@@ -7018,16 +7018,15 @@ private theorem leakAt_mono (config : Config) (pulled anc fin : BeaconState pres
     (Nat.div_le_div_right (Nat.mul_le_mul_right _ le))
 
 /-- A key's cap does not fall along a run. -/
-private theorem cap_le_cap_of_run (h : Setting config checks g split fin pulled anc counted V)
-    {z y : BeaconState preset fork} (post : Run config checks ⟨fork, z⟩ ⟨fork, y⟩) (i : ℕ) :
-    PinSplit2.capAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
-      PinSplit2.capAt (⟨fork, y⟩ : ForkedBeaconState preset) i := by
+private theorem cap_le_cap_of_run (caps : CapOrder preset) {z y : ForkedBeaconState preset}
+    (post : Run config checks z y) (early : y.fork < .glamsterdam) (i : ℕ) :
+    PinSplit2.capAt z i ≤ PinSplit2.capAt y i := by
   unfold PinSplit2.capAt
-  cases found : z.validators.data[i]? with
+  cases found : z.state.validators.data[i]? with
   | none => simp
   | some w =>
-    obtain ⟨w', found', mono⟩ := post.validatorCap_mono h.caps.activation h.caps.compounding
-      h.early i w found
+    obtain ⟨w', found', mono⟩ := post.validatorCap_mono caps.activation caps.compounding early i
+      w found
     simp only [found', Option.map_some, Option.getD_some]
     exact UInt64.le_iff_toNat_le.mp mono
 
@@ -7052,7 +7051,7 @@ private theorem effective_le_cap_pulled (h : Setting config checks g split fin p
     (post : Run config checks ⟨fork, z⟩ ⟨fork, pulled⟩) (i : ℕ) :
     effectiveAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i :=
-  Nat.le_trans (effective_le_cap_at h toZ i) (cap_le_cap_of_run h post i)
+  Nat.le_trans (effective_le_cap_at h toZ i) (cap_le_cap_of_run h.caps post h.early i)
 
 /-- A state of the balance path of a run between two states of one fork is a state of that fork.
 
@@ -7163,7 +7162,7 @@ private theorem effective_ceiling_flip (h : Setting config checks g split fin pu
         PinSplit2.capAt z i = preset.MIN_ACTIVATION_BALANCE.toNat :=
     fun r within atEnd z member => by
       obtain ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩ := balancePath_state r member
-      have hi := cap_le_cap_of_run h r2 i
+      have hi := cap_le_cap_of_run h.caps r2 h.early i
       rcases kind zs (Nat.lt_of_lt_of_le within (registryGrows_of_chainSteps r1.chainSteps)) with
         low | high
       · exact low
@@ -7177,7 +7176,7 @@ private theorem effective_ceiling_flip (h : Setting config checks g split fin pu
         PinSplit2.capAt z i = preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
     fun r within atStart z member => by
       obtain ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩ := balancePath_state r member
-      have lo := cap_le_cap_of_run h r1 i
+      have lo := cap_le_cap_of_run h.caps r1 h.early i
       rcases kind zs (Nat.lt_of_lt_of_le within (registryGrows_of_chainSteps r1.chainSteps)) with
         low | high
       · omega
@@ -7479,7 +7478,7 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
       exact effective_le_cap_at h (toC.append s1) v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
-      exact cap_le_cap_of_run h s2 v.toNat)
+      exact cap_le_cap_of_run h.caps s2 h.early v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
       exact ceiling s1 s2 cut)
