@@ -1086,7 +1086,10 @@ private theorem stages_keep (altair : .altair ≤ fork) {stages : List EpochStag
     (trace : EpochTrace (EpochStage.action config checks) stages a b) :
     b.slot = a.slot ∧ KeepsCommittees a b :=
   trace.transport (fun a b => b.slot = a.slot ∧ KeepsCommittees a b)
-    (fun _ => ⟨rfl, rfl, rfl⟩) (fun ab bc => ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩)
+    (fun _ => ⟨rfl, rfl, rfl⟩)
+    (by
+      intro _ _ _ ab bc
+      exact ⟨bc.1.trans ab.1, KeepsCommittees.trans ab.2 bc.2⟩)
     (fun k member _ _ computed =>
       have edge := EpochStage.action_cases.mp computed
       ⟨edge.slot_eq,
