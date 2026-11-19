@@ -301,10 +301,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
   -- The exit carry is at most one epoch's exit churn, which `depositChurn` caps.
   let exitCarry := max capMax depositChurn
-  -- The finalized block's state can sit at an epoch below the finalized checkpoint's.
-  --
-  -- The depth from it is read as at least the depth from the checkpoint.
-  let depthFin := max depth (epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat)
+  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
   -- A deposit postponed at the head of the queue lets the deposits behind it spend the carry.
   --
   -- So the deposits applied from the finalized block's state are at most its carry and the churn.
@@ -397,12 +394,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       effective i - floorC
     else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
-  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
-  -- A key's rate is low when its gain over the depth stays below one increment.
+  --
+  -- Two more units per epoch pay the floors of the rates.
+  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10 + 2
+  -- A key's rate is low when its gain from the finalized block's state stays below an increment.
   --
   -- Eleven times its gain plus one over the depth must also stay within its bound.
   let lowRate (i : ℕ) : Bool :=
-    decide (depth * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
+    decide (depthFin * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
     if lowRate i then cap i else capMax
   -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.

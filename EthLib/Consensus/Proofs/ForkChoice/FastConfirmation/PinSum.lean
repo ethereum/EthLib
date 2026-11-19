@@ -193,7 +193,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let consolidationCarry := max (if electra : .pectra ≤ fork then
       (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
   let exitCarry := max capMax depositChurn
-  let depthFin := max depth (epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat)
+  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
   let depositCarry := if electra : .pectra ≤ fork then
       (finalizedState.depositBalanceToConsume electra).toNat else 0
   let queueDep := 3 * (depthFin * depositChurn + depositCarry)
@@ -263,12 +263,12 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       else min (finEB i) (low - low % inc)
   let fall (i : ℕ) := if depthFin ≤ partialDelay then effective i - floorC i else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
-  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
+  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10 + 2
   -- A key's rate is low when its gain over the depth stays below one increment.
   --
   -- Eleven times its gain plus one over the depth must also stay within its bound.
   let lowRate (i : ℕ) : Bool :=
-    decide (depth * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
+    decide (depthFin * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
     if lowRate i then cap i else capMax
   let rise (i : ℕ) :=
@@ -603,8 +603,7 @@ theorem queueKeys_unfold (config : Config)
 theorem fall_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork)
     (i : ℕ) :
     (pinTerms config state ancestor finalizedState).fall i =
-      if max ((getCurrentEpoch state).toNat + 2 - ancestor.finalizedCheckpoint.epoch.toNat)
-          ((getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat) ≤
+      if (getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat ≤
           config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then
         balanceAt state i - (pinTerms config state ancestor finalizedState).floorC i
       else balanceAt state i := rfl
@@ -3167,13 +3166,11 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       config.INACTIVITY_SCORE_BIAS.toNat ≤
       (if altair : .altair ≤ fork then
         (((fin.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0) +
-      max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
         config.INACTIVITY_SCORE_BIAS.toNat := by
     simp only [altair, ↓reduceDIte]
     have depth : (getCurrentEpoch m).toNat - (getCurrentEpoch fin).toNat + 1 ≤
-        max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := by omega
+        (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
     have times := Nat.mul_le_mul_right config.INACTIVITY_SCORE_BIAS.toNat depth
     cases read : (m.inactivityScores altair).data[v]? with
     | none =>
@@ -5323,8 +5320,7 @@ private theorem leak_rate (config : Config) (pulled anc fin : BeaconState preset
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat
     (if altair : .altair ≤ fork then
       (((fin.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0)
-    (max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat))
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)
     config.INACTIVITY_SCORE_BIAS.toNat
     (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat incPos
   exact ⟨ρn, ρd, positive, fun eb aligned => bound eb aligned, fun x => above x⟩
@@ -5423,8 +5419,7 @@ private theorem existing_low_explicit
           (balanceAt fin v.toNat -
             actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
-        (max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-            ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           ((pinTerms config pulled anc fin).leakAt
             (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
               (withdrawalMaxEffectiveBalance preset fork val).toNat +
@@ -5446,8 +5441,7 @@ private theorem existing_low_explicit
   have nearC := h.near
   have arith := low_arith preset.EFFECTIVE_BALANCE_INCREMENT.toNat preset.downwardBand ρn ρd
     ((getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat)
-    (max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat))
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)
     (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
     (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
@@ -5497,8 +5491,7 @@ private theorem existing_low_or_floor (h : Setting config checks g split fin pul
           (balanceAt fin v.toNat -
             actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
-        (max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-            ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           ((pinTerms config pulled anc fin).leakAt
             (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
               (withdrawalMaxEffectiveBalance preset fork val).toNat +
@@ -5632,8 +5625,7 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
       ((pinTerms config pulled anc fin).newKeySlack + 1) fun v member => seats v member
     simpa [smul_eq_mul] using this
   have seatsEq : (pinTerms config pulled anc fin).newKeySeats =
-      (max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat /
             max 1 (pinTerms config pulled anc fin).newKeySlack := rfl
@@ -5642,8 +5634,7 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
     rfl
   rw [seatsEq, totalEq, Nat.le_div_iff_mul_le (lt_max_of_lt_left Nat.one_pos)]
   have epochs : (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch fin).toNat ≤
-      max ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat)
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := by omega
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
   have window := Nat.mul_le_mul_right (PinSplit5.syncEnvelope preset pulledTotal.toNat)
     (Nat.mul_le_mul_right preset.SYNC_COMMITTEE_SIZE.toNat
       (Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat epochs))
