@@ -366,13 +366,18 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- Both branches can share a dip there that this branch's later credits would hide.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actualFin i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
+      -- The leak is read one increment above the larger of the envelope and the base.
+      --
+      -- Each epoch also loses at most one unit to the rounding of the rates.
+      let base0 := min (actualFin i) (cap i)
+      let low := base0 - (depthFin * (leakAt (max (ebUp i) base0 + inc) i + gainRate i + 1) +
+        partialsDue i)
       -- On another branch the key can keep an effective balance that this branch's update raised.
       --
       -- Away from the downward band of the envelope, it keeps its finalized effective balance.
       --
       -- Near that band, it keeps at least its rounded balance.
-      let floorC := if ebUp i ≤ low + preset.downwardBand then finEB i
+      let floorC := if max (ebUp i) base0 ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)
       effective i - floorC
     else effective i
