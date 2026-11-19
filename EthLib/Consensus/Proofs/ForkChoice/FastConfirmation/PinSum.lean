@@ -235,8 +235,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- here, so its whole balance is charged.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := min (actualFin i) (cap i) - (depthFin * (leak i + gainRate i) + partialsDue i)
-      let floorC := if ebUp i ≤ low + preset.downwardBand then finEB i
+      let base0 := min (actualFin i) (cap i)
+      let low := base0 - (depthFin * (leakAt (max (ebUp i) base0 + inc) i + gainRate i + 1) +
+        partialsDue i)
+      let floorC := if max (ebUp i) base0 ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)
       effective i - floorC
     else effective i
