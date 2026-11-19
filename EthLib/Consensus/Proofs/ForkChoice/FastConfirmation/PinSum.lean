@@ -2437,7 +2437,9 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
       (before.snoc step).append after = seg → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat) :
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat)) :
     (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 ∧
       (∀ w, pS.validators.data[i.toNat]? = some w → w.slashed = false) ∧
       ∃ quotient : ℕ, 0 < quotient ∧
