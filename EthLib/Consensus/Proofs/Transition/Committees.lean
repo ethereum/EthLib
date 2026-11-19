@@ -79,7 +79,7 @@ theorem getCurrentEpoch_le_activityFixedEpoch (state : BeaconState preset fork) 
 
 /-- Activity is fixed at least three epochs ahead.
 
-`exitStake_le_exitReserveNear` needs it, as the near window reaches three epochs past the source. -/
+The near exit window reaches three epochs past the source. -/
 structure Preset.SeedLookaheadAtLeastThree (preset : Preset) : Prop where
   lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
 
