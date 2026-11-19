@@ -228,7 +228,8 @@ private theorem penaltyDebit_sum_zero {events : List (BalanceEvent preset)}
 
 This holds if the segment ends an epoch, and the penalties are zero otherwise.
 
-The rate is asked only at the last pass state, and only when it has a total active balance.
+The rate is asked only at the last pass state, and only when it reads a total active balance
+and a base reward per increment.
 
 Every step of the segment starts at the epoch of its start `m`.
 
@@ -246,7 +247,9 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     (rate : ∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
       (ok : advanceSlotAcross config checks z = .ok n), mid = pre.snoc (Step.slot ok) →
       (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat →
-      (∃ total, getTotalActiveBalance z.state = .ok total) → passPenaltyRate config z v ≤ pen)
+      (∃ total perIncrement, getTotalActiveBalance z.state = .ok total ∧
+        getBaseRewardPerIncrement preset total = .ok perIncrement) →
+      passPenaltyRate config z v ≤ pen)
     {found : List (BalanceEvent preset)} (replayed : mid.balanceEvents high = .ok found) :
     (found.map (penaltyDebit v)).sum ≤
       if getCurrentEpoch m.state < getCurrentEpoch n.state then pen else 0 := by
@@ -315,7 +318,7 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
   have insidePass : v < pass.validators.data.size := by rw [validators]; omega
   rcases replayRewards_penalty_scalar_cases altairU (pass.validators.bound uEarly) rewardedOk {v}
       (fun j member => by rw [Finset.mem_singleton.mp member]; exact insidePass) with
-    ⟨total, -, passTotal, -⟩ | quiet
+    ⟨total, perIncrement, passTotal, perOk⟩ | quiet
   swap
   · simp only [Finset.sum_singleton] at quiet
     rw [quiet]
@@ -335,7 +338,7 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     simpa only [getTotalActiveBalance, getActiveValidatorIndicesChecked, getTotalBalance,
       validators, passEpoch] using passTotal
   refine bound.trans (le_trans ?_ (rate inner boundary rfl
-    (UInt64.lt_iff_toNat_lt.mp crossing) ⟨total, totalU⟩))
+    (UInt64.lt_iff_toNat_lt.mp crossing) ⟨total, perIncrement, totalU, perOk⟩))
   -- The pass's reads are those of `u`.
   have weight : eligibleWeight pass v ≤ effectiveAt u v := by
     unfold eligibleWeight
@@ -4903,8 +4906,10 @@ private theorem lastPass_debit_le {m z n : ForkedBeaconState preset} (pre : Run 
     (if ∃ total, getTotalActiveBalance z.state = .ok total then passPenaltyRate config z i
       else 0)
     (fun {z'} pre' ok' split before found => by
+      obtain ⟨total, -, totalOk, -⟩ := found
+      have hasTotal : ∃ total, getTotalActiveBalance z'.state = .ok total := ⟨total, totalOk⟩
       cases split
-      simp [found])
+      simp [hasTotal])
     replayed
   rwa [ite_eq_left (by rw [same] at crossed; exact UInt64.lt_iff_toNat_lt.mpr crossed)] at bound
 
