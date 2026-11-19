@@ -442,41 +442,6 @@ private theorem Kept.foldlM {α ε : Type}
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   inputs.proposerLookahead
 
-/-- Adding a validator keeps the lookahead. -/
-private theorem kept_addValidatorToRegistry {pubkey : BLSPubkey}
-    {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
-    Kept state after := by
-  unfold addValidatorToRegistry at computed
-  split at computed
-  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    rfl
-  split at computed
-  · cases computed
-    rfl
-  · cases computed
-
-/-- A pending deposit keeps the lookahead. -/
-private theorem kept_applyPendingDeposit {deposit : PendingDeposit}
-    (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    Kept state after := by
-  unfold applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact Kept.refl _
-    simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact kept_addValidatorToRegistry computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ Kept.refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact Kept.of_payloadInputs (payloadInputs_increaseBalance computed)
-
 /-- Justification and finalization keep the lookahead. -/
 private theorem kept_processJustificationAndFinalization
     (computed : processJustificationAndFinalization state = .ok after) : Kept state after := by
@@ -484,17 +449,6 @@ private theorem kept_processJustificationAndFinalization
   · exact Kept.refl _
   · exact congrArg (·.proposerLookahead)
       (weighJustificationAndFinalization_checkpoints weighed).2.2.2
-
-/-- The inactivity updates keep the lookahead. -/
-private theorem kept_processInactivityUpdates {altair : .altair ≤ fork}
-    (computed : processInactivityUpdates config state altair = .ok after) : Kept state after := by
-  unfold processInactivityUpdates at computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ Kept.refl _
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    rfl
 
 /-- The rewards and penalties keep the lookahead. -/
 private theorem kept_processRewardsAndPenalties
@@ -517,45 +471,6 @@ private theorem kept_processRewardsAndPenalties
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, applied⟩ := computed
     exact deltas applied
-
-/-- The registry updates keep the lookahead. -/
-private theorem kept_processRegistryUpdates
-    (computed : processRegistryUpdates config state = .ok after) : Kept state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine Kept.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact Kept.of_payloadInputs (payloadInputs_setValidatorAt set)
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact Kept.of_payloadInputs (payloadInputs_initiateValidatorExit exited)
-    split at ok
-    · exact Kept.of_payloadInputs (payloadInputs_setValidatorAt (liftAccessor_ok.mp ok))
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ Kept.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
-  refine (Kept.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
-    (Kept.foldlM (fun _ _ _ ok => ?_) activated)
-  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := Kept.of_payloadInputs (payloadInputs_setValidatorAt markedOk)
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact set.trans (Kept.of_payloadInputs (payloadInputs_initiateValidatorExit exited))
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ set
-  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    exact Kept.of_payloadInputs (payloadInputs_setValidator set)
 
 /-- The slashing penalties keep the lookahead. -/
 private theorem kept_processSlashings (computed : processSlashings state = .ok after) :
@@ -607,46 +522,6 @@ private theorem kept_processEth1DataReset {hegota : fork < .hegota}
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed ▸ Kept.refl _
 
-/-- A pass over the pending deposits keeps the lookahead. -/
-private theorem kept_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      passPendingDeposits config checks stop nextEpoch available state processed count postponed
-        deposits = .ok pass →
-      Kept state pass.1.state :=
-  fun computed => passPendingDeposits_of Kept Kept.refl
-    (fun one two => one.trans two) (fun ok => kept_applyPendingDeposit ok) computed
-
-/-- A pass over the pending consolidations keeps the lookahead. -/
-private theorem kept_passPendingConsolidations {nextEpoch : Epoch} :
-    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      passPendingConsolidations nextEpoch state consolidations = .ok result →
-      Kept state result.1
-  | [], _, _, computed => by
-    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Kept.refl _
-  | consolidation :: rest, state, result, computed => by
-    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨source, _, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
-      cases computed
-      exact kept_passPendingConsolidations (result := (passed, read)) passedOk
-    split at computed
-    · cases computed
-      exact Kept.refl _
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
-      computed
-    cases computed
-    exact ((Kept.of_payloadInputs (payloadInputs_decreaseBalance loweredOk)).trans
-      (Kept.of_payloadInputs (payloadInputs_increaseBalance raisedOk))).trans
-      (kept_passPendingConsolidations (result := (passed, read)) passedOk)
-
 /-- The updates of the effective balances keep the lookahead. -/
 private theorem kept_processEffectiveBalanceUpdates
     (computed : processEffectiveBalanceUpdates state = .ok after) : Kept state after := by
@@ -655,15 +530,6 @@ private theorem kept_processEffectiveBalanceUpdates
   simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, set⟩ := ok
   exact Kept.of_payloadInputs (payloadInputs_setValidatorAt set)
-
-/-- The historical summaries update keeps the lookahead. -/
-private theorem kept_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
-    Kept state after := by
-  unfold processHistoricalSummariesUpdate at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals rfl
 
 /-- The sync committee updates keep the lookahead. -/
 private theorem kept_processSyncCommitteeUpdates {altair : .altair ≤ fork}
@@ -697,9 +563,9 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
     have edge := EpochStage.action_cases.mp ok
     cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
     · exact kept_processJustificationAndFinalization edge
-    · exact kept_processInactivityUpdates edge
+    · exact Kept.of_payloadInputs (payloadInputs_processInactivityUpdates edge)
     · exact kept_processRewardsAndPenalties edge
-    · exact kept_processRegistryUpdates edge
+    · exact Kept.of_payloadInputs (payloadInputs_processRegistryUpdates edge)
     · exact kept_processSlashings edge
     · split at edge
       · exact kept_processEth1DataReset edge
@@ -708,13 +574,13 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
       · unfold processPendingDeposits at edge
         simp only [bind, Except.bind, pure, Except.pure] at edge
         repeat' (split at edge <;> try cases edge)
-        all_goals exact (kept_passPendingDeposits ‹_›).trans rfl
+        all_goals exact (Kept.of_payloadInputs (payloadInputs_passPendingDeposits ‹_›)).trans rfl
       · exact edge ▸ Kept.refl _
     · split at edge
       · unfold processPendingConsolidations at edge
         simp only [bind, Except.bind, pure, Except.pure] at edge
         repeat' (split at edge <;> try cases edge)
-        exact (kept_passPendingConsolidations ‹_›).trans rfl
+        exact (Kept.of_payloadInputs (payloadInputs_passPendingConsolidations ‹_›)).trans rfl
       · exact edge ▸ Kept.refl _
     · split at edge
       · rw [processBuilderPendingPayments_eq edge]
@@ -729,7 +595,7 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
   have middle : Kept cleared synced := by
     obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq mixedOk
     subst rotation
-    exact (kept_processHistoricalSummariesUpdate rootedOk).trans
+    exact (Kept.of_payloadInputs (payloadInputs_processHistoricalSummariesUpdate rootedOk)).trans
       ((show Kept rooted (processParticipationFlagUpdates rooted altair) from rfl).trans
         (kept_processSyncCommitteeUpdates syncedOk))
   have tail : Kept looked after := by
