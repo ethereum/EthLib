@@ -2458,7 +2458,7 @@ def SC (split : BeaconState preset fork) : Finset ValidatorIndex :=
     slashedFlagAt counted v.toNat = some true ∧ slashedFlagAt split v.toNat = some false
 
 /-- Keys created beyond R's registry and slashed at C. -/
-def CS : Finset ValidatorIndex :=
+private def CS : Finset ValidatorIndex :=
   ((Finset.range counted.validators.data.size).image UInt64.ofNat).filter fun v =>
     pulled.validators.data.size ≤ v.toNat ∧ slashedFlagAt counted v.toNat = some true
 
