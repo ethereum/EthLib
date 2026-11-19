@@ -10,6 +10,7 @@ import EthLib.Consensus.Proofs.DirectSafety.Cohorts
 public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 
 /-!
@@ -95,37 +96,6 @@ private theorem active_stake_le_window {g x y : ForkedBeaconState preset}
   intro a b pre step before added addedOk
   exact funding_step_of_run (shared.append pre) genesis step before delay added addedOk
 
-private theorem registry_fold_bound {fork : Fork} {α : Type}
-    {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
-    (bound : ∀ s a t, action s a = .ok t →
-      t.validators.data.size ≤ s.validators.data.size + 1)
-    {items : List α} {s t : BeaconState preset fork}
-    (ok : items.foldlM action s = .ok t) :
-    t.validators.data.size ≤ s.validators.data.size + items.length := by
-  induction items generalizing s with
-  | nil => cases ok; simp
-  | cons a rest ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨middle, first, last⟩ := ok
-    have one := bound s a middle first
-    have remaining := ih last
-    simp only [List.length_cons]
-    omega
-
-private theorem registry_pending_bound {fork : Fork} {s t : BeaconState preset fork}
-    {electra : .pectra ≤ fork}
-    (ok : processPendingDeposits config checks s electra = .ok t) :
-    t.validators.data.size ≤ s.validators.data.size +
-      preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
-  -- Applied deposits form a sublist of the bounded prefix read by this pass.
-  obtain ⟨read, rest, applied, postponed, next, pending, carried,
-    _, _, cap, subset, _, _, folded, rfl⟩ := processPendingDeposits_applied ok
-  have growth := registry_fold_bound
-    (fun _ _ _ h => (applyPendingDeposit_validators_size_le_and_mem h).1) folded
-  have count := subset.length_le
-  dsimp only
-  omega
-
 private theorem registry_deposit_bound {fork : Fork} {s t : BeaconState preset fork}
     {before : fork < .hegota} {deposit : Deposit}
     (ok : processDeposit config checks before s deposit = .ok t) :
@@ -158,7 +128,7 @@ private theorem registry_operations_bound {fork : Fork} {s t : BeaconState prese
   have sa := registry_fold_size (fun _ _ _ h => (sameSizes_processProposerSlashing h).1) proposers
   have sb := registry_fold_size (fun _ _ _ h => (sameSizes_processAttesterSlashing h).1) attesters
   have sc := registry_fold_size (fun _ _ _ h => (sameSizes_processAttestation h).1) attestations
-  have sd := registry_fold_bound (fun _ _ _ h => registry_deposit_bound h) deposits
+  have sd := foldlM_validators_size_le (fun _ _ _ h => registry_deposit_bound h) deposits
   have se := registry_fold_size (fun _ _ _ h => (sameSizes_processVoluntaryExit h).1) exits
   have sf : f.validators.data.size = e.validators.data.size := by
     unfold processBlsToExecutionChanges at changes
@@ -194,47 +164,6 @@ private theorem registry_block_bound {fork : Fork} {s t : BeaconState preset for
   rw [head] at bound
   omega
 
-/-- An epoch adds at most one epoch of pending deposits to the registry, at every fork.
-
-The epoch is cut at its pending deposits: every other stage keeps the size of the registry. -/
-theorem processEpoch_validators_size_le {fork : Fork} {s t : BeaconState preset fork}
-    (ok : processEpoch config checks s = .ok t) :
-    t.validators.data.size ≤ s.validators.data.size +
-      preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
-  have trace := processEpoch_trace ok
-  change EpochTrace _ ([.justification, .inactivity, .rewards, .registry, .slashings,
-    .eth1Reset] ++ (.pendingDeposits :: .pendingConsolidations :: EpochStage.middleStages ++
-      EpochStage.tailStages)) _ _ at trace
-  obtain ⟨reset, head, rest⟩ := EpochTrace.append_iff.mp trace
-  cases rest
-  rename_i deposited depositedOk rest
-  -- Every stage other than the pending deposits keeps the size of the registry.
-  have same {ks : List EpochStage} {a b : BeaconState preset fork}
-      (trace : EpochTrace (EpochStage.action config checks) ks a b)
-      (without : EpochStage.pendingDeposits ∉ ks) :
-      b.validators.data.size = a.validators.data.size := by
-    refine trace.transport
-      (fun a b : BeaconState preset fork => b.validators.data.size = a.validators.data.size)
-      (fun _ => rfl) (fun one two => two.trans one) ?_
-    intro k member a b computed
-    have edge := EpochStage.action_cases.mp computed
-    cases k
-    case registry => exact (sameSizes_processRegistryUpdates edge).1
-    case effectiveBalances => exact (sameSizes_processEffectiveBalanceUpdates edge).1
-    case pendingDeposits => exact absurd member without
-    all_goals exact congrArg (·.data.size) (edge.validators_eq ⟨nofun, nofun, nofun⟩)
-  have before := same head (by simp)
-  have after := same rest (by simp [EpochStage.middleStages, EpochStage.tailStages])
-  have edge := EpochStage.action_cases.mp depositedOk
-  have middle : deposited.validators.data.size ≤ reset.validators.data.size +
-      preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
-    simp only [EpochStage.Edge] at edge
-    split at edge
-    · exact registry_pending_bound edge
-    · subst edge
-      omega
-  omega
-
 private theorem registry_upgrade_size {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}
     (ok : upgradeNext config checks s = .ok t) :
@@ -265,38 +194,6 @@ private theorem registry_upgrades_size {s t : ForkedBeaconState preset}
     (property := fun t => t.state.validators.data.size = s.state.validators.data.size)
     (fun prior ok => (registry_upgrade_size ok).trans prior) rfl ok
 
-/-- One slot adds at most one epoch of pending deposits to the registry, when it starts an epoch.
-
-The slot advances by one. -/
-theorem advanceSlot_validators_size_le {fork : Fork} {s t : BeaconState preset fork}
-    (ok : advanceSlot config checks s = .ok t) :
-    t.slot.toNat = s.slot.toNat + 1 ∧
-      t.validators.data.size ≤ s.validators.data.size +
-        ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
-          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
-  obtain ⟨next, cached, epoched, nextOk, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
-  obtain ⟨_, _, _, _, cacheEq⟩ := processSlot_ok cachedOk
-  have cacheSize : cached.validators.data.size = s.validators.data.size := by rw [cacheEq]
-  have cacheSlot := processSlot_slot cachedOk
-  refine ⟨nextOk, ?_⟩
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    -- Charge the pending-deposit cap only when this slot crosses an epoch boundary.
-    have epochs := nextSlot_epoch_of_boundary nextOk boundary
-    have growth := processEpoch_validators_size_le epochedOk
-    have diff : (getCurrentEpoch { epoched with slot := next }).toNat -
-        (getCurrentEpoch s).toNat = 1 := by
-      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
-      dsimp only
-      omega
-    rw [diff, one_mul]
-    dsimp only
-    omega
-  · cases epochedOk
-    dsimp only
-    omega
-
 private theorem registry_slot_bound {s t : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks s = .ok t) :
     t.state.slot.toNat = s.state.slot.toNat + 1 ∧
@@ -307,7 +204,8 @@ private theorem registry_slot_bound {s t : ForkedBeaconState preset}
   obtain ⟨advanced, slot, upgrades⟩ := ok
   have size := registry_upgrades_size upgrades
   have slotEq := processUpgrades_slot upgrades
-  obtain ⟨nextSlot, growth⟩ := advanceSlot_validators_size_le slot
+  have nextSlot := advanceSlot_slot slot
+  have growth := advanceSlot_validators_size_le slot
   have epochEq : getCurrentEpoch t.state = getCurrentEpoch advanced := by
     simp only [getCurrentEpoch, slotEq]
   refine ⟨by rw [slotEq]; exact nextSlot, ?_⟩
