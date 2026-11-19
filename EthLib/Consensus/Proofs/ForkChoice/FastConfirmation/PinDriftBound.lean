@@ -4344,20 +4344,40 @@ private theorem NoSync.record {fork : Fork} {source : BalanceSource}
   · rw [new]
     exact notSync
 
-/-- The sync debits of a block over any keys fit the participant reward of the block's total.
+/-- The effective balance of a key at a state of a run from genesis is at most the largest cap. -/
+private theorem effectiveAt_le_capMax {g m : ForkedBeaconState preset}
+    (run : Run config checks g m) (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset) (early : m.fork < .glamsterdam) (v : ℕ) :
+    effectiveAt m v ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+  unfold effectiveAt
+  cases found : m.state.validators.data[v]? with
+  | none => simp
+  | some w =>
+    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
+    have bound := run.effectiveBalance_capped genesis caps.activation caps.compounding early _
+      (Array.getElem_mem inside)
+    have activation := UInt64.le_iff_toNat_le.mp caps.activation
+    have compounding := UInt64.le_iff_toNat_le.mp caps.compounding
+    rw [UInt64.le_iff_toNat_le] at bound
+    unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance at bound
+    simp only [Option.map_some, Option.getD_some]
+    split at bound
+    · split at bound <;> omega
+    · omega
 
-The sync pass is the last pass of the replay, and no other pass records a sync event.
+/-- The replay of a block from Altair ends with its one sync pass, after events of other sources.
 
-It reads the total of the state after the block, since a sync aggregate changes only balances. -/
-private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork}
+The pass is the sync aggregate of the block, applied at the state that its other passes leave. -/
+private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset fork}
     (early : fork < .glamsterdam) (altair : .altair ≤ fork) {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {events : List (BalanceEvent preset)}
     (replay : blockBalanceReplay (config := config) (checks := checks) early engine a block =
-      .ok (t, events))
-    (total : ℕ) (band : ∀ T : Gwei, getTotalActiveBalance t = .ok T → 2 * T.toNat ≤ 3 * total)
-    (keys : Finset ℕ) :
-    ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
-      preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total := by
+      .ok (t, events)) :
+    ∃ (c : BeaconState preset fork) (rest : List (BalanceEvent preset))
+      (aggregate : SyncAggregate preset) (credit debit : ℕ),
+      events = rest ++ [⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, credit, debit⟩] ∧
+      (∀ e ∈ rest, e.source ≠ .sync) ∧ (∀ i, (rest.map (syncDebit i)).sum = 0) ∧
+      processSyncAggregate config checks c altair aggregate = .ok t := by
   have normalized := replay
   unfold blockBalanceReplay at normalized
   simp only [altair, ↓reduceDIte] at normalized
@@ -4399,20 +4419,35 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
   simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
     Prod.mk.injEq] at syncOk
   obtain ⟨⟨credit, debit⟩, limitsOk, u, synced, rfl, rfl⟩ := syncOk
+  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, eleven, fun i => ?_, synced⟩
+  exact List.sum_eq_zero fun x member => by
+    obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
+    simp [syncDebit, eleven e inside]
+
+/-- The sync debits of a block over any keys fit the participant reward of the block's total.
+
+The sync pass is the last pass of the replay, and no other pass records a sync event.
+
+It reads the total of the state after the block, since a sync aggregate changes only balances. -/
+private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork}
+    (early : fork < .glamsterdam) (altair : .altair ≤ fork) {engine : ExecutionEngine preset fork}
+    {block : BeaconBlock preset fork} {events : List (BalanceEvent preset)}
+    (replay : blockBalanceReplay (config := config) (checks := checks) early engine a block =
+      .ok (t, events))
+    (total : ℕ) (band : ∀ T : Gwei, getTotalActiveBalance t = .ok T → 2 * T.toNat ≤ 3 * total)
+    (keys : Finset ℕ) :
+    ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
+      preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total := by
+  obtain ⟨c, rest, aggregate, credit, debit, rfl, -, silent, synced⟩ :=
+    blockReplay_sync_split early altair replay
   obtain ⟨reward, proposer, rewardOk, -, -, debits⟩ := sync_bounds altair _ synced
   have bound := (DirectSafety.Apriori.Internal.keys_debits_le keys
-    ⟨.sync, ⟨fork, consolidated.1⟩, ⟨fork, u⟩, 0, 0⟩).trans debits
+    ⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, 0, 0⟩).trans debits
   obtain ⟨balances, rfl⟩ := processSyncAggregate_eq synced
-  obtain ⟨reward', rewardOk', -⟩ := limitsOk
-  have same : reward' = reward := Except.ok.inj (rewardOk'.symm.trans rewardOk)
   have reads := rewardOk
   simp only [syncParticipantReward, bind_ok_iff, liftAccessor_ok] at reads
   obtain ⟨T, totalEnd, -⟩ := reads
   have envelope := syncReward_le_envelope rewardOk totalEnd total (band T totalEnd)
-  have silent : ∀ i, (consolidated.2.map (syncDebit i)).sum = 0 := fun i =>
-    List.sum_eq_zero fun x member => by
-      obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
-      simp [syncDebit, eleven e inside]
   simp only [List.map_append, List.sum_append, silent, syncDebit, ↓reduceIte, List.map_cons,
     List.map_nil, List.sum_cons, List.sum_nil, Nat.zero_add, Nat.add_zero]
   exact bound.trans (Nat.mul_le_mul_left _ envelope)
