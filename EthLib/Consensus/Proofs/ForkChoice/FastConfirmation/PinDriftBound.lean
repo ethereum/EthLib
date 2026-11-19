@@ -2000,15 +2000,17 @@ They are its effective balance at the start, `capLow`, and `floor` rounded down 
 
 Second, suppose the effective balance at the start is a whole number of increments.
 
-Suppose its effective balance stays at most `top`, and its balance near `top`.
+Suppose a step that could lower it leaves a balance of at least that effective balance.
 
-Near means within the downward band.
+A step could lower it when the balance after it plus the downward band is below it.
 
 Suppose also that its cap stays at least its effective balance at the start.
 
-Then no downward update fires.
+Then the effective balance at the end is at least that at the start.
 
-So the effective balance at the end is at least that at the start.
+A downward update sets it to the balance rounded down.
+
+That is at least the effective balance at the start, which is a whole number of increments.
 
 An update moves the effective balance only at an epoch's first slot.
 
@@ -2048,15 +2050,18 @@ It also adds the other credits that the events of the run give the key. -/
 private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size)
-    (floor capLow top capHigh high E P : ℕ) :
+    (floor capLow capHigh high E P : ℕ) :
     ((∀ z ∈ tail.balancePath, floor ≤ actualBalanceAt z i) →
       (∀ z ∈ tail.balancePath, capLow ≤ capAt z i) →
       min (effectiveAt x i)
         (min capLow (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
           effectiveAt y i) ∧
     (effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
-      (∀ z ∈ tail.balancePath, effectiveAt z i ≤ top) →
-      (∀ z ∈ tail.balancePath, top ≤ actualBalanceAt z i + preset.downwardBand) →
+      (∀ {m n : ForkedBeaconState preset} (before : Run config checks x m)
+          (step : Step config checks m n) (after : Run config checks n y),
+        (before.snoc step).append after = tail →
+        actualBalanceAt n i + preset.downwardBand < effectiveAt m i →
+        effectiveAt x i ≤ actualBalanceAt n i) →
       (∀ z ∈ tail.balancePath, effectiveAt x i ≤ capAt z i) →
       effectiveAt x i ≤ effectiveAt y i) ∧
     (∀ ceil : ℕ, capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
@@ -2085,7 +2090,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       ∀ z ∈ tail.balancePath, min (actualBalanceAt z i) capHigh ≤
         creditBound tail i high E P capHigh) := by
   induction tail with
-  | nil => exact ⟨fun _ _ => Nat.min_le_left _ _, fun _ _ _ _ => Nat.le_refl _,
+  | nil => exact ⟨fun _ _ => Nat.min_le_left _ _, fun _ _ _ => Nat.le_refl _,
       fun _ _ _ _ _ => ⟨Nat.le_max_left _ _, fun _ => rfl, fun h => absurd h (Nat.lt_irrefl _),
         Nat.le_refl _⟩,
       fun _ _ _ _ _ _ z hz => by
@@ -2175,7 +2180,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i room
       have epoch : (getCurrentEpoch after).toNat = (getCurrentEpoch before).toNat := by
         simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
-      refine ⟨fun balanceFloor capFloor => ?_, fun aligned envelope near capFloor => ?_,
+      refine ⟨fun balanceFloor capFloor => ?_, fun aligned downs capFloor => ?_,
         fun ceil alignedHigh startCap balanceCeil capCeil => ?_,
         fun alignedHigh startCap capC rate endEp closed =>
           key alignedHigh startCap capC rate endEp closed
@@ -2184,8 +2189,9 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         exact ihFloor (fun p member => balanceFloor p (List.mem_append_left _ member))
           (fun p member => capFloor p (List.mem_append_left _ member))
       · rw [kept]
-        exact ihEnvelope aligned (fun p member => envelope p (List.mem_append_left _ member))
-          (fun p member => near p (List.mem_append_left _ member))
+        exact ihEnvelope aligned
+          (fun r1 st r2 cut => downs r1 st (r2.snoc (Step.block engine signed due ok))
+            (congrArg (fun r => Run.snoc r (Step.block engine signed due ok)) cut))
           (fun p member => capFloor p (List.mem_append_left _ member))
       · obtain ⟨c1, c2, c3, c4⟩ := ihCeiling ceil alignedHigh startCap
           (fun p member => balanceCeil p (List.mem_append_left _ member))
@@ -2203,7 +2209,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have same := DirectSafety.Apriori.Internal.processUpgrades_eq_of_window upgraded
         fuluMiddle early
       subst same
-      refine ⟨fun balanceFloor capFloor => ?_, fun aligned envelope near capFloor => ?_,
+      refine ⟨fun balanceFloor capFloor => ?_, fun aligned downs capFloor => ?_,
         fun ceil alignedHigh startCap balanceCeil capCeil => ?_,
         fun alignedHigh startCap capC rate endEp closed =>
           key alignedHigh startCap capC rate endEp closed
@@ -2216,24 +2222,23 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
           (Nat.le_trans (Nat.min_le_right _ _) (Nat.min_le_left _ _)) (fun _ => ?_) prior
           (fun v read => by simpa [capAt, read] using capped)
         exact (Nat.min_le_right _ _).trans ((Nat.min_le_right _ _).trans (rounded_mono _ funded))
-      · have nearNext := near _ (List.mem_append_right _ onPath)
-        have capped := capFloor _ (List.mem_append_right _ onPath)
+      · have capped := capFloor _ (List.mem_append_right _ onPath)
         have prior := ihEnvelope aligned
-          (fun p member => envelope p (List.mem_append_left _ member))
-          (fun p member => near p (List.mem_append_left _ member))
+          (fun r1 st r2 cut => downs r1 st (r2.snoc (Step.slot ok))
+            (congrArg (fun r => Run.snoc r (Step.slot ok)) cut))
           (fun p member => capFloor p (List.mem_append_left _ member))
-        have atTop := envelope _ (List.mem_append_left _ atMiddle)
         refine effective_floor_slot advanced i (capAt ⟨middle.fork, next⟩ i) _ room capped
           (fun fires => ?_) prior (fun v read => by simp [capAt, read])
         have eta : effectiveAt (⟨middle.fork, middle.state⟩ : ForkedBeaconState preset) i =
             effectiveAt middle i := rfl
         rw [eta] at fires
-        rcases fires with below | above
-        · omega
-        · have lift := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-            (show effectiveAt x i ≤ actualBalanceAt ⟨middle.fork, next⟩ i by omega)
-          rw [aligned, Nat.sub_zero] at lift
-          exact lift
+        have reach : effectiveAt x i ≤ actualBalanceAt ⟨middle.fork, next⟩ i := by
+          rcases fires with below | above
+          · exact downs pre (Step.slot ok) Run.nil rfl below
+          · omega
+        have lift := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat reach
+        rw [aligned, Nat.sub_zero] at lift
+        exact lift
       · have funded := balanceCeil _ (List.mem_append_right _ onPath)
         have capped := capCeil _ (List.mem_append_right _ onPath)
         obtain ⟨c1, c2, c3, c4⟩ := ihCeiling ceil alignedHigh startCap
@@ -2273,7 +2278,7 @@ private theorem Run.effective_floor_rounded {x y : ForkedBeaconState preset}
     (capFloor : ∀ z ∈ tail.balancePath, capLow ≤ capAt z i) :
     min (effectiveAt x i) (min capLow (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt y i :=
-  (Run.effective_floor_pair tail early fulu i inside floor capLow 0 0 0 0 0).1 balanceFloor
+  (Run.effective_floor_pair tail early fulu i inside floor capLow 0 0 0 0).1 balanceFloor
     capFloor
 
 /-- H4. A balance floor and a cap floor along a run give an effective-balance floor.
@@ -2323,7 +2328,26 @@ private theorem Run.effective_floor_of_envelope {x y : ForkedBeaconState preset}
     (near : ∀ z ∈ tail.balancePath, top ≤ actualBalanceAt z i + preset.downwardBand)
     (capFloor : ∀ z ∈ tail.balancePath, effectiveAt x i ≤ capAt z i) :
     effectiveAt x i ≤ effectiveAt y i :=
-  (Run.effective_floor_pair tail early fulu i inside 0 0 top 0 0 0 0).2.1 aligned envelope near
+  (Run.effective_floor_pair tail early fulu i inside 0 0 0 0 0 0).2.1 aligned
+    (fun {m n} before step after cut below => by
+      -- The envelope and the balance near it contradict a firing downward update.
+      have onPath : m ∈ tail.balancePath ∧ n ∈ tail.balancePath := by
+        rw [← cut, Run.balancePath_append]
+        have atM := List.mem_of_mem_getLast? (Run.balancePath_ends before).2
+        have ends := Step.balancePath_ends step
+        have atN := List.mem_of_mem_getLast? ends.2
+        refine ⟨List.mem_append_left _ ?_, List.mem_append_left _ ?_⟩
+        · simp [Run.balancePath, atM]
+        · cases hp : step.balancePath with
+          | nil => simp [hp] at ends
+          | cons a l =>
+            have head : a = m := by simpa [hp] using ends.1
+            rcases List.mem_cons.mp (hp ▸ atN) with same | later
+            · simp [Run.balancePath, ← same, head, atM]
+            · simp [Run.balancePath, hp, later]
+      have top := envelope m onPath.1
+      have closeBand := near n onPath.2
+      omega)
     capFloor
 
 /-- A balance ceiling and a cap ceiling along a run give an effective-balance ceiling.
@@ -2359,7 +2383,7 @@ private theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconStat
     ((getCurrentEpoch x.state).toNat < (getCurrentEpoch y.state).toNat →
       effectiveAt y i ≤ ceil + preset.downwardBand) ∧
     (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
-  (Run.effective_floor_pair tail early fulu i inside 0 0 0 capHigh 0 0 0).2.2.1 ceil
+  (Run.effective_floor_pair tail early fulu i inside 0 0 capHigh 0 0 0).2.2.1 ceil
     alignedHigh startCap balanceCeil capCeil
 
 end PinSplit2

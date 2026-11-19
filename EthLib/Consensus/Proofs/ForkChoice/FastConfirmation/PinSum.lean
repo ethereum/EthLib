@@ -2930,7 +2930,7 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
         PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
-  obtain ⟨-, -, third, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
+  obtain ⟨-, -, third, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat high E P
   have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
   exact (third _ aligned startCap
