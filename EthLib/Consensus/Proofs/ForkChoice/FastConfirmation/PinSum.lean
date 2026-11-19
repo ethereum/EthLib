@@ -3862,8 +3862,19 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
               preset.downwardBand)) ≤
         (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
           (ρd * (actualBalanceAt (⟨fork, pS⟩ : ForkedBeaconState preset) i.toNat + D +
-          preset.downwardBand) + ρn * slack) + ρd * (preset.downwardBand + slack) :=
-  sorry
+          preset.downwardBand) + ρn * slack) + ρd * (preset.downwardBand + slack) := by
+  obtain ⟨toFin⟩ := h.toFin
+  have early : (⟨fork, pS⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) h.early
+  obtain ⟨endEpoch, quotient, positive, same, guards⟩ :=
+    segment_guards h near i pre seg rest retained
+  have two : 2 ≤ quotient := by
+    rw [same, parameters_of_fusaka h.fulu h.early]
+    exact h.facts.quotient
+  rw [← same]
+  exact FloorTrace.run_potential_floor_slash (toFin.append pre) seg h.genesis h.caps h.delay early
+    h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW unslashed quotient two
+    guards segOk slack ρn ρd start pass
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`.
@@ -3988,8 +3999,29 @@ private theorem cfloor_balance_slash (h : Setting config checks g split fin pull
       floor ≤ a + loss) :
     ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
       (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
-      floor ≤ actualBalanceAt p i.toNat + loss :=
-  sorry
+      floor ≤ actualBalanceAt p i.toNat + loss := by
+  intro p r1 r2 whole
+  obtain ⟨pFork, pState⟩ := p
+  have sameFork : pFork = fork := Fork.ctorIdx_injective
+    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
+      (fork_le_of_chainSteps r1.chainSteps))
+  obtain rfl : fork = pFork := sameFork.symm
+  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+  simp only at order
+  obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
+    (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
+  obtain ⟨D, split, closed⟩ := segment_potential_slash h near i Run.nil r1 r2 val initial unslashed
+    (fun before' step after cut' w found => retained before' step (after.append r2)
+      (by rw [Run.append_assoc, cut', whole]) w found)
+    slack ρn ρd start
+    (fun before' step after cut' evs ok => pass before' step (after.append r2)
+      (by rw [Run.append_assoc, cut', whole]) evs ok)
+    beforeOk
+  obtain ⟨rest', rfl⟩ := isPrefix
+  have window : (getCurrentEpoch pState).toNat - (getCurrentEpoch fin).toNat ≤
+      (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat :=
+    Nat.sub_le_sub_right order _
+  exact arithS _ D _ window (prefix_debit_le i before rest' D split) closed
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a prefix end of C's run is the finalized one or an update's.
