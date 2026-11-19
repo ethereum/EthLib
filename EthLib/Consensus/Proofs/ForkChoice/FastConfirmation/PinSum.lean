@@ -7337,6 +7337,85 @@ private theorem leakAt_mono (config : Config) (pulled anc fin : BeaconState pres
   exact Nat.add_le_add (Nat.mul_le_mul_left _ (Nat.mul_le_mul_right _ (Nat.div_le_div_right le)))
     (Nat.div_le_div_right (Nat.mul_le_mul_right _ le))
 
+/-- The leak of the pin at the finalized state's score, spelled out.
+
+The score is the key's inactivity score at the finalized state, or zero before Altair. -/
+private theorem leakAt_eq (config : Config) (pulled anc fin : BeaconState preset fork)
+    (eb i : ℕ) :
+    (pinTerms config pulled anc fin).leakAt eb i =
+      2 * (eb / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (pinTerms config pulled anc fin).perIncrement) +
+      eb * ((if altair : .altair ≤ fork then
+          (((fin.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0) +
+        (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+        (config.INACTIVITY_SCORE_BIAS.toNat *
+          (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  unfold pinTerms
+  rfl
+
+/-- A key's inactivity score at the finalized state is at most the largest score there. -/
+private theorem score_le_scoreMax (fin : BeaconState preset fork) (i : ℕ) :
+    (if altair : .altair ≤ fork then
+        (((fin.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0) ≤
+      (if altair : .altair ≤ fork then
+        ((fin.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0) := by
+  split
+  · rename_i altair
+    cases found : (fin.inactivityScores altair).data[i]? with
+    | none => simp
+    | some x =>
+      have mem : x.toNat ∈ (fin.inactivityScores altair).data.toList.map (·.toNat) :=
+        List.mem_map_of_mem (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found))
+      rw [List.foldl_max_eq_max (List.ne_nil_of_mem mem)]
+      exact le_max_of_le_right (List.le_max_of_mem mem)
+  · exact Nat.le_refl _
+
+/-- Raising the balance by whole increments raises the leak by an amount in those increments.
+
+The amount is the leak of the increments at the key's per-increment reward and the largest score.
+
+It is rounded up once. -/
+private theorem leakAt_add_le (config : Config) (pulled anc fin : BeaconState preset fork)
+    (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (i eb m : ℕ) :
+    (pinTerms config pulled anc fin).leakAt (eb + preset.EFFECTIVE_BALANCE_INCREMENT.toNat * m) i ≤
+      (pinTerms config pulled anc fin).leakAt eb i +
+        2 * ((pinTerms config pulled anc fin).perIncrement * m) +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat * m *
+          ((pinTerms config pulled anc fin).scoreMaxFin +
+            (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+          (config.INACTIVITY_SCORE_BIAS.toNat *
+            (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) + 1) := by
+  have scoreMax : (pinTerms config pulled anc fin).scoreMaxFin = (if altair : .altair ≤ fork then
+      ((fin.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0) := by
+    unfold pinTerms
+    rfl
+  rw [leakAt_eq, leakAt_eq, scoreMax]
+  have score := score_le_scoreMax fin i
+  generalize (if altair : .altair ≤ fork then
+    (((fin.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 else 0) = S at score ⊢
+  generalize (if altair : .altair ≤ fork then
+    ((fin.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0) = M at score ⊢
+  generalize (pinTerms config pulled anc fin).perIncrement = P
+  generalize (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat = B
+  generalize config.INACTIVITY_SCORE_BIAS.toNat *
+    (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat = Q
+  generalize preset.EFFECTIVE_BALANCE_INCREMENT.toNat = inc at incPos ⊢
+  have quotient : (eb + inc * m) / inc = eb / inc + m := by
+    rw [Nat.add_mul_div_left _ _ incPos]
+  have rounded : (eb + inc * m) * (S + B) / Q ≤ eb * (S + B) / Q + inc * m * (S + B) / Q + 1 := by
+    rw [Nat.add_mul]
+    exact Nat.add_div_le_div_add_div_add_one _ _ _
+  have larger : inc * m * (S + B) / Q ≤ inc * m * (M + B) / Q :=
+    Nat.div_le_div_right (Nat.mul_le_mul_left _ (Nat.add_le_add_right score _))
+  have step : 2 * ((eb / inc + m) * P) = 2 * (eb / inc * P) + 2 * (P * m) := by ring
+  rw [quotient, step]
+  generalize eb / inc * P = x at *
+  generalize (eb + inc * m) * (S + B) / Q = u at *
+  generalize eb * (S + B) / Q = v at *
+  generalize inc * m * (S + B) / Q = w at *
+  generalize inc * m * (M + B) / Q = z at *
+  omega
+
 /-- A key's cap does not fall along a run. -/
 private theorem cap_le_cap_of_run (caps : CapOrder preset) {z y : ForkedBeaconState preset}
     (post : Run config checks z y) (early : y.fork < .glamsterdam) (i : ℕ) :
