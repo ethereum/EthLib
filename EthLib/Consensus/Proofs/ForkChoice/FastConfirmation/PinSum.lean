@@ -11923,6 +11923,29 @@ private theorem activated_of_activeVoters (early : fork < .glamsterdam)
   have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
 
+/-- A voter of the quorum has its activation assigned and reached.
+
+The quorum holds the keys that are active at the current or the previous epoch. -/
+private theorem activated_of_quorum (early : fork < .glamsterdam)
+    {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ Q s) :
+    ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+      w.activationEpoch ≤ getCurrentEpoch s := by
+  have listed := (Finset.mem_filter.mp (member : v ∈ quorumVoters s)).1
+  rw [List.mem_toFinset, List.mem_append] at listed
+  rcases listed with now | before
+  · exact activated_of_activeVoters early (by simpa [activeVoters] using now)
+  · obtain ⟨w, found, active⟩ :=
+      (mem_getActiveValidatorIndices (s.validators.bound early)).mp before
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+    have low := UInt64.le_iff_toNat_le.mp active.1
+    have prev := UInt64.le_iff_toNat_le.mp (getPreviousEpoch_le s)
+    refine ⟨w, found, fun far => ?_, UInt64.le_iff_toNat_le.mpr (by omega)⟩
+    have high := UInt64.lt_iff_toNat_lt.mp active.2
+    have bound := w.exitEpoch.toNat_lt
+    rw [far] at low
+    have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    omega
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C activates has its activation before its exit. -/
 private theorem activated_ordered (h : Setting config checks g split fin pulled anc counted V)
@@ -12061,7 +12084,8 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {v : ValidatorIndex} (active : v ∈ activeVoters counted)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) :
     creditedKey tailC highC v = true ∨ 0 < consAmt eventsC v.toNat := by
   classical
@@ -12078,7 +12102,7 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
     scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC
   rw [consZero] at consScan
   obtain ⟨z, pre, post, splitEq, -, -, -, -, funded, -, -, walk, -⟩ :=
-    created_start h tailC highC endEpochC (activated_of_activeVoters h.early active) absent
+    created_start h tailC highC endEpochC activated absent
   have positive := maxEffectiveBalance_pos h
   subst splitEq
   rw [grossScan_append] at scansZero
@@ -17101,7 +17125,8 @@ The depth is small against an increment, from `key` and a rate of at least four.
 private theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {v : ValidatorIndex} (member : v ∈ activeVoters counted)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) (P : ℕ)
     (hP : P = ((getBaseRewardPerIncrement preset
       (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
@@ -17131,7 +17156,7 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   classical
   obtain ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, inside, funded, hysteresis, reserve,
     walk, ahead⟩ := created_start h tailC highC endEpochC
-      (activated_of_activeVoters h.early member) absent
+      activated absent
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
@@ -17267,7 +17292,8 @@ private theorem created_band (h : Setting config checks g split fin pulled anc c
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {v : ValidatorIndex} (active : v ∈ activeVoters counted)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) :
     preset.upwardBand ≤ bandC tailC highC v.toNat + bandX fin highC v.toNat := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
@@ -17285,7 +17311,7 @@ private theorem created_band (h : Setting config checks g split fin pulled anc c
     unfold bandX
     rw [UInt64.ofNat_toNat]
     exact Nat.le_trans (Nat.le_mul_of_pos_right _ due) (Nat.le_add_left _ _)
-  · rcases created_credited h tailC highC endEpochC replayedC active absent with credited | cons
+  · rcases created_credited h tailC highC endEpochC replayedC activated absent with credited | cons
     · have positive : 0 < grossScan v.toNat highC tailC +
           (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
             tailC).1 := by
@@ -17318,7 +17344,8 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {v : ValidatorIndex} (active : v ∈ activeVoters counted)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat)
     (key : 11 * (min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
@@ -17347,7 +17374,7 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
       (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
     hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
       (by simpa using electra) v.toNat highC replayedC).1
-  obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC active
+  obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC activated
     absent
     (pinTerms config pulled anc fin).perIncrement rfl key flows
   have atEnd : (⟨fork, counted⟩ : ForkedBeaconState preset) ∈ post.balancePath := by
@@ -17511,7 +17538,11 @@ private theorem created_late (h : Setting config checks g split fin pulled anc c
 
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
-R's registry holds the key beyond the finalized registry.
+The key is absent from the finalized registry, and its rise is on the kept arm.
+
+A key created on C's branch after the split is bounded by its credits and their gains.
+
+The kept arm bounds the key's gain rate, which is the rate that bound reads.
 
 The replays are read at R's epoch. -/
 private theorem key_core_created (h : Setting config checks g split fin pulled anc counted V)
@@ -17525,11 +17556,41 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ValidatorIndex) (voter : v ∈ Q counted)
-    (inside : v.toNat < pulled.validators.data.size)
     (created : fin.validators.data.size ≤ v.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
-  sorry
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
+  classical
+  by_cases absent : split.validators.data.size ≤ v.toNat
+  · have activated := activated_of_quorum h.early voter
+    have incPos := h.bands.1
+    have rateLow : 11 * (pinTerms config pulled anc fin).depth *
+        ((pinTerms config pulled anc fin).ebUp v.toNat /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          (pinTerms config pulled anc fin).perIncrement *
+            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 1) ≤
+          (pinTerms config pulled anc fin).ebUp v.toNat := by
+      rw [keptArm_eq] at kept
+      simp only [Bool.and_eq_true, decide_eq_true_eq] at kept
+      exact kept.2
+    have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+      WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
+      (pinTerms config pulled anc fin).perIncrement
+      ((pinTerms config pulled anc fin).ebUp v.toNat) (pinTerms config pulled anc fin).depth
+      incPos (by decide) (ebUp_aligned h v.toNat) rateLow
+    have key : 11 * (min (pinTerms config pulled anc fin).depth
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          ((pinTerms config pulled anc fin).perIncrement *
+            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+      Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _)))
+        wide
+    have core := created_key_ceiling (events := events) (eventsF := eventsF) h tail fromFin tailC
+      highC endEpochC replayedC activated absent key (Or.inl kept)
+      (created_band h fromFin (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF tailC highC
+        endEpochC replayedC activated absent)
+    unfold keyCeiling
+    omega
+  · sorry
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The per-key core of the rise.
@@ -17594,7 +17655,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
           (fun p member => Or.inl (by simpa [Run.balancePath] using member))
           (.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) frozen kept
     · exact key_core_created h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC
-        v voter inside (Nat.le_of_not_lt inFin) kept
+        v voter (Nat.le_of_not_lt inFin) kept
   · exact key_core_headroom h tail fromFin tailC highC v kept
 
 /-- D-7 (rise): other keys active in both. -/
@@ -18662,7 +18723,7 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
   have alignedMax := (cap_values_aligned h.aligned).2
   have grows : split.validators.data.size ≤ pulled.validators.data.size :=
     registryGrows_of_chainSteps toPulled.chainSteps
-  have active := (Finset.mem_filter.mp member).1
+  have activated := activated_of_activeVoters h.early (Finset.mem_filter.mp member).1
   have absent := Nat.le_trans grows created
   -- the rate premise of the ceiling, at the depth of the window
   have gainMax : (pinTerms config pulled anc fin).gainRateMax =
@@ -18690,9 +18751,10 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
       ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = false
     simp [low]
-  exact created_key_ceiling h tail fromFin tailC highC endEpochC replayedC active absent key
+  exact created_key_ceiling h tail fromFin tailC highC endEpochC replayedC activated absent key
     (Or.inr ⟨notPosition, lowGain⟩)
-    (created_band h fromFin high endEpoch replayedF tailC highC endEpochC replayedC active absent)
+    (created_band h fromFin high endEpoch replayedF tailC highC endEpochC replayedC activated
+      absent)
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
