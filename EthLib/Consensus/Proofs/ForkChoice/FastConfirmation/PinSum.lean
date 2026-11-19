@@ -23,6 +23,7 @@ import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
 import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
 import EthLib.Consensus.Proofs.Mutators
 import EthLib.Consensus.Proofs.Transition.Trace
+import Mathlib.Data.Nat.ModEq
 import Mathlib.Data.Nat.Notation
 import EthLib.Consensus.Proofs.Transition.EpochUpdates
 import EthLib.Consensus.Proofs.Transition.ForkBoundary
