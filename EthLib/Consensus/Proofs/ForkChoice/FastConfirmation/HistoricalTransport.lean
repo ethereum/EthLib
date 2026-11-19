@@ -1054,6 +1054,78 @@ private theorem registry_of_runKept {state after : BeaconState preset fork}
   have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 run.grows
   exact ⟨after.validators.data[position], Array.getElem?_eq_getElem inside⟩
 
+/-- A validator active in a held block state at its block's epoch is in a later checkpoint state.
+
+The store is built with one setting of the checks.
+
+The two blocks read one checkpoint at its epoch, and the state's finality is not past it.
+
+The checkpoint state is the receiver's state processed to the start of its epoch, or later. -/
+public theorem _root_.EthLib.Consensus.Store.ForwardReachableWith.registered_of_shared_checkpoint
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
+    {checkpoint : Checkpoint} {root sourceRoot : Root}
+    {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
+    {source base cached : BeaconState preset fork}
+    (walk : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (bound : start ≤ max block.slot target)
+    (baseFound : store.blockStates[root]? = some base)
+    (advanced : lookaheadState config checks base target = .ok cached)
+    (sourceWalk : store.getCheckpointBlock sourceRoot checkpoint.epoch = .ok checkpoint.root)
+    (sourceBlockFound : store.blocks[sourceRoot]? = some sourceBlock)
+    (sourceFound : store.blockStates[sourceRoot]? = some source)
+    (finalized : source.finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+    {position : Nat} {validator : Validator}
+    (registered : source.validators.data[position]? = some validator)
+    (active : isActiveValidator validator (computeEpochAtSlot preset sourceBlock.slot) = true) :
+    position < cached.validators.data.size := by
+  obtain ⟨-, checkpointBlock, -, checkpointFound, -, -⟩ :=
+    Store.isAncestor_of_getCheckpointBlock sourceWalk
+  obtain ⟨boundaryBase, boundaryBaseFound, -, -⟩ :=
+    reached.reachable.blockStatesFromParents checkpointFound
+  by_cases atBlock : start ≤ sourceBlock.slot
+  · -- The pending tail at the checkpoint's epoch carries the position into the receiver.
+    have finite : checkpoint.epoch < FAR_FUTURE_EPOCH := by
+      have activeBound := UInt64.lt_iff_toNat_lt.mp
+        (by simpa [isActiveValidator] using active : _ ∧ _).2
+      have exitBound := validator.exitEpoch.toNat_lt
+      have epochLe := epoch_le_of_slot_le (preset := preset) _ _ (UInt64.le_iff_toNat_le.mp atBlock)
+      rw [computeEpochAtSlot_computeStartSlotAtEpoch positive startOk] at epochLe
+      have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      rw [UInt64.lt_iff_toNat_lt, far]
+      omega
+    have identity : lookaheadState config checks source source.slot = .ok source := by
+      simp [lookaheadState, pure, Except.pure]
+    have sourceStart : start ≤ max sourceBlock.slot source.slot := by
+      rw [UInt64.le_iff_toNat_le, toNat_max]
+      exact Nat.le_trans (UInt64.le_iff_toNat_le.mp atBlock) (Nat.le_max_left _ _)
+    obtain ⟨_, inside⟩ := registry_of_checkpointPrefix anchorSlot reached anchorInvariant positive
+      walk found startOk bound baseFound boundaryBaseFound advanced identity sourceWalk
+      sourceBlockFound sourceStart sourceFound finalized finite _ position
+      (isActiveAt_eq_true_iff.mpr ⟨validator, registered, active⟩)
+    exact (Array.getElem?_eq_some_iff.mp inside).1
+  · -- A source block before the epoch's start is the checkpoint block itself.
+    have rootEq : sourceRoot = checkpoint.root := by
+      simpa [Store.getCheckpointBlock, startOk, Except.mapError,
+        Store.getAncestor_of_le (node := ⟨sourceRoot, .pending⟩) sourceBlockFound
+          (UInt64.le_of_lt (UInt64.not_le.mp atBlock)),
+        bind, Except.bind, pure, Except.pure] using sourceWalk
+    rw [rootEq, boundaryBaseFound, Option.some.injEq] at sourceFound
+    subst sourceFound
+    obtain ⟨boundary, boundaryRun, receiverRun⟩ := relation_of_checkpoint_lookahead
+      RunKept RunKept.refl (fun one two => one.trans two)
+      (fun ok => runKept_stateTransition ok)
+      (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
+      (fun ok => runKept_processSlots ok)
+      anchorSlot reached walk found startOk bound boundaryBaseFound baseFound advanced
+    exact Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp registered).1
+      ((runKept_lookahead boundaryRun).grows.trans receiverRun.grows)
+
 /-- A window at the justified root has successful registry reads in its actual cached state.
 
 The cached state may process empty slots beyond the block at that root. -/
