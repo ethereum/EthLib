@@ -1444,21 +1444,24 @@ private theorem block_credit_le_sources {g m n : ForkedBeaconState preset}
     exact split
   | slot ok => exact absurd rfl (notSlot ok)
 
-/-- A block step raises the balance of a key by at most its gross credits. -/
-private theorem block_balance_le_gross {g : ForkedBeaconState preset} {f : Fork}
+/-- The credits of a block step to a key are at most its gross credits.
+
+A block step has no consolidation event, and its other sources credit nothing.
+
+The step counts all its credits on the left.
+
+On the right it counts only those of rewards, slashings and sync. -/
+private theorem block_credit_le_gross {g : ForkedBeaconState preset} {f : Fork}
     {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
     {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, s⟩ = false}
     {ok : applySignedBlock config checks engine s signed true = .ok t}
     (shared : Run config checks g ⟨f, s⟩) (genesis : Genesis config checks g)
     (early : f < .glamsterdam) (electra : .pectra ≤ f) (i : ℕ) :
-    actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i ≤
-      actualBalanceAt (⟨f, s⟩ : ForkedBeaconState preset) i + stepCredit
-        (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i
+    stepCredit (fun _ => true) (fun _ => true) i (Step.block engine signed due ok) ≤
+      stepCredit (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i
         (Step.block engine signed due ok) := by
   obtain ⟨events, replayed⟩ := (Step.block engine signed due ok :
     Step config checks ⟨f, s⟩ ⟨f, t⟩).balanceEvents_ok early
-  have base := PinSplit2.step_balance_le_events (Step.block engine signed due ok :
-    Step config checks ⟨f, s⟩ ⟨f, t⟩) early i replayed
   have bounded := step_events_bounded shared genesis (Step.block engine signed due ok) early
     replayed
   have noCons := blockReplay_noConsolidations electra early engine s signed.message
@@ -1475,6 +1478,25 @@ private theorem block_balance_le_gross {g : ForkedBeaconState preset} {f : Fork}
           simp [kept.1, kept.2.1, kept.2.2, noCons e member, syncCredit] at each ⊢
           omega
   simp only [stepCredit, replayed, Except.toOption, Option.getD_some]
+  simpa using split
+
+/-- A block step raises the balance of a key by at most its gross credits. -/
+private theorem block_balance_le_gross {g : ForkedBeaconState preset} {f : Fork}
+    {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
+    {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, s⟩ = false}
+    {ok : applySignedBlock config checks engine s signed true = .ok t}
+    (shared : Run config checks g ⟨f, s⟩) (genesis : Genesis config checks g)
+    (early : f < .glamsterdam) (electra : .pectra ≤ f) (i : ℕ) :
+    actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i ≤
+      actualBalanceAt (⟨f, s⟩ : ForkedBeaconState preset) i + stepCredit
+        (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i
+        (Step.block engine signed due ok) := by
+  obtain ⟨events, replayed⟩ := (Step.block engine signed due ok :
+    Step config checks ⟨f, s⟩ ⟨f, t⟩).balanceEvents_ok early
+  have base := PinSplit2.step_balance_le_events (Step.block engine signed due ok :
+    Step config checks ⟨f, s⟩ ⟨f, t⟩) early i replayed
+  have credit := block_credit_le_gross (due := due) (ok := ok) shared genesis early electra i
+  simp only [stepCredit, replayed, Except.toOption, Option.getD_some, List.filter_true] at credit ⊢
   omega
 
 /-- The credits of a step, net for a block step, are at most those of `credC`, `whistC` and sync. -/
@@ -16352,17 +16374,94 @@ The step that switches also takes the block credits that follow the switch in it
 
 So the credits are the gross ones: the net rise of that step can be zero while a credit is not.
 
-The lemmas are `Run.flip_split` and `step_flip_min`. -/
+The run splits at the step that switches, by `Run.flip_split`.
+
+That lemma bounds the balance after the step by the old cap and the credits of the step.
+
+The rest of the epoch rises by its credits alone, by `same_epoch_balance_le`. -/
 private theorem charge_flip (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) {c a : ForkedBeaconState preset}
     (toC : Run config checks ⟨fork, fin⟩ c) (r : Run config checks c a) (i : ℕ)
     (inside : i < c.state.validators.data.size)
     (same : getCurrentEpoch c.state = getCurrentEpoch a.state)
-    (early : a.fork < .glamsterdam) (endEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1)
+    (early : a.fork < .glamsterdam) (sameFork : a.fork = fork)
+    (endEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1)
     (flipped : PinSplit2.capAt c i ≠ PinSplit2.capAt a i)
     (atCap : ¬ effectiveAt c i < PinSplit2.capAt c i) :
     min (actualBalanceAt a i) (PinSplit2.capAt a i) ≤ effectiveAt c i + grossScan i highC r +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := sorry
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := by
+  classical
+  have sameC : fork = c.fork :=
+    (fork_eq_of_run toC r (Nat.le_of_eq (congrArg Fork.ctorIdx sameFork))).symm
+  obtain ⟨cf, cs⟩ := c
+  obtain ⟨af, as⟩ := a
+  simp only at sameC sameFork endEpoch same
+  have sameA : fork = af := sameFork.symm
+  subst sameC sameA
+  obtain ⟨shared⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  -- the caps: the key's cap is the activation balance at C and the largest balance after
+  have insideA : i < as.validators.data.size :=
+    Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps r.chainSteps)
+  obtain ⟨kindC, -, -⟩ := capAt_kind (z := cs) h i inside
+  obtain ⟨kindA, -, -⟩ := capAt_kind (z := as) h i insideA
+  have capMono := cap_le_cap_of_run h.caps r h.early i
+  have minMax := UInt64.le_iff_toNat_le.mp h.caps.compounding
+  have capC : PinSplit2.capAt (⟨fork, cs⟩ : ForkedBeaconState preset) i =
+      preset.MIN_ACTIVATION_BALANCE.toNat := by omega
+  have capA : PinSplit2.capAt (⟨fork, as⟩ : ForkedBeaconState preset) i =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by omega
+  have strict : preset.MIN_ACTIVATION_BALANCE.toNat <
+      PinSplit2.capAt (⟨fork, as⟩ : ForkedBeaconState preset) i := by omega
+  have effC : preset.MIN_ACTIVATION_BALANCE.toNat ≤
+      effectiveAt (⟨fork, cs⟩ : ForkedBeaconState preset) i := by omega
+  -- the run splits at the step that makes the key compound
+  obtain ⟨m, n, pre, step, post, cut, flatM, largeN, balN, sameEpoch⟩ :=
+    Run.flip_split r h.early h.fulu (Run.invariant (Genesis.invariant h.genesis)
+      (shared.append toC)) i (by omega) strict
+  obtain ⟨mf, ms⟩ := m
+  obtain ⟨nf, ns⟩ := n
+  have sameM : fork = mf :=
+    (fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)).symm
+  have sameN : fork = nf := (fork_eq_of_run (pre.snoc step) post (Nat.le_refl _)).symm
+  subst sameM sameN
+  have epochPre := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+  have epochStep := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  have epochPost := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
+  have sameNat := congrArg UInt64.toNat same
+  simp only at epochPre epochStep epochPost sameNat sameEpoch
+  have epochsEq : (getCurrentEpoch ns).toNat = (getCurrentEpoch as).toNat := by omega
+  -- the credits of the step that switches are gross, since it is a block step
+  have gross : stepCredit (fun _ => true) (fun _ => true) i step ≤
+      stepCredit (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i
+        step := by
+    cases step with
+    | slot ok =>
+      exact absurd rfl (step_flip_not_slot (Step.slot ok) h.early h.fulu i
+        (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps))
+        (by omega) largeN ok)
+    | block engine signed due ok =>
+      exact block_credit_le_gross (due := due) (ok := ok) (shared.append (toC.append pre))
+        h.genesis h.early electra i
+  -- after the switch the balance rises by the credits alone
+  have after := same_epoch_balance_le i highC post h.early (UInt64.toNat_inj.mp epochsEq.symm)
+    endEpoch
+  obtain ⟨eventsPost, replayedPost⟩ := post.balanceEvents_ok h.early highC
+  have net := (credits_le_sources (shared.append (toC.append (pre.snoc step))) h.genesis post
+    h.early (Nat.le_trans (by decide) h.fulu) i highC replayedPost).2.1
+  subst cut
+  have grossAll := grossScan_append i highC (pre.snoc step) post
+  have grossStep := grossScan_snoc i highC pre step
+  have creditAll := creditScan_append (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC
+    (pre.snoc step) post
+  have within :
+      (getCurrentEpoch (⟨fork, ms⟩ : ForkedBeaconState preset).state).toNat ≤ highC + 1 := by
+    show (getCurrentEpoch ms).toNat ≤ highC + 1
+    omega
+  simp only [within, ↓reduceIte] at grossStep
+  rw [grossAll, grossStep, creditAll]
+  rw [capA]
+  omega
 
 /-- The net credits of a run are at most its gross credits. -/
 private theorem netScan_le_grossScan {g x y : ForkedBeaconState preset}
@@ -16725,7 +16824,7 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
         · have := hystLt lt
           omega
         · have := charge_flip h highC (fromFin.append before) r v.toNat hc same
-            (aFork ▸ h.early) aEpoch capEq lt
+            (aFork ▸ h.early) aFork aEpoch capEq lt
           omega
     obtain ⟨capAll, capPost, ceilings, ceilingsPost⟩ :=
       charge_rise_fold h highC endEpochC _ step post v.toNat hcharge
