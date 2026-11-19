@@ -7844,6 +7844,51 @@ private theorem capCeil_path {c e : ForkedBeaconState preset} (tail : Run config
   obtain ⟨-, r2, -⟩ := balancePath_endpoint tail (Run.nil : Run config checks e e) back member
   exact cap_le_cap_of_run caps r2 early i
 
+/-- The effective balance of a key is at most its cap at each state of a run from a state `c`.
+
+The run from the finalized state reaches `c` first, and `c` holds the key. -/
+private theorem effective_le_cap_run (h : Setting config checks g split fin pulled anc counted V)
+    {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) {y : BeaconState preset fork}
+    (r : Run config checks ⟨fork, split⟩ ⟨fork, y⟩) (i : ℕ) :
+    ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinSplit2.capAt z i := fun z member => by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
+  exact effective_le_cap_at (shared.append (toC.append r1)) h.genesis h.caps h.early i
+
+/-- A key's effective balance at a state of C's run is that at `c`, or within the ceiling.
+
+The run of C starts at a state `c` of the shared segment, which holds the key, and ends at `e`.
+
+The cap of the key may rise once on the run, and the balance counts up to its cap at each state.
+
+The effective balance at `e` is that at `c` if `e` is no later than `c`. -/
+private theorem key_stay_to (h : Setting config checks g split fin pulled anc counted V)
+    {c e : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, e⟩) (i : ℕ)
+    (inside : i < c.validators.data.size) (Bc : ℕ)
+    (balanceC : ∀ z ∈ (fromC.append tailC).balancePath,
+      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ Bc) :
+    ((getCurrentEpoch e).toNat ≤ (getCurrentEpoch c).toNat ∧
+        effectiveAt (⟨fork, e⟩ : ForkedBeaconState preset) i =
+          effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i) ∨
+      ((getCurrentEpoch c).toNat < (getCurrentEpoch e).toNat ∧
+        effectiveAt (⟨fork, e⟩ : ForkedBeaconState preset) i ≤ Bc + preset.downwardBand ∧
+        effectiveAt (⟨fork, e⟩ : ForkedBeaconState preset) i ≤
+          max (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i)
+            (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+              (PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i))) := by
+  obtain ⟨shared⟩ := h.toFin
+  have invariant : Invariant c := Run.invariant h.genesis.invariant (shared.append toC)
+  obtain ⟨c1, c2, c3, -⟩ := effective_ceiling_flip h (fromC.append tailC) invariant i inside Bc
+    (PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i)
+    (effective_le_cap_run h toC fromC tailC i)
+    (capCeil_path (fromC.append tailC) h.caps h.early (Nat.le_refl _) i) balanceC
+  by_cases flat : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch c).toNat
+  · exact .inl ⟨flat, c2 flat⟩
+  · exact .inr ⟨by omega, c3 (by omega), c1⟩
+
 /-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance.
 
 The runs of C and of R start at a state `c` of the shared segment, which holds the key.
@@ -7875,20 +7920,13 @@ private theorem key_stay (h : Setting config checks g split fin pulled anc count
   obtain ⟨shared⟩ := h.toFin
   have invariant : Invariant c := Run.invariant h.genesis.invariant (shared.append toC)
   have later := UInt64.le_iff_toNat_le.mp h.later
-  have capped : ∀ {y : BeaconState preset fork} (r : Run config checks ⟨fork, split⟩ ⟨fork, y⟩),
-      ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinSplit2.capAt z i :=
-    fun r z member => by
-      obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
-      exact effective_le_cap_at (shared.append (toC.append r1)) h.genesis h.caps h.early i
-  obtain ⟨c1, c2, c3, -⟩ := effective_ceiling_flip h (fromC.append tailC) invariant i inside Bc
-    (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) (capped tailC)
-    (capCeil_path (fromC.append tailC) h.caps h.early (Nat.le_refl _) i) balanceC
   obtain ⟨-, r2, -, -⟩ := effective_ceiling_flip h (fromC.append tail) invariant i inside Bp
-    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) (capped tail)
+    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i)
+    (effective_le_cap_run h toC fromC tail i)
     (capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) i) balanceR
-  by_cases flat : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch c).toNat
-  · exact .inl ((c2 flat).trans (r2 (by omega)).symm)
-  · exact .inr ⟨c3 (by omega), c1⟩
+  rcases key_stay_to h toC fromC tailC i inside Bc balanceC with ⟨flat, same⟩ | ⟨-, near, top⟩
+  · exact .inl (same.trans (r2 (by omega)).symm)
+  · exact .inr ⟨near, top⟩
 
 open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
