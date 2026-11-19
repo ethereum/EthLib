@@ -248,6 +248,7 @@ theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : La
 /-- A trial and its randomizer fix the base. -/
 theorem trialRandomizer_inj_base {base base' : Randomizer} {j : ℕ}
     (h : trialRandomizer base j = trialRandomizer base' j) : base = base' := by
+  rw [trialRandomizer_eq, trialRandomizer_eq] at h
   have hb : bytesToUint base < 2 ^ 128 :=
     lt_of_lt_of_eq (Base.bytesToUint_lt base) (by simp [RANDOMIZER_LEN])
   have hb' : bytesToUint base' < 2 ^ 128 :=
