@@ -100,10 +100,10 @@ theorem padding_data (rate len : Nat) :
     (padding rate len).data =
       Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i := by
   apply Array.ext
-  · simp [padding, ByteArray.set!]
+  · simp [padding]
   · intro i _ inside
     have hk : i < rate - len % rate := by simpa using inside
-    simp only [padding, ByteArray.set!, Array.set!_eq_setIfInBounds, Array.getElem_ofFn]
+    simp only [padding, Array.getElem_ofFn]
     rw [Array.getElem_setIfInBounds (by simpa using hk),
       Array.getElem_setIfInBounds (by simpa using hk), Array.getElem_replicate]
     -- Byte i is written last when it is byte k - 1, and first when it is byte 0.
