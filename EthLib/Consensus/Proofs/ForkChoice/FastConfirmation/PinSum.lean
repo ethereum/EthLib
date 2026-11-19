@@ -1744,6 +1744,93 @@ theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
 
+/-- The guards of the floor trace of a run from a state `zs` of the run from the finalized block.
+
+The run ends at any state `y` that is at most one epoch after `pulled`.
+
+The slashing quotient at `zs` is the guard's, which is positive.
+
+The window of the slashing vector and the slashing quotient of each step are the guard's.
+
+No upgrade runs from Fulu, so no step records a crossing.
+
+It is the part of the floor of a key, on R's run and on C's, that does not read the key. -/
+private theorem floor_guards (h : Setting config checks g split fin pulled anc counted V)
+    {zs y : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    (endpoint : (getCurrentEpoch y).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩ (getCurrentEpoch pulled).toNat) ∧
+    ∀ {m n : ForkedBeaconState preset}, Run config checks ⟨fork, zs⟩ m →
+      ∀ step : Step config checks m n, Run config checks n ⟨fork, y⟩ →
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch zs).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩
+          (getCurrentEpoch pulled).toNat) ≤
+        (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing := by
+  obtain ⟨toFin⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have finZ : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch zs).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+  have atFin := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
+    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
+    (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) electra
+  have atZ := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
+    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
+    (Run.nil : Run config checks ⟨fork, zs⟩ ⟨fork, zs⟩) electra
+  refine ⟨?_, fun before step after => ⟨?_, ?_, ?_⟩⟩
+  · obtain ⟨_, _, _, _, _, _, _, quotient, _⟩ := h.guard
+    rw [atZ, ← atFin]
+    exact quotient
+  · have window := DirectSafety.Apriori.Internal.short_window_of_guard h.guard endpoint
+      ((Run.nil.snoc step).append after)
+    simp only at window ⊢
+    omega
+  · exact (DirectSafety.Apriori.Internal.slashing_quotient_of_electra before electra).le
+  · intro added addedOk
+    exact DirectSafety.Apriori.Internal.no_crossing_of_regime (toFin.append pre) before
+      h.genesis h.caps step
+      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
+      (.inl (Nat.le_trans electra (fork_le_of_chainSteps before.chainSteps))) addedOk
+
+/-- R's balance of a key that does not exit in the window falls only by its debit events.
+
+The floor starts from the smaller of the key's balance at a state `zs` of R's run and its cap.
+
+The state `zs` lies on R's run from the finalized block, and the rest of the run leads to `pulled`.
+
+The guards of the floor trace come from the setting's guard at the finalized block.
+
+The window of the slashing vector and the slashing quotient are the guard's.
+
+No upgrade runs from Fulu, so no step records a crossing. -/
+private theorem key_floorR_from (h : Setting config checks g split fin pulled anc counted V)
+    {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : rest.balanceEvents high = .ok events)
+    (i : ValidatorIndex) (val : Validator)
+    (initial : zs.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
+    (stays : ∀ w, pulled.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, zs⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, pulled⟩),
+      (before.snoc step).append after = rest → ∀ w,
+      n.state.validators.data[i.toNat]? = some w → high + 1 < w.exitEpoch.toNat) :
+    min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
+      actualBalanceAt ⟨fork, pulled⟩ i.toNat +
+        (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (events.map (syncDebit i.toNat)).sum +
+        (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨positive, guards⟩ := floor_guards h pre (y := pulled) (Nat.le_succ _)
+  refine Run.balanceFloor_events_or_fulu (toFin.append pre) rest h.genesis h.caps h.delay
+    h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
+  intro m n before step after cut w found
+  exact ⟨retained before step after cut w found, guards before step after⟩
+
 /-- R's balance of a key that does not exit in the window falls only by its debit events.
 
 The floor starts from the smaller of the key's balance at the split and its largest balance.
@@ -1770,39 +1857,9 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
         (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
         (events.map (syncDebit i.toNat)).sum +
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
-  obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
-    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-  -- The slashing quotient at the split is the guard's, which is positive.
-  have atFin := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
-    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
-    (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) electra
-  have atSplit := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
-    (checks := checks) (high := (getCurrentEpoch pulled).toNat)
-    (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) electra
-  have positive : 0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
-      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
-        (getCurrentEpoch pulled).toNat) := by
-    obtain ⟨_, _, _, _, _, _, _, quotient, _⟩ := h.guard
-    rw [atSplit, ← atFin]
-    exact quotient
-  refine Run.balanceFloor_events_or_fulu (toFin.append fromFin) tail h.genesis h.caps h.delay
-    h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
-  intro m n pre step post cut w found
-  refine ⟨retained pre step post cut w found, ?_, ?_, ?_⟩
-  · have window := DirectSafety.Apriori.Internal.short_window_of_guard h.guard
-      (show (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
-      ((Run.nil.snoc step).append post)
-    simp only at window ⊢
-    omega
-  · exact (DirectSafety.Apriori.Internal.slashing_quotient_of_electra pre electra).le
-  · intro added addedOk
-    exact DirectSafety.Apriori.Internal.no_crossing_of_regime (toFin.append fromFin) pre
-      h.genesis h.caps step
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early)
-      (.inl (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))) addedOk
+  exact key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed stays
+    retained
 
 /-! ### One key's reward in an epoch pass -/
 
