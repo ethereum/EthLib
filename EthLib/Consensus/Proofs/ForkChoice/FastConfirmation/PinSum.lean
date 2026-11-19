@@ -1807,6 +1807,75 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
     (key_stay rC rR early fulu later i inside Bc capHigh Bp capP balanceC capC balanceR capR)
     (effective_aligned (shared.append rC) genesis maxAligned i) capped ceiling slack
 
+/-- The penalty rate of a rewards pass at a state of a run from the finalized state is at most the
+pin's leak rate at the key's effective balance there. -/
+private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled anc counted V)
+    {m : BeaconState preset fork} (toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩)
+    (inside : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {total : Gwei} (totalOk : getTotalActiveBalance m = .ok total)
+    {pq : Gwei} (pqOk : getBaseRewardPerIncrement preset
+      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+        (getTotalActiveBalance pulled).toOption.getD 0 / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5) = .ok pq) (v : ℕ) :
+    PinSplit2.passPenaltyRate config (⟨fork, m⟩ : ForkedBeaconState preset) v ≤
+      (pinTerms config pulled anc fin).leakAt (effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) v)
+        v := by
+  obtain ⟨T, pulledOk⟩ := h.pulledTotal
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have toP := fromFin.append toPulled
+  have aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣
+      effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) v :=
+    Nat.dvd_of_mod_eq_zero (effective_aligned (shared.append toM) h.genesis h.aligned v)
+  have bandTotal := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+    electra h.guard toM h.early inside toP h.early (Nat.le_succ _) totalOk pulledOk
+  have band : 2 * T.toNat ≤ 3 * activeBalanceTotal m := by
+    rw [← getTotalActiveBalance_toNat totalOk]
+    exact bandTotal
+  have fromFinEpoch := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toM.chainSteps)
+  simp only at fromFinEpoch
+  have scored : (if altair : .altair ≤ fork then
+        (((m.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0) +
+      config.INACTIVITY_SCORE_BIAS.toNat ≤
+      (if altair : .altair ≤ fork then
+        (((fin.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0) +
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        config.INACTIVITY_SCORE_BIAS.toNat := by
+    simp only [altair, ↓reduceDIte]
+    have depth : (getCurrentEpoch m).toNat - (getCurrentEpoch fin).toNat + 1 ≤
+        (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
+    have times := Nat.mul_le_mul_right config.INACTIVITY_SCORE_BIAS.toNat depth
+    cases read : (m.inactivityScores altair).data[v]? with
+    | none =>
+      simp only [Option.map_none, Option.getD_none, Nat.zero_add]
+      refine le_trans ?_ (Nat.le_add_left _ _)
+      rw [Nat.add_mul, Nat.one_mul] at times
+      omega
+    | some score =>
+      have grown := runScore_le_start toM altair h.early (.inl electra) altair (i := v) read
+      simp only [Option.map_some, Option.getD_some]
+      rw [Nat.add_mul, Nat.one_mul] at times
+      simp only at grown
+      rw [Nat.mul_comm (_ - _)] at times
+      nlinarith
+  have key := PinSplit2.passPenaltyRate_le_leak (config := config) (⟨fork, m⟩ : ForkedBeaconState preset)
+    v T.toNat _ h.facts.incrementSize h.facts.room T.toNat_lt aligned band scored
+  dsimp only at key
+  refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
+  simp only [pinTerms, pulledOk, Except.toOption, Option.getD_some] at pqOk ⊢
+  rw [toNat_getBaseRewardPerIncrement pqOk]
+  have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
+      if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
+    split <;> simp [UInt64.toNat_div]
+  rw [quarter]
+  exact Nat.le_refl _
+
 /-- The per-key core of the rise.
 
 A key of R's registry rises from R to C by at most its rise term.
