@@ -5285,6 +5285,60 @@ private theorem deposits_scan_le (h : Setting config checks g split fin pulled a
     scan.trans (List.sum_le_sum fun e _ => by split <;> omega)
   omega
 
+/-- The deposits credited to keys that are active at C's end fit the window's deposit churn.
+
+A key that exits after C's epoch is not withdrawable at any deposit event of C's run.
+
+Its exit epoch is constant once set, and the exit epoch bounds the withdrawable epoch. -/
+private theorem deposits_active_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (S : Finset ValidatorIndex)
+    (active : ∀ v ∈ S, ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      (getCurrentEpoch counted).toNat < w.exitEpoch.toNat) :
+    3 * ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      tailC).1 ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  refine deposits_scan_le h tailC highC endEpochC replayedC S fun e member dep => ?_
+  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tailC h.genesis
+    h.early h.delay replayedC e member).2.2
+  obtain ⟨-, life, life', ordered, matched, -, epoch⟩ := replay_event_provenance
+    (toFin.append fromFin) tailC h.genesis h.early highC endEpochC _ replayedC e member
+  refine deposit_each_le e S dep (Nat.le_trans (Nat.le_trans (by decide) h.fulu) forkLe) matched
+    fun v inS w found => ?_
+  obtain ⟨wC, foundC, late⟩ := active v inS
+  obtain ⟨u, foundU, lifeU⟩ := (life.trans life').validators v.toNat w found
+  obtain rfl : u = wC := Option.some.inj (foundU.symm.trans foundC)
+  have epoch' : (getCurrentEpoch e.before.state).toNat ≤ (getCurrentEpoch counted).toNat := epoch
+  have bound := UInt64.le_iff_toNat_le.mp (ordered w (Array.mem_of_getElem? found))
+  have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots e.before.state
+  by_cases unset : w.exitEpoch = FAR_FUTURE_EPOCH
+  · rw [unset] at bound
+    omega
+  · have same := congrArg UInt64.toNat (lifeU.exitEpoch unset)
+    omega
+
+/-- The deposits credited to the keys of `K4` and `K6` on C's run fit the window's deposit churn.
+
+The keys of both classes are active at C's end. -/
+private theorem deposits_K46_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    3 * ∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 ≤
+        (pinTerms config pulled anc fin).queueDep :=
+  deposits_active_le h tailC highC endEpochC replayedC _ fun v member => by
+    have counted_active : v ∈ AC counted := by
+      rcases Finset.mem_union.mp member with m | m
+      · exact (Finset.mem_filter.mp m).1
+      · exact (Finset.mem_filter.mp m).1
+    obtain ⟨w, found, active⟩ := active_of_activeVoters h.early counted_active
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+    exact ⟨w, found, active.2⟩
+
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
