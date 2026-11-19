@@ -38,7 +38,7 @@ Not yet released.
   The stay step of the pin's C-floor reads it.
 
 - `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
-  The pin's drift bound read a private copy of it, and now reads this one.
+  The pin's drift bound reads it.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.

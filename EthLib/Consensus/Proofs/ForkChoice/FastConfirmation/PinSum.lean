@@ -30,7 +30,6 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
-import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.FirstDrop
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
