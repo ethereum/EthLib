@@ -2001,7 +2001,17 @@ If no epoch boundary is crossed, it is the effective balance at the start.
 
 After a boundary, it is at most `ceil` plus the downward band.
 
-The epoch never moves back. -/
+The epoch never moves back.
+
+Fourth, suppose the cap stays at most `capHigh`, as in the third.
+
+Suppose the rate of the rewards at every state is at most `P`, and the run ends by the epoch `high + 1`.
+
+Suppose also that `E` is at least the greatest effective balance that the bound below allows.
+
+Then the balance at every state is at most its start, plus the epoch rewards at the rate of `E`.
+
+It also adds the other credits that the events of the run give the key. -/
 private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
     (i : ℕ) (inside : i < x.state.validators.data.size)
@@ -2047,9 +2057,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       fun _ _ _ _ _ _ z hz => by
         rw [Run.balancePath, List.mem_singleton] at hz
         subst hz
-        have empty : (PinSplit.creditScan (fun _ => true) (fun s => decide (s ≠ .rewards)) i
-            high (Run.nil : Run config checks z z)).1 = 0 := rfl
-        simp [creditBound, empty]⟩
+        simp [creditBound]⟩
   | @snoc middle last pre step ih =>
     have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     obtain ⟨ihFloor, ihEnvelope, ihCeiling, ihCredit⟩ := ih middleEarly
