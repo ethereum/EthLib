@@ -169,105 +169,12 @@ private theorem upgradeBalanceReplay_credits {s t : ForkedBeaconState preset}
     subst replayed
     simp [sourceCredits]
 
-/-- The stages of an epoch after the rewards append only slashing, deposit and consolidation events.
--/
-private theorem epochReplayAction_sources {f : Fork} {k : EpochStage}
-    (later : k ∈ [EpochStage.registry, .slashings, .eth1Reset, .pendingDeposits,
-      .pendingConsolidations]) {pre post : BalanceReplay preset f}
-    (ok : epochReplayAction (config := config) (checks := checks) k pre = .ok post) :
-    ∃ added, post.2 = pre.2 ++ added ∧ ∀ e ∈ added,
-      e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations := by
-  simp only [List.mem_cons, List.not_mem_nil, or_false] at later
-  rcases later with rfl | rfl | rfl | rfl | rfl <;> simp only [epochReplayAction] at ok
-  · simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, rfl⟩ := ok
-    exact ⟨[], by simp, by simp⟩
-  · simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-    obtain ⟨_, _, _, _, rfl⟩ := ok
-    exact ⟨_, rfl, by simp⟩
-  all_goals
-    split at ok
-    · simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, rfl⟩ := ok
-      first
-        | exact ⟨_, rfl, by simp⟩
-        | exact ⟨[], by simp, by simp⟩
-    · cases ok
-      exact ⟨[], by simp, by simp⟩
-
 /-- A list with no event of a source records no credit of that source. -/
 private theorem sourceCredits_eq_zero {source : BalanceSource} {events : List (BalanceEvent preset)}
     (absent : ∀ e ∈ events, e.source ≠ source) : sourceCredits source events = 0 :=
   List.sum_eq_zero fun _ member => by
     obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
     simp [absent e inside]
-
-/-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards.
-
-Its events are those of the rewards pass, replayed from the state after the score update.
-
-They are followed by slashing, deposit and consolidation events only.
-
-The rewards pass records reward, penalty and inactivity events only. -/
-theorem epochReplay_events {f : Fork} (altair : .altair ≤ f)
-    {cached : BeaconState preset f} {post : BalanceReplay preset f}
-    (trace : EpochTrace (epochReplayAction (config := config) (checks := checks))
-      EpochStage.prefixStages (cached, []) post) :
-    ∃ just pass rewarded later, EpochStage.Edge config checks .justification cached just ∧
-      EpochStage.Edge config checks .inactivity just pass ∧
-      replayRewards (config := config) (pass, []) = .ok rewarded ∧
-      post.2 = rewarded.2 ++ later ∧
-      (∀ e ∈ later, e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
-      ∀ e ∈ rewarded.2, e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity := by
-  simp only [EpochStage.prefixStages] at trace
-  cases trace with | cons one trace =>
-  cases trace with | cons two trace =>
-  cases trace with | cons three trace =>
-  cases trace with | cons four trace =>
-  cases trace with | cons five trace =>
-  cases trace with | cons six trace =>
-  cases trace with | cons seven trace =>
-  cases trace with | cons eight trace =>
-  cases trace
-  simp only [epochReplayAction, carryBalance, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at one
-  obtain ⟨just, justOk, rfl⟩ := one
-  simp only [epochReplayAction, altair, ↓reduceDIte, carryBalance, bind_ok_iff, pure,
-    Except.pure, Except.ok.injEq] at two
-  obtain ⟨pass, passOk, rfl⟩ := two
-  simp only [epochReplayAction] at three
-  -- The rewards record rewards and penalties only.
-  have sources := replayRewards_induction (fun pre => ∀ e ∈ pre.2,
-      e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)
-    (fun held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, rfl⟩ := ok
-      intro e member
-      rcases List.mem_append.mp member with old | new
-      · exact held e old
-      · obtain rfl := List.mem_singleton.mp new
-        exact .inl rfl)
-    (fun penalty held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, rfl⟩ := ok
-      intro e member
-      rcases List.mem_append.mp member with old | new
-      · exact held e old
-      · obtain rfl := List.mem_singleton.mp new
-        exact .inr penalty)
-    (by simp) three
-  obtain ⟨a4, e4, s4⟩ := epochReplayAction_sources (by simp) four
-  obtain ⟨a5, e5, s5⟩ := epochReplayAction_sources (by simp) five
-  obtain ⟨a6, e6, s6⟩ := epochReplayAction_sources (by simp) six
-  obtain ⟨a7, e7, s7⟩ := epochReplayAction_sources (by simp) seven
-  obtain ⟨a8, e8, s8⟩ := epochReplayAction_sources (by simp) eight
-  refine ⟨just, pass, _, a4 ++ a5 ++ a6 ++ a7 ++ a8, justOk,
-    by simp only [EpochStage.Edge, altair, ↓reduceDIte]; exact passOk, three,
-    by rw [e8, e7, e6, e5, e4]; simp only [List.append_assoc], ?_, sources⟩
-  intro e member
-  simp only [List.mem_append] at member
-  rcases member with (((m | m) | m) | m) | m
-  exacts [s4 e m, s5 e m, s6 e m, s7 e m, s8 e m]
 
 /-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards.
 

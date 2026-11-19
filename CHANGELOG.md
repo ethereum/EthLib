@@ -31,6 +31,10 @@ Not yet released.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
+- `FloorTrace.run_potential_floor` bounds the balance of an unslashed key along a run from Fusaka before Gloas.
+  Its balance plus the sync and partial debits stays above a closed form that loses a pass rate of the effective balance each epoch.
+  The pin's low-balance floor and its fall floor read it.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
@@ -59,6 +63,10 @@ Not yet released.
   `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
   `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
   Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
+  `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
+  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes.
+  The slot ends an epoch, and it records at most one deposit event.
+  Their reader is the count of the keys that a branch credits, in the pin reserve bound.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
   `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
   `syncRewards_bounds` bounds the sync rewards at a position.
@@ -96,6 +104,8 @@ Not yet released.
   `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
   `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
   `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+  `runScore_le_start` bounds the inactivity score of a key along a run by its start score plus a bias for each epoch.
+  The pin's bound on the penalty of one rewards pass at a state reads it.
 
 - Some earlier private declarations are now public, with unchanged statements.
   They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
@@ -109,6 +119,8 @@ Not yet released.
   The bound is the epoch of the start, plus one epoch and the seed lookahead.
   `DirectSafety.departureCharges_run_indices` shows that the departure charges of a run name each registry index at most once.
   The pin's drift bound reads it for its exit-queue terms.
+  `sync_bounds_combined` bounds a sync aggregate's credits plus debits by the committee size times a reward and its share.
+  PinDriftBound's sync-debit bound reads it.
   `DirectSafety.Apriori.Internal.replayRewards_passes` gives the four passes of deltas that the rewards replay runs from Altair, after the first epoch.
   `DirectSafety.Apriori.Internal.replayDeltas_flows` bounds what one pass of deltas debits and credits at one position.
   `DirectSafety.Apriori.Internal.rewardCredit` is the credit of one reward event at a position, the sibling of `penaltyDebit`.
