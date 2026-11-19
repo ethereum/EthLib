@@ -658,6 +658,24 @@ private theorem apriori_prefix_witness {g v y : ForkedBeaconState preset}
       · simpa only [issued, nextIndex] using nextIssued
   exact key tail early endEpoch (Nat.le_refl _)
 
+/-- The effective balances active in an epoch sum the same at two states of one epoch of a run.
+
+The epoch is at most the epoch of the first state. -/
+theorem activeStake_eq_of_same_epoch {r y : ForkedBeaconState preset}
+    (inner : Run config checks r y) (early : y.fork < .glamsterdam)
+    (same : getCurrentEpoch y.state = getCurrentEpoch r.state) (epoch : Epoch)
+    (low : epoch ≤ getCurrentEpoch r.state) :
+    ∑ i ∈ (getActiveValidatorIndices y.state epoch).toFinset, effectiveAt y i.toNat =
+      ∑ i ∈ (getActiveValidatorIndices r.state epoch).toFinset, effectiveAt r i.toNat := by
+  have rEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps inner.chainSteps) early
+  have weights := run_same_epoch_effective inner early same
+  rw [(activeKept_of_chainSteps inner.chainSteps).getActiveValidatorIndices_eq
+    (UInt64.le_trans low (getCurrentEpoch_le_activityFixedEpoch _))]
+  refine Finset.sum_congr rfl fun i member => weights i.toNat ?_
+  obtain ⟨_, found, _⟩ := (mem_getActiveValidatorIndices (r.state.validators.bound rEarly)).mp
+    (List.mem_toFinset.mp member)
+  exact (Array.getElem?_eq_some_iff.mp found).1
+
 theorem activeStake_same_epoch {r y : ForkedBeaconState preset}
     (inner : Run config checks r y) (_electra : .pectra ≤ r.fork)
     (early : y.fork < .glamsterdam)
@@ -670,20 +688,10 @@ theorem activeStake_same_epoch {r y : ForkedBeaconState preset}
       effectiveAt y i.toNat) ≤ bound ∧
     (∑ i ∈ (getActiveValidatorIndices y.state (getPreviousEpoch y.state)).toFinset,
       effectiveAt y i.toNat) ≤ bound := by
-  have rEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps inner.chainSteps) early
-  have weights := run_same_epoch_effective inner early same
-  have equal (epoch : Epoch) (low : epoch ≤ getCurrentEpoch r.state) :
-      ∑ i ∈ (getActiveValidatorIndices y.state epoch).toFinset, effectiveAt y i.toNat =
-        ∑ i ∈ (getActiveValidatorIndices r.state epoch).toFinset, effectiveAt r i.toNat := by
-    rw [(activeKept_of_chainSteps inner.chainSteps).getActiveValidatorIndices_eq
-      (UInt64.le_trans low (getCurrentEpoch_le_activityFixedEpoch _))]
-    refine Finset.sum_congr rfl fun i member => weights i.toNat ?_
-    obtain ⟨_, found, _⟩ := (mem_getActiveValidatorIndices (r.state.validators.bound rEarly)).mp
-      (List.mem_toFinset.mp member)
-    exact (Array.getElem?_eq_some_iff.mp found).1
   have previousSame : getPreviousEpoch y.state = getPreviousEpoch r.state := by
     simp only [getPreviousEpoch, same]
-  rw [same, equal _ (UInt64.le_refl _), previousSame, equal _ (getPreviousEpoch_le _)]
+  rw [same, activeStake_eq_of_same_epoch inner early same _ (UInt64.le_refl _), previousSame,
+    activeStake_eq_of_same_epoch inner early same _ (getPreviousEpoch_le _)]
   exact ⟨current, previous⟩
 
 /-- From Electra, the ceiling `T_plus` does not decrease from one epoch to the next. -/

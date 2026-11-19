@@ -10337,6 +10337,74 @@ private theorem propN_arith {inc c pi pq a b total T : ℕ} (incPos : 0 < inc)
     _ = 324 * (pq * (T / inc)) + 216 * pq := by ring
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The reward rate and the total at the start of a run in `fin`'s epoch or later are bounded.
+
+The state is reached from `fin`, or it precedes `fin` in its epoch and reads what `fin` reads. -/
+private theorem start_rates (h : Setting config checks g split fin pulled anc counted V)
+    {m : BeaconState preset fork}
+    (within : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, m⟩) ∨
+      ∃ _ : Run config checks ⟨fork, m⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch m)
+    {pq : Gwei} (pqOk : getBaseRewardPerIncrement preset
+      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+        (getTotalActiveBalance pulled).toOption.getD 0 / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5) = .ok pq)
+    {T : Gwei} (pulledOk : getTotalActiveBalance pulled = .ok T)
+    {total perIncrement : Gwei} (totalOk : getTotalActiveBalance m = .ok total)
+    (per : getBaseRewardPerIncrement preset total = .ok perIncrement) :
+    perIncrement.toNat * ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
+        effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+      pq.toNat * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
+    perIncrement.toNat * ((∑ i ∈ (getActiveValidatorIndices m (getCurrentEpoch m)).toFinset,
+        effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+      pq.toNat * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ∧
+    2 * total.toNat ≤ 3 * T.toNat := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  rcases link with toMne | ⟨back, same⟩
+  · obtain ⟨toM⟩ := toMne
+    exact ⟨rate_of_guard h toM within (Or.inl rfl) pqOk total perIncrement totalOk per,
+      rate_of_guard h toM within (Or.inr rfl) pqOk total perIncrement totalOk per,
+      total_band_of_guard toFin h.genesis h.parameters h.caps h.aligned h.twoSlots electra
+        h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) toM h.early within pulledOk
+        totalOk⟩
+  · have current := activeStake_eq_of_same_epoch back h.early same (getCurrentEpoch m)
+      (UInt64.le_refl _)
+    have previous := activeStake_eq_of_same_epoch back h.early same (getPreviousEpoch m)
+      (getPreviousEpoch_le _)
+    have previousSame : getPreviousEpoch fin = getPreviousEpoch m := by
+      simp only [getPreviousEpoch, same]
+    obtain ⟨-, -, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
+    change total.toNat = max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+      (∑ i ∈ (getActiveValidatorIndices m (getCurrentEpoch m)).toFinset,
+        effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) at value
+    obtain ⟨atFin, atFinOk, atFinValue⟩ := totalActive_exists (s := fin) h.early (by
+      rw [same, current]
+      exact Nat.lt_of_le_of_lt (by rw [value]; exact le_max_right _ _) total.toNat_lt)
+    simp only [same] at atFinValue
+    have amounts : atFin = total := UInt64.toNat_inj.mp (by rw [atFinValue, current, value])
+    subst amounts
+    have inside : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+      rw [same]
+      exact within
+    have first := rate_of_guard h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) inside
+      (Or.inl rfl) pqOk atFin perIncrement atFinOk per
+    have second := rate_of_guard h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) inside
+      (Or.inr rfl) pqOk atFin perIncrement atFinOk per
+    refine ⟨?_, ?_, total_band_of_guard toFin h.genesis h.parameters h.caps h.aligned
+      h.twoSlots electra h.guard (fromFin.append toPulled) h.early (Nat.le_succ _)
+      (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) h.early inside pulledOk atFinOk⟩
+    · rw [previousSame, previous] at first
+      exact first
+    · rw [same, current] at second
+      exact second
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The proposer credits of a set of keys over a run inside one epoch of C's branch are bounded.
 
 The bound is the pin's rate on the pulled total, with `896` times the credits on the left.
@@ -10347,7 +10415,10 @@ A run with no reads of the rate credits nothing. -/
 private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) (S : Finset ValidatorIndex) {T : Gwei}
     (pulledOk : getTotalActiveBalance pulled = .ok T) {m : BeaconState preset fork}
-    (toM : Run config checks ⟨fork, split⟩ ⟨fork, m⟩) {u : ForkedBeaconState preset}
+    (toM : Run config checks g ⟨fork, m⟩)
+    (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, m⟩) ∨
+      ∃ _ : Run config checks ⟨fork, m⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch m)
+    {u : ForkedBeaconState preset}
     (inner : Run config checks ⟨fork, m⟩ u) (rest : Run config checks u ⟨fork, counted⟩)
     (same : getCurrentEpoch u.state = getCurrentEpoch m) :
     (∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
@@ -10355,17 +10426,15 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have uFork : u.fork = fork := fork_eq_of_run (toM.append inner) rest (Nat.le_refl _)
+  have uFork : u.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm
+    (fork_le_of_chainSteps rest.chainSteps) (fork_le_of_chainSteps inner.chainSteps))
   have uEarly : u.fork < .glamsterdam := by rw [uFork]; exact h.early
   have within : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 :=
     Nat.le_trans (UInt64.le_iff_toNat_le.mp
       (currentEpoch_le_of_chainSteps (inner.append rest).chainSteps)) h.near
   obtain ⟨events, replayed, bounded⟩ :=
-    Run.balanceEvents_bounded ((toFin.append fromFin).append toM) inner h.genesis uEarly highC
+    Run.balanceEvents_bounded toM inner h.genesis uEarly highC
   have scan : ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
       inner).1 ≤ sourceCredits .rewards events := by
     have := creditScan_sum_le S (fun s => decide (s = .rewards)) (fun _ => false) highC
@@ -10379,12 +10448,7 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
     simp [Nat.le_zero.mp scan]
   obtain ⟨credits, -⟩ := data total perIncrement totalOk per
   obtain ⟨pq, pqOk⟩ := quarter_base_ok h.facts per ((getTotalActiveBalance pulled).toOption.getD 0)
-  have toMFin := fromFin.append toM
-  have prev := rate_of_guard h toMFin within (Or.inl rfl) pqOk total perIncrement totalOk per
-  have curr := rate_of_guard h toMFin within (Or.inr rfl) pqOk total perIncrement totalOk per
-  have band := total_band_of_guard toFin h.genesis h.parameters h.caps h.aligned h.twoSlots
-    electra h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) toMFin h.early within
-    pulledOk totalOk
+  obtain ⟨prev, curr, band⟩ := start_rates h within link pqOk pulledOk totalOk per
   have rate : (pinTerms config pulled anc fin).perIncrement = pq.toNat := by
     show ((getBaseRewardPerIncrement preset
       (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
@@ -10403,6 +10467,8 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The proposer credits of a set of keys over a one-epoch segment of C's branch are bounded.
 
+The segment may follow a run `head` of its own epoch, whose credits it adds to.
+
 The bound is the pin's rate on the pulled total, with `896` times the credits on the left.
 
 The slot that ends the segment adds no block credit.
@@ -10410,21 +10476,30 @@ The slot that ends the segment adds no block credit.
 So the segment fits as its run before that slot does. -/
 private theorem propN_segment_le (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) (S : Finset ValidatorIndex) {T : Gwei}
-    (pulledOk : getTotalActiveBalance pulled = .ok T) {m n : ForkedBeaconState preset}
-    (toM : Run config checks ⟨fork, split⟩ m) (mid : Run config checks m n)
+    (pulledOk : getTotalActiveBalance pulled = .ok T) {s0 : BeaconState preset fork}
+    {m n : ForkedBeaconState preset} (toS : Run config checks g ⟨fork, s0⟩)
+    (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, s0⟩) ∨
+      ∃ _ : Run config checks ⟨fork, s0⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch s0)
+    (head : Run config checks ⟨fork, s0⟩ m) (mid : Run config checks m n)
     (rest : Run config checks n ⟨fork, counted⟩)
+    (sameStart : getCurrentEpoch m.state = getCurrentEpoch s0)
     (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       mid.Contains step → getCurrentEpoch u.state = getCurrentEpoch m.state) :
-    (∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      mid).1) * 896 ≤
+    ((∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
+      head).1) + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat
+        highC mid).1) * 896 ≤
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
-  have mFork : m.fork = fork := fork_eq_of_run toM (mid.append rest) (Nat.le_refl _)
+  have mFork : m.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm
+    (fork_le_of_chainSteps (mid.append rest).chainSteps) (fork_le_of_chainSteps head.chainSteps))
   obtain ⟨mf, ms⟩ := m
   obtain rfl : mf = fork := mFork
   by_cases same : getCurrentEpoch n.state = getCurrentEpoch ms
-  · exact propN_epoch_le h highC S pulledOk toM mid rest same
+  · have whole := propN_epoch_le h highC S pulledOk toS link (head.append mid) rest
+      (same.trans sameStart)
+    simp only [creditScan_append, Finset.sum_add_distrib] at whole
+    exact whole
   cases mid with
   | nil => exact absurd rfl same
   | @snoc u _ inner step =>
@@ -10439,9 +10514,11 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
         exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
           (applySignedBlock_ok ok).2.1).slot]) (UInt64.ne_of_lt crossing).symm
       | slot ok => exact ⟨ok, rfl⟩
-    refine Nat.le_trans (Nat.mul_le_mul_right 896 (Finset.sum_le_sum fun v _ => ?_))
-      (propN_epoch_le h highC S pulledOk toM inner
-        ((Run.nil.snoc (Step.slot boundary)).append rest) uEpoch)
+    have whole := propN_epoch_le h highC S pulledOk toS link (head.append inner)
+      ((Run.nil.snoc (Step.slot boundary)).append rest) (uEpoch.trans sameStart)
+    simp only [creditScan_append, Finset.sum_add_distrib] at whole
+    refine Nat.le_trans (Nat.mul_le_mul_right 896 (Nat.add_le_add_left
+      (Finset.sum_le_sum fun v _ => ?_) _)) whole
     rw [creditScan_snoc_fst]
     split <;> simp [stepCredit]
 
@@ -10484,15 +10561,22 @@ private theorem credit_arith {inc pi E T P A : ℕ} (incPos : 0 < inc) (hT : T =
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- C's proposer credits to any set of keys, with the sync part of the bound, are bounded.
 
+The credits start at a state `b` of the split's epoch, so they include the run `pre` from `b`.
+
 The bound is the proposer credit of each epoch of the window.
 
-The credits of each epoch are cut over the blocks.
+The credits of each epoch are cut over the blocks, and the split's epoch is cut once from `b`.
 
 So the flag rewards of its epoch pass are not read. -/
 private theorem proposer_rewards_le (h : Setting config checks g split fin pulled anc counted V)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (link : Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
+      ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, getCurrentEpoch fin = getCurrentEpoch b)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (S : Finset ValidatorIndex) :
-    (∑ v ∈ S, propN tailC highC v.toNat) +
+    (∑ v ∈ S, propN (pre.append tailC) highC v.toNat) +
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit := by
   obtain ⟨T, pulledOk⟩ := h.pulledTotal
@@ -10505,17 +10589,77 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
   obtain ⟨B, hB⟩ : ∃ B, B = (324 * ((pinTerms config pulled anc fin).perIncrement *
       (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement) / 896 := ⟨_, rfl⟩
+  -- the credits of `pre` are those of one epoch run, so they fit one epoch's bound
+  obtain ⟨P, hP⟩ : ∃ P, P = ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards))
+    (fun _ => false) v.toNat highC pre).1 := ⟨_, rfl⟩
+  have first : P ≤ B := by
+    have one := propN_segment_le h highC S pulledOk toB link pre
+      (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) tailC sameEpoch
+      (fun step member => by cases member)
+    rw [hB, hP]
+    refine (Nat.le_div_iff_mul_le (by norm_num)).mpr (Nat.le_trans ?_ one)
+    simp only [creditScan_nil_fst, Finset.sum_const_zero, Nat.add_zero]
+    exact Nat.le_refl _
   have cut := run_cuts_of_additive tailC h.early (fun _ => True)
     (fun r => ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      r).1) (fun _ => B)
+      r).1) (fun i => if i = 0 then B - P else B)
     (fun pre post _ => by simp only [creditScan_append, Finset.sum_add_distrib])
     (fun _ _ _ _ => trivial)
-    (fun toM mid rest starts _ => by
-      rw [hB]
-      exact (Nat.le_div_iff_mul_le (by norm_num)).mpr
-        (propN_segment_le h highC S pulledOk toM mid rest starts))
+    (fun {m n} toM mid rest starts _ => by
+      obtain ⟨mf, ms⟩ := m
+      obtain rfl : fork = mf := (fork_eq_of_run toM (mid.append rest) (Nat.le_refl _)).symm
+      by_cases e : getCurrentEpoch ms = getCurrentEpoch split
+      · -- the segment is in the split's epoch, so it adds to the credits of `pre`
+        have index : ix (⟨fork, split⟩ : ForkedBeaconState preset) ⟨fork, ms⟩ = 0 := by
+          simp only [ix, e]
+          omega
+        simp only [index, ↓reduceIte]
+        have one := propN_segment_le h highC S pulledOk toB link (pre.append toM) mid rest
+          (by simpa only [sameEpoch] using e) starts
+        have again : P ≤ ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false)
+            v.toNat highC (pre.append toM)).1 := by
+          rw [hP]
+          exact Finset.sum_le_sum fun v _ => by
+            rw [creditScan_append]
+            exact Nat.le_add_right _ _
+        have bound : P + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false)
+            v.toNat highC mid).1 ≤ B := by
+          rw [hB]
+          exact (Nat.le_div_iff_mul_le (by norm_num)).mpr
+            (Nat.le_trans (Nat.mul_le_mul_right 896 (Nat.add_le_add_right again _)) one)
+        omega
+      · have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toM.chainSteps)
+        have later : getCurrentEpoch split < getCurrentEpoch ms :=
+          UInt64.lt_of_le_of_ne (currentEpoch_le_of_chainSteps toM.chainSteps) (Ne.symm e)
+        have index : ix (⟨fork, split⟩ : ForkedBeaconState preset) ⟨fork, ms⟩ ≠ 0 := by
+          have := UInt64.lt_iff_toNat_lt.mp later
+          simp only [ix]
+          omega
+        simp only [index, ↓reduceIte]
+        rw [hB]
+        have one := propN_segment_le h highC S pulledOk ((toFin.append fromFin).append toM)
+          (Or.inl ⟨fromFin.append toM⟩) (Run.nil : Run config checks ⟨fork, ms⟩ ⟨fork, ms⟩) mid
+          rest rfl starts
+        simp only [creditScan_nil_fst, Finset.sum_const_zero, Nat.zero_add] at one
+        exact (Nat.le_div_iff_mul_le (by norm_num)).mpr one)
     (ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1) (fun step member => steps_before_end tailC step member)
-  rw [List.map_const', List.sum_replicate, List.length_range, smul_eq_mul] at cut
+  have total : ∀ t : ℕ, ((List.range (t + 1)).map
+      (fun i => if i = 0 then B - P else B)).sum + P ≤ (t + 1) * B := by
+    intro t
+    induction t with
+    | zero => simp only [List.range_one, List.map_cons, List.map_nil, List.sum_cons, List.sum_nil,
+        ↓reduceIte, Nat.add_zero, Nat.zero_add]; omega
+    | succ t ih =>
+      rw [List.range_succ, List.map_append, List.sum_append]
+      simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil,
+        Nat.succ_ne_zero t, ↓reduceIte] at ih ⊢
+      have : (t + 1 + 1) * B = (t + 1) * B + B := by ring
+      omega
+  have joined : ∑ v ∈ S, propN (pre.append tailC) highC v.toNat =
+      P + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
+        tailC).1 := by
+    rw [hP, ← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => creditScan_append _ _ _ _ pre tailC
   have depth : ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1 ≤ (pinTerms config pulled anc fin).depth := by
     have fin' := UInt64.le_iff_toNat_le.mp h.finalized
     have called := UInt64.le_iff_toNat_le.mp h.called
@@ -10553,7 +10697,10 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
       exact Nat.le_trans (by decide) (Nat.mul_le_mul two slots)
   calc _ ≤ (ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1) * B +
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer :=
-      Nat.add_le_add_right cut _
+      Nat.add_le_add_right (by
+        rw [joined]
+        have := total (ix ⟨fork, split⟩ ⟨fork, counted⟩)
+        omega) _
     _ ≤ (pinTerms config pulled anc fin).depth * B +
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer :=
       Nat.add_le_add_right (Nat.mul_le_mul_right _ depth) _
@@ -11105,7 +11252,11 @@ theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc cou
       10 * (pinTerms config pulled anc fin).exitingCredits +
         20 * (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat) := by
   -- The proposer credits fit the pin's per-epoch bound, and their consolidation part is `consAmt`.
-  have rewards := proposer_rewards_le h tailC highC (K5 counted V)
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have rewards := proposer_rewards_le h (toFin.append fromFin) (.inl ⟨fromFin⟩) Run.nil rfl tailC
+    highC (K5 counted V)
+  rw [run_nil_append] at rewards
   have parts : ∑ v ∈ (K5 counted V), propC tailC highC v.toNat ≤
       ∑ v ∈ (K5 counted V), propN tailC highC v.toNat +
         ∑ v ∈ (K5 counted V), consAmt eventsC v.toNat := by
@@ -11307,8 +11458,12 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
   bud_credits_of h tailC highC replayedC
     (by
       obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
-      have := proposer_rewards_le h tailC highC (K4 pulled counted V ∪ K5 counted V ∪
+      obtain ⟨toFin⟩ := h.toFin
+      obtain ⟨fromFin⟩ := h.fromFin
+      have := proposer_rewards_le h (toFin.append fromFin) (.inl ⟨fromFin⟩) Run.nil rfl tailC highC
+        (K4 pulled counted V ∪ K5 counted V ∪
         K6 pulled counted ∪ SC pulled counted split ∪ CS pulled counted)
+      rw [run_nil_append] at this
       rwa [Finset.sum_union (cs_disjoint h).1, Finset.sum_union (sc_disjoint h).1,
         Finset.sum_union (Finset.disjoint_union_left.mpr ⟨d46, d56⟩), Finset.sum_union d45]
         at this)
