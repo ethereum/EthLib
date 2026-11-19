@@ -13,7 +13,7 @@ It also has no activation epoch yet.
 
 Suppose every entry from some position on is pending at an epoch at or before the current one.
 
-A block before Gloas keeps that property.
+A block keeps that property.
 
 An epoch keeps it when the finalized epoch after it is at most the given epoch.
 
@@ -498,11 +498,10 @@ private theorem pendingTail_processExecutionRequests {config : Config}
     (fun _ _ _ holds ok => pendingTail_processConsolidationRequest ok holds)
     withdrawnTail consolidationRun
 
-/-- The shared operation schedule preserves the pending suffix at every fork before Gloas. -/
+/-- The operations of a block preserve the pending suffix. -/
 private theorem pendingTail_processOperations {config : Config} {checks : SignatureChecks}
     {source after : BeaconState preset fork} {body : BeaconBlockBody preset fork}
-    {parentSlot : Slot} (early : fork < .glamsterdam)
-    {boundary : Epoch} {count : Nat}
+    {parentSlot : Slot} {boundary : Epoch} {count : Nat}
     (run : processOperations config checks source body parentSlot = .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
     PendingTail count boundary after := by
@@ -514,7 +513,7 @@ private theorem pendingTail_processOperations {config : Config} {checks : Signat
       (fun ok tail => pendingTail_processVoluntaryExit ok tail)
       (fun ok tail => pendingTail_processBlsToExecutionChange ok tail)
       (fun ok tail => pendingTail_processExecutionRequests ok tail)
-      (fun {state after} {gloas} _ => (Nat.not_le.mpr early gloas).elim) run
+      (fun ok tail => by rw [processPayloadAttestation_eq ok]; exact tail) run
   have proposerTail := foldlM_ok_invariant (PendingTail count boundary)
     (fun _ _ _ held ok => pendingTail_processProposerSlashing ok held) tail proposersOk
   have slashingTail := foldlM_ok_invariant (PendingTail count boundary)
@@ -523,28 +522,48 @@ private theorem pendingTail_processOperations {config : Config} {checks : Signat
     (fun _ _ _ held ok => pendingTail_of_validators
       (congrArg (·.data) (processAttestation_registry ok).1) held) slashingTail attestedOk)
 
-/-- A block before Gloas transports its input pending tail.
+/-- A block transports its input pending tail.
 
-The execution prefix and sync aggregate keep the registry.
+From Gloas the requests of the parent payload run first, and they keep the pending tail.
+
+The rest of the execution prefix and the sync aggregate keep the registry.
 
 Boundary applicability remains an input. -/
 private theorem pendingTail_processBlock {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
-    {block : BeaconBlock preset fork} (early : fork < .glamsterdam)
-    {boundary : Epoch} {count : Nat}
+    {block : BeaconBlock preset fork} {boundary : Epoch} {count : Nat}
     (run : processBlock config checks engine source block = .ok after)
     (finite : boundary < FAR_FUTURE_EPOCH) (tail : PendingTail count boundary source) :
     PendingTail count boundary after := by
   obtain ⟨input, operated, started, operations, _, synced⟩ := processBlock_operationsInput run
-  have inputTail := pendingTail_of_validators
-    (congrArg (·.data) (started.validators_eq early)) tail
+  have inputTail : PendingTail count boundary input :=
+    started.step_of (fun s t => PendingTail count boundary s → PendingTail count boundary t)
+      (fun _ tail => tail) (fun one two tail => two (one tail))
+      (fun _ ok => processParentExecutionPayload_step_of
+        (fun s t => PendingTail count boundary s → PendingTail count boundary t)
+        (fun _ tail => tail) (fun one two tail => two (one tail))
+        (fun _ same tail => pendingTail_of_validators (congrArg (·.data) same) tail)
+        (fun ok tail => pendingTail_processWithdrawalRequest ok tail)
+        (fun ok tail => pendingTail_processConsolidationRequest ok tail) ok)
+      (fun headed tail => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
+        exact tail)
+      (fun _ executed tail =>
+        pendingTail_of_validators (congrArg (·.data) (processBlockExecution_validators executed))
+          tail)
+      (fun revealed tail => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
+        exact tail)
+      (fun _ voted tail => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq voted
+        exact pendingTail_of_validators (by rw [← rest]) tail) tail
   have same : after.validators = operated.validators := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
       rfl
     · cases synced; rfl
   exact pendingTail_of_validators (congrArg (·.data) same)
-    (pendingTail_processOperations early operations finite inputTail)
+    (pendingTail_processOperations operations finite inputTail)
 
 /-- Every non-registry stage preserves the pending tail, including intervening epoch stages. -/
 private theorem pendingTail_epochStage {config : Config} {checks : SignatureChecks}
@@ -725,7 +744,6 @@ The invariant and the finalized bound are inputs. -/
 private theorem pendingTail_stateTransition {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {source after : BeaconState preset fork}
     {signed : SignedBeaconBlock preset fork} {validate : Bool}
-    (early : fork < .glamsterdam)
     {boundary : Epoch} {count : Nat} (holds : Invariant source)
     (run : stateTransition config checks engine source signed validate = .ok after)
     (low : boundary ≤ getCurrentEpoch source)
@@ -735,7 +753,7 @@ private theorem pendingTail_stateTransition {config : Config} {checks : Signatur
   obtain ⟨advanced, slots, _, _, block, _⟩ := stateTransition_ok run
   have advancedFinalized : advanced.finalizedCheckpoint.epoch ≤ boundary := by
     simpa only [(frame_processBlock block).finalized] using finalized
-  exact pendingTail_processBlock early block finite
+  exact pendingTail_processBlock block finite
     (pendingTail_processSlots holds slots low advancedFinalized finite tail)
 
 /-- The second state follows the first without moving the current epoch back.
@@ -779,31 +797,29 @@ theorem pendingTailRun_processSlots {config : Config} {checks : SignatureChecks}
   exact ⟨afterInv, ordered, fun low high tail =>
     pendingTail_processSlots inv ok low high finite tail⟩
 
-/-- A block before Gloas relates its input and output, for a finite epoch. -/
+/-- A block relates its input and output, for a finite epoch. -/
 theorem pendingTailRun_processBlock {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
     {block : BeaconBlock preset fork} {epoch : Epoch} {count : Nat}
-    (early : fork < .glamsterdam)
     (finite : epoch < FAR_FUTURE_EPOCH)
     (ok : processBlock config checks engine s block = .ok t) : PendingTailRun count epoch s t := by
   have frame := frame_processBlock ok
   refine ⟨(runKept_processBlock ok).later, fun inv =>
     ⟨frame.invariant inv, ?_,
-      fun _ _ tail => pendingTail_processBlock early ok finite tail⟩⟩
+      fun _ _ tail => pendingTail_processBlock ok finite tail⟩⟩
   rw [frame.finalized]
   exact UInt64.le_refl _
 
-/-- A state transition before Gloas relates its input and output, for a finite epoch. -/
+/-- A state transition relates its input and output, for a finite epoch. -/
 theorem pendingTailRun_stateTransition {config : Config} {checks : SignatureChecks}
     {engine : ExecutionEngine preset fork} {s t : BeaconState preset fork}
     {signed : SignedBeaconBlock preset fork} {epoch : Epoch} {count : Nat}
-    (early : fork < .glamsterdam)
     (finite : epoch < FAR_FUTURE_EPOCH)
     (ok : stateTransition config checks engine s signed true = .ok t) :
     PendingTailRun count epoch s t := by
   refine ⟨(runKept_stateTransition ok).later, fun inv => ?_⟩
   obtain ⟨afterInv, ordered⟩ := stateTransition_invariant inv ok
   exact ⟨afterInv, ordered, fun low high tail =>
-    pendingTail_stateTransition early inv ok low high finite tail⟩
+    pendingTail_stateTransition inv ok low high finite tail⟩
 
 end EthLib.Consensus
