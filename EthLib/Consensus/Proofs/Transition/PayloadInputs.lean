@@ -20,6 +20,8 @@ From Fulu the header step also reads the proposer lookahead, so these fields inc
 
 Most steps of a block keep all of these fields, when they succeed.
 
+Several steps of an epoch keep them too, and so does a pending deposit.
+
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
 The sync aggregate and the vote on the deposit contract keep them, and from Gloas the operations.
@@ -158,6 +160,26 @@ theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubke
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · cases computed
 
+/-- Slashing a validator keeps the inputs of a payload. -/
+theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
+    {whistleblowerIndex : Option ValidatorIndex}
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    PayloadInputs state after := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exitedOk, -, -, markedOk, -, -, -, loweredOk, -, -,
+    raisedOk, lastOk, done⟩ := slashValidator_ok computed
+  -- The last step changes at most the builder payments, which are not an input of a payload.
+  have cancelled : PayloadInputs last after := by
+    subst done
+    split
+    · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · exact PayloadInputs.refl _
+  refine (payloadInputs_initiateValidatorExit exitedOk).trans <|
+    ((payloadInputs_setValidator markedOk).trans ?_).trans <|
+    (payloadInputs_decreaseBalance loweredOk).trans <|
+    (payloadInputs_increaseBalance raisedOk).trans <|
+    (payloadInputs_increaseBalance lastOk).trans cancelled
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 /-- A pending deposit keeps the inputs of a payload. -/
 theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
@@ -166,6 +188,8 @@ theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
   · exact PayloadInputs.refl _
   · exact payloadInputs_increaseBalance raised
   · exact payloadInputs_addValidatorToRegistry added
+
+/-! ## Steps of an epoch -/
 
 /-- The inactivity updates keep the inputs of a payload. -/
 theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
@@ -247,26 +271,6 @@ theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ 
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · subst rest
     exact PayloadInputs.refl _
-
-/-- Slashing a validator keeps the inputs of a payload. -/
-theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
-    {whistleblowerIndex : Option ValidatorIndex}
-    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exitedOk, -, -, markedOk, -, -, -, loweredOk, -, -,
-    raisedOk, lastOk, done⟩ := slashValidator_ok computed
-  -- The last step changes at most the builder payments, which are not an input of a payload.
-  have cancelled : PayloadInputs last after := by
-    subst done
-    split
-    · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-    · exact PayloadInputs.refl _
-  refine (payloadInputs_initiateValidatorExit exitedOk).trans <|
-    ((payloadInputs_setValidator markedOk).trans ?_).trans <|
-    (payloadInputs_decreaseBalance loweredOk).trans <|
-    (payloadInputs_increaseBalance raisedOk).trans <|
-    (payloadInputs_increaseBalance lastOk).trans cancelled
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ## The requests of a parent payload -/
 
