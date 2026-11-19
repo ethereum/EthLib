@@ -1140,7 +1140,7 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
 /-- A beacon committee has no repeated member.
 
 Its index is below the count of its slot, and the bounds of its epoch fit in 64 bits. -/
-theorem getBeaconCommittee_nodup {state : BeaconState preset fork}
+private theorem getBeaconCommittee_nodup {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) {slot : Slot} {index : CommitteeIndex}
     (below : index < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot))
     (fits : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length *

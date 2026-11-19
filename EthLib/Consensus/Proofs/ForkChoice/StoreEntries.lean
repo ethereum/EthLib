@@ -49,7 +49,9 @@ private abbrev KeepsAnswers (gloas : .glamsterdam ≤ fork) (a b : Store preset 
 
 /-- Each key of the five maps of the first store is a key of the same map of the second store.
 
-From Heze the answers on inclusion lists stay too, and a new verified payload has an answer. -/
+From Heze each root with an answer on inclusion lists still has one.
+
+A new verified payload has an answer too. -/
 private abbrev Keeps (a b : Store preset fork) : Prop :=
   (∀ r : Root, (a.unrealizedJustifications[r]?).isSome →
       (b.unrealizedJustifications[r]?).isSome) ∧
@@ -541,10 +543,11 @@ private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
 /-- From Heze, each verified payload of a reachable store has an answer on inclusion lists. -/
 private theorem Reachable.answers_aux {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
-    (reachable : Reachable config anchorState anchorBlock store) (gloas : .glamsterdam ≤ fork)
-    (heze : .hegota ≤ fork) (root : Root) (verified : (store.payloads gloas).contains root) :
+    (reachable : Reachable config anchorState anchorBlock store) (heze : .hegota ≤ fork)
+    (root : Root) (verified : (store.payloads (Nat.le_trans (by decide) heze)).contains root) :
     ((store.payloadInclusionListSatisfaction heze)[root]?).isSome := by
-  -- A step that keeps the keys keeps the answers of the verified payloads.
+  have gloas : .glamsterdam ≤ fork := Nat.le_trans (by decide) heze
+  -- After a step that keeps the keys, each verified payload still has an answer.
   have step : ∀ {s t : Store preset fork}, Keeps s t →
       (∀ r, (s.payloads gloas).contains r →
         ((s.payloadInclusionListSatisfaction heze)[r]?).isSome) →
@@ -688,7 +691,7 @@ theorem Store.Reachable.payloadInclusionListSatisfaction_isSome
     (heze : .hegota ≤ fork)
     (verified : store.isPayloadVerified (Nat.le_trans (by decide) heze) root = true) :
     ((store.payloadInclusionListSatisfaction heze)[root]?).isSome :=
-  reachable.answers_aux _ heze root verified
+  reachable.answers_aux heze root verified
 
 /-- In a reachable store, each known block has an unrealized justified checkpoint. -/
 theorem Store.Reachable.unrealizedJustification_ok
