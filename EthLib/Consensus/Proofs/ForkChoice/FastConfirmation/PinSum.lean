@@ -10582,7 +10582,9 @@ private def creditedKey {x y : ForkedBeaconState preset} (tail : Run config chec
 
 The same holds for each queue key.
 
-The slots are at least the proposers, the seats and the deposit recipients of the window. -/
+The slots are at least the proposers, the seats and the deposit recipients of the window.
+
+They also hold the seat units of R's branch and the shared segment. -/
 private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     ∃ N U : ℕ, (pinTerms config pulled anc fin).creditUnits =
         (N + 2 * (((pinTerms config pulled anc fin).positions.filter fun i =>
@@ -10593,10 +10595,67 @@ private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState p
           max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
             preset.SYNC_COMMITTEE_SIZE.toNat +
         (pinTerms config pulled anc fin).depth *
-          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ≤ N := by
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+        ((pinTerms config pulled anc fin).depth /
+          max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat +
+            ((pinTerms config pulled anc fin).depthFin /
+              max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2)) *
+          preset.SYNC_COMMITTEE_SIZE.toNat ≤ N := by
   dsimp only [pinTerms]
   simp only [decide_eq_true_eq]
-  exact ⟨_, _, rfl, Nat.le_add_right_of_le (Nat.le_add_right _ _)⟩
+  exact ⟨_, _, rfl, by omega⟩
+
+/-- The keys that a sync aggregate debits on the shared segment or R's branch fit the seat units.
+
+The seat units are the seats of the committees of the periods that the two runs touch. -/
+private theorem debit_keys_le (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    {events eventsF : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events)
+    (replayedF : fromFin.balanceEvents high = .ok eventsF) (A B : Finset ValidatorIndex)
+    (debitsF : ∀ v ∈ A, 0 < syncD eventsF v.toNat) (debitsR : ∀ v ∈ B, 0 < syncD events v.toNat) :
+    (A ∪ B).card ≤ ((pinTerms config pulled anc fin).depth /
+      max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat +
+        ((pinTerms config pulled anc fin).depthFin /
+          max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2)) *
+      preset.SYNC_COMMITTEE_SIZE.toNat := by
+  classical
+  obtain ⟨eventsC, replayedC⟩ := tailC.balanceEvents_ok h.early high
+  have inj : Function.Injective fun v : ValidatorIndex => v.toNat := fun a b same =>
+    UInt64.toNat_inj.mp same
+  have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
+    (A.image fun v => v.toNat) (B.image fun v => v.toNat)
+    (fun i hi => by
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      have := debitsF v hv
+      simp only [syncD, List.map_append, List.sum_append] at this ⊢
+      omega)
+    (fun i hi => by
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      exact debitsR v hv)
+  rw [← Finset.image_union, Finset.card_image_of_injective _ inj] at union
+  have finEpoch : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitPulled : (getCurrentEpoch split).toNat ≤ (getCurrentEpoch pulled).toNat :=
+    UInt64.le_iff_toNat_le.mp h.called
+  have periods := Nat.add_div_le_div_add_div_add_one
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) (getCurrentEpoch fin).toNat
+    (max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+  have shift : ((getCurrentEpoch pulled).toNat + 1) /
+      max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat ≤ ((getCurrentEpoch pulled).toNat + 2) /
+      max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat := Nat.div_le_div_right (by omega)
+  rw [Nat.sub_add_cancel (by omega)] at periods
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  have depthFinEq : (pinTerms config pulled anc fin).depthFin =
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := rfl
+  refine union.trans ?_
+  have nonneg := Nat.zero_le (((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) /
+    max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+  rw [depthEq, depthFinEq, Nat.mul_comm]
+  exact Nat.mul_le_mul_right _ (by omega)
 
 /-- The credited keys of `K4`, `K5`, `K6`, `SC` and `CS` fit the credited-key slots of the window.
 
