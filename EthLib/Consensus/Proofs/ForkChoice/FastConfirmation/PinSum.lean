@@ -5385,7 +5385,7 @@ private theorem gain_lt (I WD F P D k : ℕ) (hk : 0 < k)
 /-- The gain on a credit rounded up to an increment is at most an eleventh of the credit.
 
 The credit is a whole number of increments, so its rounding up is itself. -/
-private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I) (hWD : 0 < WD)
+private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I)
     (alignedC : C % I = 0) (key : 11 * D * (P * F) < WD * I) :
     11 * (D * ((C + I - 1) / I * P * F / WD)) ≤ C := by
   obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
@@ -5413,7 +5413,7 @@ private theorem ceiling_closed (I WD F P e0 D Df Cr Cr' S W C q r : ℕ) (hDf : 
       e0 + C + I + I := by
   subst hq hr
   have key := rate_per_increment I WD F P e0 D hI hWD alignedE rateLow
-  have credit := gain_credit_le I WD F P D C hI hWD alignedC key
+  have credit := gain_credit_le I WD F P D C hI alignedC key
   have base : 11 * (D * (e0 / I * P * F / WD)) + 30 * Df + 10 ≤ 10 * I := by
     have h1 : 11 * (e0 / I * P * F / WD) ≤ 10 * ((11 * (e0 / I * P * F / WD) + 9) / 10) := by
       omega
