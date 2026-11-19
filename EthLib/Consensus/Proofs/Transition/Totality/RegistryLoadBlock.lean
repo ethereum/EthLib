@@ -667,14 +667,6 @@ theorem applySignedBlock_registryLoad_le {signed : SignedBeaconBlock preset fork
 
 /-! ## The registry alone -/
 
-/-- A pending deposit added to the queue keeps the registry size. -/
-private theorem size_addPendingDeposit {electra : .pectra ≤ fork}
-    {deposit : PendingDeposit} (computed : addPendingDeposit state electra deposit = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [addPendingDeposit, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
-  rfl
-
 /-- A deposit of a block adds at most one validator. -/
 private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :

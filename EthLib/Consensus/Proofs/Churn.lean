@@ -470,4 +470,20 @@ theorem roundToIncrement_share_bounds {config : Config} (total quotient : Gwei)
     omega
   exact ⟨lower, Nat.le_trans (Nat.sub_le _ _) amountUpper⟩
 
+/-- Epochs of a churn of at least one increment hold an amount plus less than one churn.
+
+Then there are at most the amount in increments, plus one. -/
+theorem epochs_le_div_add_one {epochs churn increment left amount : Nat}
+    (positive : 0 < increment) (least : increment ≤ churn)
+    (spent : epochs * churn ≤ left + amount) (below : left < churn) :
+    epochs ≤ amount / increment + 1 := by
+  cases epochs with
+  | zero => exact Nat.zero_le _
+  | succ epochs =>
+    rw [Nat.add_mul, Nat.one_mul] at spent
+    have scaled := Nat.mul_le_mul_left epochs least
+    have bounded : epochs * increment ≤ amount := by omega
+    have := (Nat.le_div_iff_mul_le positive).mpr bounded
+    omega
+
 end EthLib.Consensus
