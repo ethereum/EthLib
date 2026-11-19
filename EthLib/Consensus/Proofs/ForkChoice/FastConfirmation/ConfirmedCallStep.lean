@@ -92,7 +92,7 @@ private theorem carrier_delivered {Δ : ℕ} {anchor : Store preset fork} {last 
     ⟨held, -⟩ | ⟨a, ha, b, hb, i, j, hi, hj, _, ⟨r, left, right⟩, found⟩
   · -- The receiver's state for the block is the sender's.
     obtain ⟨post, postFound, -, -⟩ := reachedW.blockStatesFromParents held
-    have same := e.blockStates_eq anchored sender receiver (start u sender) (start w receiver)
+    have same := e.blockStates_eq anchored (start u sender) (start w receiver)
       (agree u sender w receiver m k mBound bounded) stored postFound
     subst post
     exact ⟨held, postFound⟩
@@ -275,7 +275,7 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
         ((e.world k).state w).blockStates[root]? = some state := by
     -- The later call still holds the block, with the same state.
     obtain ⟨post, storedN, -, -⟩ := reachedN.blockStatesFromParents (e.blocks_of_le order known)
-    have same := e.blockStates_eq anchored sender sender (start u sender) (start u sender)
+    have same := e.blockStates_eq anchored (start u sender) (start u sender)
       (agree u sender u sender m n mBound nBound) stored storedN
     subst post
     have readN := (reachedN.getCheckpointBlock_of_blockState sound aligned positive window
@@ -511,7 +511,7 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
     obtain ⟨block, known⟩ := reachedM.known_of_blockState stored
     have knownN := e.blocks_of_le order known
     obtain ⟨post, storedN, -, -⟩ := reachedN.blockStatesFromParents knownN
-    have same := e.blockStates_eq anchored caller caller (start u caller) (start u caller)
+    have same := e.blockStates_eq anchored (start u caller) (start u caller)
       (agree u caller u caller m n mBound callBound) stored storedN
     subst post
     exact ⟨block, known, knownN, storedN⟩

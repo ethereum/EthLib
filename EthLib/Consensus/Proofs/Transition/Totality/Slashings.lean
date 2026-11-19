@@ -48,13 +48,11 @@ private def Kept (state current : BeaconState preset fork) : Prop :=
 /-- Lowering a balance at a position of the registry succeeds and keeps the state. -/
 private theorem decreaseBalance_kept {current : BeaconState preset fork}
     (matched : BalancesMatch state) (kept : Kept state current) {index : Nat}
-    (lt : index < state.validators.data.size) (within : state.RegistryWithinLimit)
-    (penalty : Gwei) :
+    (lt : index < state.validators.data.size) (penalty : Gwei) :
     ∃ after, decreaseBalance current index.toUInt64 penalty = .ok after ∧ Kept state after := by
-  have round := toNat_toUInt64_of_lt within lt
   have inside : index.toUInt64.toNat < current.balances.data.size := by
-    rw [round, kept.2.2.2, matched]
-    exact lt
+    rw [kept.2.2.2, matched]
+    exact Nat.lt_of_le_of_lt UInt64.toNat_ofNat_le lt
   refine ⟨_, decreaseBalance_eq_ok_iff.mpr ⟨inside, rfl⟩, ?_⟩
   exact ⟨kept.1, kept.2.1, by simp [SameSizes, BeaconState.putBalance, kept.2.2.1, kept.2.2.2]⟩
 
@@ -116,7 +114,7 @@ private theorem applySlashingPenaltyElectra_exists_ok (within : state.RegistryWi
             preset.EFFECTIVE_BALANCE_INCREMENT)) := by
         rw [mulChecked_of_lt product]; rfl
       rw [penalty, indexOk]
-      obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt within
+      obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt
         (perIncrement * (state.validators.data[index].effectiveBalance /
           preset.EFFECTIVE_BALANCE_INCREMENT))
       exact ⟨after, liftAccessor_ok.mpr lowered, kept'⟩
@@ -173,7 +171,7 @@ private theorem applySlashingPenalty_exists_ok (within : state.RegistryWithinLim
           exact second)]
         rfl
       rw [penalty, indexOk]
-      obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt within
+      obtain ⟨after, lowered, kept'⟩ := decreaseBalance_kept matched kept lt
         ((((state.validators.data[index].effectiveBalance /
             preset.EFFECTIVE_BALANCE_INCREMENT) * adjusted) / total) *
             preset.EFFECTIVE_BALANCE_INCREMENT)
