@@ -13948,6 +13948,191 @@ private theorem whistC_sum_le_limits {g m y : ForkedBeaconState preset}
     high (fun e => e.creditLimit) tail replayed fun e member _ =>
       sum_keyCredit_le_creditLimit S e (bounded e member).1
 
+/-- The positions of the keys slashed on C's branch after the split.
+
+They are unslashed at the split and slashed at C. -/
+private def slashedOnC (split counted : BeaconState preset fork) : Finset ℕ :=
+  (Finset.range counted.validators.data.size).filter fun i =>
+    (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
+      (counted.validators.data[i]?.map (·.slashed)).getD false = true
+
+/-- The bound on the effective balance of a key of R's registry that R's call reads.
+
+It is the key's effective balance, its rise and one increment, if R's branch slashes it.
+
+`branchR` pays that bound for such a key, and its increment covers the drop of R's penalty.
+
+Otherwise it is also at least the key's bound `ebUp` and its balance `bF` at the finalized state. -/
+private def whistleEnv (t : PinTerms preset) (pulled : BeaconState preset fork) (i : ℕ) : ℕ :=
+  if t.slashedRB i = true then
+    balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
+
+/-- The credits that raise the effective balance of a key of R's registry on C's branch.
+
+They are the key's credits at eleven tenths, rounded up, and the bands of its credits.
+
+The seat debits are those of the two runs that R shares with C.
+
+A key that exited before the finalized state also holds its credits on the shared segment. -/
+private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (highC high : ℕ)
+    (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
+    (i : ℕ) : ℕ :=
+  (11 * (propN tail highC i + depPre eventsC i + syncCr eventsC i + consAmt eventsC i +
+    syncD eventsF i + syncD events i) + 9) / 10 + bandC tail highC i + bandX fin highC i +
+  if t.exitBeforeFin i = true then
+    (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i
+  else 0
+
+/-- What a created key's charge adds to the effective balance of the key at an earlier exit.
+
+It is the band, the gains at the largest rate and the key's credits on C's branch. -/
+private def whistleExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (high : ℕ) (eventsC : List (BalanceEvent preset)) (i : ℕ) :
+    ℕ :=
+  preset.upwardBand + t.depth * t.gainRateMax +
+    (credC tail high i + whistC tail high i + syncCr eventsC i)
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The whistleblower credits of any set of keys on C's branch are at most the reward base.
+
+The base is the slashing reward of each key slashed on that branch, read at its balance then.
+
+A key of the split's registry is read at the bound `registry` gives for it.
+
+`registry` is asked for each key that is unslashed at the split, at each step of C's branch.
+
+Its sub-cases are the arms of the key ceilings.
+
+They are: exited before the finalized state, headroom, frozen cap, rising cap, created after it.
+
+A key slashed on the shared segment from the finalized state is slashed at the split.
+
+It is not in `slashedOnC`, so the sums below have no term for it: its credit on C's branch is zero.
+
+A key of R's registry that is also slashed on R's branch is a term of the first sum.
+
+A consumer that pays those terms by another budget splits that sum by the key's slashing on R.
+
+A key created after the split that is active at C is read at `ceilA`.
+
+A key created after the split that has exited by C is read at its charge and credits.
+
+Each term of the sums is at most the largest cap, which a slashing reads at its balance. -/
+private theorem whistle_core (h : Setting config checks g split fin pulled anc counted V)
+    {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (ceilA : ℕ → ℕ)
+    (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, i < split.validators.data.size →
+        (split.validators.data[i]?.map (·.slashed)).getD false = false →
+          effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled i +
+            whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
+              fin i)
+    (active : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, ¬ i < split.validators.data.size →
+        isActiveAt counted (getCurrentEpoch counted) i = true →
+        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
+        effectiveAt a i ≤ ceilA i)
+    (S : Finset ValidatorIndex) :
+    ∑ v ∈ S, whistC tailC highC v.toNat ≤
+      (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+        min (whistleEnv (pinTerms config pulled anc fin) pulled i +
+          whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
+            fin i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+      (∑ i ∈ ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
+          (fun i => isActiveAt counted (getCurrentEpoch counted) i = true),
+        min (ceilA i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+      (∑ i ∈ ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
+          (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true),
+        min (chargeAmt tailC i +
+            whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC i)
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have limit := whistC_sum_le_limits (shared.append fromFin) h.genesis tailC h.early highC
+    replayedC S
+  obtain ⟨E, hE⟩ : ∃ E : ℕ → ℕ, ∀ i, E i =
+      if (split.validators.data[i]?.map (·.slashed)).getD false = false then
+        min (whistleEnv (pinTerms config pulled anc fin) pulled i +
+          whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
+            fin i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+      else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := ⟨_, fun _ => rfl⟩
+  obtain ⟨cr, hcr⟩ : ∃ cr : ℕ → ℕ, ∀ i, cr i =
+      if isActiveAt counted (getCurrentEpoch counted) i = true then
+        min (ceilA i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+      else min (chargeAmt tailC i +
+          whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC i)
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := ⟨_, fun _ => rfl⟩
+  -- the keys of R's registry are read at `registry`, or at the largest cap if slashed at the split
+  have regE : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, i < split.validators.data.size → effectiveAt a i ≤ E i := by
+    intro a b step member i inside
+    rw [hE i]
+    obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+    have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
+      h.caps aEarly i
+    by_cases unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false
+    · simp only [unslashed]
+      exact le_min (registry step member i inside unslashed) capped
+    · simp only [unslashed]
+      exact capped
+  -- the created keys are read at `ceilA` while active at C, and at their charge after
+  have createdE : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, split.validators.data.size ≤ i →
+        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
+        effectiveAt a i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ cr i := by
+    intro a b step member i created flag
+    rw [hcr i]
+    obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+    have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
+      h.caps aEarly i
+    by_cases act : isActiveAt counted (getCurrentEpoch counted) i = true
+    · simp only [act]
+      exact Nat.div_le_div_right
+        (le_min (active step member i (Nat.not_lt.mpr created) act flag) capped)
+    · simp only [act]
+      exact Nat.div_le_div_right (le_min (created_charge h fromFin tailC
+        (whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC)
+        (fun step member i created old foundA assigned =>
+          earlier_charge h tailC highC endEpochC replayedC step member i created old foundA
+            assigned) step member i created flag) capped)
+  have charged := slashing_charge h fromFin tailC highC endEpochC replayedC E cr regE createdE
+  refine limit.trans (charged.trans (le_of_eq ?_))
+  -- the sum over the slashed keys splits into the three kinds of key
+  change ∑ i ∈ slashedOnC split counted, _ = _
+  rw [← Finset.sum_filter_add_sum_filter_not (slashedOnC split counted)
+    (fun i => i < split.validators.data.size)]
+  rw [← Finset.sum_filter_add_sum_filter_not
+    ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size))
+    (fun i => isActiveAt counted (getCurrentEpoch counted) i = true)]
+  rw [← add_assoc]
+  congr 1
+  congr 1
+  · refine Finset.sum_congr rfl fun i member => ?_
+    obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
+    have unslashed := (Finset.mem_filter.mp inSlashed).2.1
+    simp only [inside, ↓reduceIte, hE i, unslashed]
+  · refine Finset.sum_congr rfl fun i member => ?_
+    obtain ⟨inNew, act⟩ := Finset.mem_filter.mp member
+    have outside := (Finset.mem_filter.mp inNew).2
+    simp [outside, hcr i, act]
+  · refine Finset.sum_congr rfl fun i member => ?_
+    obtain ⟨inNew, act⟩ := Finset.mem_filter.mp member
+    have outside := (Finset.mem_filter.mp inNew).2
+    simp [outside, hcr i, act]
+
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/
 theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
