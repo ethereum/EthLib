@@ -5628,8 +5628,9 @@ private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
   rw [← sum_syncDebit_eq events v]
   exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
-/-- The sync movement over any keys of a run from the split to a state within a call's reach
-is at most its seats' envelope, read at the pulled state's total. -/
+/-- The sync movement of keys on a run from the split, within a call's reach, is within an envelope.
+
+The envelope is the seats' one, read at the pulled state's total. -/
 private theorem syncF_run_le (h : Setting config checks g split fin pulled anc counted V)
     (pulledTotal : Gwei) (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal)
     {e : BeaconState preset fork} (t : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
@@ -5764,9 +5765,9 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         omega
     _ = _ := by ring
 
-/-- The sync credits of any keys on C's branch are at most the seats' envelope and the proposer's share.
+/-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
-The bound weighs both at the depth.
+The share is the proposer's, and the bound weighs both at the depth.
 
 This is the second run of `bud_sync` for credits alone, and `syncSeats` weighs it at `depth`. -/
 private theorem syncCredits_le (h : Setting config checks g split fin pulled anc counted V)
@@ -5813,8 +5814,9 @@ private theorem syncCredits_le (h : Setting config checks g split fin pulled anc
   calc _ ≤ _ := credits.trans bounded
     _ = _ := by ring
 
-/-- The flag gains of the other credits of a key set, floored key by key,
-are at most the gain of their weighted sum, floored once.
+/-- Floored key by key, the flag gains of a key set's other credits are at most one floored gain.
+
+That gain is the gain of their weighted sum.
 
 Each floor of a sum is at least the sum of the floors, in the increments and in the weights. -/
 private theorem otherGain_sum_le {ι : Type} (S : Finset ι) (w c : ι → ℕ)
