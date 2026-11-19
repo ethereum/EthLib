@@ -8,6 +8,8 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 
 The precompile names cover exactly the addresses that transaction execution warms.
 
+The system contracts of a fork are the contracts that its blocks call, with the deposit contract.
+
 A reported configuration uses the checksum and blob schedule of its activation.
 
 The BPO forks keep Osaka's precompiles and system contracts.
@@ -149,6 +151,23 @@ theorem configSystemContracts_bpo (config : ChainConfig) {fork : Fork}
     (lower : .bpo1 ≤ fork) (upper : fork ≤ .bpo5) :
     configSystemContracts config fork = configSystemContracts config .fusaka := by
   cases fork <;> first | rfl | contradiction
+
+/-- The system contracts of a fork are those that its blocks call, and the deposit contract.
+
+A block calls the beacon roots contract from Cancun, and the history storage contract from Prague.
+
+From Prague it also reads requests from each request contract of its fork.
+
+The deposit contract of the chain joins them from Prague. -/
+theorem mem_configSystemContracts_iff (config : ChainConfig) (fork : Fork) (address : Address) :
+    address ∈ (configSystemContracts config fork).map Prod.snd ↔
+      .dencun ≤ fork ∧ address = Blocks.BEACON_ROOTS_ADDRESS ∨
+        .pectra ≤ fork ∧ (address = Blocks.HISTORY_STORAGE_ADDRESS ∨
+          address = config.depositContractAddress ∨
+          address ∈ (Blocks.requestContracts fork).map Prod.snd) := by
+  cases fork <;>
+    simp +decide [configSystemContracts, Blocks.requestContracts,
+      Blocks.REQUEST_CONTRACTS, Blocks.BUILDER_REQUEST_CONTRACTS, or_comm, or_left_comm]
 
 /-- A view without the genesis hash and timestamp answers with an internal error. -/
 theorem ChainView.configReport_no_genesis (v : ChainView) (absent : v.genesis = none) :
