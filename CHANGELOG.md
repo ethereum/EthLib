@@ -850,14 +850,15 @@ Not yet released.
   It and `uncompress_eq_zero_or` take a vector and read the flags in its first byte.
   `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` are new, and state their facts on the bytes of the input.
   `G1.compress_uncompress`, `uncompress_injective`, `uncompress_valid`, `keyValidatePoint_eq_ok_iff`, `exists_keyValidatePoint_of_isOk`, `exists_mul_generator_of_keyValidatePoint` and `Security.exists_decodeKey_of_uncompress` take the encoding as a vector.
-  `G1.compress_congr` and `Kzg.compress_eq_of_toPoint_eq` keep their text, and now equate vectors.
+  `G1.compress_congr` and `Kzg.compress_eq_of_toPoint_eq` keep their meaning, and now equate vectors.
   `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and `TrustedSetup.decodeG1_eq_ok` relates the first to decompression.
   `TrustedSetup.ofBytes_g1Monomial_mem`, `SetupLagrange.coords_of_encodes`, `SetupLagrange.ofBytes_getElem` and `SetupTorsion.modulus_smul_eq_zero` state their facts through `decodeG1`.
-  `Kzg.uncompress_G1_POINT_AT_INFINITY` and `validateKzgG1Point_eq_ok_iff` pass the 48 bytes to decompression as they are.
+  `Kzg.uncompress_G1_POINT_AT_INFINITY` and `validateKzgG1Point_eq_ok_iff` pass the 48 bytes to decompression with no conversion to bytes.
   `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
   `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
   `coreVerify_of_represents`, `pointToPubkey_bytes`, `pkBytes_eq`, `skToPk_bytes` and `Security.G1Sub.encode_eq_compress` state the key as the bytes of the compressed point, `packBytes (G1.compress P)`.
-  `addPubkeyPoint_invalidPubkey` takes the key as it is, and `fastAggregateVerify_rogue` states the keys with `skToPk`.
+  `Security.G1Sub.encode_def` is new, and states the encoding in the same form.
+  `Signatures.addPubkeyPoint_invalidPubkey` validates the key with no conversion to bytes, and `fastAggregateVerify_rogue` states the keys with `skToPk`.
   `EpochDraws.keys`, `EpochDrawsEnd.keys`, `SyncDrawable.keys`, `UpgradeDraws` and `UpgradeDrawsEnd` validate each key as a vector.
   So do the hypotheses of `getNextSyncCommittee_ok`, `processEpoch_total_of_altair_of_lt_electra`, `processEpoch_total_of_electra` and `runHypotheses_of_quiet_altair`, and the conclusion of `witnessKey_valid`.
   No C export or Python function changes.
