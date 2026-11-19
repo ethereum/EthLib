@@ -641,10 +641,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10 +
       (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
         else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
+  -- A key active by the finalized state can have a larger balance there, and its reward is charged.
+  --
+  -- The margin check prices that term at zero on every row (64739ed98, section 33).
   let pendingR := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
-        v.activationEpoch == FAR_FUTURE_EPOCH), (effective i + rise i)
+        v.activationEpoch == FAR_FUTURE_EPOCH),
+      (effective i + rise i +
+        3 * ((finEB i - effective i - rise i + (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
+          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat))
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
@@ -5234,13 +5240,18 @@ private theorem tight_iff (config : Config) (pulled anc fin : BeaconState preset
         1 + preset.MAX_SEED_LOOKAHEAD.toNat := by
   simp only [pinTerms, decide_eq_true_eq]
 
-/-- Outside the tight window, `pendingR` is the stake and rise of the pending keys. -/
+/-- Outside the tight window, `pendingR` is the stake and rise of the pending keys.
+
+It also holds the reward of what the finalized balance exceeds them by. -/
 private theorem pendingR_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     (pinTerms config pulled anc fin).pendingR =
       if (pinTerms config pulled anc fin).tight = true then 0 else
         ∑ i ∈ (pinTerms config pulled anc fin).positions with
           (pinTerms config pulled anc fin).pendingRB i = true,
-          (balanceAt pulled i + (pinTerms config pulled anc fin).rise i) := rfl
+          (balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
+            3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
+              ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) := rfl
 
 /-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
 private theorem sum_le_exiting (config : Config)
@@ -14164,8 +14175,9 @@ private theorem bud_pendingR (h : Setting config checks g split fin pulled anc c
         (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dSC)
     rw [← Finset.sum_union (Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
       (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) apart))]
-    refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
-      fun v hv => ?_
+    refine le_trans (sum_toNat_le (fun i => balanceAt pulled i +
+      (pinTerms config pulled anc fin).rise i) fun v hv => ?_)
+      (Finset.sum_le_sum fun i _ => Nat.le_add_right _ _)
     have flag : (pinTerms config pulled anc fin).pendingRB v.toNat = true := by
       rcases Finset.mem_union.mp hv with member | member
       · exact (Finset.mem_filter.mp member).2

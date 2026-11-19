@@ -851,10 +851,17 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- It can then become eligible there and activate deep in the window, while inactive here.
   --
   -- Its effective balance here and its rise are charged once; the top-up is the other branch's.
+  --
+  -- A key active by the finalized state can have a larger balance there, and its reward is charged.
+  --
+  -- The margin check prices that term at zero on every row (64739ed98, section 33).
   let pendingR := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
-        v.activationEpoch == FAR_FUTURE_EPOCH), (effective i + rise i)
+        v.activationEpoch == FAR_FUTURE_EPOCH),
+      (effective i + rise i +
+        3 * ((finEB i - effective i - rise i + (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
+          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat))
   -- A key that joins at the next epoch here can activate earlier on another branch.
   --
   -- There it gains across its band, so its rise is charged once.
