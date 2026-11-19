@@ -19,6 +19,8 @@ What the validity of a response says about its blocks or sidecars.
 - A valid response to a request for light client updates by range has at most 128 updates.
 - Their periods lie in the requested periods, and increase along the whole list.
 - The fork of each update is the fork of the epoch of its attested header, from Altair.
+- A valid response to a request for a light client bootstrap has at most one bootstrap.
+- Its root is the requested root, and its fork is the fork of the epoch of its header, from Altair.
 - A valid response to a request for sidecars by range lies in the requested slots.
 - Along the whole list, its sidecars increase in slot, then in index within one block.
 - Two of its sidecars at the same slot name the same block.
@@ -190,7 +192,8 @@ theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config :
           computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot) := by
   have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
   simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.forkMatches,
-    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq]
+    lightClientForkMatches, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff,
+    beq_iff_eq]
   simp only [ResponseUpdate.period, UInt64.le_iff_toNat_le, limit, and_assoc]
 
 /-- In a valid response for light client updates by range, periods increase along the whole list.
@@ -206,6 +209,16 @@ theorem pairwise_of_isValidLightClientUpdatesByRangeResponse {preset : Preset} {
       computeSyncCommitteePeriodAtSlot preset a.attestedSlot <
         computeSyncCommitteePeriodAtSlot preset b.attestedSlot)
     (fun _ _ h => of_decide_eq_true h) (fun _ _ _ => UInt64.lt_trans) valid.2
+
+/-- The rules that a valid response for a light client bootstrap meets, and no others. -/
+theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Config)
+    (request : Root) (bootstraps : List ResponseBootstrap) :
+    isValidLightClientBootstrapResponse preset config request bootstraps = true ↔
+      bootstraps.length ≤ 1 ∧
+      ∀ bootstrap ∈ bootstraps, bootstrap.root = request ∧ Base.Fork.altair ≤ bootstrap.fork ∧
+        bootstrap.fork = config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) := by
+  simp only [isValidLightClientBootstrapResponse, lightClientForkMatches, Bool.and_eq_true,
+    decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
 
 /-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 

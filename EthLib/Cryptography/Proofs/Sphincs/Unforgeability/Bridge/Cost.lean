@@ -11,16 +11,18 @@ Under one answer function, a signing request costs the model at most what it cos
 
 Only the counter searches depend on the answers, and both signers search the same counters.
 
-Before the layers, EthLib makes 337636 calls and the model 73709.
+Before the layers, EthLib makes 337925 calls and the model 73709.
 
-- EthLib derives `PK.seed` and `SK.prf` again and rebuilds the top tree: `2 + 264191` calls.
+- EthLib derives `PK.seed` and `SK.prf` again and builds the top tree: `2 + 264191` calls.
 - Both make `PRF_msg` and `H_msg`, 3 calls, and the model tests its randomizer with one more.
-- EthLib's FORS openings make 73440 calls.
-  The model's make as many, then 265 to recover the FORS public key.
+- EthLib's FORS signer builds each tree once, with each opened secret: 73729 calls.
+  The model's openings make 73440, then 265 to recover the FORS public key.
 
 Both signers then sign the layers from the bottom up, and stop at the first failed search.
 
-A layer of EthLib makes the calls of its message, of its one-time signature and of its path.
+Below the top, a layer of EthLib builds its tree, 66047 calls, then makes its one-time signature.
+
+The top layer of EthLib reads its path from the top tree, so it makes only its one-time signature.
 
 A layer of the model makes the calls of its one-time signature and of its path.
 
@@ -28,7 +30,9 @@ Below the top it then recovers the root of its tree, 74 calls.
 
 The one-time signatures sign the same message, so they make the same calls and both succeed or fail.
 
-The paths make the same calls, and EthLib's message, at least 66047 calls, covers the recovery.
+Below the top, EthLib's build covers the model's path of 65782 calls and its recovery.
+
+The model's top path, 263924 calls, is within EthLib's lead of 264216 before the layers.
 
 So a budget of hash calls against EthLib is a budget against the model.
 -/
@@ -446,6 +450,12 @@ theorem hashCalls_treePath (pkSeed : PkSeed) (layer : Layer) (tree e : Nat) :
   hashCalls_path f _ _ 257 (hashCalls_nodeHash f H hH pkSeed layer tree)
     (hashCalls_leaves f H hH secrets hsecrets pkSeed layer tree) _ _
 
+/-- A tree's build makes the calls of the tree's root: every node once. -/
+theorem hashCalls_buildTree (pkSeed : PkSeed) (layer : Layer) (tree : Nat) :
+    hashCalls f (buildTree H pkSeed secrets layer tree) = 258 * 2 ^ layer.height - 1 := by
+  rw [← hashCalls_map f _ Merkle.Built.value, buildTree, Merkle.value_build]
+  exact hashCalls_treeRoot f H hH secrets hsecrets pkSeed layer tree
+
 omit hH hsecrets in
 /-- The trees of the bottom, middle and top layers make 66047, 66047 and 264191 calls. -/
 theorem treeCalls_eq : 258 * 2 ^ Layer.bottom.height - 1 = 66047 ∧
@@ -498,27 +508,32 @@ theorem hashCalls_forsKey (pkSeed : PkSeed) (idx : Nat) :
     hashCalls_ofFnInOrder_const f _ _ _ (hashCalls_forsRoot f H hH secrets hsecrets pkSeed idx),
     forsPkFromRoots, hashCalls_th f H hH]
 
-/-- The opening of a FORS tree makes its secret and one whole node of each height below the root. -/
+/-- A FORS tree's build makes the calls of the tree's root, `3 * 2^10 - 1 = 3071`. -/
+theorem hashCalls_forsBuild (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) :
+    hashCalls f (forsBuild H pkSeed secrets idx kappa) = 3 * 2 ^ FORS_HEIGHT - 1 := by
+  rw [← hashCalls_map f _ Merkle.Built.value, forsBuild, Merkle.value_build]
+  exact hashCalls_forsRoot f H hH secrets hsecrets pkSeed idx kappa
+
+/-- The opening of a FORS tree makes its secret, then the calls of the tree's build. -/
 theorem hashCalls_treeOpen (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
     (s : Fin (2 ^ FORS_HEIGHT)) :
-    hashCalls f (treeOpen H pkSeed secrets idx kappa s) = 1 + pathCalls 2 FORS_HEIGHT := by
+    hashCalls f (treeOpen H pkSeed secrets idx kappa s) = 1 + (3 * 2 ^ FORS_HEIGHT - 1) := by
   rw [treeOpen, hashCalls_bind, hashCalls_forsSecret f secrets hsecrets, hashCalls_bind,
-    hashCalls_path f _ _ 2 (hashCalls_forsNodeHash f H hH pkSeed idx kappa)
-      (hashCalls_forsLeaves f H hH secrets hsecrets pkSeed idx kappa),
-    hashCalls_pure, Nat.add_zero]
+    hashCalls_forsBuild f H hH secrets hsecrets, hashCalls_pure, Nat.add_zero]
 
-/-- The FORS openings make the calls of 24 tree openings. -/
+/-- The FORS signer makes the calls of 24 tree openings, then one `T_k`. -/
 theorem hashCalls_forsSign (pkSeed : PkSeed) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     hashCalls f (forsSign H pkSeed secrets idx leaves) =
-      FORS_TREES * (1 + pathCalls 2 FORS_HEIGHT) :=
-  hashCalls_ofFnInOrder_const f _ _ _ fun kappa =>
-    hashCalls_treeOpen f H hH secrets hsecrets pkSeed idx kappa _
+      FORS_TREES * (1 + (3 * 2 ^ FORS_HEIGHT - 1)) + 1 := by
+  rw [forsSign, hashCalls_bind, hashCalls_ofFnInOrder_const f _ _ _ fun kappa =>
+    hashCalls_treeOpen f H hH secrets hsecrets pkSeed idx kappa _, hashCalls_bind, forsPkFromRoots,
+    hashCalls_th f H hH, hashCalls_pure]
 
 omit hH hsecrets in
-/-- The FORS key makes `24 * (1024 + 1024 + 1023) + 1 = 73705` calls, and the openings 73440. -/
+/-- The FORS key makes `24 * (1024 + 1024 + 1023) + 1 = 73705` calls, and the signer 73729. -/
 theorem forsCalls_eq : FORS_TREES * (3 * 2 ^ FORS_HEIGHT - 1) + 1 = 73705 ∧
-    FORS_TREES * (1 + pathCalls 2 FORS_HEIGHT) = 73440 := by
+    FORS_TREES * (1 + (3 * 2 ^ FORS_HEIGHT - 1)) + 1 = 73729 := by
   decide
 
 /-! ### The randomizer and the digest -/
@@ -585,75 +600,80 @@ variable (f : QueryImpl HashSpec Id) (H : ByteArray → OracleComp HashSpec (Vec
 
 /-! ### One layer -/
 
-/-- The calls of the message that the key of a layer signs.
+/-- The calls of the build of a layer's own tree, which the layer makes before its signature.
 
-The bottom key signs the FORS key, and a higher key signs the root of the tree below it. -/
-def messageCalls : Layer → Nat
-  | .bottom => FORS_TREES * (3 * 2 ^ FORS_HEIGHT - 1) + 1
-  | .middle => 258 * 2 ^ Layer.bottom.height - 1
-  | .top => 258 * 2 ^ Layer.middle.height - 1
+The top tree is built before signing starts, so the top layer builds nothing. -/
+def buildCalls : Layer → Nat
+  | .bottom => 258 * 2 ^ Layer.bottom.height - 1
+  | .middle => 258 * 2 ^ Layer.middle.height - 1
+  | .top => 0
 
-/-- The messages of the bottom, middle and top keys make 73705, 66047 and 66047 calls. -/
-theorem messageCalls_eq : messageCalls .bottom = 73705 ∧ messageCalls .middle = 66047 ∧
-    messageCalls .top = 66047 := by
+/-- The bottom and middle layers build trees of 66047 calls, and the top layer none. -/
+theorem buildCalls_eq : buildCalls .bottom = 66047 ∧ buildCalls .middle = 66047 ∧
+    buildCalls .top = 0 := by
   decide
 
-include hH hsecrets in
-/-- The message of a layer's key makes the calls of the FORS key or of the tree below. -/
-theorem hashCalls_layerMessage (pkSeed : PkSeed) (layer : Layer) (idx : Nat) :
-    hashCalls f (layerMessage H pkSeed secrets layer idx) = messageCalls layer := by
-  cases layer with
-  | bottom => exact hashCalls_forsKey f H hH secrets hsecrets pkSeed idx
-  | middle => exact hashCalls_treeRoot f H hH secrets hsecrets pkSeed .bottom _
-  | top => exact hashCalls_treeRoot f H hH secrets hsecrets pkSeed .middle _
+/-- Under fixed answers, the FORS signer gives the FORS public key. -/
+theorem eval_forsSign_snd (pkSeed : PkSeed) (idx : Nat)
+    (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
+    (evalWithAnswerFn f (forsSign H pkSeed secrets idx leaves)).2
+      = evalWithAnswerFn f (forsKey H pkSeed secrets idx) := by
+  have hpure : ∀ {β : Type} (b : β), evalWithAnswerFn f (pure b : OracleComp HashSpec β) = b :=
+    fun b => evalWithAnswerFn_pure f b
+  have hbind : ∀ {β γ : Type} (x : OracleComp HashSpec β) (g : β → OracleComp HashSpec γ),
+      evalWithAnswerFn f (x >>= g) = evalWithAnswerFn f (g (evalWithAnswerFn f x)) :=
+    fun x g => evalWithAnswerFn_bind f x g
+  rw [forsSign_map_monad (m := OracleComp HashSpec) (n := Id) (evalWithAnswerFn f) hpure hbind,
+    forsKey_map_monad (m := OracleComp HashSpec) (n := Id) (evalWithAnswerFn f) hpure hbind]
+  exact congrArg Prod.snd
+    (forsSign_eq_recompute (fun x => evalWithAnswerFn f (H x)) _ pkSeed idx leaves)
 
-include hH hsecrets in
-/-- A layer makes the calls of its one-time signature, and those of the path if it signs. -/
-theorem hashCalls_signLayer (pkSeed : PkSeed) (layer : Layer) (idx : Nat) (msg : Digest) :
-    hashCalls f (signLayer H pkSeed secrets layer idx msg) =
-      hashCalls f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg) +
-        if (evalWithAnswerFn f
-            (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg)).isSome then
-          pathCalls 257 layer.height
-        else 0 := by
-  rw [signLayer]
-  rw [hashCalls_bind]
+/-- Under fixed answers, the top value of a tree's build is the tree's root. -/
+theorem eval_buildTree_value (pkSeed : PkSeed) (layer : Layer) (tree : Nat) :
+    (evalWithAnswerFn f (buildTree H pkSeed secrets layer tree)).value
+      = evalWithAnswerFn f (treeRoot H pkSeed secrets layer tree) := by
+  have h := evalWithAnswerFn_map f Merkle.Built.value (buildTree H pkSeed secrets layer tree)
+  rw [buildTree, Merkle.value_build] at h
+  exact h.symm
+
+/-- A layer makes the calls of its one-time signature: it reads its path from its tree. -/
+theorem hashCalls_signLayer (pkSeed : PkSeed) (layer : Layer) (idx : Nat)
+    (tree : Merkle.Built Digest) (msg : Digest) :
+    hashCalls f (signLayer H pkSeed secrets layer idx tree msg) =
+      hashCalls f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg) := by
+  rw [signLayer, hashCalls_bind]
   cases evalWithAnswerFn f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg) with
-  | none => simp only [hashCalls_pure, Option.isSome_none, Bool.false_eq_true, ↓reduceIte]
-  | some ots =>
-    obtain ⟨counter, chainValues⟩ := ots
-    simp only [Option.isSome_some, ↓reduceIte]
-    rw [hashCalls_bind, hashCalls_treePath f H hH secrets hsecrets, hashCalls_pure, Nat.add_zero]
+  | none => rw [hashCalls_pure, Nat.add_zero]
+  | some ots => rw [hashCalls_pure, Nat.add_zero]
 
 /-- A layer gives a signature exactly when its one-time signature is found. -/
-theorem isOk_signLayer (pkSeed : PkSeed) (layer : Layer) (idx : Nat) (msg : Digest) :
-    (evalWithAnswerFn f (signLayer H pkSeed secrets layer idx msg)).isOk =
+theorem isOk_signLayer (pkSeed : PkSeed) (layer : Layer) (idx : Nat) (tree : Merkle.Built Digest)
+    (msg : Digest) :
+    (evalWithAnswerFn f (signLayer H pkSeed secrets layer idx tree msg)).isOk =
       (evalWithAnswerFn f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg)).isSome := by
   rw [signLayer]
   rw [evalWithAnswerFn_bind]
   cases evalWithAnswerFn f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx) msg) with
   | none => rfl
-  | some ots =>
-    obtain ⟨counter, chainValues⟩ := ots
-    simp only [evalWithAnswerFn_bind, evalWithAnswerFn_pure, Option.isSome_some]
-    rfl
+  | some ots => rfl
 
 /-- The counter search of a layer under `f`, on the message its key signs under `f`. -/
 def layerSearch (pkSeed : PkSeed) (idx : Nat) (layer : Layer) :
     OracleComp HashSpec (Option (UInt32 × Codeword)) :=
   Internal.findCounter H pkSeed (OtsKey.ofIndex layer idx)
-    (evalWithAnswerFn f (layerMessage H pkSeed secrets layer idx)) 0 MAX_COUNTER_TRIALS
+    (evalWithAnswerFn f (Recompute.layerMessage H pkSeed secrets layer idx)) 0 MAX_COUNTER_TRIALS
 
-/-- Whether a layer signs under `f`: its result on the message its key signs is not an error. -/
+/-- Whether a layer signs under `f`: its key finds a codeword for the message it signs under `f`.
+
+That message is the FORS public key, or the root of the tree below. -/
 def layerSigns (pkSeed : PkSeed) (idx : Nat) (layer : Layer) : Bool :=
-  (evalWithAnswerFn f (signLayer H pkSeed secrets layer idx
-    (evalWithAnswerFn f (layerMessage H pkSeed secrets layer idx)))).isOk
+  (evalWithAnswerFn f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx)
+    (evalWithAnswerFn f (Recompute.layerMessage H pkSeed secrets layer idx)))).isSome
 
-/-- The calls of one layer under `f`: the message its key signs, then its signature. -/
+/-- The calls of one layer under `f`: the build of its tree, then its one-time signature. -/
 def layerCalls (pkSeed : PkSeed) (idx : Nat) (layer : Layer) : Nat :=
-  hashCalls f (layerMessage H pkSeed secrets layer idx) +
-    hashCalls f (signLayer H pkSeed secrets layer idx
-      (evalWithAnswerFn f (layerMessage H pkSeed secrets layer idx)))
+  buildCalls layer + hashCalls f (otsSign H pkSeed secrets (OtsKey.ofIndex layer idx)
+    (evalWithAnswerFn f (Recompute.layerMessage H pkSeed secrets layer idx)))
 
 /-- The calls of the three layers, signed from the bottom up, up to the first that fails. -/
 def layersCost (signs : Layer → Bool) (cost : Layer → Nat) : Nat :=
@@ -664,19 +684,16 @@ def layersCost (signs : Layer → Bool) (cost : Layer → Nat) : Nat :=
 theorem layerSigns_eq (pkSeed : PkSeed) (idx : Nat) (layer : Layer) :
     layerSigns f H secrets pkSeed idx layer =
       (evalWithAnswerFn f (layerSearch f H secrets pkSeed idx layer)).isSome := by
-  rw [layerSigns, isOk_signLayer, isSome_otsSign]
+  rw [layerSigns, isSome_otsSign]
   rfl
 
 include hH hsecrets in
-/-- A layer makes the calls of its message and of its search, and on success 192 and its path. -/
+/-- A layer makes the calls of its build and of its search, and on success 192 more. -/
 theorem layerCalls_eq (pkSeed : PkSeed) (idx : Nat) (layer : Layer) :
     layerCalls f H secrets pkSeed idx layer =
-      messageCalls layer + hashCalls f (layerSearch f H secrets pkSeed idx layer) +
-        if layerSigns f H secrets pkSeed idx layer then V + TARGET_SUM + pathCalls 257 layer.height
-        else 0 := by
-  rw [layerCalls, hashCalls_layerMessage f H hH secrets hsecrets,
-    hashCalls_signLayer f H hH secrets hsecrets, isSome_otsSign,
-    hashCalls_otsSign f H hH secrets hsecrets, layerSigns_eq, layerSearch]
+      buildCalls layer + hashCalls f (layerSearch f H secrets pkSeed idx layer) +
+        if layerSigns f H secrets pkSeed idx layer then V + TARGET_SUM else 0 := by
+  rw [layerCalls, hashCalls_otsSign f H hH secrets hsecrets, layerSigns_eq, layerSearch]
   split <;> omega
 
 include hH in
@@ -688,7 +705,7 @@ theorem hashCalls_layerSearch_of_fails (pkSeed : PkSeed) (idx : Nat) (layer : La
   rw [layerSearch, hashCalls_findCounter f H hH]
   refine searchCalls_of_none _ 0 _ fun i hi => ?_
   cases hok : encodes f H pkSeed (OtsKey.ofIndex layer idx)
-      (evalWithAnswerFn f (layerMessage H pkSeed secrets layer idx)) (0 + i) with
+      (evalWithAnswerFn f (Recompute.layerMessage H pkSeed secrets layer idx)) (0 + i) with
   | false => rfl
   | true =>
     have := (searchFinds_iff _ 0 _).2 ⟨i, hi, hok⟩
@@ -696,10 +713,10 @@ theorem hashCalls_layerSearch_of_fails (pkSeed : PkSeed) (idx : Nat) (layer : La
     exact absurd this Bool.false_ne_true
 
 include hH hsecrets in
-/-- A layer that fails makes the calls of its message and of all `2^32` counters, and stops. -/
+/-- A layer that fails makes the calls of its build and of all `2^32` counters, and stops. -/
 theorem layerCalls_of_fails (pkSeed : PkSeed) (idx : Nat) (layer : Layer)
     (h : layerSigns f H secrets pkSeed idx layer = false) :
-    layerCalls f H secrets pkSeed idx layer = messageCalls layer + MAX_COUNTER_TRIALS := by
+    layerCalls f H secrets pkSeed idx layer = buildCalls layer + MAX_COUNTER_TRIALS := by
   rw [layerCalls_eq f H hH secrets hsecrets, hashCalls_layerSearch_of_fails f H hH secrets _ _ _ h,
     h]
   rfl
@@ -717,113 +734,144 @@ theorem layersCost_le (signs : Layer → Bool) {cost cost' : Layer → Nat}
 /-! ### The whole request -/
 
 include hH hsecrets in
-/-- Signing from the secrets makes `H_msg`, the FORS openings and the layers to the first failure.
+/-- Signing from the secrets makes `H_msg`, the FORS signer and the layers to the first failure.
 
-`idx` is the index that the digest names under `f`. -/
-theorem hashCalls_signDerived (pk : PublicKey) (rho : Randomizer) (msg : Message) (idx : Nat)
-    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho pk.pkSeed pk.root msg)) = idx) :
-    hashCalls f (signDerived H secrets pk rho msg) =
-      DIGEST_CALLS + FORS_TREES * (1 + pathCalls 2 FORS_HEIGHT) +
-        layersCost (layerSigns f H secrets pk.pkSeed idx)
-          (layerCalls f H secrets pk.pkSeed idx) := by
-  rw [signDerived]
+`idx` is the index that the digest names under `f`, and the top tree is already built. -/
+theorem hashCalls_signDerived (pkSeed : PkSeed) (top : Merkle.Built Digest) (rho : Randomizer)
+    (msg : Message) (idx : Nat)
+    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho pkSeed top.value msg)) = idx) :
+    hashCalls f (signDerived H secrets pkSeed top rho msg) =
+      DIGEST_CALLS + (FORS_TREES * (1 + (3 * 2 ^ FORS_HEIGHT - 1)) + 1) +
+        layersCost (layerSigns f H secrets pkSeed idx) (layerCalls f H secrets pkSeed idx) := by
+  rw [signDerived, hashCalls_bind, hashCalls_hMsg f H hH]
   dsimp only
-  rw [hashCalls_bind, hashCalls_hMsg f H hH]
   rw [hidx, hashCalls_bind, hashCalls_forsSign f H hH secrets hsecrets]
-  simp only [layersCost, layerCalls, layerSigns]
-  rw [hashCalls_bind, hashCalls_bind]
-  split
-  · rename_i bottom hb
-    simp only [hb, pure_bind, Except.isOk, Except.toBool, ↓reduceIte]
-    rw [hashCalls_bind, hashCalls_bind]
-    split
-    · rename_i middle hm
-      simp only [hm, ↓reduceIte]
-      rw [hashCalls_bind, hashCalls_bind]
-      split
-      · simp only [hashCalls_pure]
-        omega
-      · simp only [hashCalls_pure]
-        omega
-    · rename_i err hm
-      simp only [hm, hashCalls_pure, Bool.false_eq_true, ↓reduceIte]
-      omega
-  · rename_i err hb
-    simp only [hb, hashCalls_pure, Except.isOk, Except.toBool, Bool.false_eq_true, ↓reduceIte]
+  -- The FORS signer gives the FORS public key, which the bottom key signs.
+  have hkey := eval_forsSign_snd f H secrets pkSeed idx
+    (digestLeaves (evalWithAnswerFn f (hMsg H rho pkSeed top.value msg)))
+  generalize evalWithAnswerFn f (forsSign H pkSeed secrets idx
+    (digestLeaves (evalWithAnswerFn f (hMsg H rho pkSeed top.value msg)))) = fs at hkey
+  obtain ⟨fors, forsPk⟩ := fs
+  dsimp only at hkey ⊢
+  -- Each layer's message is the one it signs under `f`, and its tree's root the next message.
+  have hb : forsPk = evalWithAnswerFn f (Recompute.layerMessage H pkSeed secrets .bottom idx) :=
+    hkey
+  subst hb
+  have hm := eval_buildTree_value f H secrets pkSeed .bottom (OtsKey.ofIndex .bottom idx).tree
+  have ht := eval_buildTree_value f H secrets pkSeed .middle (OtsKey.ofIndex .middle idx).tree
+  simp only [layersCost, layerCalls, layerSigns, Recompute.layerMessage]
+  -- The bottom layer: its tree's build, then its signature.
+  rw [hashCalls_bind, hashCalls_buildTree f H hH secrets hsecrets, hashCalls_bind,
+    hashCalls_signLayer f H secrets]
+  have hfb := isOk_signLayer f H secrets pkSeed .bottom idx
+    (evalWithAnswerFn f (buildTree H pkSeed secrets .bottom (OtsKey.ofIndex .bottom idx).tree))
+    (evalWithAnswerFn f (forsKey H pkSeed secrets idx))
+  cases hrb : evalWithAnswerFn f (signLayer H pkSeed secrets .bottom idx
+      (evalWithAnswerFn f (buildTree H pkSeed secrets .bottom (OtsKey.ofIndex .bottom idx).tree))
+      (evalWithAnswerFn f (forsKey H pkSeed secrets idx))) with
+  | error err =>
+    rw [hrb] at hfb
+    simp only [← hfb, hashCalls_pure, Except.isOk, Except.toBool, Bool.false_eq_true, ↓reduceIte,
+      buildCalls]
     omega
+  | ok bottom =>
+    rw [hrb] at hfb
+    simp only [← hfb, pure_bind, Except.isOk, Except.toBool, ↓reduceIte, hm]
+    -- The middle layer signs the bottom tree's root.
+    rw [hashCalls_bind, hashCalls_buildTree f H hH secrets hsecrets, hashCalls_bind,
+      hashCalls_signLayer f H secrets]
+    have hfm := isOk_signLayer f H secrets pkSeed .middle idx
+      (evalWithAnswerFn f (buildTree H pkSeed secrets .middle (OtsKey.ofIndex .middle idx).tree))
+      (evalWithAnswerFn f (treeRoot H pkSeed secrets .bottom (OtsKey.ofIndex .bottom idx).tree))
+    cases hrm : evalWithAnswerFn f (signLayer H pkSeed secrets .middle idx
+        (evalWithAnswerFn f (buildTree H pkSeed secrets .middle (OtsKey.ofIndex .middle idx).tree))
+        (evalWithAnswerFn f (treeRoot H pkSeed secrets .bottom (OtsKey.ofIndex .bottom idx).tree)))
+      with
+    | error err =>
+      rw [hrm] at hfm
+      simp only [← hfm, hashCalls_pure, Except.isOk, Except.toBool, Bool.false_eq_true,
+        ↓reduceIte, buildCalls]
+      omega
+    | ok middle =>
+      rw [hrm] at hfm
+      simp only [← hfm, Except.isOk, Except.toBool, ↓reduceIte, ht]
+      -- The top layer signs the middle tree's root, with the top tree already built.
+      rw [hashCalls_bind, hashCalls_signLayer f H secrets]
+      cases evalWithAnswerFn f (signLayer H pkSeed secrets .top idx top
+          (evalWithAnswerFn f
+            (treeRoot H pkSeed secrets .middle (OtsKey.ofIndex .middle idx).tree)))
+        <;> simp only [hashCalls_pure, buildCalls] <;> omega
 
 include hH in
-/-- A signing request makes the key expansion, the top tree and `PRF_msg`, then signs.
+/-- A signing request makes the key expansion, the top tree's build and `PRF_msg`, then signs.
 
-`key`, `pk` and `rho` are the expanded key, the public key and `R` under `f`. -/
-theorem hashCalls_signWith (sk : SecretKey) (msg : Message) (key : ExpandedKey) (pk : PublicKey)
-    (rho : Randomizer) (hkey : evalWithAnswerFn f (expandKey H sk.seed) = key)
-    (hpk : evalWithAnswerFn f (publicKeyOf H key.pkSeed (prf H key.pkSeed sk.seed)) = pk)
+`key`, `top` and `rho` are the expanded key, the built top tree and `R` under `f`. -/
+theorem hashCalls_signWith (sk : SecretKey) (msg : Message) (key : ExpandedKey)
+    (top : Merkle.Built Digest) (rho : Randomizer)
+    (hkey : evalWithAnswerFn f (expandKey H sk.seed) = key)
+    (htop : evalWithAnswerFn f (buildTree H key.pkSeed (prf H key.pkSeed sk.seed) .top 0) = top)
     (hrho : evalWithAnswerFn f (prfMsg H key.skPrf key.pkSeed msg) = rho) :
     hashCalls f (signWith H sk msg) =
       2 + (258 * 2 ^ TOP_HEIGHT - 1) + 1 +
-        hashCalls f (signDerived H (prf H key.pkSeed sk.seed) pk rho msg) := by
+        hashCalls f (signDerived H (prf H key.pkSeed sk.seed) key.pkSeed top rho msg) := by
   rw [signWith, hashCalls_bind, hashCalls_expandKey f H hH, hkey]
   dsimp only
-  rw [hashCalls_bind, hashCalls_publicKeyOf f H hH _ (hashCalls_prf f H hH _ _), hpk,
-    hashCalls_bind, hashCalls_prfMsg f H hH, hrho]
+  rw [hashCalls_bind, hashCalls_buildTree f H hH _ (hashCalls_prf f H hH _ _), htop,
+    hashCalls_bind, hashCalls_prfMsg f H hH, hrho, show Layer.top.height = TOP_HEIGHT from rfl]
   omega
 
 include hH in
 /-- A signing request, step by step, as the signer runs it.
 
-1. The key expansion, 2 calls, and the top tree for `PK.root`, `258 * 2^10 - 1`.
+1. The key expansion, 2 calls, and the top tree's build, `258 * 2^10 - 1`.
 2. `PRF_msg`, 1 call, and `H_msg`, 2 calls.
-3. The FORS openings, `24 * (1 + 3059)` calls.
-4. The layers from the bottom up, each its message, its search and, if it signs, 192 and its path.
+3. The FORS signer, `24 * (1 + 3071) + 1` calls.
+4. The layers from the bottom up, each its build, its search and, if it signs, 192.
 
 The signer stops at the first layer that fails, after its search. -/
 theorem hashCalls_signWith_layers (sk : SecretKey) (msg : Message) (key : ExpandedKey)
-    (pk : PublicKey) (rho : Randomizer) (idx : Nat)
+    (top : Merkle.Built Digest) (rho : Randomizer) (idx : Nat)
     (hkey : evalWithAnswerFn f (expandKey H sk.seed) = key)
-    (hpk : evalWithAnswerFn f (publicKeyOf H key.pkSeed (prf H key.pkSeed sk.seed)) = pk)
+    (htop : evalWithAnswerFn f (buildTree H key.pkSeed (prf H key.pkSeed sk.seed) .top 0) = top)
     (hrho : evalWithAnswerFn f (prfMsg H key.skPrf key.pkSeed msg) = rho)
-    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed pk.root msg)) = idx) :
+    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed top.value msg)) = idx) :
     hashCalls f (signWith H sk msg) =
       2 + (258 * 2 ^ TOP_HEIGHT - 1) + 1 + DIGEST_CALLS +
-        FORS_TREES * (1 + pathCalls 2 FORS_HEIGHT) +
+        (FORS_TREES * (1 + (3 * 2 ^ FORS_HEIGHT - 1)) + 1) +
         layersCost (layerSigns f H (prf H key.pkSeed sk.seed) key.pkSeed idx)
           (layerCalls f H (prf H key.pkSeed sk.seed) key.pkSeed idx) := by
-  have hseed : pk.pkSeed = key.pkSeed := by rw [← hpk, pkSeed_publicKeyOf]
-  rw [hashCalls_signWith f H hH sk msg key pk rho hkey hpk hrho,
-    hashCalls_signDerived f H hH _ (hashCalls_prf f H hH _ _) pk rho msg idx
-      (by rw [hseed]; exact hidx), hseed]
+  rw [hashCalls_signWith f H hH sk msg key top rho hkey htop hrho,
+    hashCalls_signDerived f H hH _ (hashCalls_prf f H hH _ _) key.pkSeed top rho msg idx hidx]
   omega
 
-/-- The calls before the layers: `2 + 264191 + 1 + 2 + 73440 = 337636`. -/
+/-- The calls before the layers: `2 + 264191 + 1 + 2 + 73729 = 337925`. -/
 theorem signPrefixCalls_eq :
-    2 + (258 * 2 ^ TOP_HEIGHT - 1) + 1 + DIGEST_CALLS + FORS_TREES * (1 + pathCalls 2 FORS_HEIGHT) =
-      337636 := by
+    2 + (258 * 2 ^ TOP_HEIGHT - 1) + 1 + DIGEST_CALLS +
+      (FORS_TREES * (1 + (3 * 2 ^ FORS_HEIGHT - 1)) + 1) = 337925 := by
   decide
 
 include hH in
-/-- A request whose three layers sign makes `939499` calls and those of its three searches.
+/-- A request whose three layers sign makes `470595` calls and those of its three searches.
 
-With least counters `c_0`, `c_1` and `c_2`, that is `939502 + c_0 + c_1 + c_2` calls. -/
+With least counters `c_0`, `c_1` and `c_2`, that is `470598 + c_0 + c_1 + c_2` calls. -/
 theorem hashCalls_signWith_of_signs (sk : SecretKey) (msg : Message) (key : ExpandedKey)
-    (pk : PublicKey) (rho : Randomizer) (idx : Nat)
+    (top : Merkle.Built Digest) (rho : Randomizer) (idx : Nat)
     (hkey : evalWithAnswerFn f (expandKey H sk.seed) = key)
-    (hpk : evalWithAnswerFn f (publicKeyOf H key.pkSeed (prf H key.pkSeed sk.seed)) = pk)
+    (htop : evalWithAnswerFn f (buildTree H key.pkSeed (prf H key.pkSeed sk.seed) .top 0) = top)
     (hrho : evalWithAnswerFn f (prfMsg H key.skPrf key.pkSeed msg) = rho)
-    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed pk.root msg)) = idx)
+    (hidx : digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed top.value msg)) = idx)
     (hsigns : ∀ layer, layerSigns f H (prf H key.pkSeed sk.seed) key.pkSeed idx layer = true) :
     hashCalls f (signWith H sk msg) =
-      939499 + hashCalls f (layerSearch f H (prf H key.pkSeed sk.seed) key.pkSeed idx .bottom) +
+      470595 + hashCalls f (layerSearch f H (prf H key.pkSeed sk.seed) key.pkSeed idx .bottom) +
         hashCalls f (layerSearch f H (prf H key.pkSeed sk.seed) key.pkSeed idx .middle) +
         hashCalls f (layerSearch f H (prf H key.pkSeed sk.seed) key.pkSeed idx .top) := by
   have hprf := hashCalls_prf f H hH key.pkSeed sk.seed
-  rw [hashCalls_signWith_layers f H hH sk msg key pk rho idx hkey hpk hrho hidx,
+  rw [hashCalls_signWith_layers f H hH sk msg key top rho idx hkey htop hrho hidx,
     signPrefixCalls_eq, layersCost, layerCalls_eq f H hH _ hprf, layerCalls_eq f H hH _ hprf,
     layerCalls_eq f H hH _ hprf, hsigns, hsigns, hsigns]
-  obtain ⟨hb, hm, ht⟩ := messageCalls_eq
-  obtain ⟨pb, pm, pt⟩ := pathCalls_layers
+  obtain ⟨hb, hm, ht⟩ := buildCalls_eq
   have hchains : V + TARGET_SUM = 192 := by decide
-  simp only [↓reduceIte, hb, hm, ht, pb, pm, pt, hchains]
+  simp only [↓reduceIte, hb, hm, ht, hchains]
   omega
 
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge
@@ -1326,20 +1374,19 @@ theorem layerSigns_queryH (sk : SphincsSecurity.Seeded.SecretKey) (index : Sphin
     layerSigns f queryH (secretsOf sk.seed sk.parameter) (ofParam sk.parameter) index.val
         (layerOf lay)
       = signLayerFound f sk index lay := by
-  rw [layerSigns, isOk_signLayer, layerMessage_answers, isSome_otsSign_queryH,
-    toList_belowValue]
+  rw [layerSigns, layerMessage_answers, isSome_otsSign_queryH, toList_belowValue]
   rfl
 
-/-- What the model's path and root recovery cost, EthLib's message and path cover, layer by layer.
+/-- What the model's path and root recovery cost, EthLib's build covers, with the top path aside.
 
-- Top: 263924 path calls, no recovery, against 66047 + 263924.
-- Middle and bottom: 65782 + 74, against 66047 + 65782 and 73705 + 65782. -/
+- Top: 263924 path calls, no recovery, against no build.
+  The top tree's build, before the layers, covers that path.
+- Middle and bottom: 65782 + 74, against 66047. -/
 theorem treePathCost_add_le (lay : SphincsSecurity.Layer) :
     SphincsSecurity.Security.GraphView.treePathCost lay
         + SphincsSecurity.Security.GraphView.recoverCost lay
-      ≤ messageCalls (layerOf lay) + pathCalls 257 (layerOf lay).height := by
-  obtain ⟨hmb, hmm, hmt⟩ := messageCalls_eq
-  obtain ⟨hpb, hpm, hpt⟩ := pathCalls_layers
+      ≤ buildCalls (layerOf lay) + if layerOf lay = .top then 263924 else 0 := by
+  obtain ⟨hbb, hbm, hbt⟩ := buildCalls_eq
   obtain ⟨v, hv⟩ := lay
   change v < 3 at hv
   interval_cases v
@@ -1347,46 +1394,45 @@ theorem treePathCost_add_le (lay : SphincsSecurity.Layer) :
       SphincsSecurity.Security.SignCost.treePathCost_top rfl rfl rfl
     have hrec : SphincsSecurity.Security.GraphView.recoverCost ⟨0, by decide⟩ = 0 :=
       SphincsSecurity.Security.SignCost.recoverCost_top
-    simp only [layerOf, hpath, hrec, hmt, hpt]
+    simp only [layerOf, hpath, hrec, hbt, ↓reduceIte]
     omega
   · have hpath : SphincsSecurity.Security.GraphView.treePathCost ⟨1, by decide⟩ = 65782 :=
       SphincsSecurity.Security.SignCost.treePathCost_of_ne_top rfl _ (by decide)
     have hrec : SphincsSecurity.Security.GraphView.recoverCost ⟨1, by decide⟩ = 74 :=
       SphincsSecurity.Security.SignCost.recoverCost_of_ne_top rfl _ (by decide)
-    simp only [layerOf, hpath, hrec, hmm, hpm]
+    simp only [layerOf, hpath, hrec, hbm, reduceCtorEq, ↓reduceIte]
     omega
   · have hpath : SphincsSecurity.Security.GraphView.treePathCost ⟨2, by decide⟩ = 65782 :=
       SphincsSecurity.Security.SignCost.treePathCost_of_ne_top rfl _ (by decide)
     have hrec : SphincsSecurity.Security.GraphView.recoverCost ⟨2, by decide⟩ = 74 :=
       SphincsSecurity.Security.SignCost.recoverCost_of_ne_top rfl _ (by decide)
-    simp only [layerOf, hpath, hrec, hmb, hpb]
+    simp only [layerOf, hpath, hrec, hbb, reduceCtorEq, ↓reduceIte]
     omega
 
-/-- A layer of the model costs at most the same layer of EthLib.
+/-- A layer of the model costs at most the same layer of EthLib, with the top path aside.
 
-Both make the same one-time signature, and EthLib also computes the layer's message. -/
+Both make the same one-time signature, and EthLib also builds the layer's tree.
+
+The top layer of the model also computes its path, 263924 calls, which EthLib builds earlier. -/
 theorem signLayerCost_le_layerCalls (sk : SphincsSecurity.Seeded.SecretKey)
     (index : SphincsSecurity.Index) (lay : SphincsSecurity.Layer) :
     signLayerCost f sk index lay
       ≤ layerCalls f queryH (secretsOf sk.seed sk.parameter) (ofParam sk.parameter) index.val
-          (layerOf lay) := by
-  have hsecrets : ∀ adrs, hashCalls f (secretsOf (m := OracleComp HashSpec) sk.seed
-      sk.parameter adrs) = 1 :=
-    fun adrs => hashCalls_prf f queryH (hashCalls_queryH f) _ _ adrs
+          (layerOf lay) + if layerOf lay = .top then 263924 else 0 := by
   have hle := treePathCost_add_le lay
-  rw [layerCalls, hashCalls_layerMessage f queryH (hashCalls_queryH f) _ hsecrets,
-    hashCalls_signLayer f queryH (hashCalls_queryH f) _ hsecrets, layerMessage_answers,
-    hashCalls_otsSign_queryH, isSome_otsSign_queryH, toList_belowValue, signLayerCost,
+  rw [layerCalls, layerMessage_answers, hashCalls_otsSign_queryH, toList_belowValue, signLayerCost,
     signLayerFound, signLayerOts]
-  split <;> omega
+  by_cases hl : layerOf lay = .top <;> simp only [hl, ↓reduceIte] at hle ⊢ <;> split <;> omega
 
 /-- One signing request costs the model at most what it costs EthLib, under every answer function.
 
 The model signs with the secret key that its key generation returns under the same answers.
 
-- Before the layers, EthLib makes 337636 calls and the model 73709.
-- Each layer, signed from the bottom up, costs EthLib at least what it costs the model.
-  Both signers fail at the same layer, so they reach the same layers.
+- Before the layers, EthLib makes 337925 calls and the model 73709.
+- Below the top, each layer costs EthLib at least what it costs the model.
+- The model's top layer also computes its path, 263924 calls, within EthLib's lead of 264216.
+
+Both signers fail at the same layer, so they reach the same layers.
 
 So the model's cost is at most EthLib's on success and on a failure at any of the three layers. -/
 theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
@@ -1406,16 +1452,20 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
   dsimp only
   set sk : SphincsSecurity.Seeded.SecretKey := ⟨S0, skPrf, P, root⟩ with hsk
   set index := SphincsSecurity.Security.SignCost.signIndex f sk msg with hindex
-  -- EthLib's expanded key, public key and randomizer are the model's.
+  -- EthLib's expanded key, top root and randomizer are the model's.
   have hkey : evalWithAnswerFn f (expandKey (queryH (m := OracleComp HashSpec)) (ofSeed S0))
       = ofExpanded P skPrf := by
     rw [expandKey_queryH, evalWithAnswerFn_bind, evalWithAnswerFn_bind, evalWithAnswerFn_pure,
       hP, hprf]
-  have hpk : evalWithAnswerFn f (publicKeyOf (queryH (m := OracleComp HashSpec))
-      (ofExpanded P skPrf).pkSeed (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)))
-      = ofPublicKey ⟨root, P⟩ := by
-    simp only [ofExpanded]
-    rw [publicKeyOf_queryH, evalWithAnswerFn_map, hroot]
+  have htop : (evalWithAnswerFn f (buildTree (queryH (m := OracleComp HashSpec))
+      (ofExpanded P skPrf).pkSeed (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) .top
+      0)).value = (ofPublicKey ⟨root, P⟩).root := by
+    have hpk : evalWithAnswerFn f (publicKeyOf (queryH (m := OracleComp HashSpec))
+        (ofExpanded P skPrf).pkSeed (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)))
+        = ofPublicKey ⟨root, P⟩ := by
+      simp only [ofExpanded]
+      rw [publicKeyOf_queryH, evalWithAnswerFn_map, hroot]
+    rw [eval_buildTree_value, ← hpk, publicKeyOf, evalWithAnswerFn_bind, evalWithAnswerFn_pure]
   have hrho : evalWithAnswerFn f (prfMsg (queryH (m := OracleComp HashSpec))
       (ofExpanded P skPrf).skPrf (ofExpanded P skPrf).pkSeed (ofMessage msg))
       = ofRandomizer (SphincsSecurity.Security.SignCost.signRandomness f sk msg) := by
@@ -1424,14 +1474,17 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
     rfl
   have hidx : digestIndex (evalWithAnswerFn f (hMsg (queryH (m := OracleComp HashSpec))
       (ofRandomizer (SphincsSecurity.Security.SignCost.signRandomness f sk msg))
-      (ofExpanded P skPrf).pkSeed (ofPublicKey ⟨root, P⟩).root (ofMessage msg))) = index.val := by
+      (ofExpanded P skPrf).pkSeed (evalWithAnswerFn f (buildTree (queryH (m := OracleComp HashSpec))
+        (ofExpanded P skPrf).pkSeed (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) .top
+        0)).value (ofMessage msg))) = index.val := by
+    rw [htop]
     simp only [ofExpanded, ofPublicKey]
     rw [messageDigest_queryH, evalWithAnswerFn_map, eval_sequenceFin, digestIndex_ofOutputs,
       hindex, SphincsSecurity.Security.SignCost.signIndex, digestValue,
       SphincsSecurity.Concrete.messageDigest, evalWithAnswerFn_bind, eval_sequenceFin,
       evalWithAnswerFn_pure]
   rw [hashCalls_signWith_layers f queryH (hashCalls_queryH f) ⟨ofSeed S0⟩ (ofMessage msg)
-    (ofExpanded P skPrf) (ofPublicKey ⟨root, P⟩) _ index.val hkey hpk hrho hidx, signPrefixCalls_eq,
+    (ofExpanded P skPrf) _ _ index.val hkey rfl hrho hidx, signPrefixCalls_eq,
     SphincsSecurity.Security.SignCost.hashCalls_sign_three f rfl rfl rfl rfl rfl sk msg
       bottomLayer middleLayer rfl rfl, ← hindex]
   -- Layer by layer, the flags agree and the model's costs are at most EthLib's.
@@ -1443,16 +1496,24 @@ theorem hashCalls_sign_le (S0 : SphincsSecurity.MasterSeed) (m : Message) :
     layerSigns_queryH f sk index middleLayer
   have cb : signLayerCost f sk index bottomLayer ≤ layerCalls f queryH
       (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) (ofExpanded P skPrf).pkSeed index.val
-      .bottom :=
-    signLayerCost_le_layerCalls f sk index bottomLayer
+      .bottom := by
+    have h := signLayerCost_le_layerCalls f sk index bottomLayer
+    simp only [show layerOf bottomLayer = .bottom from rfl, reduceCtorEq, ↓reduceIte,
+      Nat.add_zero] at h
+    exact h
   have cm : signLayerCost f sk index middleLayer ≤ layerCalls f queryH
       (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) (ofExpanded P skPrf).pkSeed index.val
-      .middle :=
-    signLayerCost_le_layerCalls f sk index middleLayer
+      .middle := by
+    have h := signLayerCost_le_layerCalls f sk index middleLayer
+    simp only [show layerOf middleLayer = .middle from rfl, reduceCtorEq, ↓reduceIte,
+      Nat.add_zero] at h
+    exact h
   have ct : signLayerCost f sk index SphincsSecurity.topLayer ≤ layerCalls f queryH
       (prf queryH (ofExpanded P skPrf).pkSeed (ofSeed S0)) (ofExpanded P skPrf).pkSeed index.val
-      .top :=
-    signLayerCost_le_layerCalls f sk index SphincsSecurity.topLayer
+      .top + 263924 := by
+    have h := signLayerCost_le_layerCalls f sk index SphincsSecurity.topLayer
+    simp only [show layerOf SphincsSecurity.topLayer = .top from rfl, ↓reduceIte] at h
+    exact h
   rw [layersCost, hb, hm]
   cases signLayerFound f sk index bottomLayer <;> cases signLayerFound f sk index middleLayer <;>
     simp only [Bool.false_eq_true, ↓reduceIte] <;> omega

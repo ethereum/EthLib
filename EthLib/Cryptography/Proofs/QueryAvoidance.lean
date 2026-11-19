@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.Build
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.HashSig
 public import VCVio.OracleComp.QueryTracking.QueryBound.Simulation
@@ -68,6 +68,15 @@ theorem merkleNode_isQueryBoundP_zero {α : Type}
     (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0)
     (q : Merkle.Position) : IsQueryBoundP (Merkle.node hash leaves q) p 0 :=
   Merkle.node_rec hash (fun x => IsQueryBoundP x p 0)
+    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash q
+
+/-- A Merkle build queries `p` nowhere when no leaf and no node hash does. -/
+theorem merkleBuild_isQueryBoundP_zero {α : Type}
+    (hash : Merkle.Position → α → α → OracleComp spec α)
+    (leaves : Nat → OracleComp spec α) (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
+    (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0)
+    (q : Merkle.Position) : IsQueryBoundP (Merkle.build hash leaves q) p 0 :=
+  Merkle.build_rec hash (fun x => IsQueryBoundP x p 0) (fun _ => isQueryBoundP_pure _ _ _)
     (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash q
 
 /-- The siblings of a node query `p` nowhere when no leaf and no node hash does. -/

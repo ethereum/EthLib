@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Aes.Ctr
 
 /-!
@@ -19,6 +20,8 @@ The key is secret, and nothing here is constant-time, the tag comparison include
 @[expose] public section
 
 namespace EthLib.Cryptography.Aes.Gcm
+
+open EthLib.Base (byteAt)
 
 /-! ## Blocks as integers
 
@@ -65,7 +68,8 @@ def ghash (H : Block) (X : List Block) : Block :=
 For the additional data `A`, the result is `A || 0^v` of SP 800-38D §7.1, step 4, as blocks. -/
 def blocksOf (data : ByteArray) : List Block :=
   (List.range ((data.size + 15) / 16)).map fun j =>
-    Vector.ofFn fun i => data.data.getD (16 * j + i.val) 0
+    -- Each byte is read in place, and a byte past the end reads as zero.
+    Vector.ofFn fun i => byteAt data (16 * j + i.val)
 
 /-- GCTR of SP 800-38D §6.5, Algorithm 3.
 

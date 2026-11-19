@@ -25,6 +25,14 @@ A proof shows either the value of the key or its absence:
 - The path ends at a leaf with the rest of the key, or at a branch with a value: the key is set.
 - The path leaves the trie: the key is not set.
 
+EIP-1186 says nothing of the empty trie, whose root is the hash of `0x80`, the RLP of no bytes.
+
+This specification decides that two proofs show any key not set against that root.
+
+One is the proof `[0x80]`, which starts with the encoding of the root, as the EIP describes.
+
+The other is the proof of no nodes, since the empty trie has no node to list.
+
 The module checks a proof, and builds the proof of a key from a trie.
 
 [eip-1186]: https://github.com/ethereum/EIPs/blob/7622abc1c6569b7e7ade9ed957dde4ed2271cc40/EIPS/eip-1186.md
@@ -173,15 +181,31 @@ def walk (hash : ByteArray → Hash32) :
           let (child, rest) ← resolve hash subnodes[nibble] proof
           walk hash fuel child restOfPath rest
 
+/-- The root of the empty trie: the hash of `0x80`, the encoding of the empty string. -/
+def emptyTrieRoot (hash : ByteArray → Hash32) : Hash32 := hash ⟨#[0x80]⟩
+
+/-- The nodes that the check of a proof against `root` reads.
+
+The empty trie has no node, so a proof of no nodes shows that it holds no key.
+
+Against the root of the empty trie, that proof reads as the encoding of its root node, `0x80`.
+
+Any other proof reads as it is. -/
+def readNodes (hash : ByteArray → Hash32) (root : Hash32) : List ByteArray → List ByteArray
+  | [] => if root = emptyTrieRoot hash then [⟨#[0x80]⟩] else []
+  | node :: rest => node :: rest
+
 /-- The value of `key` in the trie of `root`, or `none` when `key` is not set, as `proof` shows.
 
 `secured` says whether the trie hashes its keys, as the state and storage tries do.
 
-The root is always the hash of the root node's encoding, so the proof starts with that encoding. -/
+The root is always the hash of the root node's encoding, so the proof starts with that encoding.
+
+Against the root of the empty trie, a proof of no nodes also shows that no key is set. -/
 def verifyProof (hash : ByteArray → Hash32) (root : Hash32) (secured : Bool) (key : ByteArray)
     (proof : List ByteArray) : Except ProofError (Option ByteArray) := do
   let path := keyPath hash secured key
-  let (rootNode, rest) ← resolve hash (.bytes ⟨root.toArray⟩) proof
+  let (rootNode, rest) ← resolve hash (.bytes ⟨root.toArray⟩) (readNodes hash root proof)
   let (value, unused) ← walk hash (path.length + 1) rootNode path rest
   if unused.isEmpty then
     return value

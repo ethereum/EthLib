@@ -645,25 +645,6 @@ private theorem size_addPendingDeposit {electra : .pectra ≤ fork}
   obtain ⟨_, _, rfl⟩ := computed
   rfl
 
-/-- A fold raises the registry size by at most one for each item. -/
-private theorem foldlM_size_le {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (each : ∀ s x s', step s x = .ok s' → s'.validators.data.size ≤ s.validators.data.size + 1) :
-    ∀ (items : List α) {state after : BeaconState preset fork},
-      items.foldlM step state = .ok after →
-        after.validators.data.size ≤ state.validators.data.size + items.length
-  | [], _, _, computed => by
-    simp only [List.foldlM, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simp
-  | _ :: rest, _, _, computed => by
-    simp only [List.foldlM, bind_ok_iff] at computed
-    obtain ⟨_, first, tail⟩ := computed
-    have one := each _ _ _ first
-    have more := foldlM_size_le each rest tail
-    simp only [List.length_cons]
-    omega
-
 /-- A deposit of a block adds at most one validator. -/
 private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
@@ -770,7 +751,8 @@ private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
     proposersOk).trans <|
     (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
     LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk
-  have deposited := foldlM_size_le (fun _ _ _ ok => processDeposit_size_le ok) _ depositedOk
+  have deposited :=
+    foldlM_validators_size_le (fun _ _ _ ok => processDeposit_size_le ok) depositedOk
   have exits := (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok)
     exitsOk).1
   have changes : LoadKept exited changed := by

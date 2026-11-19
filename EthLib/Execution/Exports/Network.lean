@@ -134,7 +134,7 @@ The forks after Glamsterdam fail with code 0, since EthLib does not specify thei
 def receiptsMatchExport (version : UInt64) (fork root receipts : ByteArray) : Result Bool := do
   let v ← readVersion version
   let fork ← forkUpTo .glamsterdam fork
-  let some (root : Base.Hash32) := (if h : root.size = 32 then some ⟨root.data, h⟩ else none)
+  let some (root : Base.Hash32) := Base.exactBytes? 32 root
     | throw (0, "receipts root is not 32 bytes")
   match Serialization.Rlp.decode receipts with
   | .ok (.list items) => return receiptsMatch v fork root items

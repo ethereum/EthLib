@@ -83,7 +83,7 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 It says nothing about unforgeability.
 
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
-Key generation makes at most `13434881` calls and signing at most `8630239231`.
+Key generation makes at most `13434881` calls and signing at most `8616804556`.
 Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
@@ -102,9 +102,9 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 The budget `q` counts the calls of key generation, the signer and the final verification too.
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
-It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
-With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
+With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
 The library proves no smaller bound on the calls of a request.
 
@@ -422,7 +422,7 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
 The hash calls of each algorithm, under a fixed answer function, are in `Proofs/Sphincs/Cost.lean`, when each call of `H` makes exactly one query.
-Key generation makes exactly `264193` calls, and signing at most `12885841387`.
+Key generation makes exactly `264193` calls, and signing at most `12885372483`.
 Verification makes at most `491` calls, and exactly `491` when it accepts.
 
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
@@ -451,11 +451,11 @@ So the adversary's budget of `q` hash calls carries over unchanged, and the mode
 
 A second theorem, `Unforgeability.Bridge.unforgeable_adversary`, counts only the adversary's own hash calls.
 Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
-It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (939499 + 3 * 2^32) + 491`.
+It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (470595 + 3 * 2^32) + 491`.
 At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`.
 At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 `r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
-Key generation makes 264193 calls, and a signing request at most `939499 + 3 * 2^32`, when every counter search tries all `2^32` counters.
+Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
 The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
 
@@ -1317,10 +1317,13 @@ Their §4 shows that the composition fails for multi-stage games.
 Let each hash call cost at least 1.
 `isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
 `Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
-Its bound is the closed form of equation (6) of Bertoni et al., which bounds the exact term of their Theorem 2.
-EthLib does not prove that the closed form bounds the exact term.
+Its bound is the closed form of equation (6) of Bertoni et al.
 For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
-EthLib does not prove this hypothesis, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+Their Theorem 2 rests on the exact term of their Lemma 5, `spongeExact`.
+Their equation (6) approximates that term by the closed form, for `N` well below `2^512`.
+`spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
+So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
+EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
 The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
 Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
 The distinguisher here asks only for 256-bit outputs of byte strings.
@@ -2324,15 +2327,18 @@ The trie commits to a map from byte keys to byte values under one 32-byte root.
 Two theorems in `Execution/Proofs/Trie/Binding.lean` describe what the root binds, for every hash.
 
 The first is `verifyProof_binding`, about two Merkle proofs of one key that verify against one root.
-They are one proof and give the key one value.
+They read as one list of nodes and give the key one value.
 Otherwise `findProofCollision` returns two different nodes of the proofs with one hash.
+A proof reads as itself, except the proof of no nodes against the root of the empty trie.
+The empty trie has no node, so that proof reads as the encoding of its root node, `0x80`, which `readNodes` writes.
 The second is `root_binding`, about two tries with one root.
 They give every key one value, or `findCollision` returns such a collision in the proofs of that key.
 Both searches are proved to return only collisions, and to return none for an input compared with itself.
 
 `verifyProof_sound`, in the same file, compares a proof with the proof that the trie builds for the key.
-The proof is that honest proof and gives the trie's value of the key.
-Otherwise `findProofCollision` returns a collision between the two proofs.
+The proof reads as that honest proof and gives the trie's value of the key.
+Otherwise `findProofCollision` returns a collision between the nodes that the proof reads as and the honest proof.
+`verifyProof_nil_eq_ok_iff` proves that the proof of no nodes verifies only against the root of the empty trie, where it shows the key unset.
 
 A secured trie hashes each key into its path, so two of its keys can have one path.
 `root_binding` and `verifyProof_sound` name that case too.
@@ -3284,8 +3290,10 @@ At each up-to-date honest store up to `time`, the root is in the filtered tree o
 The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
 Each such store has a head, by `Execution.honestHeadsExist_or_evidence` in `HonestHeads.lean`, up to the same alternatives ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
-It reads `CheckpointStakeCeiling`, `ProposerScoreFits` and the network and duty premises that the headline already takes.
+It reads `CheckpointStakeCeiling`, `ProposerScoreFits`, the bound of `Config.CommitteeWindowsFit.seeds` on the epoch of the largest 64-bit time and the network and duty premises that the headline already takes.
 The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot and is accepted.
+So the store holds its justified block, and its filtered tree computes without error.
+That is why `HonestHeadsExist` needs no premise on the tree.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
 `HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
@@ -4394,6 +4402,13 @@ A payload and its block determine each other.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
 `exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`acceptsFork_eq_true_iff` gives the forks of each version.
+From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
+Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Version 2 takes Paris and Shapella, and version 1 Paris alone.
+`acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
+Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
+So version 5 returns Fusaka and the BPO forks, and some version returns each fork from Paris to Glamsterdam (`exists_acceptsGetPayloadFork_iff`).
 `validRequests_iff` states when the execution requests of version 4 and later pass.
 Each request must have more than one byte, and their first bytes must strictly increase along the list.
 `status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID`, or `INVALID_BLOCK_HASH` only at version 1, with no latest valid hash.
@@ -4659,6 +4674,9 @@ The next and last are those of the first and last fork times after the head whos
 The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+`mem_configSystemContracts_iff` gives the system contracts of each fork.
+The beacon roots contract counts from Cancun.
+From Prague the history storage contract, the chain's deposit contract and the request contracts of the fork count too.
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
 The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
 
@@ -6555,12 +6573,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 523 operations and 51 size constants.
-The Python extension calls 523 of the operations and 51 of the constants.
+Lean exports 524 operations and 51 size constants.
+The Python extension calls 524 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11776 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1584), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (821), `x25519.c` (21), `xmss.c` (134).
+11787 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1585), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (822), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

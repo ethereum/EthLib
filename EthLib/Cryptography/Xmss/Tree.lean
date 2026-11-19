@@ -67,6 +67,15 @@ Computing it evaluates the `2^level` leaves below it. -/
 def node (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j : Nat) : m Digest :=
   Merkle.node (nodeHash H pp layer) (leaves H pp prf layer) ⟨level, j⟩
 
+/-- Every node under node `j` on `level` of a layer, each computed once.
+
+Its top value is `X_{level,j}`.
+
+It holds the `level` lowest siblings of every key below that node: the whole path at level 16. -/
+def build (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (level j : Nat) :
+    m (Merkle.Built Digest) :=
+  Merkle.build (nodeHash H pp layer) (leaves H pp prf layer) ⟨level, j⟩
+
 /-! ## The path -/
 
 /-- The path of key `e`, from the leaf up, level 0 first.

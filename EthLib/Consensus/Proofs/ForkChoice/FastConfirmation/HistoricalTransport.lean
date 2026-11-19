@@ -1176,7 +1176,7 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
   obtain ⟨block, found⟩ := reached.reachable.known_of_blockState baseFound
   have ordered := reached.reachable.finalized_le_justified anchorInvariant
   obtain ⟨start, boundaryBlock, startOk, boundaryFound, _, _⟩ :=
-    Store.isAncestor_of_getCheckpointBlock early walk
+    Store.isAncestor_of_getCheckpointBlock walk
   obtain ⟨boundaryBase, boundaryBaseFound, _, _⟩ :=
     reached.reachable.blockStatesFromParents boundaryFound
   have bound : start ≤ max block.slot target := by

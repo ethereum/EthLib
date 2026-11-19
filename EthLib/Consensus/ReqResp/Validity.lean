@@ -70,6 +70,22 @@ The source asks for updates in consecutive order by period, which may also mean 
 
 The check asks only for increasing periods, so it allows a period with no update.
 
+## Light client bootstrap
+
+From Altair, a request names the bootstrap of a block by the root of that block.
+
+The root of a bootstrap is the root of the beacon header of its header.
+
+- The response has at most one bootstrap.
+- Its root is the requested root.
+- Its fork is the fork of the epoch of its header, and it is from Altair.
+
+That fork is the one that the context bytes of its chunk name.
+
+As for updates, the check compares forks, not digests.
+
+It does not check the header or the branch of the sync committee, which the light client checks.
+
 ## Sidecars by range
 
 From Deneb, a request names the blob sidecars of a range of slots.
@@ -246,11 +262,15 @@ def ResponseUpdate.ofUpdate {preset : Preset} {fork : Fork}
 def ResponseUpdate.period (preset : Preset) (update : ResponseUpdate) : UInt64 :=
   computeSyncCommitteePeriodAtSlot preset update.attestedSlot
 
+/-- Whether the fork of a light client chunk is the fork of the epoch of a slot, from Altair. -/
+def lightClientForkMatches (preset : Preset) (config : Config) (slot : Slot) (fork : Fork) :
+    Bool :=
+  .altair ≤ fork && fork == config.forkAtEpoch (computeEpochAtSlot preset slot)
+
 /-- Whether the fork of an update is the fork of the epoch of its attested header, from Altair. -/
 def ResponseUpdate.forkMatches (preset : Preset) (config : Config) (update : ResponseUpdate) :
     Bool :=
-  .altair ≤ update.fork &&
-    update.fork == config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)
+  lightClientForkMatches preset config update.attestedSlot update.fork
 
 /-- Whether the updates of a response are valid for a request for light client updates by range.
 
@@ -265,6 +285,39 @@ def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
         (update.period preset).toNat < request.startPeriod.toNat + request.count.toNat &&
         update.forkMatches preset config) &&
     allAdjacent (fun a b => a.period preset < b.period preset) updates
+
+/-- What a response check reads from a light client bootstrap: its slot, its root and its fork.
+
+The slot and the root are those of the beacon header of its header.
+
+The fork is the one that the context bytes of the chunk of the bootstrap name. -/
+structure ResponseBootstrap where
+  /-- The slot of the header. -/
+  slot : Slot
+  /-- The root of the beacon header of the header. -/
+  root : Root
+  /-- The fork that the context bytes of the chunk name. -/
+  fork : Fork
+  deriving DecidableEq, Repr
+
+/-- What a response check reads from a light client bootstrap of a fork.
+
+It fails when the root of the beacon header cannot be computed. -/
+def ResponseBootstrap.ofBootstrap {preset : Preset} {fork : Fork}
+    (bootstrap : LightClientBootstrap preset fork) : Except Err ResponseBootstrap := do
+  let header := bootstrap.header.beacon
+  let root ← SszType.hashTreeRoot header
+  return { slot := header.slot, root, fork }
+
+/-- Whether the bootstraps of a response are valid for a request for a light client bootstrap.
+
+The request is the root of the block whose bootstrap it asks for. -/
+def isValidLightClientBootstrapResponse (preset : Preset) (config : Config) (request : Root)
+    (bootstraps : List ResponseBootstrap) : Bool :=
+  bootstraps.length ≤ 1 &&
+    bootstraps.all (fun bootstrap =>
+      bootstrap.root == request &&
+        lightClientForkMatches preset config bootstrap.slot bootstrap.fork)
 
 /-- What a response check reads from a sidecar: the slot and root of its block, and its index.
 

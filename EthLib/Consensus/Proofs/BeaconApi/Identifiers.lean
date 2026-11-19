@@ -81,7 +81,7 @@ private theorem parseUInt64_toHex (data : Bytes) : parseUInt64 (toHex data) = no
 /-- The hex text of bytes reads back as those bytes when the count fits. -/
 private theorem parseHexBytes_toHex {count : Nat} (data : Vector UInt8 count) :
     parseHexBytes count (toHex data.toArray) = some data := by
-  simp [parseHexBytes, ofHex_toHex]
+  simp [parseHexBytes, Base.exactBytes?, ByteArray.size, ofHex_toHex]
 
 /-- The hex text of bytes is none of the words, which start with a letter. -/
 private theorem toHex_ne_word (data : Bytes) {word : String} (c : Char)
