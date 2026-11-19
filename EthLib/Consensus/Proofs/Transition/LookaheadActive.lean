@@ -99,7 +99,9 @@ private theorem LookaheadActive.upgradeToFulu {pre : BeaconState preset .pectra}
   have sum := Uint64.addChecked_ok_iff.mp counted
   have small : (k / preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
       k / preset.SLOTS_PER_EPOCH.toNat := by
-    simp only [Nat.toUInt64, UInt64.toNat_ofNat]
+    refine UInt64.toNat_ofNat_of_lt' ?_
+    have := preset.MIN_SEED_LOOKAHEAD.toNat_lt
+    have : UInt64.size = 2 ^ 64 := rfl
     omega
   have same : e = epoch := UInt64.toNat_inj.mp (by rw [he, sum.2, small]; rfl)
   subst same
