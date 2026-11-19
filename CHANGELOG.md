@@ -9,6 +9,24 @@ Not yet released.
 
 ### Proof additions
 
+- `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  XMSS bounds key generation and signing on every path: at most `13434881` and `8630239231` calls.
+  Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
+  leanSPHINCS counts the calls under a fixed answer function.
+  Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
+  `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
+- `Unforgeability.Bridge.unforgeable_adversary` bounds a SPHINCS forgery by the adversary's own hash calls ([#3336](https://github.com/ethereum/EthLib/issues/3336)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + schemeCalls r) / 2^127`.
+  `schemeCalls r` bounds the calls of key generation, of `r` requests and of verification, about `2^63.7` at the model's cap of 1,182,000,000 requests.
+  `HasAdversaryQueryBound` reads both counts from `adversaryExperiment`, the game with a counter on the adversary's hash calls.
+  `mem_support_counted_iff` now holds for a game with any result type, not only a Boolean one.
+
+- `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
+  An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
+  `gameQueries qH r` adds upper bounds on the calls of key generation, of `r` requests and of the verification.
+  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+  `unforgeable` is unchanged.
+
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
@@ -274,6 +292,8 @@ Not yet released.
 - `getTotalActiveBalance_bounds` bounds a total active balance below by one increment.
   It bounds it above by the larger of one increment and the sum of the effective balances.
 
+- `processEpoch_registryCut` splits an epoch at its registry updates: the three stages before them, the registry updates, then the rest of the epoch.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
@@ -299,6 +319,9 @@ Not yet released.
   The validator there has execution credentials from the address of the request, and it may make a request.
   `isActiveValidator_of_canRequest` gives that a validator that may make a request is active.
   A caller that matched the cases as `⟨index, exited⟩` and `⟨index, v, owed, withdrawn⟩` writes `⟨index, v, accepted, exited⟩` and `⟨index, v, owed, accepted, withdrawn⟩`.
+
+- In Lean, `queriesWith` and its lemmas move from `Sphincs.Unforgeability` to `HashSig`, so that XMSS can count its calls with them ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  A caller opens `EthLib.Cryptography.HashSig` or writes `HashSig.queriesWith`.
 
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.

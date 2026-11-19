@@ -83,6 +83,11 @@ The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`)
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 It says nothing about unforgeability.
 
+The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
+Key generation makes at most `13434881` calls and signing at most `8630239231`.
+Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
+Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
+
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
 It proves that the signer's own calls before each search add none.
@@ -94,6 +99,15 @@ Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean
 In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
+
+The budget `q` counts the calls of key generation, the signer and the final verification too.
+`Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
+Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`.
+The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
+A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
+The library proves no smaller bound on the calls of a request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -425,6 +439,10 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
+The hash calls of each algorithm, under a fixed answer function, are in `Proofs/Sphincs/Cost.lean`, when each call of `H` makes exactly one query.
+Key generation makes exactly `264193` calls, and signing at most `12885841387`.
+Verification makes at most `491` calls, and exactly `491` when it accepts.
+
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
 The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts.
 
@@ -448,6 +466,16 @@ The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthL
 An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
 So the adversary's budget of `q` hash calls carries over unchanged, and the model's theorem `h26_layered` gives the bound.
+
+A second theorem, `Unforgeability.Bridge.unforgeable_adversary`, counts only the adversary's own hash calls.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (939499 + 3 * 2^32) + 491`.
+At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`.
+At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
+`r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
+Key generation makes 264193 calls, and a signing request at most `939499 + 3 * 2^32`, when every counter search tries all `2^32` counters.
+A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
+The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
 
 ### VRF tree
 
@@ -1285,6 +1313,36 @@ The theorems below tie the code to the model, and only a reader who checks the m
 `digest_absorb_absorb` (`Proofs/Hash/Keccak/Hasher.lean`) proves that the incremental hasher gives Keccak-256 of the two pieces it absorbed, wherever the message is cut.
 `size_pending_lt` proves that every hasher reached from the empty one keeps fewer pending bytes than the rate, so its digest pads them into one block.
 The Python tests (`bindings/python/tests/keccak`) check the hashes and the permutation against pinned vectors.
+
+`Proofs/Hash/Keccak/OneBlock.lean` bounds collisions and preimages of Keccak-256 on messages of at most 135 bytes.
+There Keccak-f[1600] is replaced by a uniform permutation of the 2^1600 states, which the adversary evaluates forward and backward.
+`spongeAbsorb_of_size_lt` proves that, below 136 bytes, the absorbing phase is one call to the permutation.
+The call is on the padded block with a zero capacity, whatever the permutation is.
+`oneCallHash_eq` proves that the hash of the games is that sponge, with only the permutation swapped.
+Let the adversary make `q` calls to the permutation and its inverse.
+`keccak256_collisionAdvantage_le` bounds its chance of a collision by `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
+`keccak256_preimageAdvantage_le` bounds its chance of a preimage of any given digest by `Q (2^1344 + 2^1088) / (2^1600 - Q)` with `Q = q + 1`, about `Q / 2^256 + Q / 2^512`.
+These bounds hold in the random permutation model only.
+Keccak-f[1600] is one fixed permutation, and treating it as a uniform one is a heuristic that EthLib assumes and does not prove.
+
+The bounds that model Keccak-256 as a random oracle on byte strings can be carried to the sponge over a uniform permutation.
+That carrying rests on the hypothesis below.
+`Proofs/Indifferentiability.lean` defines indifferentiability from a random oracle, after Definition 1 of [Bertoni, Daemen, Peeters and Van Assche](https://keccak.team/files/SpongeIndifferentiability.pdf), §2, without its bounds on running times.
+Its simulator asks the random oracle at most once per call.
+The simulator of their §4.3, Algorithm 3, does so, adapted to a 256-bit oracle that leaves it to draw the other output bits.
+`realProb_le_romProb_add` is the composition for single-stage games, Theorem 3.1 of [Ristenpart, Shacham and Shrimpton](https://hovav.net/ucsd/dist/revindiff.pdf).
+Their §4 shows that the composition fails for multi-stage games.
+Let each hash call cost at least 1.
+`isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
+`Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
+Its bound is the closed form of equation (6) of Bertoni et al., which bounds the exact term of their Theorem 2.
+EthLib does not prove that the closed form bounds the exact term.
+For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
+EthLib does not prove this hypothesis, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
+Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
+The distinguisher here asks only for 256-bit outputs of byte strings.
+The definition bounds no running time, so only random-oracle bounds that count queries alone carry over.
 
 ### KZG
 
@@ -6666,14 +6724,17 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/DerivationTable.lean`
 - `EthLib/Cryptography/Proofs/EvalDistEq.lean`
 - `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/Hash/`
 - `EthLib/Cryptography/Proofs/HashSig/`
 - `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
 - `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Indifferentiability.lean`
 - `EthLib/Cryptography/Proofs/Kzg/`
 - `EthLib/Cryptography/Proofs/LazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
 - `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
 - `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/OneCallPermutation.lean`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`

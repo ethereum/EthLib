@@ -32,8 +32,9 @@ instance : DecidablePred isHashCall := fun input ↦ inferInstanceAs (Decidable 
 /-- A count of the counted oracle is a count of the counted game under some answer function.
 
 The cost function must charge 1 for each hash call and 0 for each coin. -/
-theorem mem_support_counted_iff (oa : OracleComp OracleWorld Bool) (cost : OracleWorld.Domain → Nat)
-    (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : Bool × Nat) :
+theorem mem_support_counted_iff {α : Type} (oa : OracleComp OracleWorld α)
+    (cost : OracleWorld.Domain → Nat)
+    (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : α × Nat) :
     result ∈ support ((simulateQ (HashSpec.romImpl.withAddCost cost) oa).run.run' ∅) ↔
       ∃ f : QueryImpl HashSpec Id, result ∈ support
         (simulateQ (unifFwdAnswerImpl f) (SphincsSecurity.QueryCap.counted isHashCall oa)) := by

@@ -288,6 +288,26 @@ theorem EpochTrace.through_effectiveBalances {config : Config} {checks : Signatu
   exact ⟨_, _, _, _, _, _, _, _, _, _, justifiedOk, scoredOk, rewardedOk, registeredOk,
     slashedOk, resetOk, depositedOk, consolidatedOk, settledOk, updatedOk, trace⟩
 
+/-- An epoch splits at its registry updates.
+
+The three stages before them come first, then the registry updates, then the rest of the epoch. -/
+theorem processEpoch_registryCut {config : Config} {checks : SignatureChecks}
+    {state after : BeaconState preset fork}
+    (computed : processEpoch config checks state = .ok after) :
+    ∃ ready registered,
+      EpochTrace (action config checks) [.justification, .inactivity, .rewards] state ready ∧
+      processRegistryUpdates config ready = .ok registered ∧
+      EpochTrace (action config checks)
+        ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
+          middleStages ++ tailStages) registered after := by
+  have trace := processEpoch_trace computed
+  change EpochTrace _ ([.justification, .inactivity, .rewards] ++
+    (.registry :: ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
+      middleStages ++ tailStages))) state after at trace
+  obtain ⟨ready, before, rest⟩ := append_iff.mp trace
+  cases rest with
+  | cons registry suffix => exact ⟨ready, _, before, action_cases.mp registry, suffix⟩
+
 /-- The RANDAO reset separates the balance updates from history and rotation.
 
 After the reset, the equations of history, rotation and the three committee stages follow. -/
