@@ -803,15 +803,6 @@ private theorem keyCredit_le_creditLimit (i : ℕ) (e : BalanceEvent preset)
       simp [actualBalanceAt, Array.getElem?_eq_none (Nat.le_of_not_lt within)]
     omega
 
-/-- A property of the states of a trace that each stage keeps holds at its end. -/
-private theorem epochTrace_invariant {σ ε : Type} {action : EpochStage → σ → Except ε σ}
-    (P : σ → Prop) (step : ∀ k s u, P s → action k s = .ok u → P u)
-    {ks : List EpochStage} {s t : σ} (trace : EpochTrace action ks s t) :
-    P s → P t := by
-  induction trace with
-  | nil => exact id
-  | cons ok _ ih => exact fun held => ih (step _ _ _ held ok)
-
 /-- The stages of an epoch replay record no slashing event with a credit limit. -/
 private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
     {pre post : BalanceReplay preset fork}
@@ -921,10 +912,10 @@ private theorem slot_slashing_credit {m n : ForkedBeaconState preset}
   · exact absurd member notCrossing
   · rw [shape] at member
     rcases List.mem_append.mp member with inside | inside
-    · exact epochTrace_invariant (action := epochReplayAction (config := config) (checks := checks))
-        (fun p => ∀ e ∈ p.2, e.source = .slashings → e.creditLimit = 0)
-        (fun k s u held ok => epochReplayAction_slashing_credit k held ok)
-        (epochBalanceReplay_trace recordOk) (fun e member => by simp at member) e inside source
+    · exact EpochTrace.induction_on
+        (fun _ p => ∀ e ∈ p.2, e.source = .slashings → e.creditLimit = 0)
+        (epochBalanceReplay_trace recordOk) (fun e member => by simp at member)
+        (fun k _ a b ok held => epochReplayAction_slashing_credit k held ok) e inside source
     · exact absurd inside notCrossing
 
 /-- An event of a block step credits a key only from the sources of `credC`, `whistC` and sync.
@@ -996,18 +987,6 @@ private theorem slot_event_credit {g m n : ForkedBeaconState preset}
   simp only [cd, ↓reduceIte]
   omega
 
-/-- The events that a filter selects sum as the events with the others at zero. -/
-private theorem sum_filter_ite (events : List (BalanceEvent preset))
-    (f : BalanceEvent preset → ℕ) (p : BalanceSource → Bool) :
-    ((events.filter (p ·.source)).map f).sum =
-      (events.map fun e => if p e.source = true then f e else 0).sum := by
-  induction events with
-  | nil => rfl
-  | cons e rest ih =>
-    by_cases h : p e.source = true
-    · simp [h, ih]
-    · simp [h, ih]
-
 /-- A bound for each selected event gives the bound for the sums of the credits that it splits. -/
 private theorem sum_credits_split (events : List (BalanceEvent preset))
     (f g : BalanceEvent preset → ℕ) (r p q : BalanceSource → Bool)
@@ -1016,24 +995,17 @@ private theorem sum_credits_split (events : List (BalanceEvent preset))
         g e) :
     ((events.filter (r ·.source)).map f).sum ≤ ((events.filter (p ·.source)).map f).sum +
       ((events.filter (q ·.source)).map f).sum + (events.map g).sum := by
-  rw [sum_filter_ite, sum_filter_ite, sum_filter_ite, ← List.sum_map_add, ← List.sum_map_add]
+  have ite (p : BalanceSource → Bool) : ((events.filter (p ·.source)).map f).sum =
+      (events.map fun e => if p e.source = true then f e else 0).sum := by
+    rw [List.sum_map_ite (fun e : BalanceEvent preset => p e.source = true) f (fun _ => 0)]
+    simp
+  rw [ite, ite, ite, ← List.sum_map_add, ← List.sum_map_add]
   refine List.sum_le_sum fun e member => ?_
   by_cases hr : r e.source = true
   · simp only [hr, ↓reduceIte]
     exact each e member hr
   · simp only [hr]
     exact Nat.zero_le _
-
-/-- A bound for each event of a list gives the bound for the sum of all its credits. -/
-private theorem sum_credits_split_all (events : List (BalanceEvent preset))
-    (f g : BalanceEvent preset → ℕ) (p q : BalanceSource → Bool)
-    (each : ∀ e ∈ events,
-      f e ≤ (if p e.source = true then f e else 0) + (if q e.source = true then f e else 0) +
-        g e) :
-    (events.map f).sum ≤ ((events.filter (p ·.source)).map f).sum +
-      ((events.filter (q ·.source)).map f).sum + (events.map g).sum := by
-  rw [sum_filter_ite, sum_filter_ite, ← List.sum_map_add, ← List.sum_map_add]
-  exact List.sum_le_sum each
 
 /-- A filter that selects no event sums to zero. -/
 private theorem sum_filter_none (events : List (BalanceEvent preset))
@@ -1049,11 +1021,7 @@ private theorem step_events_bounded {g m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
     ∀ e ∈ events, e.credits ≤ e.creditLimit := by
-  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
-    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
-    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
-      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+  have run := PinSplit2.run_one_step_events step ok
   obtain ⟨found, foundOk, bounded⟩ := Run.balanceEvents_bounded shared (Run.nil.snoc step)
     genesis early (getCurrentEpoch n.state).toNat
   rw [run] at foundOk
@@ -1075,9 +1043,14 @@ private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
   cases step with
   | block engine signed due ok =>
     have each := block_event_credit shared genesis early electra i replayed bounded
-    have split := sum_credits_split_all events (keyCredit i) (syncCredit i)
-      (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
-      (fun e m => by simpa using each e m)
+    have split : (events.map (keyCredit i)).sum ≤
+        ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
+          (keyCredit i)).sum +
+        ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
+        (events.map (syncCredit i)).sum := by
+      simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
+        (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
+        (fun e m _ => by simpa using each e m)
     simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
       sum_filter_none] at base ⊢
     omega

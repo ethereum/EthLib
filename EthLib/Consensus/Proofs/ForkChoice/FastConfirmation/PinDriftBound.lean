@@ -1921,16 +1921,22 @@ private theorem balance_le_pathCredits (i : ℕ) :
       simp only [pathCredits]
       omega
 
+/-- The replay of a run of one step, to the end epoch of the step, is the replay of the step. -/
+private theorem run_one_step_events {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) {events : List (BalanceEvent preset)}
+    (ok : step.balanceEvents = .ok events) :
+    (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
+  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
+    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
+    (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+
 /-- A step raises the balance of a key by at most the credits of its events. -/
 private theorem step_balance_le_events {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam) (i : ℕ)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
     actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum := by
-  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
-    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
-    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
-      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+  have run := run_one_step_events step ok
   have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
     (Nat.le_succ _) run false i
   have ends := Run.balancePath_ends (Run.nil.snoc step)
