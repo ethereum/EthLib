@@ -18586,6 +18586,8 @@ At that state its effective balance is within the floor of its balance, and it i
 
 Before it the key is absent from the path, so its effective balance is zero.
 
+A state of the run that lacks the key is no later than the first state.
+
 A step that appends a key leaves it unassigned, so the first state is where the key is created. -/
 private theorem created_first_state (h : Setting config checks g split fin pulled anc counted V)
     {e : BeaconState preset fork} (run : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
@@ -18599,7 +18601,11 @@ private theorem created_first_state (h : Setting config checks g split fin pulle
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
           actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
+      ∀ (d : BeaconState preset fork) (toD : Run config checks ⟨fork, fin⟩ ⟨fork, d⟩)
+        (restD : Run config checks ⟨fork, d⟩ ⟨fork, e⟩), toD.append restD = run →
+        ¬ v.toNat < d.validators.data.size →
+        (getCurrentEpoch d).toNat ≤ (getCurrentEpoch c).toNat := by
   classical
   obtain ⟨toFin⟩ := h.toFin
   -- the first state of the run that holds the key
@@ -18638,7 +18644,7 @@ private theorem created_first_state (h : Setting config checks g split fin pulle
       have absent : p.state.validators.data[v.toNat]? = none :=
         Array.getElem?_eq_none (by omega)
       simp [effectiveAt, absent]
-  refine ⟨ns, pre0.snoc step, post0, cutFlip.symm, presentN, fun u found => ?_, before, ?_⟩
+  refine ⟨ns, pre0.snoc step, post0, cutFlip.symm, presentN, fun u found => ?_, before, ?_, ?_⟩
   · rw [foundN] at found
     cases found
     exact clean
@@ -18652,6 +18658,12 @@ private theorem created_first_state (h : Setting config checks g split fin pulle
     have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat within
     rw [aligned] at rounded
     simpa using rounded
+  · -- a state without the key is before the first state, since the registry only grows
+    intro d toD restD cutD absentD
+    rcases Run.prefix_total toD restD (pre0.snoc step) post0 cutD cutFlip.symm with
+      ⟨r, -⟩ | ⟨r, -⟩
+    · exact UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r.chainSteps)
+    · exact absurd (Nat.lt_of_lt_of_le presentN (registryGrows_of_chainSteps r.chainSteps)) absentD
 
 /-- The exit of a key that the finalized state does not hold is late for the whole run.
 
@@ -18725,7 +18737,7 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
     omega
   · -- the key is created on the shared segment, and its envelope starts at its first state
     have splitSize : v.toNat < split.validators.data.size := Nat.lt_of_not_le absent
-    obtain ⟨c, toC, fromC, cutC, insideC, -, before, floorStart⟩ :=
+    obtain ⟨c, toC, fromC, cutC, insideC, -, before, floorStart, -⟩ :=
       created_first_state h fromFin created splitSize
     exact key_core_cap h tail replayed fromFin replayedF tailC highC endEpochC replayedC v
       (voter_unslashed h v voter) (created_late h created) toC fromC cutC insideC before
