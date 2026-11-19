@@ -821,17 +821,7 @@ private theorem Plain.withdrawals {a b : BeaconState preset fork} {capella : .sh
       (fun withdrawn => by rw [applyWithdrawal_eq withdrawn]; exact Plain.of_validators)
       _ _ _ _ _ _ applied
     all_goals exact fun _ _ => Plain.of_validators
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      exact Plain.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of Plain (Plain.refl _) expected ok
 
 private theorem Plain.blockExecution {a b : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
