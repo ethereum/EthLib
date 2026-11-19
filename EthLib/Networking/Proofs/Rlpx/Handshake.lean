@@ -4,6 +4,7 @@ public import EthLib.Networking.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Serialization.Proofs.Rlp.Codec
+public import EthLib.Cryptography.Proofs.EcdsaSignature
 import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -100,27 +101,20 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
     recoverSigner hash (signatureBytes sig) = .ok (mul sk generator) := by
   obtain ⟨r, s, odd⟩ := sig
   have hrec := Ecdsa.recover_sign_rfc6979 h
-  have hlr := Base.natToBytes_length 32 r.val
-  have hls := Base.natToBytes_length 32 s.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
   -- The first 64 bytes are `r || s`, and they read back as the two integers.
-  have hrs : (Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val).length =
-      EcdsaSignature.SIGNATURE_LEN := by
-    simp [hlr, hls, EcdsaSignature.SIGNATURE_LEN]
-  have hsc :
-      EcdsaSignature.toNats ((signatureBytes (r, s, odd)).take EcdsaSignature.SIGNATURE_LEN) =
-        (r.val, s.val) := by
-    unfold EcdsaSignature.toNats
-    erw [Vector.toList_take]
-    simp only [signatureBytes, Vector.toList_mk, List.take_left' hrs, List.take_left' hlr,
-      List.drop_left' hlr, Base.bytesToNat_natToBytes, hmod]
+  have htake : ((signatureBytes (r, s, odd)).take EcdsaSignature.SIGNATURE_LEN :
+      Vector UInt8 EcdsaSignature.SIGNATURE_LEN) = EcdsaSignature.toBytes r.val s.val :=
+    EcdsaSignature.take_toRecoverableBytes _ _ _
+  -- The last byte is the recovery id.
+  have hv : (signatureBytes (r, s, odd))[64] = if odd then 1 else 0 :=
+    EcdsaSignature.getElem_toRecoverableBytes _ _ _
   unfold recoverSigner
-  rw [hsc]
-  unfold signatureBytes
+  rw [htake, EcdsaSignature.toNats_toBytes, hmod, hmod, hv]
   cases odd <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
-     simp [hlr, hls, Except.mapError, hrec])
+     simp [Except.mapError, hrec])
 
 /-! ## Packets -/
 

@@ -31,7 +31,7 @@ The keys and the nonces are secret, and EthLib makes no constant-time claim (SOU
 
 namespace EthLib.Networking.Rlpx
 
-open EthLib.Base (natToBytes natToBytes_length xorBytes)
+open EthLib.Base (xorBytes)
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Serialization.Rlp
@@ -192,8 +192,7 @@ structure Sealing where
 
 /-- The signature `r || s || v` of a hash, where `v` is the recovery id. -/
 def signatureBytes (sig : Fn × Fn × Bool) : Vector UInt8 65 :=
-  ⟨(natToBytes 32 sig.1.val ++ natToBytes 32 sig.2.1.val ++ [if sig.2.2 then 1 else 0]).toArray,
-    by simp [natToBytes_length]⟩
+  EcdsaSignature.toRecoverableBytes sig.1.val sig.2.1.val sig.2.2
 
 /-- The public key that signed a hash, from a signature `r || s || v`. -/
 def recoverSigner (hash : Vector UInt8 32) (sig : Vector UInt8 65) : Except HandshakeError Point :=
