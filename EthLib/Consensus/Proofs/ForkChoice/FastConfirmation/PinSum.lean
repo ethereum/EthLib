@@ -7614,7 +7614,7 @@ The same holds for each queue key.
 The slots are at least the proposers, the seats and the deposit recipients of the window. -/
 private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     ∃ N U : ℕ, (pinTerms config pulled anc fin).creditUnits =
-        (N + 2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
+        (N + 2 * (((pinTerms config pulled anc fin).positions.filter fun i =>
           (pinTerms config pulled anc fin).exitingB i = true).card +
             (pinTerms config pulled anc fin).queueKeys)) * U ∧
       (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
@@ -7733,6 +7733,10 @@ private theorem credit_slots_le (h : Setting config checks g split fin pulled an
     (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
     (show (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat by omega)
+  have monotoneLe := Nat.div_le_div_right
+    (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) monotone
+  have nonneg := Nat.zero_le (((getCurrentEpoch pulled).toNat + 2 -
+    anc.finalizedCheckpoint.epoch.toNat) / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
   have first := Nat.mul_le_mul_right
     (preset.SLOTS_PER_EPOCH.toNat + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) wide
   have second := Nat.mul_le_mul_left preset.SYNC_COMMITTEE_SIZE.toNat
