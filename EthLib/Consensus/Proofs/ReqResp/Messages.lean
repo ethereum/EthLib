@@ -15,6 +15,7 @@ Properties of the request and response messages of the consensus layer.
 - Each protocol ID parses back to its protocol and its version.
 - So no two protocol IDs of a fork are one string.
 - A protocol ID of a fork is a protocol ID of every later fork.
+- The metadata of a version is that of the first fork that has the version.
 - The status, the metadata and the container requests are lawful SSZ containers at every fork.
 - A goodbye code is recovered from the reason it names.
 -/
@@ -117,6 +118,36 @@ theorem toString_injective {fork : Fork} {a b : ProtocolId} (left : a ∈ protoc
   have := parse?_protocolIds left
   rw [same, parse?_protocolIds right] at this
   exact (Option.some.inj this).symm
+
+/-- The metadata of a version is that of the first fork from Phase 0 whose protocol has it.
+
+So version 1 carries the metadata of Phase 0, version 2 that of Altair, and version 3 that of Fulu.
+-/
+theorem metadataFork_eq_some_iff {version : Nat} {fork : Fork} :
+    metadataFork version = some fork ↔
+      .phase0 ≤ fork ∧ version ∈ ReqRespProtocol.metadata.versions fork ∧
+        ∀ other, .phase0 ≤ other → version ∈ ReqRespProtocol.metadata.versions other →
+          fork ≤ other := by
+  constructor
+  · intro named
+    match version, named with
+    | 1, named | 2, named | 3, named =>
+      simp only [metadataFork, Option.some.injEq] at named
+      subst named
+      refine ⟨by decide, by decide, fun other => ?_⟩
+      cases other <;> decide
+  · rintro ⟨started, member, first⟩
+    have phase0 := first .phase0 (by decide)
+    have altair := first .altair (by decide)
+    have fulu := first .fusaka (by decide)
+    have listed : version = 1 ∨ version = 2 ∨ version = 3 := by
+      simp only [ReqRespProtocol.versions] at member
+      split at member
+      · simp at member
+        omega
+      · split at member <;> simp at member <;> omega
+    rcases listed with rfl | rfl | rfl <;> cases fork <;>
+      revert started member phase0 altair fulu <;> decide
 
 /-- A goodbye code is recovered from the reason it names. -/
 theorem GoodbyeReason.toCode_ofCode (code : UInt64) :
