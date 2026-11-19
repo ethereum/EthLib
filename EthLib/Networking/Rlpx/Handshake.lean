@@ -4,7 +4,7 @@ public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Sign
-public import EthLib.Cryptography.EcdsaSignature
+public import EthLib.Cryptography.Ecdsa.Encoding
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -192,11 +192,11 @@ structure Sealing where
 
 /-- The signature `r || s || v` of a hash, where `v` is the recovery id. -/
 def signatureBytes (sig : Fn × Fn × Bool) : Vector UInt8 65 :=
-  EcdsaSignature.toRecoverableBytes sig.1.val sig.2.1.val sig.2.2
+  Cryptography.Ecdsa.toRecoverableBytes sig.1.val sig.2.1.val sig.2.2
 
 /-- The public key that signed a hash, from a signature `r || s || v`. -/
 def recoverSigner (hash : Vector UInt8 32) (sig : Vector UInt8 65) : Except HandshakeError Point :=
-  let (r, s) := EcdsaSignature.toNats (sig.take EcdsaSignature.SIGNATURE_LEN)
+  let (r, s) := Cryptography.Ecdsa.toNats (sig.take Cryptography.Ecdsa.SIGNATURE_LEN)
   let v := sig[64]
   if h : v.toNat < 2 then (Ecdsa.recover hash r s ⟨v.toNat, h⟩).mapError .secp256k1
   else .error (.badRecoveryId v)

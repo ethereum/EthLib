@@ -119,8 +119,8 @@ theorem verifyV4_negS {rec : Enr} (hsize : rec.signature.size = 64) :
   have hc : (negS rec).content = rec.content := rfl
   rw [hpk, hc]
   split
-  · simp only [EcdsaSignature.read?_eq, EcdsaSignature.SIGNATURE_LEN, hsize, hsize', ↓reduceIte,
-      htake, hdrop]
+  · simp only [Cryptography.Ecdsa.read?_eq, Cryptography.Ecdsa.SIGNATURE_LEN, hsize, hsize',
+      ↓reduceIte, htake, hdrop]
     by_cases hs : 0 < sigS rec ∧ sigS rec < Fn.modulus
     · exact Ecdsa.verify_neg_s _ _ _ hs
     · exact (verify_eq_false_of_s (by omega)).trans (verify_eq_false_of_s hs).symm

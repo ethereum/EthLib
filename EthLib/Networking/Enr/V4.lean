@@ -4,7 +4,7 @@ public import EthLib.Networking.Enr.Record
 public import EthLib.Cryptography.Secp256k1.Address
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Sign
-public import EthLib.Cryptography.EcdsaSignature
+public import EthLib.Cryptography.Ecdsa.Encoding
 
 /-!
 # `Networking.Enr.V4`
@@ -74,7 +74,7 @@ ECDSA accepts a high `s` here, since the EIP adds no low-s rule. -/
 def verifyV4 (r : Enr) : Bool :=
   match r.publicKeyV4, Serialization.Rlp.encode r.content with
   | .ok q, .ok content =>
-    match EcdsaSignature.read? r.signature with
+    match Cryptography.Ecdsa.read? r.signature with
     | some (rr, ss) => Ecdsa.verify q (Hash.Keccak.keccak256 content) rr ss
     | none => false
   | _, _ => false
@@ -100,7 +100,7 @@ So the caller puts the `id` pair and the `secp256k1` pair of `sk G` among them, 
 def signV4 (sk : Fn) (r : Enr) : Except EnrError Enr := do
   let content ← (Serialization.Rlp.encode r.content).mapError .rlp
   let (rr, ss, _) ← (Ecdsa.sign sk (Hash.Keccak.keccak256 content)).mapError fun _ => .signing
-  return { r with signature := Base.packBytes (EcdsaSignature.toBytes rr.val ss.val) }
+  return { r with signature := Base.packBytes (Cryptography.Ecdsa.toBytes rr.val ss.val) }
 
 /-- The pairs with one more pair, placed before the first pair whose key is larger. -/
 def insertPair (p : ByteArray × Item) : List (ByteArray × Item) → List (ByteArray × Item)

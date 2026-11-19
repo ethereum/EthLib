@@ -4,7 +4,7 @@ public import EthLib.Networking.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Serialization.Proofs.Rlp.Codec
-public import EthLib.Cryptography.Proofs.EcdsaSignature
+public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -82,7 +82,7 @@ theorem recoverSigner_valid {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p 
     (h : recoverSigner hash sig = .ok p) :
     p.isOnCurve = true ∧ p ≠ .infinity := by
   unfold recoverSigner at h
-  generalize EcdsaSignature.toNats (sig.take EcdsaSignature.SIGNATURE_LEN) = rs at h
+  generalize Cryptography.Ecdsa.toNats (sig.take Cryptography.Ecdsa.SIGNATURE_LEN) = rs at h
   obtain ⟨r, s⟩ := rs
   dsimp only at h
   split at h
@@ -104,14 +104,14 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
   -- The first 64 bytes are `r || s`, and they read back as the two integers.
-  have htake : ((signatureBytes (r, s, odd)).take EcdsaSignature.SIGNATURE_LEN :
-      Vector UInt8 EcdsaSignature.SIGNATURE_LEN) = EcdsaSignature.toBytes r.val s.val :=
-    EcdsaSignature.take_toRecoverableBytes _ _ _
+  have htake : ((signatureBytes (r, s, odd)).take Cryptography.Ecdsa.SIGNATURE_LEN :
+      Vector UInt8 Cryptography.Ecdsa.SIGNATURE_LEN) = Cryptography.Ecdsa.toBytes r.val s.val :=
+    Cryptography.Ecdsa.take_toRecoverableBytes _ _ _
   -- The last byte is the recovery id.
   have hv : (signatureBytes (r, s, odd))[64] = if odd then 1 else 0 :=
-    EcdsaSignature.getElem_toRecoverableBytes _ _ _
+    Cryptography.Ecdsa.getElem_toRecoverableBytes _ _ _
   unfold recoverSigner
-  rw [htake, EcdsaSignature.toNats_toBytes, hmod, hmod, hv]
+  rw [htake, Cryptography.Ecdsa.toNats_toBytes, hmod, hmod, hv]
   cases odd <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
      simp [Except.mapError, hrec])

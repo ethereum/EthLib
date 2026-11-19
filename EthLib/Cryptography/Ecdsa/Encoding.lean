@@ -10,16 +10,19 @@ An ECDSA signature over a curve with a 256-bit order is the pair of integers `r`
 
 Its byte form here is 64 bytes: `r` then `s`, each as 32 big-endian bytes.
 
-It is the form of the "v4" identity scheme of [EIP-778][eip778], where the recovery id is left out.
+[RFC 7518 §3.4][rfc7518] defines this layout for ECDSA on P-256.
+
+The "v4" identity scheme of [EIP-778][eip778] uses it on secp256k1, without the recovery id.
 
 A signature with its recovery id is 65 bytes: the recovery id is one more byte, after `s`.
 
+[rfc7518]: https://www.rfc-editor.org/rfc/rfc7518#section-3.4
 [eip778]: https://eips.ethereum.org/EIPS/eip-778
 -/
 
 @[expose] public section
 
-namespace EthLib.Cryptography.EcdsaSignature
+namespace EthLib.Cryptography.Ecdsa
 
 /-- The length of a signature: `r` then `s`, 32 bytes each. -/
 def SIGNATURE_LEN : Nat := 64
@@ -47,4 +50,4 @@ def read? (bytes : ByteArray) : Option (Nat × Nat) :=
 def read {ε : Type} (bytes : ByteArray) (bad : Nat → ε) : Except ε (Nat × Nat) :=
   (Base.exactBytes SIGNATURE_LEN bytes bad).map toNats
 
-end EthLib.Cryptography.EcdsaSignature
+end EthLib.Cryptography.Ecdsa
