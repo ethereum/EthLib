@@ -13357,7 +13357,7 @@ The keys of `SC` that the rise term of `bud_whistle` charges are not in K4.
 Each of them is a key of R's registry.
 
 `rise_base` is the part for K4. -/
-theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
+private theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) +
       (∑ v ∈ (sc3a config pulled anc fin counted split) with
         (pinTerms config pulled anc fin).current v.toNat = true,
@@ -13371,7 +13371,7 @@ theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
 The keys of `SC` that the rise term of `bud_whistle` charges are not in K6.
 
 Each of them is a key of R's registry. -/
-theorem bud_joinRise (h : Setting config checks g split fin pulled anc counted V) :
+private theorem bud_joinRise (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K6 pulled counted) with
         (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
           isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
@@ -13389,7 +13389,7 @@ A key of `SC` outside the tight window pays its stake three times and its rise.
 In the tight window `late` is 0, and the sum over `SC` is empty, since its guard is false.
 
 `late_base` is the part for V and K6. -/
-theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
+private theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
     3 * (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
         eR pulled v) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).lateB v.toNat = true,
@@ -13405,7 +13405,7 @@ theorem bud_late (h : Setting config checks g split fin pulled anc counted V) :
 In the tight window `pendingR` is 0, and the sum over `SC` is empty, since its guard is false.
 
 `pending_base` is the part for K6. -/
-theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V) :
+private theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (sc3a config pulled anc fin counted split) with
@@ -13423,7 +13423,7 @@ A key is active at R, or active at the next epoch only.
 Otherwise its activation is past the delay, or its eligibility is past the epoch.
 
 In the tight window the last two cases are empty. -/
-theorem sc_3a_split (h : Setting config checks g split fin pulled anc counted V) :
+private theorem sc_3a_split (h : Setting config checks g split fin pulled anc counted V) :
     ∑ v ∈ sc3a config pulled anc fin counted split,
         ((pinTerms config pulled anc fin).rise v.toNat +
           (if (pinTerms config pulled anc fin).tight = false ∧
@@ -13455,7 +13455,7 @@ Off the high gain rate each active key of `CS` charges one `unitGain` for its st
 Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
 
 The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
-theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
+private theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -13477,7 +13477,7 @@ At a high gain rate each takes the largest cap, and `creditCap` is the cap of ea
 The keys of `K6` beyond R's registry take `capUse` of it, so the slots are counted once.
 
 Each key created after R's registry came through a pending deposit of the window. -/
-theorem bud_capSlots (h : Setting config checks g split fin pulled anc counted V) :
+private theorem bud_capSlots (h : Setting config checks g split fin pulled anc counted V) :
     capUse config pulled anc fin counted +
       (if (pinTerms config pulled anc fin).gainHigh = true then
         ((CS counted split).filter fun v =>
