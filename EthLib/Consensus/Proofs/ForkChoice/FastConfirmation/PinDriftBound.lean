@@ -1682,7 +1682,9 @@ variable {preset : Preset} {config : Config}
 
 The rate is taken at the key's effective balance at the state.
 
-`pulledTotal` is R's total read, and `quarter` is `max inc (pulledTotal / 4)`.
+`pulledTotal` is R's total read.
+
+The `quarter` is a quarter of it from 18 increments, and a fifth of an increment below.
 
 The reserve reads the base reward per increment at the quarter.
 
@@ -1705,7 +1707,7 @@ The floor of a quotient that is at least one is at least half of it.
 The left side is `passPenaltyRate config z v` of this file, restated. -/
 private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulledTotal : ℕ)
     (scoreBound : ℕ)
-    (positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (size : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (roomy : 2 ^ 33 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat)
     (pulledFits : pulledTotal < 2 ^ 64)
     (aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ effectiveAt z v)
@@ -1723,7 +1725,7 @@ private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ)
         ((z.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0)
     let score := if altair : .altair ≤ z.fork then
         (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
-    let quarter := max inc (pulledTotal / 4)
+    let quarter := if 18 * inc ≤ pulledTotal then pulledTotal / 4 else inc / 5
     let perIncrement := inc * preset.BASE_REWARD_FACTOR.toNat / quarter.sqrt
     (TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat) * preset.BASE_REWARD_FACTOR.toNat *
         effectiveAt z v / (WEIGHT_DENOMINATOR.toNat * total.sqrt) +
@@ -1735,6 +1737,8 @@ private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ)
         (config.INACTIVITY_SCORE_BIAS.toNat *
           (parameters preset z.fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
   intro inc total score quarter perIncrement
+  have sizeInc : 10 ^ 8 ≤ inc := size
+  have positive : 0 < inc := by omega
   have weights : TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat = 40 := by decide
   have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
   rw [weights, denominator]
@@ -1754,23 +1758,34 @@ private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ)
     rw [← hX]
     exact Nat.le_mul_of_pos_right _ hfactor
   have quarterLe : quarter ≤ X ^ 2 := by
-    refine max_le ?_ ?_
-    · exact Nat.le_trans incX (Nat.le_self_pow (by decide) _)
+    by_cases big : 18 * inc ≤ pulledTotal
     · have : 2 ^ 66 ≤ X ^ 2 := by
         calc 2 ^ 66 = (2 ^ 33) ^ 2 := by norm_num
           _ ≤ X ^ 2 := Nat.pow_le_pow_left roomy 2
       have : pulledTotal / 4 < 2 ^ 62 := by omega
+      simp only [quarter, big, ↓reduceIte]
+      omega
+    · simp only [quarter, big, ↓reduceIte]
+      exact Nat.le_trans (Nat.div_le_self _ _)
+        (Nat.le_trans incX (Nat.le_self_pow (by decide) _))
+  have quarterTotal : quarter ≤ total := by
+    by_cases big : 18 * inc ≤ pulledTotal
+    · simp only [quarter, big, ↓reduceIte]
+      have : 2 * pulledTotal ≤ 3 * total := band
+      omega
+    · simp only [quarter, big, ↓reduceIte]
+      exact Nat.le_trans (Nat.div_le_self _ _) hinc
+  have quarterPositive : 0 < quarter.sqrt := by
+    refine Nat.sqrt_pos.mpr ?_
+    by_cases big : 18 * inc ≤ pulledTotal
+    · simp only [quarter, big, ↓reduceIte]
+      omega
+    · simp only [quarter, big, ↓reduceIte]
       omega
   have quarterRoot : quarter.sqrt ≤ X := by
     have := Nat.sqrt_le_sqrt quarterLe
     rwa [Nat.sqrt_eq'] at this
-  have quarterTotal : quarter ≤ total := by
-    refine max_le hinc ?_
-    have : 2 * pulledTotal ≤ 3 * total := band
-    omega
   have totalRoot : quarter.sqrt ≤ total.sqrt := Nat.sqrt_le_sqrt quarterTotal
-  have quarterPositive : 0 < quarter.sqrt :=
-    Nat.sqrt_pos.mpr (Nat.lt_of_lt_of_le positive (le_max_left _ _))
   have perOne : 1 ≤ X / quarter.sqrt := (Nat.le_div_iff_mul_le quarterPositive).mpr (by omega)
   have rewardRate : 40 * preset.BASE_REWARD_FACTOR.toNat * effectiveAt z v / (64 * total.sqrt) ≤
       2 * (effectiveAt z v / inc * perIncrement) := by
