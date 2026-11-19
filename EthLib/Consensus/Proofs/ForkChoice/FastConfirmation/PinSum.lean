@@ -6540,6 +6540,39 @@ private theorem classes_disjoint (h : Setting config checks g split fin pulled a
   · simp only [K6, Finset.mem_filter] at b
     exact b.2.2 (h.voting v a).1
 
+/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
+private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
+    Disjoint V (SC pulled counted split) := by
+  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
+    intro v hv hs
+    simp only [Q, quorumVoters, Finset.mem_filter] at hv
+    have unslashed := hv.2
+    unfold slashedFlagAt at hs
+    rw [hs] at unslashed
+    simp at unslashed
+  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
+    intro v hv
+    simp only [Finset.mem_union] at hv
+    rcases hv with (h4 | h5) | h6
+    · simp only [K4, Finset.mem_filter] at h4
+      exact h4.2.2.1
+    · simp only [K5, Finset.mem_filter] at h5
+      exact h5.1
+    · simp only [K6, Finset.mem_filter] at h6
+      exact h6.2.1
+  refine ⟨?_, ?_⟩
+  · rw [Finset.disjoint_left]
+    intro v hk hs
+    simp only [SC, Finset.mem_filter] at hs
+    exact qS v (inQ v hk) hs.2.1
+  · rw [Finset.disjoint_left]
+    intro v hv hs
+    simp only [SC, Finset.mem_filter] at hs
+    have unslashed := (h.voting v hv).2
+    rw [hs.2.1] at unslashed
+    simp at unslashed
+
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
@@ -6641,29 +6674,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   have d456 : Disjoint (K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
     Finset.disjoint_union_left.mpr ⟨d46, d56⟩
-  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
-    intro v hv hs
-    simp only [Q, quorumVoters, Finset.mem_filter] at hv
-    have unslashed := hv.2
-    unfold slashedFlagAt at hs
-    rw [hs] at unslashed
-    simp at unslashed
-  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
-    intro v hv
-    simp only [Finset.mem_union] at hv
-    rcases hv with (h4 | h5) | h6
-    · simp only [K4, Finset.mem_filter] at h4
-      exact h4.2.2.1
-    · simp only [K5, Finset.mem_filter] at h5
-      exact h5.1
-    · simp only [K6, Finset.mem_filter] at h6
-      exact h6.2.1
-  have dS : Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
-      (SC pulled counted split) := by
-    rw [Finset.disjoint_left]
-    intro v hk hs
-    simp only [SC, Finset.mem_filter] at hs
-    exact qS v (inQ v hk) hs.2.1
+  obtain ⟨dS, dVS⟩ := sc_disjoint h
   have dKV : Disjoint Kall V := by
     rw [hKall, Finset.disjoint_left]
     intro v hk hv
@@ -6675,10 +6686,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
       exact h5.2.2 hv
     · simp only [K6, Finset.mem_filter] at h6
       exact h6.2.2 (h.voting v hv).1
-    · simp only [SC, Finset.mem_filter] at hS
-      have unslashed := (h.voting v hv).2
-      rw [hS.2.1] at unslashed
-      simp at unslashed
+    · exact Finset.disjoint_left.mp dVS hv hS
   -- The amounts and the entries split over the three sets of C's keys.
   have splitAmount : (∑ v ∈ Kall, consAmt eventsC v.toNat) =
       (∑ v ∈ K4 pulled counted V, consAmt eventsC v.toNat) +
@@ -6986,7 +6994,140 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth *
-            (pinTerms config pulled anc fin).syncProposer) := sorry
+            (pinTerms config pulled anc fin).syncProposer) := by
+  classical
+  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  -- the five sets are pairwise disjoint
+  obtain ⟨d45, d46, d56, d1, d15, d16⟩ := classes_disjoint h
+  obtain ⟨dS, dVS⟩ := sc_disjoint h
+  have d2 : Disjoint (V ∪ K4 pulled counted V) (K5 counted V) :=
+    Finset.disjoint_union_left.mpr ⟨d15, d45⟩
+  have d3 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
+    Finset.disjoint_union_left.mpr ⟨Finset.disjoint_union_left.mpr ⟨d16, d46⟩, d56⟩
+  have d4 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+      (SC pulled counted split) := by
+    rw [Finset.disjoint_left]
+    intro v member slashed
+    simp only [Finset.mem_union] at member
+    rcases member with ((inV | in4) | in5) | in6
+    · exact Finset.disjoint_left.mp dVS inV slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_left _ (Finset.mem_union_left _ in4))
+        slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_left _ (Finset.mem_union_right _ in5))
+        slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_right _ in6) slashed
+  obtain ⟨U, hU⟩ : ∃ U : Finset ValidatorIndex,
+      U = V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split :=
+    ⟨_, rfl⟩
+  obtain ⟨g, hg⟩ : ∃ g : ValidatorIndex → ℕ, ∀ v, g v =
+      syncD eventsF v.toNat + syncF events v.toNat + syncF eventsC v.toNat := ⟨_, fun _ => rfl⟩
+  have sumU : ∑ v ∈ U, g v = ∑ v ∈ V, g v + ∑ v ∈ K4 pulled counted V, g v +
+      ∑ v ∈ K5 counted V, g v + ∑ v ∈ K6 pulled counted, g v +
+      ∑ v ∈ SC pulled counted split, g v := by
+    rw [hU, Finset.sum_union d4, Finset.sum_union d3, Finset.sum_union d2, Finset.sum_union d1]
+  -- each class is weighed at most three times its movement, and the shares at most their own
+  have classV : ∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat)) =
+      ∑ v ∈ V, g v :=
+    Finset.sum_congr rfl fun v _ => by rw [hg]; omega
+  have class4 : ∑ v ∈ K4 pulled counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K4 pulled counted V, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have class5 : ∑ v ∈ K5 counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K5 counted V, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have class6 : ∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K6 pulled counted, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have credits : wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) ≤
+      ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat :=
+    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      unfold syncCr
+      rw [syncF_eq]
+      exact Nat.le_add_right _ _)
+  have debits : wShare preset fork
+      (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
+      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) :=
+    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      unfold syncD
+      rw [syncF_eq]
+      omega)
+  have shares : ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat +
+      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) =
+      ∑ v ∈ SC pulled counted split, g v := by
+    rw [← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => by rw [hg]; omega
+  refine le_trans (b := 3 * ∑ v ∈ U, g v) ?_ ?_
+  · rw [sumU]
+    omega
+  -- the keys of the five sets, at their positions, move by the three runs' seat bounds
+  have covered := sum_toNat_le (S := U) (P := U.image fun v : ValidatorIndex => v.toNat)
+    (fun i => syncD eventsF i + syncF events i + syncF eventsC i)
+    fun v member => Finset.mem_image_of_mem _ member
+  have toPositions : ∑ v ∈ U, g v ≤ ∑ i ∈ U.image (fun v : ValidatorIndex => v.toNat),
+      (syncD eventsF i + syncF events i + syncF eventsC i) :=
+    (Finset.sum_congr rfl fun v _ => hg v).le.trans covered
+  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      fromFin.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat :=
+    step_band_of_guard h fromFin (by omega) pulledOk
+  have shared := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
+    pulledTotal.toNat band (U.image fun v : ValidatorIndex => v.toNat)).1
+  have first := syncF_run_le h pulledTotal pulledOk tail (Nat.le_succ _) high replayed
+    (U.image fun v : ValidatorIndex => v.toNat)
+  have second := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC
+    (U.image fun v : ValidatorIndex => v.toNat)
+  generalize U.image (fun v : ValidatorIndex => v.toNat) = P at toPositions shared first second
+  have splitP : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) =
+      ∑ i ∈ P, syncD eventsF i + ∑ i ∈ P, syncF events i + ∑ i ∈ P, syncF eventsC i := by
+    rw [Finset.sum_add_distrib, Finset.sum_add_distrib]
+  have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
+    rw [pulledOk]
+    rfl
+  have seats : (pinTerms config pulled anc fin).syncSeats =
+      3 * (((pinTerms config pulled anc fin).depth +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+            PinSplit5.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat) := rfl
+  have proposer : (pinTerms config pulled anc fin).syncProposer =
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
+          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  rw [totalEq] at seats proposer
+  rw [seats, proposer]
+  unfold PinSplit5.syncSeatEnvelope at first second
+  generalize (pinTerms config pulled anc fin).depth = depth at depthEq ⊢
+  generalize PinSplit5.syncEnvelope preset pulledTotal.toNat = env at *
+  generalize env * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) =
+    share at *
+  -- the epochs of the three runs fit the two depths
+  have epochs : ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat) +
+      ((getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat) +
+      ((getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat) ≤
+      depth + ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := by
+    omega
+  have firstDepth : (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
+    omega
+  have secondDepth :
+      (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
+    omega
+  generalize (getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat = ef at *
+  generalize (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat = e1 at *
+  generalize (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat = e2 at *
+  generalize (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat = d at *
+  have scaleEnv := Nat.mul_le_mul_right
+    (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) epochs
+  have scaleShare := Nat.mul_le_mul_right
+    (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)
+    (show e1 + e2 ≤ depth + depth by omega)
+  nlinarith [toPositions, splitP, shared, first, second, scaleEnv, scaleShare]
 
 /-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
