@@ -33,7 +33,7 @@ Not yet released.
   The closed form loses at most a given rate of the effective balance for each epoch of the run, and it is vacuous once that loss reaches the whole floor.
   It takes the same guards as `FloorTrace.run_of_le_cap_general_or_fulu`, and a bound on each step's pass penalty.
   The preset keeps the bands of hysteresis.
-  The pin's effective-balance floor reads it.
+  The pin's low-balance floor and its fall floor read it.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
