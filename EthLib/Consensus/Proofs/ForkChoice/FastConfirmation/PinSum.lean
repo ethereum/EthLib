@@ -4946,7 +4946,7 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     exact ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
   -- the charge is the first charge of the key that counts, so `exitQ` is its amount
   have exitQEq : exitQ tailC v.toNat = c.amount := by
-    unfold exitQ
+    have exitNat := congrArg UInt64.toNat exitSame
     have picked : (c.index == v.toNat && decide (c.epoch ≤ (getCurrentEpoch counted).toNat)) =
         true := by
       simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq]
@@ -4958,7 +4958,14 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
       simp only [Bool.and_eq_true, beq_iff_eq] at picked
       exact eq_of_nodup_map (·.index) _ (departureCharges_run_indices tailC) d member c cMember
         (picked.1.trans cIndex.symm)
-    rw [find?_eq_some_of_unique _ c _ cMember picked only]
+    have unique := find?_eq_some_of_unique
+      (fun d => d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)) c _
+      cMember picked only
+    unfold exitQ
+    change ((tailC.departureCharges.find? fun d =>
+      d.index == v.toNat && decide (d.epoch ≤ (getCurrentEpoch counted).toNat)).map
+        (·.amount)).getD 0 = c.amount
+    rw [unique]
     rfl
   -- the run from the finalized state to the exit step, and its events, a prefix of the replay
   have shape : fromFin.append ((pre.snoc step).append post) =
@@ -4968,11 +4975,11 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
   rw [← split', shape] at replayed
   obtain ⟨prior, priorOk, isPrefix⟩ := Run.balanceEvents_prefix (fromFin.append pre)
     ((Run.nil.snoc step).append post) (getCurrentEpoch pulled).toNat events replayed
-  have aEpoch := UInt64.le_iff_toNat_le.mp
-    (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+  have aEpoch : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch counted).toNat :=
+    UInt64.le_iff_toNat_le.mp
+      (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
   have aInside : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
     have := h.near
-    simp only at aEpoch
     omega
   have aEarly : a.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
@@ -4998,9 +5005,9 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     · obtain rfl := Option.some.inj (foundFin.symm.trans foundFin')
       rw [far]
       exact getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
-  have floor := PinSplit.Run.new_key_effective_floor toFin (fromFin.append pre) h.genesis
-    h.parameters h.caps h.aligned h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard
-    aEarly aInside h.window h.delay h.bands h.facts v.toNat pending active hysteresis priorOk
+  have floor := PinSplit.Run.new_key_effective_floor toFin h.genesis h.parameters h.caps h.aligned
+    h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard (fromFin.append pre) aEarly
+    aInside h.window h.delay h.bands h.facts v.toNat pending active hysteresis priorOk
   have partials := noPartials a (fromFin.append pre) aInside priorOk
   have order := exitFloor_add_slack h
   have floorEq : (pinTerms config pulled anc fin).newKeyFloor =
@@ -5016,8 +5023,6 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     obtain ⟨rest, rfl⟩ := isPrefix
     simp only [List.map_append, List.sum_append]
     omega
-  rw [partials] at floor
-  rw [effective] at floor
   omega
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
