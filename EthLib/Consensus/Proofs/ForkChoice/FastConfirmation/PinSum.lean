@@ -12912,6 +12912,27 @@ theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms con
   dsimp only [pinTerms, quorumReserve]
   exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
+/-- SCRATCH stub of C's whistleblower bucket: the slashing credits of any keys fit `WB`.
+
+`WB` is the whistleblower base of `otherCredits`. -/
+private theorem flow_whist (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    ∃ WB : ℕ, (pinTerms config pulled anc fin).otherGain =
+        (3 * (WB + (((pinTerms config pulled anc fin).depth +
+          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+            preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+              PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+            (pinTerms config pulled anc fin).depth *
+              (pinTerms config pulled anc fin).syncProposer))) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (pinTerms config pulled anc fin).perIncrement *
+            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ∧
+      ∀ keys : Finset ℕ, ∑ i ∈ keys, whistC tailC highC i ≤ WB := sorry
+
 /-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
 
 They also take `slashCharge`'s surplus over R's slashed keys and a tenth of the keys' credits.
