@@ -18574,8 +18574,16 @@ private theorem syncCr_prefix_le {a b : ForkedBeaconState preset}
     {eventsPre eventsC : List (BalanceEvent preset)}
     (replayedPre : pre.balanceEvents highC = .ok eventsPre)
     (replayedC : ((pre.snoc step).append post).balanceEvents highC = .ok eventsC) (i : ℕ) :
-    syncCr eventsPre i ≤ syncCr eventsC i :=
-  sorry
+    syncCr eventsPre i ≤ syncCr eventsC i := by
+  obtain ⟨eventsStep, replayedStep, prefixStep⟩ :=
+    (pre.snoc step).balanceEvents_prefix post highC eventsC replayedC
+  obtain ⟨events, replayed, prefixPre⟩ :=
+    pre.balanceEvents_prefix (Run.nil.snoc step) highC eventsStep (by exact replayedStep)
+  obtain rfl : events = eventsPre := Except.ok.inj (replayed.symm.trans replayedPre)
+  obtain ⟨rest, restEq⟩ := prefixPre.trans prefixStep
+  rw [← restEq]
+  unfold syncCr
+  simp [List.map_append, List.sum_append]
 
 /-- A slashing penalty and the gain on it over the window fit below one increment.
 
