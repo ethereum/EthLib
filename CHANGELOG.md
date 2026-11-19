@@ -12,19 +12,20 @@ Not yet released.
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
   The receiver's store must be closed under the envelopes that it accepts from its view.
-  Otherwise bounded honest stores collide.
+  Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
   `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
   `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
 
-- `Store.getNodeChildren_held` shows that the children of a held node can be computed and are held, at every fork.
-  When the store's parents sit below their children (`ParentsBelow`), each child is lower in rank.
+- `Store.getNodeChildren_held` shows that the children of a held node can be computed at every fork, when the store's parents sit below their children (`ParentsBelow`).
+  Each child is held and lower in rank.
 
 - `Store.isPayloadVerified_of_getHead` shows that from Gloas a full head of a store has its payload verified by that store.
 
 - `VoteAt.accepted_at_next_slot_of_payloadVote` accepts a held duty vote at the next slot at every fork, or names a collision of bounded honest stores ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   From Gloas it takes the receiver's check of the payload status that the vote names.
 
-- `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block at every fork, when the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+- `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block at every fork, when from Gloas the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Execution.blocks_of_partiallySynchronous` is now its corollary before Gloas, with its statement unchanged.
   It needs partial synchrony, the sender's read of the receiver's finalized checkpoint, and a receiver that admits the delivered blocks.
   Otherwise bounded honest stores collide.
   From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.

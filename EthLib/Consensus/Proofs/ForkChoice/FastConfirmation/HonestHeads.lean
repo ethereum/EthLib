@@ -444,8 +444,8 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   -- So the head reaches the receiver by arrival, with its checkpoint blocks.
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ := Store.isAncestor_of_getCheckpointBlock
     (chain w hw arrival arrival (le_refl _) arrivalBound)
-  rcases e.blocks_of_partiallySynchronous_of_anchorSlot sync (UInt64.le_of_eq anchorSlot) admitted
-      anchored hv hw (start v hv) (start w hw)
+  rcases e.blocks_of_partiallySynchronous_of_anchorSlot sync (fun _ => UInt64.le_of_eq anchorSlot)
+      admitted anchored hv hw (start v hv) (start w hw)
       (by simpa using late) arrivalBound arrivalCurrent ⟨finalized, finalizedKnown⟩
       (dataRoot ▸ headKnown) headCheckpoint with ⟨votedKnown, transport⟩ | collision
   swap

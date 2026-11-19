@@ -667,7 +667,7 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
   simp [EthLib.Consensus.Store.onAttestation, valid, stored, read, committees, indexedOk, signed,
     bind, Except.bind, Except.mapError, pure, Except.pure]
 
-/-- At every fork, a held duty vote is accepted at the next slot, or bounded stores collide.
+/-- At every fork, a held duty vote is accepted at the next slot, or honest stores collide.
 
 The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.
 

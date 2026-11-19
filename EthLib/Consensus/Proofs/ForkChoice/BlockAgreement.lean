@@ -583,48 +583,6 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp higher)
   exact ⟨target, targetOk, node, (agree target slotLe).trans nodeOk, rootOk⟩
 
-
-/-- Before Gloas, synchrony and compatible finality deliver a block or name a collision.
-
-Admission uses the separate handler-success hypothesis, not synchrony alone. -/
-theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
-    (sync : e.PartiallySynchronous GST Δ) (preGloas : fork < .glamsterdam)
-    (admitted : BlocksAdmitted e GST Δ last)
-    {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ u ∈ J, e.start u = anchor) {v u : ValidatorIndex} (honest : v ∈ J)
-    (receiver : u ∈ J) {n k : ℕ}
-    (late : max (e.world n).time GST + Δ ≤ (e.world k).time) (bounded : (e.world k).time ≤ last)
-    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view u)
-      ((e.world k).state u))
-    (finalizedKnown : ∃ finalizedBlock,
-      ((e.world k).state u).blocks[((e.world k).state u).finalizedCheckpoint.root]? =
-        some finalizedBlock)
-    {root : Root} {block : BeaconBlock preset fork}
-    (found : ((e.world n).state v).blocks[root]? = some block)
-    (final : ((e.world n).state v).getCheckpointBlock root
-      ((e.world k).state u).finalizedCheckpoint.epoch =
-        .ok ((e.world k).state u).finalizedCheckpoint.root) :
-    (((e.world k).state u).blocks[root]? = some block ∧
-      ∀ epoch checkpointRoot,
-        ((e.world k).state u).finalizedCheckpoint.epoch ≤ epoch →
-        ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
-        ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot) ∨
-    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
-      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
-        ((e.world m).state v) [root] = some collision := by
-  have senderBound : ∀ i ≤ n, (e.world i).time ≤ last := fun i le => by
-    have time : (e.world i).time ≤ (e.world n).time := e.monotone_time le
-    have := le_max_left (e.world n).time GST
-    omega
-  rcases e.blocksAgree_or_collision last with agree | collision
-  · exact .inl (e.blocks_of_partiallySynchronous_core sync admitted anchored honest receiver
-      (start v honest) (start u receiver)
-      (fun i le => agree v honest u receiver i k (senderBound i le) bounded) late bounded
-      upToDate finalizedKnown
-      (fun _ _ _ _ _ _ _ => Store.validateParentPayload_of_lt preGloas) found final)
-  · exact .inr collision
-
 /-- From Gloas, synchrony delivers a payload that an honest sender verified to a later receiver.
 
 Both stores start at the anchor store, and the receiver holds the state of the payload's block.
@@ -633,7 +591,9 @@ The receiver keeps its store under each envelope of its view, as an up-to-date s
 
 The anchor block must not be after the anchor state, so that no walk reaches the anchor's parent.
 
-Otherwise two honest stores at bounded times collide. -/
+Otherwise two honest stores at bounded times collide.
+
+Those stores may be any honest ones, so the result has content when all start at the anchor. -/
 theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     (sync : e.PartiallySynchronous GST Δ) (gloas : .glamsterdam ≤ fork)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot) {anchor : Store preset fork}
@@ -721,9 +681,10 @@ Admission uses the separate handler-success hypothesis, not synchrony alone.
 
 From Gloas a block on its parent's payload needs that payload, which synchrony delivers too.
 
-The anchor block must not be after the anchor state. -/
+From Gloas the anchor block must not be after the anchor state. -/
 theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : ℕ}
-    (sync : e.PartiallySynchronous GST Δ) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (sync : e.PartiallySynchronous GST Δ)
+    (anchorSlot : .glamsterdam ≤ fork → anchorBlock.slot ≤ anchorState.slot)
     (admitted : BlocksAdmitted e GST Δ last)
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -772,12 +733,46 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   -- The receiver holds the parent's state, as it holds the parent.
   have reached := e.reachable_of_start anchored startReceiver k
   obtain ⟨parentState, parentStateFound, -⟩ := reached.blockStatesFromParents parentFound
-  rcases e.payloadVerified_of_partiallySynchronous sync gloas anchorSlot anchored honest receiver
+  rcases e.payloadVerified_of_partiallySynchronous sync gloas (anchorSlot gloas) anchored honest
+      receiver
       startSender startReceiver (n := i) (by omega) bounded
       (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted)) (sentVerified full)
       ⟨parentState, parentStateFound⟩ with delivered | collision
   · exact delivered
   · -- A collision of bounded honest stores contradicts their agreement.
     exact absurd collision (e.not_honestCollision_of_agree agree)
+
+/-- Before Gloas, synchrony and compatible finality deliver a block or name a collision.
+
+Admission uses the separate handler-success hypothesis, not synchrony alone. -/
+theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
+    (sync : e.PartiallySynchronous GST Δ) (preGloas : fork < .glamsterdam)
+    (admitted : BlocksAdmitted e GST Δ last)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {v u : ValidatorIndex} (honest : v ∈ J)
+    (receiver : u ∈ J) {n k : ℕ}
+    (late : max (e.world n).time GST + Δ ≤ (e.world k).time) (bounded : (e.world k).time ≤ last)
+    (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view u)
+      ((e.world k).state u))
+    (finalizedKnown : ∃ finalizedBlock,
+      ((e.world k).state u).blocks[((e.world k).state u).finalizedCheckpoint.root]? =
+        some finalizedBlock)
+    {root : Root} {block : BeaconBlock preset fork}
+    (found : ((e.world n).state v).blocks[root]? = some block)
+    (final : ((e.world n).state v).getCheckpointBlock root
+      ((e.world k).state u).finalizedCheckpoint.epoch =
+        .ok ((e.world k).state u).finalizedCheckpoint.root) :
+    (((e.world k).state u).blocks[root]? = some block ∧
+      ∀ epoch checkpointRoot,
+        ((e.world k).state u).finalizedCheckpoint.epoch ≤ epoch →
+        ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
+        ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision :=
+  e.blocks_of_partiallySynchronous_of_anchorSlot sync
+    (fun gloas => absurd gloas (Nat.not_le_of_lt preGloas)) admitted anchored honest receiver
+    (start v honest) (start u receiver) late bounded upToDate finalizedKnown found final
 
 end EthLib.Consensus.Models.Network
