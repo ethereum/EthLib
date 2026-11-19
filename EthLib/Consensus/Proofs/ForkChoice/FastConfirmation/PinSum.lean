@@ -31,6 +31,7 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -87,6 +88,7 @@ structure PinTerms (preset : Preset) where
   pendingR : ℕ
   creditGain : ℕ
   creditUnits : ℕ
+  syncLeak : ℕ
   gainHigh : Bool
   pendingRB : ℕ → Bool
   credits : ℕ
@@ -131,7 +133,7 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
     3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
     3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain +
-    t.creditUnits)
+    t.creditUnits + t.syncLeak)
 
 /-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
@@ -221,6 +223,20 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let leakAt (eb : ℕ) (i : ℕ) := 2 * (eb / inc * perIncrement) +
     eb * (scoreFin i + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
       (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat)
+  -- The largest inactivity score at the finalized block's state.
+  let scoreMaxFin := if altair : .altair ≤ fork then
+      ((finalizedState.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0
+  -- A key's effective balance before its sync debits on this branch can sit above `ebUp`.
+  --
+  -- `ebUp` reads its balance after them.
+  --
+  -- Its inactivity and flag penalties then run at the raised balance, which `rise` does not read.
+  --
+  -- The seats of the window debit at most `syncDebitMax` in all, so this charges the extra leak.
+  let syncDebitMax := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope
+  let syncLeak := 3 * depthFin * (2 * perIncrement * (2 * syncDebitMax / (inc - 1) + 1) +
+    2 * syncDebitMax * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   let partialsR (i : ℕ) := if electra : .pectra ≤ fork then
       (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
         w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ epoch.toNat + 1).map
@@ -536,7 +552,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
-    proposerCredit, exitingBands, pendingR, creditGain, creditUnits,
+    proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak,
     gainHigh := !decide (11 * depth * (gainRateMax + 1) ≤ capMax),
     pendingRB := fun i => (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
@@ -850,6 +866,13 @@ private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ)
     (events.map (syncDebit v)).sum =
       ((events.filter (·.source = .sync)).map (keyDebit v)).sum :=
   sum_map_sync events (keyDebit v)
+
+/-- The rounding band of a key is the band if the key has a sync debit, and zero otherwise. -/
+private theorem bandR_eq (events : List (BalanceEvent preset)) (v : ℕ) :
+    bandR events v = if 0 < (events.map (syncDebit v)).sum then
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0 := by
+  unfold bandR
+  rw [← sum_syncDebit_eq]
 
 /-- A key's credit in an event is at most the event's credit limit. -/
 private theorem keyCredit_le_creditLimit (i : ℕ) (e : BalanceEvent preset)
@@ -1595,6 +1618,37 @@ private theorem credited_piece {g : ForkedBeaconState preset}
           obtain ⟨w, found, mem⟩ := hS _ priorOk i pos
           exact carry i w found mem
 
+/-- The positions that hold a key of a committee of a list are at most the keys of the list.
+
+The registry has distinct keys, and each committee has at most `SYNC_COMMITTEE_SIZE` keys. -/
+private theorem listed_positions_card (state : BeaconState preset fork)
+    (distinct : PubkeysDistinct state) (Ls : List (List Cryptography.Bls.BLSPubkey))
+    (each : ∀ L ∈ Ls, L.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat) :
+    ((Finset.range state.validators.data.size).filter fun i =>
+        ∃ w, state.validators.data[i]? = some w ∧ ∃ L ∈ Ls, w.pubkey ∈ L).card ≤
+      preset.SYNC_COMMITTEE_SIZE.toNat * Ls.length := by
+  classical
+  have mapped : ((Finset.range state.validators.data.size).filter fun i =>
+      ∃ w, state.validators.data[i]? = some w ∧ ∃ L ∈ Ls, w.pubkey ∈ L).card ≤
+        Ls.flatten.toFinset.card := by
+    refine Finset.card_le_card_of_injOn (keyAt state) (fun i member => ?_)
+      (fun i mi j mj eq => ?_)
+    · obtain ⟨w, found, L, hL, mem⟩ := (Finset.mem_filter.mp member).2
+      simp only [keyAt, found, Option.map_some, Option.getD_some]
+      exact List.mem_toFinset.mpr (List.mem_flatten.mpr ⟨L, hL, mem⟩)
+    · obtain ⟨w, found, -⟩ := (Finset.mem_filter.mp mi).2
+      obtain ⟨w', found', -⟩ := (Finset.mem_filter.mp mj).2
+      simp only [keyAt, found, found', Option.map_some, Option.getD_some] at eq
+      exact distinct.index_eq found found' eq
+  have total : Ls.flatten.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat * Ls.length := by
+    rw [List.length_flatten]
+    have := List.sum_le_length_nsmul (Ls.map List.length) preset.SYNC_COMMITTEE_SIZE.toNat
+      (fun a ha => by
+        obtain ⟨L, hL, rfl⟩ := List.mem_map.mp ha
+        exact each L hL)
+    simpa [List.length_map, smul_eq_mul, Nat.mul_comm] using this
+  exact mapped.trans ((List.toFinset_card_le _).trans total)
+
 /-- The positions that hold a key of a committee are at most the size of the committee. -/
 private theorem seat_positions {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) {x y : ForkedBeaconState preset}
@@ -1607,18 +1661,12 @@ private theorem seat_positions {g : ForkedBeaconState preset}
   let L := (x.state.currentSyncCommittee altair).value.pubkeys.toList
   refine ⟨(Finset.range y.state.validators.data.size).filter fun i =>
       ∃ w, y.state.validators.data[i]? = some w ∧ w.pubkey ∈ L, ?_, ?_⟩
-  · have mapped : ((Finset.range y.state.validators.data.size).filter fun i =>
-        ∃ w, y.state.validators.data[i]? = some w ∧ w.pubkey ∈ L).card ≤ L.toFinset.card := by
-      refine Finset.card_le_card_of_injOn (keyAt y.state) (fun i member => ?_)
-        (fun i mi j mj eq => ?_)
-      · obtain ⟨w, found, mem⟩ := (Finset.mem_filter.mp member).2
-        simp only [keyAt, found, Option.map_some, Option.getD_some]
-        exact List.mem_toFinset.mpr mem
-      · obtain ⟨w, found, -⟩ := (Finset.mem_filter.mp mi).2
-        obtain ⟨w', found', -⟩ := (Finset.mem_filter.mp mj).2
-        simp only [keyAt, found, found', Option.map_some, Option.getD_some] at eq
-        exact distinct.index_eq found found' eq
-    exact mapped.trans ((List.toFinset_card_le L).trans (by simp [L]))
+  · have listed := listed_positions_card y.state distinct [L] (by simp [L])
+    rw [List.length_singleton, Nat.mul_one] at listed
+    refine le_trans (Finset.card_le_card ?_) listed
+    intro i member
+    obtain ⟨inside, w, found, mem⟩ := Finset.mem_filter.mp member
+    exact Finset.mem_filter.mpr ⟨inside, w, found, L, List.mem_singleton_self L, mem⟩
   · intro i w found mem
     exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1,
       w, found, mem⟩
@@ -1632,8 +1680,19 @@ private theorem succ_div_le (a c : ℕ) : (a + 1) / c ≤ a / c + 1 := by
     have := Nat.lt_mul_div_succ a positive
     omega
 
-/-- The keys credited in the block steps of a run, counted by the periods that it touches. -/
-private theorem credited_pieces {g : ForkedBeaconState preset}
+/-- The empty run before a run changes nothing. -/
+private theorem run_nil_append {x y : ForkedBeaconState preset} (r : Run config checks x y) :
+    Run.nil.append r = r := by
+  induction r with
+  | nil => rfl
+  | snoc r step ih => exact congrArg (fun run => run.snoc step) ih
+
+/-- The keys credited in the block steps of a run, counted by the periods that it touches.
+
+The keys that a sync aggregate debits hold a seat of one committee for each period of the run.
+
+Each committee is the current one at a state of the run, in the period of its index. -/
+private theorem credited_pieces_seated {g : ForkedBeaconState preset}
     (genesis : Genesis config checks g) {y : ForkedBeaconState preset}
     (early : y.fork < .glamsterdam)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) (high : ℕ) :
@@ -1641,15 +1700,21 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
       ∀ (r : Run config checks x y), .fusaka ≤ x.fork →
     (getCurrentEpoch y.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
       (getCurrentEpoch x.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + n →
-    ∃ B S D : Finset ℕ, B.card ≤ r.blockCount ∧
+    ∃ (Ls : ℕ → List Cryptography.Bls.BLSPubkey) (B S D : Finset ℕ), B.card ≤ r.blockCount ∧
       S.card ≤ preset.SYNC_COMMITTEE_SIZE.toNat * (n + 1) ∧
       D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
         ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) ∧
       (∀ i, 0 < netScan i high r → i ∈ B ∨ i ∈ S) ∧
       (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r).1 →
         i ∈ D) ∧
-      ∀ events, r.balanceEvents high = .ok events → ∀ i, 0 < (events.map (syncDebit i)).sum →
-        i ∈ S := by
+      (∀ events, r.balanceEvents high = .ok events → ∀ i, 0 < (events.map (syncDebit i)).sum →
+        i ∈ S ∧ ∃ w j, y.state.validators.data[i]? = some w ∧ j ≤ n ∧ w.pubkey ∈ Ls j) ∧
+      ∀ j ≤ n, ∃ (z : ForkedBeaconState preset) (r1 : Run config checks x z)
+        (r2 : Run config checks z y) (alt : .altair ≤ z.fork), r1.append r2 = r ∧
+        (getCurrentEpoch z.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
+          (getCurrentEpoch x.state).toNat /
+            max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + j ∧
+        Ls j = (z.state.currentSyncCommittee alt).value.pubkeys.toList := by
   classical
   intro n
   induction n with
@@ -1660,13 +1725,17 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
     obtain ⟨B, D, cardB, cardD, hB, hDep, hD⟩ := credited_piece genesis shared r fulu altair
       early delay high (by simpa using count)
     obtain ⟨S, cardS, hS⟩ := seat_positions genesis shared r altair
-    refine ⟨B, S, D, cardB, by simpa using cardS, cardD, fun i pos => ?_, hDep, ?_⟩
+    refine ⟨fun _ => (x.state.currentSyncCommittee altair).value.pubkeys.toList, B, S, D, cardB,
+      by simpa using cardS, cardD, fun i pos => ?_, hDep, ?_, ?_⟩
     · rcases hB i pos with member | ⟨w, found, mem⟩
       · exact .inl member
       · exact .inr (hS i w found mem)
     · intro events replayed i pos
       obtain ⟨w, found, mem⟩ := hD events replayed i pos
-      exact hS i w found mem
+      exact ⟨hS i w found mem, w, 0, found, Nat.le_refl _, mem⟩
+    · intro j hj
+      obtain rfl : j = 0 := by omega
+      exact ⟨x, Run.nil, r, altair, run_nil_append r, (Nat.add_zero _).symm, rfl⟩
   | succ n ih =>
     intro x shared r fulu count
     have electra : .pectra ≤ x.fork := Nat.le_trans (by decide) fulu
@@ -1702,7 +1771,7 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
     obtain ⟨B₁, D₁, cardB₁, cardD₁, hB₁, hDep₁, hD₁⟩ := credited_piece genesis shared pre fulu
       altair mEarly delay high (by simpa using mSame)
     obtain ⟨S₁, cardS₁, hS₁⟩ := seat_positions genesis shared pre altair
-    obtain ⟨B₂, S₂, D₂, cardB₂, cardS₂, cardD₂, hB₂, hDep₂, hD₂⟩ := ih (x := v)
+    obtain ⟨Ls₂, B₂, S₂, D₂, cardB₂, cardS₂, cardD₂, hB₂, hDep₂, hD₂, hz₂⟩ := ih (x := v)
       (shared.append (pre.snoc step)) post vFulu
       (by omega)
     -- The step leaves an epoch, so it is a slot step: a block step keeps its epoch.
@@ -1733,7 +1802,9 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
     have stepUp := UInt64.le_iff_toNat_le.mp
       (Step.slot ok : Step config checks m v).chainStep.currentEpoch_le
     have postUp := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-    refine ⟨B₁ ∪ B₂, S₁ ∪ S₂, D₁ ∪ Ds ∪ D₂, ?_, ?_, ?_, fun i pos => ?_, fun i pos => ?_, ?_⟩
+    refine ⟨fun j => if j = 0 then (x.state.currentSyncCommittee altair).value.pubkeys.toList
+        else Ls₂ (j - 1), B₁ ∪ B₂, S₁ ∪ S₂, D₁ ∪ Ds ∪ D₂, ?_, ?_, ?_, fun i pos => ?_,
+      fun i pos => ?_, ?_, ?_⟩
     · rw [Run.blockCount_append]
       exact (Finset.card_union_le _ _).trans (Nat.add_le_add cardB₁ cardB₂)
     · refine (Finset.card_union_le _ _).trans ?_
@@ -1781,23 +1852,303 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
       subst joined
       simp only [List.map_append, List.sum_append] at pos
       by_cases first : 0 < ((e1.map (syncDebit i))).sum
-      · refine Finset.mem_union_left _ ?_
-        simp only [Run.balanceEvents, bind_ok_iff] at ok1
-        obtain ⟨prior, priorOk, rest⟩ := ok1
-        split at rest
-        · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
-          obtain ⟨added, addedOk, rfl⟩ := rest
-          have zero := (PinSplit5.slot_syncDebit_zero
-            (Nat.le_trans (show Fork.pectra ≤ Fork.fusaka by decide)
-              (Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))) ok vEarly addedOk i).1
-          simp only [List.map_append, List.sum_append, zero, Nat.add_zero] at first
-          obtain ⟨w, found, mem⟩ := hD₁ prior priorOk i first
-          exact hS₁ i w found mem
-        · simp only [pure, Except.pure, Except.ok.injEq] at rest
-          subst rest
-          obtain ⟨w, found, mem⟩ := hD₁ _ priorOk i first
-          exact hS₁ i w found mem
-      · exact Finset.mem_union_right _ (hD₂ e2 ok2 i (by omega))
+      · have seated : ∃ w, m.state.validators.data[i]? = some w ∧
+            w.pubkey ∈ (x.state.currentSyncCommittee altair).value.pubkeys.toList := by
+          simp only [Run.balanceEvents, bind_ok_iff] at ok1
+          obtain ⟨prior, priorOk, rest⟩ := ok1
+          split at rest
+          · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
+            obtain ⟨added, addedOk, rfl⟩ := rest
+            have zero := (PinSplit5.slot_syncDebit_zero
+              (Nat.le_trans (show Fork.pectra ≤ Fork.fusaka by decide)
+                (Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))) ok vEarly addedOk i).1
+            simp only [List.map_append, List.sum_append, zero, Nat.add_zero] at first
+            exact hD₁ prior priorOk i first
+          · simp only [pure, Except.pure, Except.ok.injEq] at rest
+            subst rest
+            exact hD₁ _ priorOk i first
+        obtain ⟨w, found, mem⟩ := seated
+        refine ⟨Finset.mem_union_left _ (hS₁ i w found mem), ?_⟩
+        have kept := (validatorKeys_prefix_and_distinct_of_chainSteps
+          (Relation.ReflTransGen.head (Step.slot ok : Step config checks m v).chainStep
+            post.chainSteps)).1
+        obtain ⟨w', found', same⟩ := validators_getElem?_of_validatorKeys_prefix kept found
+        exact ⟨w', 0, found', Nat.zero_le _, by simpa [same] using mem⟩
+      · obtain ⟨inS, w, j, found, hj, mem⟩ := hD₂ e2 ok2 i (by omega)
+        exact ⟨Finset.mem_union_right _ inS, w, j + 1, found, by omega, by simpa using mem⟩
+    · intro j hj
+      by_cases j0 : j = 0
+      · subst j0
+        exact ⟨x, Run.nil, (pre.snoc (Step.slot ok)).append post, altair, run_nil_append _,
+          (Nat.add_zero _).symm, by simp⟩
+      · obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := hz₂ (j - 1) (by omega)
+        refine ⟨z, (pre.snoc (Step.slot ok)).append r1, r2, alt, ?_, ?_, ?_⟩
+        · rw [← Run.append_assoc, cut]
+        · omega
+        · simpa [j0] using hL
+
+/-- The keys credited in the block steps of a run, counted by the periods that it touches. -/
+private theorem credited_pieces {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) {y : ForkedBeaconState preset}
+    (early : y.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) (high : ℕ) :
+    ∀ (n : ℕ) {x : ForkedBeaconState preset}, Run config checks g x →
+      ∀ (r : Run config checks x y), .fusaka ≤ x.fork →
+    (getCurrentEpoch y.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
+      (getCurrentEpoch x.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + n →
+    ∃ B S D : Finset ℕ, B.card ≤ r.blockCount ∧
+      S.card ≤ preset.SYNC_COMMITTEE_SIZE.toNat * (n + 1) ∧
+      D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) ∧
+      (∀ i, 0 < netScan i high r → i ∈ B ∨ i ∈ S) ∧
+      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r).1 →
+        i ∈ D) ∧
+      ∀ events, r.balanceEvents high = .ok events → ∀ i, 0 < (events.map (syncDebit i)).sum →
+        i ∈ S := by
+  intro n x shared r fulu count
+  obtain ⟨_, B, S, D, cardB, cardS, cardD, hBS, hDep, hSD, _⟩ :=
+    credited_pieces_seated genesis early delay high n shared r fulu count
+  exact ⟨B, S, D, cardB, cardS, cardD, hBS, hDep,
+    fun events replayed i pos => (hSD events replayed i pos).1⟩
+
+/-- A key of an earlier registry has the same position in a later registry.
+
+The later registry has distinct keys, and the earlier keys are a prefix of the later ones. -/
+private theorem position_in_prefix {f f' : Fork} {x : BeaconState preset f}
+    {t : BeaconState preset f'} (kept : validatorKeys x <+: validatorKeys t)
+    (distinct : PubkeysDistinct t) {pk : Cryptography.Bls.BLSPubkey}
+    (mem : pk ∈ validatorKeys x) {i : ℕ} {w : Validator}
+    (found : t.validators.data[i]? = some w) (same : w.pubkey = pk) :
+    ∃ v, x.validators.data[i]? = some v ∧ v.pubkey = pk := by
+  simp only [validatorKeys] at mem
+  obtain ⟨v, hv, rfl⟩ := List.mem_map.mp mem
+  obtain ⟨j, hj⟩ := List.mem_iff_getElem?.mp hv
+  have foundX : x.validators.data[j]? = some v := by simpa using hj
+  obtain ⟨cur, foundT, same'⟩ := validators_getElem?_of_validatorKeys_prefix kept foundX
+  have index := distinct.index_eq found foundT (same.trans same'.symm)
+  subst index
+  exact ⟨v, foundX, rfl⟩
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The keys that a sync aggregate debits on the two branches fit the committees of their periods.
+
+The keys of C's run from the finalized block are counted in its committees.
+
+The keys of R's run from the split hold a seat of its committees.
+
+Its first two committees are the current and next ones at the split, which C's run holds too.
+
+So each key counts once, and the later committees of R's run count after C's.
+
+The next committee at the start of a run is the current one at its end, if it crosses a period. -/
+private theorem seat_union_card (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    {events eventsF eventsC : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events)
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (replayedC : tailC.balanceEvents high = .ok eventsC)
+    (AV AK : Finset ℕ)
+    (debitsC : ∀ i ∈ AV, 0 < ((eventsF ++ eventsC).map (syncDebit i)).sum)
+    (debitsR : ∀ i ∈ AK, 0 < (events.map (syncDebit i)).sum) :
+    (AV ∪ AK).card ≤ preset.SYNC_COMMITTEE_SIZE.toNat *
+      (((getCurrentEpoch pulled).toNat + 1) /
+          max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+        (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+      ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
+        max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  have altairF : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
+  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitPulled := UInt64.le_iff_toNat_le.mp h.called
+  have pulledCounted := UInt64.le_iff_toNat_le.mp h.later
+  have near := h.near
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  simp only at finSplit
+  generalize hP : max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat = P at *
+  -- the periods of the two runs
+  have divFS := Nat.div_le_div_right (c := P) finSplit
+  have divSP := Nat.div_le_div_right (c := P) splitPulled
+  have divPC := Nat.div_le_div_right (c := P) pulledCounted
+  have divCN := Nat.div_le_div_right (c := P) near
+  have divSC : (getCurrentEpoch split).toNat / P ≤ (getCurrentEpoch counted).toNat / P :=
+    Nat.div_le_div_right (Nat.le_trans splitPulled pulledCounted)
+  have divRS : (getCurrentEpoch pulled).toNat / P - (getCurrentEpoch split).toNat / P ≤
+      ((getCurrentEpoch pulled).toNat - (getCurrentEpoch split).toNat) / P + 1 := by
+    rcases Nat.le_total (getCurrentEpoch pulled).toNat (getCurrentEpoch split).toNat with
+      order | order
+    · have := Nat.div_le_div_right (c := P) order
+      have nonneg :=
+        Nat.zero_le (((getCurrentEpoch pulled).toNat - (getCurrentEpoch split).toNat) / P)
+      omega
+    · obtain ⟨d, hd⟩ := Nat.exists_eq_add_of_le order
+      rw [hd, Nat.add_sub_cancel_left]
+      have := Nat.add_div_le_div_add_div_add_one (getCurrentEpoch split).toNat d P
+      have nonneg := Nat.zero_le (d / P)
+      omega
+  have divDepth : ((getCurrentEpoch pulled).toNat - (getCurrentEpoch split).toNat) / P ≤
+      ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) / P :=
+    Nat.div_le_div_right (by omega)
+  have periodsR : (getCurrentEpoch pulled).toNat / P =
+      (getCurrentEpoch split).toNat / P +
+        ((getCurrentEpoch pulled).toNat / P - (getCurrentEpoch split).toNat / P) := by omega
+  have periodsC : (getCurrentEpoch counted).toNat / P =
+      (getCurrentEpoch fin).toNat / P +
+        ((getCurrentEpoch counted).toNat / P - (getCurrentEpoch fin).toNat / P) := by omega
+  obtain ⟨LsR, BR, SR, DR, -, -, -, -, -, debitR, familyR⟩ :=
+    credited_pieces_seated h.genesis (y := ⟨fork, pulled⟩) h.early h.delay high
+      ((getCurrentEpoch pulled).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+        (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+      (toFin.append fromFin) tail h.fulu (by rw [hP]; exact periodsR)
+  obtain ⟨LsC, BC, SC, DC, -, -, -, -, -, debitC, familyC⟩ :=
+    credited_pieces_seated h.genesis (y := ⟨fork, counted⟩) h.early h.delay high
+      ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+        (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+      toFin (fromFin.append tailC) h.fulu (by rw [hP]; exact periodsC)
+  simp only [hP] at familyR familyC debitR debitC
+  have replayedRC : (fromFin.append tailC).balanceEvents high = .ok (eventsF ++ eventsC) :=
+    DirectSafety.Apriori.Internal.balanceEvents_append fromFin tailC high replayedF replayedC
+  have arith : ((getCurrentEpoch counted).toNat / P - (getCurrentEpoch fin).toNat / P + 1) +
+      ((getCurrentEpoch pulled).toNat / P - (getCurrentEpoch split).toNat / P - 1) ≤
+      ((getCurrentEpoch pulled).toNat + 1) / P - (getCurrentEpoch fin).toNat / P + 1 +
+        ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) / P := by
+    generalize (getCurrentEpoch counted).toNat / P = A at divCN ⊢
+    generalize ((getCurrentEpoch pulled).toNat + 1) / P = B at divCN ⊢
+    generalize (getCurrentEpoch fin).toNat / P = F
+    generalize (getCurrentEpoch pulled).toNat / P = E at divRS ⊢
+    generalize (getCurrentEpoch split).toNat / P = T at divRS ⊢
+    generalize ((getCurrentEpoch pulled).toNat - (getCurrentEpoch split).toNat) / P = D1
+      at divRS divDepth
+    generalize ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) / P = D2
+      at divDepth ⊢
+    omega
+  generalize hnR : (getCurrentEpoch pulled).toNat / P - (getCurrentEpoch split).toNat / P = nR
+    at *
+  generalize hnC : (getCurrentEpoch counted).toNat / P - (getCurrentEpoch fin).toNat / P = nC
+    at *
+  -- the current and next committees at the split
+  have keysSplit := (toFin.append fromFin).syncCommittee_keys h.genesis altairF
+  generalize hLcur : (split.currentSyncCommittee altairF).value.pubkeys.toList = Lcur at *
+  generalize hLnext : (split.nextSyncCommittee altairF).value.pubkeys.toList = Lnext at *
+  have sizeOf : ∀ {f : Fork} (alt : .altair ≤ f) (b : BeaconState preset f),
+      (b.currentSyncCommittee alt).value.pubkeys.toList.length =
+        preset.SYNC_COMMITTEE_SIZE.toNat := fun _ _ => Vector.length_toList
+  -- R's first two committees are the current and next ones at the split
+  have firstR : LsR 0 = Lcur := by
+    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR 0 (Nat.zero_le _)
+    have earlyZ : z.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    rw [hL, ← hLcur]
+    exact r1.currentSyncCommittee_eq_of_same_period earlyZ (by rw [hP]; simpa using per) alt
+      altairF
+  have secondR : 1 ≤ nR → LsR 1 = Lnext := fun one => by
+    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR 1 one
+    have earlyZ : z.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    rw [hL, ← hLnext]
+    exact r1.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
+      h.facts.divisors.syncPeriod (by rw [hP]; simpa using per) alt altairF
+  -- C's committees hold them too
+  have firstC : ∃ j ≤ nC, LsC j = Lcur := by
+    refine ⟨(getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P, by omega, ?_⟩
+    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC
+      ((getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P) (by omega)
+    have earlyZ : z.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    rw [hL, ← hLcur]
+    rcases Run.prefix_total r1 r2 fromFin tailC cut rfl with ⟨r, -⟩ | ⟨r, -⟩
+    · exact (r.currentSyncCommittee_eq_of_same_period h.early
+        (by rw [hP]; simp only; omega) altairF alt).symm
+    · exact r.currentSyncCommittee_eq_of_same_period earlyZ
+        (by rw [hP]; simp only; omega) alt altairF
+  have secondC : 1 ≤ nR → ∃ j ≤ nC, LsC j = Lnext := fun one => by
+    refine ⟨(getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P + 1,
+      by omega, ?_⟩
+    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC
+      ((getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P + 1) (by omega)
+    have earlyZ : z.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    rw [hL, ← hLnext]
+    rcases Run.prefix_total r1 r2 fromFin tailC cut rfl with ⟨r, -⟩ | ⟨r, -⟩
+    · exfalso
+      have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r.chainSteps)
+      simp only at order
+      have := Nat.div_le_div_right (c := P) order
+      omega
+    · exact r.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
+        h.facts.divisors.syncPeriod (by rw [hP]; simp only; omega) alt altairF
+  -- the positions that hold a key of the committees of each run
+  have distinctR : PubkeysDistinct pulled :=
+    ((toFin.append fromFin).append tail).pubkeysDistinct h.genesis
+  have distinctC : PubkeysDistinct counted :=
+    (toFin.append (fromFin.append tailC)).pubkeysDistinct h.genesis
+  have eachC : ∀ L ∈ (List.range (nC + 1)).map LsC, L.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat :=
+    fun L member => by
+      obtain ⟨j, hj, rfl⟩ := List.mem_map.mp member
+      obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyC j (by
+        have := List.mem_range.mp hj
+        omega)
+      rw [hL]
+      exact (sizeOf alt z.state).le
+  have eachR : ∀ L ∈ (List.range' 2 (nR - 1)).map LsR,
+      L.length ≤ preset.SYNC_COMMITTEE_SIZE.toNat := fun L member => by
+    obtain ⟨j, hj, rfl⟩ := List.mem_map.mp member
+    obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := familyR j (by
+      have := List.mem_range'_1.mp hj
+      omega)
+    rw [hL]
+    exact (sizeOf alt z.state).le
+  have cardC := listed_positions_card counted distinctC _ eachC
+  have cardR := listed_positions_card pulled distinctR _ eachR
+  rw [List.length_map, List.length_range] at cardC
+  rw [List.length_map, List.length_range'] at cardR
+  have keptR := (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1
+  have keptC := (validatorKeys_prefix_and_distinct_of_chainSteps tailC.chainSteps).1
+  have union_le := le_trans (Finset.card_union_le _ _) (Nat.add_le_add cardC cardR)
+  refine le_trans (Finset.card_le_card ?_) (le_trans union_le ?_)
+  · intro i member
+    rcases Finset.mem_union.mp member with inV | inK
+    · obtain ⟨-, w, j, found, hj, mem⟩ := debitC (eventsF ++ eventsC) replayedRC i
+        (debitsC i inV)
+      exact Finset.mem_union_left _ (Finset.mem_filter.mpr
+        ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, LsC j,
+          List.mem_map.mpr ⟨j, List.mem_range.mpr (by omega), rfl⟩, mem⟩)
+    · obtain ⟨-, w, j, found, hj, mem⟩ := debitR events replayed i (debitsR i inK)
+      by_cases late : 2 ≤ j
+      · exact Finset.mem_union_right _ (Finset.mem_filter.mpr
+          ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, LsR j,
+            List.mem_map.mpr ⟨j, List.mem_range'_1.mpr (by omega), rfl⟩, mem⟩)
+      · -- a seat of the first two committees: the key is at its position in the split
+        have inSplit : w.pubkey ∈ validatorKeys split ∧
+            ∃ L ∈ (List.range (nC + 1)).map LsC, w.pubkey ∈ L := by
+          rcases Nat.lt_or_ge j 1 with zero | one
+          · have j0 : j = 0 := by omega
+            subst j0
+            rw [firstR] at mem
+            obtain ⟨L, hL, hLmem⟩ : ∃ L ∈ (List.range (nC + 1)).map LsC, L = Lcur := by
+              obtain ⟨jc, hjc, e⟩ := firstC
+              exact ⟨LsC jc, List.mem_map.mpr ⟨jc, List.mem_range.mpr (by omega), rfl⟩, e⟩
+            exact ⟨keysSplit.1 w.pubkey mem, L, hL,
+              by rw [hLmem]; exact mem⟩
+          · have j1 : j = 1 := by omega
+            subst j1
+            have oneR : 1 ≤ nR := hj
+            rw [secondR oneR] at mem
+            obtain ⟨L, hL, hLmem⟩ : ∃ L ∈ (List.range (nC + 1)).map LsC, L = Lnext := by
+              obtain ⟨jc, hjc, e⟩ := secondC oneR
+              exact ⟨LsC jc, List.mem_map.mpr ⟨jc, List.mem_range.mpr (by omega), rfl⟩, e⟩
+            exact ⟨keysSplit.2 w.pubkey mem, L, hL,
+              by rw [hLmem]; exact mem⟩
+        obtain ⟨inKeys, L, hL, hLmem⟩ := inSplit
+        obtain ⟨v, foundS, sameS⟩ := position_in_prefix keptR distinctR inKeys found rfl
+        obtain ⟨c, foundC, sameC⟩ := validators_getElem?_of_validatorKeys_prefix keptC foundS
+        exact Finset.mem_union_left _ (Finset.mem_filter.mpr
+          ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp foundC).1, c, foundC, L, hL,
+            by rw [sameC, sameS]; exact hLmem⟩)
+  · rw [← Nat.mul_add]
+    exact Nat.mul_le_mul_left _ arith
 
 /-- The keys that a run from the split credits or debits through a sync seat.
 
@@ -2292,45 +2643,52 @@ private theorem floorPenaltyDebit_sum (i : ℕ) (events : List (BalanceEvent pre
   rw [← List.sum_map_add]
   rfl
 
-/-- C's balance of a key that C may slash falls only by its debit events and one slashing penalty.
+/-- A run's debit events and one slashing penalty bound the fall of a key's balance.
+
+The run is from the split and ends within one epoch after the call.
 
 The floor starts from the smaller of the key's balance at the split and its largest balance.
 
-The key is unslashed at the split, and its effective balance stays at most `top` along C's run.
+The key is unslashed at the split, and its effective balance stays at most `top` along the run.
 
-The slashing penalty is then at most `top` over the slashing quotient, whenever C slashes the key.
+The slashing penalty is then at most `top` over the slashing quotient, whenever the run slashes it.
 
 The guards of the floor trace are `floor_guards`, from the setting's guard at the finalized block.
 
 Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed.
 
+A step may assign the key's exit within the window, if its withdrawable epoch is beyond the window.
+
 No upgrade runs from Fulu, so no step records a crossing. -/
-private theorem slashed_floorC (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+private theorem slashed_floor (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork}
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, e⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch e).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (i : ValidatorIndex) (val : Validator)
     (initial : split.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
-    (activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH) (top : ℕ)
-    (envelope : ∀ z ∈ tailC.balancePath, effectiveAt z i.toNat ≤ top)
+    (top : ℕ)
+    (envelope : ∀ z ∈ tail.balancePath, effectiveAt z i.toNat ≤ top)
     (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
-      (step : Step config checks m n) (post : Run config checks n ⟨fork, counted⟩),
-      (pre.snoc step).append post = tailC → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      highC + 1 < w.exitEpoch.toNat) :
+      (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
     min (actualBalanceAt ⟨fork, split⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
-      actualBalanceAt ⟨fork, counted⟩ i.toNat +
-        (eventsC.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
-        (eventsC.map (syncDebit i.toNat)).sum +
-        (eventsC.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum +
+      actualBalanceAt ⟨fork, e⟩ i.toNat +
+        (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (events.map (syncDebit i.toNat)).sum +
+        (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum +
         top / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨positive, guards⟩ := floor_guards h fromFin (y := counted) h.near
+  obtain ⟨positive, guards⟩ := floor_guards h fromFin (y := e) near
   have member : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
-      (step : Step config checks m n) (post : Run config checks n ⟨fork, counted⟩),
-      (pre.snoc step).append post = tailC → m ∈ tailC.balancePath := by
+      (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
+      (pre.snoc step).append post = tail → m ∈ tail.balancePath := by
     intro m n pre step post cut
     obtain ⟨front, atEnd⟩ := Run.balancePath_last pre
     have path := Run.balancePath_append (pre.snoc step) post
@@ -2338,11 +2696,11 @@ private theorem slashed_floorC (h : Setting config checks g split fin pulled anc
     rw [path]
     simp [Run.balancePath, atEnd]
   have start : effectiveAt ⟨fork, split⟩ i.toNat ≤ top := by
-    obtain ⟨rest, atHead⟩ := Run.balancePath_head tailC
+    obtain ⟨rest, atHead⟩ := Run.balancePath_head tail
     exact envelope _ (by rw [atHead]; exact List.mem_cons_self)
   obtain ⟨last, trace, balance, debt, -, w, final, -, -, -, ceiling, -⟩ :=
-    DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append fromFin) tailC
-      h.genesis h.caps h.delay h.early highC endEpochC i val initial activated
+    DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append fromFin) tail
+      h.genesis h.caps h.delay h.early high endEpoch i val initial (Or.inr h.fulu)
       (min (actualBalanceAt ⟨fork, split⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat) top _
       (Nat.min_le_right _ _) positive
@@ -2350,7 +2708,7 @@ private theorem slashed_floorC (h : Setting config checks g split fin pulled anc
         ⟨retained pre step post cut w found,
           ⟨fun _ => (guards pre step post).1, fun s => absurd s (by simp [unslashed])⟩,
           (guards pre step post).2⟩)
-      replayedC
+      replayed
   obtain ⟨-, below⟩ := ceiling top start fun pre step post cut =>
     envelope _ (member pre step post cut)
   have floor := DirectSafety.Apriori.Internal.FloorTrace.balance_floor_general trace
@@ -2769,10 +3127,7 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
     retained slack ρn ρd
     (low - (events.map (syncDebit i.toNat)).sum) start pass arith rp rest cut
   have incPos := h.bands.1
-  have bandEq : bandR events i.toNat = if 0 < (events.map (syncDebit i.toNat)).sum then
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0 := by
-    unfold bandR
-    rw [← sum_syncDebit_eq]
+  have bandEq := bandR_eq events i.toNat
   have lowLe : low ≤ (withdrawalMaxEffectiveBalance preset fork val).toNat := by
     have := Nat.min_le_right (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat
@@ -5003,12 +5358,101 @@ theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
         ((K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = false))
     omega
 
+/-- The deposit credits of V keys, as events, fit any per-event bound on them. -/
+private theorem credDepR_sum_le (V : Finset ValidatorIndex) (events : List (BalanceEvent preset))
+    (T : BalanceEvent preset → ℕ)
+    (each : ∀ e ∈ events, e.source = .deposits → ∑ v ∈ V, keyCredit v.toNat e ≤ T e) :
+    ∑ v ∈ V, credDepR events v.toNat ≤ (events.map T).sum := by
+  induction events with
+  | nil => simp [credDepR]
+  | cons e rest ih =>
+    have tail := ih fun e' member => each e' (List.mem_cons_of_mem _ member)
+    by_cases dep : e.source = .deposits
+    · have head := each e List.mem_cons_self dep
+      have split : ∑ v ∈ V, credDepR (e :: rest) v.toNat =
+          ∑ v ∈ V, keyCredit v.toNat e + ∑ v ∈ V, credDepR rest v.toNat := by
+        rw [← Finset.sum_add_distrib]
+        exact Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+      simp only [List.map_cons, List.sum_cons]
+      omega
+    · have same : ∑ v ∈ V, credDepR (e :: rest) v.toNat = ∑ v ∈ V, credDepR rest v.toNat :=
+        Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+      simp only [List.map_cons, List.sum_cons]
+      omega
+
+/-- `queueDep` is three times the deposit churn of each epoch of the window, and the carry. -/
+private theorem queueDep_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).queueDep =
+      3 * (((getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat) *
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
+        (if electra : .pectra ≤ fork then
+          (finalizedState.depositBalanceToConsume electra).toNat else 0)) := rfl
+
+/-- D-8 (deposit queue) from the per-event bound of V's deposit credits.
+
+The credits that a deposit event gives to V keys are at most its deposit credit.
+
+That credit leaves out the keys that are withdrawn, which V keys never are.
+
+The deposit credits of the run from the finalized block fit its carry and a churn for each epoch. -/
+private theorem bud_deposits_of (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (each : ∀ e ∈ events, e.source = .deposits →
+      ∑ v ∈ V, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
+    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  -- Every step of the run starts within the epochs of `pulled`, so `high` can be that epoch.
+  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch
+    (Nat.le_succ _)
+  have tailOk : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [← same]
+    exact replayed
+  obtain ⟨ef, efOk⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  have fullOk := DirectSafety.Apriori.Internal.balanceEvents_append fromFin tail
+    (getCurrentEpoch pulled).toNat efOk tailOk
+  have capacity := DirectSafety.funding_deposit_capacity toFin (fromFin.append tail) h.genesis
+    h.early (getCurrentEpoch pulled).toNat (Nat.le_succ _) (ef ++ events) fullOk
+  have bound : ((ef ++ events).map DirectSafety.funding_deposit_credit).sum ≤
+      (if electra : .pectra ≤ fork then (fin.depositBalanceToConsume electra).toNat else 0) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := capacity
+  rw [List.map_append, List.sum_append] at bound
+  have sum := credDepR_sum_le V events DirectSafety.funding_deposit_credit each
+  rw [queueDep_eq]
+  omega
+
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := sorry
+    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have within := BeaconState.registryWithinLimit_of_lt h.early pulled
+  -- The keys of `V` are active at R's epoch, so no deposit event credits a withdrawable one.
+  have recent : ∀ i ∈ V.image UInt64.toNat, ∃ w, pulled.validators.data[i]? = some w ∧
+      (isActiveValidator w (getCurrentEpoch pulled) = true ∨
+        isActiveValidator w (getPreviousEpoch pulled) = true) := by
+    intro i hi
+    obtain ⟨v, member, rfl⟩ := Finset.mem_image.mp hi
+    have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
+      simpa [activeVoters] using (h.voting v member).1
+    obtain ⟨u, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
+    exact ⟨u, found, .inl active⟩
+  refine bud_deposits_of h tail high endEpoch replayed fun e member deposit => ?_
+  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tail h.genesis h.early
+    h.delay replayed e member).2.2
+  have credited := Run.deposit_credit_le_funding (toFin.append fromFin) tail h.genesis h.early
+    h.twoSlots high endEpoch replayed (V.image UInt64.toNat) recent e member deposit
+    (Nat.le_trans electra forkLe)
+  rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at credited
+  exact credited
 
 /-- Two charges of a run at one position are the same charge. -/
 private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run config checks x y)
@@ -7919,6 +8363,257 @@ private theorem bandX_sum (X : BeaconState preset fork) (electra : .pectra ≤ f
       dueAt_eq X electra high, show insert a s = {a} ∪ s from rfl,
       dueList_length_union X electra high (Finset.disjoint_singleton_left.mpr ha)]
 
+/-- The classes `K4`, `K5` and `K6` share no key with each other or with `V`. -/
+private theorem classes_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V) (K5 counted V) ∧
+    Disjoint (K4 pulled counted V) (K6 pulled counted) ∧
+    Disjoint (K5 counted V) (K6 pulled counted) ∧
+    Disjoint V (K4 pulled counted V) ∧ Disjoint V (K5 counted V) ∧
+    Disjoint V (K6 pulled counted) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> refine Finset.disjoint_left.mpr fun v a b => ?_
+  · simp only [K4, K5, Finset.mem_filter] at a b
+    exact b.2.1 a.1
+  · simp only [K4, K6, Finset.mem_filter] at a b
+    exact b.2.2 a.2.1
+  · simp only [K5, K6, Finset.mem_filter] at a b
+    exact a.2.1 b.1
+  · simp only [K4, Finset.mem_filter] at b
+    exact b.2.2.2 a
+  · simp only [K5, Finset.mem_filter] at b
+    exact b.2.2 a
+  · simp only [K6, Finset.mem_filter] at b
+    exact b.2.2 (h.voting v a).1
+
+/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
+private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
+    Disjoint V (SC pulled counted split) := by
+  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
+    intro v hv hs
+    simp only [Q, quorumVoters, Finset.mem_filter] at hv
+    have unslashed := hv.2
+    unfold slashedFlagAt at hs
+    rw [hs] at unslashed
+    simp at unslashed
+  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
+    intro v hv
+    simp only [Finset.mem_union] at hv
+    rcases hv with (h4 | h5) | h6
+    · simp only [K4, Finset.mem_filter] at h4
+      exact h4.2.2.1
+    · simp only [K5, Finset.mem_filter] at h5
+      exact h5.1
+    · simp only [K6, Finset.mem_filter] at h6
+      exact h6.2.1
+  refine ⟨?_, ?_⟩
+  · rw [Finset.disjoint_left]
+    intro v hk hs
+    simp only [SC, Finset.mem_filter] at hs
+    exact qS v (inQ v hk) hs.2.1
+  · rw [Finset.disjoint_left]
+    intro v hv hs
+    simp only [SC, Finset.mem_filter] at hs
+    have unslashed := (h.voting v hv).2
+    rw [hs.2.1] at unslashed
+    simp at unslashed
+
+/-- A key that a run credits.
+
+A block step nets it a credit, or a pending-deposit pass credits it. -/
+private def creditedKey {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high : ℕ) (v : ValidatorIndex) : Bool :=
+  decide (0 < netScan v.toNat high tail +
+    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail).1)
+
+/-- `creditUnits` is a unit for the credited-key slots and for two more of each exiting key.
+
+The same holds for each queue key.
+
+The slots are at least the proposers, the seats and the deposit recipients of the window. -/
+private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    ∃ N U : ℕ, (pinTerms config pulled anc fin).creditUnits =
+        (N + 2 * (((pinTerms config pulled anc fin).positions.filter fun i =>
+          (pinTerms config pulled anc fin).exitingB i = true).card +
+            (pinTerms config pulled anc fin).queueKeys)) * U ∧
+      (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+        ((pinTerms config pulled anc fin).depth /
+          max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
+            preset.SYNC_COMMITTEE_SIZE.toNat +
+        (pinTerms config pulled anc fin).depth *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat ≤ N := by
+  dsimp only [pinTerms]
+  simp only [decide_eq_true_eq]
+  exact ⟨_, _, rfl, Nat.le_add_right _ _⟩
+
+/-- The credited keys of `K4`, `K5`, `K6` and `SC` fit the credited-key slots of the window.
+
+The slots are the proposers, the seats and the deposit recipients of the window. -/
+private theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
+    ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
+      ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card +
+      ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
+      ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card ≤
+    (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+      ((pinTerms config pulled anc fin).depth /
+        max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
+          preset.SYNC_COMMITTEE_SIZE.toNat +
+      (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  classical
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  set C4 := (K4 pulled counted V).filter fun v => creditedKey tailC highC v = true
+  set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
+  set C6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
+  set CS := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
+  -- The four classes are apart, and each key of them is in C's registry.
+  have apart : Disjoint (C4 ∪ C6) C5 :=
+    Finset.disjoint_union_left.mpr ⟨Finset.disjoint_filter_filter d45,
+      (Finset.disjoint_filter_filter d56).symm⟩
+  have apartSC : Disjoint (C4 ∪ C6 ∪ C5) CS :=
+    Finset.disjoint_of_subset_left (u := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+      (fun v hv => by
+        simp only [C4, C5, C6, Finset.mem_union, Finset.mem_filter] at hv
+        simp only [Finset.mem_union]
+        tauto)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dSC)
+  have card4 : (C4 ∪ C6 ∪ C5 ∪ CS).card = C4.card + C6.card + C5.card + CS.card := by
+    rw [Finset.card_union_of_disjoint apartSC, Finset.card_union_of_disjoint apart,
+      Finset.card_union_of_disjoint (Finset.disjoint_filter_filter d46)]
+  have inCounted : ∀ v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V,
+      v.toNat < counted.validators.data.size := by
+    intro v hv
+    simp only [Finset.mem_union] at hv
+    rcases hv with (h4 | h6) | h5
+    · obtain ⟨w, found, -⟩ := active_of_activeVoters h.early (Finset.mem_filter.mp h4).1
+      exact (Array.getElem?_eq_some_iff.mp found).1
+    · obtain ⟨w, found, -⟩ := active_of_activeVoters h.early (Finset.mem_filter.mp h6).1
+      exact (Array.getElem?_eq_some_iff.mp found).1
+    · have listed := (Finset.mem_filter.mp h5).1
+      simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at listed
+      rcases listed.1 with now | before
+      · exact lt_size_of_mem_getActiveValidatorIndices now
+      · exact lt_size_of_mem_getActiveValidatorIndices before
+  have inSC : ∀ v ∈ SC pulled counted split, v.toNat < counted.validators.data.size := by
+    intro v hv
+    have flag := (Finset.mem_filter.mp hv).2.1
+    simp only [slashedFlagAt, Option.map_eq_some_iff] at flag
+    obtain ⟨w, found, -⟩ := flag
+    exact (Array.getElem?_eq_some_iff.mp found).1
+  -- Those keys are credited keys of the run, which `credited_keys_le` counts by slots.
+  have credited := credited_keys_le h tailC highC
+  have fit : (C4 ∪ C6 ∪ C5 ∪ CS).card ≤
+      ((Finset.range counted.validators.data.size).filter fun i =>
+        0 < netScan i highC tailC +
+          (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1).card :=
+    by
+    refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
+      (fun a _ b _ same => UInt64.toNat_inj.mp same)
+    have member : v ∈ C4 ∪ C6 ∪ C5 ∪ CS := hv
+    have classed : v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V ∨
+        v ∈ SC pulled counted split := by
+      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member ⊢
+      tauto
+    have flag : creditedKey tailC highC v = true := by
+      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member
+      tauto
+    exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
+      (classed.elim (inCounted v) (inSC v)), of_decide_eq_true flag⟩
+  -- The slots of the run's epochs are at most those of the window.
+  have near := h.near
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have monotone := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tailC.chainSteps)
+  simp only at monotone
+  have wide : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat + 1 ≤
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := by omega
+  have periods := Nat.add_div_le_div_add_div_add_one
+    ((getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat)
+    (getCurrentEpoch split).toNat (max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+  rw [Nat.sub_add_cancel monotone] at periods
+  have periodsLe := Nat.div_le_div_right
+    (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+    (show (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat by omega)
+  have monotoneLe := Nat.div_le_div_right
+    (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) monotone
+  have nonneg := Nat.zero_le (((getCurrentEpoch pulled).toNat + 2 -
+    anc.finalizedCheckpoint.epoch.toNat) / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+  have first := Nat.mul_le_mul_right
+    (preset.SLOTS_PER_EPOCH.toNat + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) wide
+  have second := Nat.mul_le_mul_left preset.SYNC_COMMITTEE_SIZE.toNat
+    (show (getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+        (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 ≤
+      ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
+        max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2 by omega)
+  have bound : ((getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat + 1) *
+      (preset.SLOTS_PER_EPOCH.toNat + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) +
+        preset.SYNC_COMMITTEE_SIZE.toNat *
+          ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+            (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat +
+              1) ≤
+      ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) *
+          preset.SLOTS_PER_EPOCH.toNat +
+        (((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
+          max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
+            preset.SYNC_COMMITTEE_SIZE.toNat +
+        ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat :=
+    (Nat.add_le_add first second).trans_eq (by ring)
+  rw [depthEq]
+  omega
+
+/-- The credited keys of `K4`, `K5` and `K6`, with `K5` at weight three, fit the credited-key slots.
+
+The slots are the proposers, the seats and the deposit recipients of the window.
+
+Two more are left for each key that R reads as exiting or that the queues let exit.
+
+A credited key of `K6` beyond R's registry was created by a deposit on C's branch.
+
+It uses a slot of the deposit recipients, as the other credited keys of the three classes do. -/
+private theorem credit_slots_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
+    ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
+      ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
+      3 * ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card ≤
+    (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+      ((pinTerms config pulled anc fin).depth /
+        max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
+          preset.SYNC_COMMITTEE_SIZE.toNat +
+      (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+      2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+          (pinTerms config pulled anc fin).queueKeys)) := by
+  classical
+  have classes := credited_classes_le h tailC highC
+  set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
+  -- A credited key of `K5` is read as exiting at R, or has a departure charge on C's run.
+  have fiveCount : C5.card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+      (pinTerms config pulled anc fin).queueKeys := by
+    set A := (K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = true
+    set B := ((K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = false).filter
+        fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+    have cover : C5 ⊆ A ∪ B := by
+      intro v member
+      have inK5 := (Finset.mem_filter.mp member).1
+      by_cases exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true
+      · exact Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inK5, exiting⟩)
+      · have flag : (pinTerms config pulled anc fin).exitingB v.toNat = false := by
+          simpa using exiting
+        exact Finset.mem_union_right _ (Finset.mem_filter.mpr
+          ⟨Finset.mem_filter.mpr ⟨inK5, flag⟩, K5_charged h tailC inK5 flag⟩)
+    have exitingLe := card_exitingB_le config pulled anc fin A fun v hv =>
+      (Finset.mem_filter.mp hv).2
+    have chargedLe := charged_count h tailC
+    exact (Finset.card_le_card cover).trans ((Finset.card_union_le _ _).trans
+      (Nat.add_le_add exitingLe chargedLe))
+  omega
+
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
@@ -8017,46 +8712,10 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
     simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
     exact Nat.le_add_left _ _
   -- The target sets are disjoint.
-  have d45 : Disjoint (K4 pulled counted V) (K5 counted V) := by
-    rw [Finset.disjoint_left]
-    intro v h4 h5
-    simp only [K4, K5, Finset.mem_filter] at h4 h5
-    exact h5.2.1 h4.1
-  have d46 : Disjoint (K4 pulled counted V) (K6 pulled counted) := by
-    rw [Finset.disjoint_left]
-    intro v h4 h6
-    simp only [K4, K6, Finset.mem_filter] at h4 h6
-    exact h6.2.2 h4.2.1
-  have d56 : Disjoint (K5 counted V) (K6 pulled counted) := by
-    rw [Finset.disjoint_left]
-    intro v h5 h6
-    simp only [K5, K6, Finset.mem_filter] at h5 h6
-    exact h5.2.1 h6.1
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   have d456 : Disjoint (K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
     Finset.disjoint_union_left.mpr ⟨d46, d56⟩
-  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
-    intro v hv hs
-    simp only [Q, quorumVoters, Finset.mem_filter] at hv
-    have unslashed := hv.2
-    unfold slashedFlagAt at hs
-    rw [hs] at unslashed
-    simp at unslashed
-  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
-    intro v hv
-    simp only [Finset.mem_union] at hv
-    rcases hv with (h4 | h5) | h6
-    · simp only [K4, Finset.mem_filter] at h4
-      exact h4.2.2.1
-    · simp only [K5, Finset.mem_filter] at h5
-      exact h5.1
-    · simp only [K6, Finset.mem_filter] at h6
-      exact h6.2.1
-  have dS : Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
-      (SC pulled counted split) := by
-    rw [Finset.disjoint_left]
-    intro v hk hs
-    simp only [SC, Finset.mem_filter] at hs
-    exact qS v (inQ v hk) hs.2.1
+  obtain ⟨dS, dVS⟩ := sc_disjoint h
   have dKV : Disjoint Kall V := by
     rw [hKall, Finset.disjoint_left]
     intro v hk hv
@@ -8068,10 +8727,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
       exact h5.2.2 hv
     · simp only [K6, Finset.mem_filter] at h6
       exact h6.2.2 (h.voting v hv).1
-    · simp only [SC, Finset.mem_filter] at hS
-      have unslashed := (h.voting v hv).2
-      rw [hS.2.1] at unslashed
-      simp at unslashed
+    · exact Finset.disjoint_left.mp dVS hv hS
   -- The amounts and the entries split over the three sets of C's keys.
   have splitAmount : (∑ v ∈ Kall, consAmt eventsC v.toNat) =
       (∑ v ∈ K4 pulled counted V, consAmt eventsC v.toNat) +
@@ -8171,6 +8827,218 @@ theorem bud_exitedR :
   obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (i := v.toNat) (Or.inl flag)
   exact mem_positions_filter config pulled anc fin found flag
 
+/-- Three sets with disjoint keys: the weights one, three and one are at most three. -/
+private theorem weighted_le {A B C : Finset ValidatorIndex} (f : ValidatorIndex → ℕ)
+    (ab : Disjoint A B) (ac : Disjoint A C) (bc : Disjoint B C) :
+    ∑ v ∈ A, f v + 3 * ∑ v ∈ B, f v + ∑ v ∈ C, f v ≤ 3 * ∑ v ∈ A ∪ B ∪ C, f v := by
+  rw [Finset.sum_union (Finset.disjoint_union_left.mpr ⟨ac, bc⟩), Finset.sum_union ab]
+  omega
+
+/-- `slashedRB` reads the slashed flag and the withdrawable epoch of the key's record. -/
+private theorem slashedRB_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config state ancestor finalizedState).slashedRB i =
+      decide ((((state.validators.data[i]?).map (·.slashed)).getD false = true) ∧
+        ((state.validators.data[i]?).any fun v => decide (
+          ancestor.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+            v.withdrawableEpoch.toNat)) = true) := rfl
+
+/-- A key that the pin counts as slashed on this branch holds a position of the registry. -/
+private theorem slashedRB_lt (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork)
+    {i : ℕ} (h : (pinTerms config state ancestor finalizedState).slashedRB i = true) :
+    i < state.validators.data.size := by
+  by_contra out
+  have none : state.validators.data[i]? = none := Array.getElem?_eq_none (Nat.le_of_not_lt out)
+  rw [slashedRB_eq] at h
+  simp [none] at h
+
+/-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
+private theorem slashR_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork)
+    (W : Finset ValidatorIndex) :
+    ∑ v ∈ W, slashR (pinTerms config state ancestor finalizedState) v.toNat ≤
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (pinTerms config state ancestor finalizedState).slashedR := by
+  classical
+  have sum : ∑ v ∈ W, slashR (pinTerms config state ancestor finalizedState) v.toNat =
+      ∑ v ∈ W.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
+        = true), preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    rw [Finset.sum_filter]
+    rfl
+  rw [sum, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
+  refine Nat.mul_le_mul_left _ ?_
+  rw [slashedR_eq]
+  refine Finset.card_le_card_of_injOn UInt64.toNat (fun v member => ?_)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)
+  obtain ⟨_, flag⟩ := Finset.mem_filter.mp member
+  exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor
+    finalizedState flag), flag⟩
+
+/-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
+private theorem sum_bandR (events : List (BalanceEvent preset)) (T : Finset ValidatorIndex) :
+    ∑ v ∈ T, bandR events v.toNat =
+      (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+        (T.filter fun v => 0 < (events.map (syncDebit v.toNat)).sum).card := by
+  classical
+  simp only [bandR_eq]
+  rw [← Finset.sum_filter, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
+
+/-- The rounding bands of the classes of keys fit the seats of the committees of the periods.
+
+The keys of `V` are on C's run, and those of `K4`, `K5` and `K6` are on R's run.
+
+The keys of `V` weigh three, as do those of `K5`, and the others weigh one.
+
+Each key that has a band holds a seat, and the seats of the two runs are counted together. -/
+private theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    {events eventsF eventsC : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events)
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (replayedC : tailC.balanceEvents high = .ok eventsC) :
+    3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        (∑ v ∈ K4 pulled counted V, bandR events v.toNat) +
+        3 * (∑ v ∈ K5 counted V, bandR events v.toNat) +
+        (∑ v ∈ K6 pulled counted, bandR events v.toNat) ≤
+      3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+        (preset.SYNC_COMMITTEE_SIZE.toNat *
+          (((getCurrentEpoch pulled).toNat + 1) /
+              max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+            (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+          ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
+            max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) := by
+  classical
+  obtain ⟨d45, d46, d56, d4v, d5v, d6v⟩ := classes_disjoint h
+  rw [sum_bandR, sum_bandR, sum_bandR, sum_bandR]
+  generalize preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 = β
+  generalize hSeats : preset.SYNC_COMMITTEE_SIZE.toNat *
+    (((getCurrentEpoch pulled).toNat + 1) / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+      (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+    ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
+      max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = seats
+  set fV := V.filter fun v => 0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum with hfV
+  set f4 := (K4 pulled counted V).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum
+    with hf4
+  set f5 := (K5 counted V).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum with hf5
+  set f6 := (K6 pulled counted).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum
+    with hf6
+  have d45' : Disjoint f4 f5 := d45.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have d46' : Disjoint f4 f6 := d46.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have d56' : Disjoint f5 f6 := d56.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have d4f : Disjoint fV f4 := d4v.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have d5f : Disjoint fV f5 := d5v.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have d6f : Disjoint fV f6 := d6v.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
+  have inj : Function.Injective fun v : ValidatorIndex => v.toNat := fun a b same =>
+    UInt64.toNat_inj.mp same
+  have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
+    (fV.image fun v => v.toNat) ((f4 ∪ f5 ∪ f6).image fun v => v.toNat)
+    (fun i hi => by
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      exact (Finset.mem_filter.mp hv).2)
+    (fun i hi => by
+      obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+      rcases Finset.mem_union.mp hv with hv | hv
+      · rcases Finset.mem_union.mp hv with hv | hv
+        · exact (Finset.mem_filter.mp hv).2
+        · exact (Finset.mem_filter.mp hv).2
+      · exact (Finset.mem_filter.mp hv).2)
+  rw [hSeats] at union
+  have disjoint : Disjoint (fV.image fun v => v.toNat) ((f4 ∪ f5 ∪ f6).image fun v => v.toNat) := by
+    rw [Finset.disjoint_image inj]
+    rw [Finset.disjoint_union_right, Finset.disjoint_union_right]
+    exact ⟨⟨d4f, d5f⟩, d6f⟩
+  rw [Finset.card_union_of_disjoint disjoint, Finset.card_image_of_injective _ inj,
+    Finset.card_image_of_injective _ inj,
+    Finset.card_union_of_disjoint (Finset.disjoint_union_left.mpr ⟨d46', d56'⟩),
+    Finset.card_union_of_disjoint d45'] at union
+  have linear : 3 * fV.card + f4.card + 3 * f5.card + f6.card ≤ 3 * seats := by omega
+  have scaled := Nat.mul_le_mul_left β linear
+  calc 3 * (β * fV.card) + β * f4.card + 3 * (β * f5.card) + β * f6.card
+      = β * (3 * fV.card + f4.card + 3 * f5.card + f6.card) := by ring
+    _ ≤ β * (3 * seats) := scaled
+    _ = 3 * (β * seats) := by ring
+
+/-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
+
+The slashed, proposer and rounding charges have weight three, as has the whistleblower charge. -/
+private theorem branchR_split (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    ∃ W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      3 * (W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          (pinTerms config state ancestor finalizedState).slashedR +
+        (pinTerms config state ancestor finalizedState).depth *
+          (pinTerms config state ancestor finalizedState).proposerCredit +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+          ((pinTerms config state ancestor finalizedState).depth * preset.SLOTS_PER_EPOCH.toNat +
+            (pinTerms config state ancestor finalizedState).depth *
+              preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+            preset.SYNC_COMMITTEE_SIZE.toNat *
+              (((getCurrentEpoch state).toNat + 1) /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+                (getCurrentEpoch finalizedState).toNat /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+                (pinTerms config state ancestor finalizedState).depth /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
+  ⟨_, rfl⟩
+
+/-- The sync part of the proposer credit is at most the proposer credit. -/
+private theorem syncProposer_le_credit (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).syncProposer ≤
+      (pinTerms config state ancestor finalizedState).proposerCredit :=
+  Nat.le_add_left _ _
+
+/-- R1 from the count of its rounding bands.
+
+The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
+
+The sync part of the proposer credit fits the proposer credit of each epoch.
+
+The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`. -/
+private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
+    {events eventsF eventsC : List (BalanceEvent preset)}
+    (bands : 3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        (∑ v ∈ K4 pulled counted V, bandR events v.toNat) +
+        3 * (∑ v ∈ K5 counted V, bandR events v.toNat) +
+        (∑ v ∈ K6 pulled counted, bandR events v.toNat) ≤
+      3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+        ((pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+          (pinTerms config pulled anc fin).depth *
+            preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+          preset.SYNC_COMMITTEE_SIZE.toNat *
+            (((getCurrentEpoch pulled).toNat + 1) /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+              (getCurrentEpoch fin).toNat /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+              (pinTerms config pulled anc fin).depth /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)))) :
+    3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        3 * ((pinTerms config pulled anc fin).depth *
+          (pinTerms config pulled anc fin).syncProposer) +
+        (∑ v ∈ (K4 pulled counted V),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+        3 * (∑ v ∈ (K5 counted V),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+        (∑ v ∈ (K6 pulled counted),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
+      (pinTerms config pulled anc fin).branchR := by
+  classical
+  obtain ⟨W, hW⟩ := branchR_split config pulled anc fin
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  have slashes := weighted_le (A := K4 pulled counted V) (B := K5 counted V)
+    (C := K6 pulled counted) (fun v => slashR (pinTerms config pulled anc fin) v.toNat) d45 d46
+    d56
+  have slashBound := slashR_le config pulled anc fin
+    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+  have credit := Nat.mul_le_mul_left (pinTerms config pulled anc fin).depth
+    (syncProposer_le_credit config pulled anc fin)
+  simp only [Finset.sum_add_distrib] at *
+  rw [hW]
+  omega
+
 /-- R1 (branchR): R's credits to V keys since the split, weight 3.
 
 The slashing of a key on R's branch is charged here for the keys of `K4` and `K5`.
@@ -8209,6 +9077,30 @@ private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
   rw [← sum_syncDebit_eq events v]
   exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
+/-- The sync movement of keys on a run from the split, within a call's reach, is within an envelope.
+
+The envelope is the seats' one, read at the pulled state's total. -/
+private theorem syncF_run_le (h : Setting config checks g split fin pulled anc counted V)
+    (pulledTotal : Gwei) (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal)
+    {e : BeaconState preset fork} (t : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
+    (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    (highE : ℕ) {evs : List (BalanceEvent preset)} (replayed : t.balanceEvents highE = .ok evs)
+    (keys : Finset ℕ) :
+    ∑ i ∈ keys, syncF evs i ≤
+      ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch split).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+          PinSplit5.syncSeatEnvelope preset pulledTotal.toNat := by
+  obtain ⟨fromFin⟩ := h.fromFin
+  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      t.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat := by
+    intro u w step member T read
+    exact step_band_of_guard h (fromFin.append t) within pulledOk step
+      ((Run.contains_append _ _ _).mpr (.inr member)) T read
+  have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
+    band keys).2
+  exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
+
 /-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
 
 The proposer's share of the sync credits is in `syncF`, so the bound adds the `syncProposer` part
@@ -8229,7 +9121,236 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth *
-            (pinTerms config pulled anc fin).syncProposer) := sorry
+            (pinTerms config pulled anc fin).syncProposer) := by
+  classical
+  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  -- the five sets are pairwise disjoint
+  obtain ⟨d45, d46, d56, d1, d15, d16⟩ := classes_disjoint h
+  obtain ⟨dS, dVS⟩ := sc_disjoint h
+  have d2 : Disjoint (V ∪ K4 pulled counted V) (K5 counted V) :=
+    Finset.disjoint_union_left.mpr ⟨d15, d45⟩
+  have d3 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
+    Finset.disjoint_union_left.mpr ⟨Finset.disjoint_union_left.mpr ⟨d16, d46⟩, d56⟩
+  have d4 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+      (SC pulled counted split) := by
+    rw [Finset.disjoint_left]
+    intro v member slashed
+    simp only [Finset.mem_union] at member
+    rcases member with ((inV | in4) | in5) | in6
+    · exact Finset.disjoint_left.mp dVS inV slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_left _ (Finset.mem_union_left _ in4))
+        slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_left _ (Finset.mem_union_right _ in5))
+        slashed
+    · exact Finset.disjoint_left.mp dS (Finset.mem_union_right _ in6) slashed
+  obtain ⟨U, hU⟩ : ∃ U : Finset ValidatorIndex,
+      U = V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split :=
+    ⟨_, rfl⟩
+  obtain ⟨g, hg⟩ : ∃ g : ValidatorIndex → ℕ, ∀ v, g v =
+      syncD eventsF v.toNat + syncF events v.toNat + syncF eventsC v.toNat := ⟨_, fun _ => rfl⟩
+  have sumU : ∑ v ∈ U, g v = ∑ v ∈ V, g v + ∑ v ∈ K4 pulled counted V, g v +
+      ∑ v ∈ K5 counted V, g v + ∑ v ∈ K6 pulled counted, g v +
+      ∑ v ∈ SC pulled counted split, g v := by
+    rw [hU, Finset.sum_union d4, Finset.sum_union d3, Finset.sum_union d2, Finset.sum_union d1]
+  -- each class is weighed at most three times its movement, and the shares at most their own
+  have classV : ∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat)) =
+      ∑ v ∈ V, g v :=
+    Finset.sum_congr rfl fun v _ => by rw [hg]; omega
+  have class4 : ∑ v ∈ K4 pulled counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K4 pulled counted V, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have class5 : ∑ v ∈ K5 counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K5 counted V, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have class6 : ∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat) ≤
+      ∑ v ∈ K6 pulled counted, g v :=
+    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+  have credits : wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) ≤
+      ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat :=
+    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      unfold syncCr
+      rw [syncF_eq]
+      exact Nat.le_add_right _ _)
+  have debits : wShare preset fork
+      (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
+      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) :=
+    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      unfold syncD
+      rw [syncF_eq]
+      omega)
+  have shares : ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat +
+      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) =
+      ∑ v ∈ SC pulled counted split, g v := by
+    rw [← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => by rw [hg]; omega
+  refine le_trans (b := 3 * ∑ v ∈ U, g v) ?_ ?_
+  · rw [sumU]
+    omega
+  -- the keys of the five sets, at their positions, move by the three runs' seat bounds
+  have covered := sum_toNat_le (S := U) (P := U.image fun v : ValidatorIndex => v.toNat)
+    (fun i => syncD eventsF i + syncF events i + syncF eventsC i)
+    fun v member => Finset.mem_image_of_mem _ member
+  have toPositions : ∑ v ∈ U, g v ≤ ∑ i ∈ U.image (fun v : ValidatorIndex => v.toNat),
+      (syncD eventsF i + syncF events i + syncF eventsC i) :=
+    (Finset.sum_congr rfl fun v _ => hg v).le.trans covered
+  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      fromFin.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat :=
+    step_band_of_guard h fromFin (by omega) pulledOk
+  have shared := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
+    pulledTotal.toNat band (U.image fun v : ValidatorIndex => v.toNat)).1
+  have first := syncF_run_le h pulledTotal pulledOk tail (Nat.le_succ _) high replayed
+    (U.image fun v : ValidatorIndex => v.toNat)
+  have second := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC
+    (U.image fun v : ValidatorIndex => v.toNat)
+  generalize U.image (fun v : ValidatorIndex => v.toNat) = P at toPositions shared first second
+  have splitP : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) =
+      ∑ i ∈ P, syncD eventsF i + ∑ i ∈ P, syncF events i + ∑ i ∈ P, syncF eventsC i := by
+    rw [Finset.sum_add_distrib, Finset.sum_add_distrib]
+  have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
+    rw [pulledOk]
+    rfl
+  have seats : (pinTerms config pulled anc fin).syncSeats =
+      3 * (((pinTerms config pulled anc fin).depth +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+            PinSplit5.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat) := rfl
+  have proposer : (pinTerms config pulled anc fin).syncProposer =
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
+          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  rw [totalEq] at seats proposer
+  rw [seats, proposer]
+  unfold PinSplit5.syncSeatEnvelope at first second
+  generalize (pinTerms config pulled anc fin).depth = depth at depthEq ⊢
+  generalize PinSplit5.syncEnvelope preset pulledTotal.toNat = env at *
+  generalize env * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) =
+    share at *
+  -- the epochs of the three runs fit the two depths
+  have epochs : ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat) +
+      ((getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat) +
+      ((getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat) ≤
+      depth + ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := by
+    omega
+  have firstDepth : (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
+    omega
+  have secondDepth :
+      (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
+    omega
+  generalize (getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat = ef at *
+  generalize (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat = e1 at *
+  generalize (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat = e2 at *
+  generalize (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat = d at *
+  have scaleEnv := Nat.mul_le_mul_right
+    (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) epochs
+  have scaleShare := Nat.mul_le_mul_right
+    (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)
+    (show e1 + e2 ≤ depth + depth by omega)
+  have positions : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) ≤
+      (ef + e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
+    rw [splitP]
+    calc _ ≤ ef * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+          e1 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
+          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) :=
+          Nat.add_le_add (Nat.add_le_add shared first) second
+      _ = _ := by ring
+  calc 3 * ∑ v ∈ U, g v
+      ≤ 3 * ((ef + e1 + e2) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
+        Nat.mul_le_mul_left _ (toPositions.trans positions)
+    _ ≤ 3 * ((depth + d) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (depth + depth) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
+        Nat.mul_le_mul_left _ (Nat.add_le_add scaleEnv scaleShare)
+    _ = _ := by ring
+
+/-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
+
+The share is the proposer's, and the bound weighs both at the depth.
+
+This is the second run of `bud_sync` for credits alone, and `syncSeats` weighs it at `depth`. -/
+private theorem syncCredits_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (keys : Finset ℕ) :
+    ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤
+      (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
+          preset.SYNC_COMMITTEE_SIZE.toNat *
+          PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer := by
+  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  have run := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC keys
+  have credits : ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤ ∑ i ∈ keys, syncF eventsC i :=
+    Finset.sum_le_sum fun i _ => (Nat.le_add_right _ _).trans (syncF_eq eventsC i).ge
+  have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
+    rw [pulledOk]
+    rfl
+  have proposer : (pinTerms config pulled anc fin).syncProposer =
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
+          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  rw [proposer, totalEq]
+  unfold PinSplit5.syncSeatEnvelope at run
+  generalize (pinTerms config pulled anc fin).depth = depth at depthEq ⊢
+  generalize PinSplit5.syncEnvelope preset pulledTotal.toNat = env at *
+  generalize env * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) =
+    share at *
+  have depthCounted : (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth :=
+    by omega
+  have bounded : ∑ i ∈ keys, syncF eventsC i ≤
+      depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+        depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share := by
+    refine run.trans ?_
+    rw [Nat.mul_add]
+    exact Nat.add_le_add
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ depthCounted)))
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ depthCounted)))
+  calc _ ≤ _ := credits.trans bounded
+    _ = _ := by ring
+
+/-- Floored key by key, the flag gains of a key set's other credits are at most one floored gain.
+
+That gain is the gain of their weighted sum.
+
+Each floor of a sum is at least the sum of the floors, in the increments and in the weights. -/
+private theorem otherGain_sum_le {ι : Type} (S : Finset ι) (w c : ι → ℕ)
+    (depth inc P F WD OC : ℕ) (within : ∑ i ∈ S, w i * c i ≤ OC) :
+    ∑ i ∈ S, w i * (depth * (c i / inc * P * F / WD)) ≤ depth * (OC / inc * P * F / WD) := by
+  have inner : ∑ i ∈ S, w i * (c i / inc) ≤ OC / inc :=
+    (Finset.sum_le_sum fun i _ => Nat.mul_div_le_mul_div_assoc (w i) (c i) inc).trans
+      ((DirectSafety.Apriori.Internal.sum_div_le S (fun i => w i * c i) inc).trans
+        (Nat.div_le_div_right within))
+  have outer : ∑ i ∈ S, w i * (c i / inc * P * F / WD) ≤ (OC / inc * P * F) / WD := by
+    calc ∑ i ∈ S, w i * (c i / inc * P * F / WD)
+        ≤ ∑ i ∈ S, (w i * (c i / inc) * P * F) / WD := Finset.sum_le_sum fun i _ => by
+          have := Nat.mul_div_le_mul_div_assoc (w i) (c i / inc * P * F) WD
+          rwa [show w i * (c i / inc * P * F) = w i * (c i / inc) * P * F by ring] at this
+      _ ≤ (∑ i ∈ S, w i * (c i / inc) * P * F) / WD :=
+          DirectSafety.Apriori.Internal.sum_div_le S _ WD
+      _ = ((∑ i ∈ S, w i * (c i / inc)) * P * F) / WD := by
+          rw [← Finset.sum_mul, ← Finset.sum_mul]
+      _ ≤ (OC / inc * P * F) / WD :=
+          Nat.div_le_div_right (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ inner))
+  calc ∑ i ∈ S, w i * (depth * (c i / inc * P * F / WD))
+      = depth * ∑ i ∈ S, w i * (c i / inc * P * F / WD) := by
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun i _ => by ring
+    _ ≤ depth * (OC / inc * P * F / WD) := Nat.mul_le_mul_left _ outer
 
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/

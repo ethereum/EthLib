@@ -4000,6 +4000,37 @@ private theorem intervalGain_deposit_sites {x y : ForkedBeaconState preset}
   · obtain ⟨_, first, last, ordered, matched, _⟩ := provenance e member
     exact Or.inr ⟨first.trans last, ordered, later, matched⟩
 
+/-- A deposit event of a run credits the keys recent at the run's end at most its funding credit.
+
+A key is recent if it is active in the current epoch of the end state or in the one before. -/
+theorem _root_.EthLib.Consensus.Run.deposit_credit_le_funding {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (early : y.fork < .glamsterdam) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat) (high : Nat)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (S : Finset Nat)
+    (recent : ∀ i ∈ S, ∃ w, y.state.validators.data[i]? = some w ∧
+      (isActiveValidator w (getCurrentEpoch y.state) = true ∨
+        isActiveValidator w (getPreviousEpoch y.state) = true)) :
+    ∀ e ∈ events, e.source = .deposits → .pectra ≤ e.before.fork →
+      ∑ i ∈ S, (actualBalanceAt e.after i - actualBalanceAt e.before i) ≤
+        funding_deposit_credit e := by
+  intro e member deposit electra
+  rcases replay_electra_deposit_epoch shared tail genesis early high endEpoch events replayed e
+    member deposit electra with zero | later
+  · exact (Finset.sum_eq_zero fun i _ => Nat.sub_eq_zero_of_le (zero i)).trans_le (Nat.zero_le _)
+  · obtain ⟨_, first, last, ordered, matched, _⟩ :=
+      replay_event_provenance shared tail genesis early high endEpoch events replayed e member
+    have selected := intervalGain_selected_deposit y twoSlots e (first.trans last) ordered later
+      matched
+    have subset : S ⊆ intervalGain_indices y := fun i hi => by
+      obtain ⟨w, found, active⟩ := recent i hi
+      exact Finset.mem_filter.mpr
+        ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, active⟩
+    exact (Finset.sum_le_sum_of_subset subset).trans
+      (selected.trans (le_of_eq (ite_eq_left ⟨deposit, electra⟩).symm))
+
 private theorem intervalGain_events_bounded {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g)

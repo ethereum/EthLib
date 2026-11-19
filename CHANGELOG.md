@@ -27,10 +27,11 @@ Not yet released.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
-  `FloorTrace.step_general`, `FloorTrace.run_of_le_cap_general` and `FloorTrace.run_of_le_cap` are the activated cases.
+  `FloorTrace.step_general` and `FloorTrace.run_of_le_cap` are the activated cases.
   They also accept a different guard in place of the final key's exit.
   It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
   Master's headers are the cases with the exit guard.
+  `FloorTrace.run_of_le_cap_general` takes the same guard and covers an activated key or a branch from Fulu.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
@@ -64,6 +65,9 @@ Not yet released.
 - `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
   The pin's bound on the penalties and partials of a key on R's branch reads it.
   `run_partial_queue_kept` follows from it.
+
+- `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
+  The pin's deposit-queue bound for the keys that vote on R's branch reads it.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
