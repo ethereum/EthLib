@@ -3795,6 +3795,53 @@ private theorem segment_potential (h : Setting config checks g split fin pulled 
     start pass
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The potential floor of a segment of C's run for a key that is unslashed at its start.
+
+The key may be slashed at the end of the segment, or at the end of C's run.
+
+The closed form is the one of a slash with the fork's quotient, over one more epoch.
+
+`segment_potential` keeps the form without the slash for a key that is unslashed at the end.
+
+The slash form cannot give that one, so the lemmas stay apart. -/
+private theorem segment_potential_slash (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork}
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (i : ValidatorIndex)
+    {wS pS : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, wS⟩)
+    (seg : Run config checks ⟨fork, wS⟩ ⟨fork, pS⟩) (rest : Run config checks ⟨fork, pS⟩ ⟨fork, e⟩)
+    (valW : Validator) (initialW : wS.validators.data[i.toNat]? = some valW)
+    (unslashed : valW.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
+      (before.snoc step).append after = seg → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
+    (slack ρn ρd : ℕ)
+    (start : effectiveAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat ≤
+      actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat +
+        (preset.downwardBand + slack))
+    (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
+      (before.snoc step).append after = seg → ∀ evs, step.balanceEvents = .ok evs →
+      (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    {segEvents : List (BalanceEvent preset)}
+    (segOk : seg.balanceEvents (getCurrentEpoch pulled).toNat = .ok segEvents) :
+    ∃ D, D + (segEvents.map (penaltyDebit i.toNat)).sum =
+        (segEvents.map (floorPenaltyDebit i.toNat)).sum +
+          (segEvents.map (floorPartialDebit i)).sum ∧
+      ((EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) *
+          ((ρd - ρn * ((getCurrentEpoch pS).toNat - (getCurrentEpoch wS).toNat + 1)) *
+            (min (actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat)
+                (withdrawalMaxEffectiveBalance preset fork valW).toNat +
+              preset.downwardBand)) ≤
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
+          (ρd * (actualBalanceAt (⟨fork, pS⟩ : ForkedBeaconState preset) i.toNat + D +
+          preset.downwardBand) + ρn * slack) + ρd * (preset.downwardBand + slack) :=
+  sorry
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`.
 
 The run is C's from the finalized block, and `floor` is below what the potential floor gives.
@@ -3873,6 +3920,59 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
       (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat :=
     Nat.sub_le_sub_right order _
   exact arith _ D _ window (by omega) closed
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The balance of a key at every prefix end of C's run is above `floor`, less `loss`.
+
+The key is unslashed at the finalized block, and it may be slashed on C's run.
+
+The potential floor is `segment_potential_slash`.
+
+It is read at the end of each prefix, from the finalized block.
+
+The step `arithS` fits its closed form to `floor`, and `loss` is the slash's share.
+
+`cfloor_balance` has the key unslashed at the end of the run and the closed form of one epoch less.
+
+That form is stronger than this one, so `cfloor_balance` is not a case of it. -/
+private theorem cfloor_balance_slash (h : Setting config checks g split fin pulled anc counted V)
+    (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {events : List (BalanceEvent preset)}
+    (replayed : wholeRun.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (unslashed : val.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = wholeRun → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
+    (slack ρn ρd floor loss : ℕ)
+    (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+        (preset.downwardBand + slack))
+    (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = wholeRun → ∀ evs,
+      step.balanceEvents = .ok evs →
+      (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    (arithS : ∀ a D k : ℕ,
+      k ≤ (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat →
+      D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+      ((EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) *
+        ((ρd - ρn * (k + 1)) *
+          (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+            (withdrawalMaxEffectiveBalance preset fork val).toNat + preset.downwardBand)) ≤
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
+          (ρd * (a + D + preset.downwardBand) + ρn * slack) +
+          ρd * (preset.downwardBand + slack) →
+      floor ≤ a + loss) :
+    ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+      (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
+      floor ≤ actualBalanceAt p i.toNat + loss :=
+  sorry
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a prefix end of C's run is the finalized one or an update's.
@@ -3989,6 +4089,54 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
       (forkEnd r2) i.toNat val initial
     simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a key at a state of C's run is above a least value, for a slashed key.
+
+The balance of the key at every prefix end is above `floor`, less `loss`, by `cfloor_balance_slash`.
+
+The least value is that of `cfloor_endpoint`, with `floor - loss` for `floor`. -/
+private theorem cfloor_endpoint_slash (h : Setting config checks g split fin pulled anc counted V)
+    (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {events : List (BalanceEvent preset)}
+    (replayed : wholeRun.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (unslashed : val.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = wholeRun → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
+    (slack ρn ρd floor loss : ℕ)
+    (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+        (preset.downwardBand + slack))
+    (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = wholeRun → ∀ evs,
+      step.balanceEvents = .ok evs →
+      (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    (arithS : ∀ a D k : ℕ,
+      k ≤ (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat →
+      D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+      ((EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) *
+        ((ρd - ρn * (k + 1)) *
+          (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+            (withdrawalMaxEffectiveBalance preset fork val).toNat + preset.downwardBand)) ≤
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
+          (ρd * (a + D + preset.downwardBand) + ρn * slack) +
+          ρd * (preset.downwardBand + slack) →
+      floor ≤ a + loss)
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, e⟩) (cut : rp.append rest = wholeRun) :
+    min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+        (min (withdrawalMaxEffectiveBalance preset fork val).toNat
+          ((floor - loss) - (floor - loss) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
+      effectiveAt z i.toNat :=
+  sorry
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key's effective balance on C's run is above the floor of its fall.
@@ -9505,6 +9653,94 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
     (events.map (syncDebit i.toNat)).sum D a X
     positive (above _) (above _) (by omega) fall (by omega) closed
   omega
+
+/-- The arithmetic of the margin of the floor of a slashed key on C's run.
+
+It is `floorC_margin` for the closed form after a slash with the fork's quotient.
+
+`Xs` is the effective balance that the slash is read at.
+
+It is at least the finalized one and an increment.
+
+`bridge` turns the closed form into the one at the balance and the slash's share `Xs / M`.
+
+Then `margin_arith` at one more epoch gives the bound. -/
+private theorem floorC_margin_slash (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (ρn ρd : ℕ) (positive : 0 < ρd)
+    (leaky : ∀ eb : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ eb →
+      (pinTerms config pulled anc fin).leakAt eb i.toNat ≤ ρn * eb / ρd)
+    (above : ∀ x : ℕ, ρn * x ≤ ρd * ((pinTerms config pulled anc fin).leakAt
+      (x + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1))
+    (base0 X low Xs : ℕ)
+    (hXs : max (balanceAt fin i.toNat) base0 + preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ Xs)
+    (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat)
+    (hlow : low = base0 - X)
+    (fall : ((pinTerms config pulled anc fin).leakAt
+          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          ((pinTerms config pulled anc fin).leakAt
+            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
+    ∃ slack : ℕ,
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+          (preset.downwardBand + slack) ∧
+      (∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+        (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+        (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+        step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) ∧
+      ∀ a D k : ℕ, k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+        D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+        ((EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat - 1) *
+        ((ρd - ρn * (k + 1)) *
+            (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+              (withdrawalMaxEffectiveBalance preset fork val).toNat + preset.downwardBand)) ≤
+          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat *
+            (ρd * (a + D + preset.downwardBand) + ρn * slack) +
+            ρd * (preset.downwardBand + slack) →
+        low - (events.map (syncDebit i.toNat)).sum ≤ a + Xs /
+          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat :=
+  sorry
+
+/-- The effective balance of a key at C is above its `lowEB`, less the slash's share.
+
+The sync debits of the key are added to it.
+
+The key is unslashed at the finalized block, and it may be slashed at C.
+
+The share is read at the effective balance that `flagged` reads the slashing's loss at.
+
+The drop in `lowEB` holds the band and an increment, which cover the rounding of the floor. -/
+private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (unslashed : val.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat)) :
+    (pinTerms config pulled anc fin).lowEB i.toNat -
+        max ((pinTerms config pulled anc fin).ebUp i.toNat)
+          (max (balanceAt fin i.toNat) ((pinTerms config pulled anc fin).base0 i.toNat) +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
+        (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ≤
+      balanceAt counted i.toNat + (events.map (syncDebit i.toNat)).sum :=
+  sorry
 
 /-- Two different whole numbers of increments differ by at least an increment. -/
 private theorem aligned_gap {E M inc : ℕ} (e : E % inc = 0) (m : M % inc = 0) (lt : M < E) :
