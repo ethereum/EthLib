@@ -4463,7 +4463,7 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
     ∃ (c : BeaconState preset fork) (rest : List (BalanceEvent preset))
       (aggregate : SyncAggregate preset) (credit debit : ℕ),
       events = rest ++ [⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, credit, debit⟩] ∧
-      (∀ e ∈ rest, e.source ≠ .sync) ∧ (∀ i, (rest.map (syncDebit i)).sum = 0) ∧
+      (∀ i, (rest.map (syncDebit i)).sum = 0) ∧
       processSyncAggregate config checks c altair aggregate = .ok t := by
   have normalized := replay
   unfold blockBalanceReplay at normalized
@@ -4506,7 +4506,7 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
   simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
     Prod.mk.injEq] at syncOk
   obtain ⟨⟨credit, debit⟩, limitsOk, u, synced, rfl, rfl⟩ := syncOk
-  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, eleven, fun i => ?_, synced⟩
+  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, fun i => ?_, synced⟩
   exact List.sum_eq_zero fun x member => by
     obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
     simp [syncDebit, eleven e inside]
@@ -4525,7 +4525,7 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
     (keys : Finset ℕ) :
     ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
       preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total := by
-  obtain ⟨c, rest, aggregate, credit, debit, rfl, -, silent, synced⟩ :=
+  obtain ⟨c, rest, aggregate, credit, debit, rfl, silent, synced⟩ :=
     blockReplay_sync_split early altair replay
   obtain ⟨reward, proposer, rewardOk, -, -, debits⟩ := sync_bounds altair _ synced
   have bound := (DirectSafety.Apriori.Internal.keys_debits_le keys
