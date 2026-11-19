@@ -5728,6 +5728,28 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
       absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
     simp
 
+/-- The pin's rate bounds the reward rate at each state of a prefix of C's tail.
+
+The prefix ends at most one epoch after the call, and its states are of the fork of the setting. -/
+private theorem key_rate_forked (h : Setting config checks g split fin pulled anc counted V) :
+    ∃ P : ℕ, ∀ a : ForkedBeaconState preset, Run config checks ⟨fork, split⟩ a → a.fork ≤ fork →
+      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
+      ∀ total perIncrement : Gwei, getTotalActiveBalance a.state = .ok total →
+        getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices a.state
+          (getPreviousEpoch a.state)).toFinset, effectiveAt a j.toNat) /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
+  obtain ⟨fromFin⟩ := h.fromFin
+  refine ⟨P, fun a run forkLe near total perIncrement totalOk perOk => ?_⟩
+  obtain ⟨af, as⟩ := a
+  have sameFork : af = fork := Fork.ctorIdx_injective
+    (Nat.le_antisymm forkLe (fork_le_of_chainSteps run.chainSteps))
+  subst sameFork
+  simp only at near totalOk perOk ⊢
+  exact rateAll (fromFin.append run) (by omega) total perIncrement totalOk perOk
+
 /-- The pin's rate bounds the reward rate at every state of a prefix of C's tail.
 
 The prefix ends at most one epoch after the call.
@@ -5745,20 +5767,15 @@ private theorem key_rate_pre (h : Setting config checks g split fin pulled anc c
         (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
         P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
+  obtain ⟨P, rate⟩ := key_rate_forked h
   refine ⟨P, fun z member total perIncrement totalOk perOk => ?_⟩
-  obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨r1, r2, -⟩ := balancePath_endpoint pre Run.nil
     (show (⟨fork, a⟩ : ForkedBeaconState preset).fork ≤
       (⟨fork, split⟩ : ForkedBeaconState preset).fork from Nat.le_refl _) member
-  obtain ⟨zf, zs⟩ := z
-  have sameFork : zf = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
-      (fork_le_of_chainSteps r1.chainSteps))
-  subst sameFork
-  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
-  simp only at order totalOk perOk ⊢
-  exact rateAll (fromFin.append r1) (by omega) total perIncrement totalOk perOk
+  have order : (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch a).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+  exact rate z r1 (fork_le_of_chainSteps r2.chainSteps) (by omega) total perIncrement totalOk
+    perOk
 
 
 /-- The epoch rewards of a key over a run are at most the rate for each epoch of the run.
@@ -8277,28 +8294,6 @@ private theorem slot_zero_step {g m n : ForkedBeaconState preset}
   simp only [List.filter_false, List.map_nil, List.sum_nil] at sources
   omega
 
-/-- The pin's rate bounds the reward rate at each state of a prefix of C's tail.
-
-The prefix ends at most one epoch after the call, and its states are of the fork of the setting. -/
-private theorem key_rate_forked (h : Setting config checks g split fin pulled anc counted V) :
-    ∃ P : ℕ, ∀ a : ForkedBeaconState preset, Run config checks ⟨fork, split⟩ a → a.fork ≤ fork →
-      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-      ∀ total perIncrement : Gwei, getTotalActiveBalance a.state = .ok total →
-        getBaseRewardPerIncrement preset total = .ok perIncrement →
-        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices a.state
-          (getPreviousEpoch a.state)).toFinset, effectiveAt a j.toNat) /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
-  obtain ⟨fromFin⟩ := h.fromFin
-  refine ⟨P, fun a run forkLe near total perIncrement totalOk perOk => ?_⟩
-  obtain ⟨af, as⟩ := a
-  have sameFork : af = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm forkLe (fork_le_of_chainSteps run.chainSteps))
-  subst sameFork
-  simp only at near totalOk perOk ⊢
-  exact rateAll (fromFin.append run) (by omega) total perIncrement totalOk perOk
-
 /-- A key that is not credited along a prefix of C's run has no balance at the end of the prefix.
 
 The key is two epochs from its activation at the end of the run.
@@ -8364,20 +8359,18 @@ private theorem key_zero_walk (h : Setting config checks g split fin pulled anc 
         | some w =>
           have funds := EthLib.Consensus.Internal.run_eligible_balance shared h.genesis
             h.caps.activation h.caps.compounding h.aligned middleEarly finite
-          by_cases assigned : w.activationEpoch = FAR_FUTURE_EPOCH
-          · obtain ⟨⟨b, read, low⟩, -, -⟩ := funds.1 v w found assigned
-            have zero : b.toNat = 0 := by simpa [actualBalanceAt, read] using before
-            have := UInt64.le_iff_toNat_le.mp low
-            simp only [effectiveAt, found, Option.map_some, Option.getD_some]
-            omega
-          · have lt := ahead middle afterStep w found assigned
-            obtain ⟨funded, -, -⟩ := funds.2 middleElectra v w found (Or.inl assigned)
-              (UInt64.lt_iff_toNat_lt.mpr (by omega))
-            obtain ⟨b, read, low⟩ := funded lt
-            have zero : b.toNat = 0 := by simpa [actualBalanceAt, read] using before
-            have := UInt64.le_iff_toNat_le.mp low
-            simp only [effectiveAt, found, Option.map_some, Option.getD_some]
-            omega
+          have funded : ∃ b, middle.state.balances.data[v]? = some b ∧
+              w.effectiveBalance ≤ b := by
+            by_cases assigned : w.activationEpoch = FAR_FUTURE_EPOCH
+            · exact (funds.1 v w found assigned).1
+            · have lt := ahead middle afterStep w found assigned
+              exact (funds.2 middleElectra v w found (Or.inl assigned)
+                (UInt64.lt_iff_toNat_lt.mpr (by omega))).1 lt
+          obtain ⟨b, read, low⟩ := funded
+          have zero : b.toNat = 0 := by simpa [actualBalanceAt, read] using before
+          have := UInt64.le_iff_toNat_le.mp low
+          simp only [effectiveAt, found, Option.map_some, Option.getD_some]
+          omega
       exact slot_zero_step shared h.genesis ok lastEarly middleElectra v known P
         (fun total perIncrement totalOk perOk => rate middle pre
           (Nat.le_trans middleFork zFork) (by omega) total perIncrement totalOk perOk)
@@ -8428,7 +8421,7 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
         u.activationEpoch.toNat := fun u found => by
     simp only [splitAbsent] at found
     cases found
-  obtain ⟨z, pre, post, v0, vy, splitEq, found0, foundY, sameAct, actEq, actLe, exitGt⟩ :=
+  obtain ⟨z, pre, post, v0, vy, splitEq, found0, -, sameAct, actEq, actLe, exitGt⟩ :=
     PinSplit.Run.start_state tailC h.window v.toNat pending activeAt
   have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   have exitBound := vy.exitEpoch.toNat_lt
