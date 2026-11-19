@@ -229,6 +229,12 @@ The whistleblower reward of a key slashed on another branch is charged where tha
 
 It is also charged where that key's effective balance can fall below what pays for it in the count.
 
+A key whose exit was set by the finalized block's state can be swept here and slashed there.
+
+Those charges also read its finalized effective balance and its rounded finalized balance.
+
+A due consolidation can raise its target by one more increment, whose gains count three times.
+
 Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
 
 The reserve grows as the total active balance shrinks.
@@ -383,6 +389,12 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Both branches can share a dip there that this branch's later credits would hide.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
+  -- A key whose exit was set by the finalized block's state can be swept here and slashed there.
+  --
+  -- There it keeps at least its finalized effective balance or its rounded finalized balance.
+  let exitBeforeFin (i : ℕ) := (validator i).any fun v =>
+    decide (v.exitEpoch.toNat ≤ (getCurrentEpoch finalizedState).toNat)
+  let bF (i : ℕ) := if exitBeforeFin i then max (finEB i) (actualFin i - actualFin i % inc) else 0
   -- The floor starts at the finalized block's balance, at most the key's cap there.
   let capFin (i : ℕ) := ((finalizedState.validators.data[i]?).map fun v =>
     (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
@@ -466,6 +478,16 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
               (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
       else 0)
     else 0
+  -- Each entry of `consolidationsX` can raise its target by one more increment.
+  --
+  -- That increment earns `unitGain`, three times.
+  let consolidationsXCount := if depthFin ≤ partialDelay then
+      (if electra : .pectra ≤ fork then
+        (((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
+          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
+            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).length
+      else 0)
+    else 0
   -- Each sync seat of the window debits at most its envelope on each branch.
   --
   -- A key whose sync debits can lower its effective balance has debits of at least an increment.
@@ -482,7 +504,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- Its effective balance on either branch is at most its effective balance here plus its rise.
   let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
       decide (finalized ≤ v.exitEpoch.toNat)),
-    (effective i + rise i) / inc * perIncrement
+    max (effective i + rise i) (bF i) / inc * perIncrement
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
   --
   -- The keys are the window's proposers and deposit recipients.
@@ -521,7 +543,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let whistleblowerExtra := ((∑ i ∈ positions with (validator i).any (fun v =>
       v.activationEpoch.toNat = epoch.toNat + 1 ||
         (decide (finalized < v.withdrawableEpoch.toNat) &&
-          decide (v.withdrawableEpoch.toNat ≤ epoch.toNat))), effective i) +
+          decide (v.withdrawableEpoch.toNat ≤ epoch.toNat))), max (effective i) (bF i)) +
       ∑ i ∈ positions with current i = true, rise i) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   -- Slashings on the call's branch after the finalized epoch, which the other branch can lack.
@@ -681,7 +703,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
-    (effective i + rise i)
+    max (effective i + rise i) (bF i)
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
@@ -738,7 +760,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions,
+          max (max (ebUp i) (effective i + rise i)) (bF i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
           consolidationsX + depth * proposerCredit +
           -- C's seat rewards.
@@ -779,7 +802,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    creditGain + creditUnits + syncLeak)
+    creditGain + creditUnits + syncLeak + 3 * unitGain * consolidationsXCount)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)

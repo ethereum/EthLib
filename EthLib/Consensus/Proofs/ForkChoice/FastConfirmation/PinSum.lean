@@ -89,6 +89,10 @@ structure PinTerms (preset : Preset) where
   creditGain : ℕ
   creditUnits : ℕ
   syncLeak : ℕ
+  unitGain : ℕ
+  consolidationsXCount : ℕ
+  exitBeforeFin : ℕ → Bool
+  bF : ℕ → ℕ
   gainHigh : Bool
   pendingRB : ℕ → Bool
   credits : ℕ
@@ -133,7 +137,7 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
     3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
     3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain +
-    t.creditUnits + t.syncLeak)
+    t.creditUnits + t.syncLeak + 3 * t.unitGain * t.consolidationsXCount)
 
 /-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
@@ -270,6 +274,12 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A partial requested after that state can then be paid on a branch and sit in no queue read
   -- here, so its whole balance is charged.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
+  -- A key whose exit was set by the finalized block's state can be swept here and slashed there.
+  --
+  -- There it keeps at least its finalized effective balance or its rounded finalized balance.
+  let exitBeforeFin (i : ℕ) := (validator i).any fun v =>
+    decide (v.exitEpoch.toNat ≤ (getCurrentEpoch finalizedState).toNat)
+  let bF (i : ℕ) := if exitBeforeFin i then max (finEB i) (actualFin i - actualFin i % inc) else 0
   let capFin (i : ℕ) := ((finalizedState.validators.data[i]?).map fun v =>
     (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
   let base0 (i : ℕ) := min (actualFin i) (capFin i)
@@ -324,6 +334,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
               (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
       else 0)
     else 0
+  -- Each entry of `consolidationsX` can raise its target by one more increment.
+  --
+  -- That increment earns `unitGain`, three times.
+  let consolidationsXCount := if depthFin ≤ partialDelay then
+      (if electra : .pectra ≤ fork then
+        (((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
+          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
+            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).length
+      else 0)
+    else 0
   -- Each sync seat of the window debits at most its envelope on each branch.
   --
   -- A key whose sync debits can lower its effective balance has debits of at least an increment.
@@ -340,7 +360,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Its effective balance on either branch is at most its effective balance here plus its rise.
   let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
       decide (finalized ≤ v.exitEpoch.toNat)),
-    (effective i + rise i) / inc * perIncrement
+    max (effective i + rise i) (bF i) / inc * perIncrement
   -- Each key the call's branch credits or debits can move by a rounding step and a band.
   --
   -- The keys are the window's proposers and deposit recipients.
@@ -379,7 +399,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let whistleblowerExtra := ((∑ i ∈ positions with (validator i).any (fun v =>
       v.activationEpoch.toNat = epoch.toNat + 1 ||
         (decide (finalized < v.withdrawableEpoch.toNat) &&
-          decide (v.withdrawableEpoch.toNat ≤ epoch.toNat))), effective i) +
+          decide (v.withdrawableEpoch.toNat ≤ epoch.toNat))), max (effective i) (bF i)) +
       ∑ i ∈ positions with current i = true, rise i) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   -- Slashings on the call's branch after the finalized epoch, which the other branch can lack.
@@ -509,7 +529,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
-    (effective i + rise i)
+    max (effective i + rise i) (bF i)
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
@@ -537,7 +557,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (effective i + rise i)
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions,
+          max (max (ebUp i) (effective i + rise i)) (bF i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
           consolidationsX + depth * proposerCredit +
           -- C's seat rewards.
@@ -562,7 +583,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
-    proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak,
+    proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
+    consolidationsXCount, exitBeforeFin, bF,
     gainHigh := !decide (11 * depth * (gainRateMax + 1) ≤ capMax),
     pendingRB := fun i => (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
@@ -10134,6 +10156,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     positivity
   have proposerPos : 0 ≤ ((pinTerms config pulled anc fin).depth : ℤ) *
       ((pinTerms config pulled anc fin).syncProposer : ℤ) := by positivity
+  have unitPos : 0 ≤ ((pinTerms config pulled anc fin).unitGain : ℤ) *
+      ((pinTerms config pulled anc fin).consolidationsXCount : ℤ) := by positivity
   -- A key of `K6` whose exit R reads weighs once in the drift and three times in `exiting`.
   have exitingK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
       (pinTerms config pulled anc fin).exitingB v.toNat = true, (balanceAt pulled v.toNat : ℤ) :=
