@@ -13448,22 +13448,14 @@ theorem sc_3a_split (h : Setting config checks g split fin pulled anc counted V)
           (pinTerms config pulled anc fin).pendingRB v.toNat = true),
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) := sorry
 
-/-- The units of the counted keys, at their weights, fit the unit terms of `pinReserve`.
+/-- The units of the active keys of `CS` are held by the units of the keys of `CS`.
 
-A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes a seat unit.
+Off the high gain rate each active key of `CS` charges one `unitGain` for its stake at the slashing.
 
-A key credited only by a consolidation of X takes row H's unit.
+Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
 
-A key slashed only on R's branch takes its unit in `branchR`.
-
-The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave.
-
-A key of `CS` that is active at C also takes the slot of its deposit for `unitGain`.
-
-It does so off the high gain rate.
-
-`units_base` is the claim without that slot. -/
-private theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
+The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
+theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -13471,26 +13463,12 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    (∑ v ∈ (K4 pulled counted V),
-        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
-      3 * (∑ v ∈ (K5 counted V),
-          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
-            (propC tailC highC v.toNat)) +
-      (∑ v ∈ (K6 pulled counted),
-          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
-      (∑ v ∈ SC pulled counted split,
-          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
-      (∑ v ∈ CS counted split,
-          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
-      (if (pinTerms config pulled anc fin).gainHigh = true then 0 else
-        ((CS counted split).filter fun v =>
-          isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
-            (pinTerms config pulled anc fin).unitGain) ≤
-      (pinTerms config pulled anc fin).creditUnits +
-        3 * (pinTerms config pulled anc fin).unitGain *
-          (pinTerms config pulled anc fin).consolidationsXCount +
-        3 * ((pinTerms config pulled anc fin).unitGain *
-          (pinTerms config pulled anc fin).slashedR) := sorry
+    (if (pinTerms config pulled anc fin).gainHigh = true then 0 else
+      ((CS counted split).filter fun v =>
+        isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
+          (pinTerms config pulled anc fin).unitGain) ≤
+      ∑ v ∈ CS counted split,
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := sorry
 
 /-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.
 
@@ -15951,7 +15929,7 @@ A key slashed only on R's branch takes its unit in `branchR`.
 The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave.
 
 The keys of `SC` alone fit the slots and the extra units at weight one. -/
-private theorem units_base (h : Setting config checks g split fin pulled anc counted V)
+private theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -19634,7 +19612,9 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
   have f1 := flow_split (config := config) h tail high endEpoch replayed fromFin replayedF tailC
     highC endEpochC replayedC
-  have u1 := bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
+  have u1 := (bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
+    endEpochC replayedC).1
+  have u2 := bud_csUnits (config := config) h tail high replayed fromFin replayedF tailC highC
     endEpochC replayedC
   have l1 := (bud_syncLeak (config := config) h tail high endEpoch replayed fromFin replayedF
     tailC highC endEpochC replayedC).1
@@ -19727,9 +19707,9 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
       (inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   by_cases gH : (pinTerms config pulled anc fin).gainHigh = true
-  · simp only [gH, ↓reduceIte] at b14 b21 u1
+  · simp only [gH, ↓reduceIte] at b14 b21 u2
     linarith
-  · simp only [gH, Bool.false_eq_true, ↓reduceIte] at b14 b21 u1
+  · simp only [gH, Bool.false_eq_true, ↓reduceIte] at b14 b21 u2
     linarith
 
 end Closure
