@@ -3065,10 +3065,10 @@ def SC (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
     slashedFlagAt counted v.toNat = some true ∧ slashedFlagAt split v.toNat = some false
 
-/-- Keys created beyond R's registry and slashed at C. -/
-private def CS : Finset ValidatorIndex :=
+/-- Keys created beyond the split's registry and slashed at C. -/
+private def CS (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range counted.validators.data.size).image UInt64.ofNat).filter fun v =>
-    pulled.validators.data.size ≤ v.toNat ∧ slashedFlagAt counted v.toNat = some true
+    split.validators.data.size ≤ v.toNat ∧ slashedFlagAt counted v.toNat = some true
 
 end Costs
 
@@ -11179,17 +11179,14 @@ private theorem sc_disjoint (h : Setting config checks g split fin pulled anc co
     rw [hs.2.1] at unslashed
     simp at unslashed
 
-/-- The keys created after R's registry and slashed at C are in no other class.
+/-- The keys created after the split's registry and slashed at C are in no other class.
 
 They are slashed at C, so they are not in C's quorum or in `V`.
 
 They are absent at the split, so they are not in `SC`. -/
 private theorem cs_disjoint (h : Setting config checks g split fin pulled anc counted V) :
     Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split)
-      (CS pulled counted) ∧ Disjoint V (CS pulled counted) := by
-  obtain ⟨toPulled⟩ := h.toPulled
-  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
-    registryGrows_of_chainSteps toPulled.chainSteps
+      (CS counted split) ∧ Disjoint V (CS counted split) := by
   refine ⟨?_, ?_⟩
   · rw [Finset.disjoint_left]
     intro v hk hc
@@ -11199,7 +11196,7 @@ private theorem cs_disjoint (h : Setting config checks g split fin pulled anc co
     · simp only [SC, Finset.mem_filter] at created
       have absent : slashedFlagAt split v.toNat = none := by
         simp only [slashedFlagAt, Option.map_eq_none_iff]
-        exact Array.getElem?_eq_none (by omega)
+        exact Array.getElem?_eq_none hc.2.1
       rw [absent] at created
       cases created.2.2
   · rw [Finset.disjoint_left]
@@ -11308,7 +11305,7 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
       ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
       ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card +
-      ((CS pulled counted).filter fun v => creditedKey tailC highC v = true).card ≤
+      ((CS counted split).filter fun v => creditedKey tailC highC v = true).card ≤
     (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
       ((pinTerms config pulled anc fin).depth /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -11324,7 +11321,7 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
   set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
   set C6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
   set Csc := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
-  set Ccs := (CS pulled counted).filter fun v => creditedKey tailC highC v = true
+  set Ccs := (CS counted split).filter fun v => creditedKey tailC highC v = true
   -- The five classes are apart, and each key of them is in C's registry.
   have apart : Disjoint (C4 ∪ C6) C5 :=
     Finset.disjoint_union_left.mpr ⟨Finset.disjoint_filter_filter d45,
@@ -11371,7 +11368,7 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
     exact (Array.getElem?_eq_some_iff.mp found).1
   have inSC : ∀ v ∈ SC pulled counted split, v.toNat < counted.validators.data.size :=
     fun v hv => flagIn v (Finset.mem_filter.mp hv).2.1
-  have inCS : ∀ v ∈ CS pulled counted, v.toNat < counted.validators.data.size :=
+  have inCS : ∀ v ∈ CS counted split, v.toNat < counted.validators.data.size :=
     fun v hv => flagIn v (Finset.mem_filter.mp hv).2.2
   -- Those keys are credited keys of the run, which `credited_keys_le` counts by slots.
   have credited := credited_keys_le h tailC highC
@@ -11384,7 +11381,7 @@ private theorem credited_classes_le (h : Setting config checks g split fin pulle
       (fun a _ b _ same => UInt64.toNat_inj.mp same)
     have member : v ∈ C4 ∪ C6 ∪ C5 ∪ Csc ∪ Ccs := hv
     have classed : v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V ∨
-        v ∈ SC pulled counted split ∨ v ∈ CS pulled counted := by
+        v ∈ SC pulled counted split ∨ v ∈ CS counted split := by
       simp only [C4, C5, C6, Csc, Ccs, Finset.mem_union, Finset.mem_filter] at member ⊢
       tauto
     have flag : creditedKey tailC highC v = true := by
@@ -11550,7 +11547,7 @@ private theorem deposits_union_le (h : Setting config checks g split fin pulled 
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
         (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1) +
-      (∑ v ∈ SC pulled counted split ∪ CS pulled counted, depPre eventsC v.toNat)) ≤
+      (∑ v ∈ SC pulled counted split ∪ CS counted split, depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep := by
   have quorum : K4 pulled counted V ∪ K6 pulled counted ⊆
       K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted := fun v member => by
@@ -11593,18 +11590,18 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
       (∑ v ∈ K5 counted V, propN tailC highC v.toNat) +
       (∑ v ∈ K6 pulled counted, propN tailC highC v.toNat) +
       (∑ v ∈ SC pulled counted split, propN tailC highC v.toNat) +
-      (∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
+      (∑ v ∈ CS counted split, propN tailC highC v.toNat) +
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit)
     (deposits : 3 * ((∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
         (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1) +
-      (∑ v ∈ SC pulled counted split ∪ CS pulled counted, depPre eventsC v.toNat)) ≤
+      (∑ v ∈ SC pulled counted split ∪ CS counted split, depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep)
     (cards : ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
       ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card +
-      ((CS pulled counted).filter fun v => creditedKey tailC highC v = true).card ≤
+      ((CS counted split).filter fun v => creditedKey tailC highC v = true).card ≤
       (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
         ((pinTerms config pulled anc fin).depth /
           max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -11619,9 +11616,9 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
       wShare preset fork ((∑ v ∈ SC pulled counted split, propN tailC highC v.toNat) +
         ∑ v ∈ SC pulled counted split, depPre eventsC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
-      wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
-        ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat)) +
+      wShare preset fork ((∑ v ∈ CS counted split, propN tailC highC v.toNat) +
+        ∑ v ∈ CS counted split, depPre eventsC v.toNat) +
+      (∑ v ∈ CS counted split, bandC tailC highC v.toNat)) +
       ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
         (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
         (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
@@ -11634,7 +11631,7 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
   classical
   obtain ⟨carry, churn, wb, ck, queue, credits, slots⟩ := credits_budget config pulled anc fin
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
-  have dSCCS : Disjoint (SC pulled counted split) (CS pulled counted) :=
+  have dSCCS : Disjoint (SC pulled counted split) (CS counted split) :=
     Finset.disjoint_of_subset_left Finset.subset_union_right (cs_disjoint h).1
   have parts (S : Finset ValidatorIndex) := fun v (_ : v ∈ S) => credit_parts_le tailC highC v
     replayedC
@@ -11660,13 +11657,13 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
   rw [Finset.sum_union d46, Finset.sum_union dSCCS] at deposits
   have w1 := wShare_le (fork := fork) h.facts ((∑ v ∈ SC pulled counted split,
     propN tailC highC v.toNat) + ∑ v ∈ SC pulled counted split, depPre eventsC v.toNat)
-  have w2 := wShare_le (fork := fork) h.facts ((∑ v ∈ CS pulled counted,
-    propN tailC highC v.toNat) + ∑ v ∈ CS pulled counted, depPre eventsC v.toNat)
+  have w2 := wShare_le (fork := fork) h.facts ((∑ v ∈ CS counted split,
+    propN tailC highC v.toNat) + ∑ v ∈ CS counted split, depPre eventsC v.toNat)
   have bands : (∑ v ∈ K4 pulled counted V, bandC tailC highC v.toNat) +
       (∑ v ∈ K5 counted V, bandC tailC highC v.toNat) +
       (∑ v ∈ K6 pulled counted, bandC tailC highC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat) ≤ ck * preset.upwardBand := by
+      (∑ v ∈ CS counted split, bandC tailC highC v.toNat) ≤ ck * preset.upwardBand := by
     simp only [band_sum, ← Nat.mul_add]
     rw [Nat.mul_comm]
     exact Nat.mul_le_mul_right _ (cards.trans slots)
@@ -11696,9 +11693,9 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
       wShare preset fork ((∑ v ∈ SC pulled counted split, propN tailC highC v.toNat) +
         ∑ v ∈ SC pulled counted split, depPre eventsC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
-      wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
-        ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat)) +
+      wShare preset fork ((∑ v ∈ CS counted split, propN tailC highC v.toNat) +
+        ∑ v ∈ CS counted split, depPre eventsC v.toNat) +
+      (∑ v ∈ CS counted split, bandC tailC highC v.toNat)) +
       ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
         (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
         (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
@@ -11715,7 +11712,7 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
       obtain ⟨fromFin⟩ := h.fromFin
       have := proposer_rewards_le h (toFin.append fromFin) (.inl ⟨fromFin⟩) Run.nil rfl tailC highC
         (K4 pulled counted V ∪ K5 counted V ∪
-        K6 pulled counted ∪ SC pulled counted split ∪ CS pulled counted)
+        K6 pulled counted ∪ SC pulled counted split ∪ CS counted split)
       rw [run_nil_append] at this
       rwa [Finset.sum_union (cs_disjoint h).1, Finset.sum_union (sc_disjoint h).1,
         Finset.sum_union (Finset.disjoint_union_left.mpr ⟨d46, d56⟩), Finset.sum_union d45]
@@ -12235,8 +12232,8 @@ private theorem bud_consolidations_base
       3 * (∑ v ∈ V, consAmt events v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) +
-      wShare preset fork (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandX fin highC v.toNat) +
+      wShare preset fork (∑ v ∈ CS counted split, consAmt eventsC v.toNat) +
+      (∑ v ∈ CS counted split, bandX fin highC v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split with
         (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true,
           consAmt eventsF v.toNat) +
@@ -12270,7 +12267,7 @@ private theorem bud_consolidations_base
   subst sameF
   obtain ⟨Kall, hKall⟩ : ∃ K : Finset ValidatorIndex,
       K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
-        CS pulled counted := ⟨_, rfl⟩
+        CS counted split := ⟨_, rfl⟩
   have boundC := cons_due_bound h fromFin tailC highC endEpochC highLe replayedFin replayedC Kall
   have boundR := cons_due_bound h fromFin tail high endEpoch highLeR replayedF replayed V
   -- The shared segment's amounts of the keys of `SC` that exited before the finalized epoch.
@@ -12320,7 +12317,7 @@ private theorem bud_consolidations_base
         (∑ v ∈ K5 counted V, consAmt eventsC v.toNat) +
         (∑ v ∈ K6 pulled counted, consAmt eventsC v.toNat) +
         (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
-        (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) := by
+        (∑ v ∈ CS counted split, consAmt eventsC v.toNat) := by
     rw [hKall, Finset.sum_union dC, Finset.sum_union dS, Finset.sum_union d456,
       Finset.sum_union d45]
   have splitEntries (H : ℕ) : (dueList fin electra H Kall).length =
@@ -12328,7 +12325,7 @@ private theorem bud_consolidations_base
         (dueList fin electra H (K5 counted V)).length +
         (dueList fin electra H (K6 pulled counted)).length +
         (dueList fin electra H (SC pulled counted split)).length +
-        (dueList fin electra H (CS pulled counted)).length := by
+        (dueList fin electra H (CS counted split)).length := by
     rw [hKall, dueList_length_union fin electra H dC, dueList_length_union fin electra H dS,
       dueList_length_union fin electra H d456, dueList_length_union fin electra H d45]
   -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
@@ -12369,7 +12366,7 @@ private theorem bud_consolidations_base
     omega
   refine ⟨?_, whole⟩
   have bandLen : (dueList fin electra highC (SC pulled counted split)).length +
-      (dueList fin electra highC (CS pulled counted)).length +
+      (dueList fin electra highC (CS counted split)).length +
       (dueList fin electra highC (K4 pulled counted V)).length +
       (dueList fin electra highC (K6 pulled counted)).length +
       3 * (dueList fin electra highC (K5 counted V)).length +
@@ -12380,7 +12377,7 @@ private theorem bud_consolidations_base
     have m5 := dueList_length_mono fin electra highLe (K5 counted V)
     have m6 := dueList_length_mono fin electra highLe (K6 pulled counted)
     have mS := dueList_length_mono fin electra highLe (SC pulled counted split)
-    have mC := dueList_length_mono fin electra highLe (CS pulled counted)
+    have mC := dueList_length_mono fin electra highLe (CS counted split)
     have mF := (dueList_length_mono fin electra highLeR S').trans
       (dueList_length_subset fin electra (getCurrentEpoch pulled).toNat
         (Finset.filter_subset _ _ : S' ⊆ SC pulled counted split))
@@ -12389,9 +12386,9 @@ private theorem bud_consolidations_base
   have shareS := wShare_le (fork := fork) h.facts
     (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat)
   have shareC := wShare_le (fork := fork) h.facts
-    (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat)
+    (∑ v ∈ CS counted split, consAmt eventsC v.toNat)
   rw [bandX_sum fin electra highC (SC pulled counted split),
-    bandX_sum fin electra highC (CS pulled counted), bandX_sum fin electra high S']
+    bandX_sum fin electra highC (CS counted split), bandX_sum fin electra high S']
   rw [dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra highC,
     dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra high,
     dueAt_eq fin electra high]
@@ -12400,10 +12397,10 @@ private theorem bud_consolidations_base
   generalize (dueList fin electra highC (K5 counted V)).length = d5 at *
   generalize (dueList fin electra highC (K6 pulled counted)).length = d6 at *
   generalize (dueList fin electra highC (SC pulled counted split)).length = dS' at *
-  generalize (dueList fin electra highC (CS pulled counted)).length = dC' at *
+  generalize (dueList fin electra highC (CS counted split)).length = dC' at *
   generalize (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) = aS at *
   generalize wShare preset fork aS = wS at *
-  generalize (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) = aC at *
+  generalize (∑ v ∈ CS counted split, consAmt eventsC v.toNat) = aC at *
   generalize wShare preset fork aC = wC at *
   generalize (dueList fin electra high S').length = dF at *
   generalize (∑ v ∈ S', consAmt eventsFin v.toNat) = aF at *
@@ -12456,8 +12453,8 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
       3 * (∑ v ∈ V, consAmt events v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) +
-      wShare preset fork (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandX fin highC v.toNat) +
+      wShare preset fork (∑ v ∈ CS counted split, consAmt eventsC v.toNat) +
+      (∑ v ∈ CS counted split, bandX fin highC v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split with
         (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true,
           consAmt eventsF v.toNat) +
@@ -13375,7 +13372,7 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
       wShare preset fork
         (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
-      wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) +
+      wShare preset fork (∑ v ∈ CS counted split, syncCr eventsC v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split with
         (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, syncCr eventsF v.toNat) ≤
         (pinTerms config pulled anc fin).syncSeats +
@@ -13409,7 +13406,7 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         slashed
     · exact Finset.disjoint_left.mp dS (Finset.mem_union_right _ in6) slashed
   have dCS : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
-      SC pulled counted split) (CS pulled counted) := by
+      SC pulled counted split) (CS counted split) := by
     rw [Finset.disjoint_left]
     intro v member created
     simp only [Finset.mem_union] at member
@@ -13421,13 +13418,13 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     · exact Finset.disjoint_left.mp dCK (by simp [inSC]) created
   obtain ⟨U, hU⟩ : ∃ U : Finset ValidatorIndex,
       U = V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
-        CS pulled counted :=
+        CS counted split :=
     ⟨_, rfl⟩
   obtain ⟨g, hg⟩ : ∃ g : ValidatorIndex → ℕ, ∀ v, g v =
       syncF events v.toNat + syncF eventsC v.toNat := ⟨_, fun _ => rfl⟩
   have sumU : ∑ v ∈ U, g v = ∑ v ∈ V, g v + ∑ v ∈ K4 pulled counted V, g v +
       ∑ v ∈ K5 counted V, g v + ∑ v ∈ K6 pulled counted, g v +
-      ∑ v ∈ SC pulled counted split, g v + ∑ v ∈ CS pulled counted, g v := by
+      ∑ v ∈ SC pulled counted split, g v + ∑ v ∈ CS counted split, g v := by
     rw [hU, Finset.sum_union dCS, Finset.sum_union d4, Finset.sum_union d3, Finset.sum_union d2,
       Finset.sum_union d1]
   -- the keys of SC that exited by the finalized epoch hold the shared credits, and the rest debits
@@ -13481,8 +13478,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       omega)
   have creditsF : wShare preset fork (∑ v ∈ EK, syncCr eventsF v.toNat) ≤
       ∑ v ∈ EK, syncCr eventsF v.toNat := wShare_le h.facts _
-  have creditsCS : wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) ≤
-      ∑ v ∈ CS pulled counted, g v :=
+  have creditsCS : wShare preset fork (∑ v ∈ CS counted split, syncCr eventsC v.toNat) ≤
+      ∑ v ∈ CS counted split, g v :=
     (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
       rw [hg]
       unfold syncCr
@@ -14366,12 +14363,12 @@ theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
             (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
           (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
           (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) +
-          wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
-            ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
-          wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) +
-          wShare preset fork (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) +
-          (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat) +
-          (∑ v ∈ CS pulled counted, bandX fin highC v.toNat) +
+          wShare preset fork ((∑ v ∈ CS counted split, propN tailC highC v.toNat) +
+            ∑ v ∈ CS counted split, depPre eventsC v.toNat) +
+          wShare preset fork (∑ v ∈ CS counted split, syncCr eventsC v.toNat) +
+          wShare preset fork (∑ v ∈ CS counted split, consAmt eventsC v.toNat) +
+          (∑ v ∈ CS counted split, bandC tailC highC v.toNat) +
+          (∑ v ∈ CS counted split, bandX fin highC v.toNat) +
           wShare preset fork (∑ v ∈ SC pulled counted split with
             (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, syncCr eventsF v.toNat) +
           wShare preset fork (∑ v ∈ SC pulled counted split with
