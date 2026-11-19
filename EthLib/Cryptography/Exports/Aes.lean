@@ -26,8 +26,7 @@ open EthLib.Exports (Result)
 
 /-- A 16-byte block, or an error for any other length. -/
 def readBlock (what : String) (bytes : ByteArray) : Result Block :=
-  if h : bytes.data.size = 16 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"bad {what} size: {bytes.size}, expected 16")
+  Base.exactBytes 16 bytes fun size => (0, s!"bad {what} size: {size}, expected 16")
 
 /-- The forward cipher of a 16-byte or 32-byte key, or an error for any other length. -/
 def readCiph (key : ByteArray) : Result (Block → Block) :=

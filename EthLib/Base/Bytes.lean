@@ -64,6 +64,20 @@ Examples:
 def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
   if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
 
+/-- The bytes of a buffer as an object of `n` bytes, or an error built from the buffer's length.
+
+The error is built only for a buffer of another length: no padding, no truncation.
+
+Examples:
+* `exactBytes 2 (ByteArray.mk #[10, 20]) id = .ok #v[10, 20]`
+* `exactBytes 3 (ByteArray.mk #[10, 20]) id = .error 2`
+-/
+def exactBytes {ε : Type} (n : Nat) (bytes : ByteArray) (bad : Nat → ε) :
+    Except ε (Vector UInt8 n) :=
+  match exactBytes? n bytes with
+  | some v => .ok v
+  | none => .error (bad bytes.size)
+
 /-- Read the `n` bytes of a buffer that start at an offset.
 
 The caller proves the buffer has room, so the read needs no fallback byte.

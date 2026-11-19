@@ -161,6 +161,7 @@ instance {n : Nat} : ToPy (Vector UInt8 n) := ⟨fun v => .bytes ⟨v.toArray⟩
 
 instance {n : Nat} : FromPy (Vector UInt8 n) := ⟨fun v => do
   let data ← fromPy (α := ByteArray) v
+  -- The shared read of exact bytes is specification code, which this module never imports.
   if h : data.data.size = n then return ⟨data.data, h⟩
   else throw s!"expected {n} bytes, got {data.size}"⟩
 

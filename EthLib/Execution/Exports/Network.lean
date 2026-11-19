@@ -152,8 +152,7 @@ def accessListsAnswerExport (version : UInt64) (request response : ByteArray)
   let req ← run (Message.decode v GET_BLOCK_ACCESS_LISTS_ID request)
   let resp ← run (Message.decode v BLOCK_ACCESS_LISTS_ID response)
   let hashes ← expected.toList.mapM fun b =>
-    if h : b.size = 32 then pure (⟨b.data, h⟩ : Base.Hash32)
-    else throw (0, "an access list hash is not 32 bytes")
+    Base.exactBytes 32 b fun _ => (0, "an access list hash is not 32 bytes")
   return Message.accessListsResponse hashes req resp
 
 /-- A message for a refused partial list, phrased for someone reading a Python traceback. -/
