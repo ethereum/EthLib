@@ -7127,7 +7127,25 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
   have scaleShare := Nat.mul_le_mul_right
     (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)
     (show e1 + e2 ≤ depth + depth by omega)
-  nlinarith [toPositions, splitP, shared, first, second, scaleEnv, scaleShare]
+  have positions : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) ≤
+      (ef + e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
+    rw [splitP]
+    calc _ ≤ ef * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+          e1 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
+          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) :=
+          Nat.add_le_add (Nat.add_le_add shared first) second
+      _ = _ := by ring
+  calc 3 * ∑ v ∈ U, g v
+      ≤ 3 * ((ef + e1 + e2) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
+        Nat.mul_le_mul_left _ (toPositions.trans positions)
+    _ ≤ 3 * ((depth + d) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+        (depth + depth) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
+        Nat.mul_le_mul_left _ (Nat.add_le_add scaleEnv scaleShare)
+    _ = _ := by ring
 
 /-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
