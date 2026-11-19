@@ -2943,6 +2943,9 @@ It also reads the epoch of a fork left at the far future, which no message carri
 There the digest in a bootnode record of each chain reads back the fork that the record's next fork version implies.
 On mainnet the check reads the root from the pinned genesis state, so it runs only with the archives.
 `decodeResponseChunk_forkOfDigest` (`Consensus/Proofs/ReqResp/ResponseBounds.lean`) draws the consequence for req/resp: on a chain that passes the check, the receiver reads a chunk at the type of the sender's fork.
+That type is the one of the gossip topic of the same object, when one carries it.
+`responseDesc_eq_messageDesc` states it for blocks, light client updates, sidecars, payload envelopes and inclusion lists, with the size limit of the topic.
+`responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block, whatever the context bytes name.
 
 ### Weak subjectivity
 
