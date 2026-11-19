@@ -582,13 +582,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
           consolidationsX + depth * proposerCredit +
           -- The proposer share of the shared segment's seat rewards.
+          --
+          -- Those are the rewards of keys that exited before the finalized state.
           depthFin * syncProposer +
           -- C's seat rewards.
           depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
           -- The shared segment's and R's seat debits.
           depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) + 9) / 10 +
         creditedKeys * inc) /
-          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+          -- The credits include the keys' own whistleblower credits, so two quotient steps go.
+          (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) +
       -- C's seat flows, and R's and the shared segment's seat debits.
       (depth + depthFin) * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
         depth * syncProposer)
