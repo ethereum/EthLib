@@ -25354,6 +25354,59 @@ private theorem prefix_append_credits (v : ValidatorIndex) (highC : ℕ)
   exact ⟨by omega, creditScan_append _ _ _ _ pre rest,
     riseScan_append_of_none v.toNat highC pre rest noneBefore⟩
 
+/-- The data at the start of the split's epoch that bounds a key charged in that epoch.
+
+The key's charge step starts in the split's epoch, whose first state `t` is on the shared run.
+
+The run from `t` to the charge is `pre` and the front of C's run.
+
+Its balance at the charge is within the upward band of its effective balance at `t`.
+
+From `t` it rises at most by the credits of the run. -/
+private theorem split_epoch_start_data (h : Setting config checks g split fin pulled anc counted V)
+    (highC : ℕ) {t : BeaconState preset fork} (toT : Run config checks g ⟨fork, t⟩)
+    (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
+    (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      toT.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch t).toNat)
+    {p q : ForkedBeaconState preset} (cf : Run config checks ⟨fork, split⟩ p)
+    (step : Step config checks p q) (rest : Run config checks q ⟨fork, counted⟩)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) {v : ValidatorIndex}
+    (inSplitEpoch : ¬ (getCurrentEpoch split).toNat < (getCurrentEpoch p.state).toNat)
+    (charged : step.departureCharges.any (·.index == v.toNat) = true) :
+    ∃ (c : ForkedBeaconState preset) (before : Run config checks ⟨fork, t⟩ c)
+      (r : Run config checks c p), before.append r = pre.append cf ∧
+      v.toNat < c.state.validators.data.size ∧ getCurrentEpoch c.state = getCurrentEpoch p.state ∧
+      effectiveAt c v.toNat = effectiveAt p v.toNat ∧
+      min (actualBalanceAt c v.toNat) (PinSplit2.capAt c v.toNat) ≤
+        effectiveAt c v.toNat + preset.upwardBand ∧
+      (effectiveAt c v.toNat < PinSplit2.capAt c v.toNat →
+        actualBalanceAt c v.toNat ≤ effectiveAt c v.toNat + preset.upwardBand) ∧
+      actualBalanceAt p v.toNat ≤ actualBalanceAt c v.toNat + netScan v.toNat highC r +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r).1 := by
+  obtain ⟨u0, w0, foundP, -, unset0, -⟩ := charge_exits step charged
+  have hin : v.toNat < p.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundP).1
+  have unset : ∀ w, p.state.validators.data[v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH :=
+    fun w found => by
+      obtain rfl := Option.some.inj (foundP.symm.trans found)
+      exact unset0
+  have pFork : p.fork = fork :=
+    fork_eq_of_run cf ((Run.nil.snoc step).append rest) (Nat.le_refl _)
+  have pEarly : p.fork < .glamsterdam := by rw [pFork]; exact h.early
+  have pFulu : .fusaka ≤ p.fork := by rw [pFork]; exact h.fulu
+  have pEpoch : (getCurrentEpoch p.state).toNat ≤ highC + 1 :=
+    Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
+      ((Run.nil.snoc step).append rest).chainSteps)) endEpochC
+  have splitLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps cf.chainSteps)
+  have sameNat := congrArg UInt64.toNat sameEpoch
+  have sameT : getCurrentEpoch (⟨fork, t⟩ : ForkedBeaconState preset).state =
+      getCurrentEpoch p.state := UInt64.toNat_inj.mp (by simp only at splitLe sameNat ⊢; omega)
+  have hystT := hysteresis_at_epoch_start h toT earlier
+  obtain ⟨insideT, effEq, floor, up, rise⟩ := charge_start_at h highC (pre.append cf) step
+    v.toNat hin unset pFulu pEarly sameT hystT pEpoch charged
+  exact ⟨⟨fork, t⟩, Run.nil, pre.append cf, run_nil_append _, insideT, sameT, effEq, floor, up,
+    rise⟩
+
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
 The epoch's start `b` is on the shared run, before the split.
@@ -25396,39 +25449,19 @@ private theorem K5_charged_split_epoch
         bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat) := by
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   subst site
-  have aFork : a.fork = fork :=
-    fork_eq_of_run front ((Run.nil.snoc step).append post) (Nat.le_refl _)
-  have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
-  have aFulu : .fusaka ≤ a.fork := by rw [aFork]; exact h.fulu
   obtain ⟨u0, w0, foundA0, foundB0, unset0, set0⟩ := charge_exits step charged
-  have hin : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA0).1
-  have unset : ∀ w, a.state.validators.data[v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH :=
-    fun w foundA => by
-      obtain rfl := Option.some.inj (foundA0.symm.trans foundA)
-      exact unset0
   have charges : ∃ c ∈ ((front.snoc step).append post).departureCharges, c.index = v.toNat := by
     obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
     exact ⟨charge, by simp [Run.departureCharges_append, Run.departureCharges, member],
       beq_iff_eq.mp index⟩
-  -- the key's epoch is the split's epoch, which is the epoch of `b`
-  have aEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1 :=
-    Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
-      ((Run.nil.snoc step).append post).chainSteps)) endEpochC
-  have splitLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps front.chainSteps)
-  have sameNat := congrArg UInt64.toNat sameEpoch
-  have sameB : getCurrentEpoch (⟨fork, b⟩ : ForkedBeaconState preset).state =
-      getCurrentEpoch a.state := UInt64.toNat_inj.mp (by simp only at splitLe sameNat ⊢; omega)
-  -- the bands of hysteresis at `b`, the first state of its epoch
-  have hystB := hysteresis_at_epoch_start h toB earlier
-  obtain ⟨insideB, effEq, floor, up, rise⟩ := charge_start_at h highC (pre.append front) step
-    v.toNat hin unset aFulu aEarly sameB hystB aEpoch charged
+  have start := split_epoch_start_data h highC toB pre sameEpoch earlier front step post endEpochC
+    inSplitEpoch charged
   -- the whole run from `b`: the shared part `pre`, then C's run from the split
   have whole := charge_effective_bound_of h toB (y := ⟨fork, counted⟩) rfl
     (pre.append ((front.snoc step).append post)) highC endEpochC
     (DirectSafety.Apriori.Internal.balanceEvents_append pre _ highC replayedP replayedC)
     (pre.append front) step post (Run.append_assoc pre (front.snoc step) post).symm charged
-    ⟨⟨fork, b⟩, Run.nil, pre.append front, run_nil_append _, insideB, sameB, effEq, floor, up, rise⟩
-    (K5_charged_held h member front step post charged)
+    start (K5_charged_held h member front step post charged)
   -- the credits of `pre` are its proposer, whistleblower and sync credits
   have noneBefore : ∀ c ∈ pre.departureCharges, c.index ≠ v.toNat := by
     intro c member index
