@@ -6481,6 +6481,44 @@ private theorem dueList_sum_le_all (X : BeaconState preset fork) (electra : .pec
 private theorem keyCredit_eq (i : ℕ) (e : BalanceEvent preset) :
     keyCredit i e = PinSplit.keyCredit i e := rfl
 
+/-- A whistleblower's share of an amount is at most the amount.
+
+The quotient is at least thirty, so a share of `33/300` of the amount, rounded up, fits. -/
+private theorem wShare_le (facts : PinPresetFacts preset) (x : ℕ) : wShare preset fork x ≤ x := by
+  have quotient := facts.whistleblower fork
+  unfold wShare
+  generalize (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat = W at *
+  have pos : 0 < 10 * W := by omega
+  refine Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul pos).mpr ?_)
+  have big : 33 * x ≤ 10 * W * x := Nat.mul_le_mul_right _ (by omega)
+  have two : (x + 1) * (10 * W) = 10 * W * x + 10 * W := by ring
+  show 33 * x + 10 * W - 1 < (x + 1) * (10 * W)
+  omega
+
+/-- The band of a key is its upward band for each due entry that names it, and these add over keys.
+
+The due entries of a set of targets are the due entries of its keys.
+
+Each entry names one target. -/
+private theorem bandX_sum (X : BeaconState preset fork) (electra : .pectra ≤ fork) (high : ℕ)
+    (T : Finset ValidatorIndex) :
+    ∑ v ∈ T, bandX X high v.toNat = preset.upwardBand * dueAt X high T := by
+  classical
+  have single (v : ValidatorIndex) :
+      bandX X high v.toNat = preset.upwardBand * dueAt X high {v} := by
+    simp [bandX]
+  simp only [single]
+  rw [← Finset.mul_sum]
+  congr 1
+  induction T using Finset.induction_on with
+  | empty =>
+    rw [dueAt_eq X electra high]
+    simp [dueList]
+  | insert a s ha ih =>
+    rw [Finset.sum_insert ha, ih, dueAt_eq X electra high, dueAt_eq X electra high,
+      dueAt_eq X electra high, show insert a s = {a} ∪ s from rfl,
+      dueList_length_union X electra high (Finset.disjoint_singleton_left.mpr ha)]
+
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
@@ -6492,6 +6530,14 @@ The run to R's state bounds the credits to V the same way.
 
 The sets `V`, `K4`, `K5` and `K6` are disjoint, so the sum over their union is at most the caps of X's
 queue: `consolidationsX`, as `high ≤` the epoch of the call and X is within the withdrawal delay.
+
+The keys of `SC` are slashed at C, so they are not in `K4`, `K5`, `K6` or `V`.
+
+Their credits join those of `K4`, `K5` and `K6` in the bound.
+
+A whistleblower's share of their amounts is at most the amounts.
+
+A due entry that names one of them adds its band.
 
 A key of `V` or `K5` weighs three, and the others one.
 
@@ -6524,7 +6570,194 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
       preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
         dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
         3 * dueAt fin high V) ≤
-        (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := sorry
+        (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := by
+  classical
+  have shallow := h.shallow
+  have early := h.early
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨shared⟩ := h.toFin
+  have finEpoch : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitPulled : (getCurrentEpoch split).toNat ≤ (getCurrentEpoch pulled).toNat :=
+    UInt64.le_iff_toNat_le.mp h.called
+  have delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
+  have withinC : highC + 2 ≤ (getCurrentEpoch fin).toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
+  have withinR : high + 2 ≤ (getCurrentEpoch fin).toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
+  obtain ⟨eventsFin, replayedFin⟩ := fromFin.balanceEvents_ok early highC
+  obtain ⟨eventsFinR, replayedFinR⟩ := fromFin.balanceEvents_ok early high
+  have wholeC := Apriori.Internal.balanceEvents_append fromFin tailC highC replayedFin replayedC
+  have wholeR := Apriori.Internal.balanceEvents_append fromFin tail high replayedFinR replayed
+  obtain ⟨Kall, hKall⟩ : ∃ K : Finset ValidatorIndex,
+      K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split :=
+      ⟨_, rfl⟩
+  have boundC := PinSplit.Run.consolidation_credits_le_X_targets (config := config)
+    (checks := checks) shared h.genesis h.caps (fromFin.append tailC) electra early highC wholeC
+    endEpochC withinC delay (Kall.image UInt64.toNat)
+  have boundR := PinSplit.Run.consolidation_credits_le_X_targets (config := config)
+    (checks := checks) shared h.genesis h.caps (fromFin.append tail) electra early high wholeR
+    endEpoch withinR delay (V.image UInt64.toNat)
+  have injective : Function.Injective UInt64.toNat := fun _ _ same => UInt64.toNat_inj.mp same
+  simp only [injective.mem_finset_image] at boundC boundR
+  have amountC : (∑ v ∈ Kall, consAmt eventsC v.toNat) ≤
+      ((dueList fin electra highC Kall).map fun v =>
+        (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
+    rw [← Finset.sum_image (f := fun i => consAmt eventsC i)
+      (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
+    refine le_trans (Finset.sum_le_sum fun i _ => ?_) boundC
+    simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
+    exact Nat.le_add_left _ _
+  have amountR : (∑ v ∈ V, consAmt events v.toNat) ≤
+      ((dueList fin electra high V).map fun v =>
+        (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
+    rw [← Finset.sum_image (f := fun i => consAmt events i)
+      (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
+    refine le_trans (Finset.sum_le_sum fun i _ => ?_) boundR
+    simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
+    exact Nat.le_add_left _ _
+  -- The target sets are disjoint.
+  have d45 : Disjoint (K4 pulled counted V) (K5 counted V) := by
+    rw [Finset.disjoint_left]
+    intro v h4 h5
+    simp only [K4, K5, Finset.mem_filter] at h4 h5
+    exact h5.2.1 h4.1
+  have d46 : Disjoint (K4 pulled counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v h4 h6
+    simp only [K4, K6, Finset.mem_filter] at h4 h6
+    exact h6.2.2 h4.2.1
+  have d56 : Disjoint (K5 counted V) (K6 pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v h5 h6
+    simp only [K5, K6, Finset.mem_filter] at h5 h6
+    exact h5.2.1 h6.1
+  have d456 : Disjoint (K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
+    Finset.disjoint_union_left.mpr ⟨d46, d56⟩
+  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
+    intro v hv hs
+    simp only [Q, quorumVoters, Finset.mem_filter] at hv
+    have unslashed := hv.2
+    unfold slashedFlagAt at hs
+    rw [hs] at unslashed
+    simp at unslashed
+  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
+    intro v hv
+    simp only [Finset.mem_union] at hv
+    rcases hv with (h4 | h5) | h6
+    · simp only [K4, Finset.mem_filter] at h4
+      exact h4.2.2.1
+    · simp only [K5, Finset.mem_filter] at h5
+      exact h5.1
+    · simp only [K6, Finset.mem_filter] at h6
+      exact h6.2.1
+  have dS : Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+      (SC pulled counted split) := by
+    rw [Finset.disjoint_left]
+    intro v hk hs
+    simp only [SC, Finset.mem_filter] at hs
+    exact qS v (inQ v hk) hs.2.1
+  have dKV : Disjoint Kall V := by
+    rw [hKall, Finset.disjoint_left]
+    intro v hk hv
+    simp only [Finset.mem_union] at hk
+    rcases hk with ((h4 | h5) | h6) | hS
+    · simp only [K4, Finset.mem_filter] at h4
+      exact h4.2.2.2 hv
+    · simp only [K5, Finset.mem_filter] at h5
+      exact h5.2.2 hv
+    · simp only [K6, Finset.mem_filter] at h6
+      exact h6.2.2 (h.voting v hv).1
+    · simp only [SC, Finset.mem_filter] at hS
+      have unslashed := (h.voting v hv).2
+      rw [hS.2.1] at unslashed
+      simp at unslashed
+  -- The amounts and the entries split over the three sets of C's keys.
+  have splitAmount : (∑ v ∈ Kall, consAmt eventsC v.toNat) =
+      (∑ v ∈ K4 pulled counted V, consAmt eventsC v.toNat) +
+        (∑ v ∈ K5 counted V, consAmt eventsC v.toNat) +
+        (∑ v ∈ K6 pulled counted, consAmt eventsC v.toNat) +
+        (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) := by
+    rw [hKall, Finset.sum_union dS, Finset.sum_union d456, Finset.sum_union d45]
+  have splitEntries : (dueList fin electra highC Kall).length =
+      (dueList fin electra highC (K4 pulled counted V)).length +
+        (dueList fin electra highC (K5 counted V)).length +
+        (dueList fin electra highC (K6 pulled counted)).length +
+        (dueList fin electra highC (SC pulled counted split)).length := by
+    rw [hKall, dueList_length_union fin electra highC dS,
+      dueList_length_union fin electra highC d456, dueList_length_union fin electra highC d45]
+  -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
+  have floorOf (l : List Validator) : preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
+      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
+    have := List.length_nsmul_le_sum
+      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+      preset.MAX_EFFECTIVE_BALANCE.toNat (by
+        simp only [List.mem_map]
+        rintro _ ⟨v, -, rfl⟩
+        exact UInt64.le_iff_toNat_le.mp
+          (Internal.minimum_cap h.caps.activation h.caps.compounding v))
+    simpa [smul_eq_mul, Nat.mul_comm] using this
+  have floorC := floorOf (dueList fin electra highC Kall)
+  have floorR := floorOf (dueList fin electra high V)
+  -- Both runs charge entries of X's queue, at most those that `consolidationsX` counts.
+  have total : ((dueList fin electra highC Kall).map fun v =>
+        (withdrawalMaxEffectiveBalance preset fork v).toNat).sum +
+      ((dueList fin electra high V).map fun v =>
+        (withdrawalMaxEffectiveBalance preset fork v).toNat).sum ≤
+      (pinTerms config pulled anc fin).consolidationsX := by
+    have hcX : (pinTerms config pulled anc fin).consolidationsX =
+        (((((fin.pendingConsolidations electra).data.toList.filterMap fun c =>
+          fin.validators.data[c.sourceIndex.toNat]?).filter fun v =>
+            !v.slashed &&
+              decide (v.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).map
+              fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)).sum := by
+      unfold pinTerms
+      dsimp only
+      simp only [shallow, electra, ↓reduceIte, ↓reduceDIte]
+    have laterC := dueList_sum_mono fin electra highLe Kall
+      (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+    have laterR := dueList_sum_mono fin electra highLeR V
+      (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+    have union := dueList_sum_union fin electra (getCurrentEpoch pulled).toNat dKV
+      (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+    have all := dueList_sum_le_all fin electra (getCurrentEpoch pulled).toNat (Kall ∪ V)
+      (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+    rw [hcX]
+    omega
+  have shareS := wShare_le (fork := fork) h.facts
+    (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat)
+  rw [bandX_sum fin electra highC (SC pulled counted split)]
+  rw [dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra highC,
+    dueAt_eq fin electra highC, dueAt_eq fin electra high]
+  rw [Nat.le_div_iff_mul_le (by norm_num)]
+  generalize (dueList fin electra highC (K4 pulled counted V)).length = d4 at *
+  generalize (dueList fin electra highC (K5 counted V)).length = d5 at *
+  generalize (dueList fin electra highC (K6 pulled counted)).length = d6 at *
+  generalize (dueList fin electra highC (SC pulled counted split)).length = dS' at *
+  generalize (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) = aS at *
+  generalize wShare preset fork aS = wS at *
+  generalize (dueList fin electra highC Kall).length = dK at *
+  generalize (dueList fin electra high V).length = dV at *
+  generalize ((dueList fin electra highC Kall).map fun v =>
+    (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PK at *
+  generalize ((dueList fin electra high V).map fun v =>
+    (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PV at *
+  generalize (pinTerms config pulled anc fin).consolidationsX = cX at *
+  have bandsK : preset.upwardBand * dS' + preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) ≤
+      3 * (preset.upwardBand * (dK + dV)) := by
+    have : dS' + (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (dK + dV) := by omega
+    calc preset.upwardBand * dS' + preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV)
+        = preset.upwardBand * (dS' + (d4 + d6 + 3 * d5 + 3 * dV)) := (Nat.mul_add _ _ _).symm
+      _ ≤ preset.upwardBand * (3 * (dK + dV)) := Nat.mul_le_mul_left _ this
+      _ = 3 * (preset.upwardBand * (dK + dV)) := by ring
+  have bandsM : 10 * (preset.upwardBand * (dK + dV)) ≤
+      preset.MAX_EFFECTIVE_BALANCE.toNat * dK + preset.MAX_EFFECTIVE_BALANCE.toNat * dV := by
+    calc 10 * (preset.upwardBand * (dK + dV))
+        = (10 * preset.upwardBand) * (dK + dV) := by ring
+      _ ≤ preset.MAX_EFFECTIVE_BALANCE.toNat * (dK + dV) := Nat.mul_le_mul_right _ band
+      _ = preset.MAX_EFFECTIVE_BALANCE.toNat * dK + preset.MAX_EFFECTIVE_BALANCE.toNat * dV :=
+        Nat.mul_add _ _ _
+  omega
 
 /-- L10: the keys whose exit started on R's branch after the split, in `K6`. -/
 theorem bud_exitedR :
