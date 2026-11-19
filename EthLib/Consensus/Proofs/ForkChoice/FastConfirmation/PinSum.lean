@@ -4723,6 +4723,30 @@ private theorem K5_unslashed {v : ValidatorIndex} (member : v ∈ K5 counted V) 
   obtain ⟨⟨-, flag⟩, -, -⟩ := inK5
   simpa [slashedFlagAt, found] using flag
 
+/-- A key whose exit starts on a run is activated at the start of the step that starts it.
+
+The hypothesis `site` is the split of the run at the step that assigns the charged exit.
+
+The activation comes from `ChainStep.exit_assigned_activated` at that step. -/
+private theorem charge_activated {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+    (tail : Run config checks x y) (charge : DepartureCharge)
+    (site : ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,
+      ∃ post : Run config checks b y, (pre.snoc step).append post = tail ∧
+        ∃ v w, a.state.validators.data[charge.index]? = some v ∧
+          b.state.validators.data[charge.index]? = some w ∧
+          v.exitEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
+          charge.amount = v.effectiveBalance.toNat ∧ charge.epoch = w.exitEpoch.toNat) :
+    ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,
+      ∃ post : Run config checks b y, (pre.snoc step).append post = tail ∧
+        ∃ v, a.state.validators.data[charge.index]? = some v ∧ v.exitEpoch = FAR_FUTURE_EPOCH ∧
+          v.activationEpoch ≤ getCurrentEpoch a.state ∧
+          charge.amount = v.effectiveBalance.toNat := by
+  obtain ⟨a, b, pre, step, post, split, v, w, found, later, unset, set, amount, -⟩ := site
+  exact ⟨a, b, pre, step, post, split, v, found, unset,
+    step.chainStep.exit_assigned_activated
+      (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))
+      found later unset set, amount⟩
+
 /-- A key that is not yet activated at the finalized state and has a small charge loses seats.
 
 The key is missing at the finalized state, or its activation there is unassigned.
