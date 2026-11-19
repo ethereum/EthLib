@@ -21852,6 +21852,10 @@ The run from `b` to the split, `pre`, is the end of the shared run.
 
 The state `b` comes after the finalized state, or before it in its epoch.
 
+In the first case the run from the finalized state ends with `pre`.
+
+In the second case `pre` ends with the run from the finalized state.
+
 No step of the run to `b` starts in the epoch of `b`, so no block of that epoch precedes it.
 
 No genesis fact is read.
@@ -21865,8 +21869,10 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       (Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
         ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩,
           getCurrentEpoch fin = getCurrentEpoch b) ∧
-      ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), toB.Contains step →
-        (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat := by
+      (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), toB.Contains step →
+        (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) ∧
+      ((∃ fromB : Run config checks ⟨fork, fin⟩ ⟨fork, b⟩, fromFin = fromB.append pre) ∨
+        ∃ toFinB : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, pre = toFinB.append fromFin) := by
   have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   have gFin : (getCurrentEpoch g.state).toNat ≤ (getCurrentEpoch fin).toNat :=
@@ -21879,7 +21885,7 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       subst gFork
       dsimp only at atGenesis
       exact ⟨gs, Run.nil, toFin.append fromFin, run_nil_append _, UInt64.toNat_inj.mp (by omega),
-        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, fun _ member => by cases member⟩
+        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, (fun _ member => by cases member), .inr ⟨toFin, rfl⟩⟩
     · -- the boundary into the split's epoch is in the run to the finalized state
       obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, hz, hn⟩ := Run.cross_split toFin
         ((getCurrentEpoch fin).toNat - 1) (by omega)
@@ -21892,7 +21898,8 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       subst nFork
       subst cut
       refine ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin, Run.append_assoc _ _ _,
-        UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩, fun {u w} step member => ?_⟩
+        UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩, fun {u w} step member => ?_,
+        .inr ⟨rest, rfl⟩⟩
       cases member with
       | last => omega
       | earlier inner =>
@@ -21911,7 +21918,8 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
     subst nFork
     subst cut
     refine ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest, (Run.append_assoc _ _ _).symm,
-      nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩, fun {u w} step member => ?_⟩
+      nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩, fun {u w} step member => ?_,
+      .inl ⟨pre0.snoc (Step.slot ok), rfl⟩⟩
     rcases (Run.contains_append _ _ _).mp member with early | late
     · have := steps_before_end toFin step early
       simp only [ix] at this
@@ -21994,7 +22002,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have tR := stake_le_total pulledOk
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨b, toB, pre, cut, sameEpoch, link, -⟩ := split_epoch_start toFin fromFin
+  obtain ⟨b, toB, pre, cut, sameEpoch, link, -, -⟩ := split_epoch_start toFin fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
   have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
     tailC highC endEpochC replayedC)
