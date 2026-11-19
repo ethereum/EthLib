@@ -229,7 +229,11 @@ The whistleblower reward of a key slashed on another branch is charged where tha
 
 It is also charged where that key's effective balance can fall below what pays for it in the count.
 
-Inactivity scores and the queue of partial withdrawals are read at the finalized block's state. -/
+Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
+
+The reserve grows as the total active balance shrinks.
+
+For small totals it exceeds all stake, so the pin is vacuous. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -687,6 +691,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- They are read at every key slashable there, its credits, and the seats.
   --
+  -- A key's whistleblower base is the larger of its envelope and its effective balance plus rise.
+  --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
   -- There each deposit the window can apply to a new key is charged up to the cap.
@@ -694,7 +700,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let otherCredits := 3 * (2 * ((∑ i ∈ positions, ebUp i) +
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
         depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
         consolidationsX + depth * proposerCredit +
         depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
@@ -705,6 +711,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let creditGain := if 11 * depth * gainRateMax < capMax
     then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
+  --
+  -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
+  --
+  -- Each credited key pays it once, and a key pays two more if the call reads its exit.
+  let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+    WEIGHT_DENOMINATOR.toNat + 2)
+  let creditUnits := (creditedKeys + 2 * (exitingCount + queueKeys)) * unitGain
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
   -- It can then become eligible there and activate deep in the window, while inactive here.
@@ -723,7 +737,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    creditGain)
+    creditGain + creditUnits)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
