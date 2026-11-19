@@ -558,6 +558,7 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  facts : PinPresetFacts preset
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
   finalized : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split
   called : getCurrentEpoch split ≤ getCurrentEpoch pulled
