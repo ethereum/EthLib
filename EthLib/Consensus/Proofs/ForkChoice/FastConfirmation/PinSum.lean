@@ -5197,6 +5197,153 @@ theorem bud_exitedR :
   obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (i := v.toNat) (Or.inl flag)
   exact mem_positions_filter config pulled anc fin found flag
 
+/-- Three sets with disjoint keys: the weights one, three and one are at most three. -/
+private theorem weighted_le {A B C : Finset ValidatorIndex} (f : ValidatorIndex → ℕ)
+    (ab : Disjoint A B) (ac : Disjoint A C) (bc : Disjoint B C) :
+    ∑ v ∈ A, f v + 3 * ∑ v ∈ B, f v + ∑ v ∈ C, f v ≤ 3 * ∑ v ∈ A ∪ B ∪ C, f v := by
+  rw [Finset.sum_union (Finset.disjoint_union_left.mpr ⟨ac, bc⟩), Finset.sum_union ab]
+  omega
+
+/-- `slashedRB` reads the slashed flag and the withdrawable epoch of the key's record. -/
+private theorem slashedRB_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config state ancestor finalizedState).slashedRB i =
+      decide ((((state.validators.data[i]?).map (·.slashed)).getD false = true) ∧
+        ((state.validators.data[i]?).any fun v => decide (
+          ancestor.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+            v.withdrawableEpoch.toNat)) = true) := rfl
+
+/-- A key that the pin counts as slashed on this branch holds a position of the registry. -/
+private theorem slashedRB_lt (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork)
+    {i : ℕ} (h : (pinTerms config state ancestor finalizedState).slashedRB i = true) :
+    i < state.validators.data.size := by
+  by_contra out
+  have none : state.validators.data[i]? = none := Array.getElem?_eq_none (Nat.le_of_not_lt out)
+  rw [slashedRB_eq] at h
+  simp [none] at h
+
+/-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
+private theorem slashR_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork)
+    (W : Finset ValidatorIndex) :
+    ∑ v ∈ W, slashR (pinTerms config state ancestor finalizedState) v.toNat ≤
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (pinTerms config state ancestor finalizedState).slashedR := by
+  classical
+  have sum : ∑ v ∈ W, slashR (pinTerms config state ancestor finalizedState) v.toNat =
+      ∑ v ∈ W.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
+        = true), preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    rw [Finset.sum_filter]
+    rfl
+  rw [sum, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
+  refine Nat.mul_le_mul_left _ ?_
+  rw [slashedR_eq]
+  refine Finset.card_le_card_of_injOn UInt64.toNat (fun v member => ?_)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)
+  obtain ⟨_, flag⟩ := Finset.mem_filter.mp member
+  exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor
+    finalizedState flag), flag⟩
+
+/-- The classes `K4`, `K5` and `K6` share no key with each other or with `V`. -/
+private theorem classes_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V) (K5 counted V) ∧
+    Disjoint (K4 pulled counted V) (K6 pulled counted) ∧
+    Disjoint (K5 counted V) (K6 pulled counted) ∧
+    Disjoint V (K4 pulled counted V) ∧ Disjoint V (K5 counted V) ∧
+    Disjoint V (K6 pulled counted) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> refine Finset.disjoint_left.mpr fun v a b => ?_
+  · simp only [K4, K5, Finset.mem_filter] at a b
+    exact b.2.1 a.1
+  · simp only [K4, K6, Finset.mem_filter] at a b
+    exact b.2.2 a.2.1
+  · simp only [K5, K6, Finset.mem_filter] at a b
+    exact a.2.1 b.1
+  · simp only [K4, Finset.mem_filter] at b
+    exact b.2.2.2 a
+  · simp only [K5, Finset.mem_filter] at b
+    exact b.2.2 a
+  · simp only [K6, Finset.mem_filter] at b
+    exact b.2.2 (h.voting v a).1
+
+/-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
+
+The slashed, proposer and rounding charges have weight three, as has the whistleblower charge. -/
+private theorem branchR_split (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    ∃ W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      3 * (W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          (pinTerms config state ancestor finalizedState).slashedR +
+        (pinTerms config state ancestor finalizedState).depth *
+          (pinTerms config state ancestor finalizedState).proposerCredit +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+          ((pinTerms config state ancestor finalizedState).depth * preset.SLOTS_PER_EPOCH.toNat +
+            (pinTerms config state ancestor finalizedState).depth *
+              preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+            preset.SYNC_COMMITTEE_SIZE.toNat *
+              (((getCurrentEpoch state).toNat + 1) /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+                ancestor.finalizedCheckpoint.epoch.toNat /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+                (pinTerms config state ancestor finalizedState).depth /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
+  ⟨_, rfl⟩
+
+/-- The sync part of the proposer credit is at most the proposer credit. -/
+private theorem syncProposer_le_credit (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).syncProposer ≤
+      (pinTerms config state ancestor finalizedState).proposerCredit :=
+  Nat.le_add_left _ _
+
+/-- R1 from the count of its rounding bands.
+
+The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
+
+The sync part of the proposer credit fits the proposer credit of each epoch.
+
+The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`. -/
+private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
+    {events eventsF eventsC : List (BalanceEvent preset)}
+    (bands : 3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        (∑ v ∈ K4 pulled counted V, bandR events v.toNat) +
+        3 * (∑ v ∈ K5 counted V, bandR events v.toNat) +
+        (∑ v ∈ K6 pulled counted, bandR events v.toNat) ≤
+      3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+        ((pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+          (pinTerms config pulled anc fin).depth *
+            preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+          preset.SYNC_COMMITTEE_SIZE.toNat *
+            (((getCurrentEpoch pulled).toNat + 1) /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+              anc.finalizedCheckpoint.epoch.toNat /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+              (pinTerms config pulled anc fin).depth /
+                max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)))) :
+    3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        3 * ((pinTerms config pulled anc fin).depth *
+          (pinTerms config pulled anc fin).syncProposer) +
+        (∑ v ∈ (K4 pulled counted V),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+        3 * (∑ v ∈ (K5 counted V),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+        (∑ v ∈ (K6 pulled counted),
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
+      (pinTerms config pulled anc fin).branchR := by
+  classical
+  obtain ⟨W, hW⟩ := branchR_split config pulled anc fin
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  have slashes := weighted_le (A := K4 pulled counted V) (B := K5 counted V)
+    (C := K6 pulled counted) (fun v => slashR (pinTerms config pulled anc fin) v.toNat) d45 d46
+    d56
+  have slashBound := slashR_le config pulled anc fin
+    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+  have credit := Nat.mul_le_mul_left (pinTerms config pulled anc fin).depth
+    (syncProposer_le_credit config pulled anc fin)
+  simp only [Finset.sum_add_distrib] at *
+  rw [hW]
+  omega
+
 /-- R1 (branchR): R's credits to V keys since the split, weight 3.
 
 The slashing of a key on R's branch is charged here for the keys of `K4` and `K5`.
