@@ -9,6 +9,27 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
+  The receiver's store must be closed under the envelopes that it accepts from its view.
+  Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
+  `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
+  `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
+
+- `Store.getNodeChildren_held` shows that the children of a held node can be computed at every fork, when the store's parents sit below their children (`ParentsBelow`).
+  Each child is held and lower in rank.
+
+- `Store.isPayloadVerified_of_getHead` shows that from Gloas a full head of a store has its payload verified by that store.
+
+- `VoteAt.accepted_at_next_slot_of_payloadVote` accepts a held duty vote at the next slot at every fork, or names a collision of bounded honest stores ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas it takes the receiver's check of the payload status that the vote names.
+
+- `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block at every fork, when from Gloas the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Execution.blocks_of_partiallySynchronous` is now its corollary before Gloas, with its statement unchanged.
+  It needs partial synchrony, the sender's read of the receiver's finalized checkpoint, and a receiver that admits the delivered blocks.
+  Otherwise bounded honest stores collide.
+  From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.
+
 - `Store.getHead_exists_of_gloas` shows that from Gloas the head of a store that the handlers build can be computed ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It is the Gloas twin of `Store.getHead_exists`.
   The store must hold its justified state, whose effective balances add up to at most `2 * 10^17` Gwei (`effectiveBalanceSum`).
@@ -355,6 +376,14 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.
+  A caller drops those two arguments.
+
+- In Lean, `VoteAt.accepted_at_next_slot` and `VoteAt.recorded_at_next_slot` no longer take the premise `epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The honest vote data already puts the target at the epoch of the duty slot.
+  A caller drops that argument.
 
 - In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The root of an ancestor walk does not depend on the payload status of its start.

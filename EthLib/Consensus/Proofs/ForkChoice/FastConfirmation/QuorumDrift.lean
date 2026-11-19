@@ -478,7 +478,7 @@ private theorem runs_of_call
   -- The receiver holds the same target state, and its state runs on from the middle state.
   obtain ⟨-, aBlockW, -, aFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨ancW, heldW, -⟩ := (forward w receiver k).reachable.blockStatesFromParents aFoundW
-  obtain rfl : anc = ancW := e.blockStates_eq anchored caller receiver (start u caller)
+  obtain rfl : anc = ancW := e.blockStates_eq anchored (start u caller)
     (start w receiver) (agree u caller w receiver n k callTime receiveTime) held heldW
   have stateLater : boundary ≤ state.slot := by
     have := UInt64.le_iff_toNat_le.mp later
