@@ -4248,17 +4248,27 @@ private theorem round_add_le {inc x S U : ℕ} (incPos : 0 < inc)
     have := Nat.div_add_mod (x + S) inc
     omega
 
-/-- The effective balance of a key that stays on its path is at most the rise of the main regime. -/
+/-- The effective balance of a key that stays on its path is at most the rise of the main regime.
+
+Its `stay` has three cases: it equals R's, it ends at its start, or it is within the ceiling.
+
+In the case where it ends at its start, `start` is within the cap and the rounded top.
+
+The caller proves those two bounds of `start`. -/
 private theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S U : Nat}
     (incPos : 0 < inc)
-    (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max start (min (Bc - Bc % inc) capHigh)))
+    (stay : eC = eR ∨
+      (eC ≤ start ∧ start ≤ capFor + S + U ∧ start ≤ (high + band) - (high + band) % inc + S + U) ∨
+      (eC ≤ Bc + band ∧ eC ≤ max start (min (Bc - Bc % inc) capHigh)))
     (startLe : start ≤ max finEB ((high + S) - (high + S) % inc))
     (aligned : eC % inc = 0) (capped : eC ≤ capFor + S + U) (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
       (max finEB (high - high % inc))) - eR) + S + U := by
-  rcases stay with same | ⟨boundary, update⟩
+  rcases stay with same | ⟨atStart, viaCap, viaTop⟩ | ⟨boundary, update⟩
   · omega
+  · have b := round_add_le (x := high) incPos slack
+    omega
   · have alignedLe : ∀ x, eC ≤ x → eC ≤ x - x % inc := fun x le => by
       have := rounded_mono inc le
       rw [aligned] at this
@@ -7300,11 +7310,13 @@ private theorem rise_kept (config : Config) (pulled anc fin : BeaconState preset
 
 /-- A key on its kept arm has an effective balance within its rise, the flows and their slack.
 
-The key's effective balance stays at that of R or within the ceiling of its balance.
+The key's effective balance stays at that of R, ends at its start, or is within the ceiling.
 
 The ceiling is within `riseTop` and the flows, and the slack is paid when there are flows.
 
-It starts from any state: `start` bounds the effective balance there. -/
+It starts from any state: `start` bounds the effective balance there.
+
+A key that ends at its start has `start` within the cap and within the rounded top of `H`. -/
 private theorem rise_close (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ)
     {H : ℕ} (hH : H = riseTop (pinTerms config pulled anc fin) pulled fin i)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
@@ -7313,8 +7325,12 @@ private theorem rise_close (config : Config) (pulled anc fin : BeaconState prese
     (alignedC : eC % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (startLe : start ≤ max (balanceAt fin i)
       ((H + S) - (H + S) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
-    (stay : eC = balanceAt pulled i ∨ (eC ≤ Bc + preset.downwardBand ∧
-      eC ≤ max start (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
+    (stay : eC = balanceAt pulled i ∨
+      (eC ≤ start ∧ start ≤ capForOf (pinTerms config pulled anc fin) pulled i + S + U ∧
+        start ≤ (H + preset.downwardBand) -
+          (H + preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
+      (eC ≤ Bc + preset.downwardBand ∧
+        eC ≤ max start (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (capped : eC ≤ capForOf (pinTerms config pulled anc fin) pulled i + S + U)
     (ceiling : Bc ≤ H + S)
     (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
@@ -16370,6 +16386,8 @@ C's run may end at any state, so a prefix of it closes the same way.
 
 The start of the effective balance's ceiling is any state's, bounded as `rise_close` reads it.
 
+A key that ends at its start has the two bounds of `start` that `rise_close` reads, for each slack.
+
 Its bound may use the ceiling `Bc ≤ riseTop + S` of the slack `S` that the closing chooses.
 
 At the finalized state it is `balanceAt fin`, and the bound is `Nat.le_max_left`.
@@ -16433,6 +16451,15 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
           (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) %
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
+      (balanceAt ending v.toNat ≤ start ∧ ∀ S U : ℕ,
+        Bc ≤ riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+        (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
+          (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) →
+        start ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U ∧
+          start ≤ (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
+            preset.downwardBand) - (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
+            preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
       (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
         balanceAt ending v.toNat ≤ max start
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
@@ -16573,7 +16600,10 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       balanceAt ending v.toNat ≤
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
     fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
-      alignedC (by subst hH; exact startLe S ceiling) stay cap ceiling slack
+      alignedC (by subst hH; exact startLe S ceiling)
+      (stay.imp_right fun st => st.elim
+        (fun ⟨atStart, bounds⟩ => Or.inl ⟨atStart, by subst hH; exact bounds S U ceiling slack⟩)
+        Or.inr) cap ceiling slack
   have fK : flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
       flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
     simp [flowK, kept]
@@ -17041,7 +17071,8 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     (voter_not_withdrawn h fromFin tail v unslashed late
       (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps fromC.chainSteps)))
     P hP Df D q gc Cr M Bc _ hDf hD hq hM hform hBc
-    rateLow maxLe (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) startLe stay
+    rateLow maxLe (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) startLe
+    (Or.imp_right Or.inr stay)
     (fun _ => Nat.le_trans cappedC (Nat.le_add_right _ _)) creditsLe noCredit) creditsLe
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
