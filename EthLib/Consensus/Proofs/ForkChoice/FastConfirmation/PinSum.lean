@@ -4185,17 +4185,19 @@ private theorem step_flip_min {m n : ForkedBeaconState preset} (step : Step conf
   rw [credit] at flip ⊢
   omega
 
-/-- A step that makes a registered key compound is a block step, so it stays in its epoch.
+/-- A step that makes a registered key compound is not a slot step.
 
 A slot step keeps whether each validator of its first state compounds. -/
-private theorem step_flip_epoch {m n : ForkedBeaconState preset} (step : Step config checks m n)
+private theorem step_flip_not_slot {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork)
     (i : ℕ) (inside : i < m.state.validators.data.size)
     (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
     (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
-    (getCurrentEpoch n.state).toNat = (getCurrentEpoch m.state).toNat := by
+    ∀ ok : advanceSlotAcross config checks m = .ok n, step ≠ Step.slot ok := by
+  intro ok same
+  subst same
   have electraM : .pectra ≤ m.fork := Nat.le_trans (by decide) fulu
-  have electraN : .pectra ≤ n.fork := Nat.le_trans electraM step.chainStep.fork_le
+  have electraN : .pectra ≤ n.fork := Nat.le_trans electraM (Step.slot ok).chainStep.fork_le
   obtain ⟨v, found⟩ : ∃ v, m.state.validators.data[i]? = some v :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
   obtain ⟨w, foundN, switched⟩ := compounding_of_cap electraN large
@@ -4210,12 +4212,23 @@ private theorem step_flip_epoch {m n : ForkedBeaconState preset} (step : Step co
     rw [capAt_of_found electraM found, yes] at flat
     simp at flat
     omega
+  obtain ⟨w', found', same⟩ := slot_compounding_kept ok fulu early found
+  have equal := Option.some.inj (found'.symm.trans foundN)
+  subst equal
+  simp [switched, plain] at same
+
+/-- A step that makes a registered key compound stays in its epoch.
+
+It is a block step, and a block keeps the slot. -/
+private theorem step_flip_epoch {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork)
+    (i : ℕ) (inside : i < m.state.validators.data.size)
+    (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
+    (getCurrentEpoch n.state).toNat = (getCurrentEpoch m.state).toNat := by
   cases step with
   | slot ok =>
-    obtain ⟨w', found', same⟩ := slot_compounding_kept ok fulu early found
-    have equal := Option.some.inj (found'.symm.trans foundN)
-    subst equal
-    simp [switched, plain] at same
+    exact absurd rfl (step_flip_not_slot (Step.slot ok) early fulu i inside flat large ok)
   | @block f s t engine signed due ok =>
     obtain ⟨-, processed, -⟩ := applySignedBlock_ok ok
     have slot := (frame_processBlock processed).slot
