@@ -11944,6 +11944,45 @@ private theorem slot_idle_step {g m n : ForkedBeaconState preset}
   simp only [List.filter_false, List.map_nil, List.sum_nil] at sources
   omega
 
+/-- A block step gives no gross credit to a key that is not active and holds no seat.
+
+A key that is not active at the epoch of the step is not its proposer.
+
+A key whose activation is too late for a committee to sample it holds no seat. -/
+private theorem block_idle_step {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    {f : Fork} {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
+    {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, s⟩ = false}
+    {ok : applySignedBlock config checks engine s signed true = .ok t}
+    (shared : Run config checks g ⟨f, s⟩) (fulu : .fusaka ≤ f) (early : f < .glamsterdam) (v : ℕ)
+    (notActive : ∀ w, s.validators.data[v]? = some w →
+      isActiveValidator w (getCurrentEpoch s) = false)
+    (notSeated : ∀ w, t.validators.data[v]? = some w → w.activationEpoch = FAR_FUTURE_EPOCH ∨
+      (getCurrentEpoch t).toNat + 1 < w.activationEpoch.toNat) :
+    stepCredit (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) v
+      (Step.block engine signed due ok) = 0 := by
+  obtain ⟨K, -, proposer, keys⟩ := block_step_gross_keys genesis apart shared fulu early
+    (engine := engine) (signed := signed) (due := due) (ok := ok)
+  by_contra nonzero
+  rcases keys v (Nat.pos_of_ne_zero nonzero) with member | ⟨altair, w, found, seat⟩
+  · obtain ⟨p, read, same⟩ := proposer v member
+    have active := (Run.lookaheadActive covers genesis shared early).proposer_active fulu read
+    rw [same] at active
+    obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
+    rw [notActive w found] at isActive
+    exact Bool.false_ne_true isActive
+  · have run := shared.snoc (Step.block engine signed due ok)
+    obtain ⟨j, w', found', keyed, assigned, late⟩ :=
+      (run.syncCommittee_activation_bounded genesis altair).1 w.pubkey seat
+    obtain rfl := (run.pubkeysDistinct genesis).index_eq found found' keyed.symm
+    obtain rfl := Option.some.inj (found.symm.trans found')
+    rcases notSeated w found with far | later
+    · exact assigned far
+    · have bound : w.activationEpoch.toNat ≤ (getCurrentEpoch t).toNat + 1 := late
+      omega
+
 /-- A key that is idle along a prefix of C's run has a balance at most its credits there.
 
 The key is two epochs from its activation at the end of the run.
