@@ -6592,6 +6592,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Consensus/Proofs/PqKeys/`
 - `EthLib/Consensus/Proofs/SigningRandomOracle.lean`
 - `EthLib/Cryptography/Proofs/Aes/`
+- `EthLib/Cryptography/Proofs/Aggregation/`
 - `EthLib/Cryptography/Proofs/BadOnBudget.lean`
 - `EthLib/Cryptography/Proofs/BadOnGrowth.lean`
 - `EthLib/Cryptography/Proofs/Bls/`
