@@ -249,17 +249,7 @@ private theorem Kept.withdrawals {capella : .shapella ≤ fork}
         exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       _ _ _ _ _ _ applied
     all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      exact Kept.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of Kept (Kept.refl _) expected ok
 
 private theorem Kept.blockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
