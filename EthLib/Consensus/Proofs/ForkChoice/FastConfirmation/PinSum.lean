@@ -1361,10 +1361,15 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
     rcases Nat.eq_zero_or_pos (events.map (syncDebit i.toNat)).sum with zero | positive
     · have same : low - (events.map (syncDebit i.toNat)).sum = low := by omega
       rw [same] at eff
-      rw [bandEq, if_neg (by omega), zero]
+      have noBand : bandR events i.toNat = 0 := by
+        rw [bandEq]
+        simp [zero]
       omega
     · have mod := Nat.mod_lt (low - (events.map (syncDebit i.toNat)).sum) incPos
-      rw [bandEq, if_pos positive]
+      have band : bandR events i.toNat =
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 := by
+        rw [bandEq]
+        simp [positive]
       omega
 
 /-! ### One key's reward in an epoch pass -/
