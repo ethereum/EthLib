@@ -435,4 +435,39 @@ theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
     rw [UInt64.toNat_mod]
     exact Nat.mod_le _ _)), UInt64.toNat_mod]
 
+/-- A share of a total, at least the least churn and rounded down to an increment, is bounded.
+
+It is at least one increment, and at most the least churn plus the total. -/
+theorem roundToIncrement_share_bounds {config : Config} (total quotient : Gwei)
+    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA) :
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+        (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
+          (total / quotient))).toNat ∧
+      (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
+          (total / quotient))).toNat ≤
+        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
+  rw [toNat_roundToIncrement, toNat_max, UInt64.toNat_div]
+  have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    UInt64.lt_iff_toNat_lt.mp increment
+  have minimum := UInt64.le_iff_toNat_le.mp minimum
+  have share := Nat.div_le_self total.toNat quotient.toNat
+  have amountLower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+      max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) := by
+    omega
+  have amountUpper : max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
+      (total.toNat / quotient.toNat) ≤
+        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
+    omega
+  generalize max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) =
+    amount at *
+  have split := Nat.mod_add_div amount preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  have whole : 1 ≤ amount / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    (Nat.le_div_iff_mul_le positive).mpr (by omega)
+  have lower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+      amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    have := Nat.le_mul_of_pos_right preset.EFFECTIVE_BALANCE_INCREMENT.toNat whole
+    omega
+  exact ⟨lower, Nat.le_trans (Nat.sub_le _ _) amountUpper⟩
+
 end EthLib.Consensus
