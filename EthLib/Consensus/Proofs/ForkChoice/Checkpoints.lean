@@ -864,6 +864,8 @@ A new block enters the store at its root, with the state after it.
 
 The store before the pull-up has the justified checkpoints of the store before the block.
 
+Its finalized checkpoint is that of the store before the block or that of the state.
+
 On that store with the state's checkpoints, the pull-up records the block's pulled-up checkpoint.
 
 It then updates the unrealized checkpoints.
@@ -881,6 +883,8 @@ theorem onBlock_pulledUp {before after : Store preset fork} {checks : SignatureC
       before.getCurrentStoreEpoch config = .ok epoch ∧
       (base.justifiedCheckpoint = before.justifiedCheckpoint ∨
         base.justifiedCheckpoint = state.currentJustifiedCheckpoint) ∧
+      (base.finalizedCheckpoint = before.finalizedCheckpoint ∨
+        base.finalizedCheckpoint = state.finalizedCheckpoint) ∧
       base.unrealizedJustifiedCheckpoint = before.unrealizedJustifiedCheckpoint ∧
       ((computeEpochAtSlot preset signed.message.slot < epoch ∧
           after = (base.updateUnrealizedCheckpoints pulled.currentJustifiedCheckpoint
@@ -937,12 +941,21 @@ theorem onBlock_pulledUp {before after : Store preset fork} {checks : SignatureC
   have justified := boosted.updateCheckpoints_justifiedCheckpoint state.currentJustifiedCheckpoint
     state.finalizedCheckpoint
   rw [boostSame.justified, recordSame.justified] at justified
+  have finalized : (boosted.updateCheckpoints state.currentJustifiedCheckpoint
+      state.finalizedCheckpoint).finalizedCheckpoint = before.finalizedCheckpoint ∨
+      (boosted.updateCheckpoints state.currentJustifiedCheckpoint
+        state.finalizedCheckpoint).finalizedCheckpoint = state.finalizedCheckpoint := by
+    have same : boosted.finalizedCheckpoint = before.finalizedCheckpoint := by
+      rw [boostSame.finalized, recordSame.finalized]
+    unfold Store.updateCheckpoints
+    split <;> dsimp only <;> split
+    all_goals first | exact .inl same | exact .inr rfl
   refine .inr ⟨blockRoot, state, pulled,
     { boosted.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint with
       unrealizedJustifications := (boosted.updateCheckpoints state.currentJustifiedCheckpoint
         state.finalizedCheckpoint).unrealizedJustifications.insert blockRoot
           pulled.currentJustifiedCheckpoint }, now, hashed, fresh, blockFields, stateFields,
-    mapError_ok_iff.mp processed, clock, justified, ?_, ?_⟩
+    mapError_ok_iff.mp processed, clock, justified, finalized, ?_, ?_⟩
   · show (boosted.updateCheckpoints _ _).unrealizedJustifiedCheckpoint = _
     rw [updateCheckpoints_unrealizedJustifiedCheckpoint, boostSame.unrealizedJustified,
       recordSame.unrealizedJustified]
@@ -968,7 +981,7 @@ theorem onBlock_unrealized_epoch_le {before after : Store preset fork}
           (after.justifiedCheckpoint = state.currentJustifiedCheckpoint ∨
             after.justifiedCheckpoint = pulled.currentJustifiedCheckpoint)) := by
   rcases onBlock_pulledUp added with rfl | ⟨blockRoot, state, pulled, base, epoch, -, -, -,
-      states, run, -, mid, baseU, moved⟩
+      states, run, -, mid, -, baseU, moved⟩
   · exact ⟨UInt64.le_refl _, .inl rfl⟩
   have bounds := unrealized_bounds base pulled.currentJustifiedCheckpoint
     pulled.finalizedCheckpoint
@@ -1005,7 +1018,7 @@ private theorem adoption_block {before after : Store preset fork} {epoch : Epoch
   have monotone := Store.onBlock_checkpointsAdvance added
   have raised := (onBlock_unrealized_epoch_le added).1
   rcases onBlock_pulledUp added with rfl | ⟨blockRoot, state, pulled, base, now, -, -,
-      blockFields, fields, run, nowOk, -, -, moved⟩
+      blockFields, fields, run, nowOk, -, -, -, moved⟩
   · exact old
   cases Except.ok.inj (nowOk.symm.trans clock)
   have pending := unrealized_bounds base pulled.currentJustifiedCheckpoint

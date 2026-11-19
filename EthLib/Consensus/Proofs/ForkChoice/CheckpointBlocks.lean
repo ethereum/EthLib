@@ -1475,7 +1475,7 @@ private theorem origins_block {before after : Store preset fork} {epoch : Epoch}
     Origins (anchorState := anchorState) (anchorBlock := anchorBlock) after epoch := by
   have original := added
   rcases Store.onBlock_pulledUp added with rfl | ⟨blockRoot, state, pulled, base, now, hashed,
-      fresh, blockFields, fields, run, nowOk, baseJ, baseU, moved⟩
+      fresh, blockFields, fields, run, nowOk, baseJ, -, baseU, moved⟩
   · exact old
   cases Except.ok.inj (nowOk.symm.trans clock)
   obtain ⟨⟨current, currentOk, slotLe⟩, _⟩ := Store.onBlock_checks hashed fresh original
