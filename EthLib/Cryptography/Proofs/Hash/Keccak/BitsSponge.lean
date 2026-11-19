@@ -13,9 +13,9 @@ FIPS 202 Appendix B.1 orders the bits of each byte from least significant to mos
 
 This file proves that the two sponges agree in that order for one squeezed block.
 
-The absorbing covers every positive byte rate that is a multiple of 8.
+The proof covers every positive byte rate that is a multiple of 8.
 
-The whole sponge covers every such rate below 200 bytes, as FIPS 202 §4 asks.
+FIPS 202 §4 defines the sponge only for rates below 200 bytes, which include those of both hashes.
 
 Keccak-256 and Keccak-512 therefore equal their bit models on every message.
 -/
@@ -459,12 +459,12 @@ theorem outputByte_eq_squeeze512 (a : Keccak.State) (i : Fin 64) :
 
 The output fits in one rate block, so FIPS 202 Algorithm 8 stops before another permutation. -/
 theorem sponge_eq_of_squeeze {rate outBytes : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate)
-    (hlt : rate < 200) (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
+    (hout : outBytes ≤ rate) (sq : Keccak.State → Vector UInt8 outBytes)
     (hsq : ∀ (a : Keccak.State) (i : Fin outBytes), (sq a)[i] = outputByte (ofLanes a) i.val)
     (msg : ByteArray) :
     sq (Keccak.spongeAbsorb Keccak.keccakF rate msg) =
-      sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) (by omega)
-        (Nat.mul_le_mul_left 8 hout) msg := by
+      sponge (rateBits := 8 * rate) (Nat.mul_pos (by decide) hr) (Nat.mul_le_mul_left 8 hout)
+        msg := by
   apply Vector.ext
   intro i hi
   have out := hsq (Keccak.spongeAbsorb Keccak.keccakF rate msg) ⟨i, hi⟩
@@ -485,14 +485,14 @@ theorem keccak512_getElem (msg : ByteArray) (i : Nat) (h : i < 64) :
 theorem keccak256_eq (msg : ByteArray) : Keccak.keccak256 msg = keccak256 msg := by
   simpa only [Keccak.keccak256, Keccak.RATE_256, Keccak.DIGEST_LEN_256, keccak256] using
     sponge_eq_of_squeeze (rate := 136) (outBytes := Keccak.DIGEST_LEN_256) (by decide) ⟨17, rfl⟩
-      (by decide) (by decide) Keccak.Internal.squeeze256
+      (by decide) Keccak.Internal.squeeze256
       (fun a i => (outputByte_eq_squeeze a i).symm) msg
 
 /-- The lane implementation of Keccak-512 equals the bit model, for every message. -/
 theorem keccak512_eq (msg : ByteArray) : Keccak.keccak512 msg = keccak512 msg := by
   simpa only [Keccak.keccak512, Keccak.RATE_512, Keccak.DIGEST_LEN_512, keccak512] using
     sponge_eq_of_squeeze (rate := 72) (outBytes := Keccak.DIGEST_LEN_512) (by decide) ⟨9, rfl⟩
-      (by decide) (by decide) Keccak.Internal.squeeze512
+      (by decide) Keccak.Internal.squeeze512
       (fun a i => (outputByte_eq_squeeze512 a i).symm) msg
 
 end EthLib.Cryptography.Models.KeccakBits

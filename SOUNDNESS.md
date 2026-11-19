@@ -1267,6 +1267,25 @@ It runs the blocks from its own initial value, and its digest puts the least sig
 `pad_eq_spec` proves that the padding of the code is the padding of the model.
 The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check the hash against the test vectors on Bosselaers' RIPEMD-160 page.
 
+### Keccak
+
+The Keccak proofs compare the lane implementation with a model on single bits (`Proofs/Models/KeccakBits.lean`).
+The model is one reading of FIPS 202 Algorithms 1 to 9.
+It holds the state as a function of the coordinates `x`, `y` and `z`, and defines the five step mappings, the 24 rounds, pad10*1, and the sponge for an output that fits in one rate block.
+It orders the bits of each byte from the least significant, as FIPS 202 Appendix B.1 does.
+It imports nothing from the lane implementation, so it derives the rho offsets and the round constants from Algorithms 2 and 5 rather than sharing the tables.
+The model is the trust boundary.
+The theorems below tie the code to the model, and only a reader who checks the model against FIPS 202 ties the code to the standard.
+
+`keccak256_eq` and `keccak512_eq` (`Proofs/Hash/Keccak/BitsSponge.lean`) prove that Keccak-256 and Keccak-512 equal the model on every message, with no bound on its length.
+`absorbAll_eq` proves the same for the absorbing at every positive rate that is a multiple of 8 bytes.
+`keccakF1600_eq` (`Proofs/Exports/Keccak.lean`) proves that the export of Keccak-f[1600] returns the model permutation of every 200-byte state.
+`keccakF_bijective` (`Proofs/Hash/Keccak/Permutation.lean`) proves that Keccak-f[1600] is a permutation of the 2^1600 states, as FIPS 202 §3 states.
+`pad_injective` (`Proofs/Hash/Keccak/Basic.lean`) proves that two different messages never pad to the same string, at any positive rate.
+`digest_absorb_absorb` (`Proofs/Hash/Keccak/Hasher.lean`) proves that the incremental hasher gives Keccak-256 of the two pieces it absorbed, wherever the message is cut.
+`size_pending_lt` proves that every hasher reached from the empty one keeps fewer pending bytes than the rate, so its digest pads them into one block.
+The Python tests (`bindings/python/tests/keccak`) check the hashes and the permutation against pinned vectors.
+
 ### KZG
 
 No text is agreed yet as the normative KZG specification.

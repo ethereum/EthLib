@@ -105,6 +105,11 @@ theorem padding_data (rate len : Nat) :
     (padding rate len).size = rate - len % rate := by
   simp [ByteArray.size, padding_data]
 
+/-- The padding has at most `rate` bytes, so it fits in one block. -/
+theorem size_padding_le (rate len : Nat) : (padding rate len).size ≤ rate := by
+  rw [size_padding]
+  exact Nat.sub_le rate (len % rate)
+
 /-- The padded length is the block count times the rate. -/
 theorem size_pad {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
     (pad rate msg).size = rate * blockCount rate msg.size := by

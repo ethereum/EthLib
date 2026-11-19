@@ -373,16 +373,24 @@ where
 
 /-! ## The sponge
 
-FIPS 202 §5.2 defines the Keccak family on byte strings `M` and output lengths `d`:
+FIPS 202 §5.2 defines the Keccak family on bit strings `N` and output lengths `d`:
 
 ```text
-    Keccak[c](M, d) = SPONGE[Keccak-p[1600, 24], pad10*1, 1600 - c](M, d)
+    Keccak[c](N, d) = SPONGE[Keccak-p[1600, 24], pad10*1, 1600 - c](N, d)
 ```
 
-- Keccak-256 is `Keccak[512](M, 256)`,
-- Keccak-512 is `Keccak[1024](M, 512)`.
+- Keccak-256 is `Keccak[512](N, 256)`,
+- Keccak-512 is `Keccak[1024](N, 512)`.
 
-In bytes, the first padding byte is `0x01` for Keccak-256 and `0x06` for SHA3-256.
+This library takes `N` as a byte string, so the padding fills whole bytes.
+
+SHA3-256 pads with `0x06`, then any zero bytes, then `0x80` (FIPS 202 Appendix B.2, Table 6).
+
+A single padding byte of SHA3-256 holds both, so it is `0x86`.
+
+Keccak-256 and Keccak-512 add no `01` suffix: they pad with `0x01`, any zero bytes, then `0x80`.
+
+A single padding byte of Keccak holds both, so it is `0x81`.
 
 The Keccak reference, version 3.0, calls Keccak-256 Keccak[r = 1088, c = 512].
 
@@ -600,7 +608,7 @@ The rate must be positive and below 200 bytes, since FIPS 202 §4 asks `0 < r < 
 
 It must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or in `0^c`.
 
-For other rates, the state is not specified.
+FIPS 202 defines no sponge at other rates.
 
 FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
 def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=

@@ -80,6 +80,25 @@ theorem padding_mod (rate len : Nat) : padding rate (len % rate) = padding rate 
 /-- The rate of Keccak-256 is a whole number of lanes. -/
 theorem lanes_rate : 8 ∣ RATE_256 := ⟨17, rfl⟩
 
+/-- After an absorb, the pending bytes number the bytes not yet absorbed, mod the rate. -/
+theorem size_pending_absorb (h : Hasher256) (data : ByteArray) :
+    (h.absorb data).pending.size = (h.pending.size + data.size) % RATE_256 := by
+  simp only [Hasher256.absorb, ByteArray.size_extract, ByteArray.size_append, Nat.min_self,
+    RATE_256]
+  omega
+
+/-- Every hasher reached from the empty one by absorbs keeps fewer pending bytes than the rate. -/
+theorem size_pending_lt (pieces : List ByteArray) :
+    (pieces.foldl Hasher256.absorb Hasher256.empty).pending.size < RATE_256 := by
+  suffices ∀ h : Hasher256, h.pending.size < RATE_256 →
+      (pieces.foldl Hasher256.absorb h).pending.size < RATE_256 from
+    this _ (by simp [Hasher256.empty, RATE_256])
+  induction pieces with
+  | nil => exact fun _ h => h
+  | cons data pieces ih =>
+    intro h _
+    exact ih _ (by rw [size_pending_absorb]; exact Nat.mod_lt _ (by decide))
+
 /-- Absorbing two pieces is absorbing the two of them at once. -/
 theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
     (h.absorb a).absorb b = h.absorb (a ++ b) := by
