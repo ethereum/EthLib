@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Serialization.Rlp.Codec
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Scalar
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: typed RLP codecs
@@ -260,19 +261,20 @@ instance : LawfulCodec ByteArray where
 
 instance {n : Nat} : LawfulCodec (Vector UInt8 n) where
   ofItem_toItem v := by
-    have hSize : ({ data := v.toArray } : ByteArray).size = n := by simp [ByteArray.size]
-    simp [Codec.ofItem, Codec.toItem, Item.toBytes, bind, Except.bind, hSize]
+    simp [Codec.ofItem, Codec.toItem, Item.toBytes, bind, Except.bind]
   toItem_of_ofItem {item v} h := by
     simp only [Codec.ofItem, bind, Except.bind] at h
     cases hb : item.toBytes with
     | error e => simp [hb] at h
     | ok data =>
       simp only [hb] at h
-      split at h
-      · cases h
+      by_cases hs : data.size = n
+      · rw [exactBytes_of_size_eq _ hs] at h
+        cases h
         rw [Item.toBytes_eq_ok.mp hb]
         rfl
-      · cases h
+      · rw [exactBytes_of_size_ne _ hs] at h
+        cases h
 
 /-- Reading back the items of a list of values gives the values. -/
 theorem mapM_ofItem_map_toItem {α : Type} [Codec α] [LawfulCodec α] :

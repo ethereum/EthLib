@@ -89,9 +89,7 @@ def bytes (what : String) (j : Json) : Read ByteArray := bytesOf what false j
 /-- A byte string of exactly `n` bytes. -/
 def fixed (what : String) (n : Nat) (j : Json) (upper : Bool := false) :
     Read (Vector UInt8 n) := do
-  let b ← bytesOf what upper j
-  if h : b.data.size = n then pure ⟨b.data, h⟩
-  else reject s!"{what}: {b.size} bytes, not {n}"
+  exactBytes n (← bytesOf what upper j) fun size => s!"{what}: {size} bytes, not {n}"
 
 /-- An address of 20 bytes, whose hex digits may be uppercase. -/
 def address (what : String) (j : Json) : Read Address := fixed what 20 j (upper := true)

@@ -4,6 +4,7 @@ public import EthLib.Networking.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Serialization.Proofs.Rlp.Codec
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the RLPx handshake
@@ -177,14 +178,14 @@ theorem decodeBody_encode {α : Type} [Codec α] {m : α}
 /-- `auth` reads back from its RLP item. -/
 theorem AuthMessage.ofItem_toItem (m : AuthMessage) :
     Codec.ofItem (Codec.toItem m) = .ok m := by
-  simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes, ByteArray.size,
-    toScalar_scalar, bind, Except.bind, pure, Except.pure]
+  simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes,
+    toScalar_scalar, Base.exactBytes_mk_toArray, bind, Except.bind, pure, Except.pure]
 
 /-- `ack` reads back from its RLP item. -/
 theorem AckMessage.ofItem_toItem (m : AckMessage) :
     Codec.ofItem (Codec.toItem m) = .ok m := by
-  simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes, ByteArray.size,
-    toScalar_scalar, bind, Except.bind, pure, Except.pure]
+  simp [Codec.toItem, Codec.ofItem, leadingFields, Item.toItems, Item.toBytes,
+    toScalar_scalar, Base.exactBytes_mk_toArray, bind, Except.bind, pure, Except.pure]
 
 /-! ## Further list items -/
 

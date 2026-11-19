@@ -83,7 +83,7 @@ private theorem one_ne_max : ¬(0 + 1 : UInt64) = 2 ^ 64 - 1 := by decide +kerne
 /-- A 32-byte key read back from its bytes is that key. -/
 private theorem readKey_packBytes (v : Key) : readKey (packBytes v) = .ok v := by
   unfold readKey
-  rw [dite_eq_left (size_packBytes v)]
+  rw [exactBytes_of_size_eq _ (size_packBytes v)]
   rfl
 
 /-- The first 32 bytes of a key followed by other bytes are that key. -/
