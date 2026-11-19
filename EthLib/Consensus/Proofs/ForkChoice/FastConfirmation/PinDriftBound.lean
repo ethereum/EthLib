@@ -2334,20 +2334,9 @@ private theorem Run.effective_floor_of_envelope {x y : ForkedBeaconState preset}
       have onPath : m ∈ tail.balancePath ∧ n ∈ tail.balancePath := by
         rw [← cut, Run.balancePath_append]
         have atM := List.mem_of_mem_getLast? (Run.balancePath_ends before).2
-        have ends := Step.balancePath_ends step
-        have atN := List.mem_of_mem_getLast? ends.2
-        refine ⟨List.mem_append_left _ ?_, List.mem_append_left _ ?_⟩
-        · simp [Run.balancePath, atM]
-        · cases hp : step.balancePath with
-          | nil => simp [hp] at ends
-          | cons a l =>
-            have head : a = m := by simpa [hp] using ends.1
-            rcases List.mem_cons.mp (hp ▸ atN) with same | later
-            · have atBefore : n ∈ before.balancePath := by
-                rw [same, head]
-                exact atM
-              simp [Run.balancePath, atBefore]
-            · simp [Run.balancePath, hp, later]
+        have atN := List.mem_of_mem_getLast? (Run.balancePath_ends (before.snoc step)).2
+        exact ⟨List.mem_append_left _ (by simp [Run.balancePath, atM]),
+          List.mem_append_left _ atN⟩
       have top := envelope m onPath.1
       have closeBand := near n onPath.2
       omega)
