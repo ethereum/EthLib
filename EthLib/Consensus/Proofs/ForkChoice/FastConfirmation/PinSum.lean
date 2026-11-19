@@ -10430,7 +10430,7 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
     exact step_band_of_guard h (fromFin.append t) within pulledOk step
       ((Run.contains_append _ _ _).mpr (.inr member)) T read
   have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
-    band keys).2
+    band keys).2.1
   exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
 
 /-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.

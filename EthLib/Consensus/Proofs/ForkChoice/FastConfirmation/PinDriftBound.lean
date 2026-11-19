@@ -5260,11 +5260,115 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
       obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
       simp [syncCredit, eleven e inside]
 
+/-- The movement of two sets of keys from one state to another.
+
+The first set counts its debits, and the second counts its credits and its debits. -/
+private def moved {fork : Fork} (a b : BeaconState preset fork) (debited moving : Finset ℕ) : ℕ :=
+  ∑ i ∈ debited, (actualBalanceAt ⟨fork, a⟩ i - actualBalanceAt ⟨fork, b⟩ i) +
+    ∑ i ∈ moving, ((actualBalanceAt ⟨fork, b⟩ i - actualBalanceAt ⟨fork, a⟩ i) +
+      (actualBalanceAt ⟨fork, a⟩ i - actualBalanceAt ⟨fork, b⟩ i))
+
+/-- A sync reward step moves two apart sets at most one reward.
+
+The proposer must not be in the second set.
+
+Only the member's balance moves by the reward, and the proposer's share goes outside that set.
+
+The first set holds debits only, which the share does not touch. -/
+private theorem applySyncReward_moved_le {fork : Fork} {s t : BeaconState preset fork}
+    {reward proposerReward : Gwei} {proposer : Except AccessorError ValidatorIndex}
+    {member : ValidatorIndex × Bool} {debited moving : Finset ℕ}
+    (apartSets : Disjoint debited moving)
+    (apart : ∀ p, proposer = .ok p → p.toNat ∉ moving)
+    (ok : applySyncReward reward proposerReward proposer s member = .ok t) :
+    moved s t debited moving ≤ reward.toNat := by
+  have single
+      (le₁ : ∀ i ∈ debited, actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i ≤
+        if member.1.toNat = i then reward.toNat else 0)
+      (le₂ : ∀ i ∈ moving, (actualBalanceAt ⟨fork, t⟩ i - actualBalanceAt ⟨fork, s⟩ i) +
+        (actualBalanceAt ⟨fork, s⟩ i - actualBalanceAt ⟨fork, t⟩ i) ≤
+        if member.1.toNat = i then reward.toNat else 0) :
+      moved s t debited moving ≤ reward.toNat := by
+    unfold moved
+    refine (Nat.add_le_add (Finset.sum_le_sum le₁) (Finset.sum_le_sum le₂)).trans ?_
+    rw [← Finset.sum_union apartSets, Finset.sum_ite_eq]
+    split <;> omega
+  unfold applySyncReward at ok
+  split at ok
+  · simp only [liftAccessor_ok, bind_ok_iff] at ok
+    obtain ⟨u, first, p, pOk, last⟩ := ok
+    have raised (i : ℕ) := actualBalanceAt_increaseBalance first i
+    have paid (i : ℕ) := actualBalanceAt_increaseBalance last i
+    refine single (fun i _ => ?_) fun i hi => ?_
+    · rw [paid, raised]
+      omega
+    · have apartAt : p.toNat ≠ i := fun same => apart p pOk (same ▸ hi)
+      have paidAt := paid i
+      simp only [apartAt, ↓reduceIte, Nat.add_zero] at paidAt
+      rw [paidAt, raised]
+      split <;> omega
+  · have lowered (i : ℕ) := actualBalanceAt_decreaseBalance (liftAccessor_ok.mp ok) i
+    refine single (fun i _ => ?_) fun i _ => ?_ <;> rw [lowered] <;> split <;> omega
+
+/-- A sync aggregate moves two apart sets at most one reward for each seat.
+
+The proposer must not be in the second set. -/
+private theorem processSyncAggregate_moved_le {fork : Fork} {s t : BeaconState preset fork}
+    (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
+    (ok : processSyncAggregate config checks s altair aggregate = .ok t)
+    {debited moving : Finset ℕ} (apartSets : Disjoint debited moving)
+    (apart : ∀ p, getBeaconProposerIndex s = .ok p → p.toNat ∉ moving) :
+    ∃ reward, syncParticipantReward s = .ok reward ∧
+      moved s t debited moving ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat := by
+  simp only [processSyncAggregate, bind_ok_iff] at ok
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, proposer, proposerOk,
+    members, membersOk, folded⟩ := ok
+  refine ⟨reward, rewardOk, ?_⟩
+  have fold (xs : List (ValidatorIndex × Bool)) (a b : BeaconState preset fork)
+      (ok : xs.foldlM (applySyncReward reward proposer (getBeaconProposerIndex s)) a = .ok b) :
+      moved a b debited moving ≤ xs.length * reward.toNat := by
+    induction xs generalizing a with
+    | nil => cases ok; simp [moved]
+    | cons x xs ih =>
+      obtain ⟨u, one, rest⟩ := bind_ok_iff.mp ok
+      have step := applySyncReward_moved_le apartSets apart one
+      have tail := ih u rest
+      have triangle : moved a b debited moving ≤ moved a u debited moving +
+          moved u b debited moving := by
+        unfold moved
+        rw [Nat.add_add_add_comm, ← Finset.sum_add_distrib, ← Finset.sum_add_distrib]
+        exact Nat.add_le_add (Finset.sum_le_sum fun i _ => by omega)
+          (Finset.sum_le_sum fun i _ => by omega)
+      simp only [List.length_cons, Nat.add_mul, Nat.one_mul]
+      omega
+  have bounds := fold _ s t (by simpa only [← Array.foldlM_toList] using folded)
+  have length : (members.zip aggregate.syncCommitteeBits.bits.toArray).toList.length ≤
+      preset.SYNC_COMMITTEE_SIZE.toNat := by
+    simp only [Array.length_toList, Array.size_zip]
+    exact (Nat.min_le_right _ _).trans (by simp)
+  exact bounds.trans (Nat.mul_le_mul_right _ length)
+
+/-- The sync debits of a set of keys and the sync credits and debits of a second set of keys. -/
+private def syncSeatMoves (debited moving : Finset ℕ) (events : List (BalanceEvent preset)) : ℕ :=
+  ∑ i ∈ debited, (events.map (syncDebit i)).sum +
+    ∑ i ∈ moving, ((events.map (syncCredit i)).sum + (events.map (syncDebit i)).sum)
+
+/-- The movements of two sets of keys add up over the events of two replays. -/
+private theorem syncSeatMoves_append (debited moving : Finset ℕ)
+    (first second : List (BalanceEvent preset)) :
+    syncSeatMoves debited moving (first ++ second) =
+      syncSeatMoves debited moving first + syncSeatMoves debited moving second := by
+  unfold syncSeatMoves
+  simp only [List.map_append, List.sum_append, Finset.sum_add_distrib]
+  omega
+
 /-- The sync debits of a block over any keys fit the participant reward of the block's total.
 
 The sync pass is the last pass of the replay, and no other pass records a sync event.
 
-It reads the total of the state after the block, since a sync aggregate changes only balances. -/
+It reads the total of the state after the block, since a sync aggregate changes only balances.
+
+If the block's proposer is not among the keys, they move at most one participant reward per seat. -/
 private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork}
     (early : fork < .glamsterdam) (altair : .altair ≤ fork) {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {events : List (BalanceEvent preset)}
@@ -5275,7 +5379,11 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
     ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
       preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total ∧
     ∑ i ∈ keys, ((events.map (syncCredit i)).sum + (events.map (syncDebit i)).sum) ≤
-      preset.SYNC_COMMITTEE_SIZE.toNat * syncSeatEnvelope preset total := by
+      preset.SYNC_COMMITTEE_SIZE.toNat * syncSeatEnvelope preset total ∧
+    (∀ debited moving : Finset ℕ, Disjoint debited moving →
+      (∀ p, getBeaconProposerIndex t = .ok p → p.toNat ∉ moving) →
+      syncSeatMoves debited moving events ≤
+        preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total) := by
   obtain ⟨c, rest, aggregate, credit, debit, rfl, silent, silentCredit, synced⟩ :=
     blockReplay_sync_split early altair replay
   obtain ⟨reward, proposer, rewardOk, proposerOk, -, debits, moves⟩ :=
@@ -5296,7 +5404,7 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
   obtain ⟨T, totalEnd, -⟩ := reads
   have envelope := syncReward_le_envelope rewardOk totalEnd total (band T totalEnd)
   have share := syncProposer_le envelope proposerOk
-  refine ⟨?_, ?_⟩
+  refine ⟨?_, ?_, fun debited moving apartSets apart => ?_⟩
   · simp only [List.map_append, List.sum_append, silent, syncDebit, ↓reduceIte, List.map_cons,
       List.map_nil, List.sum_cons, List.sum_nil, Nat.zero_add, Nat.add_zero]
     exact bound.trans (Nat.mul_le_mul_left _ envelope)
@@ -5306,6 +5414,18 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
     refine movesBound.trans (Nat.mul_le_mul_left _ ?_)
     unfold syncSeatEnvelope
     omega
+  · -- The proposer is read from the slot and the lookahead, which the sync pass leaves alone.
+    have same : getBeaconProposerIndex ({ c with balances } : BeaconState preset fork) =
+        getBeaconProposerIndex c := by
+      rfl
+    obtain ⟨reward', rewardOk', moves'⟩ := processSyncAggregate_moved_le altair _ synced
+      apartSets fun p found => apart p (same.trans found)
+    obtain rfl : reward' = reward := Except.ok.inj (rewardOk'.symm.trans rewardOk)
+    unfold syncSeatMoves
+    simp only [List.map_append, List.sum_append, silent, silentCredit, syncDebit, syncCredit,
+      ↓reduceIte, List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.zero_add,
+      Nat.add_zero]
+    exact moves'.trans (Nat.mul_le_mul_left _ envelope)
 
 private theorem replayDeltas_noSync {fork : Fork} {source : BalanceSource}
     {deltas : Array Gwei × Array Gwei} {p q : BalanceReplay preset fork}
@@ -5438,6 +5558,14 @@ private theorem slot_syncDebit_zero {x y : ForkedBeaconState preset} (electra : 
       obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
       simp [syncCredit, slot_noSync electra ok early replayed e inside]⟩
 
+/-- A block step is apart from keys if the proposer at its end is not among them.
+
+A slot step is apart from every set of keys. -/
+private def stepApart (keys : Finset ℕ) :
+    {x y : ForkedBeaconState preset} → Step config checks x y → Prop
+  | _, _, .slot _ => True
+  | _, y, .block .. => ∀ p, getBeaconProposerIndex y.state = .ok p → p.toNat ∉ keys
+
 /-- The sync debits of a run fit the committee size times the envelope for each block of the run.
 
 The credits and debits together fit one envelope and proposer share for each seat and block. -/
@@ -5452,12 +5580,17 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
     ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
       tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total) ∧
     ∑ i ∈ keys, ((events.map (syncCredit i)).sum + (events.map (syncDebit i)).sum) ≤
-      tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * syncSeatEnvelope preset total) := by
+      tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * syncSeatEnvelope preset total) ∧
+    (∀ debited moving : Finset ℕ, Disjoint debited moving →
+      (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+        tail.Contains step → stepApart moving step) →
+      syncSeatMoves debited moving events ≤
+        tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total)) := by
   induction tail generalizing events with
   | nil =>
     simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
     subst replayed
-    simp [Run.blockCount]
+    simp [Run.blockCount, syncSeatMoves]
   | @snoc middle last pre step ih =>
     have earlyMiddle : middle.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt step.chainStep.fork_le early
@@ -5465,8 +5598,13 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
       Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
-    obtain ⟨priorDebits, priorMoves⟩ := ih earlyMiddle priorOk
+    obtain ⟨priorDebits, priorMoves, priorApart⟩ := ih earlyMiddle priorOk
       (fun inner member => band inner (Run.Contains.earlier member step))
+    have priorApart' := fun (debited moving : Finset ℕ) (apartSets : Disjoint debited moving)
+        (apart : ∀ {u w : ForkedBeaconState preset} (inner : Step config checks u w),
+          (pre.snoc step).Contains inner → stepApart moving inner) =>
+      priorApart debited moving apartSets fun inner member =>
+        apart inner (Run.Contains.earlier member step)
     split at rest
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
       obtain ⟨added, addedOk, rfl⟩ := rest
@@ -5478,23 +5616,37 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
       cases step with
       | slot ok =>
         have zero := slot_syncDebit_zero (Nat.le_trans (by decide) fuluMiddle) ok early addedOk
-        simpa [fun i => (zero i).1, fun i => (zero i).2, Run.blockCount] using
-          And.intro priorDebits priorMoves
+        have none : ∀ debited moving : Finset ℕ, syncSeatMoves debited moving added = 0 := by
+          intro debited moving
+          unfold syncSeatMoves
+          simp [fun i => (zero i).1, fun i => (zero i).2]
+        refine ⟨?_, ?_, fun debited moving apartSets apart => ?_⟩
+        · simpa [fun i => (zero i).1, fun i => (zero i).2, Run.blockCount] using priorDebits
+        · simpa [fun i => (zero i).1, fun i => (zero i).2, Run.blockCount] using priorMoves
+        · rw [syncSeatMoves_append, none]
+          simpa [Run.blockCount] using priorApart' debited moving apartSets apart
       | @block fork before after engine signed due ok =>
         have altair : Fork.altair ≤ fork :=
           Nat.le_trans (show Fork.altair ≤ Fork.fusaka by decide) fuluMiddle
         have replay := Step.balanceEvents_block early addedOk
-        obtain ⟨bound, boundMoves⟩ := block_syncDebits_le early altair replay total
+        obtain ⟨bound, boundMoves, boundApart⟩ := block_syncDebits_le early altair replay total
           (fun T hT => band _ (Run.Contains.last pre _) T hT) keys
         simp only [Run.blockCount, Nat.add_mul, Nat.one_mul]
-        exact ⟨by omega, by omega⟩
+        refine ⟨by omega, by omega, fun debited moving apartSets apart => ?_⟩
+        have here := boundApart debited moving apartSets (apart _ (Run.Contains.last pre _))
+        have before := priorApart' debited moving apartSets apart
+        rw [syncSeatMoves_append]
+        omega
     · simp only [pure, Except.pure, Except.ok.injEq] at rest
       subst rest
       cases step with
-      | slot ok => simpa [Run.blockCount] using And.intro priorDebits priorMoves
+      | slot ok =>
+        simpa [Run.blockCount] using And.intro priorDebits (And.intro priorMoves priorApart')
       | block =>
         exact ⟨priorDebits.trans (Nat.mul_le_mul_right _ (Nat.le_succ _)),
-          priorMoves.trans (Nat.mul_le_mul_right _ (Nat.le_succ _))⟩
+          priorMoves.trans (Nat.mul_le_mul_right _ (Nat.le_succ _)),
+          fun debited moving apartSets apart => (priorApart' debited moving apartSets apart).trans
+            (Nat.mul_le_mul_right _ (Nat.le_succ _))⟩
 
 /-- The blocks of a run fit one amount per seat for each slot of the epochs that the run touches.
 
@@ -5552,7 +5704,11 @@ Every total along the run is within three halves of `total`.
 
 Each block debits the keys at most one participant reward per seat.
 
-Each block moves the keys at most one participant reward and its proposer share per seat. -/
+Each block moves the keys at most one participant reward and its proposer share per seat.
+
+If no block's proposer is among the keys, each block moves them at most one participant reward.
+
+That reward is per seat. -/
 private theorem Run.syncDebits_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -5568,16 +5724,25 @@ private theorem Run.syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
     ∑ i ∈ keys, ((events.map (syncCredit i)).sum + (events.map (syncDebit i)).sum) ≤
       ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-          syncSeatEnvelope preset total := by
+          syncSeatEnvelope preset total ∧
+    (∀ debited moving : Finset ℕ, Disjoint debited moving →
+      (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+        tail.Contains step → stepApart moving step) →
+      syncSeatMoves debited moving events ≤
+        ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+            syncEnvelope preset total) := by
   have empty : preset.SLOTS_PER_EPOCH.toNat = 0 → syncEnvelope preset total = 0 := fun empty => by
     unfold syncEnvelope
     rw [empty]
     simp
   have bounds := run_syncDebits_le tail fulu early high replayed total band keys
   exact ⟨bounds.1.trans (Run.blockCount_mul_le tail _ empty),
-    bounds.2.trans (Run.blockCount_mul_le tail _ fun e => by
+    bounds.2.1.trans (Run.blockCount_mul_le tail _ fun e => by
       unfold syncSeatEnvelope
-      simp [empty e])⟩
+      simp [empty e]),
+    fun debited moving apartSets apart =>
+      (bounds.2.2 debited moving apartSets apart).trans (Run.blockCount_mul_le tail _ empty)⟩
 end PinSplit5
 
 end GroupSeat
