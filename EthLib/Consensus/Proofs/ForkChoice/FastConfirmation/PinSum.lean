@@ -929,7 +929,9 @@ private def flagRate (t : PinTerms preset) : ℕ :=
 
 /-- The leak of one increment over the window, at the largest score of the finalized state.
 
-It is the leak part of `slashCharge`, read at one increment, and `slashCharge` covers it twice. -/
+It is the leak part of `slashCharge`, read at one increment.
+
+`slashCharge` covers it and the flag gain of two windows. -/
 private def slashLeak (config : Config) (fork : Fork) (t : PinTerms preset) : ℕ :=
   t.depthFin * (2 * t.perIncrement +
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
