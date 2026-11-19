@@ -13450,6 +13450,162 @@ private theorem bud_pendingR (h : Setting config checks g split fin pulled anc c
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
       (pinTerms config pulled anc fin).pendingR := sorry
 
+/-- No key of the split's registry is slashed on C's branch and withdrawable at R.
+
+Here withdrawable means by the finalized epoch.
+
+Both records are unslashed before C's slashing, and the key is unslashed at R.
+
+If the split has no exit for it, C's slashing assigns one, and a run never charges an exit twice.
+
+Otherwise R's withdrawable epoch is the split's, so the key is retired at the split.
+
+A retired key stays unslashed on C's run. -/
+private theorem sc3a_unwithdrawn (h : Setting config checks g split fin pulled anc counted V)
+    {i : ℕ} {s w u : Validator} (foundS : split.validators.data[i]? = some s)
+    (foundP : pulled.validators.data[i]? = some w)
+    (foundC : counted.validators.data[i]? = some u)
+    (cleanS : s.slashed = false) (slashedC : u.slashed = true) (cleanP : w.slashed = false)
+    (settled : w.withdrawableEpoch.toNat ≤ anc.finalizedCheckpoint.epoch.toNat) : False := by
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨tailR⟩ := h.toPulled
+  obtain ⟨tailC⟩ := h.toCounted
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  obtain ⟨uAssigned, -⟩ := tailC.newly_slashed_withdrawableEpoch h.caps.activation
+    h.caps.compounding h.early h.delay i s u foundS foundC cleanS slashedC
+  by_cases unset : s.exitEpoch = FAR_FUTURE_EPOCH
+  · obtain ⟨c, member, index, -⟩ := tailC.departure_charge_of_assigned i s u foundS foundC unset
+      uAssigned
+    exact no_charge_of_settled h tailC (Array.getElem?_eq_some_iff.mp foundS).1 foundP settled c
+      member index
+  · have kept := PinSplit4.kept_run (rf.append rs) h.genesis h.fulu tailR h.early
+    obtain ⟨-, moved⟩ := kept.withdrawable i s w foundS foundP unset
+    have same := congrArg UInt64.toNat (moved.resolve_left (by simp [cleanP]))
+    have ordered := UInt64.le_iff_toNat_le.mp
+      ((Run.invariant (Genesis.invariant h.genesis) (rf.append rs)).exitsOrdered s
+        (Array.mem_of_getElem? foundS))
+    have exited : s.exitEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
+    have withdrawn : s.withdrawableEpoch.toNat ≤ (getCurrentEpoch split).toNat := by omega
+    have clean := (Run.retired_validator tailC h.caps.activation h.caps.compounding h.early i s u
+      foundS foundC (UInt64.le_iff_toNat_le.mpr exited) cleanS
+      (UInt64.le_iff_toNat_le.mpr withdrawn)).1
+    simp [slashedC] at clean
+
+/-- A key of `sc3a` is active at R or at R's next epoch.
+
+Outside the tight window it can instead be late or pending.
+
+In the tight window C's epoch is in the shared window, so R activates the key by then.
+
+Outside it, an exit by R's next epoch is a slashing on R's branch, which `slashedRB` counts.
+
+Otherwise `exitedSlashable` counts the exit.
+
+Or the key withdraws by the finalized epoch, which C's slashing excludes.
+
+A key that exits after R's next epoch activates after it.
+
+Its eligibility is then late or pending. -/
+private theorem sc3a_class (h : Setting config checks g split fin pulled anc counted V)
+    {v : ValidatorIndex} (member : v ∈ sc3a config pulled anc fin counted split) :
+    isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true ∨
+      isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true ∨
+      ((pinTerms config pulled anc fin).tight = false ∧
+        ((pinTerms config pulled anc fin).lateB v.toNat = true ∨
+          (pinTerms config pulled anc fin).pendingRB v.toNat = true)) := by
+  classical
+  obtain ⟨memberSC, ⟨notRB, notX⟩, activeC⟩ := Finset.mem_filter.mp member
+  obtain ⟨-, flagC, flagS⟩ := Finset.mem_filter.mp memberSC
+  obtain ⟨u, foundU, slashedU⟩ : ∃ u, counted.validators.data[v.toNat]? = some u ∧
+      u.slashed = true := by
+    simpa [slashedFlagAt, Option.map_eq_some_iff] using flagC
+  obtain ⟨s, foundS, cleanS⟩ : ∃ s, split.validators.data[v.toNat]? = some s ∧
+      s.slashed = false := by
+    simpa [slashedFlagAt, Option.map_eq_some_iff] using flagS
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  have chain := (rf.append rs).append rp
+  obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[v.toNat]? = some w :=
+    ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp foundS).1
+      (registryGrows_of_chainSteps rp.chainSteps))⟩
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have later := UInt64.le_iff_toNat_le.mp h.later
+  have near := h.near
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have succNat : (getCurrentEpoch pulled + 1).toNat = (getCurrentEpoch pulled).toNat + 1 := by
+    have one : (1 : UInt64).toNat = 1 := rfl
+    rw [UInt64.toNat_add, one]
+    exact Nat.mod_eq_of_lt (by omega)
+  have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+  have rActive : ∀ e : Epoch, isActiveAt pulled e v.toNat = true ↔
+      (w.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < w.exitEpoch.toNat) := by
+    intro e
+    simp [isActiveAt, found, isActiveValidator, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+  by_cases tight : (pinTerms config pulled anc fin).tight = true
+  · -- In the tight window C's epoch is in the shared window, so R activates the key by then.
+    have bound := (tight_iff config pulled anc fin).mp tight
+    have shared := activity_shared h (e := getCurrentEpoch counted) (by omega) v.toNat
+    have atR := shared.trans activeC
+    by_cases same : (getCurrentEpoch counted).toNat = (getCurrentEpoch pulled).toNat
+    · rw [UInt64.toNat_inj.mp same] at atR
+      exact .inl atR
+    · rw [show getCurrentEpoch counted = getCurrentEpoch pulled + 1 from
+        UInt64.toNat_inj.mp (by rw [succNat]; omega)] at atR
+      exact .inr (.inl atR)
+  · have loose : (pinTerms config pulled anc fin).tight = false := by simpa using tight
+    have bound : anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+        (getCurrentEpoch pulled).toNat + 1 := by
+      have := mt (tight_iff config pulled anc fin).mpr tight
+      omega
+    by_cases aR : isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true
+    · exact .inl aR
+    by_cases aR1 : isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true
+    · exact .inr (.inl aR1)
+    refine .inr (.inr ⟨loose, ?_⟩)
+    have notR1 := mt (rActive _).mpr aR1
+    by_cases exited : w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1
+    · -- An exit by R's next epoch is held by a slashing, or by `exitedSlashable`.
+      exfalso
+      by_cases slashedW : w.slashed = true
+      · have newly : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+            w.withdrawableEpoch.toNat :=
+          (rp.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+            h.early h.delay v.toNat s w foundS found cleanS slashedW).2
+        apply notRB
+        rw [slashedRB_eq]
+        have key : anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+            w.withdrawableEpoch.toNat := by omega
+        simpa [found, slashedW] using key
+      · have cleanW : w.slashed = false := by simpa using slashedW
+        have settled : w.withdrawableEpoch.toNat ≤ anc.finalizedCheckpoint.epoch.toNat := by
+          by_contra late
+          apply notX
+          simp only [exitedSlashable, found, Option.map_some, Option.getD_some, cleanW,
+            Option.any_some]
+          simp
+          omega
+        exact sc3a_unwithdrawn h foundS found foundU cleanS slashedU cleanW settled
+    · -- The key activates after R's next epoch.
+      have afterA : (getCurrentEpoch pulled).toNat + 1 < w.activationEpoch.toNat := by
+        by_contra early
+        apply notR1
+        rw [succNat]
+        exact ⟨by omega, by omega⟩
+      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
+      · by_cases elig : (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat
+        · exact .inr ((pendingRB_iff config pulled anc fin v.toNat).mpr ⟨w, found, elig, far⟩)
+        · refine .inl ((lateB_iff config pulled anc fin v.toNat).mpr ⟨w, found, by omega, ?_⟩)
+          rw [far, farNat]
+          omega
+      · have eligible := Run.eligibility_le_finalized chain h.genesis v.toNat w found far
+        have eligNat : w.activationEligibilityEpoch.toNat ≤
+            pulled.finalizedCheckpoint.epoch.toNat := UInt64.le_iff_toNat_le.mp eligible
+        exact .inl ((lateB_iff config pulled anc fin v.toNat).mpr ⟨w, found, by omega, by omega⟩)
+
 /-- The charged keys of `SC` are current, upcoming-only, late or pending, and each pays that entry.
 
 A key of `SC` outside the tight window that is late or pending pays its stake and its rise there.
@@ -13482,7 +13638,34 @@ private theorem sc_3a_split (h : Setting config checks g split fin pulled anc co
       (∑ v ∈ (sc3a config pulled anc fin counted split) with
         ((pinTerms config pulled anc fin).tight = false ∧
           (pinTerms config pulled anc fin).pendingRB v.toNat = true),
-        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) := sorry
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) := by
+  classical
+  simp only [Finset.sum_filter, ← Finset.sum_add_distrib]
+  refine Finset.sum_le_sum fun v member => ?_
+  have cls := sc3a_class h member
+  have current : (pinTerms config pulled anc fin).current v.toNat =
+      isActiveAt pulled (getCurrentEpoch pulled) v.toNat := rfl
+  rw [current]
+  unfold eR
+  have arith : ∀ (r b : ℕ) (C U L P : Prop) [Decidable C] [Decidable U] [Decidable L]
+      [Decidable P], (C ∨ U ∨ L ∨ P) →
+      r + (if L then 3 * b else 0) + (if P then b else 0) ≤
+        (if C then r else 0) + (if U then r else 0) + (if L then 3 * b + r else 0) +
+          (if P then b + r else 0) := by
+    intro r b C U L P _ _ _ _ cover
+    by_cases hC : C <;> by_cases hU : U <;> by_cases hL : L <;> by_cases hP : P <;>
+      simp [hC, hU, hL, hP] at cover ⊢ <;> omega
+  refine arith _ _ _ _ _ _ ?_
+  by_cases hC : isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true
+  · exact .inl hC
+  · have hC' : isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false := by simpa using hC
+    by_cases hU : isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true
+    · exact .inr (.inl ⟨hC', hU⟩)
+    · rcases cls with c | u | ⟨t, l | p⟩
+      · exact absurd c hC
+      · exact absurd u hU
+      · exact .inr (.inr (.inl ⟨t, l⟩))
+      · exact .inr (.inr (.inr ⟨t, p⟩))
 
 /-- The units of the active keys of `CS` are held by the units of the keys of `CS`.
 
