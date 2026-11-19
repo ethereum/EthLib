@@ -9,16 +9,16 @@ The source is [FIPS 202](https://doi.org/10.6028/NIST.FIPS.202).
 
 A state is 1600 bits, in the order of FIPS 202 §3.1.2.
 
-Bit `z` of lane `ℓ` sits at position `j = z + 64 ℓ`, with `z < 64` the slice.
+Bit `z` of lane `i` sits at position `j = z + 64 i`, with `z < 64` the slice.
 
-Lane `ℓ = x + 5 y` lies in row `y = ℓ / 5` and column `x = ℓ % 5`.
+Lane `i = x + 5 y` lies in row `y = i / 5` and column `x = i % 5`.
 
 That is the order of the lane state, whose field `a{x + 5y}` holds lane `(x, y)`.
 
 The shift by `k` along a row moves `k` columns in the same row and keeps the slice:
 
 ```text
-along(z + 64 ℓ, k) = z + 64 (5 (ℓ / 5) + (ℓ % 5 + k) % 5)
+along(z + 64 i, k) = z + 64 (5 (i / 5) + (i % 5 + k) % 5)
 ```
 
 Round `r` maps the bits `a` to the bits `a'`, with sums and products over GF(2):
@@ -41,7 +41,7 @@ namespace EthLib.Cryptography.LeanVm.KeccakGkr
 
 open EthLib.Cryptography.Hash
 
-/-- A bit position of the state: `j = z + 64 ℓ`, slice `z`, lane `ℓ`. -/
+/-- A bit position of the state: `j = z + 64 i`, slice `z`, lane `i`. -/
 abbrev Pos := Fin 1600
 
 /-- The 25 lanes of a state, lane `x + 5y` at index `x + 5y`. -/
@@ -60,30 +60,30 @@ def bitsOf (A : Keccak.State) : Pos → Bool := fun j =>
 
 /-- The state whose bit `j` is `a j`. -/
 def ofBits (a : Pos → Bool) : Keccak.State :=
-  stateOfLanes (Vector.ofFn fun ℓ : Fin 25 =>
+  stateOfLanes (Vector.ofFn fun i : Fin 25 =>
     Fin.foldl 64 (fun lane z =>
-      if a ⟨z.val + 64 * ℓ.val, by omega⟩ then lane ||| (1 <<< z.val.toUInt64) else lane) 0)
+      if a ⟨z.val + 64 * i.val, by omega⟩ then lane ||| (1 <<< z.val.toUInt64) else lane) 0)
 
 /-- The position `k` columns along from `j`, same row and slice. -/
 def along (j : Pos) (k : Fin 5) : Pos :=
   ⟨j.val % 64 + 64 * (5 * (j.val / 64 / 5) + (j.val / 64 % 5 + k.val) % 5), by omega⟩
 
-/-- The linear part of a round, `π ∘ ρ ∘ θ`, on bits (through EthLib's lane functions). -/
+/-- The linear part of a round on bits, `pi (rho (theta a))`, through EthLib's lane functions. -/
 def linearBits (a : Pos → Bool) : Pos → Bool :=
   bitsOf (Keccak.pi (Keccak.rho (Keccak.theta (ofBits a))))
 
-/-- Round `r`: the linear part, then `χ` written with `along`, then `ι` on lane 0. -/
+/-- Round `r`: the linear part, then chi written with `along`, then iota on lane 0. -/
 def roundBits (r : Fin Keccak.ROUNDS) (a : Pos → Bool) : Pos → Bool := fun j =>
   let b := linearBits a
   b j ^^ (!b (along j 1) && b (along j 2)) ^^
     (j.val < 64 && ((Keccak.RC[r] >>> j.val.toUInt64) &&& 1) == 1)
 
-/-- Rounds `r₀, …, r₀ + n - 1` in order.
+/-- Rounds `r0, ..., r0 + n - 1` in order.
 
 A round index past 23 leaves the bits unchanged. -/
-def roundsBits (r₀ n : Nat) (a : Pos → Bool) : Pos → Bool :=
+def roundsBits (r0 n : Nat) (a : Pos → Bool) : Pos → Bool :=
   match n with
   | 0 => a
-  | n + 1 => roundsBits (r₀ + 1) n (if h : r₀ < 24 then roundBits ⟨r₀, h⟩ a else a)
+  | n + 1 => roundsBits (r0 + 1) n (if h : r0 < 24 then roundBits ⟨r0, h⟩ a else a)
 
 end EthLib.Cryptography.LeanVm.KeccakGkr

@@ -5,7 +5,7 @@ public import EthLib.Cryptography.LeanVm.KeccakGkr
 /-!
 # leanVM
 
-The leanVM proof system and the cryptography of aggregation.
+The leanVM machine and its proof system.
 
-The README of this directory records the plan and its decisions.
+`LeanVm/README.md` records the plan and its decisions.
 -/
