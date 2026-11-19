@@ -4761,29 +4761,6 @@ private theorem charge_activated {x y : ForkedBeaconState preset} (electra : .pe
       (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))
       found later unset set, amount, epoch⟩
 
-/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
-
-The key is missing at the finalized state, or its activation there is unassigned.
-
-It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
-balance less its sync debits, from `Run.new_key_effective_floor`.
-
-A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
-
-It has no partial withdrawals queued, since a request needs an active key. -/
-private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    {events : List (BalanceEvent preset)}
-    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
-    (v : ValidatorIndex) (member : v ∈ K5 counted V)
-    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
-    (fresh : fin.validators.data[v.toNat]? = none ∨
-      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
-    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum :=
-  sorry
-
 /-- A key of `K5` that is activated at the finalized state is active and not withdrawable at R.
 
 Its activation at R is that of C, which is at most the epoch before C's: an assigned activation
@@ -5568,6 +5545,29 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     simp only [List.map_append, List.sum_append]
     omega
   omega
+
+/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
+
+The key is missing at the finalized state, or its activation there is unassigned.
+
+It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
+balance less its sync debits, from `Run.new_key_effective_floor`.
+
+A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
+
+It has no partial withdrawals queued, since a request needs an active key. -/
+private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (member : v ∈ K5 counted V)
+    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
+    (fresh : fin.validators.data[v.toNat]? = none ∨
+      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
+    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum :=
+  pending_key_claim_of h fromFin tailC replayed v member charged small fresh
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
 
