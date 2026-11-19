@@ -117,9 +117,9 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
   obtain ⟨c, chosen⟩ := Option.isSome_iff_exists.mp found
   have selected := List.find?_some chosen
   have same := charge_unique tailC (List.mem_of_find?_eq_some chosen) inRun
-    (by simpa using selected)
+    (beq_iff_eq.mp selected)
   subst same
-  simp only [chosen, Option.map_some, Option.getD_some]
+  rw [chosen]
   simp [effectiveAt, foundA]
 
 end Charge
