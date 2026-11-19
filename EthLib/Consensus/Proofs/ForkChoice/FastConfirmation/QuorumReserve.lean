@@ -713,9 +713,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
   --
-  -- That increment earns the flag rewards over the depth, plus a unit per epoch for the floors.
+  -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
   --
-  -- Each credited key pays it once, and a key whose exit the call reads pays it three times.
+  -- Each credited key pays it once, and a key pays two more if the call reads its exit.
   let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
     WEIGHT_DENOMINATOR.toNat + 2)
   let creditUnits := (creditedKeys + 2 * (exitingCount + queueKeys)) * unitGain
