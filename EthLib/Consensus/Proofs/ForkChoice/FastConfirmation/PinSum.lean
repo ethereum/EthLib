@@ -581,6 +581,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
           max (max (ebUp i) (effective i + rise i)) (bF i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
           consolidationsX + depth * proposerCredit +
+          -- The proposer share of the shared segment's seat rewards.
+          depthFin * syncProposer +
           -- C's seat rewards.
           depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
           -- The shared segment's and R's seat debits.
