@@ -1004,9 +1004,10 @@ private theorem processEpochStep
       exact CommitteeStep.refl _
   case payments =>
     split at edge
-    · rw [processBuilderPendingPayments_eq edge]
+    · have kept := keeps nofun
+      rw [processBuilderPendingPayments_eq edge] at kept ⊢
       exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl), rfl,
-        fun _ => keeps nofun⟩
+        fun _ => kept⟩
     · subst edge
       exact CommitteeStep.refl _
   case effectiveBalances =>
