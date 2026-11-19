@@ -507,7 +507,8 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
           (property := fun post => RegistryLifecycle advanced post.state)
           (fun before ok => before.trans (registryLifecycle_upgradeNext ok)) (.refl advanced)
           upgrades
-        exact (EpochStage.Edge.registryLifecycle (k := .effectiveBalances) updateOk).trans
+        exact (EpochStage.Edge.registryLifecycle (config := config) (checks := checks)
+          (k := .effectiveBalances) updateOk).trans
           (epochedKept.trans (advancedKept.trans upgraded))
       have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
           cached := by
