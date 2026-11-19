@@ -201,13 +201,13 @@ The sync seats count on both branches, each at an envelope of its reward.
 
 The envelope is read at three halves of the call's total active balance.
 
-A key's fall starts from the lesser of its balance at the finalized block's state and its cap.
+A key's fall starts from the lesser of its balance and its cap at the finalized block's state.
 
 Another branch can keep a lower effective balance that this branch's update raised.
 
 So a key's fall reaches its effective balance at the finalized block's state.
 
-Near the downward band of the envelope, it also reaches its rounded balance.
+Near the downward band of that start, it also reaches its rounded balance.
 
 Past the withdrawability delay, a key's whole balance is charged as its fall.
 
@@ -365,19 +365,26 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Both branches can share a dip there that this branch's later credits would hide.
   let actualFin (i : ℕ) := ((finalizedState.balances.data[i]?).map (·.toNat)).getD 0
+  -- The floor starts at the finalized block's balance, at most the key's cap there.
+  let capFin (i : ℕ) := ((finalizedState.validators.data[i]?).map fun v =>
+    (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
+  let base0 (i : ℕ) := min (actualFin i) (capFin i)
+  -- The first pass after the finalized block's state charges its stored effective balance.
+  --
+  -- That can exceed the state's balance, and later debits are charged against the floor's start.
+  let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
   let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      -- The leak is read one increment above the larger of the envelope and the base.
+      -- The leak is read one increment above the floor's start.
       --
       -- Each epoch also loses at most one unit to the rounding of the rates.
-      let base0 := min (actualFin i) (cap i)
-      let low := base0 - (depthFin * (leakAt (max (ebUp i) base0 + inc) i + gainRate i + 1) +
+      let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
         partialsDue i)
       -- On another branch the key can keep an effective balance that this branch's update raised.
       --
-      -- Away from the downward band of the envelope, it keeps its finalized effective balance.
+      -- Away from the downward band of its start, it keeps its finalized effective balance.
       --
       -- Near that band, it keeps at least its rounded balance.
-      let floorC := if max (ebUp i) base0 ≤ low + preset.downwardBand then finEB i
+      let floorC := if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
         else min (finEB i) (low - low % inc)
       effective i - floorC
     else effective i
@@ -511,12 +518,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- The keys are the window's proposers and deposit recipients.
   --
-  -- They also hold the sync seats of each period from the finalized epoch to the next epoch.
+  -- They also hold the sync seats of each period from the finalized block's epoch to the next one.
   --
   -- Each period crossing adds one more set of seats.
   let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
     preset.SYNC_COMMITTEE_SIZE.toNat *
-      (((epoch.toNat + 1) / period - finalized / period + 1) + depth / period)
+      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
+        depth / period)
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
   let branchR := 3 * (whistleblowerR + inc * slashedR + depth * proposerCredit +
     (inc + preset.downwardBand - 1) * roundedKeys)
@@ -543,11 +551,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- It starts at the finalized block's state, which lies on every branch, and at most this one's.
   --
-  -- Leak over the depth from there, partials, the band and one increment of rounding are drops.
+  -- The start is also at most the finalized block's balance.
+  --
+  -- The carry, the leak over the depth, partials, the band and one increment of rounding are drops.
   --
   -- A partial in that state's own epoch can be paid before it, but leaves the activation balance.
-  let drop (i : ℕ) := depthFin * leak i + preset.downwardBand + inc
-  let lowEB (i : ℕ) := min (min (effective i) (finEB i) - partialsDue i)
+  let drop (i : ℕ) := carry i + depthFin * (leakAt (base0 i + inc) i + 1) +
+    preset.downwardBand + inc
+  let lowEB (i : ℕ) := min (min (min (effective i) (finEB i)) (actualFin i) - partialsDue i)
     preset.MIN_ACTIVATION_BALANCE.toNat - drop i
   -- A key can exit on the other branch with an effective balance below the ejection balance.
   --
