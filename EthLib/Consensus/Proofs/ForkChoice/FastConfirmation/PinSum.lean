@@ -148,7 +148,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let quarter := if 18 * inc ≤ total then totalGwei / 4
     else preset.EFFECTIVE_BALANCE_INCREMENT / 5
   let perIncrement := ((getBaseRewardPerIncrement preset quarter).toOption.getD 0).toNat
-  let base (i : ℕ) := effective i / inc * perIncrement
   let depositChurn := config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
   -- The exit and consolidation churns are bounded at three halves of the call's total.
   --
@@ -258,14 +257,55 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         let kept := high + preset.downwardBand
         min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
     else capFor i - effective i
+  let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
+  let due := if electra : .pectra ≤ fork then
+      (state.pendingConsolidations electra).data.toList.filter fun c =>
+        ((validator c.sourceIndex.toNat).map fun v =>
+          v.slashed || decide (v.withdrawableEpoch ≤ epoch + 1)).getD false
+    else []
+  let depositRecipients := preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
+  let creditedKeys := depth * slots + (depth / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat +
+    depth * depositRecipients + due.length
+  let consolidationsX := if depthFin ≤ partialDelay then
+      (if electra : .pectra ≤ fork then
+        ((((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
+          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
+            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).map fun v =>
+              (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
+      else 0)
+    else 0
+  -- Each sync seat of the window debits at most its envelope on each branch.
+  --
+  -- A key whose sync debits exceed an increment less one has at least that many seats' worth.
+  --
+  -- So the keys whose effective balance their sync debits can lower are at most this many.
+  let seatExcess := 2 * (depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+    (inc - 1)
+  -- The window's proposer rewards are read at every key that can attest in it.
+  --
+  -- Such a key is activated by the next epoch and exits no earlier than the finalized epoch.
+  --
+  -- Its effective balance on either branch is at most its effective balance here and its rise.
+  let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
+      decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
+        decide (finalized ≤ v.exitEpoch.toNat)),
+    (effective i + rise i) / inc * perIncrement
+  -- The other branch's credits can raise its attesters' effective balances above that read.
+  --
+  -- Each increment they add is counted, with one rounding step per credited key or seat key.
+  --
+  -- Each deposit the window can apply to a new key counts at the largest effective balance.
+  let attesterExcess := (depositCarry + depthFin * depositChurn + consolidationsX +
+      depth * proposerBase + depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+        inc +
+    creditedKeys + seatExcess +
+    depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * (capMax / inc)
   -- This follows `syncProposerReward` on natural numbers, at the envelope.
   --
   -- It is a bound on the reward, not a read.
   let syncProposer := slots * preset.SYNC_COMMITTEE_SIZE.toNat *
     (syncEnvelope * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
-  let proposerCredit :=
-    (∑ i ∈ positions with (before i || current i || upcoming i) = true, base i) +
-    syncProposer
+  let proposerCredit := proposerBase + attesterExcess * perIncrement + syncProposer
   -- The slashable keys of the window that the quorum reserve's whistleblower term leaves out.
   --
   -- Those are keys active from the next epoch, or withdrawable after the finalized epoch.
@@ -280,8 +320,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Slashings on the call's branch after the finalized epoch, which the other branch can lack.
   --
   -- A slashing sets the withdrawable epoch at least `EPOCHS_PER_SLASHINGS_VECTOR` later.
-  let whistleblowerR := (∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
-      effective i) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+  --
+  -- Its effective balance can exceed what it is here by its rise, or by sync debits it had here.
+  let whistleblowerR := ((∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
+      (effective i + rise i)) + seatExcess * inc) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
@@ -290,21 +332,12 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
         decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
       (3 * effective i + rise i)
-  let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   -- Every seat of every sync committee in the window counts, at the seat's envelope.
   --
   -- The window can include the call's previous period, which its state does not store.
   --
   -- Both branches can credit and debit those seats, so they count twice.
   let syncSeats := 3 * (2 * depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)
-  let due := if electra : .pectra ≤ fork then
-      (state.pendingConsolidations electra).data.toList.filter fun c =>
-        ((validator c.sourceIndex.toNat).map fun v =>
-          v.slashed || decide (v.withdrawableEpoch ≤ epoch + 1)).getD false
-    else []
-  let depositRecipients := preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
-  let creditedKeys := depth * slots + (depth / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat +
-    depth * depositRecipients + due.length
   -- The credits are scaled by eleven tenths, rounded up, for the gains they compound.
   --
   -- The band of each credited key is not scaled.
@@ -431,14 +464,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- Twice the debits of every seat in the window covers what they take from the test.
   let seatShortfall := 2 * (depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)
-  let consolidationsX := if depthFin ≤ partialDelay then
-      (if electra : .pectra ≤ fork then
-        ((((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
-          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
-            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).map fun v =>
-              (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
-      else 0)
-    else 0
   let exitedR := ∑ i ∈ positions with (validator i).any (fun v =>
       decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
