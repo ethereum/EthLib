@@ -8,7 +8,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 
 The precompile names cover exactly the addresses that transaction execution warms.
 
-The system contracts of a fork are the contracts that its blocks call, with the deposit contract.
+Each system contract of a fork is stated with the fork that it starts at.
 
 A reported configuration uses the checksum and blob schedule of its activation.
 
@@ -152,13 +152,13 @@ theorem configSystemContracts_bpo (config : ChainConfig) {fork : Fork}
     configSystemContracts config fork = configSystemContracts config .fusaka := by
   cases fork <;> first | rfl | contradiction
 
-/-- The system contracts of a fork are those that its blocks call, and the deposit contract.
+/-- The addresses of the system contracts of a fork.
 
-A block calls the beacon roots contract from Cancun, and the history storage contract from Prague.
+The beacon roots contract counts from Cancun, and the history storage contract from Prague.
 
-From Prague it also reads requests from each request contract of its fork.
+From Prague each request contract of the fork counts, and so does the deposit contract.
 
-The deposit contract of the chain joins them from Prague. -/
+The request contracts are the list that request reading walks. -/
 theorem mem_configSystemContracts_iff (config : ChainConfig) (fork : Fork) (address : Address) :
     address ∈ (configSystemContracts config fork).map Prod.snd ↔
       .dencun ≤ fork ∧ address = Blocks.BEACON_ROOTS_ADDRESS ∨
