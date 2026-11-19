@@ -13354,9 +13354,7 @@ Its base lemma keeps the proof of the claim for the classes. -/
 
 The keys of `SC` that the rise term of `bud_whistle` charges are not in K4.
 
-Each of them is a key of R's registry.
-
-`rise_base` is the part for K4. -/
+Each of them is a key of R's registry. -/
 private theorem bud_rise (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) +
       (∑ v ∈ (sc3a config pulled anc fin counted split) with
@@ -13364,7 +13362,26 @@ private theorem bud_rise (h : Setting config checks g split fin pulled anc count
           (pinTerms config pulled anc fin).rise v.toNat) ≤
       ∑ i ∈ (pinTerms config pulled anc fin).positions with
         (pinTerms config pulled anc fin).current i = true,
-          (pinTerms config pulled anc fin).rise i := sorry
+          (pinTerms config pulled anc fin).rise i := by
+  classical
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  have dis : Disjoint (K4 pulled counted V) ((sc3a config pulled anc fin counted split).filter
+      fun v => (pinTerms config pulled anc fin).current v.toNat = true) :=
+    Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
+        (Finset.disjoint_of_subset_left
+          (Finset.subset_union_left.trans Finset.subset_union_left) dSC))
+  rw [← Finset.sum_union dis]
+  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  rcases Finset.mem_union.mp hv with member | member
+  · simp only [K4, Finset.mem_filter] at member
+    obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) member.2.1
+    exact mem_positions_filter config pulled anc fin found
+      (isActiveAt_eq_true_iff.mpr ⟨w, found, active⟩)
+  · obtain ⟨-, current⟩ := Finset.mem_filter.mp member
+    obtain ⟨w, found, -⟩ := isActiveAt_eq_true_iff.mp
+      (show isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true from current)
+    exact mem_positions_filter config pulled anc fin found current
 
 /-- The rise of the upcoming-only keys of K6 and of `SC` fits `joinRise`.
 
@@ -13380,7 +13397,26 @@ private theorem bud_joinRise (h : Setting config checks g split fin pulled anc c
         (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
           isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
         (pinTerms config pulled anc fin).rise v.toNat) ≤
-      (pinTerms config pulled anc fin).joinRise := sorry
+      (pinTerms config pulled anc fin).joinRise := by
+  classical
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  have dis : Disjoint ((K6 pulled counted).filter fun v =>
+        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+          isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true)
+      ((sc3a config pulled anc fin counted split).filter fun v =>
+        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+          isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true) :=
+    Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
+        (Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
+          (Finset.disjoint_of_subset_left (Finset.subset_union_right) dSC)))
+  rw [← Finset.sum_union dis, joinRise_eq]
+  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  have upcoming : isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+      isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true := by
+    rcases Finset.mem_union.mp hv with member | member <;> exact (Finset.mem_filter.mp member).2
+  obtain ⟨w, found, -⟩ := isActiveAt_eq_true_iff.mp upcoming.2
+  exact mem_positions_filter config pulled anc fin found upcoming
 
 /-- Late activations, weight 3 for V keys and for new keys, and for the keys of `SC`.
 
@@ -15333,15 +15369,6 @@ theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
   obtain ⟨validator, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
   exact mem_positions_filter config pulled anc fin found
     (isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩)
-
-/-- Glue: (K4 pulled counted V) keys are current at R. -/
-private theorem rise_base (h : Setting config checks g split fin pulled anc counted V) :
-    (∑ v ∈ (K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) ≤ ∑ i ∈ (pinTerms config pulled anc fin).positions with (pinTerms config pulled anc fin).current i = true, (pinTerms config pulled anc fin).rise i := by
-  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
-  simp only [K4, Finset.mem_filter] at hv
-  obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) hv.2.1
-  exact mem_positions_filter config pulled anc fin found
-    (isActiveAt_eq_true_iff.mpr ⟨w, found, active⟩)
 
 /-- `quorumReserve` holds `joining` (its gain term). -/
 theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms config pulled anc fin).quorum := by
