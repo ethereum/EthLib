@@ -68,6 +68,9 @@ Not yet released.
 - `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
   The pin's deposit-queue bound for the keys that vote on R's branch reads it.
 
+- `FloorTrace.run_of_le_cap_general` gives the per-key accounting trace of a branch from a floor, for an activated key or a branch from Fulu.
+  Its guard lets the key's exit come within the window, if the key is not yet withdrawable.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
