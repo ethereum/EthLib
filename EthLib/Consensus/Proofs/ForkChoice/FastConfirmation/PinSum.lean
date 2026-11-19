@@ -13962,7 +13962,7 @@ It is the key's effective balance, its rise and one increment, if R's branch sla
 
 `branchR` pays that bound for such a key, and its increment covers the drop of R's penalty.
 
-A key that `exitedSlashable` charges is read at its balance and rise, or `bF`.
+A key that `exitedSlashable`, `late` or `pendingR` charges is read at its balance and rise, or `bF`.
 
 It is read without `ebUp`, which can exceed them.
 
@@ -13970,11 +13970,12 @@ Otherwise it is also at least the key's bound `ebUp`. -/
 private def whistleEnv (t : PinTerms preset) (pulled anc : BeaconState preset fork) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then
     balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  else if (pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
+  else if ((pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
       ((pulled.validators.data[i]?.map fun v =>
         decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true) ∧
       ((pulled.validators.data[i]?).any fun v =>
-        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true then
+        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true) ∨
+      (t.tight = false ∧ (t.lateB i = true ∨ t.pendingRB i = true)) then
     max (balanceAt pulled i + t.rise i) (t.bF i)
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
@@ -13988,7 +13989,9 @@ The credits hold the key's own whistleblower credits.
 
 The seat debits are those of the two runs that R shares with C.
 
-A key that exited before the finalized state also holds its credits on the shared segment. -/
+A key that exited before the finalized state also holds its credits on the shared segment.
+
+A sync credit there has the band of its rounding. -/
 private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (highC high : ℕ)
     (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
@@ -13997,7 +14000,8 @@ private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
     consAmt eventsC i + syncD eventsF i + syncD events i) + 9) / 10 + bandC tail highC i +
     bandX fin highC i + bandR (eventsF ++ events) i +
   if t.exitBeforeFin i = true then
-    (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i
+    (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i +
+      (if 0 < syncCr eventsF i then preset.upwardBand else 0)
   else 0
 
 /-- What a created key's charge adds to the effective balance of the key at an earlier exit.
