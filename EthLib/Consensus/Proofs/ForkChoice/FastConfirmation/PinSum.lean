@@ -1210,10 +1210,9 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
         (fork_le_of_chainSteps r1.chainSteps))
     obtain rfl : fork = pFork := sameFork.symm
-    set p : ForkedBeaconState preset := ⟨fork, pState⟩ with hp
     have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
     simp only at order
-    have endEpoch : (getCurrentEpoch p.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+    have endEpoch : (getCurrentEpoch pState).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
       have := h.near
       omega
     have nonDecreasing := UInt64.le_iff_toNat_le.mp
@@ -1222,7 +1221,7 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
       (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
     obtain ⟨positive, guards⟩ := floor_guards h (zs := fin) (y := pState) Run.nil endEpoch
-    have cleanP : ∀ w, p.state.validators.data[i.toNat]? = some w → w.slashed = false := by
+    have cleanP : ∀ w, pState.validators.data[i.toNat]? = some w → w.slashed = false := by
       intro w found
       cases flag : w.slashed
       · rfl
@@ -1253,7 +1252,7 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     have partialSum : ((before ++ rest').map (floorPartialDebit i)).sum =
         (before.map (floorPartialDebit i)).sum + (rest'.map (floorPartialDebit i)).sum := by
       simp only [List.map_append, List.sum_append]
-    have window : (getCurrentEpoch p.state).toNat - (getCurrentEpoch fin).toNat ≤
+    have window : (getCurrentEpoch pState).toNat - (getCurrentEpoch fin).toNat ≤
         (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat :=
       Nat.sub_le_sub_right order _
     exact arith _ D _ window (by omega) closed
