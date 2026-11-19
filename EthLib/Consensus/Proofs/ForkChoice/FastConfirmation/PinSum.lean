@@ -6173,23 +6173,18 @@ private theorem gain_split_flat (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk :
 /-- The gain on whole increments of a stake, at eleven tenths, is at most a tenth of the stake.
 
 The rate for each increment is the one that `rate_per_increment` bounds. -/
-private theorem gain_tenth (I WD F P D Zr : ℕ) (hWD : 0 < WD)
+private theorem gain_tenth (I WD F P D Zr : ℕ)
     (key : 11 * D * (P * F) < WD * I) :
     D * (11 * Zr / (10 * I) * P * F / WD) ≤ Zr / 10 := by
   have rounded := Nat.mul_div_le (11 * Zr) (10 * I)
   generalize 11 * Zr / (10 * I) = k at rounded ⊢
-  have floor := Nat.div_mul_le_self (k * P * F) WD
-  generalize k * P * F / WD = m at floor ⊢
-  have scaled : 11 * (D * m) * WD ≤ k * I * WD :=
-    calc 11 * (D * m) * WD = 11 * D * (m * WD) := by ring
-      _ ≤ 11 * D * (k * P * F) := Nat.mul_le_mul_left _ floor
-      _ = k * (11 * D * (P * F)) := by ring
-      _ ≤ k * (WD * I) := Nat.mul_le_mul_left _ key.le
-      _ = k * I * WD := by ring
-  have cancelled := Nat.le_of_mul_le_mul_right scaled hWD
-  have swap : 10 * I * k = 10 * (k * I) := by ring
+  have swap : 10 * I * k = 10 * (I * k) := by ring
   rw [Nat.le_div_iff_mul_le (by norm_num)]
-  omega
+  rcases Nat.eq_zero_or_pos k with zero | pos
+  · subst zero
+    simp
+  · have := (gain_lt I WD F P D k pos key).le
+    omega
 
 /-- The gain at the base stake, with its tenth, is within `rise`'s gain slack. -/
 private theorem base_absorb (D Df q : ℕ) (hDf : D ≤ Df) :
@@ -6207,12 +6202,12 @@ private theorem base_absorb (D Df q : ℕ) (hDf : D ≤ Df) :
 The joint floor of the flows and the base stake splits by kind with one step.
 
 With no flow there is no step. -/
-private theorem flow_gain_split (I WD F P D Dt Df q Zk Z' : ℕ) (hWD : 0 < WD)
+private theorem flow_gain_split (I WD F P D Dt Df q Zk Z' : ℕ)
     (key : 11 * D * (P * F) < WD * I) (hDt : D ≤ Dt) (hDf : D ≤ Df) (hZ : Zk ≤ Z') :
     D * (11 * (Zk + (D * q + D)) / (10 * I) * P * F / WD) + (D * q + D) ≤
       Dt * (11 * Z' / (10 * I) * P * F / WD) +
         (if 0 < Z' then Dt * (P * F / WD + 2) else 0) + Df * ((11 * q + 9) / 10 + 3) := by
-  have tenth := gain_tenth I WD F P D (D * q + D) hWD key
+  have tenth := gain_tenth I WD F P D (D * q + D) key
   have absorb := base_absorb D Df q hDf
   have monoGain : D * (11 * Zk / (10 * I) * P * F / WD) ≤
       Dt * (11 * Z' / (10 * I) * P * F / WD) :=
