@@ -186,7 +186,7 @@ private theorem charge_amounts_le_queueWindow
     unfold chargeAmt exitQ
     rw [find_charge inRun (by simp [index]) (fun d inD hd => unique d inD (by simpa using hd)),
       find_charge inRun (by simp [index, epoch])
-        (fun d inD hd => unique d inD (by simpa using hd.1))]
+        (fun d inD hd => unique d inD (by simp at hd; exact hd.1))]
   rw [Finset.sum_congr rfl same]
   refine (sum_exitQ_le tailC ((getCurrentEpoch counted).toNat - 1 + 1) (by simp only; omega) S).trans ?_
   exact charges_le_queueWindow h tailC
