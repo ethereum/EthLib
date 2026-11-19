@@ -7905,45 +7905,6 @@ private theorem key_stay_to (h : Setting config checks g split fin pulled anc co
   · exact .inl ⟨flat, c2 flat⟩
   · exact .inr ⟨by omega, c3 (by omega), c1⟩
 
-/-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance.
-
-The runs of C and of R start at a state `c` of the shared segment, which holds the key.
-
-The cap of the key may rise once on either run, and the balance counts up to its cap at each state.
-
-The cap at C bounds the cap along C's run, and the cap at R bounds it along R's.
-
-The effective balance of the key is at most its cap at each state of a run from the finalized state.
-
-The effective balance at C is that at R if C is no later than `c`. -/
-private theorem key_stay (h : Setting config checks g split fin pulled anc counted V)
-    {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
-    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (i : ℕ)
-    (inside : i < c.validators.data.size) (Bc Bp : ℕ)
-    (balanceC : ∀ z ∈ (fromC.append tailC).balancePath,
-      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ Bc)
-    (balanceR : ∀ z ∈ (fromC.append tail).balancePath,
-      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ Bp) :
-    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
-        effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i ∨
-      (effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ Bc + preset.downwardBand ∧
-        effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤
-          max (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i)
-            (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-              (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i))) := by
-  obtain ⟨shared⟩ := h.toFin
-  have invariant : Invariant c := Run.invariant h.genesis.invariant (shared.append toC)
-  have later := UInt64.le_iff_toNat_le.mp h.later
-  obtain ⟨-, r2, -, -⟩ := effective_ceiling_flip h (fromC.append tail) invariant i inside Bp
-    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i)
-    (effective_le_cap_run h toC fromC tail i)
-    (capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) i) balanceR
-  rcases key_stay_to h toC fromC tailC i inside Bc balanceC with ⟨flat, same⟩ | ⟨-, near, top⟩
-  · exact .inl (same.trans (r2 (by omega)).symm)
-  · exact .inr ⟨near, top⟩
-
 open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
 
@@ -17168,34 +17129,6 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     P hP Df D q gc Cr M Bc _ hDf hD hq hM hform hBc
     rateLow maxLe (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) startLe stay
     cappedY creditsLe noCredit
-
-/-- A counted voter that the split holds is unslashed at the split.
-
-A slashed validator stays slashed at its index along a run. -/
-private theorem voter_unslashed_split (h : Setting config checks g split fin pulled anc counted V)
-    (v : ValidatorIndex) (voter : v ∈ Q counted)
-    (inSplit : v.toNat < split.validators.data.size) :
-    (split.validators.data[v.toNat]?.map (·.slashed)).getD false = false := by
-  obtain ⟨tailC⟩ := h.toCounted
-  have within := BeaconState.registryWithinLimit_of_lt h.early counted
-  have inQ := voter
-  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inQ
-  obtain ⟨listed, unslashedC⟩ := inQ
-  obtain ⟨uC, foundC⟩ : ∃ uC, counted.validators.data[v.toNat]? = some uC := by
-    rcases listed with now | before
-    · obtain ⟨u, foundU, -⟩ := (mem_getActiveValidatorIndices within).mp now
-      exact ⟨u, foundU⟩
-    · obtain ⟨u, foundU, -⟩ := (mem_getActiveValidatorIndices within).mp before
-      exact ⟨u, foundU⟩
-  have cleanC : uC.slashed = false := by
-    simpa [foundC] using unslashedC
-  obtain ⟨uS, foundS⟩ : ∃ uS, split.validators.data[v.toNat]? = some uS :=
-    ⟨_, Array.getElem?_eq_getElem inSplit⟩
-  have cleanS := unslashed_of_run tailC foundS (fun w fw => by
-    rw [foundC] at fw
-    cases fw
-    exact cleanC)
-  simp [foundS, cleanS]
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The per-key core of the rise for a counted voter on its kept arm, from a start state `c`.
