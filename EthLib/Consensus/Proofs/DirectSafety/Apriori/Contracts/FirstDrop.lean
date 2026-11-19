@@ -1129,8 +1129,8 @@ private theorem FloorTrace.run_potential_core
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨Or.inl retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
-          noCrossing⟩) replayed
+        exact ⟨Or.inl retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
+          quotient_le, noCrossing⟩) replayed
   exact ⟨potential, fun aligned => origin aligned fulu⟩
 
 /-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form. -/
