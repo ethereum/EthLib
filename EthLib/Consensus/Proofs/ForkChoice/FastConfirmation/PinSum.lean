@@ -333,23 +333,38 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (inc - 1)
   -- The window's proposer rewards are read at every key that can attest in it.
   --
-  -- Such a key is activated by the next epoch and exits no earlier than the finalized epoch.
+  -- Such a key exits no earlier than the finalized epoch.
+  --
+  -- It can activate on the other branch while it is still pending here.
   --
   -- Its effective balance on either branch is at most its effective balance here plus its rise.
   let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
-      decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
-        decide (finalized ≤ v.exitEpoch.toNat)),
+      decide (finalized ≤ v.exitEpoch.toNat)),
     (effective i + rise i) / inc * perIncrement
+  -- Each key the call's branch credits or debits can move by a rounding step and a band.
+  --
+  -- The keys are the window's proposers and deposit recipients.
+  --
+  -- They also hold the sync seats of each period from the finalized epoch to the next epoch.
+  --
+  -- Each period crossing adds one more set of seats.
+  let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+    preset.SYNC_COMMITTEE_SIZE.toNat *
+      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
+        depth / period)
   -- The other branch's credits can raise its attesters' effective balances above that read.
   --
   -- Each increment they add is counted, with one rounding step per credited key or seat key.
   --
   -- Each deposit the window can apply to a new key counts at the largest effective balance.
+  --
+  -- A key this branch debits keeps one more rounding step, and the leak its sync debits induce.
   let attesterExcess := (depositCarry + depthFin * depositChurn + consolidationsX +
       depth * proposerBase + depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
         inc +
     creditedKeys + seatExcess +
-    depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * (capMax / inc)
+    depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * (capMax / inc) +
+    roundedKeys + syncLeak / inc
   -- This follows `syncProposerReward` on natural numbers, at the envelope.
   --
   -- It is a bound on the reward, not a read.
@@ -398,19 +413,14 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn +
       whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
-  -- Each key the call's branch credits or debits can move by a rounding step and a band.
+  -- A key slashed on this branch drops by at most one increment of effective balance.
   --
-  -- The keys are the window's proposers and deposit recipients.
-  --
-  -- They also hold the sync seats of each period from the finalized epoch to the next epoch.
-  --
-  -- Each period crossing adds one more set of seats.
-  let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
-    preset.SYNC_COMMITTEE_SIZE.toNat *
-      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
-        depth / period)
+  -- Its leak over the window is then read at the dropped balance, so the drop's leak is charged.
+  let slashCharge := inc + depthFin * (2 * (2 * perIncrement) +
+    2 * inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
-  let branchR := 3 * (whistleblowerR + inc * slashedR + depth * proposerCredit +
+  let branchR := 3 * (whistleblowerR + slashCharge * slashedR + depth * proposerCredit +
     (inc + preset.downwardBand - 1) * roundedKeys)
   -- A key previous-epoch-only in a counting state weighs three times there, at its balance there.
   --
@@ -795,7 +805,9 @@ def syncF (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
 
 /-- One increment for a key slashed on R's branch after the finalized epoch.
 
-The initial penalty is at most one increment, and `branchR` charges `inc` for each such key. -/
+The effective-balance drop of R's initial penalty is at most one increment, by `slashBand`.
+
+`branchR` charges each such key `slashCharge`, at least one increment. -/
 def slashR (t : PinTerms preset) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0
 
@@ -8550,8 +8562,26 @@ private theorem branchR_split (config : Config)
                 (getCurrentEpoch finalizedState).toNat /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) := by
+  -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
+  obtain ⟨W, D, split⟩ : ∃ W D : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      3 * (W + (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + D) *
+          (pinTerms config state ancestor finalizedState).slashedR +
+        (pinTerms config state ancestor finalizedState).depth *
+          (pinTerms config state ancestor finalizedState).proposerCredit +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
+          ((pinTerms config state ancestor finalizedState).depth * preset.SLOTS_PER_EPOCH.toNat +
+            (pinTerms config state ancestor finalizedState).depth *
+              preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+            preset.SYNC_COMMITTEE_SIZE.toNat *
+              (((getCurrentEpoch state).toNat + 1) /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+                (getCurrentEpoch finalizedState).toNat /
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
+                (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
-  ⟨_, rfl⟩
+    ⟨_, _, rfl⟩
+  exact ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring⟩
 
 /-- The sync part of the proposer credit is at most the proposer credit. -/
 private theorem syncProposer_le_credit (config : Config)
