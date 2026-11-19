@@ -16181,6 +16181,30 @@ private theorem y_floor_le (I WD F P D Df q Cr Ds DsF W gc S U Fl : ℕ)
         have := hS hW0
         omega
 
+/-- The closing of a key, with the credits `Cr` that it holds, gives `keyCeiling`.
+
+`Cr` is at most the credits of C's run, and the sync credits are at most `syncF`. -/
+private theorem keyCeiling_of_close (anc : BeaconState preset fork)
+    {ending : BeaconState preset fork}
+    (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
+    (eventsC events eventsF : List (BalanceEvent preset)) (v Cr : ℕ)
+    (close : balanceAt ending v ≤ balanceAt pulled v + (pinTerms config pulled anc fin).rise v +
+      (syncD eventsF v + syncD events v + Cr + inducedR (pinTerms config pulled anc fin) run v +
+        flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v +
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v) +
+      (bandC tailC highC v + bandR (eventsF ++ events) v + bandX fin highC v +
+        slashR (pinTerms config pulled anc fin) v))
+    (creditsLe : Cr ≤ credC tailC highC v + whistC tailC highC v +
+      (eventsC.map (syncCredit v)).sum) :
+    keyCeiling anc run tailC highC eventsC events eventsF v := by
+  have fSyncE : syncD events v ≤ syncF events v := by
+    rw [syncF_eq]; unfold syncD; omega
+  have fSyncC : (eventsC.map (syncCredit v)).sum ≤ syncF eventsC v := by
+    rw [syncF_eq]; omega
+  unfold keyCeiling keyExtra
+  omega
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
 
@@ -16197,6 +16221,10 @@ A key with no band has no credits, and its flows are at most its initial penalty
 The cap enters only through `stay` and `cappedY`, which the cap arms prove.
 
 C's run may end at any state, so a prefix of it closes the same way.
+
+It concludes with the flows and bands in the form of `keyExtra`, without the credits of `credC`.
+
+`keyCeiling_of_close` gives `keyCeiling` from it, and the credits `Cr` that it holds.
 
 `cappedY` is the premise `capped` of `rise_close`, for a key on a low rate.
 
@@ -16257,7 +16285,14 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
     (creditsLe : Cr ≤ credC tailC highC v.toNat + whistC tailC highC v.toNat +
       (eventsC.map (syncCredit v.toNat)).sum)
     (noCredit : bandC tailC highC v.toNat = 0 → bandX fin highC v.toNat = 0 → Cr = 0) :
-    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
+    balanceAt ending v.toNat ≤ balanceAt pulled v.toNat +
+      (pinTerms config pulled anc fin).rise v.toNat +
+      (syncD eventsF v.toNat + syncD events v.toNat + Cr +
+        inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat +
+        flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat +
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
+      (bandC tailC highC v.toNat + bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat +
+        slashR (pinTerms config pulled anc fin) v.toNat) := by
   classical
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   -- the gain of the flows, and of the base stake, is the flow gain with a unit and the base gain
@@ -16381,10 +16416,6 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
     fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
       alignedC (Nat.le_max_left _ _) stay cap ceiling slack
-  have fSyncE : syncD events v.toNat ≤ syncF events v.toNat := by
-    rw [syncF_eq]; unfold syncD; omega
-  have fSyncC : (eventsC.map (syncCredit v.toNat)).sum ≤ syncF eventsC v.toNat := by
-    rw [syncF_eq]; omega
   have fK : flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
       flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
     simp [flowK, kept]
@@ -16418,7 +16449,6 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         Nat.pos_of_ne_zero fun z => by rw [z, Nat.mul_zero] at pos; exact Nat.lt_irrefl _ pos
       have := Nat.le_mul_of_pos_right preset.upwardBand dpos
       omega
-  unfold keyCeiling keyExtra
   by_cases bands : 0 < bandC tailC highC v.toNat ∨ 0 < bandR (eventsF ++ events) v.toNat ∨
       0 < bandX fin highC v.toNat
   · have := close _ (bandC tailC highC v.toNat + bandR (eventsF ++ events) v.toNat +
@@ -16763,11 +16793,12 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
       (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide)) v.toNat highC
       tailC
     omega
-  exact key_close h tail fromFin tailC highC v kept
+  exact keyCeiling_of_close anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat Cr
+    (key_close h tail fromFin tailC highC v kept
     (voter_not_withdrawn h fromFin tail v voter inFin) P hP Df D q gc Cr M Bc _ hDf hD hq hM
     hform hBc
     rateLow maxLe stay (fun _ => Nat.le_trans cappedC (Nat.le_add_right _ _)) creditsLe
-    noCredit
+    noCredit) creditsLe
 
 /-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
 
