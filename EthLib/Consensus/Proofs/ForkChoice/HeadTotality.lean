@@ -661,7 +661,7 @@ private theorem shouldExtendPayload_ok {anchorState : BeaconState preset fork}
       ∃ v, store.isPayloadInclusionListSatisfied heze root = .ok v := by
     intro heze verified
     obtain ⟨v, vFound⟩ := Option.isSome_iff_exists.mp
-      (reachable.payloadInclusionListSatisfaction_isSome gloas heze verified)
+      (reachable.payloadInclusionListSatisfaction_isSome heze verified)
     unfold isPayloadInclusionListSatisfied
     simp only [vFound]
     by_cases held : store.isPayloadVerified (Nat.le_trans (by decide) heze) root <;>

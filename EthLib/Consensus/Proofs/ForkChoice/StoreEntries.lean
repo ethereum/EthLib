@@ -37,7 +37,7 @@ variable {preset : Preset} {fork : Fork} {config : Config}
 
 namespace Store
 
-/-- From Heze, the answers on inclusion lists of the first store stay in the second store.
+/-- From Heze, a block with an answer on inclusion lists in the first store has one in the second.
 
 Each verified payload of the second store is one of the first store or has an answer. -/
 private abbrev KeepsAnswers (gloas : .glamsterdam ≤ fork) (a b : Store preset fork) : Prop :=
@@ -405,9 +405,9 @@ private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSourc
       obtain ⟨k, u, t, p, o⟩ := addBlock_entries added
       exact .inr ⟨blockRoot, k, blocks, u, t, p, o, known⟩
 
-/-- From Heze, recording an envelope keeps every answer on inclusion lists.
+/-- From Heze, after an envelope each block with an answer on inclusion lists still has one.
 
-It adds one for its block. -/
+The block of the envelope has one too. -/
 private theorem recordEnvelope_answers {sources : BlockSources preset fork} {root : Root}
     {payload : ExecutionPayload preset fork} {recorded : Store preset fork}
     (record : a.recordEnvelope sources root payload = .ok recorded) (heze : .hegota ≤ fork)
@@ -685,10 +685,10 @@ theorem Store.Reachable.payloadDataAvailabilityVote_isSome
 /-- From Heze, in a reachable store, each verified payload has an answer on its inclusion lists. -/
 theorem Store.Reachable.payloadInclusionListSatisfaction_isSome
     (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
-    (gloas : .glamsterdam ≤ fork) (heze : .hegota ≤ fork)
-    (verified : store.isPayloadVerified gloas root = true) :
+    (heze : .hegota ≤ fork)
+    (verified : store.isPayloadVerified (Nat.le_trans (by decide) heze) root = true) :
     ((store.payloadInclusionListSatisfaction heze)[root]?).isSome :=
-  reachable.answers_aux gloas heze root verified
+  reachable.answers_aux _ heze root verified
 
 /-- In a reachable store, each known block has an unrealized justified checkpoint. -/
 theorem Store.Reachable.unrealizedJustification_ok
