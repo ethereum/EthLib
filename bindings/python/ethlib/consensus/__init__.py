@@ -361,12 +361,15 @@ ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
 # A light client update: the slot of its attested header and the fork of its chunk.
 ResponseLightClientUpdate: TypeAlias = tuple[int, str]
+# A light client bootstrap: the slot and root of its beacon header and the fork of its chunk.
+ResponseLightClientBootstrap: TypeAlias = tuple[int, bytes, str]
 ResponseItems: TypeAlias = (
     Sequence[ResponseBlock]
     | Sequence[ResponseSidecar]
     | Sequence[ResponseEnvelope]
     | Sequence[ResponseInclusionList]
     | Sequence[ResponseLightClientUpdate]
+    | Sequence[ResponseLightClientBootstrap]
 )
 
 
@@ -2304,6 +2307,7 @@ __all__ = [
     "ResponseSidecar",
     "ResponseEnvelope",
     "ResponseInclusionList",
+    "ResponseLightClientBootstrap",
     "ResponseLightClientUpdate",
     "ResponseItems",
     "reqresp_is_valid_response",

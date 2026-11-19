@@ -216,6 +216,12 @@ def reqRespResponseValidOf
     let updates ← fields.mapM fun (attestedSlot, chunkFork) => do
       return ResponseUpdate.mk attestedSlot (← forkUpTo .hegota chunkFork.toUTF8)
     return isValidLightClientUpdatesByRangeResponse preset config request updates
+  | .lightClientBootstrap =>
+    let request ← decodeRequest Root request
+    let fields ← decodeItems (Slot × Root × String) (fun fields => fields) items
+    let bootstraps ← fields.mapM fun (slot, root, chunkFork) => do
+      return ResponseBootstrap.mk slot root (← forkUpTo .hegota chunkFork.toUTF8)
+    return isValidLightClientBootstrapResponse preset config request bootstraps
   | .blobSidecarsByRange =>
     return isValidBlobSidecarsByRangeResponse config fork
       (← decodeRequest BlobSidecarsByRangeRequest request) (← sidecar items)
@@ -263,6 +269,8 @@ An envelope is its slot, block root, parent hash and block hash.
 An inclusion list is its slot, validator index and dependent root.
 
 A light client update is the slot of its attested header and the name of the fork of its chunk.
+
+A light client bootstrap is the slot and root of its beacon header and the fork of its chunk.
 
 The committee is read only for inclusion lists, and must then have one validator per seat.
 
