@@ -5472,6 +5472,16 @@ private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run confi
     (same : c.index = d.index) : c = d :=
   List.inj_on_of_nodup_map (DirectSafety.departureCharges_run_indices tail) hc hd same
 
+/-- A state between two runs is of the fork of the start.
+
+The end of the runs must not be of a later fork than the start.
+
+A run never moves the fork back. -/
+private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config checks x m)
+    (r2 : Run config checks m y) (back : y.fork ≤ x.fork) : m.fork = x.fork :=
+  Fork.ctorIdx_injective (Nat.le_antisymm
+    (Nat.le_trans (fork_le_of_chainSteps r2.chainSteps) back) (fork_le_of_chainSteps r1.chainSteps))
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The slashing credits of C's run are paid for each key by its envelope or its charge.
 
@@ -5502,11 +5512,9 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
   refine slashing_credits_le (shared.append fromFin) tailC h.genesis h.early h.caps.compounding
     highC endEpochC _ _ ?_ replayedC
   intro a b step member i inside flag
-  obtain ⟨pre, post, cut, aEarly, -⟩ := Run.contains_step_facts member h.early
-  have above : fork ≤ a.fork := fork_le_of_chainSteps pre.chainSteps
-  have below : a.fork ≤ fork := Nat.le_trans step.chainStep.fork_le
-    (fork_le_of_chainSteps post.chainSteps)
-  have sameFork : a.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
+  obtain ⟨pre, post, -, -, -⟩ := Run.contains_step_facts member h.early
+  have sameFork : a.fork = fork :=
+    fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)
   simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
   obtain ⟨unslashedA, slashedB⟩ := flag
   have insideCounted : i < counted.validators.data.size :=
@@ -5543,6 +5551,14 @@ private def chargeAmt {x y : ForkedBeaconState preset} (tail : Run config checks
     ℕ :=
   ((tail.departureCharges.find? fun c => c.index == i).map (·.amount)).getD 0
 
+/-- A charge that meets a test, and is the only one that does, is the first that does. -/
+private theorem find_charge {l : List DepartureCharge} {p : DepartureCharge → Bool}
+    {c : DepartureCharge} (member : c ∈ l) (hp : p c = true)
+    (unique : ∀ d ∈ l, p d = true → d = c) : l.find? p = some c := by
+  obtain ⟨d, chosen⟩ := Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, member, hp⟩)
+  obtain rfl := unique d (List.mem_of_find?_eq_some chosen) (List.find?_some chosen)
+  exact chosen
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that a step slashes with its exit unset is charged its effective balance before the step.
 
@@ -5576,14 +5592,8 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
       tailC.departureCharges := by
     rw [cut, Run.departureCharges_append]
     simp [Run.departureCharges, inStep]
-  have found : (tailC.departureCharges.find? fun c => c.index == i).isSome = true :=
-    List.find?_isSome.mpr ⟨_, inRun, beq_iff_eq.mpr rfl⟩
-  obtain ⟨c, chosen⟩ := Option.isSome_iff_exists.mp found
-  have selected := List.find?_some chosen
-  have same := charge_unique tailC (List.mem_of_find?_eq_some chosen) inRun
-    (beq_iff_eq.mp selected)
-  subst same
-  rw [chosen]
+  rw [find_charge inRun (beq_iff_eq.mpr rfl)
+    (fun d inD hd => charge_unique tailC inD inRun (beq_iff_eq.mp hd))]
   simp [effectiveAt, foundA]
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
@@ -5616,14 +5626,6 @@ private theorem created_charge (h : Setting config checks g split fin pulled anc
         exact (slash_exit_charge h fromFin tailC step member i old new foundA foundB unset
           marked).trans (Nat.le_add_right _ _)
     · exact earlier step member i old foundA unset
-
-/-- A charge that meets a test, and is the only one that does, is the first that does. -/
-private theorem find_charge {l : List DepartureCharge} {p : DepartureCharge → Bool}
-    {c : DepartureCharge} (member : c ∈ l) (hp : p c = true)
-    (unique : ∀ d ∈ l, p d = true → d = c) : l.find? p = some c := by
-  obtain ⟨d, chosen⟩ := Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, member, hp⟩)
-  obtain rfl := unique d (List.mem_of_find?_eq_some chosen) (List.find?_some chosen)
-  exact chosen
 
 /-- The keys whose exit is charged within the run's epochs pay at most the window of the queues.
 
@@ -5926,16 +5928,6 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
       | error e => rfl
       | ok p => exact absurd ⟨_, p, hr⟩ anyOk
     · simp
-
-/-- A state between two runs is of the fork of the start.
-
-The end of the runs must not be of a later fork than the start.
-
-A run never moves the fork back. -/
-private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config checks x m)
-    (r2 : Run config checks m y) (back : y.fork ≤ x.fork) : m.fork = x.fork :=
-  Fork.ctorIdx_injective (Nat.le_antisymm
-    (Nat.le_trans (fork_le_of_chainSteps r2.chainSteps) back) (fork_le_of_chainSteps r1.chainSteps))
 
 /-- The pin's rate bounds the reward rate at each state of a prefix of C's tail.
 
