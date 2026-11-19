@@ -3589,13 +3589,15 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
     (startCap : effectiveAt n i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
     (capCeil : ∀ z ∈ post.balancePath,
       PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
-    (rate : ∀ z ∈ post.balancePath, ∀ total perIncrement : Gwei,
-      getTotalActiveBalance z.state = .ok total →
-      getBaseRewardPerIncrement preset total = .ok perIncrement →
-      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    (rate : ∀ z ∈ post.balancePath,
+      i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) ∨
+      ∀ total perIncrement : Gwei,
+        getTotalActiveBalance z.state = .ok total →
+        getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+          (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
       (PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
@@ -3656,7 +3658,7 @@ private theorem key_capped_credits {n y : ForkedBeaconState preset}
       WEIGHT_DENOMINATOR.toNat + 2) ≤ U2) :
     effectiveAt y i ≤ B0 + Cr + gainOn preset depth P Cr + (U1 + U2) := by
   have ceiling := key_credit_ceiling post early fulu i inside high P E aligned startCap capCeil
-    rate endEpoch fixpoint
+    (fun z member => .inr (rate z member)) endEpoch fixpoint
   have split := gain_split preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P e0 Cr
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat) depth incPos epochs
@@ -6017,7 +6019,8 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
         (floor_le_of_lt incPos alignedE (Nat.lt_of_le_of_lt bound closed)))
   obtain ⟨-, -, -, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0
     capHigh high (e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) P
-  have balances := fourth alignedCap startCap capCeil rate endEpoch fixpoint
+  have balances := fourth alignedCap startCap capCeil (fun z member => .inr (rate z member))
+    endEpoch fixpoint
   intro z member
   exact Nat.le_trans (balances z member) bound
 

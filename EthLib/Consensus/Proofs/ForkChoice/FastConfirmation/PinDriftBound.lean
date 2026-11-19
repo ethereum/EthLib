@@ -2146,13 +2146,15 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat) ∧
     (capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
       (∀ z ∈ tail.balancePath, capAt z i ≤ capHigh) →
-      (∀ z ∈ tail.balancePath, ∀ total perIncrement : Gwei,
-        getTotalActiveBalance z.state = .ok total →
-        getBaseRewardPerIncrement preset total = .ok perIncrement →
-        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-          (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+      (∀ z ∈ tail.balancePath,
+        i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) ∨
+        ∀ total perIncrement : Gwei,
+          getTotalActiveBalance z.state = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+            (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
       (getCurrentEpoch y.state).toNat ≤ high + 1 →
       max (effectiveAt x i) (min capHigh (creditBound tail i high E P capHigh -
         creditBound tail i high E P capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
@@ -2177,13 +2179,15 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       Nat.le_trans (by decide) (Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))
     have key : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
         (∀ z ∈ (pre.snoc step).balancePath, capAt z i ≤ capHigh) →
-        (∀ z ∈ (pre.snoc step).balancePath, ∀ total perIncrement : Gwei,
-          getTotalActiveBalance z.state = .ok total →
-          getBaseRewardPerIncrement preset total = .ok perIncrement →
-          perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-            (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+        (∀ z ∈ (pre.snoc step).balancePath,
+          i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) ∨
+          ∀ total perIncrement : Gwei,
+            getTotalActiveBalance z.state = .ok total →
+            getBaseRewardPerIncrement preset total = .ok perIncrement →
+            perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+              (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+                preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+              P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
         (getCurrentEpoch last.state).toNat ≤ high + 1 →
         max (effectiveAt x i) (min capHigh (creditBound (pre.snoc step) i high E P capHigh -
           creditBound (pre.snoc step) i high E P capHigh %
@@ -2239,7 +2243,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
           rw [Nat.min_comm] at c1
           have envelope : effectiveAt middle i ≤ E := c1.trans closed
           have rewards := epochRewards_le step altair early i (Or.inl room) E P envelope
-            (.inr (rate middle (List.mem_append_left _ atMiddle)))
+            (rate middle (List.mem_append_left _ atMiddle))
           have stepBound := step_balance_le step early i
           have mid := ihPre _ atMiddle
           rw [tailEq]
