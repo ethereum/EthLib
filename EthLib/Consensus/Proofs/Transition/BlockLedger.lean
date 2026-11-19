@@ -516,16 +516,10 @@ private theorem lives_queueConsolidation {electra : .pectra ≤ fork} {sourceInd
     (far : source.exitEpoch = FAR_FUTURE_EPOCH)
     (computed : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     Lives s t := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, _, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  have same := congrArg (·.data) (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
-  exact (Lives.of_data_left same <|
-    Lives.setValidator (old := source) (by simp [getValidator, same, found]) set
-      ⟨rfl, fun set => absurd far set⟩).of_data_right rfl
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  have step := Lives.setValidator (old := source) (by simp [getValidator, found]) set
+    ⟨rfl, fun set => absurd far set⟩
+  exact (Lives.of_data_left (s := s) (by rfl) step).of_data_right rfl
 
 private theorem lives_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
@@ -1359,16 +1353,11 @@ private theorem Ledger.consolidate {electra : .pectra ≤ fork}
     (found : s.validators.data[sourceIndex.toNat]? = some source)
     (computed : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
     Ledger s t ∅ ∅ 0 0 0 := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, Base.Uint64.addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churned, epoch⟩, churn, _, _, marked, set, pending, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  have same := computeConsolidationEpochAndUpdateChurn_earliest churn
-  have one : Ledger s churned ∅ ∅ 0 0 0 := Ledger.of_eq (by rw [same.2.2]) (by rw [same.2.1])
-  have two := Ledger.setValidator (old := source)
-    (by rw [getValidator_eq_ok_iff, same.2.1]; exact found) (by rfl) set
-  simpa only [Finset.empty_union, add_zero] using (one.trans two).trans
+  obtain ⟨_, _, _, marked, pending, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  have two := Ledger.setValidator (old := source) (by rw [getValidator_eq_ok_iff]; exact found)
+    (by rfl) set
+  have one := (Ledger.of_eq (s := s) (by rfl) (by rfl)).trans two
+  simpa only [Finset.empty_union, add_zero] using one.trans
     (Ledger.of_eq (t := { marked with pendingConsolidations := fun _ => pending }) rfl rfl)
 
 /-- A consolidation request converts at most one validator, and moves no other balance. -/
