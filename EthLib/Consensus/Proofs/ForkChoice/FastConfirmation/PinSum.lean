@@ -2161,7 +2161,7 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
   refine Run.balanceFloor_events_or_fulu (toFin.append pre) rest h.genesis h.caps h.delay
     h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
   intro m n before step after cut w found
-  exact ⟨.inl (retained before step after cut w found), guards before step after⟩
+  exact ⟨retained before step after cut w found, guards before step after⟩
 
 /-- R's balance of a key that does not exit in the window falls only by its debit events.
 
