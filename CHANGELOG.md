@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `VoteAt.accepted_at_next_slot_of_payloadVote` accepts a held duty vote at the next slot at every fork, or names a collision of bounded honest stores ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas it takes the receiver's check of the payload status that the vote names.
+
 - `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block under synchrony at every fork, when the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.
 
