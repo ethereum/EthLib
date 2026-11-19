@@ -504,35 +504,23 @@ This function returns `S ^ (P_i || 0^c)`, and the permutation `f` follows it.
 
 Lane `i` of `S`, for `i < 25`, is XORed with lane `i` of `P_i || 0^c`.
 
-- A rate of 136 bytes fills lanes 0 to 16 with `P_i`.
-- A rate of 72 bytes fills lanes 0 to 8, and lanes 9 to 16 are zero.
+- A rate of 136 bytes fills lanes 0 to 16 with `P_i`, and lanes 17 to 24 are zero.
+- A rate of 72 bytes fills lanes 0 to 8, and lanes 9 to 24 are zero.
 
-For a rate of at most 136, lanes 17 to 24 lie in `0^c`, so they stay unchanged and are skipped. -/
+All 25 lanes are XORed, so every positive rate below 200 bytes that is a multiple of 8 works. -/
 def absorbBlock (rate : Nat) (S : State) (bytes : ByteArray) (start : Nat) : State :=
   -- lane i is lane i of P_i || 0^c: bytes 8i to 8i + 7 of P_i, or 0 past the rate.
   let lane := blockLane rate bytes start
-  { S with
-    -- y = 0
-    a0 := S.a0 ^^^ lane 0,       -- S[0, 0] ^ bytes 0 to 7 of P_i
-    a1 := S.a1 ^^^ lane 1,       -- S[1, 0] ^ bytes 8 to 15 of P_i
-    a2 := S.a2 ^^^ lane 2,       -- S[2, 0] ^ bytes 16 to 23 of P_i
-    a3 := S.a3 ^^^ lane 3,       -- S[3, 0] ^ bytes 24 to 31 of P_i
-    a4 := S.a4 ^^^ lane 4,       -- S[4, 0] ^ bytes 32 to 39 of P_i
-    -- y = 1
-    a5 := S.a5 ^^^ lane 5,       -- S[0, 1] ^ bytes 40 to 47 of P_i
-    a6 := S.a6 ^^^ lane 6,       -- S[1, 1] ^ bytes 48 to 55 of P_i
-    a7 := S.a7 ^^^ lane 7,       -- S[2, 1] ^ bytes 56 to 63 of P_i
-    a8 := S.a8 ^^^ lane 8,       -- S[3, 1] ^ bytes 64 to 71 of P_i, the last lane at rate 72
-    a9 := S.a9 ^^^ lane 9,       -- S[4, 1] ^ bytes 72 to 79 of P_i, or 0 at rate 72
-    -- y = 2
-    a10 := S.a10 ^^^ lane 10,    -- S[0, 2] ^ bytes 80 to 87 of P_i, or 0 at rate 72
-    a11 := S.a11 ^^^ lane 11,    -- S[1, 2] ^ bytes 88 to 95 of P_i, or 0 at rate 72
-    a12 := S.a12 ^^^ lane 12,    -- S[2, 2] ^ bytes 96 to 103 of P_i, or 0 at rate 72
-    a13 := S.a13 ^^^ lane 13,    -- S[3, 2] ^ bytes 104 to 111 of P_i, or 0 at rate 72
-    a14 := S.a14 ^^^ lane 14,    -- S[4, 2] ^ bytes 112 to 119 of P_i, or 0 at rate 72
-    -- y = 3
-    a15 := S.a15 ^^^ lane 15,    -- S[0, 3] ^ bytes 120 to 127 of P_i, or 0 at rate 72
-    a16 := S.a16 ^^^ lane 16 }   -- S[1, 3] ^ bytes 128 to 135 of P_i, or 0 at rate 72
+  -- y = 0: S[x, 0] ^ bytes 8x to 8x + 7 of P_i
+  ⟨S.a0 ^^^ lane 0, S.a1 ^^^ lane 1, S.a2 ^^^ lane 2, S.a3 ^^^ lane 3, S.a4 ^^^ lane 4,
+   -- y = 1: S[x, 1] ^ bytes 40 + 8x to 47 + 8x of P_i
+   S.a5 ^^^ lane 5, S.a6 ^^^ lane 6, S.a7 ^^^ lane 7, S.a8 ^^^ lane 8, S.a9 ^^^ lane 9,
+   -- y = 2: S[x, 2] ^ bytes 80 + 8x to 87 + 8x of P_i
+   S.a10 ^^^ lane 10, S.a11 ^^^ lane 11, S.a12 ^^^ lane 12, S.a13 ^^^ lane 13, S.a14 ^^^ lane 14,
+   -- y = 3: S[x, 3] ^ bytes 120 + 8x to 127 + 8x of P_i
+   S.a15 ^^^ lane 15, S.a16 ^^^ lane 16, S.a17 ^^^ lane 17, S.a18 ^^^ lane 18, S.a19 ^^^ lane 19,
+   -- y = 4: S[x, 4] ^ bytes 160 + 8x to 167 + 8x of P_i
+   S.a20 ^^^ lane 20, S.a21 ^^^ lane 21, S.a22 ^^^ lane 22, S.a23 ^^^ lane 23, S.a24 ^^^ lane 24⟩
 
 /-- The output of FIPS 202 §4, Algorithm 8, steps 7 to 9, for `d = 256` bits:
 
@@ -608,7 +596,11 @@ end Internal
 
 Here `N` is the message, `b = 1600`, and `pad` is pad10*1.
 
-The rate is at most 136 bytes, so each block fits in the lanes that it XORs.
+The rate must be positive and below 200 bytes, since FIPS 202 §4 asks `0 < r < b`.
+
+It must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or in `0^c`.
+
+For other rates, the state is not specified.
 
 FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
 def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
