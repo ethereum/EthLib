@@ -16174,6 +16174,47 @@ private theorem K5_charge_site (h : Setting config checks g split fin pulled anc
         v.toNat < a.state.validators.data.size ∧
         exitQ tailC v.toNat = effectiveAt a v.toNat := sorry
 
+/-- Within one epoch, a key's balance rises at most by its block credits.
+
+A slot step inside the epoch keeps the balances.
+
+A block step counts the net rise of the balance across it. -/
+private theorem same_epoch_balance_le (i high : ℕ) {c a : ForkedBeaconState preset}
+    (r : Run config checks c a) (early : a.fork < .glamsterdam)
+    (same : getCurrentEpoch a.state = getCurrentEpoch c.state)
+    (endEpoch : (getCurrentEpoch a.state).toNat ≤ high + 1) :
+    actualBalanceAt a i ≤ actualBalanceAt c i + netScan i high r +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r).1 := by
+  refine Run.induction_of_same_epoch (fun z r' => (getCurrentEpoch z.state).toNat ≤ high + 1 →
+      actualBalanceAt z i ≤ actualBalanceAt c i + netScan i high r' +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r').1)
+    (fun _ => by simp [netScan_nil, creditScan_nil_fst]) ?_ ?_ r early same endEpoch
+  · intro f s t engine signed due ok pre' _ prior within
+    have epoch : (getCurrentEpoch t).toNat = (getCurrentEpoch s).toNat := by
+      simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
+    have before := prior (by simp only at within ⊢; omega)
+    have net := netScan_snoc i high pre' (Step.block engine signed due ok)
+    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+      pre' (Step.block engine signed due ok)
+    simp only at within net credit
+    simp only [show (getCurrentEpoch s).toNat ≤ high + 1 by omega, ↓reduceIte] at net credit
+    rw [net, credit]
+    simp only [stepNet]
+    omega
+  · intro middle last cached next pre' ok lastEq cachedOk kept prior within
+    subst lastEq
+    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    have net := netScan_snoc i high pre' (Step.slot ok)
+    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+      pre' (Step.slot ok)
+    simp only at within kept
+    rw [kept] at within
+    have before := prior within
+    simp only [within, ↓reduceIte] at net credit
+    rw [net, credit]
+    simp only [stepNet, actualBalanceAt] at before ⊢
+    omega
+
 /-- The start-of-epoch half of the charge arm, for a charge after the split's epoch.
 
 The run to the charge crosses an epoch boundary, at the state `c`.
@@ -16204,7 +16245,64 @@ private theorem charge_epoch_start (h : Setting config checks g split fin pulled
       (effectiveAt c i < PinSplit2.capAt c i →
         actualBalanceAt c i ≤ effectiveAt c i + preset.upwardBand) ∧
       actualBalanceAt a i ≤ actualBalanceAt c i + netScan i highC r +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := sorry
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := by
+  have aFork : a.fork = fork := fork_eq_of_run pre ((Run.nil.snoc step).append post)
+    (Nat.le_refl _)
+  have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
+  have aFulu : .fusaka ≤ a.fork := by rw [aFork]; exact h.fulu
+  have aCounted := UInt64.le_iff_toNat_le.mp
+    (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+  simp only at aCounted
+  obtain ⟨z, n, pre0, ok, rest, cut, hz, hn⟩ :=
+    Run.cross_split pre ((getCurrentEpoch a.state).toNat - 1) (by simp only; omega) (by omega)
+  have same : getCurrentEpoch n.state = getCurrentEpoch a.state := UInt64.toNat_inj.mp (by omega)
+  have zFulu : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre0.chainSteps)
+  have nEarly : n.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) aEarly
+  -- the key is active at the charge, so it is in the registry at the start of the epoch
+  obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
+  obtain ⟨w, later, assigned, -⟩ := (Run.nil.snoc step).departure_charge_exit charge
+    (by simpa [Run.departureCharges] using member)
+  rw [beq_iff_eq.mp index] at later
+  obtain ⟨v, found⟩ : ∃ v, a.state.validators.data[i]? = some v :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  have far := unset v found
+  have activated := step.chainStep.exit_assigned_activated (Nat.le_trans (by decide) aFulu)
+    found later far assigned
+  have activeA : isActiveAt a.state (getCurrentEpoch a.state) i = true := by
+    refine isActiveAt_eq_true_iff.mpr ⟨v, found, ?_⟩
+    have below : getCurrentEpoch a.state < FAR_FUTURE_EPOCH := by
+      rw [UInt64.lt_iff_toNat_lt, getCurrentEpoch_toNat]
+      have := a.state.slot.toNat_lt
+      have := Nat.div_le_div_left (a := a.state.slot.toNat) h.twoSlots (by decide : 0 < 2)
+      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+    exact ⟨activated, below⟩
+  have activeN : isActiveAt n.state (getCurrentEpoch a.state) i = true := by
+    rw [← activeKept_of_chainSteps rest.chainSteps _
+      (same ▸ getCurrentEpoch_le_activityFixedEpoch n.state)]
+    exact activeA
+  obtain ⟨vn, foundN, -⟩ := isActiveAt_eq_true_iff.mp activeN
+  have insideN : i < n.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundN).1
+  -- the bands of hysteresis at the start of the epoch
+  have hyst := DirectSafety.Apriori.Internal.hysteresis_of_crossing_slot ok h.bands zFulu nEarly
+    (by omega)
+  have up : effectiveAt n i < PinSplit2.capAt n i →
+      actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand := by
+    intro lt
+    cases bal : n.state.balances.data[i]? with
+    | none => simp [actualBalanceAt, bal]
+    | some balance =>
+      simp only [effectiveAt, PinSplit2.capAt, foundN, Option.map_some, Option.getD_some] at lt
+      simpa [actualBalanceAt, effectiveAt, bal, foundN] using
+        hyst.up i vn balance foundN bal (UInt64.lt_iff_toNat_lt.mpr lt)
+  refine ⟨n, pre0.snoc (Step.slot ok), rest, cut.symm, insideN, same,
+    (DirectSafety.run_same_epoch_effective rest aEarly same.symm i insideN).symm, ?_, up,
+    same_epoch_balance_le i highC rest aEarly same.symm (by omega)⟩
+  by_cases lt : effectiveAt n i < PinSplit2.capAt n i
+  · exact (Nat.min_le_left _ _).trans (up lt)
+  · exact (Nat.min_le_right _ _).trans (by omega)
 
 /-- The switch case of the start of the epoch.
 
