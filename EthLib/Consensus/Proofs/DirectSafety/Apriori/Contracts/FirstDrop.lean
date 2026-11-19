@@ -734,7 +734,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             cases flag : v.slashed
             · exact .inl ⟨rfl, window.1 flag⟩
             · exact .inr ⟨rfl, window.2 flag⟩)
-          high endEpoch retained (noCrossing added addedOk)
+          high endEpoch (retained.imp_right (· u middle)) (noCrossing added addedOk)
           (low := min (actualBalanceAt m i.toNat)
             (withdrawalMaxEffectiveBalance preset m.fork u).toNat)
           (base := base) (quotient := quotient) (a := fresh) (b := fresh) .nil rfl
@@ -972,8 +972,8 @@ theorem FloorTrace.run_potential_floor
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
-          noCrossing⟩) replayed
+        exact ⟨Or.inl retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
+          quotient_le, noCrossing⟩) replayed
   obtain ⟨-, closed⟩ := potential ρn ρd slack fulu bands clean start pass
   refine ⟨nonPassDebt i events, ?_, closed⟩
   have := penaltyDebit_le_floor i.toNat events
