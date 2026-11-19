@@ -25,7 +25,7 @@ public section
 
 namespace EthLib.Cryptography.Secp256k1.Exports
 
-open EthLib.Exports (Result)
+open EthLib.Exports (Result readSignature)
 
 /-- The length of a hash. -/
 def HASH_LEN : Nat := 32
@@ -39,22 +39,18 @@ def runSecp256k1 {α : Type} (act : Except Secp256k1Error α) : Result α :=
 
 /-- A 32-byte hash, or an error for any other length. -/
 def readHash (bytes : ByteArray) : Except Secp256k1Error (Vector UInt8 32) :=
-  if h : bytes.size = HASH_LEN then .ok ⟨bytes.data, h⟩ else .error (.badHashSize bytes.size)
+  Base.exactBytes HASH_LEN bytes .badHashSize
 
-/-- A 32-byte big-endian private key below `n`, or an error.
+/-- A 32-byte big-endian private key below `n`, or the error for its size or its value.
 
 A larger value is rejected rather than reduced, so each key has one encoding. -/
-def readPrivateKey (bytes : ByteArray) : Except Secp256k1Error Fn :=
+def readPrivateKey {ε : Type} (bytes : ByteArray) (badSize : Nat → ε) (tooLarge : ε) :
+    Except ε Fn :=
   if bytes.size = 32 then
-    let d := Base.bytesToNat bytes.data.toList
-    if h : d < Fn.modulus then .ok ⟨d, h⟩ else .error .privateKeyTooLarge
-  else .error (.badPrivateKeySize bytes.size)
-
-/-- The integers `r` and `s` of a 64-byte signature, or an error for any other length. -/
-def readSignature (bytes : ByteArray) : Except Secp256k1Error (Nat × Nat) :=
-  if bytes.size = SIGNATURE_LEN then
-    .ok (Base.bytesToNat (bytes.data.toList.take 32), Base.bytesToNat (bytes.data.toList.drop 32))
-  else .error (.badSignatureSize bytes.size)
+    match Fn.ofBytes? bytes.data.toList with
+    | some d => .ok d
+    | none => .error tooLarge
+  else .error (badSize bytes.size)
 
 /-! ## Sizes
 
@@ -75,13 +71,13 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256k1 do
   let q ← Point.decode publicKey
   let h ← readHash hash
-  let (r, s) ← readSignature signature
+  let (r, s) ← readSignature signature .badSignatureSize
   return if Ecdsa.verify q h r s then 1 else 0
 
 /-- The low-s rule of EIP-2, on the `s` of a signature. -/
 @[export eth_secp256k1_is_low_s]
 def isLowSExport (signature : ByteArray) : Result UInt8 := runSecp256k1 do
-  let (_, s) ← readSignature signature
+  let (_, s) ← readSignature signature .badSignatureSize
   return if Ecdsa.isLowS s then 1 else 0
 
 /-- The public key that signed a hash, from the signature and a recovery id of `0` or `1`.
@@ -91,7 +87,7 @@ It comes back in the 65-byte uncompressed encoding. -/
 def recoverExport (hash signature : ByteArray) (recoveryId : UInt8) : Result ByteArray :=
   runSecp256k1 do
     let h ← readHash hash
-    let (r, s) ← readSignature signature
+    let (r, s) ← readSignature signature .badSignatureSize
     if hid : recoveryId.toNat < 2 then
       let q ← Ecdsa.recover h r s ⟨recoveryId.toNat, hid⟩
       return q.encodeUncompressed
@@ -104,7 +100,7 @@ It comes back as `r || s || v`: 65 bytes, with the recovery id `v` as `0` or `1`
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_sign]
 def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 do
-  let d ← readPrivateKey privateKey
+  let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   let h ← readHash hash
   let (r, s, odd) ← Ecdsa.sign d h
   return ⟨(Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val ++ [if odd then 1 else 0]).toArray⟩
@@ -114,7 +110,7 @@ def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_ecdh]
 def ecdhExport (privateKey publicKey : ByteArray) : Result ByteArray := runSecp256k1 do
-  let d ← readPrivateKey privateKey
+  let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   let q ← Point.decode publicKey
   let secret ← ecdh d q
   return ⟨secret.toArray⟩
@@ -126,7 +122,7 @@ It is the last 20 bytes of the Keccak-256 hash of the 64 bytes of `d G`.
 The private key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3). -/
 @[export eth_secp256k1_address]
 def addressExport (privateKey : ByteArray) : Result ByteArray := runSecp256k1 do
-  let d ← readPrivateKey privateKey
+  let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   match addressOfPrivateKey d with
   | some a => return ⟨a.toArray⟩
   -- Only the key 0 gives the point at infinity.

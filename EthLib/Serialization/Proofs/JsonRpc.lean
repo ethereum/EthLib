@@ -340,9 +340,8 @@ theorem fixed_hexString (what : String) (n : Nat) (v : Vector UInt8 n) (upper : 
   unfold fixed
   rw [bytesOf_hexString]
   simp only [bind, Except.bind]
-  have h : (v.toList.toByteArray).data.size = n := by simp
-  simp only [h, ↓reduceDIte]
-  simp only [pure, Except.pure]
+  have h : (v.toList.toByteArray).size = n := by simp
+  rw [exactBytes_of_size_eq _ h]
   congr 1
   exact Vector.toArray_inj.mp (by
     simp only [List.data_toByteArray]
@@ -386,13 +385,15 @@ theorem fixed_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {upper : Bool}
   · intro h
     obtain ⟨b, hb, h⟩ := bind_ok_iff.mp h
     -- A string of another size fails, so the bytes have the size and form the vector.
-    split at h
-    · cases h
+    by_cases hs : b.size = n
+    · rw [exactBytes_of_size_eq _ hs] at h
+      cases h
       rw [hb]
-    · cases h
+    · rw [exactBytes_of_size_ne _ hs] at h
+      cases h
   · intro h
     rw [h]
-    simp [bind, Except.bind, pure, Except.pure, v.size_toArray]
+    simp only [bind, Except.bind, exactBytes_mk_toArray]
 
 /-- An address decodes exactly when its bytes are the address's, with uppercase digits allowed. -/
 theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :

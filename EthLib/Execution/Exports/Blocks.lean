@@ -262,8 +262,8 @@ def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
 The first argument is the 20-byte address of the deposit contract of the chain. -/
 @[export eth_block_deposit_requests]
 def depositRequestsExport (depositContract logs : ByteArray) : Result ByteArray := do
-  let address : Address ← if h : depositContract.data.size = 20 then pure ⟨depositContract.data, h⟩
-    else throw (0, "the deposit contract address is not 20 bytes")
+  let address : Address ← Base.exactBytes 20 depositContract fun _ =>
+    (0, "the deposit contract address is not 20 bytes")
   let logs : List Log ← runRlp "logs rejected" (Codec.decode logs)
   (depositRequests address logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
 

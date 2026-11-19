@@ -106,7 +106,7 @@ theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}
 /-- A root reads back from its hex. -/
 theorem readRoot_toHex (r : Root) :
     ApiEnvelope.readRoot (.str (toHex r.toArray)) = some r := by
-  simp [ApiEnvelope.readRoot, ofHex_toHex]
+  simp [ApiEnvelope.readRoot, Base.exactBytes?, ByteArray.size, ofHex_toHex]
 
 /-- An envelope reads back as written. -/
 theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :
@@ -206,7 +206,8 @@ theorem readRoot_eq_some_iff {j : Json} {root : Root} :
       ∃ text, j = .str text ∧ HexCase (toHex root.toArray) text := by
   cases j with
   | str text =>
-    simp only [ApiEnvelope.readRoot, Json.str.injEq, exists_eq_left', ← ofHex_eq_ok_iff]
+    simp only [ApiEnvelope.readRoot, Base.exactBytes?, ByteArray.size, Json.str.injEq,
+      exists_eq_left', ← ofHex_eq_ok_iff]
     cases h : ofHex text with
     | error e => simp
     | ok data =>

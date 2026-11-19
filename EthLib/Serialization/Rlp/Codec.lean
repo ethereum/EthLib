@@ -156,8 +156,7 @@ Any other length is an error. -/
 instance {n : Nat} : Codec (Vector UInt8 n) where
   toItem v := .bytes ⟨v.toArray⟩
   ofItem item := do
-    let data ← item.toBytes
-    if h : data.size = n then .ok ⟨data.data, h⟩ else .error (.wrongLength n data.size)
+    exactBytes n (← item.toBytes) (.wrongLength n)
 
 /-- An item is itself, so a structure can hold an item that it does not read. -/
 instance : Codec Item where

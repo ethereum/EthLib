@@ -250,8 +250,8 @@ def inclusionListSatisfactionExport (args : PyValue) : Result PyValue :=
 /-- Whether an optimistic validator may not sign under a domain type of 4 bytes. -/
 @[export eth_consensus_is_optimistic_restricted_domain]
 def isOptimisticRestrictedDomainExport (domainType : ByteArray) : Result Bool := do
-  if sized : domainType.size = 4 then
-    return isOptimisticRestrictedDomain ⟨domainType.data, sized⟩
-  else throw (0, s!"a domain type is 4 bytes, not {domainType.size}")
+  let domainType ← Base.exactBytes 4 domainType fun size =>
+    (0, s!"a domain type is 4 bytes, not {size}")
+  return isOptimisticRestrictedDomain domainType
 
 end EthLib.Consensus.Exports

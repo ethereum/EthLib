@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the input checks of the blob operations
@@ -62,8 +63,8 @@ theorem parseBytes_eq_ok_iff {n : Nat} {err : Nat → KzgError} {b : ByteArray}
     {v : Vector UInt8 n} :
     parseBytes n err b = .ok v ↔ v.toArray = b.data := by
   unfold parseBytes
-  split
-  · rename_i h
+  by_cases h : b.size = n
+  · rw [Base.exactBytes_of_size_eq err h]
     constructor
     · intro he
       cases he
@@ -71,7 +72,7 @@ theorem parseBytes_eq_ok_iff {n : Nat} {err : Nat → KzgError} {b : ByteArray}
     · intro hv
       congr 1
       exact (Vector.toArray_inj.mp (hv.trans rfl)).symm
-  · rename_i h
+  · rw [Base.exactBytes_of_size_ne err h]
     constructor
     · intro he
       cases he
@@ -83,14 +84,14 @@ theorem parseBytes_eq_error_iff {n : Nat} {err : Nat → KzgError} {b : ByteArra
     {e : KzgError} :
     parseBytes n err b = .error e ↔ b.size ≠ n ∧ e = err b.size := by
   unfold parseBytes
-  split
-  · rename_i h
+  by_cases h : b.size = n
+  · rw [Base.exactBytes_of_size_eq err h]
     constructor
     · intro he
       cases he
     · rintro ⟨hne, _⟩
       exact absurd h hne
-  · rename_i h
+  · rw [Base.exactBytes_of_size_ne err h]
     constructor
     · intro he
       cases he

@@ -1317,10 +1317,13 @@ Their §4 shows that the composition fails for multi-stage games.
 Let each hash call cost at least 1.
 `isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
 `Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
-Its bound is the closed form of equation (6) of Bertoni et al., which bounds the exact term of their Theorem 2.
-EthLib does not prove that the closed form bounds the exact term.
+Its bound is the closed form of equation (6) of Bertoni et al.
 For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
-EthLib does not prove this hypothesis, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+Their Theorem 2 rests on the exact term of their Lemma 5, `spongeExact`.
+Their equation (6) approximates that term by the closed form, for `N` well below `2^512`.
+`spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
+So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
+EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
 The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
 Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
 The distinguisher here asks only for 256-bit outputs of byte strings.
@@ -4399,6 +4402,13 @@ A payload and its block determine each other.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
 `exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`acceptsFork_eq_true_iff` gives the forks of each version.
+From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
+Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Version 2 takes Paris and Shapella, and version 1 Paris alone.
+`acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
+Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
+So version 5 returns Fusaka and the BPO forks, and some version returns each fork from Paris to Glamsterdam (`exists_acceptsGetPayloadFork_iff`).
 `validRequests_iff` states when the execution requests of version 4 and later pass.
 Each request must have more than one byte, and their first bytes must strictly increase along the list.
 `status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID`, or `INVALID_BLOCK_HASH` only at version 1, with no latest valid hash.
@@ -4664,6 +4674,9 @@ The next and last are those of the first and last fork times after the head whos
 The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+`mem_configSystemContracts_iff` gives the system contracts of each fork.
+The beacon roots contract counts from Cancun.
+From Prague the history storage contract, the chain's deposit contract and the request contracts of the fork count too.
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
 The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
 

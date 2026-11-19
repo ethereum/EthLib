@@ -231,7 +231,7 @@ def requireKey : Option Key → Except NoiseError Key
 
 /-- A decrypted static coordinate has exactly `DHLEN` bytes, Noise §5.3. -/
 def readKey (bytes : ByteArray) : Except NoiseError Key :=
-  if h : bytes.size = 32 then .ok ⟨bytes.data, h⟩ else .error (.truncated 32 bytes.size)
+  exactBytes 32 bytes (.truncated 32)
 
 /-- The next XX outgoing message, including its implicit payload, Noise §§5.3 and 7.5. -/
 def writeMessage (s : HandshakeState) (payload : ByteArray) :

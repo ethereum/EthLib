@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.MillerLoop
+public import EthLib.Cryptography.Proofs.Bls.PairingFactor
 public import EthLib.Cryptography.Proofs.Bls.G2Subgroup
 public import EthLib.Cryptography.Proofs.MillerFunction
 
@@ -387,9 +388,11 @@ theorem pairing_eq_finalExponentiation_loop {P : G1} {Q : G2} (hQ : G2.Valid Q)
   by_cases hQi : Q.isInfinity = true
   · have h1 : (1 : Fp12).conjugate = 1 := by apply Fp12.ext <;> simp
     rw [(G2.isInfinity_eq_true_iff_toPoint_eq_zero hQ).mp hQi, map_zero, Miller.loop_zero,
-      pairing, hQi, Bool.or_true, ite_eq_left rfl, h1,
-      finalExponentiation_eq_pow, one_pow, Fp12.one_eq_one]
-  rw [pairing, hP, Bool.false_or, ite_eq_right hQi]
+      h1, finalExponentiation_eq_pow, one_pow,
+      pairing_eq_one_of_pairFactor (pairFactor_eq_none (by rw [hQi, Bool.or_true])),
+      Fp12.one_eq_one]
+  rw [pairing_eq_of_pairFactor
+    (pairFactor_eq_some (by rw [hP, Bool.false_or]; exact Bool.eq_false_iff.mpr hQi))]
   apply finalExponentiation_conjugate_congr
   have hz : Q.z ≠ 0 := fun h => hQi (Fp2.isZero_iff.mpr h)
   obtain ⟨h, e⟩ := toPoint_eq_some hQ hz

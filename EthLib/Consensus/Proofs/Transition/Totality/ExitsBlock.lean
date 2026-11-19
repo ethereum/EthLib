@@ -373,22 +373,6 @@ end Bound
 
 section Churn
 
-/-- Epochs of a churn of at least one increment hold an amount plus less than one churn.
-
-Then there are at most the amount in increments, plus one. -/
-private theorem epochs_le_div_add_one {epochs churn increment left amount : Nat}
-    (positive : 0 < increment) (least : increment ≤ churn)
-    (spent : epochs * churn ≤ left + amount) (below : left < churn) :
-    epochs ≤ amount / increment + 1 := by
-  cases epochs with
-  | zero => exact Nat.zero_le _
-  | succ epochs =>
-    rw [Nat.add_mul, Nat.one_mul] at spent
-    have scaled := Nat.mul_le_mul_left epochs least
-    have bounded : epochs * increment ≤ amount := by omega
-    have := (Nat.le_div_iff_mul_le positive).mpr bounded
-    omega
-
 /-- A queue whose churn is at least one increment places an amount within its cost.
 
 The churn left over is at most the larger of the one before and the churn. -/
@@ -417,41 +401,6 @@ private theorem churnQueue_bound {earliest first churn left₀ amount epoch left
   · have epochs := epochs_le_div_add_one (epochs := epoch.toNat - (max earliest first).toNat)
       (amount := amount.toNat) positive least (by omega) below
     constructor <;> omega
-
-/-- A share of a total, at least the least churn and rounded down to an increment, is bounded.
-
-It is at least one increment, and at most the least churn plus the total. -/
-private theorem roundToIncrement_share_bounds (total quotient : Gwei)
-    (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
-    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA) :
-    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-        (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-          (total / quotient))).toNat ∧
-      (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-          (total / quotient))).toNat ≤
-        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
-  rw [toNat_roundToIncrement, Uint64.toNat_max, UInt64.toNat_div]
-  have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    UInt64.lt_iff_toNat_lt.mp increment
-  have minimum := UInt64.le_iff_toNat_le.mp minimum
-  have share := Nat.div_le_self total.toNat quotient.toNat
-  have amountLower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-      max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) := by
-    omega
-  have amountUpper : max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-      (total.toNat / quotient.toNat) ≤
-        config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat + total.toNat := by
-    omega
-  generalize max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (total.toNat / quotient.toNat) =
-    amount at *
-  have split := Nat.mod_add_div amount preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  have whole : 1 ≤ amount / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    (Nat.le_div_iff_mul_le positive).mpr (by omega)
-  have lower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-      amount - amount % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    have := Nat.le_mul_of_pos_right preset.EFFECTIVE_BALANCE_INCREMENT.toNat whole
-    omega
-  exact ⟨lower, Nat.le_trans (Nat.sub_le _ _) amountUpper⟩
 
 /-- A churn of exits that is computed is at least one increment and at most one churn bound. -/
 private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconState preset fork}

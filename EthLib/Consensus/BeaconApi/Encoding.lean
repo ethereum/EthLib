@@ -117,7 +117,7 @@ def readBool : Json → Option Bool
 /-- A root of 32 bytes, written as hex after its `0x` marker, with digits in either case. -/
 def readRoot : Json → Option Root
   | .str text => match ofHex text with
-    | .ok data => if size : data.size = 32 then some ⟨data, size⟩ else none
+    | .ok data => Base.exactBytes? 32 ⟨data⟩
     | .error _ => none
   | _ => none
 
