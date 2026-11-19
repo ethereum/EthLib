@@ -13830,6 +13830,66 @@ private def scSlashedReward (config : Config)
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
         (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
 
+/-- The keys of R's registry that are slashed at the split and that R's call reads as slashed.
+
+They are the keys that the shared run slashes in its last epoch, and some before it.
+
+The withdrawable epoch at R is a slashing vector past the finalized state's epoch.
+
+The anchor's finalized epoch can lag that of the finalized state.
+
+So this leaves out a key slashed before the finalized state's epoch.
+
+Its correlation penalty can fall in the window.
+
+None is in `SC`, which holds keys that are unslashed at the split.
+
+None is in C's quorum, since a flag set at the split persists to C. -/
+private def cutKeys (config : Config) (pulled anc fin split : BeaconState preset fork) :
+    Finset ValidatorIndex :=
+  ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
+    ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+      (pinTerms config pulled anc fin).slashedRB v.toNat = true ∧
+      ((pulled.validators.data[v.toNat]?).any fun w =>
+        decide ((getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+          w.withdrawableEpoch.toNat)) = true
+
+/-- A key that the shared run slashes is bounded by its finalized balance or by R's balance.
+
+The bound by R's balance reads its rise, one increment and the debits and induced leak.
+
+A second increment pays the rounding of the balance when it has a sync debit.
+
+The balance at the split is the key's effective balance at the epoch start, up to the downward band.
+
+A queued partial paid before the finalized state leaves the balance at the finalized one.
+
+Otherwise R's tail takes its penalties and sync debits, and the leak that `rise` reads covers them.
+
+The cut-key part of `bud_branchR`'s body reads the quotient of this bound.
+
+It reads it for each key of `cut_whistle`'s set, and pays the rounding with the debits.
+
+That part of the body is not written yet.
+
+This lemma has no reader until then. -/
+private theorem cut_balance_le (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {eventsF events : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (replayed : tail.balanceEvents high = .ok events)
+    (v : ValidatorIndex) (member : v ∈ cutKeys config pulled anc fin split) :
+    balanceAt split v.toNat ≤ max (balanceAt fin v.toNat)
+      (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat +
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+        (if 0 < syncD eventsF v.toNat + syncD events v.toNat then
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0) +
+        (syncD eventsF v.toNat + syncD events v.toNat +
+          inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat)) := by
+  sorry
+
 /-- R1 from the count of its rounding bands.
 
 The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
@@ -13993,7 +14053,11 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ SC pulled counted split,
           if (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true then
             (if 0 < syncCr eventsF v.toNat then preset.upwardBand else 0) else 0) ≤
-      (pinTerms config pulled anc fin).branchR := by
+      (pinTerms config pulled anc fin).branchR +
+        -- The cut keys' sync debits and induced leak, paid by `bud_sync` and `bud_syncLeak`.
+        3 * (∑ v ∈ cutKeys config pulled anc fin split,
+          (syncD eventsF v.toNat + syncD events v.toNat +
+            inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat)) := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have nearC := h.near
   have transport : ∀ {x y : ForkedBeaconState preset} (r : Run config checks x y) (a : ℕ),
@@ -14010,7 +14074,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (transport tailC highC (le_max_right _ _) endEpochC replayedC)
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
-  refine bud_branchR_of h (le_trans bands ?_)
+  refine le_trans (bud_branchR_of h (le_trans bands ?_)) (Nat.le_add_right _ _)
   rw [depthEq]
   exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ (Nat.le_add_left _ _))
 
@@ -14060,7 +14124,9 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (∑ v ∈ (K4 pulled counted V), syncD eventsF v.toNat) +
         (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
         (∑ v ∈ (K5 counted V), syncD eventsF v.toNat) +
-        (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
+        (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
+        (∑ v ∈ cutKeys config pulled anc fin split,
+          (syncD eventsF v.toNat + syncD events v.toNat))) +
       (∑ v ∈ (K6 pulled counted), syncD eventsF v.toNat) +
       (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
       wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
@@ -14192,9 +14258,21 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
   have rise3a : ∑ v ∈ sc3a config pulled anc fin counted split, syncD eventsF v.toNat ≤
       ∑ v ∈ SC pulled counted split, syncD eventsF v.toNat :=
     Finset.sum_le_sum_of_subset (Finset.filter_subset _ _)
-  refine le_trans (b := 3 * (∑ v ∈ U, g v + S)) ?_ ?_
-  · rw [sumU, hS]
-    omega
+  -- the cut keys' debits are paid by the pools once `cutKeys` joins `PD` and `g`, which is open
+  obtain ⟨extra, hextra⟩ : ∃ extra : ℕ, extra = 3 * ∑ v ∈ cutKeys config pulled anc fin split,
+      (syncD eventsF v.toNat + syncD events v.toNat) := ⟨_, rfl⟩
+  have cutSplit : ∑ v ∈ cutKeys config pulled anc fin split,
+        (syncD eventsF v.toNat + syncD events v.toNat) =
+      ∑ v ∈ cutKeys config pulled anc fin split, syncD eventsF v.toNat +
+        ∑ v ∈ cutKeys config pulled anc fin split, syncD events v.toNat := Finset.sum_add_distrib
+  suffices _pools : 3 * (∑ v ∈ U, g v + S) ≤ (pinTerms config pulled anc fin).syncSeats +
+      6 * ((pinTerms config pulled anc fin).depth *
+        (pinTerms config pulled anc fin).syncProposer) by
+    refine le_trans (b := 3 * (∑ v ∈ U, g v + S) + extra) ?_ ?_
+    · rw [sumU, hS]
+      omega
+    -- Pari's `bud_sync` body: the pools below, with `cutKeys` joined to `PD` and to `g`
+    sorry
   -- the shared segment moves the debited keys and the keys of EK by one envelope for each seat
   obtain ⟨PD, hPD⟩ : ∃ PD, PD = (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
       NF).image fun v : ValidatorIndex => v.toNat := ⟨_, rfl⟩
@@ -14294,7 +14372,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       ((getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat) ≤
       depth + ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := by
     omega
-  have firstDepth : (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
+  have firstDepth :
+      (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
     omega
   have secondDepth :
       (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
@@ -14310,10 +14389,12 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (show e1 + e2 ≤ depth + depth by omega)
   have positions : ∑ v ∈ U, g v + S ≤
       (ef + e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
-        (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
+        (e1 + e2) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
     have tails : ∑ i ∈ P, (syncF events i + syncF eventsC i) ≤
         e1 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
-          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) := by
+          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+            (env + share) := by
       rw [splitP]
       exact Nat.add_le_add first second
     calc _ ≤ _ := Nat.add_le_add (toPositions.trans tails) sharedS
@@ -14323,7 +14404,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
           (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
         (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
         Nat.mul_le_mul_left _ positions
-    _ ≤ 3 * ((depth + d) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
+    _ ≤ 3 * ((depth + d) *
+          (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
         (depth + depth) *
           (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
         Nat.mul_le_mul_left _ (Nat.add_le_add scaleEnv scaleShare)
@@ -16620,9 +16702,7 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
           v.toNat) +
       (∑ v ∈ (SC pulled counted split), inducedR (pinTerms config pulled anc fin)
           (fromFin.append tail) v.toNat) +
-      3 * (∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
-            (fun v => ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
-              (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+      3 * (∑ v ∈ cutKeys config pulled anc fin split,
           inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) ≤
       (pinTerms config pulled anc fin).syncLeak +
         3 * ((pinTerms config pulled anc fin).slashedR *
