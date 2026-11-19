@@ -687,6 +687,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- They are read at every key slashable there, its credits, and the seats.
   --
+  -- A key's whistleblower base is the larger of its envelope and its effective balance plus its rise.
+  --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
   -- There each deposit the window can apply to a new key is charged up to the cap.
@@ -694,7 +696,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let otherCredits := 3 * (2 * ((∑ i ∈ positions, ebUp i) +
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
         depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
         consolidationsX + depth * proposerCredit +
         depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
