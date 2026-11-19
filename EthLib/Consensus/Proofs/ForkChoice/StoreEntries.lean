@@ -111,15 +111,15 @@ private theorem Keeps.of_fields {a b : Store preset fork}
   · rwa [timelyVote]
   · rwa [availableVote]
 
-/-- A store that keeps those keys and leaves its map of timeliness as it is. -/
+/-- A store that keeps those keys and leaves its maps of timeliness and of payloads as they are. -/
 private abbrev Fixes (a b : Store preset fork) : Prop :=
-  Keeps a b ∧ b.blockTimeliness = a.blockTimeliness
+  Keeps a b ∧ b.blockTimeliness = a.blockTimeliness ∧ ∀ g, b.payloads g = a.payloads g
 
-private theorem Fixes.refl (a : Store preset fork) : Fixes a a := ⟨.refl _, rfl⟩
+private theorem Fixes.refl (a : Store preset fork) : Fixes a a := ⟨.refl _, rfl, fun _ => rfl⟩
 
 private theorem Fixes.trans {a b c : Store preset fork} (ab : Fixes a b) (bc : Fixes b c) :
     Fixes a c :=
-  ⟨ab.1.trans bc.1, bc.2.trans ab.2⟩
+  ⟨ab.1.trans bc.1, bc.2.1.trans ab.2.1, fun g => (bc.2.2 g).trans (ab.2.2 g)⟩
 
 private theorem Fixes.of_fields {a b : Store preset fork}
     (unrealized : b.unrealizedJustifications = a.unrealizedJustifications)
@@ -132,7 +132,7 @@ private theorem Fixes.of_fields {a b : Store preset fork}
       a.payloadInclusionListSatisfaction h := by intros; rfl) :
     Fixes a b :=
   ⟨Keeps.of_fields unrealized timeliness ptc timelyVote availableVote payloads satisfaction,
-    timeliness⟩
+    timeliness, payloads⟩
 
 private theorem isSome_insert_of {α : Type} {m : Std.TreeMap Root α} {k r : Root} {v : α}
     (h : (m[r]?).isSome) : ((m.insert k v)[r]?).isSome := by
@@ -252,7 +252,7 @@ private theorem recordPtcVotes_keeps {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := recorded
   exact ⟨⟨fun _ h => h, fun _ h => h, fun g =>
     ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h,
-      .of_fields rfl fun _ => rfl⟩⟩, rfl⟩
+      .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
 
 private theorem onPayloadAttestationMessage_keeps {checks : SignatureChecks}
     {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
@@ -306,7 +306,7 @@ private theorem recordBlockPtcVotes_entries {checks : SignatureChecks}
       (kept.1.2.2 g).2.2.1 _ isSome_insert_self⟩⟩
     exact ⟨⟨fun _ h => h, fun _ h => h, fun g =>
       ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h,
-        .of_fields rfl fun _ => rfl⟩⟩, rfl⟩
+        .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at recorded
     subst recorded
     exact ⟨.refl _, fun g => absurd g ‹_›⟩
@@ -315,7 +315,8 @@ private theorem recordBlockTimeliness_entries {root : Root} {after : Store prese
     (recorded : a.recordBlockTimeliness config root = .ok after) :
     Keeps a after ∧ (after.blockTimeliness[root]?).isSome ∧
       (∀ gloas : .glamsterdam ≤ fork, ((after.ptcTimeliness gloas)[root]?).isSome) ∧
-      ∀ r, r ≠ root → after.blockTimeliness[r]? = a.blockTimeliness[r]? := by
+      (∀ r, r ≠ root → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
+      ∀ g, after.payloads g = a.payloads g := by
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, pure, Except.pure] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
@@ -325,12 +326,14 @@ private theorem recordBlockTimeliness_entries {root : Root} {after : Store prese
     exact ⟨⟨fun _ h => h, fun _ h => isSome_insert_of h, fun g =>
       ⟨fun _ h => isSome_insert_of h, fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩,
       isSome_insert_self,
-      fun g => isSome_insert_self, fun r ne => by simp [getElem?_insert_root, Ne.symm ne]⟩
+      fun g => isSome_insert_self, fun r ne => by simp [getElem?_insert_root, Ne.symm ne],
+      fun _ => rfl⟩
   · cases recorded
     exact ⟨⟨fun _ h => h, fun _ h => isSome_insert_of h, fun g =>
       ⟨fun _ h => h, fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩,
       isSome_insert_self,
-      fun g => absurd g ‹_›, fun r ne => by simp [getElem?_insert_root, Ne.symm ne]⟩
+      fun g => absurd g ‹_›, fun r ne => by simp [getElem?_insert_root, Ne.symm ne],
+      fun _ => rfl⟩
 
 private theorem updateProposerBoostRoot_keeps {head root : Root} {after : Store preset fork}
     (updated : a.updateProposerBoostRoot config head root = .ok after) : Fixes a after := by
@@ -352,7 +355,7 @@ private theorem computePulledUpTip_entries {root : Root} {after : Store preset f
   have ins : ∀ (s : Store preset fork) (cp : Checkpoint),
       Fixes s { s with unrealizedJustifications := s.unrealizedJustifications.insert root cp } :=
     fun s cp => ⟨⟨fun _ h => isSome_insert_of h, fun _ h => h, fun _ => ⟨fun _ h => h,
-      fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩, rfl⟩
+      fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
   · exact ⟨(ins _ _).trans ((updateUnrealizedCheckpoints_keeps _ _).trans
       (updateCheckpoints_keeps _ _)), (updateCheckpoints_keeps _ _).1.1 _
@@ -368,21 +371,23 @@ private theorem addBlock_entries {checks : SignatureChecks} {sources : BlockSour
       (∀ gloas : .glamsterdam ≤ fork, ((after.ptcTimeliness gloas)[blockRoot]?).isSome ∧
         ((after.payloadTimelinessVote gloas)[blockRoot]?).isSome ∧
         ((after.payloadDataAvailabilityVote gloas)[blockRoot]?).isSome) ∧
-      ∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]? := by
+      (∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
+      ∀ g, after.payloads g = a.payloads g := by
   unfold addBlock at added
   simp only [bind_ok_iff] at added
   obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
   obtain ⟨k1, v1⟩ := recordBlockPtcVotes_entries vote
-  obtain ⟨k2, t2, p2, o2⟩ := recordBlockTimeliness_entries record
+  obtain ⟨k2, t2, p2, o2, s2⟩ := recordBlockTimeliness_entries record
   have k3 := updateProposerBoostRoot_keeps boost
   obtain ⟨k5, u5⟩ := computePulledUpTip_entries added
   have tail := k3.trans ((updateCheckpoints_keeps _ _).trans k5)
   refine ⟨(Fixes.of_fields (by rfl) (by rfl) (fun _ => by rfl) (fun _ => by rfl)
       (fun _ => by rfl)).1.trans (k1.1.trans (k2.trans tail.1)), u5, tail.1.2.1 _ t2,
-      fun g => ?_, fun r ne => ?_⟩
+      fun g => ?_, fun r ne => ?_, fun g => ?_⟩
   · exact ⟨(tail.1.2.2 g).1 _ (p2 g), ((k2.trans tail.1).2.2 g).2.1 _ (v1 g).1,
       ((k2.trans tail.1).2.2 g).2.2.1 _ (v1 g).2⟩
-  · rw [tail.2, o2 r ne, k1.2]
+  · rw [tail.2.1, o2 r ne, k1.2.1]
+  · exact ((tail.2.2 g).trans (s2 g)).trans (k1.2.2 g)
 
 private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
@@ -395,7 +400,7 @@ private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSourc
         ((after.payloadTimelinessVote gloas)[blockRoot]?).isSome ∧
         ((after.payloadDataAvailabilityVote gloas)[blockRoot]?).isSome) ∧
       (∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
-      ¬ a.blocks.contains blockRoot := by
+      ¬ a.blocks.contains blockRoot ∧ ∀ g, after.payloads g = a.payloads g := by
   cases root : SszType.hashTreeRoot signed.message with
   | error e => simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
@@ -406,8 +411,8 @@ private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSourc
     · obtain ⟨blocks, -⟩ := onBlock_insert root known added
       simp only [onBlock, root, known, bind, Except.bind, Except.mapError, ↓reduceIte,
         Bool.false_eq_true] at added
-      obtain ⟨k, u, t, p, o⟩ := addBlock_entries added
-      exact .inr ⟨blockRoot, k, blocks, u, t, p, o, known⟩
+      obtain ⟨k, u, t, p, o, same⟩ := addBlock_entries added
+      exact .inr ⟨blockRoot, k, blocks, u, t, p, o, known, same⟩
 
 /-- From Heze, after an envelope each block with an answer on inclusion lists still has one.
 
@@ -517,7 +522,7 @@ private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
     exact Entries.mono (onTick_keeps ticked).1 (ih (by rwa [blocks] at known))
   | @block prior _ checks sources signed previous added ih =>
     rcases onBlock_entries added with
-      same | ⟨blockRoot, kept, blocks, unrealized, timely, ptc, -, -⟩
+      same | ⟨blockRoot, kept, blocks, unrealized, timely, ptc, -, -, -⟩
     · subst same
       exact ih known
     · rw [blocks] at known
@@ -601,9 +606,9 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
       simp
   | tick _ ticked ih =>
     obtain ⟨-, -, blocks, -⟩ := onTick_frame ticked
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onTick_keeps ticked).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onTick_keeps ticked).2.1]; exact ih.2⟩
   | @block prior _ checks sources signed previous added ih =>
-    rcases onBlock_entries added with same | ⟨blockRoot, -, blocks, -, -, -, others, fresh⟩
+    rcases onBlock_entries added with same | ⟨blockRoot, -, blocks, -, -, -, others, fresh, -⟩
     · subst same
       exact ih
     · refine ⟨?_, ?_⟩
@@ -613,14 +618,14 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
         exact ih.2
   | attestation _ attested ih =>
     obtain ⟨-, blocks, -⟩ := onAttestation_frame attested
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttestation_keeps attested).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttestation_keeps attested).2.1]; exact ih.2⟩
   | attesterSlashing _ slashed ih =>
     obtain ⟨-, blocks, -⟩ := onAttesterSlashing_frame slashed
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttesterSlashing_keeps slashed).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttesterSlashing_keeps slashed).2.1]; exact ih.2⟩
   | payloadAttestation _ voted ih =>
     obtain ⟨-, blocks, -⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
     exact ⟨by rw [blocks]; exact ih.1,
-      by rw [(onPayloadAttestationMessage_keeps voted).2]; exact ih.2⟩
+      by rw [(onPayloadAttestationMessage_keeps voted).2.1]; exact ih.2⟩
   | envelope _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onExecutionPayloadEnvelope_frame accepted
     obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
@@ -630,6 +635,35 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
     obtain ⟨-, blocks, -⟩ := onInclusionList_frame accepted
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
     exact ⟨by rw [blocks]; exact ih.1, ih.2⟩
+
+/-- A tick keeps the verified payloads. -/
+theorem onTick_payloads {timeMs : UInt64} {after : Store preset fork}
+    (ticked : store.onTick config timeMs = .ok after) (gloas : .glamsterdam ≤ fork) :
+    after.payloads gloas = store.payloads gloas :=
+  (onTick_keeps ticked).2.2 gloas
+
+/-- A block keeps the verified payloads. -/
+theorem onBlock_payloads {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
+    (added : store.onBlock config checks sources signed = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas := by
+  rcases onBlock_entries added with same | ⟨-, -, -, -, -, -, -, -, kept⟩
+  · rw [same]
+  · exact kept gloas
+
+/-- An attestation keeps the verified payloads. -/
+theorem onAttestation_payloads {checks : SignatureChecks} {attestation : Attestation preset fork}
+    {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas :=
+  (onAttestation_keeps attested).2.2 gloas
+
+/-- An attester slashing keeps the verified payloads. -/
+theorem onAttesterSlashing_payloads {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork}
+    (slashed : store.onAttesterSlashing config checks slashing = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas :=
+  (onAttesterSlashing_keeps slashed).2.2 gloas
 
 end Store
 

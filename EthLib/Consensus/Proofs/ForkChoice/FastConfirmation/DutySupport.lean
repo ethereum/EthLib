@@ -423,7 +423,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
   obtain ⟨due, dueOk⟩ := fits.1
   have dueLt := fits.due_lt_slot nextSlotOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextSlotOk slotTimeOk followingTimeOk deadlineOk
-  obtain ⟨dataSlot, dataEpoch, head, headBlock, headOk, headKnown, dataRoot, notFuture⟩ :=
+  obtain ⟨dataSlot, -, head, headBlock, headOk, headKnown, dataRoot, notFuture⟩ :=
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start honest deadlineOk dueOk dueLt
   have supports := supports head headOk
   have sourceKnown : ((e.world n).state v).blocks[root]? = some rootBlock := by
@@ -493,7 +493,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
     (fun u hu v hv => by simp [start u hu, anchorEmpty] at hv)
     j receiver v member honest
   rcases vote.recorded_at_next_slot (last := time) sync preGloas anchored start
-      honest receiver committees dataSlot dataEpoch nextSlotOk currentOk (by omega)
+      honest receiver committees dataSlot nextSlotOk currentOk (by omega)
       arrivalCurrent (counted arrival) arrivalLe (by omega) votedKnown notFuture receiverRead with
     ⟨latest, latestOk, rank⟩ | collision
   swap

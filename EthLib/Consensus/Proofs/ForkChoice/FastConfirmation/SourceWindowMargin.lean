@@ -2123,7 +2123,7 @@ private theorem committee_reads_agree (preGloas : fork < .glamsterdam)
     (reached u caller n).blockStatesFromParents callerParent
   obtain ⟨receiverParentState, receiverParentFound, -⟩ :=
     (reached w receiver k).blockStatesFromParents receiverParent
-  have sameParent := e.blockStates_eq anchored caller receiver (start u caller)
+  have sameParent := e.blockStates_eq anchored (start u caller)
     (start w receiver) agree callerParentFound receiverParentFound
   subst sameParent
   obtain ⟨callerBlock, callerFound, -⟩ := Store.slot_le_of_isAncestor callerParent callerDescends
