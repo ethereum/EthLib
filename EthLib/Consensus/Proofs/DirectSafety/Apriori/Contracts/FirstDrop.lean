@@ -1,6 +1,8 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ownership
+import EthLib.Consensus.Proofs.Transition.ChainRoots
+import EthLib.Consensus.Proofs.Transition.Slot
 
 /-!
 # The supported branch and the first drop of a key
@@ -397,9 +399,11 @@ private theorem potential_cross (ρn ρd k band g cap EB Pm Pn pen : ℕ) (gcap 
     have hab : b + ρn = a := by omega
     rw [e1] at second
     rw [e4] at first second
+    have hbc : b ≤ c := by omega
     have : ρd * b ≤ c * a := by
-      rw [hc, ← hab]
-      nlinarith [Nat.zero_le (ρn * b), Nat.zero_le (ρn * ρn), Nat.zero_le (c * ρn)]
+      calc ρd * b = ρn * b + c * b := by rw [hc]; ring
+        _ ≤ ρn * c + c * b := Nat.add_le_add_right (Nat.mul_le_mul_left _ hbc) _
+        _ = c * a := by rw [← hab]; ring
     have third : ρd * ((ρd - ρn * (k + 1)) * (g + band)) ≤ ρd * (ρd * (Pn + band)) := by
       rw [e2]
       calc ρd * (b * (g + band)) = (ρd * b) * (g + band) := by ring
@@ -417,8 +421,8 @@ private theorem potential_cross (ρn ρd k band g cap EB Pm Pn pen : ℕ) (gcap 
       have h5 : ρd * (cap + band) ≤ ρd * (Pn + band) + ρd * pen := by
         calc ρd * (cap + band) ≤ ρd * (Pn + pen + band) := Nat.mul_le_mul_left _ (by omega)
           _ = ρd * (Pn + band) + ρd * pen := by ring
-      have h6 : ρn * (cap + band) ≥ ρn * cap := by nlinarith [Nat.zero_le (ρn * band)]
-      nlinarith [Nat.zero_le (ρn * band)]
+      have h6 : ρn * cap ≤ ρn * (cap + band) := Nat.mul_le_mul_left _ (Nat.le_add_right _ _)
+      omega
     calc (ρd - ρn * (k + 1)) * (g + band) ≤ (ρd - ρn) * (g + band) :=
           Nat.mul_le_mul_right _
             (Nat.sub_le_sub_left (Nat.le_mul_of_pos_right ρn (Nat.succ_pos k)) _)
@@ -433,10 +437,10 @@ private theorem upgradeNext_glamsterdam_le {pre : ForkedBeaconState preset}
   cases fork <;>
     simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw, throwThe,
       MonadExceptOf.throw, reduceCtorEq] at computed <;>
+    dsimp only at fulu <;>
     first
       | exact absurd fulu (by decide)
-      | (obtain ⟨_, -, rfl⟩ := computed; decide)
-      | (subst computed; decide)
+      | (obtain ⟨_, -, rfl⟩ := computed; dsimp only; decide)
 
 /-- From Fusaka, the upgrades of a slot that ends before Glamsterdam leave the state as it is. -/
 private theorem processUpgrades_eq_of_early {forked after : ForkedBeaconState preset}
@@ -448,7 +452,7 @@ private theorem processUpgrades_eq_of_early {forked after : ForkedBeaconState pr
     obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
     have far := upgradeNext_glamsterdam_le fulu nextOk
     have order := processUpgrades_fork_le rest
-    exact absurd (lt_of_le_of_lt (le_trans far order) early) (lt_irrefl _)
+    exact absurd (Nat.lt_of_le_of_lt (Nat.le_trans far order) early) (Nat.lt_irrefl _)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     exact computed.symm
 
@@ -474,8 +478,12 @@ private theorem hysteresis_of_crossing_slot {m n : ForkedBeaconState preset}
 private theorem epoch_succ_of_slot {m n : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks m = .ok n) :
     (getCurrentEpoch n.state).toNat ≤ (getCurrentEpoch m.state).toNat + 1 := by
-  have next := (advanceSlotAcross_cases ok).1
-  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, next, Nat.succ_div]
+  obtain ⟨after, advanced, upgraded⟩ := bind_ok_iff.mp ok
+  have slot : n.state.slot = after.slot := processUpgrades_slot upgraded
+  obtain ⟨nextSlot, cached, epoched, sum, -, -, rfl⟩ := advanceSlot_ok advanced
+  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, slot]
+  simp only
+  rw [sum, Nat.succ_div]
   split <;> omega
 
 /-- A step that crosses an epoch is a slot step. -/
@@ -756,7 +764,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         have ebEq : effectiveAt n i.toNat = effectiveAt m i.toNat := effKept i.toNat room
         have penZero := penaltyDebit_sum_zero_of_free free i.toNat
         have epochEq := congrArg UInt64.toNat eq
-        obtain ⟨stayEB, stayClosed⟩ := potential_stay ρn ρd
+        obtain ⟨stayClosed, stayEB⟩ := potential_stay ρn ρd
           ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
           (preset.downwardBand + slack)
           (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
