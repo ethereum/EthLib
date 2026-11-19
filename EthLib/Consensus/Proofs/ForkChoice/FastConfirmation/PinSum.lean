@@ -1248,7 +1248,10 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     have partialSum : ((before ++ rest').map (floorPartialDebit i)).sum =
         (before.map (floorPartialDebit i)).sum + (rest'.map (floorPartialDebit i)).sum := by
       simp only [List.map_append, List.sum_append]
-    exact arith _ D _ (by omega) (by omega) closed
+    have window : (getCurrentEpoch p.state).toNat - (getCurrentEpoch fin).toNat ≤
+        (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat :=
+      Nat.sub_le_sub_right order _
+    exact arith _ D _ window (by omega) closed
   have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
       ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, counted⟩),
         r1.append r2 = fromFin.append tailC := fun member => by
