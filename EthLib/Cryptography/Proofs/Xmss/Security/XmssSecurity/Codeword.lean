@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Convert
 public import EthLib.Cryptography.Proofs.Xmss.Encoding
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Code
 
 /-!
@@ -128,7 +129,7 @@ theorem codeword?_ofDigest (x : XmssSecurity.Digest) :
       (digestTop x = 0 ∧ XmssSecurity.TargetSum.Valid (digestEncoding x)) := by
     rw [Bool.and_eq_true, htail, beq_iff_eq, hsum, XmssSecurity.TargetSum.Valid]
     simp only [TARGET_SUM, XmssSecurity.targetSum]
-  unfold codeword?
+  rw [codeword?_eq_digits]
   dsimp only
   rw [hchains, decodeDigest]
   split
@@ -146,7 +147,7 @@ theorem trialRandomizer_ofRandomizer (base : XmssSecurity.Randomness) (c : Nat) 
       = ofRandomizer (base + BitVec.ofNat XmssSecurity.randomnessBits c) := by
   -- Both sides are the bytes of `(R0 + c) mod 2^128`.
   show _ = ofBV RANDOMIZER_LEN _
-  rw [trialRandomizer, bytesToUint_ofRandomizer, ofBV_eq_uintToBytes, BitVec.toNat_add,
+  rw [trialRandomizer_eq, bytesToUint_ofRandomizer, ofBV_eq_uintToBytes, BitVec.toNat_add,
     BitVec.toNat_ofNat]
   congr 1
   simp only [XmssSecurity.randomnessBits]

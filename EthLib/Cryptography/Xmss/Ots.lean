@@ -98,9 +98,20 @@ def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UIn
 
 /-- `rho_c = LE_128(LE^-1(R_0) + c mod 2^128)`: the randomizer of trial `c`.
 
-A sum, not a hash, so each trial costs the one hash of its digest. -/
+A sum, not a hash, so each trial costs the one hash of its digest.
+
+The sum runs byte by byte, least significant first, and drops the carry past the top byte. -/
 def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
-  uintToBytes RANDOMIZER_LEN ((bytesToUint base + c) % 2 ^ 128)
+  go base c 0
+where
+  /-- Add `carry` into the bytes from byte `i` up. -/
+  go (acc : Randomizer) (carry i : Nat) : Randomizer :=
+    if h : i < RANDOMIZER_LEN then
+      -- The byte keeps the low 8 bits of the sum, and the rest carries into the next byte.
+      let sum := acc[i].toNat + carry
+      go (acc.set i (UInt8.ofNat sum)) (sum / 256) (i + 1)
+    else acc
+  termination_by RANDOMIZER_LEN - i
 
 namespace Internal
 
