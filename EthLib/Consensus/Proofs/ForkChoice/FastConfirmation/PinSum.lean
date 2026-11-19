@@ -6,6 +6,8 @@ import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.Transition.FfgJustification
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.SlashedExit
+import EthLib.Consensus.Proofs.Transition.ChainRoots
+import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.EpochReads
 import EthLib.Consensus.Proofs.Transition.PendingConsolidations
@@ -1038,6 +1040,306 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
         bandR events v.toNat)) : ℕ) := sorry
 
+/-- The pending keys of `pinTerms` are validators of R's registry.
+
+Each is not yet eligible at R's epoch, and has no activation epoch. -/
+private theorem pendingRB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
+    (i : ℕ) : (pinTerms config pulled anc fin).pendingRB i = true ↔
+      ∃ w, pulled.validators.data[i]? = some w ∧
+        (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat ∧
+        w.activationEpoch = FAR_FUTURE_EPOCH := by
+  simp only [pinTerms]
+  cases pulled.validators.data[i]? <;> simp
+
+/-- The late keys of `pinTerms` are validators of R's registry.
+
+Each has an eligibility epoch by R's epoch.
+
+Its activation epoch is beyond the seed lookahead of the finalized epoch. -/
+private theorem lateB_iff (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config pulled anc fin).lateB i = true ↔ ∃ w, pulled.validators.data[i]? = some w ∧
+      w.activationEligibilityEpoch.toNat ≤ (getCurrentEpoch pulled).toNat ∧
+      anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+        w.activationEpoch.toNat := by
+  simp only [pinTerms]
+  cases pulled.validators.data[i]? <;> simp
+
+/-- The keys of `pinTerms` whose exit R reads are validators of R's registry.
+
+Each is active in R's previous epoch or its current one, and unslashed or recently slashed.
+
+Its exit epoch is at most one after R's epoch. -/
+private theorem exitingB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
+    (i : ℕ) : (pinTerms config pulled anc fin).exitingB i = true ↔
+      ∃ w, pulled.validators.data[i]? = some w ∧
+        (isActiveAt pulled (getPreviousEpoch pulled) i = true ∨
+          isActiveAt pulled (getCurrentEpoch pulled) i = true) ∧
+        (w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
+          preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat) ∧
+        w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+  simp only [pinTerms]
+  rcases Option.eq_none_or_eq_some (pulled.validators.data[i]?) with none | ⟨w, some⟩
+  · simp [none]
+  · simp [some]
+
+/-- The keys of `pinTerms` whose exit R holds are validators of R's registry.
+
+Each exit was set after the finalized epoch, and R's epoch is past it. -/
+private theorem exitedRB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
+    (i : ℕ) : (pinTerms config pulled anc fin).exitedRB i = true ↔
+      ∃ w, pulled.validators.data[i]? = some w ∧
+        anc.finalizedCheckpoint.epoch.toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤
+          w.exitEpoch.toNat ∧ w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch pulled).toNat := by
+  simp only [pinTerms]
+  cases pulled.validators.data[i]? <;> simp
+
+/-- Activity up to the seed lookahead after the split is the same at R and C. -/
+private theorem activity_shared {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) {e : Epoch}
+    (fixed : e.toNat ≤ (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat)
+    (i : ℕ) : isActiveAt pulled e i = isActiveAt counted e i := by
+  obtain ⟨rp⟩ := h.toPulled
+  obtain ⟨rc⟩ := h.toCounted
+  have inside : e ≤ activityFixedEpoch split := by
+    rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
+    have := e.toNat_lt
+    omega
+  exact (activeKept_of_chainSteps rp.chainSteps e inside i).trans
+    (activeKept_of_chainSteps rc.chainSteps e inside i).symm
+
+/-- The finalized epoch of R is at most its current epoch. -/
+private theorem finalized_le_current {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) :
+    pulled.finalizedCheckpoint.epoch ≤ getCurrentEpoch pulled := by
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  have valid := Run.invariant (Genesis.invariant h.genesis) ((rf.append rs).append rp)
+  exact UInt64.le_trans valid.ordered.1 (UInt64.le_trans valid.ordered.2
+    (UInt64.le_trans valid.settled (getPreviousEpoch_le pulled)))
+
+/-- A key of `K6` in R's registry has no exit, or an exit after the split's lookahead.
+
+An exit at or before the split's epoch plus the seed lookahead is on the shared prefix of the runs.
+
+Both runs then agree on the key's activity up to that exit, so C would not count the key.
+
+The records of the key at R and at C, and what they say of its activity, are the premises. -/
+private theorem K6_exit_late {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) {v : ValidatorIndex}
+    {w u : Validator} (found : pulled.validators.data[v.toNat]? = some w)
+    (rActive : ∀ e : Epoch, isActiveAt pulled e v.toNat = true ↔
+      (w.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < w.exitEpoch.toNat))
+    (cActive : ∀ e : Epoch, isActiveAt counted e v.toNat = true ↔
+      (u.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < u.exitEpoch.toNat))
+    (uExit : (getCurrentEpoch counted).toNat < u.exitEpoch.toNat)
+    (notActive : ¬ (w.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat ∧
+      (getCurrentEpoch pulled).toNat < w.exitEpoch.toNat)) :
+    w.exitEpoch = FAR_FUTURE_EPOCH ∨
+      (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < w.exitEpoch.toNat := by
+  by_cases far : w.exitEpoch = FAR_FUTURE_EPOCH
+  · exact .inl far
+  refine .inr ?_
+  by_contra early
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  have gap := Run.exit_activation_gap ((rf.append rs).append rp) h.genesis v.toNat w found far
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have later := UInt64.le_iff_toNat_le.mp h.later
+  have shareA := activity_shared h (e := w.activationEpoch) (by omega) v.toNat
+  have shareX := activity_shared h (e := w.exitEpoch) (by omega) v.toNat
+  have activeA : isActiveAt pulled w.activationEpoch v.toNat = true :=
+    (rActive _).mpr ⟨Nat.le_refl _, by omega⟩
+  have atA := (cActive _).mp (shareA.symm.trans activeA)
+  have notX : ¬ isActiveAt counted w.exitEpoch v.toNat = true := by
+    rw [← shareX]
+    intro active
+    have := (rActive _).mp active
+    omega
+  have ended := mt (cActive w.exitEpoch).mpr notX
+  omega
+
+/-- A key counted in C and inactive at R, read at R's record, is in one of five classes.
+
+It joins at R's next epoch.
+
+Or it activates late, has exited at R, is exiting at R, or is not yet eligible at R. -/
+private theorem K6_class {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) {v : ValidatorIndex}
+    (member : v ∈ K6 pulled counted) {w : Validator}
+    (found : pulled.validators.data[v.toNat]? = some w) :
+    (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true) ∨
+      (pinTerms config pulled anc fin).lateB v.toNat = true ∨
+      (pinTerms config pulled anc fin).exitedRB v.toNat = true ∨
+      (pinTerms config pulled anc fin).exitingB v.toNat = true ∨
+      (pinTerms config pulled anc fin).pendingRB v.toNat = true := by
+  classical
+  obtain ⟨memberAC, memberQ, notAR⟩ := Finset.mem_filter.mp member
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  obtain ⟨rc⟩ := h.toCounted
+  have chain := (rf.append rs).append rp
+  -- Epochs, as natural numbers.
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have later := UInt64.le_iff_toNat_le.mp h.later
+  have near := h.near
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have succNat : (getCurrentEpoch pulled + 1).toNat = (getCurrentEpoch pulled).toNat + 1 := by
+    have one : (1 : UInt64).toNat = 1 := rfl
+    rw [UInt64.toNat_add, one]
+    exact Nat.mod_eq_of_lt (by omega)
+  have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+  -- The records of the key at R and at C, and the activity they give.
+  obtain ⟨u, foundU, activeU⟩ := active_of_activeVoters h.early memberAC
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeU
+  have uAct := UInt64.le_iff_toNat_le.mp activeU.1
+  have uExit := UInt64.lt_iff_toNat_lt.mp activeU.2
+  have uUnslashed : u.slashed = false := by
+    have := (Finset.mem_filter.mp memberQ).2
+    simpa [foundU] using this
+  have rActive : ∀ e : Epoch, isActiveAt pulled e v.toNat = true ↔
+      (w.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < w.exitEpoch.toNat) := by
+    intro e
+    simp [isActiveAt, found, isActiveValidator, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+  have cActive : ∀ e : Epoch, isActiveAt counted e v.toNat = true ↔
+      (u.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < u.exitEpoch.toNat) := by
+    intro e
+    simp [isActiveAt, foundU, isActiveValidator, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+  have notActive : ¬ (w.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat ∧
+      (getCurrentEpoch pulled).toNat < w.exitEpoch.toNat) := by
+    intro both
+    apply notAR
+    simpa [AR, activeVoters] using
+      mem_getActiveValidatorIndices_of_isActiveAt ((rActive _).mpr both)
+  -- The key joins at R's next epoch.
+  have joins : w.activationEpoch.toNat = (getCurrentEpoch pulled).toNat + 1 →
+      (w.exitEpoch = FAR_FUTURE_EPOCH ∨
+        w.activationEpoch.toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ w.exitEpoch.toNat) →
+      isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true := by
+    intro first gap
+    refine ⟨Bool.eq_false_iff.mpr fun active => ?_, (rActive _).mpr ⟨by omega, ?_⟩⟩
+    · have := (rActive _).mp active
+      omega
+    · rcases gap with far | gap
+      · rw [succNat, far, farNat]
+        omega
+      · rw [succNat]
+        omega
+  by_cases hA : (getCurrentEpoch pulled).toNat < w.activationEpoch.toNat
+  · -- Not activated at R's epoch.
+    by_cases window : (getCurrentEpoch counted).toNat ≤
+        (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat
+    · -- The key's activity at C's epoch is shared, so R activates it by then.
+      have shared := activity_shared h (e := getCurrentEpoch counted) window v.toNat
+      have activeAtC : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
+        (cActive _).mpr ⟨uAct, uExit⟩
+      have atR := (rActive _).mp (shared.trans activeAtC)
+      left
+      refine joins (by omega) ?_
+      by_cases far : w.exitEpoch = FAR_FUTURE_EPOCH
+      · exact .inl far
+      · exact .inr (Run.exit_activation_gap chain h.genesis v.toNat w found far)
+    · -- Beyond the shared window, the finalized epoch is before R's epoch.
+      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
+      · by_cases elig : (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat
+        · exact .inr (.inr (.inr (.inr
+            ((pendingRB_iff config pulled anc fin v.toNat).mpr ⟨w, found, elig, far⟩))))
+        · refine .inr (.inl ((lateB_iff config pulled anc fin v.toNat).mpr
+            ⟨w, found, by omega, ?_⟩))
+          rw [far, farNat]
+          omega
+      · have eligible := Run.eligibility_le_finalized chain h.genesis v.toNat w found far
+        have eligNat : w.activationEligibilityEpoch.toNat ≤
+            pulled.finalizedCheckpoint.epoch.toNat := UInt64.le_iff_toNat_le.mp eligible
+        by_cases first : w.activationEpoch.toNat = (getCurrentEpoch pulled).toNat + 1
+        · left
+          refine joins first ?_
+          by_cases farExit : w.exitEpoch = FAR_FUTURE_EPOCH
+          · exact .inl farExit
+          · exact .inr (Run.exit_activation_gap chain h.genesis v.toNat w found farExit)
+        · exact .inr (.inl ((lateB_iff config pulled anc fin v.toNat).mpr
+            ⟨w, found, by omega, by omega⟩))
+  · -- Exited at R's epoch or before.
+    have exited : w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat := by omega
+    have exitNear : w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+      intro far
+      rw [far, farNat] at exited
+      omega
+    have gap := Run.exit_activation_gap chain h.genesis v.toNat w found exitNear
+    have afterFin : anc.finalizedCheckpoint.epoch.toNat + 1 +
+        preset.MAX_SEED_LOOKAHEAD.toNat ≤ w.exitEpoch.toNat := by
+      rcases K6_exit_late h found rActive cActive uExit notActive with far | late
+      · exact absurd far exitNear
+      · omega
+    by_cases settled : w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch pulled).toNat
+    · exact .inr (.inr (.inl ((exitedRB_iff config pulled anc fin v.toNat).mpr
+        ⟨w, found, afterFin, settled⟩)))
+    · -- The exit is at R's epoch.
+      refine .inr (.inr (.inr (.inl ((exitingB_iff config pulled anc fin v.toNat).mpr
+        ⟨w, found, .inl ((rActive _).mpr ⟨?_, ?_⟩), ?_, by omega⟩))))
+      · rw [getPreviousEpoch_toNat]
+        omega
+      · rw [getPreviousEpoch_toNat]
+        omega
+      · by_cases unslashed : w.slashed = false
+        · exact .inl unslashed
+        · right
+          have slashed : w.slashed = true := by simpa using unslashed
+          have delayed := slashed_waits (rf.append rs) h.genesis rp rc h.early h.caps h.delay
+            found slashed (by simp [foundU, uUnslashed])
+          omega
+
+/-- The keys that join at R's next epoch are charged their stake in `joining`. -/
+private theorem joining_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).joining =
+      ∑ i ∈ (pinTerms config pulled anc fin).positions with
+        (isActiveAt pulled (getCurrentEpoch pulled) i = false ∧
+          isActiveAt pulled (getCurrentEpoch pulled + 1) i = true), balanceAt pulled i := rfl
+
+/-- The keys that join at R's next epoch are charged their rise in `joinRise`. -/
+private theorem joinRise_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).joinRise =
+      ∑ i ∈ (pinTerms config pulled anc fin).positions with
+        (isActiveAt pulled (getCurrentEpoch pulled) i = false ∧
+          isActiveAt pulled (getCurrentEpoch pulled + 1) i = true),
+            (pinTerms config pulled anc fin).rise i := rfl
+
+/-- The keys of `K6` beyond R's registry are paid by the credits.
+
+In the high regime they are also paid by `creditGain`.
+
+They joined the registry on C's branch, so their stake is the credits that reach them.
+
+The credits compound by a tenth, which `credN / 10` charges, when the gain rate is low.
+
+Otherwise `creditGain` charges the deposits up to the cap. -/
+private theorem beyond_keys (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    ∑ v ∈ (K6 pulled counted) with pulled.validators.data.size ≤ v.toNat, eC counted v ≤
+      (∑ v ∈ (K6 pulled counted) with pulled.validators.data.size ≤ v.toNat,
+        (((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+            whistC tailC highC v.toNat) +
+          (syncF events v.toNat + syncF eventsC v.toNat) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+            bandR events v.toNat))) +
+        (if (pinTerms config pulled anc fin).gainHigh then
+          (pinTerms config pulled anc fin).creditGain else 0) := sorry
+
 /-- D-8 (activations): keys counted in C and not active at R.
 
 A key whose exit started on R's branch after the split is inactive at R and active in C (L10).
@@ -1068,7 +1370,151 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (if (pinTerms config pulled anc fin).gainHigh then (pinTerms config pulled anc fin).creditGain
-        else 0)) : ℕ) := sorry
+        else 0)) : ℕ) := by
+  classical
+  -- `cJ` is the stake in C of the keys of `K6`.
+  have cJ_eq : cJ pulled counted = ((∑ v ∈ K6 pulled counted, eC counted v : ℕ) : ℤ) := by
+    unfold cJ
+    push_cast
+    rw [← Finset.sum_filter]
+    refine Finset.sum_congr ?_ fun _ _ => rfl
+    ext v
+    simp only [Finset.mem_filter, K6, U, Finset.mem_union]
+    tauto
+  rw [cJ_eq, Nat.cast_le]
+  -- The keys at or beyond R's registry are paid by `creditGain` and the credits.
+  have beyond := beyond_keys h tail high endEpoch replayed tailC highC endEpochC replayedC
+  -- The keys inside R's registry rise by `key_core`, and R's record puts each in a class.
+  have core : ∀ v ∈ K6 pulled counted, v.toNat < pulled.validators.data.size →
+      eC counted v ≤ (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+        (((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+            whistC tailC highC v.toNat) +
+          (syncF events v.toNat + syncF eventsC v.toNat) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+            bandR events v.toNat)) := by
+    intro v _ hin
+    have := key_core (config := config) h tail high endEpoch replayed tailC highC endEpochC
+      replayedC v.toNat hin
+    unfold eC eR
+    omega
+  have classes : ∀ v ∈ K6 pulled counted, v.toNat < pulled.validators.data.size →
+      eR pulled v + (pinTerms config pulled anc fin).rise v.toNat ≤
+        ((if (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+              isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true) then
+            eR pulled v + (pinTerms config pulled anc fin).rise v.toNat else 0) +
+          (if (pinTerms config pulled anc fin).lateB v.toNat = true then
+            3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat else 0) +
+          (if (pinTerms config pulled anc fin).exitedRB v.toNat = true then
+            eR pulled v + (pinTerms config pulled anc fin).rise v.toNat else 0) +
+          (if (pinTerms config pulled anc fin).exitingB v.toNat = true then
+            eR pulled v + (pinTerms config pulled anc fin).rise v.toNat else 0) +
+          (if (pinTerms config pulled anc fin).pendingRB v.toNat = true then
+            eR pulled v + (pinTerms config pulled anc fin).rise v.toNat else 0)) := by
+    intro v hK hin
+    obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[v.toNat]? = some w :=
+      ⟨_, Array.getElem?_eq_getElem hin⟩
+    rcases K6_class h hK found with c | c | c | c | c
+    · rw [ite_eq_left c]; omega
+    · rw [ite_eq_left c]; omega
+    · rw [ite_eq_left c]; omega
+    · rw [ite_eq_left c]; omega
+    · rw [ite_eq_left c]; omega
+  -- Sum the classes over the keys inside R's registry.
+  set inside := (K6 pulled counted).filter (fun v => v.toNat < pulled.validators.data.size)
+    with hInside
+  have partition := Finset.sum_filter_add_sum_filter_not (K6 pulled counted)
+    (fun v => v.toNat < pulled.validators.data.size) (eC counted)
+  have notInside : (K6 pulled counted).filter (fun v => ¬ v.toNat < pulled.validators.data.size) =
+      (K6 pulled counted).filter (fun v => pulled.validators.data.size ≤ v.toNat) := by
+    refine Finset.filter_congr fun v _ => ?_
+    omega
+  rw [notInside, ← hInside] at partition
+  have insideSum : ∑ v ∈ inside, eC counted v ≤
+      ∑ v ∈ inside, (((eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+        (((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+            whistC tailC highC v.toNat) +
+          (syncF events v.toNat + syncF eventsC v.toNat) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+            bandR events v.toNat)))) :=
+    Finset.sum_le_sum fun v hv =>
+      core v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2
+  rw [Finset.sum_add_distrib] at insideSum
+  have classSum : ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) ≤
+      (∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+          isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (∑ v ∈ inside with (pinTerms config pulled anc fin).lateB v.toNat = true,
+        (3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (∑ v ∈ inside with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (∑ v ∈ inside with (pinTerms config pulled anc fin).exitingB v.toNat = true,
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (∑ v ∈ inside with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) := by
+    refine Nat.le_trans (Finset.sum_le_sum fun v hv =>
+      classes v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2) (Nat.le_of_eq ?_)
+    simp only [Finset.sum_filter]
+    simp only [Finset.sum_add_distrib]
+  -- Each class of inside keys is within the matching class of `K6`.
+  have restrict : ∀ (p : ValidatorIndex → Prop) [DecidablePred p] (f : ValidatorIndex → ℕ),
+      ∑ v ∈ inside with p v, f v ≤ ∑ v ∈ (K6 pulled counted) with p v, f v := fun p _ f =>
+    Finset.sum_le_sum_of_subset (Finset.filter_subset_filter _ (Finset.filter_subset _ _))
+  have joinStake : ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true), eR pulled v ≤
+      (pinTerms config pulled anc fin).joining := by
+    rw [joining_eq]
+    refine sum_toNat_le (fun i => balanceAt pulled i) fun v hv => ?_
+    obtain ⟨hi, hj⟩ := Finset.mem_filter.mp hv
+    obtain ⟨hK, hin⟩ := Finset.mem_filter.mp hi
+    exact mem_positions_filter config pulled anc fin (Array.getElem?_eq_getElem hin) hj
+  have joinRise : ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
+        (pinTerms config pulled anc fin).rise v.toNat ≤
+      (pinTerms config pulled anc fin).joinRise := by
+    rw [joinRise_eq]
+    refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+    obtain ⟨hi, hj⟩ := Finset.mem_filter.mp hv
+    obtain ⟨hK, hin⟩ := Finset.mem_filter.mp hi
+    exact mem_positions_filter config pulled anc fin (Array.getElem?_eq_getElem hin) hj
+  have joinSplit : ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) =
+      (∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true), eR pulled v) +
+      ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
+        isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
+        (pinTerms config pulled anc fin).rise v.toNat := Finset.sum_add_distrib
+  have late := restrict (fun v => (pinTerms config pulled anc fin).lateB v.toNat = true)
+    (fun v => 3 * eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)
+  have exited := restrict (fun v => (pinTerms config pulled anc fin).exitedRB v.toNat = true)
+    (fun v => eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)
+  have exiting := restrict (fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true)
+    (fun v => eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)
+  have pending := restrict (fun v => (pinTerms config pulled anc fin).pendingRB v.toNat = true)
+    (fun v => eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)
+  -- The credits, sync flows and slash bands over `K6` split at R's registry.
+  have bounds := Finset.sum_filter_add_sum_filter_not (K6 pulled counted)
+    (fun v => v.toNat < pulled.validators.data.size)
+    (fun v => (((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+            whistC tailC highC v.toNat) +
+          (syncF events v.toNat + syncF eventsC v.toNat) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+            bandR events v.toNat)))
+  rw [notInside, ← hInside] at bounds
+  have boundSplit : ∑ v ∈ K6 pulled counted,
+      (((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+            whistC tailC highC v.toNat) +
+          (syncF events v.toNat + syncF eventsC v.toNat) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+            bandR events v.toNat)) =
+      (∑ v ∈ K6 pulled counted, ((credC tailC highC v.toNat + credN tailC highC v.toNat / 10) +
+        whistC tailC highC v.toNat)) +
+      (∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat)) +
+      ∑ v ∈ K6 pulled counted, (slashR (pinTerms config pulled anc fin) v.toNat +
+        bandC tailC highC v.toNat + bandR events v.toNat) := by
+    simp only [Finset.sum_add_distrib]
+  omega
+
 
 /-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
 
