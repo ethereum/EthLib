@@ -909,27 +909,31 @@ private structure PinPresetFacts (preset : Preset) : Prop where
       preset.MAX_EFFECTIVE_BALANCE.toNat /
         (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) At every fork the whistleblower quotient is at least two. -/
+  /-- (preset fact) At every fork the whistleblower quotient is at least thirty. -/
   whistleblower : ∀ fork : Fork,
-    2 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+    30 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   /-- (preset fact) The increment times the base reward factor is `2 ^ 35` or more, never small. -/
   rewardScale : 2 ^ 35 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) An increment is at least `10 ^ 8` gwei, which rules out a small increment. -/
   incrementSize : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) A sync committee period has at least one epoch. -/
-  syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0
+  /-- (preset fact) The preset's divisors, a sync committee period among them, are positive. -/
+  divisors : preset.DivisorsPositive
+  /-- (preset fact) Four downward bands fit in an increment. -/
+  quarterBand : 4 * preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
+    by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
+    by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
