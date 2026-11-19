@@ -14,13 +14,15 @@ The hypothesis is that the padded sponge is indifferentiable from a random oracl
 
 The bound is the one of [Bertoni, Daemen, Peeters, Van Assche, Eurocrypt 2008][sponge], §4.3.
 
-Their Theorem 2 gives an exact term, and their equation (6) approximates it by a closed form.
+Their Theorem 2 rests on the exact term of their Lemma 5.
+
+Their equation (6) approximates that term by a closed form.
 
 For a cost `N`, it is `((1 - 2^-r) N^2 + (1 + 2^-r) N) / 2^(c + 1)`.
 
 EthLib proves that the closed form bounds the exact term.
 
-So the hypothesis with the exact term, the bound of their Theorem 2, implies the one here.
+So indifferentiability with the bound of their Theorem 2 implies the hypothesis here.
 
 Keccak-256 has the rate `r = 1088` and the capacity `c = 512`.
 
@@ -79,7 +81,7 @@ def Keccak256Indifferentiable : Prop :=
 
 It needs indifferentiability with the exact term of their Lemma 5, for `r = 1088` and `c = 512`.
 
-That exact term is the bound of their Theorem 2.
+Their Theorem 2 allows every bound above that term, for a cost below `2^c`.
 
 The closed form bounds the exact term, so the hypothesis follows. -/
 theorem keccak256Indifferentiable_of_spongeExact

@@ -42,7 +42,7 @@ Their §4 shows that the composition fails for games with several stages that sh
 
 Bertoni et al. bound the advantage of the sponge by the exact term of their Lemma 5.
 
-`spongeExact_le_spongeBound` proves that the closed form of their equation (6) bounds that term.
+EthLib proves that the closed form of their equation (6) bounds that term.
 
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 [rss]: https://hovav.net/ucsd/dist/revindiff.pdf
@@ -172,9 +172,9 @@ Write `x` for it.
 
 For `N` well below `2^c`, equation (6) approximates the exact term by `1 - e^-x`.
 
-It then notes that `1 - e^-x` is below `x`.
+Equation (6) then notes that `1 - e^-x` is below `x`.
 
-`spongeExact_le_spongeBound` proves that `x` bounds the exact term, for every `N`.
+EthLib proves that `x` bounds the exact term, for every `N`.
 
 For `N` at least `2^c` the closed form is at least 1, so their condition `N < 2^c` costs nothing. -/
 noncomputable def spongeBound (r c N : ℕ) : ℝ≥0∞ :=
