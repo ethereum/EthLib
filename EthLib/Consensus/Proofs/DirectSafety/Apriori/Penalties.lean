@@ -388,23 +388,13 @@ private theorem penalties_succ (x : ForkedBeaconState preset) (high t : Nat) :
             t := by
   simp [windowPenalties, List.range_succ, List.map_append, List.sum_append]
 
-/-- Let every step of a branch start before the epoch `epoch x + t`.
-
-Then a cost of the events of the branch fits the sum of a bound over its first `t` epochs.
-
-Each segment of one epoch must fit the bound at its offset from `x`.
-
-The branch from `x` to `y` splits after its last step starting at each epoch `epoch x + t`.
-
-The steps between two such cuts start at one epoch, and so form one segment.
-
-A property of the states before the epoch of `y` passes to the states of each segment.
-
-The penalties of a cohort are one instance; the debits of one key are another. -/
-theorem run_cuts_le {x y : ForkedBeaconState preset}
-    (high : Nat)
+/-- A quantity that adds over `Run.append` fits a bound summed over a branch's first `t` epochs. -/
+theorem run_cuts_of_additive {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
-    (P : ForkedBeaconState preset → Prop) (cost : BalanceEvent preset → Nat) (bound : Nat → Nat)
+    (P : ForkedBeaconState preset → Prop)
+    (F : ∀ {a b : ForkedBeaconState preset}, Run config checks a b → Nat) (bound : Nat → Nat)
+    (add : ∀ {a m n : ForkedBeaconState preset} (pre : Run config checks a m)
+      (post : Run config checks m n), n.fork < .glamsterdam → F (pre.append post) = F pre + F post)
     (eligible : ∀ {z : ForkedBeaconState preset} (pre : Run config checks x z)
       (post : Run config checks z y), tail = pre.append post →
       (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat → P z)
@@ -415,29 +405,35 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
       (∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
         (post : Run config checks z n), mid = pre.append post →
         (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat → P z) →
-      ∀ {found : List (BalanceEvent preset)}, mid.balanceEvents high = .ok found →
-      (found.map cost).sum ≤ bound (ix x m))
+      F mid ≤ bound (ix x m))
     (t : Nat) (bounded : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      tail.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch x.state).toNat + t)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    (events.map cost).sum ≤ ((List.range t).map bound).sum := by
+      tail.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch x.state).toNat + t) :
+    F tail ≤ ((List.range t).map bound).sum := by
   let start := (getCurrentEpoch x.state).toNat
-  -- After `t + 1` cuts, the first part pays at most the penalties of `t + 1` epochs.
+  -- A run without a step adds nothing: it is `.nil`, and `.nil.append .nil` is `.nil`.
+  have quiet : ∀ {a b : ForkedBeaconState preset} (run : Run config checks a b),
+      b.fork < .glamsterdam → (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+        ¬ run.Contains step) → F run = 0 := by
+    intro a b run bEarly empty
+    cases run with
+    | nil =>
+      have := add (Run.nil : Run config checks a a) Run.nil bEarly
+      change F Run.nil = F Run.nil + F Run.nil at this
+      omega
+    | snoc pre step => exact absurd (.last _ _) (empty step)
+  -- After `t + 1` cuts, the first part pays at most the bound of `t + 1` epochs.
   have key : ∀ t, ∃ (m : ForkedBeaconState preset) (cut : Run config checks x m)
       (rest : Run config checks m y), tail = cut.append rest ∧
       (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), rest.Contains step →
         start + t < (getCurrentEpoch u.state).toNat) ∧
       (start + t < (getCurrentEpoch m.state).toNat ∨
         ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), ¬ rest.Contains step) ∧
-      ∃ found, cut.balanceEvents high = .ok found ∧
-        (found.map cost).sum ≤ ((List.range (t + 1)).map bound).sum := by
+      F cut ≤ ((List.range (t + 1)).map bound).sum := by
     intro t
     induction t with
     | zero =>
       obtain ⟨m, cut, rest, same, inside, outside, -, begins⟩ := window_cut tail early start
-      have mEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early
-      obtain ⟨found, foundOk⟩ := cut.balanceEvents_ok mEarly high
-      refine ⟨m, cut, rest, same, outside, begins, found, foundOk, ?_⟩
+      refine ⟨m, cut, rest, same, outside, begins, ?_⟩
       rw [List.range_succ, List.map_append, List.sum_append]
       have bound := segment .nil cut rest (fun step member => by
         have inner := contains_epochs cut member
@@ -447,21 +443,19 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
           have ny := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
           exact eligible pre (post.append rest)
             (by rw [same, split]; exact (Run.append_assoc _ _ _).symm)
-            (by omega)) foundOk
+            (by omega))
       simpa [ix] using bound
     | succ t ih =>
-      obtain ⟨m, cut, rest, rfl, later, begins, found, foundOk, bound⟩ := ih
+      obtain ⟨m, cut, rest, rfl, later, begins, bound⟩ := ih
       obtain ⟨n, mid, last, rfl, inside, outside, -, ends⟩ :=
         window_cut rest early (start + (t + 1))
       have nEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps last.chainSteps) early
-      obtain ⟨midEvents, midOk⟩ := mid.balanceEvents_ok nEarly high
-      refine ⟨n, cut.append mid, last, Run.append_assoc _ _ _, outside, ends,
-        found ++ midEvents, balanceEvents_append cut mid high foundOk midOk, ?_⟩
-      rw [List.range_succ, List.map_append, List.sum_append, List.map_append, List.sum_append]
+      refine ⟨n, cut.append mid, last, Run.append_assoc _ _ _, outside, ends, ?_⟩
+      rw [add cut mid nEarly, List.range_succ, List.map_append, List.sum_append]
       refine Nat.add_le_add bound ?_
       by_cases empty : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
           ¬ mid.Contains step
-      · obtain rfl := Except.ok.inj (midOk.symm.trans (balanceEvents_of_empty mid empty high))
+      · rw [quiet mid nEarly empty]
         exact Nat.zero_le _
       -- A step of the segment starts after `start + t`, so the segment starts there too.
       simp only [not_forall, not_not] at empty
@@ -484,7 +478,7 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
           have ny := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps last.chainSteps)
           exact eligible (cut.append pre) (post.append last)
             (by rw [split, ← Run.append_assoc pre post last, Run.append_assoc cut pre])
-            (by omega)) midOk
+            (by omega))
       simpa [index] using each
   cases t with
   | zero =>
@@ -494,10 +488,10 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
       have low := UInt64.le_iff_toNat_le.mp (contains_epochs tail member).1
       have up := bounded step member
       omega
-    obtain rfl := Except.ok.inj (replayed.symm.trans (balanceEvents_of_empty tail empty high))
+    rw [quiet tail early empty]
     simp
   | succ t =>
-    obtain ⟨m, cut, rest, rfl, after, -, found, foundOk, bound⟩ := key t
+    obtain ⟨m, cut, rest, rfl, after, -, bound⟩ := key t
     -- No step of the branch starts at the epoch `epoch x + t + 1` or later.
     have empty : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
         ¬ rest.Contains step := fun step member => by
@@ -505,11 +499,46 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
       have up := bounded step ((Run.contains_append cut rest step).mpr (.inr member))
       simp only [start] at late
       omega
-    have whole := balanceEvents_append cut rest high foundOk
-      (balanceEvents_of_empty rest empty high)
-    rw [List.append_nil] at whole
-    obtain rfl := Except.ok.inj (replayed.symm.trans whole)
+    rw [add cut rest early, quiet rest early empty, Nat.add_zero]
     exact bound
+
+/-- A cost of the events that a branch replays fits a bound summed over its first `t` epochs.
+
+This is `run_cuts_of_additive` for the cost of the replayed events. -/
+theorem run_cuts_le {x y : ForkedBeaconState preset}
+    (high : Nat)
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    (P : ForkedBeaconState preset → Prop) (cost : BalanceEvent preset → Nat) (bound : Nat → Nat)
+    (eligible : ∀ {z : ForkedBeaconState preset} (pre : Run config checks x z)
+      (post : Run config checks z y), tail = pre.append post →
+      (getCurrentEpoch z.state).toNat < (getCurrentEpoch y.state).toNat → P z)
+    (segment : ∀ {m n : ForkedBeaconState preset} (_toM : Run config checks x m)
+      (mid : Run config checks m n) (_ : Run config checks n y),
+      (∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), mid.Contains step →
+        getCurrentEpoch u.state = getCurrentEpoch m.state) →
+      (∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
+        (post : Run config checks z n), mid = pre.append post →
+        (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat → P z) →
+      ∀ {found : List (BalanceEvent preset)}, mid.balanceEvents high = .ok found →
+      (found.map cost).sum ≤ bound (ix x m))
+    (t : Nat) (bounded : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      tail.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch x.state).toNat + t)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    (events.map cost).sum ≤ ((List.range t).map bound).sum := by
+  have total := run_cuts_of_additive tail early P
+    (fun r => (((r.balanceEvents high).toOption.getD []).map cost).sum) bound
+    (fun {a m n} pre post nEarly => by
+      obtain ⟨one, oneOk⟩ := pre.balanceEvents_ok
+        (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) nEarly) high
+      obtain ⟨two, twoOk⟩ := post.balanceEvents_ok nEarly high
+      simp [balanceEvents_append pre post high oneOk twoOk, oneOk, twoOk, Except.toOption])
+    eligible
+    (fun {m n} toM mid rest starts elig => by
+      obtain ⟨found, foundOk⟩ := mid.balanceEvents_ok
+        (Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early) high
+      simpa [foundOk, Except.toOption] using segment toM mid rest starts elig foundOk)
+    t bounded
+  simpa [replayed, Except.toOption] using total
 
 /-- The penalty and sync debits of the cohort over a branch fit the penalties of `t` epochs.
 

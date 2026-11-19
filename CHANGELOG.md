@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.Apriori.Internal.run_cuts_of_additive` sums a bound over the one-epoch segments of a branch, for any quantity that adds over `Run.append`.
+  `run_cuts_le` is its instance for the cost of the replayed events.
+  The pin's proposer-credit bound reads it for the credits of the block steps.
+
 - `DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax` says that a key's effective balance at a state of a run from genesis is at most the largest one its credentials allow.
   The pin's floors read it.
 
