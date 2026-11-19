@@ -14518,12 +14518,17 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
 
 The keys that are slashed at C and not at the split are counted too, at weight one.
 
+The keys slashed at the split that R's call reads as slashed are counted at weight three.
+
+They are the keys of `Kc` in `bud_sync`.
+
 It fits `syncLeak`, and the leak of one increment for each key slashed on R's branch.
 
-Those keys alone fit `syncLeak` and one such leak for each key slashed on R's branch.
+The keys slashed at C alone fit `syncLeak` and one such leak for each key slashed on R's branch.
 
-The weights of the counted classes are at most three, so `syncLeak` pays the debits of the keys
-slashed at C at weight one. -/
+The weights of the counted classes are at most three.
+
+So `syncLeak` pays the debits of the keys slashed at C at weight one. -/
 private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -14540,7 +14545,11 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
       (∑ v ∈ (K6 pulled counted), inducedR (pinTerms config pulled anc fin) (fromFin.append tail)
           v.toNat) +
       (∑ v ∈ (SC pulled counted split), inducedR (pinTerms config pulled anc fin)
-          (fromFin.append tail) v.toNat) ≤
+          (fromFin.append tail) v.toNat) +
+      3 * (∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
+            (fun v => ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+              (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+          inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) ≤
       (pinTerms config pulled anc fin).syncLeak +
         3 * ((pinTerms config pulled anc fin).slashedR *
           slashLeak config fork (pinTerms config pulled anc fin)) ∧
@@ -15897,6 +15906,12 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   -- The keys slashed at C add a nonnegative leak to the left side of `bud_syncLeak`.
   have leakSC : 0 ≤ ∑ v ∈ SC pulled counted split,
+      (inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+  -- The keys slashed at the split add a nonnegative leak to the left side of `bud_syncLeak`.
+  have leakKc : 0 ≤ ∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
+      (fun v => ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+        (pinTerms config pulled anc fin).slashedRB v.toNat = true),
       (inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   linarith
