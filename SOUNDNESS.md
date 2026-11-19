@@ -1271,7 +1271,7 @@ The Python tests (`bindings/python/tests/precompile/test_ripemd160.py`) check th
 
 The Keccak proofs compare the lane implementation with a model on single bits (`Proofs/Models/KeccakBits.lean`).
 The model is one reading of FIPS 202 Algorithms 1 to 9.
-It holds the state as a function of the coordinates `x`, `y` and `z`, and defines the five step mappings, the 24 rounds, pad10*1 and the sponge.
+It holds the state as a function of the coordinates `x`, `y` and `z`, and defines the five step mappings, the 24 rounds, pad10*1, and the sponge for an output that fits in one rate block.
 It orders the bits of each byte from the least significant, as FIPS 202 Appendix B.1 does.
 It imports nothing from the lane implementation, so it derives the rho offsets and the round constants from Algorithms 2 and 5 rather than sharing the tables.
 The model is the trust boundary.

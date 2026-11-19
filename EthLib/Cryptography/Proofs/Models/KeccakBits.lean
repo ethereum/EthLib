@@ -177,7 +177,9 @@ def paddedBlock {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray)
 
 /-- XOR one `rateBits`-bit block into the state, leaving the capacity unchanged.
 
-Bits at index 1600 and above are dropped, so the sponge requires a rate below 1600. -/
+Bits at index 1600 and above are dropped.
+
+FIPS 202 section 4 asks for a rate below 1600, where no bit is dropped. -/
 def absorb {rateBits : Nat} (a : State) (block : Block rateBits) : State := fun x y z =>
   let i := index x y z
   Bool.xor (a x y z) (if h : i < rateBits then block[i]'h else false)

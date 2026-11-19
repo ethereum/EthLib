@@ -225,7 +225,7 @@ theorem columnStep_injective_of_sq {α β : Fin 5} {s : UInt64} (hs : s.toNat �
     Function.Injective (columnStep α β s) := fun c d hcd =>
   h (by rw [← columnStep_columnStep _ _ _ hs, ← columnStep_columnStep _ _ _ hs, hcd])
 
-/-- The map `1 + y + y^4` on one bit of each column parity is injective. -/
+/-- The map `1 + T + T^4` on one bit of each column parity is injective. -/
 theorem mix_bits_injective (p q : Fin 5 → Bool)
     (h : ∀ x, (p x ^^ p (x + 1) ^^ p (x + 4)) = (q x ^^ q (x + 1) ^^ q (x + 4))) : p = q := by
   revert p q

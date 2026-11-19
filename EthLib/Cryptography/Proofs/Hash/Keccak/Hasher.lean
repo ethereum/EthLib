@@ -87,9 +87,7 @@ theorem size_pending_absorb (h : Hasher256) (data : ByteArray) :
     RATE_256]
   omega
 
-/-- Every hasher reached from the empty one by absorbs keeps fewer pending bytes than the rate.
-
-So the digest pads them into exactly one block. -/
+/-- Every hasher reached from the empty one by absorbs keeps fewer pending bytes than the rate. -/
 theorem size_pending_lt (pieces : List ByteArray) :
     (pieces.foldl Hasher256.absorb Hasher256.empty).pending.size < RATE_256 := by
   suffices ∀ h : Hasher256, h.pending.size < RATE_256 →
