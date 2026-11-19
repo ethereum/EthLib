@@ -34,6 +34,8 @@ import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+import EthLib.Consensus.Proofs.Transition.BlockCredits
+import EthLib.Consensus.Proofs.DirectSafety.Apriori.BlockFold
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
@@ -2993,6 +2995,325 @@ private theorem key_capped_credits {n y : ForkedBeaconState preset}
   unfold gainOn
   refine Nat.le_trans ceiling (max_le (by omega) (Nat.le_trans (Nat.min_le_left _ _) ?_))
   omega
+
+/-- A cap above the activation balance belongs to a validator with compounding credentials. -/
+private theorem compounding_of_cap {z : ForkedBeaconState preset} {i : ℕ}
+    (electra : .pectra ≤ z.fork)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt z i) :
+    ∃ v, z.state.validators.data[i]? = some v ∧ hasCompoundingWithdrawalCredential v = true := by
+  unfold PinSplit2.capAt at large
+  cases found : z.state.validators.data[i]? with
+  | none => simp [found] at large
+  | some v =>
+    refine ⟨v, rfl, ?_⟩
+    by_contra not
+    have plain : hasCompoundingWithdrawalCredential v = false := by simpa using not
+    simp [found, withdrawalMaxEffectiveBalance, electra, getMaxEffectiveBalance, plain] at large
+
+/-- The cap of a validator is the largest effective balance if it compounds.
+
+Otherwise it is the activation balance. -/
+private theorem capAt_of_found {z : ForkedBeaconState preset} {i : ℕ} {v : Validator}
+    (electra : .pectra ≤ z.fork) (found : z.state.validators.data[i]? = some v) :
+    PinSplit2.capAt z i = if hasCompoundingWithdrawalCredential v = true then
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat else preset.MIN_ACTIVATION_BALANCE.toNat := by
+  unfold PinSplit2.capAt
+  rw [found]
+  by_cases compounds : hasCompoundingWithdrawalCredential v = true <;>
+    simp [withdrawalMaxEffectiveBalance, electra, getMaxEffectiveBalance, compounds]
+
+/-- From Fusaka, a slot step before Gloas keeps whether each validator of its first state compounds.
+
+It keeps the position of each such validator. -/
+private theorem slot_compounding_kept {m n : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks m = .ok n) (fulu : .fusaka ≤ m.fork)
+    (early : n.fork < .glamsterdam) {i : ℕ} {v : Validator}
+    (found : m.state.validators.data[i]? = some v) :
+    ∃ w, n.state.validators.data[i]? = some w ∧
+      hasCompoundingWithdrawalCredential w = hasCompoundingWithdrawalCredential v := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+  obtain rfl := DirectSafety.Apriori.Internal.processUpgrades_eq_of_window upgraded fulu early
+  obtain ⟨_, cached, epoched, _, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok advancedOk
+  obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+  rcases epochIfLast_cases epochedOk with ⟨_, epochOk⟩ | ⟨_, rfl⟩
+  · have altair : .altair ≤ m.fork := Nat.le_trans (by decide) fulu
+    simp only [processEpoch, altair, ↓reduceDIte] at epochOk
+    obtain ⟨later, laterFound, same⟩ := processEpochAltair_credentials epochOk found
+    exact ⟨later, laterFound, by unfold hasCompoundingWithdrawalCredential; rw [same]⟩
+  · exact ⟨v, found, rfl⟩
+
+/-- A fold of recorded passes ends at the state of the fold of their actions. -/
+private theorem record_fold_state {α : Type} (src : BalanceSource)
+    (lim : α → BeaconState preset fork → Except TransitionError (ℕ × ℕ))
+    (act : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)) :
+    ∀ (items : List α) (p q : BalanceReplay preset fork),
+      items.foldlM (fun pre x => recordBalance src (lim x) (act · x) pre) p = .ok q →
+      items.foldlM act p.1 = .ok q.1 := by
+  intro items
+  induction items with
+  | nil =>
+    intro p q ok
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at ok
+    subst ok
+    rfl
+  | cons x rest ih =>
+    rintro ⟨first, events⟩ q ok
+    rw [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨⟨second, recorded⟩, step, others⟩ := ok
+    obtain ⟨_, _, -, actionOk, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single step
+    show List.foldlM act first (x :: rest) = _
+    rw [List.foldlM_cons, actionOk]
+    exact ih _ _ others
+
+/-- A consolidation request keeps whether a validator compounds.
+
+Otherwise it makes the validator compound and leaves its balance within the activation balance. -/
+private theorem consolidationRequest_flip {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {request : ConsolidationRequest}
+    (ok : processConsolidationRequest config s electra request = .ok t)
+    {key : ValidatorIndex} {v : Validator} (found : s.validators.data[key.toNat]? = some v) :
+    ∃ w, t.validators.data[key.toNat]? = some w ∧
+      (hasCompoundingWithdrawalCredential w = hasCompoundingWithdrawalCredential v ∨
+        (hasCompoundingWithdrawalCredential w = true ∧
+          actualBalanceAt (⟨fork, t⟩ : ForkedBeaconState preset) key.toNat ≤
+            preset.MIN_ACTIVATION_BALANCE.toNat)) := by
+  obtain ⟨conv, ledger, -⟩ := BlockLedger.ledger_processConsolidationRequest ok
+  by_cases member : key ∈ conv
+  · obtain ⟨w, located, compounds⟩ := ledger.switched key member
+    have capped := ledger.converted key member
+    exact ⟨w, located, .inr ⟨compounds, by simpa using capped⟩⟩
+  · obtain ⟨w, located, same⟩ := ledger.kept key v member found
+    exact ⟨w, located, .inl same⟩
+
+/-- A fold of consolidation requests that each record an excess event.
+
+The balance of a key rises by at most the credits of the events.
+
+The key may switch from plain to compounding credentials in the fold.
+
+Then it ends within the activation balance plus the credits of the events. -/
+private theorem excess_fold {electra : .pectra ≤ fork}
+    (lim : ConsolidationRequest → BeaconState preset fork → Except TransitionError (ℕ × ℕ))
+    (key : ValidatorIndex) :
+    ∀ (requests : List ConsolidationRequest) (r rN : BeaconState preset fork)
+      (E E' : List (BalanceEvent preset)),
+      requests.foldlM (fun pre request => recordBalance .excess (lim request)
+        (processConsolidationRequest config · electra request) pre) (r, E) = .ok (rN, E') →
+      ∃ Ec : List (BalanceEvent preset), E' = E ++ Ec ∧
+        actualBalanceAt (⟨fork, rN⟩ : ForkedBeaconState preset) key.toNat ≤
+          actualBalanceAt (⟨fork, r⟩ : ForkedBeaconState preset) key.toNat +
+            (Ec.map (keyCredit key.toNat)).sum ∧
+        ∀ v, r.validators.data[key.toNat]? = some v →
+          hasCompoundingWithdrawalCredential v = false → ∀ w,
+          rN.validators.data[key.toNat]? = some w → hasCompoundingWithdrawalCredential w = true →
+            actualBalanceAt (⟨fork, rN⟩ : ForkedBeaconState preset) key.toNat ≤
+              preset.MIN_ACTIVATION_BALANCE.toNat + (Ec.map (keyCredit key.toNat)).sum := by
+  intro requests
+  induction requests with
+  | nil =>
+    intro r rN E E' ok
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at ok
+    obtain ⟨rfl, rfl⟩ := ok
+    refine ⟨[], by simp, by simp, fun v found plain w foundW switched => ?_⟩
+    have same := Option.some.inj (found.symm.trans foundW)
+    subst same
+    exact absurd (switched.symm.trans plain) (by decide)
+  | cons request rest ih =>
+    intro r rN E E' ok
+    rw [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨⟨after, recorded⟩, step, others⟩ := ok
+    obtain ⟨credit, debit, -, actionOk, rfl⟩ :=
+      DirectSafety.Apriori.Internal.recordBalance_single step
+    obtain ⟨Ec, rfl, rise, later⟩ := ih after rN _ E' others
+    refine ⟨⟨.excess, ⟨fork, r⟩, ⟨fork, after⟩, credit, debit⟩ :: Ec, by simp, ?_, ?_⟩
+    · simp only [List.map_cons, List.sum_cons, keyCredit]
+      omega
+    · intro v found plain w foundW switched
+      obtain ⟨v', found', changed⟩ := consolidationRequest_flip actionOk found
+      rcases changed with same | ⟨_, capped⟩
+      · have bound := later v' found' (same.trans plain) w foundW switched
+        simp only [List.map_cons, List.sum_cons, keyCredit]
+        omega
+      · simp only [List.map_cons, List.sum_cons, keyCredit]
+        omega
+
+/-- Whether each validator compounds is the same at two states. -/
+private def CompKept {f : Fork} (s t : BeaconState preset f) : Prop :=
+  ∀ (v : ValidatorIndex) (validator : Validator), s.validators.data[v.toNat]? = some validator →
+    ∃ later, t.validators.data[v.toNat]? = some later ∧
+      hasCompoundingWithdrawalCredential later = hasCompoundingWithdrawalCredential validator
+
+private theorem CompKept.trans {f : Fork} {s u t : BeaconState preset f} (one : CompKept s u)
+    (two : CompKept u t) : CompKept s t := fun v validator located => by
+  obtain ⟨middle, middleFound, same⟩ := one v validator located
+  obtain ⟨later, laterFound, same'⟩ := two v middle middleFound
+  exact ⟨later, laterFound, same'.trans same⟩
+
+private theorem CompKept.of_ledger {f : Fork} {s t : BeaconState preset f}
+    {paid : Finset ValidatorIndex} {sync other slash : ValidatorIndex → ℕ}
+    (ledger : BlockLedger.Ledger s t paid ∅ sync other slash) : CompKept s t :=
+  fun v validator located => ledger.kept v validator (Finset.notMem_empty v) located
+
+/-- From Fulu and before Gloas, a block's replay leaves a switched key within activation balance.
+
+The key switches by a consolidation request.
+
+The events after the switch then add their credits. -/
+private theorem block_flip_balance {engine : ExecutionEngine preset fork}
+    {s t : BeaconState preset fork} {block : BeaconBlock preset fork}
+    {events : List (BalanceEvent preset)} (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
+    (matched : BalancesMatch s)
+    (replayed : blockBalanceReplay (config := config) (checks := checks) early engine s block =
+      .ok (t, events))
+    (key : ValidatorIndex) {v w : Validator} (found : s.validators.data[key.toNat]? = some v)
+    (plain : hasCompoundingWithdrawalCredential v = false)
+    (foundT : t.validators.data[key.toNat]? = some w)
+    (switched : hasCompoundingWithdrawalCredential w = true) :
+    actualBalanceAt (⟨fork, t⟩ : ForkedBeaconState preset) key.toNat ≤
+      preset.MIN_ACTIVATION_BALANCE.toNat + (events.map (keyCredit key.toNat)).sum := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) fulu
+  unfold blockBalanceReplay at replayed
+  dsimp only at replayed
+  obtain ⟨⟨u1, E1⟩, h1, replayed⟩ := bind_ok_iff.mp replayed
+  rw [dite_eq_left_of_eq_true (eq_true bellatrix)] at replayed
+  obtain ⟨⟨u2, E2⟩, h2, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨u3, E3⟩, h3, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨u4, E4⟩, h4, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨_, -, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨_, -, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨p5, h5, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨p6, h6, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨p7, h7, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨p8, h8, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨u9, E9⟩, h9, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨u10, E10⟩, h10, replayed⟩ := bind_ok_iff.mp replayed
+  rw [dite_eq_left_of_eq_true (eq_true electra)] at replayed
+  obtain ⟨⟨u11, E11⟩, h11, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨u12, E12⟩, h12, replayed⟩ := bind_ok_iff.mp replayed
+  obtain ⟨⟨rN, E13⟩, hfold, replayed⟩ := bind_ok_iff.mp replayed
+  rw [dite_eq_left_of_eq_true (eq_true altair)] at replayed
+  -- The states before the consolidation requests.
+  obtain ⟨hu1, -⟩ := PinSplit4.carryBalance_cases h1
+  obtain ⟨_, _, -, hu2, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single h2
+  obtain ⟨hu3, -⟩ := PinSplit4.carryBalance_cases h3
+  obtain ⟨hu4, -⟩ := PinSplit4.carryBalance_cases h4
+  have f5 := record_fold_state _ _ _ _ _ _ h5
+  have f6 := record_fold_state _ _ _ _ _ _ h6
+  have f7 := record_fold_state _ _ _ _ _ _ h7
+  have f8 := record_fold_state _ _ _ _ _ _ h8
+  obtain ⟨hu9, -⟩ := PinSplit4.carryBalance_cases h9
+  obtain ⟨hu10, -⟩ := PinSplit4.carryBalance_cases h10
+  obtain ⟨hu11, -⟩ := PinSplit4.carryBalance_cases h11
+  obtain ⟨hu12, -⟩ := PinSplit4.carryBalance_cases h12
+  have matchedInput : BalancesMatch u4 :=
+    ((frame_processBlockHeader hu1).toFrame.trans
+      ((frame_processBlockExecution hu2).toFrame.trans
+        ((frame_processRandao hu3).toFrame.trans
+          (frame_processEth1Data hu4).toFrame))).balancesMatch matched
+  obtain ⟨_, executed, -⟩ := BlockLedger.ledger_processBlockExecution early hu2
+  have toInput : CompKept s u4 :=
+    (CompKept.of_ledger (BlockLedger.ledger_processBlockHeader hu1)).trans <|
+      (CompKept.of_ledger executed).trans <|
+        (CompKept.of_ledger (BlockLedger.ledger_processRandao hu3)).trans
+          (CompKept.of_ledger (BlockLedger.ledger_processEth1Data hu4))
+  have toRequests : CompKept u4 u12 := BlockCredits.compoundingKept_beforeConsolidations
+    early fulu electra matchedInput f5 f6 f7 f8 (by rw [Array.foldlM_toList]; exact hu9) hu10
+    (by rw [Array.foldlM_toList]; exact hu11) (by rw [Array.foldlM_toList]; exact hu12)
+  obtain ⟨v0, found0, same0⟩ := (toInput.trans toRequests) key v found
+  -- The consolidation requests, then the sync aggregate.
+  obtain ⟨Ec, rfl, -, switchedBound⟩ := excess_fold (electra := electra) _ key _ _ _ _ _ hfold
+  obtain ⟨_, _, -, hu, rfl⟩ := DirectSafety.Apriori.Internal.recordBalance_single replayed
+  have kept := (BlockLedger.processSyncAggregate_kept hu).1
+  rw [kept] at foundT
+  have bound := switchedBound v0 found0 (same0.trans plain) w foundT switched
+  simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
+    List.sum_nil, keyCredit]
+  omega
+
+/-- A step makes a key compound.
+
+It leaves the balance of the key within the activation balance plus the credits of the step. -/
+private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
+    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
+    actualBalanceAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
+      stepCredit (fun _ => true) (fun _ => true) i step := by
+  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
+  have base := PinSplit2.step_balance_le_events step early i replayed
+  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
+      (events.map (keyCredit i)).sum := by
+    cases step <;> simp [stepCredit, replayed, Except.toOption]
+  rw [credit]
+  have electraM : .pectra ≤ m.fork := Nat.le_trans (by decide) fulu
+  have electraN : .pectra ≤ n.fork := Nat.le_trans electraM step.chainStep.fork_le
+  obtain ⟨w, foundN, switched⟩ := compounding_of_cap electraN large
+  have strict : preset.MIN_ACTIVATION_BALANCE.toNat <
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+    rw [capAt_of_found electraN foundN, switched] at large
+    simpa using large
+  cases found : m.state.validators.data[i]? with
+  | none =>
+    have out := Array.getElem?_eq_none_iff.mp found
+    have sizes := invariant.balancesMatch
+    unfold BalancesMatch at sizes
+    have zero : actualBalanceAt m i = 0 := by
+      simp [actualBalanceAt,
+        Array.getElem?_eq_none (show m.state.balances.data.size ≤ i by omega)]
+    omega
+  | some v =>
+    have plain : hasCompoundingWithdrawalCredential v = false := by
+      by_contra compounds
+      have yes : hasCompoundingWithdrawalCredential v = true := by simpa using compounds
+      rw [capAt_of_found electraM found, yes] at flat
+      simp at flat
+      omega
+    cases step with
+    | slot ok =>
+      obtain ⟨w', found', same⟩ := slot_compounding_kept ok fulu early found
+      have equal := Option.some.inj (found'.symm.trans foundN)
+      subst equal
+      simp [switched, plain] at same
+    | @block f s t engine signed due ok =>
+      have replay := Step.balanceEvents_block (fork := f) early replayed
+      have limit := s.registryWithinLimit_of_lt early
+      unfold BeaconState.RegistryWithinLimit at limit
+      have inside : i < s.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
+      have bound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+      obtain ⟨key, hkey⟩ : ∃ key : ValidatorIndex, key.toNat = i :=
+        ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (show i < 2 ^ 64 by omega)⟩
+      subst hkey
+      exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
+        plain foundN switched
+
+/-- A run from a key with plain credentials to a key with compounding credentials splits at a step.
+
+The step makes the key compound.
+
+It leaves the balance of the key within the activation balance plus the credits of the step. -/
+private theorem Run.flip_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork) (invariant : Invariant x.state)
+    (i : ℕ) (flat : PinSplit2.capAt x i ≤ preset.MIN_ACTIVATION_BALANCE.toNat)
+    (compounding : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt y i) :
+    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m) (step : Step config checks m n)
+      (post : Run config checks n y),
+      (pre.snoc step).append post = tail ∧
+      PinSplit2.capAt m i ≤ preset.MIN_ACTIVATION_BALANCE.toNat ∧
+      preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i ∧
+      actualBalanceAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
+        stepCredit (fun _ => true) (fun _ => true) i step := by
+  obtain ⟨m, n, pre, step, post, split, notYet, arrived⟩ := Run.split_at_flip tail
+    (fun z => preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt z i)
+    (show ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt x i by omega) compounding
+  have before : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i := notYet
+  have after : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i := arrived
+  have fuluM : .fusaka ≤ m.fork := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
+  have earlyN : n.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
+  exact ⟨m, n, pre, step, post, split.symm, Nat.le_of_not_lt before, after,
+    step_flip_balance step earlyN fuluM (Run.invariant invariant pre) i before after⟩
 
 /-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
