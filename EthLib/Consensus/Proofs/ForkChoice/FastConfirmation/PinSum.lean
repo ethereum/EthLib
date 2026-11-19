@@ -12366,7 +12366,7 @@ private theorem consolidationsX_aligned
   exact Nat.dvd_of_mod_eq_zero (by simpa [UInt64.toNat_mod] using this)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key with no due consolidation entry takes no consolidation credit on C's run.
+/-- A key with no due consolidation entry takes no consolidation credit on C's run or before it.
 
 The horizon of the due entries is cut to R's epoch, which C's replay does not read. -/
 private theorem consAmt_zero (h : Setting config checks g split fin pulled anc counted V)
@@ -12377,7 +12377,8 @@ private theorem consAmt_zero (h : Setting config checks g split fin pulled anc c
     (endEpochC : (getCurrentEpoch ending).toNat ≤ highC + 1)
     (near : (getCurrentEpoch ending).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (v : ValidatorIndex) (none : dueAt fin highC {v} = 0) : consAmt eventsC v.toNat = 0 := by
+    (v : ValidatorIndex) (none : dueAt fin highC {v} = 0) :
+    consAmt eventsF v.toNat + consAmt eventsC v.toNat = 0 := by
   classical
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have called := UInt64.le_iff_toNat_le.mp h.called
