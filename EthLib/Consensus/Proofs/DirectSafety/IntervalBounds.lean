@@ -3815,11 +3815,11 @@ private theorem intervalGain_replay_bound {g x y : ForkedBeaconState preset}
   rw [exchange] at covered
   omega
 
-/-- A deposit event credits a set of keys at most its funding credit.
+/-- A balance event credits a set of keys at most the gains of the keys that are not withdrawable.
 
 Each key of the set must be absent from `e.before`'s registry or not yet withdrawable there.
 
-The funding credit is the sum of the gains of the keys that are not withdrawable. -/
+For a deposit event from Electra, that sum is its funding credit. -/
 theorem selected_deposit_le (S : Finset Nat) (e : BalanceEvent preset)
     (matched : BalancesMatch e.after.state)
     (selected : ∀ i ∈ S, (e.before.state.validators.data[i]?.map (fun v =>

@@ -26,7 +26,8 @@ Not yet released.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
-- `DirectSafety.selected_deposit_le` says that a deposit event credits a set of keys, none of them withdrawable before it, at most its funding credit.
+- `DirectSafety.selected_deposit_le` says that a balance event credits a set of keys, none of them withdrawable before it, at most the gains of the keys that are not withdrawable.
+  For a deposit event from Electra, that sum is its funding credit.
   The pin's deposit bound for the slashed keys of C's run reads it.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
