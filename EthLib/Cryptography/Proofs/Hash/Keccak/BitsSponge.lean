@@ -361,7 +361,7 @@ theorem absorbAll_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (msg : B
 /-! ## Squeezing -/
 
 /-- Byte `m` of a lane, for `m < 8`, holds lane bits `8m` to `8m + 7`. -/
-private theorem bytesOfLane_bit (v : UInt64) (m j : Nat) (hm : m < 8) (hj : j < 8) :
+theorem bytesOfLane_bit (v : UInt64) (m j : Nat) (hm : m < 8) (hj : j < 8) :
     ((Keccak.Internal.bytesOfLane v)[m]'(by
       simp [Keccak.Internal.bytesOfLane]; omega)).toBitVec.getLsbD j =
       v.toBitVec.getLsbD (8 * m + j) := by
