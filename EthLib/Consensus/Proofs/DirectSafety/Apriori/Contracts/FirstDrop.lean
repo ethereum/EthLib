@@ -1076,6 +1076,53 @@ theorem FloorTrace.run_potential_floor
   unfold nonPassDebt
   omega
 
+/-- From Fusaka, a key's effective balance after a run is its start value, or an update set it.
+
+An update sets it at most to the balance at the last state where it changed.
+
+The run splits at that state, the effective balance stays constant after it, and it is aligned. -/
+theorem FloorTrace.run_effective_origin
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
+    (maxAligned : MaxEffectiveBalancesAligned preset) (high : Nat)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (i : ValidatorIndex) (v : Validator)
+    (initial : x.state.validators.data[i.toNat]? = some v)
+    (clean : ∀ w, y.state.validators.data[i.toNat]? = some w → w.slashed = false)
+    (quotient : Nat) (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    effectiveAt y i.toNat = effectiveAt x i.toNat ∨
+      ∃ (m : ForkedBeaconState preset) (pre : Run config checks x m)
+          (post : Run config checks m y),
+        pre.append post = tail ∧ effectiveAt y i.toNat = effectiveAt m i.toNat ∧
+          effectiveAt m i.toNat ≤ actualBalanceAt m i.toNat ∧
+          effectiveAt m i.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  have unslashed : v.slashed = false := by
+    cases flag : v.slashed
+    · rfl
+    · obtain ⟨z, found, marked⟩ := tail.slashedPersistence i.toNat v initial flag
+      have := clean z found
+      simp [marked] at this
+  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, -, origin⟩ :=
+    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+      initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
+      (fun pre step post split w found => by
+        obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
+        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
+          noCrossing⟩) replayed
+  exact origin maxAligned fulu
+
 /-- The per-key accounting trace of a branch, from a floor.
 
 The floor is at most the key's largest effective balance at the start.
