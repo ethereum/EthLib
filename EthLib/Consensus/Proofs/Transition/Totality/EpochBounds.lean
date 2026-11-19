@@ -29,6 +29,8 @@ From Electra, the churn carried for deposits grows by at most the cap of the dep
 After one epoch, the effective balances sum to at most 4/3 of the balances on mainnet.
 
 That needs a state that keeps the invariant.
+
+Only the pending deposits grow the registry, by at most their cap at each epoch start.
 -/
 
 @[expose] public section
@@ -418,30 +420,11 @@ theorem processEpoch_effectiveBalanceSum_le {config : Config} {checks : Signatur
     rw [kept.1, kept.2]
     exact bound
 
-
 /-! ## The registry grows only by pending deposits at epoch starts -/
 
 section RegistryGrowth
 
 variable {config : Config} {checks : SignatureChecks}
-
-/-- A fold whose steps each add at most one validator adds at most one for each item. -/
-theorem foldlM_validators_size_le {fork : Base.Fork} {α : Type}
-    {action : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)}
-    (bound : ∀ s a t, action s a = .ok t →
-      t.validators.data.size ≤ s.validators.data.size + 1)
-    {items : List α} {s t : BeaconState preset fork}
-    (ok : items.foldlM action s = .ok t) :
-    t.validators.data.size ≤ s.validators.data.size + items.length := by
-  induction items generalizing s with
-  | nil => cases ok; simp
-  | cons a rest ih =>
-    simp only [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨middle, first, last⟩ := ok
-    have one := bound s a middle first
-    have remaining := ih last
-    simp only [List.length_cons]
-    omega
 
 /-- The pending deposits of an epoch add at most `MAX_PENDING_DEPOSITS_PER_EPOCH` validators. -/
 private theorem processPendingDeposits_validators_size_le {fork : Base.Fork}
