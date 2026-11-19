@@ -3339,8 +3339,8 @@ The fork is Fulu or later and before Gloas.
 A private step of the same file shows that each call keeps a private call invariant, given the invariant at every earlier call.
 The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
 So the endpoint takes neither as a premise.
-In their place it takes the parameter facts that the drift bound reads, except for the seed lookahead.
-For it the endpoint takes `Preset.SeedLookaheadAtLeastThree`, a lookahead of at least three epochs.
+In their place it takes the parameter facts that the drift bound reads, among them `CapOrder` and `ActivationWithinMaxEffective`.
+For the seed lookahead it takes `Preset.SeedLookaheadAtLeastThree` instead, a lookahead of at least three epochs.
 The drift bound needs a lookahead of one epoch, and the near exit bound below needs three.
 The endpoint derives `HeldStatesBeforeUpgrade` itself, with `Execution.heldStatesBeforeUpgrade_of_bounded`, and does not take it either.
 

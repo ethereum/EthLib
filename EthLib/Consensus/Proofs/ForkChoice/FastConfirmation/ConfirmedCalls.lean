@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ReceiverExits
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetCount
 public import EthLib.Consensus.Proofs.ForkChoice.JustifiedVotes
+public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalCoverage
@@ -1600,8 +1601,6 @@ private structure StepCtx {g : ForkedBeaconState preset}
   fusaka : .fusaka ≤ fork
   band : preset.IncrementWithinUpwardBand
   withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
-  capEq : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE
-  capOrder : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA
   forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat
   included : TargetIncluded (e := e) limit
   stale : StaleHeadVotersInWindow (e := e) limit
@@ -3023,8 +3022,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
     (signedAll : JustifiedHonestlySigned (e := e) anchorEpoch 0 limit)
     (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (capEq : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (capOrder : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (included : TargetIncluded (e := e) limit) (stale : StaleHeadVotersInWindow (e := e) limit)
     (reference : ∃ x ∈ J, ∃ m, ∃ referenceSlot finish : Slot, limit ≤ (e.world m).time ∧
@@ -3067,7 +3065,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
       windows, fit, anchored, sound, anchorSlot, anchorBoundary, start,
       anchorEpochOk, increment, bounded, roots, unslashed, ceiling, scoreFits, parameters,
       genesis, heldEarly, enough, terminal, absent, pinned, signedAll, fusaka,
-      band, withdrawDelay, capEq, capOrder, forkWindow, included, stale, reference, caller,
+      band, withdrawDelay, forkWindow, included, stale, reference, caller,
       confirmationEpoch, anchorEpochBefore, upToDate, atSlots }
   suffices goal : CallInvariant (e := e) 0 limit anchor.finalizedCheckpoint.root u n
       after.confirmedRoot ∨ Bad (e := e) pre limit from goal
@@ -3092,8 +3090,7 @@ private theorem Execution.callInvariant_step [DecidablePred (· ∈ J)] {Δ : �
       have := exitWindow.lookahead
       omega
     exact e.quorumDriftWithin anchored start anchorSlot slots positive genesis pre preGloas
-      fusaka forkWindow bounded maxLookahead band withdrawDelay ⟨UInt64.le_of_eq capEq, capOrder⟩
-      (UInt64.le_of_eq capEq.symm)
+      fusaka forkWindow bounded maxLookahead band withdrawDelay caps activation
   have good : Good (e := e) horizon limit := ⟨agree, finality, blocks, quorum⟩
   have anchorFacts := anchor_facts ctx
   have member : n ∈ events := List.mem_of_getElem? calls.1
@@ -3247,8 +3244,7 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (byzantine : ByzantineCountedStake (e := e) anchorEpoch 0 limit)
     (fusaka : .fusaka ≤ fork) (band : preset.IncrementWithinUpwardBand)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (capEq : preset.MAX_EFFECTIVE_BALANCE = preset.MIN_ACTIVATION_BALANCE)
-    (capOrder : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
     (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (included : TargetIncluded (e := e) limit) (stale : StaleHeadVotersInWindow (e := e) limit)
     (reference : ∃ x ∈ J, ∃ m, ∃ referenceSlot finish : Slot, limit ≤ (e.world m).time ∧
@@ -3312,7 +3308,7 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
         preGloas admitted half long maxAligned votes fits prompt windows fit anchored anchorSlot
         anchorBoundary start anchorEpochOk increment bounded roots unslashed ceiling scoreFits
         parameters genesis heldEarly enough terminal absent pinned signedAll fusaka band
-        withdrawDelay capEq capOrder forkWindow included stale reference caller confirmationEpoch
+        withdrawDelay caps activation forkWindow included stale reference caller confirmationEpoch
         anchorEpochBefore upToDate atSlots calls
         (timeLe i n calls.1) (obligations i n fcr after calls) (fun i' lt => earlier i' lt) with
         holds | evidence
