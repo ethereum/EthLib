@@ -10566,52 +10566,29 @@ The floor of each state of R's run from the finalized state is `voter_floorAt`.
 
 `prefix_envelope` turns it into the bound on the effective balance.
 
-The cap is aligned, so the ceiling on the balance gives one on the effective balance.
-
-The replays are read at R's epoch, which gives the same events for any horizon. -/
+The cap is aligned, so the ceiling on the balance gives one on the effective balance. -/
 private theorem envelope_of_voter (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)}
-    (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (replayed : tail.balanceEvents high = .ok events)
-    (i : ℕ) (voter : (UInt64.ofNat i : ValidatorIndex) ∈ Q counted)
-    (inFin : i < fin.validators.data.size)
-    (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) i =
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) :
-    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤
-      (pinTerms config pulled anc fin).ebUp i +
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-        ((syncD eventsF i + syncD events i + slashW (pinTerms config pulled anc fin) i) /
-          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  classical
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (voter : v ∈ Q counted) (inFin : v.toNat < fin.validators.data.size)
+    (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) :
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat +
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          ((syncD eventsF v.toNat + syncD events v.toNat +
+              slashW (pinTerms config pulled anc fin) v.toNat) /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
   obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  have limit := BeaconState.registryWithinLimit_of_lt h.early fin
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  have below : i < 2 ^ 64 := by omega
-  generalize hv : (UInt64.ofNat i : ValidatorIndex) = v at voter
-  have hvi : v.toNat = i := by
-    rw [← hv]
-    exact UInt64.toNat_ofNat_of_lt' below
-  subst hvi
   have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
   have sizeSplit := registryGrows_of_chainSteps toPulled.chainSteps
   obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
     ⟨_, Array.getElem?_eq_getElem
       (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
-  -- the replays at R's epoch
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
   have alignedCap : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
     rw [capAt_of_found (z := (⟨fork, pulled⟩ : ForkedBeaconState preset)) electra foundP]
@@ -10622,8 +10599,8 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
       simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.2
     split <;> assumption
-  exact prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF'
-    replayed' v inFin (slashW (pinTerms config pulled anc fin) v.toNat) alignedCap
+  exact prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF
+    replayed v inFin (slashW (pinTerms config pulled anc fin) v.toNat) alignedCap
     (voter_floorAt h fromFin tail v voter inFin frozen)
 
 /-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
@@ -11500,6 +11477,131 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
           slashLeak config fork (pinTerms config pulled anc fin)) :=
   sorry
 
+/-- The per-key core of the rise for a counted voter of R's finalized registry with a frozen cap.
+
+The key keeps its cap from the finalized state to R and C, and its rise is on the kept arm.
+
+Its balance is bounded by the credit ceiling of C's run and the floor of R's.
+
+The replays are read at R's epoch. -/
+private theorem key_core_frozen (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ValidatorIndex) (voter : v ∈ Q counted)
+    (inFin : v.toNat < fin.validators.data.size)
+    (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (frozenC : PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
+      PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
+    (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
+    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
+      (pinTerms config pulled anc fin).rise v.toNat +
+      (credC tailC highC v.toNat +
+          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
+            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
+      (syncF events v.toNat + syncF eventsC v.toNat) +
+      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+      bandR events v.toNat + bandX fin highC v.toNat :=
+  sorry
+
+/-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
+
+The key's cap rises on R's branch after the finalized state, or on C's branch.
+
+Its credentials switch to compounding at a step of one of the runs.
+
+The replays are read at R's epoch. -/
+private theorem key_core_flip (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ValidatorIndex) (voter : v ∈ Q counted)
+    (inFin : v.toNat < fin.validators.data.size)
+    (moves : ¬ (PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
+        PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat ∧
+      PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
+        PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat))
+    (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
+    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
+      (pinTerms config pulled anc fin).rise v.toNat +
+      (credC tailC highC v.toNat +
+          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
+            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
+      (syncF events v.toNat + syncF eventsC v.toNat) +
+      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+      bandR events v.toNat + bandX fin highC v.toNat :=
+  sorry
+
+/-- The per-key core of the rise for a key on the headroom arm.
+
+Its rise is its whole headroom.
+
+The replays are read at R's epoch. -/
+private theorem key_core_headroom (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ValidatorIndex)
+    (notKept : ¬ (pinTerms config pulled anc fin).keptArm v.toNat = true) :
+    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
+      (pinTerms config pulled anc fin).rise v.toNat +
+      (credC tailC highC v.toNat +
+          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
+            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
+      (syncF events v.toNat + syncF eventsC v.toNat) +
+      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+      bandR events v.toNat + bandX fin highC v.toNat :=
+  sorry
+
+/-- The per-key core of the rise for a counted voter created after the finalized state.
+
+R's registry holds the key beyond the finalized registry.
+
+The replays are read at R's epoch. -/
+private theorem key_core_created (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ValidatorIndex) (voter : v ∈ Q counted)
+    (inside : v.toNat < pulled.validators.data.size)
+    (created : fin.validators.data.size ≤ v.toNat)
+    (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
+    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
+      (pinTerms config pulled anc fin).rise v.toNat +
+      (credC tailC highC v.toNat +
+          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
+            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
+      (syncF events v.toNat + syncF eventsC v.toNat) +
+      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+      bandR events v.toNat + bandX fin highC v.toNat :=
+  sorry
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The per-key core of the rise.
 
 A key of R's registry rises from R to C by at most its rise term.
@@ -11524,14 +11626,49 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (i : ℕ) (inside : i < pulled.validators.data.size) :
+    (i : ℕ) (inside : i < pulled.validators.data.size)
+    (voter : (UInt64.ofNat i : ValidatorIndex) ∈ Q counted) :
     balanceAt counted i ≤ balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
       (credC tailC highC i +
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
             eventsC events eventsF i) + whistC tailC highC i +
       (syncF events i + syncF eventsC i) + slashR (pinTerms config pulled anc fin) i +
-      bandC tailC highC i + bandR events i + bandX fin highC i :=
-  sorry
+      bandC tailC highC i + bandR events i + bandX fin highC i := by
+  classical
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  -- the replays are read at R's epoch
+  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
+    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayed
+  -- the key as a validator index
+  have limit := BeaconState.registryWithinLimit_of_lt h.early pulled
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have below : i < 2 ^ 64 := by omega
+  generalize hv : (UInt64.ofNat i : ValidatorIndex) = v at voter
+  have hvi : v.toNat = i := by
+    rw [← hv]
+    exact UInt64.toNat_ofNat_of_lt' below
+  subst hvi
+  by_cases kept : (pinTerms config pulled anc fin).keptArm v.toNat = true
+  · by_cases inFin : v.toNat < fin.validators.data.size
+    · by_cases frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
+          PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat ∧
+        PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
+          PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat
+      · exact key_core_frozen h tail replayed' fromFin replayedF' tailC highC endEpochC
+          replayedC v voter inFin frozen.1 frozen.2 kept
+      · exact key_core_flip h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC
+          v voter inFin frozen kept
+    · exact key_core_created h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC
+        v voter inside (Nat.le_of_not_lt inFin) kept
+  · exact key_core_headroom h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC v
+      kept
 
 /-- D-7 (rise): other keys active in both. -/
 theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
@@ -11564,6 +11701,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
     obtain ⟨w, found, -⟩ := active_of_activeVoters early (s := pulled) active
     have core := key_core h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
       replayedC v.toNat (Array.getElem?_eq_some_iff.mp found).1
+      (by rw [UInt64.ofNat_toNat]; exact (Finset.mem_filter.mp member).2.2.1)
     simp only [eC, eR]
     push_cast
     zify at core
@@ -11695,9 +11833,10 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
             bandR events v.toNat)) := by
-    intro v _ hin
+    intro v hv hin
     have := key_core (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
       endEpochC replayedC v.toNat hin
+      (by rw [UInt64.ofNat_toNat]; exact (Finset.mem_filter.mp hv).2.1)
     unfold eC eR
     omega
   have classes : ∀ v ∈ K6 pulled counted, v.toNat < pulled.validators.data.size →
