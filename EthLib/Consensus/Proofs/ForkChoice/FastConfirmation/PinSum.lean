@@ -654,23 +654,6 @@ named below.
 
 Sync events are in `syncF` with the seats. -/
 
-/-- The net credits to the key in the block steps of a run.
-
-A block step counts the rise of the key's balance across the whole step.
-
-A credit that the same step takes back counts for nothing.
-
-The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
-def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
-    {y : ForkedBeaconState preset} → Run config checks x y → ℕ
-  | _, .nil => 0
-  | y, .snoc (middle := m) pre step =>
-    if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-      netScan v high pre + match step with
-        | .block .. => actualBalanceAt y v - actualBalanceAt m v
-        | .slot _ => 0
-    else netScan v high pre
-
 /-- Proposer and due-consolidation credits to the key on C's branch since the split.
 
 The rounding slack of a credited key is `bandC`, once for each key.
@@ -841,16 +824,6 @@ def riseQ {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
   if (riseScan v high tail).1 = true then preset.upwardBand + (riseScan v high tail).2 else 0
 
 /-! ### The keys that a run credits -/
-
-/-- The net credits to a key in the block steps of a run, after one more step. -/
-private theorem netScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
-    (pre : Run config checks x m) (step : Step config checks m y) :
-    netScan v high (pre.snoc step) =
-      if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-        netScan v high pre + (match step with
-          | .block .. => actualBalanceAt y v - actualBalanceAt m v
-          | .slot _ => 0)
-      else netScan v high pre := rfl
 
 /-- The net credits to a key in the block steps of a run add over `append`. -/
 private theorem netScan_append (v high : ℕ) {x m y : ForkedBeaconState preset}
