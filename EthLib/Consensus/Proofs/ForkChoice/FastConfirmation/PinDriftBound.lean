@@ -1960,7 +1960,11 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
     simp only [ne_eq] at split ⊢
     omega
 
-/-- The bound on a key's balance along a run: its start, the epoch rewards, and its other credits.
+/-- The bound on a key's balance below a cap along a run.
+
+It is the start, the epoch rewards and the other credits.
+
+The start and the balance count only up to the cap.
 
 The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`.
 
@@ -1968,8 +1972,8 @@ The other credits are the net rises of its block steps and the credits of its sl
 
 The slot-step credits leave out the epoch rewards. -/
 private def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (i high E P : ℕ) : ℕ :=
-  actualBalanceAt x i +
+    (i high E P capHigh : ℕ) : ℕ :=
+  min (actualBalanceAt x i) capHigh +
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
@@ -2070,9 +2074,10 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
           P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
       (getCurrentEpoch y.state).toNat ≤ high + 1 →
-      max (effectiveAt x i) (min capHigh (creditBound tail i high E P -
-        creditBound tail i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
-      ∀ z ∈ tail.balancePath, actualBalanceAt z i ≤ creditBound tail i high E P) := by
+      max (effectiveAt x i) (min capHigh (creditBound tail i high E P capHigh -
+        creditBound tail i high E P capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
+      ∀ z ∈ tail.balancePath, min (actualBalanceAt z i) capHigh ≤
+        creditBound tail i high E P capHigh) := by
   induction tail with
   | nil => exact ⟨fun _ _ => Nat.min_le_left _ _, fun _ _ _ _ => Nat.le_refl _,
       fun _ _ _ _ _ => ⟨Nat.le_max_left _ _, fun _ => rfl, fun h => absurd h (Nat.lt_irrefl _),
@@ -2100,11 +2105,12 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
             P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
         (getCurrentEpoch last.state).toNat ≤ high + 1 →
-        max (effectiveAt x i) (min capHigh (creditBound (pre.snoc step) i high E P -
-          creditBound (pre.snoc step) i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
+        max (effectiveAt x i) (min capHigh (creditBound (pre.snoc step) i high E P capHigh -
+          creditBound (pre.snoc step) i high E P capHigh %
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
         (∀ z ∈ step.balancePath, z = middle ∨ z = last) →
         ∀ z ∈ (pre.snoc step).balancePath,
-          actualBalanceAt z i ≤ creditBound (pre.snoc step) i high E P := by
+          min (actualBalanceAt z i) capHigh ≤ creditBound (pre.snoc step) i high E P capHigh := by
       intro alignedHigh startCap capC rate endEp closed pathCases z hz
       have xm : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch middle.state).toNat :=
         UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
@@ -2115,8 +2121,8 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         i high pre step
       have net := PinSplit.netScan_snoc i high pre step
       simp only [within, ↓reduceIte] at scan net
-      have tailEq : creditBound (pre.snoc step) i high E P =
-          creditBound pre i high E P +
+      have tailEq : creditBound (pre.snoc step) i high E P capHigh =
+          creditBound pre i high E P capHigh +
             ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) *
               (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
                 (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
@@ -2134,8 +2140,8 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
           omega
         rw [split]
         omega
-      have closedPre : max (effectiveAt x i) (min capHigh (creditBound pre i high E P -
-          creditBound pre i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E :=
+      have closedPre : max (effectiveAt x i) (min capHigh (creditBound pre i high E P capHigh -
+          creditBound pre i high E P capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E :=
         le_trans (max_le_max le_rfl (min_le_min le_rfl (rounded_mono _ (by omega)))) closed
       have ihPre := ihCredit alignedHigh startCap
         (fun p member => capC p (List.mem_append_left _ member))
@@ -2145,9 +2151,9 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       · rcases pathCases z stepMember with rfl | rfl
         · exact (ihPre _ atMiddle).trans (by omega)
         · have ceilings : ∀ p ∈ pre.balancePath,
-              min (actualBalanceAt p i) capHigh ≤ creditBound (pre.snoc step) i high E P :=
-            fun p member => (Nat.min_le_left _ _).trans ((ihPre p member).trans (by omega))
-          obtain ⟨c1, -, -, -⟩ := ihCeiling (creditBound (pre.snoc step) i high E P)
+              min (actualBalanceAt p i) capHigh ≤ creditBound (pre.snoc step) i high E P capHigh :=
+            fun p member => (ihPre p member).trans (by omega)
+          obtain ⟨c1, -, -, -⟩ := ihCeiling (creditBound (pre.snoc step) i high E P capHigh)
             alignedHigh startCap ceilings
             (fun p member => capC p (List.mem_append_left _ member))
           rw [Nat.min_comm] at c1
