@@ -11935,7 +11935,10 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
       actualBalanceAt z v.toNat ≤ grossScan v.toNat highC pre +
         (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
         (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
-          pre).1 := by
+          pre).1 ∧
+      ∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
+        w.activationEpoch ≠ FAR_FUTURE_EPOCH →
+        (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat := by
   classical
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
@@ -11980,18 +11983,24 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
     simp only [actualBalanceAt, Array.getElem?_eq_none (show
       split.balances.data.size ≤ v.toNat by omega), Option.map_none,
       Option.getD_none]
-  refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted,
-    (Array.getElem?_eq_some_iff.mp found0).1, funded, hysteresis, reserve, ?_⟩
-  exact key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega)
-    (fun m run w found assigned => by
+  -- the key is not yet active at a state before the one that schedules it
+  have ahead : ∀ m : ForkedBeaconState preset, Run config checks m z → ∀ w : Validator,
+      m.state.validators.data[v.toNat]? = some w → w.activationEpoch ≠ FAR_FUTURE_EPOCH →
+        (getCurrentEpoch m.state).toNat + 1 < w.activationEpoch.toNat :=
+    fun m run w found assigned => by
       obtain ⟨later, foundLater, life⟩ := run.registryLifecycle.validators v.toNat w found
       have same : later = v0 := Option.some.inj (foundLater.symm.trans found0)
       subst same
       have act := life.activationEpoch assigned
       have mZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps run.chainSteps)
       rw [← act]
-      omega)
-    startZero pre Run.nil
+      omega
+  refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted,
+    (Array.getElem?_eq_some_iff.mp found0).1, funded, hysteresis, reserve,
+    key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega) ahead startZero pre Run.nil,
+    fun p member => ?_⟩
+  obtain ⟨-, r2, -⟩ := balancePath_endpoint pre (Run.nil : Run config checks z z) zFork member
+  exact ahead p r2
 
 /-- The activation reserve is positive. -/
 private theorem maxEffectiveBalance_pos
@@ -12034,7 +12043,7 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
       highC tailC).1 ≤ consAmt eventsC v.toNat :=
     scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC
   rw [consZero] at consScan
-  obtain ⟨z, pre, post, splitEq, -, -, -, -, funded, -, -, walk⟩ :=
+  obtain ⟨z, pre, post, splitEq, -, -, -, -, funded, -, -, walk, -⟩ :=
     created_start h tailC highC endEpochC active absent
   have positive := maxEffectiveBalance_pos h
   subst splitEq
@@ -17025,6 +17034,9 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
       (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z) :
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
+      (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
+        w.activationEpoch ≠ FAR_FUTURE_EPOCH →
+        (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat) ∧
       ∀ p ∈ post.balancePath, effectiveAt p v.toNat ≤ Z +
         (min (pinTerms config pulled anc fin).depth
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
@@ -17036,7 +17048,7 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
         preset.downwardBand := by
   classical
   obtain ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, inside, funded, hysteresis, reserve,
-    walk⟩ := created_start h tailC highC endEpochC member absent
+    walk, ahead⟩ := created_start h tailC highC endEpochC member absent
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
@@ -17044,8 +17056,14 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   have alignedMax := (cap_values_aligned h.aligned).2
   have fuluZ : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)
   have electraZ : .pectra ≤ z.fork := Nat.le_trans (by decide) fuluZ
-  obtain ⟨P', hP', rate⟩ := key_rate_forked h
+  obtain ⟨P', hP', rate⟩ := key_rate_pre h tailC h.near
   obtain rfl : P = P' := hP.trans hP'.symm
+  have inRun : ∀ p ∈ post.balancePath, p ∈ tailC.balancePath := fun p member => by
+    obtain ⟨front, last⟩ := Run.balancePath_last pre
+    obtain ⟨rest, head⟩ := Run.balancePath_head post
+    rw [head] at member
+    rw [splitEq, Run.balancePath_append, last, head]
+    rcases List.mem_cons.mp member with rfl | later <;> simp [*]
   have backZ : (⟨fork, counted⟩ : ForkedBeaconState preset).fork ≤ z.fork := by
     have := fork_le_of_chainSteps pre.chainSteps
     exact this
@@ -17055,11 +17073,6 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
       (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
     exact capAt_le_capMax h.caps (Nat.le_trans electraZ (fork_le_of_chainSteps r1.chainSteps))
       v.toNat
-  have ends (p : ForkedBeaconState preset) (member : p ∈ post.balancePath) :
-      ∃ (r1 : Run config checks z p) (r2 : Run config checks p ⟨fork, counted⟩), True := by
-    obtain ⟨r1, r2, -⟩ := balancePath_endpoint post
-      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
-    exact ⟨r1, r2, trivial⟩
   have splitZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
   have near := h.near
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
@@ -17088,12 +17101,8 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat alignedMax
     (PinSplit5.effectiveAt_le_capMax (shared.append pre) h.genesis h.caps zEarly v.toNat)
     capCeil
-    (fun p member total perIncrement totalOk perOk => by
-      obtain ⟨r1, r2, -⟩ := ends p member
-      have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
-      exact rate p (pre.append r1) (fork_le_of_chainSteps r2.chainSteps) (by
-        simp only at order ⊢
-        omega) total perIncrement totalOk perOk)
+    (fun p member total perIncrement totalOk perOk =>
+      rate p (inRun p member) total perIncrement totalOk perOk)
     endEpochC incPos D Cr Cr e0 C S W (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q rfl hq
     alignedE0 hC (by simp only at splitZ ⊢; omega) (by rw [hS]; exact Nat.min_le_left _ _)
     (by omega) (le_of_eq hCr.symm) key (by omega)
@@ -17129,7 +17138,7 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
     WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P D e0 S Cr Z
     preset.downwardBand key (by rw [he0, hS]; exact hysteresis) credited small
   rw [← hq, ← hW] at arith
-  refine ⟨z, pre, post, rfl, ?_, fun p member => ?_⟩
+  refine ⟨z, pre, post, rfl, ?_, ahead, fun p member => ?_⟩
   · have := maxEffectiveBalance_pos h
     omega
   obtain ⟨r1, r2, cut⟩ := balancePath_endpoint post
@@ -17255,7 +17264,8 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
       (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
     hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
       (by simpa using electra) v.toNat highC replayedC).1
-  obtain ⟨z, pre, post, -, positive, bound⟩ := created_ceiling h tailC highC endEpochC active absent
+  obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC active
+    absent
     (pinTerms config pulled anc fin).perIncrement rfl key flows
   have atEnd : (⟨fork, counted⟩ : ForkedBeaconState preset) ∈ post.balancePath := by
     obtain ⟨front, eq⟩ := Run.balancePath_last post
