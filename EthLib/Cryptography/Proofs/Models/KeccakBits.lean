@@ -132,6 +132,11 @@ def padded (rateBits : Nat) (msg : ByteArray) : List Bool :=
 /-- FIPS 202 section 3.1.2 linear state index. -/
 def index (x y : Fin 5) (z : Fin 64) : Nat := 64 * (x.val + 5 * y.val) + z.val
 
+/-- The state of a bit string `S`, FIPS 202 section 3.1.2: `A[x, y, z] = S[64(5y + x) + z]`.
+
+FIPS 202 defines it for strings of 1600 bits; bits past the end of a shorter `S` read as zero. -/
+def ofString (S : List Bool) : State := fun x y z => S.getD (index x y z) false
+
 /-- Each padded message has a whole number of rate-sized blocks, at any positive bit rate. -/
 theorem padded_size_multiple {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) :
     (padded rateBits msg).length % rateBits = 0 := by
@@ -183,7 +188,9 @@ def absorbAll {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) : State :=
     (fun a i => permutation (absorb a (paddedBlock hr msg i)))
     (fun _ _ _ => false)
 
-/-- The state bit at a linear index, modulo the state dimensions. -/
+/-- The state bit at a linear index, modulo the state dimensions.
+
+Bit `64(5y + x) + z` of the state string is `A[x, y, z]`, FIPS 202 section 3.1.3. -/
 def stateBit (a : State) (i : Nat) : Bool :=
   a (xy ((i / 64) % 5)) (xy ((i / 64) / 5)) (zcoord i)
 
