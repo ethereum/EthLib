@@ -1860,6 +1860,54 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
   exact ⟨consolidated.1, consolidated.2, altair, _, credit, debit, rfl, link, synced,
     consolidatedC⟩
 
+/-- A key that an event of a block step credits is its proposer, or a seat holder for a sync event.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+private theorem block_gross_keys {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g)
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {f : Fork} {s t : BeaconState preset f} {engine : ExecutionEngine preset f}
+    {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, s⟩ = false}
+    {ok : applySignedBlock config checks engine s signed true = .ok t}
+    (shared : Run config checks g ⟨f, s⟩) (fulu : .fusaka ≤ f) (early : f < .glamsterdam)
+    {events : List (BalanceEvent preset)}
+    (replayed : (Step.block engine signed due ok).balanceEvents = .ok events) :
+    ∃ K : Finset ℕ, K.card ≤ 1 ∧ ∀ e ∈ events, ∀ i, 0 < keyCredit i e →
+      i ∈ K ∨ (e.source = .sync ∧ ∃ altair : .altair ≤ f, ∃ w, t.validators.data[i]? = some w ∧
+        w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList) := by
+  have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
+  obtain ⟨c, rest, altair, aggregate, credit, debit, split, read, synced, passes⟩ :=
+    blockReplay_proposer_credits apart electra early (Step.balanceEvents_block early replayed)
+  have bounded := step_events_bounded shared genesis (Step.block engine signed due ok) early
+    replayed
+  have matchedT : BalancesMatch t :=
+    (frame_processBlock (applySignedBlock_ok ok).2.1).balancesMatch
+      (run_justified_separated shared genesis).1.balancesMatch
+  refine ⟨{signed.message.proposerIndex.toNat}, by simp, fun e member i positive => ?_⟩
+  have member' := member
+  rw [split] at member'
+  rcases List.mem_append.mp member' with inRest | inSync
+  · obtain ⟨notSync, notConsolidation, only⟩ := passes e inRest
+    refine .inl (Finset.mem_singleton.mpr ?_)
+    by_contra other
+    by_cases credited : e.source = .rewards ∨ e.source = .slashings
+    · have := only credited i fun same => other same.symm
+      omega
+    · have each := block_event_credit shared genesis early electra i replayed bounded e member
+      have noRewards : ¬ (e.source = .rewards ∨ e.source = .consolidations) := by
+        rintro (h | h)
+        · exact credited (.inl h)
+        · exact notConsolidation h
+      have noSync : syncCredit i e = 0 := by simp [syncCredit, notSync]
+      have noSlash : ¬ e.source = .slashings := fun h => credited (.inr h)
+      simp only [noRewards, noSlash, noSync, ↓reduceIte] at each
+      omega
+  · obtain rfl := List.mem_singleton.mp inSync
+    simp only [keyCredit] at positive
+    rcases sync_moved_seat (i := i) altair synced matchedT (by omega) with h | ⟨_, found, same, -⟩
+    · exact .inr ⟨rfl, altair, h⟩
+    · exact .inl (Finset.mem_singleton.mpr (by rw [read] at found; cases found; exact same.symm))
+
 /-- A list of at most one element has equal members. -/
 private theorem list_eq_of_length_le_one {α : Type} {L : List α} (short : L.length ≤ 1) {a b : α}
     (ha : a ∈ L) (hb : b ∈ L) : a = b := by
