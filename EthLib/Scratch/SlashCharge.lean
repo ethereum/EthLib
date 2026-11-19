@@ -110,10 +110,10 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
     · simp [foundB, unset, assigned]
   have inRun : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
       tailC.departureCharges := by
-    rw [cut, DirectSafety.Run.departureCharges_append]
+    rw [cut, Run.departureCharges_append]
     simp [Run.departureCharges, inStep]
   have found := List.find?_isSome.mpr
-    ⟨_, inRun, by simp⟩
+    ⟨_, inRun, beq_iff_eq.mpr rfl⟩
   obtain ⟨c, chosen⟩ := Option.isSome_iff_exists.mp found
   have selected := List.find?_some chosen
   have same := charge_unique tailC (List.mem_of_find?_eq_some chosen) inRun
