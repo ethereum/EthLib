@@ -323,7 +323,7 @@ Not yet released.
 
 ### Changes that break callers
 
-- In Lean, `DirectSafety.Apriori.whistleblowerAllowanceAt` charges the whistleblower allowance at the slashable balance at the reference state plus the window's issuance and deposit funding, over `WQ − 1`, not at `MAX_EFFECTIVE_BALANCE_ELECTRA` (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+- In Lean, `DirectSafety.Apriori.whistleblowerAllowanceAt` can now be below the cap form, which charges each slashable key at `MAX_EFFECTIVE_BALANCE_ELECTRA` (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
   From Electra, when `WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA` is at least 2, it is the smaller of `whistleblowerAllowance` and a new bound.
   The new bound is the new `slashableBase`, plus `windowIssuance`, the deposit carry and the exit flow of the window, over one less than that quotient.
   `slashableBase` sums the larger of the effective and the actual balance over the validators that are unslashed and not yet withdrawable at the reference state.

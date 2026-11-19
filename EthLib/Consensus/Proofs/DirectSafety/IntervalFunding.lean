@@ -986,7 +986,9 @@ theorem replayRewards_induction {fork : Fork} (P : BalanceReplay preset fork →
       obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
       exact deltas (.inr rfl) _ (passes (deltas (.inl rfl) _ initial rewardOk) folded) last
 
-/-- The rewards pass records reward, penalty and inactivity events only. -/
+/-- The rewards pass records reward, penalty and inactivity events only.
+
+So a log with only those sources keeps only those sources. -/
 theorem replayRewards_sources {fork : Fork} {pre post : BalanceReplay preset fork}
     (initial : ∀ e ∈ pre.2,
       e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)

@@ -468,9 +468,9 @@ def exitedSlashableCount (x : ForkedBeaconState preset) : Nat :=
     !v.slashed && decide (v.exitEpoch ≤ getCurrentEpoch x.state) &&
       decide (getCurrentEpoch x.state < v.withdrawableEpoch)
 
-/-- `W`: the balance base of the validators that a window from `x` can still slash.
+/-- `B`: the slashable base at `x`.
 
-These are the validators that are unslashed at `x` and not yet withdrawable at its epoch.
+It counts the validators that are unslashed at `x` and not yet withdrawable at its epoch.
 
 Each counts at the larger of its effective and actual balance. -/
 def slashableBase (x : ForkedBeaconState preset) : Nat :=
@@ -664,11 +664,13 @@ def activationBudget (x : ForkedBeaconState preset) (high : Nat) :=
 
 /-- The whistleblower allowance of the window, read at `x`.
 
-Before the fork it is `Omega`.
+When the window has an epoch before Electra, it is `Omega`.
 
-From Electra, when `WQ` is at least 2, it is also at most a bound over `WQ - 1`.
+Otherwise, when `WQ` is at least 2, it is also at most a bound over `WQ - 1`.
 
-That bound is the base `W`, plus the issuance envelope and the deposit funding of the window. -/
+That bound is the base `B` plus the issuance envelope of the window.
+
+It also adds the deposit carry and the exit flow of the window. -/
 abbrev whistleblowerAllowanceAt (x : ForkedBeaconState preset) (high : Nat) :=
   let omega := whistleblowerAllowance preset config (referenceCount x)
     (scheduledActivationCount x) (unassignedPreStake x) (fundingCarry x)

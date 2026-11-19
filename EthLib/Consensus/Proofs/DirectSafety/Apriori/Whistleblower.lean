@@ -7,11 +7,11 @@ public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
 
 From Electra, the credits other than rewards and sync credits fit an allowance of the window.
 
-For a branch from `x` to `y`, let `SC` be its slashing credits and `W` the slashable base.
+For a branch from `x` to `y`, let `SC` be its slashing credits and `B` the slashable base.
 
 Let `R`, `S` and `D` be the reward, sync and deposit funding credits of the branch.
 
-Then `WQ * SC + W y ≤ W x + R + S + D + SC`, so `(WQ - 1) * SC ≤ W x + R + S + D`.
+Then `WQ * SC + B y ≤ B x + R + S + D + SC`, so `(WQ - 1) * SC ≤ B x + R + S + D`.
 
 The allowance reads only the reference state and the length of the window.
 -/
@@ -1098,9 +1098,9 @@ private theorem pass_le_freed {g u v : ForkedBeaconState preset}
 
 /-- From Electra, a slot pays no slashing credit.
 
-Its credits to the slashable base at its end have three bounds together.
+Its credits to the slashable base at its end are at most a sum.
 
-They are its fund credits, its deposit funding credits and the weight of the keys that leave. -/
+The sum is its fund credits, its deposit funding credits and the weight of the keys that leave. -/
 private theorem slot_credits_le {g u v : ForkedBeaconState preset}
     (shared : Run config checks g u) (genesis : Genesis (config := config) (checks := checks) g)
     (ok : advanceSlotAcross config checks u = .ok v) (caps : CapOrder preset)
