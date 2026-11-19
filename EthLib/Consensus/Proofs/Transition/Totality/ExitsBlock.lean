@@ -403,8 +403,11 @@ private theorem churnQueue_bound {earliest first churn left₀ amount epoch left
     constructor <;> omega
 
 /-- A churn of exits that is computed is at least one increment and at most one churn bound. -/
-private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconState preset fork}
-    {churn : Gwei} (computed : exitChurnLimit config s = .ok churn) :
+private theorem exitChurnLimit_bounds (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA)
+    (maximum :
+      preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT)
+    {s : BeaconState preset fork} {churn : Gwei} (computed : exitChurnLimit config s = .ok churn) :
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ churn.toNat ∧
       churn.toNat ≤ exitChurnCeiling config s := by
   unfold exitChurnLimit at computed
@@ -413,7 +416,7 @@ private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconS
     obtain ⟨total, totalOk, rfl⟩ := computed
     have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
-      config.CHURN_LIMIT_QUOTIENT_GLOAS rates.increment rates.minimum
+      config.CHURN_LIMIT_QUOTIENT_GLOAS increment minimum
     unfold exitChurnCeiling
     exact ⟨lower, by omega⟩
   · simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff, pure,
@@ -421,8 +424,8 @@ private theorem exitChurnLimit_bounds (rates : Rates preset config) {s : BeaconS
     obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
     have totalLe := (getTotalActiveBalance_bounds totalOk).2
     obtain ⟨lower, upper⟩ := roundToIncrement_share_bounds (config := config) total
-      config.CHURN_LIMIT_QUOTIENT rates.increment rates.minimum
-    have maximum := UInt64.le_iff_toNat_le.mp rates.maximum
+      config.CHURN_LIMIT_QUOTIENT increment minimum
+    have maximum := UInt64.le_iff_toNat_le.mp maximum
     rw [Uint64.toNat_min]
     unfold exitChurnCeiling
     constructor <;> omega
@@ -447,7 +450,8 @@ private theorem exitChurn_bound (rates : Rates preset config) {a b : BeaconState
   obtain ⟨rfl, rfl⟩ := final
   have firstLe := (computeActivationExitEpoch_ok_iff.mp firstOk).2
   have opens := holds.opens
-  obtain ⟨lower, upper⟩ := exitChurnLimit_bounds rates churnOk
+  obtain ⟨lower, upper⟩ :=
+    exitChurnLimit_bounds rates.increment rates.minimum rates.maximum churnOk
   have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
     UInt64.lt_iff_toNat_lt.mp rates.increment
   obtain ⟨epochLe, leftLe⟩ := churnQueue_bound queueOk positive lower (holds.exitQueue electra)
@@ -686,9 +690,12 @@ private theorem depositRequests_balanceSum {electra : .pectra ≤ fork}
   simp only [balanceSum, kept]
 
 /-- A consolidation churn above the activation balance places its source within its cost. -/
-private theorem consolidationChurn_bound (rates : Rates preset config)
+private theorem consolidationChurn_bound (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
+    (activation : preset.EFFECTIVE_BALANCE_INCREMENT ≤ preset.MIN_ACTIVATION_BALANCE)
     {a b : BeaconState preset fork} {electra : .pectra ≤ fork} {amount churn : Gwei}
-    {epoch : Epoch} {r u : Nat} (holds : Holds config start ceiling a r u)
+    {epoch : Epoch} {r : Nat}
+    (opens : (getCurrentEpoch a).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ r)
+    (queue : (a.earliestConsolidationEpoch electra).toNat ≤ r)
     (churnOk : getConsolidationChurnLimit config a = .ok churn)
     (above : preset.MIN_ACTIVATION_BALANCE < churn)
     (computed :
@@ -704,15 +711,14 @@ private theorem consolidationChurn_bound (rates : Rates preset config)
   obtain ⟨rfl, rfl⟩ := final
   obtain rfl : used = churn := Except.ok.inj (usedOk.symm.trans churnOk)
   have firstLe := (computeActivationExitEpoch_ok_iff.mp firstOk).2
-  have opens := holds.opens
   have positive : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    UInt64.lt_iff_toNat_lt.mp rates.increment
+    UInt64.lt_iff_toNat_lt.mp increment
   have lower : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ used.toNat := by
-    have := UInt64.le_iff_toNat_le.mp rates.activation
+    have := UInt64.le_iff_toNat_le.mp activation
     have := UInt64.lt_iff_toNat_lt.mp above
     omega
   obtain ⟨epochLe, -⟩ := churnQueue_bound queueOk positive lower
-    (holds.consolidationQueue electra) (by omega)
+    queue (by omega)
   exact ⟨left, rfl, epochLe⟩
 
 /-- A consolidation that is accepted exits its source, which pays for the move of the queue. -/
@@ -728,7 +734,8 @@ private theorem moves_queueConsolidation (rates : Rates preset config)
   obtain ⟨epoch, _, _, _, _, churnStep, added, set, _, rfl⟩ := queueConsolidation_steps computed
   have fits := (Uint64.addChecked_ok_iff.mp added).1
   intro r u holds
-  obtain ⟨-, -, epochLe⟩ := consolidationChurn_bound rates holds churnOk above churnStep
+  obtain ⟨-, -, epochLe⟩ := consolidationChurn_bound rates.increment rates.activation
+    holds.opens (holds.consolidationQueue _) churnOk above churnStep
   rw [setValidator_eq_setValidatorAt] at set
   obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
   -- The withdrawal delay keeps the exit below the far future.
@@ -829,27 +836,13 @@ private theorem Plain.withdrawals {a b : BeaconState preset fork} {capella : .sh
 private theorem Plain.blockExecution {a b : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
-    (ok : processBlockExecution config checks engine a body bellatrix = .ok b) : Plain a b := by
-  have payload {a b : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (paid : processExecutionPayload config engine a body execution = .ok b) : Plain a b := by
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
-    exact Plain.of_validators
-  unfold processBlockExecution at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, bid⟩ := ok
-    obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
-    exact (Plain.withdrawals withdrawn).trans Plain.of_validators
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, paid⟩ := ok
-    exact (Plain.withdrawals withdrawn).trans (payload paid)
-  · dsimp only at ok
-    split at ok
-    · exact payload ok
-    · cases ok
-      exact Plain.refl _
+    (ok : processBlockExecution config checks engine a body bellatrix = .ok b) : Plain a b :=
+  processBlockExecution_of Plain Plain.refl (fun one two => one.trans two)
+    (fun paid => by
+      obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
+      exact Plain.of_validators)
+    (fun bid => by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid; exact Plain.of_validators)
+    Plain.withdrawals ok
 
 private theorem Plain.attestation {a b : BeaconState preset fork}
     {attestation : Attestation preset fork} {parentSlot : Slot}
