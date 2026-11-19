@@ -10,7 +10,7 @@ Not yet released.
 ### Proof additions
 
 - `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
-  XMSS bounds key generation and signing on every path: at most `13434881` and `8630239231` calls.
+  XMSS bounds key generation and signing on every path: at most `13434881` and `8616804556` calls.
   Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
   leanSPHINCS counts the calls under a fixed answer function.
   Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
@@ -21,10 +21,16 @@ Not yet released.
   `HasAdversaryQueryBound` reads both counts from `adversaryExperiment`, the game with a counter on the adversary's hash calls.
   `mem_support_counted_iff` now holds for a game with any result type, not only a Boolean one.
 
+- XMSS signing builds the bottom tree once, for both the key's path and the root its top key signs ([#3395](https://github.com/ethereum/EthLib/pull/3395)).
+  `Xmss.signDerived_eq_path_node` proves that every signature stays the same, byte for byte, for every hash function.
+  `Merkle.build` computes every node under a position, with the calls of the node there, in the same order.
+  The signing bound drops from `8630239231` to `8616804556` calls, and a request's bound `requestQueries` from `2^33 + 615 * 2^16` to `2^33 + 410 * 2^16 + 204`.
+  `Cost.signCalls_eq`, `isQueryBoundP_signDerived`, `isQueryBoundP_signWith` and `lifetimeQueries_eq` state the new constants.
+
 - `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
   An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
   `gameQueries qH r` adds upper bounds on the calls of key generation, of `r` requests and of the verification.
-  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
   `unforgeable` is unchanged.
 
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).

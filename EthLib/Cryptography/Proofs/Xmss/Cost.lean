@@ -9,7 +9,7 @@ public import EthLib.Cryptography.Proofs.HashSig.Calls
 For the bounds, each call of `H` makes at most one query on every path.
 
 - Key generation takes at most `1 + 205 * 2^16 = 13434881` calls.
-- Signing takes at most `2 + 2^33 + 615 * 2^16 - 3 = 8630239231` calls.
+- Signing takes at most `2 + 2^33 + 410 * 2^16 + 202 = 8616804556` calls.
 - Verification takes at most `384` calls, as the query bounds of the algorithms already prove.
 
 The signing bound charges each of its two randomizer searches all `2^32` trials.
@@ -34,9 +34,9 @@ open EthLib.Cryptography.HashSig (queriesWith queriesWith_bind queriesWith_pure
 theorem keyGenCalls_eq : 1 + 205 * 2 ^ LAYER_HEIGHT = 13434881 := by
   decide
 
-/-- The bound `2 + 2^33 + 615 * 2^16 - 3` of signing is `8630239231`. -/
-theorem signCalls_eq : 2 + (2 * MAX_RANDOMIZER_TRIALS + 615 * 2 ^ LAYER_HEIGHT - 3) =
-    8630239231 := by
+/-- The bound `2 + 2^33 + 410 * 2^16 + 202` of signing is `8616804556`. -/
+theorem signCalls_eq : 2 + (2 * MAX_RANDOMIZER_TRIALS + 410 * 2 ^ LAYER_HEIGHT + 202) =
+    8616804556 := by
   decide
 
 /-! ## Upper bounds on every path -/
@@ -68,13 +68,13 @@ theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
       fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
   simp [LAYER_HEIGHT]
 
-/-- Signing is the scheme seed, the parameter and a signature: at most `8630239231` calls.
+/-- Signing is the scheme seed, the parameter and a signature: at most `8616804556` calls.
 
 It bounds the calls of one signing request in a security game. -/
 theorem isQueryBoundP_signWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
     (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (signWith H sk idx msg) p
-      (2 + (2 * MAX_RANDOMIZER_TRIALS + 615 * 2 ^ LAYER_HEIGHT - 3)) := by
+      (2 + (2 * MAX_RANDOMIZER_TRIALS + 410 * 2 ^ LAYER_HEIGHT + 202)) := by
   unfold signWith
   refine (isQueryBoundP_bind (isQueryBoundP_schemeSeed hH sk.seed) fun s _ =>
     isQueryBoundP_bind (isQueryBoundP_publicParamOf (isQueryBoundP_seedPrf hH s)) fun pp _ =>
