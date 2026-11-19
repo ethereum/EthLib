@@ -8075,32 +8075,44 @@ private theorem retained_of_exit (h : Setting config checks g split fin pulled a
 
 /-- A key whose exit at R is at or before the finalized epoch has that exit at the finalized state.
 
+A key absent from the finalized registry was created after it, and its exit is assigned after it.
+
 An exit assigned after the finalized state is at least the seed lookahead past its epoch.
 
 An exit assigned before it is kept along the run. -/
 private theorem exit_kept_of_le_fin (h : Setting config checks g split fin pulled anc counted V)
-    {i : ℕ} {u w : Validator} (foundFin : fin.validators.data[i]? = some u)
-    (foundPulled : pulled.validators.data[i]? = some w)
+    {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat) :
-    u.exitEpoch = w.exitEpoch := by
+    ∃ u, fin.validators.data[i]? = some u ∧ u.exitEpoch = w.exitEpoch := by
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨toPulled⟩ := h.toPulled
   have assigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
     have := getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
     have := congrArg UInt64.toNat far
     omega
-  by_cases unset : u.exitEpoch = FAR_FUTURE_EPOCH
-  · obtain ⟨charge, member, -, epoch⟩ := (fromFin.append toPulled).departure_charge_of_assigned i
-      u w foundFin foundPulled unset assigned
-    have late : (getCurrentEpoch fin).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ charge.epoch :=
-      DirectSafety.Run.departureCharges_epoch_ge_start (fromFin.append toPulled)
-        (Nat.le_trans (by decide) h.fulu) h.early charge member
+  have late : ∀ c ∈ (fromFin.append toPulled).departureCharges,
+      (getCurrentEpoch fin).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ c.epoch :=
+    DirectSafety.Run.departureCharges_epoch_ge_start (fromFin.append toPulled)
+      (Nat.le_trans (by decide) h.fulu) h.early
+  cases foundFin : fin.validators.data[i]? with
+  | none =>
+    obtain ⟨charge, member, -, epoch⟩ := PinSplit.Run.charge_of_exit (fromFin.append toPulled)
+      (Nat.le_trans (by decide) h.fulu) h.early i (fun v hv => nomatch hv.symm.trans foundFin) w
+      foundPulled assigned
+    have := late charge member
     omega
-  · obtain ⟨last, located, kept⟩ :=
-      (fromFin.append toPulled).registryLifecycle.validators i u foundFin
-    have lastEq : last = w := Option.some.inj (located.symm.trans foundPulled)
-    rw [← lastEq]
-    exact (kept.exitEpoch unset).symm
+  | some u =>
+    refine ⟨u, rfl, ?_⟩
+    by_cases unset : u.exitEpoch = FAR_FUTURE_EPOCH
+    · obtain ⟨charge, member, -, epoch⟩ := (fromFin.append toPulled).departure_charge_of_assigned
+        i u w foundFin foundPulled unset assigned
+      have := late charge member
+      omega
+    · obtain ⟨last, located, kept⟩ :=
+        (fromFin.append toPulled).registryLifecycle.validators i u foundFin
+      have lastEq : last = w := Option.some.inj (located.symm.trans foundPulled)
+      rw [← lastEq]
+      exact (kept.exitEpoch unset).symm
 
 /-- The events of C's run from the finalized block are those of its two parts.
 
