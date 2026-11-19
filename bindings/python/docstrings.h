@@ -893,15 +893,6 @@
 #define DOC_consensus_digests_identify \
   "Whether the digest of each epoch at which it can change reads back the fork at that epoch."
 
-#define DOC_pq_keys_ssz \
-  "The root of the value that the bytes encode, and the bytes of that value, as a pair."
-
-#define DOC_pq_keys_possession_signing_root \
-  "The root that a proof of possession signs, on the chain with the given genesis validators."
-
-#define DOC_pq_keys_is_valid_possession_proof \
-  "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."
-
 #define DOC_consensus_verify_data_column_sidecar \
   "Whether a sidecar, given as bytes, has a valid shape."
 

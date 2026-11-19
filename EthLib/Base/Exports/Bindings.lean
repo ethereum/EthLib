@@ -1196,16 +1196,6 @@ def bindings : List Binding := [
   ⟨"consensus_digests_identify", `EthLib.Consensus.Exports.digestsIdentifyExport,
     "(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool",
     [], some "ConsensusError"⟩,
-  ⟨"pq_keys_ssz", `EthLib.Consensus.Exports.pqKeysSszExport,
-    "(type: str, data: bytes) -> tuple[bytes, bytes]",
-    [`EthLib.Serialization.Ssz.Err], some "SszError"⟩,
-  ⟨"pq_keys_possession_signing_root", `EthLib.Consensus.PqKeys.possessionSigningRoot,
-    "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes",
-    [], some "ConsensusError"⟩,
-  ⟨"pq_keys_is_valid_possession_proof", `EthLib.Consensus.PqKeys.isValidPqPossessionProof,
-    "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, " ++
-      "proof: bytes) -> bool",
-    [], some "ConsensusError"⟩,
   ⟨"consensus_verify_data_column_sidecar",
     `EthLib.Consensus.Exports.verifyDataColumnSidecarExport,
     "(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) " ++
