@@ -18031,6 +18031,112 @@ private theorem rise_of_notKept (h : Setting config checks g split fin pulled an
   exact notKept shallow (of_decide_eq_true (Bool.and_eq_true_iff.mp low).2)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key of the split's registry, unslashed at the split and kept, is bounded at its slashing.
+
+The key is held at a state `c` of the shared segment.
+
+The closing reads the cap of each state, so the cap is not read as frozen.
+
+The step `a → b` of C's run slashes it, and `pre` is C's run up to `a`.
+
+The balance at `a` is the closing of the rise at the end `a`, from `c`.
+
+Its credits are those of the prefix.
+
+Those credits are within the terms of `whistleSlack`.
+
+The slashing's increment is `whistleEnv`'s.
+
+An end before R's epoch and no later than `c` keeps the balance of `c`, which `short` bounds.
+
+The exit at R is at or after the finalized epoch, so it is late for the whole run. -/
+private theorem registry_frozen (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (inside : i < c.validators.data.size)
+    (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
+    (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤
+        (pinTerms config pulled anc fin).ebUp i ∧
+        effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤ balanceAt fin i) ∨
+      effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤
+        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) i -
+          actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) i %
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
+    (exitAfterFin : ∀ w, pulled.validators.data[i]? = some w →
+      (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat)
+    (kept : (pinTerms config pulled anc fin).keptArm i = true)
+    (addend : ℕ) (hA : 0 < slashW (pinTerms config pulled anc fin) i →
+      (pinTerms config pulled anc fin).unitGain ≤ addend)
+    (short : (getCurrentEpoch a.state).toNat < (getCurrentEpoch pulled).toNat →
+      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch c).toNat →
+      effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc i +
+        whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+          eventsC eventsF events fin i + addend) :
+    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc i +
+      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+        eventsC eventsF events fin i + addend := by
+  classical
+  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  obtain ⟨af, as⟩ := a
+  have sameFork : fork = af :=
+    (fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)).symm
+  subst sameFork
+  by_cases flat : (getCurrentEpoch as).toNat < (getCurrentEpoch pulled).toNat ∧
+      (getCurrentEpoch as).toNat ≤ (getCurrentEpoch c).toNat
+  · exact short flat.1 flat.2
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  -- the replays are read at R's epoch
+  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
+    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayed
+  obtain ⟨eventsPre, replayedPre⟩ := pre.balanceEvents_ok aEarly highC
+  subst cut
+  -- the key as a validator index
+  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have sizeC : c.validators.data.size ≤ split.validators.data.size :=
+    registryGrows_of_chainSteps fromC.chainSteps
+  have sizeCounted : split.validators.data.size ≤ counted.validators.data.size :=
+    registryGrows_of_chainSteps ((pre.snoc step).append post).chainSteps
+  have aEpoch' : (getCurrentEpoch as).toNat ≤ (getCurrentEpoch counted).toNat := aEpoch
+  have below : i < 2 ^ 64 := by omega
+  obtain ⟨v, hvi⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' below⟩
+  subst hvi
+  have core := key_core_frozen_from h tail replayed' fromFin replayedF' pre highC
+    (by omega) (by omega) replayedPre v unslashed (late_of_exitAfterFin h v.toNat exitAfterFin)
+    toC fromC cutC inside before start (fun lt le _ _ _ => absurd ⟨lt, le⟩ flat) kept
+  have p1 := credC_prefix_le h pre step post highC replayedC v.toNat flag
+  have p2 := prefix_credits_mono (counted := counted) pre step post highC v.toNat
+  have p3 : (eventsPre.map (syncCredit v.toNat)).sum ≤ syncCr eventsC v.toNat :=
+    syncCr_prefix_le pre step post highC replayedPre replayedC v.toNat
+  exact whistle_of_close h _ rfl pre ((pre.snoc step).append post) (fromFin.append tail) highC high
+    eventsC eventsPre eventsF events v.toNat
+    (credC pre highC v.toNat + whistC pre highC v.toNat +
+      (eventsPre.map (syncCredit v.toNat)).sum)
+    (balanceAt as v.toNat) addend core (by omega) p2.1 p1 p2.2.1 p3 p2.2.2 kept hA
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry that is off the kept arm is bounded by the largest cap.
 
 Its rise is its whole headroom, so the bound reads the largest cap at each step of C's branch. -/
