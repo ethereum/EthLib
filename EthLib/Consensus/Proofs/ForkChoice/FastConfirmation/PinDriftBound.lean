@@ -7447,6 +7447,51 @@ private theorem final_floor (A inc S effZ effN K : ℕ) (hA : A ≤ K) (hZ : K �
 
 /-! ## C3: the effective balance of a new key -/
 
+/-- A key that has an activation epoch two epochs ahead holds the largest effective balance there.
+
+It is funded: its balance is at least its effective balance, which is at least the maximum.
+
+Its effective balance is at most its balance and the downward band, and it is unslashed. -/
+private theorem Run.funded_at_start {g x z : ForkedBeaconState preset}
+    (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (caps : CapOrder preset) (aligned : MaxEffectiveBalancesAligned preset)
+    (electra : .pectra ≤ x.fork) (pre : Run config checks x z) (zEarly : z.fork < .glamsterdam)
+    (i : ℕ) {v0 : Validator} (found0 : z.state.validators.data[i]? = some v0)
+    (actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (act : (getCurrentEpoch z.state).toNat + 2 = v0.activationEpoch.toNat) :
+    v0.slashed = false ∧ preset.MAX_EFFECTIVE_BALANCE.toNat ≤ actualBalanceAt z i ∧
+      effectiveAt z i ≤ actualBalanceAt z i + preset.downwardBand ∧
+      preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z i := by
+  have electraZ : .pectra ≤ z.fork := Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
+  have actBound := v0.activationEpoch.toNat_lt
+  have finite : getCurrentEpoch z.state < FAR_FUTURE_EPOCH :=
+    UInt64.lt_iff_toNat_lt.mpr (by
+      have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega)
+  have plusOne : (getCurrentEpoch z.state + 1).toNat = (getCurrentEpoch z.state).toNat + 1 := by
+    rw [UInt64.toNat_add]
+    have : (1 : UInt64).toNat = 1 := rfl
+    rw [this]
+    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    exact Nat.mod_eq_of_lt (by omega)
+  have lessAct : getCurrentEpoch z.state + 1 < v0.activationEpoch :=
+    UInt64.lt_iff_toNat_lt.mpr (by rw [plusOne]; omega)
+  obtain ⟨funded, maxLe, unslashed⟩ := (Internal.run_eligible_balance (shared.append pre) genesis
+    caps.activation caps.compounding aligned zEarly finite).2 electraZ i v0 found0
+    (Or.inl actNeFar)
+    (UInt64.lt_iff_toNat_lt.mpr (by have := UInt64.lt_iff_toNat_lt.mp lessAct; omega))
+  obtain ⟨bal, hbal, effLe⟩ := funded (by
+    have := UInt64.lt_iff_toNat_lt.mp lessAct
+    omega)
+  refine ⟨unslashed, ?_, ?_, ?_⟩
+  · have := UInt64.le_iff_toNat_le.mp (UInt64.le_trans maxLe effLe)
+    simpa [actualBalanceAt, hbal] using this
+  · have := UInt64.le_iff_toNat_le.mp effLe
+    simp only [effectiveAt, actualBalanceAt, found0, hbal, Option.map_some, Option.getD_some]
+    omega
+  · have := UInt64.le_iff_toNat_le.mp maxLe
+    simpa [effectiveAt, found0] using this
+
 open DirectSafety.Apriori.Internal in
 /-- C3: a key created on the run keeps its effective balance near two thirds of the maximum.
 
@@ -7514,32 +7559,11 @@ private theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     rw [sameAct] at h
     have := congrArg UInt64.toNat h
     omega
-  have finite : getCurrentEpoch z.state < FAR_FUTURE_EPOCH :=
-    UInt64.lt_iff_toNat_lt.mpr (by omega)
-  have plusOne : (getCurrentEpoch z.state + 1).toNat = (getCurrentEpoch z.state).toNat + 1 := by
-    rw [UInt64.toNat_add]
-    have : (1 : UInt64).toNat = 1 := rfl
-    rw [this]
-    exact Nat.mod_eq_of_lt (by omega)
-  have lessAct : getCurrentEpoch z.state + 1 < v0.activationEpoch :=
-    UInt64.lt_iff_toNat_lt.mpr (by rw [plusOne, sameAct]; omega)
-  obtain ⟨funded, maxLe, unslashed⟩ := (Internal.run_eligible_balance (shared.append pre) genesis
-    caps.activation caps.compounding aligned zEarly finite).2 electraZ i v0 found0
-    (Or.inl actNeFar)
-    (UInt64.lt_iff_toNat_lt.mpr (by have := UInt64.lt_iff_toNat_lt.mp lessAct; omega))
-  obtain ⟨bal, hbal, effLe⟩ := funded (by
-    have := UInt64.lt_iff_toNat_lt.mp lessAct
-    omega)
-  have bal0 : preset.MAX_EFFECTIVE_BALANCE.toNat ≤ actualBalanceAt z i := by
-    have := UInt64.le_iff_toNat_le.mp (UInt64.le_trans maxLe effLe)
-    simpa [actualBalanceAt, hbal] using this
-  have hystZ : effectiveAt z i ≤ actualBalanceAt z i + preset.downwardBand := by
-    have := UInt64.le_iff_toNat_le.mp effLe
-    simp only [effectiveAt, actualBalanceAt, found0, hbal, Option.map_some, Option.getD_some]
-    omega
-  have effZ : preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z i := by
-    have := UInt64.le_iff_toNat_le.mp maxLe
-    simpa [effectiveAt, found0] using this
+  have actZ : (getCurrentEpoch z.state).toNat + 2 = v0.activationEpoch.toNat := by
+    rw [sameAct]
+    exact actEq
+  obtain ⟨unslashed, bal0, hystZ, effZ⟩ :=
+    Run.funded_at_start shared genesis caps aligned electra pre zEarly i found0 actNeFar actZ
   have exitLate : ∀ (n : ForkedBeaconState preset) (_rest : Run config checks n y)
       (w : Validator), n.state.validators.data[i]? = some w →
       (getCurrentEpoch y.state).toNat < w.exitEpoch.toNat := by
