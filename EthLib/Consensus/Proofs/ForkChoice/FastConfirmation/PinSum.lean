@@ -1866,17 +1866,20 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
     v T.toNat _ h.facts.incrementSize h.facts.room T.toNat_lt aligned band scored
   dsimp only at key
   refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
-  simp only [pinTerms, pulledOk]
-  simp only [pulledOk] at pqOk
+  simp only [pinTerms]
+  have totalRead : (getTotalActiveBalance pulled).toOption.getD 0 = T := by
+    rw [pulledOk]
+    rfl
+  rw [totalRead] at pqOk ⊢
   rw [pqOk]
-  simp only [Except.toOption, Option.getD_some] at pqOk ⊢
+  simp only [Except.toOption, Option.getD_some]
   have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
       if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
   have perIncrement := toNat_getBaseRewardPerIncrement pqOk
-  simp only [quarter] at perIncrement
+  rw [quarter] at perIncrement
   refine Nat.le_of_eq ?_
   rw [perIncrement]
 
