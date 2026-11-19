@@ -3039,15 +3039,17 @@ private theorem kept_run {g x y : ForkedBeaconState preset}
 private structure Grew {f : Fork} (p q : BalanceReplay preset f) : Prop where
   kept : Kept p.1 q.1
   slot : q.1.slot = p.1.slot
+  size : q.1.validators.data.size = p.1.validators.data.size
   events : ∀ e ∈ q.2, e ∈ p.2 ∨ e.source ≠ .deposits
 
 private theorem Grew.refl {f : Fork} (p : BalanceReplay preset f) : Grew p p :=
-  ⟨Kept.of_data rfl, rfl, fun _ member => .inl member⟩
+  ⟨Kept.of_data rfl, rfl, rfl, fun _ member => .inl member⟩
 
 private theorem Grew.trans {f : Fork} {p q r : BalanceReplay preset f} (one : Grew p q)
     (two : Grew q r) : Grew p r where
   kept := one.kept.trans two.kept
   slot := two.slot.trans one.slot
+  size := two.size.trans one.size
   events e member := by
     rcases two.events e member with old | other
     · exact one.events e old
@@ -3090,13 +3092,17 @@ private theorem replayDeltas_grew {f : Fork} {source : BalanceSource}
   have loweredAction := liftAccessor_ok.mp loweredAction
   have first : Grew r raised :=
     ⟨Kept.of_data (congrArg (·.data) (increaseBalance_validators raisedAction)),
-      (frame_increaseBalance raisedAction).toFrame.slot, fun e member => by
+      (frame_increaseBalance raisedAction).toFrame.slot,
+      congrArg Array.size (congrArg (·.data) (increaseBalance_validators raisedAction)),
+      fun e member => by
         rcases raisedEvents e member with old | new
         · exact .inl old
         · exact .inr (by rw [new]; decide)⟩
   have second : Grew raised r' :=
     ⟨Kept.of_data (congrArg (·.data) (decreaseBalance_validators loweredAction)),
-      (frame_decreaseBalance loweredAction).toFrame.slot, fun e member => by
+      (frame_decreaseBalance loweredAction).toFrame.slot,
+      congrArg Array.size (congrArg (·.data) (decreaseBalance_validators loweredAction)),
+      fun e member => by
         rcases loweredEvents e member with old | new
         · exact .inl old
         · exact .inr (by rw [new]; exact notDeposit)⟩
@@ -3132,18 +3138,25 @@ private theorem replay_stage {f : Fork} (electra : .pectra ≤ f) {k : EpochStag
     (member : k ∈ [EpochStage.justification, .inactivity, .rewards, .registry, .slashings,
       .eth1Reset]) {p q : BalanceReplay preset f}
     (ok : epochReplayAction (config := config) (checks := checks) k p = .ok q) : Grew p q := by
-  have ofEdge (edge : EpochStage.Edge config checks k p.1 q.1) (same : q.2 = p.2) : Grew p q :=
-    ⟨kept_stage electra edge, edge.slot_eq, fun e member => .inl (same ▸ member)⟩
+  have sizeOf : ∀ {k' : EpochStage} (e : EpochStage.Edge config checks k' p.1 q.1),
+      (k' ≠ .registry ∧ k' ≠ .pendingDeposits ∧ k' ≠ .effectiveBalances) →
+        q.1.validators.data.size = p.1.validators.data.size := fun e other =>
+    congrArg Array.size (congrArg (·.data) (e.validators_eq other))
+  have ofEdge (edge : EpochStage.Edge config checks k p.1 q.1) (same : q.2 = p.2)
+      (size : q.1.validators.data.size = p.1.validators.data.size) : Grew p q :=
+    ⟨kept_stage electra edge, edge.slot_eq, size, fun e member => .inl (same ▸ member)⟩
   simp only [List.mem_cons, List.not_mem_nil, or_false] at member
   rcases member with rfl | rfl | rfl | rfl | rfl | rfl
   · simp only [epochReplayAction] at ok
     obtain ⟨action, same⟩ := carryBalance_cases ok
-    exact ofEdge action same
+    exact ofEdge action same (sizeOf (k' := .justification) action ⟨nofun, nofun, nofun⟩)
   · simp only [epochReplayAction] at ok
     split at ok
     · obtain ⟨action, same⟩ := carryBalance_cases ok
       rename_i h
-      exact ofEdge (by simp only [EpochStage.Edge, h, ↓reduceDIte]; exact action) same
+      have edge : EpochStage.Edge config checks .inactivity p.1 q.1 := by
+        simp only [EpochStage.Edge, h, ↓reduceDIte]; exact action
+      exact ofEdge edge same (sizeOf edge ⟨nofun, nofun, nofun⟩)
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       subst ok
       exact Grew.refl _
@@ -3151,11 +3164,13 @@ private theorem replay_stage {f : Fork} (electra : .pectra ≤ f) {k : EpochStag
     exact replayRewards_grew ok
   · simp only [epochReplayAction] at ok
     obtain ⟨action, same⟩ := carryBalance_cases ok
-    exact ofEdge action same
+    exact ofEdge action same (sameSizes_processRegistryUpdates (config := config)
+      (by simpa only [EpochStage.Edge] using action)).1
   · simp only [epochReplayAction] at ok
     obtain ⟨action, events⟩ := recordBalance_cases ok
     have edge : EpochStage.Edge config checks .slashings p.1 q.1 := action
-    exact ⟨kept_stage electra edge, edge.slot_eq, fun e member => by
+    exact ⟨kept_stage electra edge, edge.slot_eq, sizeOf edge ⟨nofun, nofun, nofun⟩,
+      fun e member => by
         rcases events e member with old | new
         · exact .inl old
         · exact .inr (by rw [new]; decide)⟩
@@ -3163,7 +3178,9 @@ private theorem replay_stage {f : Fork} (electra : .pectra ≤ f) {k : EpochStag
     split at ok
     · obtain ⟨action, same⟩ := carryBalance_cases ok
       rename_i h
-      exact ofEdge (by simp only [EpochStage.Edge, h, ↓reduceDIte]; exact action) same
+      have edge : EpochStage.Edge config checks .eth1Reset p.1 q.1 := by
+        simp only [EpochStage.Edge, h, ↓reduceDIte]; exact action
+      exact ofEdge edge same (sizeOf edge ⟨nofun, nofun, nofun⟩)
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
       subst ok
       exact Grew.refl _
@@ -3182,7 +3199,9 @@ The steps of the run before the slot keep the registry, and so does each of thos
 
 Block deposits are not covered.
 
-From Electra they credit no existing key. -/
+From Electra they credit no existing key.
+
+The registry at the event's start has at most the size of the one at the slot step's start. -/
 private theorem Run.events_kept {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam)
@@ -3193,7 +3212,8 @@ private theorem Run.events_kept {g x y : ForkedBeaconState preset}
     ∀ e ∈ events, e.source = .deposits →
       RegistryLifecycle x.state e.before.state ∧
       WithdrawableKept x.state e.before.state ∧
-      getCurrentEpoch e.before.state ≤ getCurrentEpoch y.state := by
+      getCurrentEpoch e.before.state ≤ getCurrentEpoch y.state ∧
+      e.before.state.validators.data.size ≤ u.state.validators.data.size := by
   intro e member source
   obtain ⟨pre, post, rfl⟩ := Run.contains_split tail (Step.slot ok) contained
   have stepFork := (Step.slot ok : Step config checks u w).chainStep.fork_le
@@ -3244,7 +3264,10 @@ private theorem Run.events_kept {g x y : ForkedBeaconState preset}
           · exact absurd source other
         · rw [List.mem_singleton.mp added]
           have total : Kept x.state six.1 := run.trans (cachedKept.trans grew.kept)
-          refine ⟨total.life, total.withdrawable, ?_⟩
+          have cachedSize : cached.validators.data.size = u.state.validators.data.size := by
+            obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+            rfl
+          refine ⟨total.life, total.withdrawable, ?_, (grew.size.trans cachedSize).le⟩
           have same : getCurrentEpoch six.1 = getCurrentEpoch u.state := by
             simp only [getCurrentEpoch, grew.slot, cachedSlot]
           exact same ▸ epochLe
@@ -4673,8 +4696,10 @@ private theorem Run.exiting_deposit_credit_zero {g x y : ForkedBeaconState prese
     (held : (getCurrentEpoch y.state).toNat < v.withdrawableEpoch.toNat) :
     ((events.filter (·.source = .deposits)).map (keyCredit i)).sum = 0 :=
   Run.exiting_deposit_credit_zero_of_kept tail (Nat.le_trans (by decide) fulu) early high replayed
-    (fun {_ _} ok contained {_} replayedEs =>
-      PinSplit4.Run.events_kept shared genesis tail fulu early ok contained replayedEs)
+    (fun {_ _} ok contained {_} replayedEs e member source =>
+      let kept := PinSplit4.Run.events_kept shared genesis tail fulu early ok contained replayedEs
+        e member source
+      ⟨kept.1, kept.2.1, kept.2.2.1⟩)
     i v found exited held
 
 /-- A2'' (rev 2.5.1).
