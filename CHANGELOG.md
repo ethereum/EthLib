@@ -30,6 +30,18 @@ Not yet released.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
+- `processProposerSlashing_balanceDown` says that a proposer slashing does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
+- `processAttesterSlashing_balanceDown` says that an attester slashing does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
+- `processAttestation_balanceDown` says that an attestation does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
 - `DirectSafety.selected_deposit_le` says that a balance event credits a set of keys, none of them withdrawable before it, at most the gains of the keys that are not withdrawable.
   For a deposit event from Electra, that sum is its funding credit.
   The pin's bound on the deposits credited to the active keys of C's run reads it, in `deposit_each_le`.

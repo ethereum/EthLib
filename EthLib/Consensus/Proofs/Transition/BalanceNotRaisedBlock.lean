@@ -1729,4 +1729,43 @@ theorem operationsInput_proposer
   exact ⟨(Steady.proposer apart (before 0).2.1).trans read,
     (before 0).2.1.1.2.2.trans paid.2.2.2.1, fun index => (paid.1 index).trans (before index).1⟩
 
+/-- A proposer slashing raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processProposerSlashing_balanceDown {slashing : ProposerSlashing}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processProposerSlashing config checks state slashing = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processProposerSlashing apart computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
+
+/-- An attester slashing raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processAttesterSlashing_balanceDown {slashing : AttesterSlashing preset fork}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processAttesterSlashing config checks state slashing = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processAttesterSlashing apart computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
+
+/-- An attestation raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processAttestation_balanceDown {attestation : Attestation preset fork} {parentSlot : Slot}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processAttestation config checks state parentSlot attestation = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processAttestation computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
+
 end EthLib.Consensus
