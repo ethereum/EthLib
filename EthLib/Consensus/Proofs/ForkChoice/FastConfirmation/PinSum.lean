@@ -9363,43 +9363,6 @@ theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc cou
       10 * (pinTerms config pulled anc fin).exitingCredits +
         20 * (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat) := sorry
 
-/-- D-7 (credits): C's non-attestation credits to keys counted once.
-
-The consolidation amounts are not here either: `bud_consolidations` charges them.
-
-The `syncProposer` part of `credits` is not here: `bud_sync` uses it.
-
-The bound is scaled by ten, to take the eleven tenths and the rounding of `credits`.
-
-The compounding of the credits, an exact tenth of the keys' total, is in the bound.
-
-The rounding slacks of the credited keys of `K4` and `K5` are paid by `creditedKeys`. -/
-theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    10 * ((∑ v ∈ (K4 pulled counted V), credC tailC highC v.toNat) +
-      (∑ v ∈ (K6 pulled counted), credC tailC highC v.toNat) +
-      (∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
-      (∑ v ∈ (K4 pulled counted V), bandC tailC highC v.toNat) +
-      (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) +
-      (∑ v ∈ (K6 pulled counted), bandC tailC highC v.toNat) +
-      wShare preset fork ((∑ v ∈ SC pulled counted split, propN tailC highC v.toNat) +
-        ∑ v ∈ SC pulled counted split, depPre eventsC v.toNat) +
-      (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
-      wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
-        ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat)) +
-      ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
-        (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
-        (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
-        11 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
-      10 * (pinTerms config pulled anc fin).credits +
-        10 * ((∑ v ∈ (K4 pulled counted V), consAmt eventsC v.toNat) +
-          (∑ v ∈ (K6 pulled counted), consAmt eventsC v.toNat) +
-          (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat)) :=
-  sorry
-
 /-- The due entries of a queue, summed over two disjoint sets of targets, add up. -/
 private theorem sum_filterMap_filter_add {α β : Type} (L : List α) (look : α → Option β)
     (ok : β → Bool) (p q : α → Bool) (disjoint : ∀ a, ¬ (p a = true ∧ q a = true))
@@ -10015,6 +9978,52 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
     rw [Nat.mul_comm]
     exact Nat.mul_le_mul_right _ (cards.trans slots)
   omega
+
+/-- D-7 (credits): C's non-attestation credits to keys counted once.
+
+The consolidation amounts are not here either: `bud_consolidations` charges them.
+
+The `syncProposer` part of `credits` is not here: `bud_sync` uses it.
+
+The bound is scaled by ten, to take the eleven tenths and the rounding of `credits`.
+
+The compounding of the credits, an exact tenth of the keys' total, is in the bound.
+
+The rounding slacks of the credited keys of `K4` and `K5` are paid by `creditedKeys`. -/
+theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    10 * ((∑ v ∈ (K4 pulled counted V), credC tailC highC v.toNat) +
+      (∑ v ∈ (K6 pulled counted), credC tailC highC v.toNat) +
+      (∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
+      (∑ v ∈ (K4 pulled counted V), bandC tailC highC v.toNat) +
+      (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) +
+      (∑ v ∈ (K6 pulled counted), bandC tailC highC v.toNat) +
+      wShare preset fork ((∑ v ∈ SC pulled counted split, propN tailC highC v.toNat) +
+        ∑ v ∈ SC pulled counted split, depPre eventsC v.toNat) +
+      (∑ v ∈ SC pulled counted split, bandC tailC highC v.toNat) +
+      wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
+        ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
+      (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat)) +
+      ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
+        (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
+        (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
+        11 * ((pinTerms config pulled anc fin).depth *
+          (pinTerms config pulled anc fin).syncProposer) ≤
+      10 * (pinTerms config pulled anc fin).credits +
+        10 * ((∑ v ∈ (K4 pulled counted V), consAmt eventsC v.toNat) +
+          (∑ v ∈ (K6 pulled counted), consAmt eventsC v.toNat) +
+          (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat)) :=
+  bud_credits_of h tailC highC replayedC
+    (by
+      obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+      have := proposer_rewards_le h tailC highC (K4 pulled counted V ∪ K5 counted V ∪
+        K6 pulled counted ∪ SC pulled counted split ∪ CS pulled counted)
+      rwa [Finset.sum_union (cs_disjoint h).1, Finset.sum_union (sc_disjoint h).1,
+        Finset.sum_union (Finset.disjoint_union_left.mpr ⟨d46, d56⟩), Finset.sum_union d45]
+        at this)
+    (deposits_union_le h tailC highC endEpochC replayedC) (credited_classes_le h tailC highC)
 
 /-- The credited keys of `K4`, `K5` and `K6`, with `K5` at weight three, fit the credited-key slots.
 
