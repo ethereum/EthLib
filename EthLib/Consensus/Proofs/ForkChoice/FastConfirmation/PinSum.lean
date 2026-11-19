@@ -11075,6 +11075,32 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
         at this)
     (deposits_union_le h tailC highC endEpochC replayedC) (credited_classes_le h tailC highC)
 
+/-- The keys of `K5` are at most the keys that R reads as exiting and the queue keys.
+
+A key of `K5` is read as exiting at R, or has a departure charge on C's run. -/
+private theorem card_K5_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
+    (K5 counted V).card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+      (pinTerms config pulled anc fin).queueKeys := by
+  classical
+  set A := (K5 counted V).filter fun v =>
+    (pinTerms config pulled anc fin).exitingB v.toNat = true
+  set B := (K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+  have cover : K5 counted V ⊆ A ∪ B := by
+    intro v inK5
+    by_cases exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true
+    · exact Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inK5, exiting⟩)
+    · have flag : (pinTerms config pulled anc fin).exitingB v.toNat = false := by
+        simpa using exiting
+      exact Finset.mem_union_right _ (Finset.mem_filter.mpr
+        ⟨inK5, K5_charged h tailC inK5 flag⟩)
+  have exitingLe := card_exitingB_le config pulled anc fin A fun v hv =>
+    (Finset.mem_filter.mp hv).2
+  have chargedLe := charged_count h tailC
+  exact (Finset.card_le_card cover).trans ((Finset.card_union_le _ _).trans
+    (Nat.add_le_add exitingLe chargedLe))
+
 /-- The credited keys of `K4`, `K5` and `K6`, with `K5` at weight three, fit the credited-key slots.
 
 The slots are the proposers, the seats and the deposit recipients of the window.
@@ -11100,27 +11126,10 @@ private theorem credit_slots_le (h : Setting config checks g split fin pulled an
   classical
   have classes := credited_classes_le h tailC highC
   set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
-  -- A credited key of `K5` is read as exiting at R, or has a departure charge on C's run.
   have fiveCount : C5.card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
         (pinTerms config pulled anc fin).exitingB i = true).card +
-      (pinTerms config pulled anc fin).queueKeys := by
-    set A := (K5 counted V).filter fun v =>
-      (pinTerms config pulled anc fin).exitingB v.toNat = true
-    set B := (K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
-    have cover : C5 ⊆ A ∪ B := by
-      intro v member
-      have inK5 := (Finset.mem_filter.mp member).1
-      by_cases exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true
-      · exact Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inK5, exiting⟩)
-      · have flag : (pinTerms config pulled anc fin).exitingB v.toNat = false := by
-          simpa using exiting
-        exact Finset.mem_union_right _ (Finset.mem_filter.mpr
-          ⟨inK5, K5_charged h tailC inK5 flag⟩)
-    have exitingLe := card_exitingB_le config pulled anc fin A fun v hv =>
-      (Finset.mem_filter.mp hv).2
-    have chargedLe := charged_count h tailC
-    exact (Finset.card_le_card cover).trans ((Finset.card_union_le _ _).trans
-      (Nat.add_le_add exitingLe chargedLe))
+      (pinTerms config pulled anc fin).queueKeys :=
+    (Finset.card_le_card (Finset.filter_subset _ _)).trans (card_K5_le h tailC)
   omega
 
 /-- The events of the sources of consolidations and deposits are at most those of each source. -/
@@ -12936,6 +12945,107 @@ private theorem flow_split (h : Setting config checks g split fin pulled anc cou
           2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) :=
   sorry
 
+/-- A scan over sources that the gross credits hold is at most the gross credits. -/
+private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) (p : BalanceSource → Bool)
+    (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
+    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
+  have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
+    (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
+    (fun _ => false) (fun _ => false)
+    (fun s => by
+      by_cases hp : p s = true
+      · simp [hp, inside s hp]
+      · simp [hp])
+    (fun _ => rfl) (fun s ⟨first, second⟩ => by simp [first] at second)
+    (fun s h => by simp at h) v high tail
+  unfold grossScan
+  omega
+
+/-- A key with a flow credit of `cred` or a whistleblower credit has a gross credit on C's run.
+
+Or a consolidation credits it. -/
+private theorem credit_gate {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high : ℕ) (v : ValidatorIndex) {cred : ℕ}
+    (source : cred = credC tail high v.toNat ∨ cred = propC tail high v.toNat)
+    (positive : 0 < cred + whistC tail high v.toNat) :
+    creditedKey tail high v = true ∨
+      0 < (creditScan (fun s => decide (s = .consolidations))
+        (fun s => decide (s = .consolidations)) v.toNat high tail).1 := by
+  have prop : propN tail high v.toNat ≤ grossScan v.toNat high tail :=
+    scan_le_gross tail high v.toNat _ fun s h => .inl (by simpa using h)
+  have whist : whistC tail high v.toNat ≤ grossScan v.toNat high tail :=
+    scan_le_gross tail high v.toNat _ fun s h => .inr (.inl (by simpa using h))
+  have cn := credN_split tail high v.toNat
+  have cc := credC_split tail high v.toNat
+  have pc := propC_split tail high v.toNat
+  by_cases cons : 0 < (creditScan (fun s => decide (s = .consolidations))
+      (fun s => decide (s = .consolidations)) v.toNat high tail).1
+  · exact .inr cons
+  · left
+    simp only [creditedKey, decide_eq_true_eq]
+    rcases source with rfl | rfl <;> omega
+
+/-- A key with a sync credit over C's replayed events has a gross credit on C's run. -/
+private theorem syncCr_gross (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨-, sync⟩ := creditScan_bounds ∅
+    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
+    (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
+  have bound := sync (by simp) electra h.early
+    (fun ok _ fork early replayed i => (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) v
+  unfold grossScan
+  unfold syncCr at positive
+  omega
+
+/-- A key with a flow credit is credited.
+
+Or a consolidation of X, a seat debit or R's slashing takes it. -/
+private theorem unit_gate (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (events eventsF : List (BalanceEvent preset)) (v : ValidatorIndex) {cred : ℕ}
+    (source : cred = credC tailC highC v.toNat ∨ cred = propC tailC highC v.toNat)
+    (positive : 0 < flowCredit (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
+      v.toNat cred) :
+    creditedKey tailC highC v = true ∨ 0 < consAmt eventsC v.toNat ∨
+      0 < syncD eventsF v.toNat ∨ 0 < syncD events v.toNat ∨
+      (pinTerms config pulled anc fin).slashedRB v.toNat = true := by
+  unfold flowCredit at positive
+  by_cases credit : 0 < cred + whistC tailC highC v.toNat
+  · rcases credit_gate tailC highC v source credit with credited | consolidated
+    · exact .inl credited
+    · exact .inr (.inl (Nat.lt_of_lt_of_le consolidated
+        (scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC)))
+  by_cases seat : 0 < syncCr eventsC v.toNat
+  · left
+    have := syncCr_gross h tailC highC replayedC v.toNat seat
+    simp only [creditedKey, decide_eq_true_eq]
+    omega
+  by_cases debitF : 0 < syncD eventsF v.toNat
+  · exact .inr (.inr (.inl debitF))
+  by_cases debitR : 0 < syncD events v.toNat
+  · exact .inr (.inr (.inr (.inl debitR)))
+  right; right; right; right
+  have slash : 0 < slashW (pinTerms config pulled anc fin) v.toNat := by omega
+  by_contra not
+  simp [slashW, not] at slash
+
+/-- The units of a set of keys are the unit for each key with a flow credit. -/
+private theorem sum_unitK (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tailC : Run config checks x y) (high : ℕ) (eventsC events eventsF : List (BalanceEvent preset))
+    (S : Finset ValidatorIndex) (cred : ValidatorIndex → ℕ) :
+    ∑ v ∈ S, unitK t tailC high eventsC events eventsF v.toNat (cred v) =
+      t.unitGain * (S.filter fun v =>
+        0 < flowCredit t tailC high eventsC events eventsF v.toNat (cred v)).card := by
+  rw [Finset.card_filter, Finset.mul_sum]
+  refine Finset.sum_congr rfl fun v _ => ?_
+  unfold unitK
+  split <;> simp_all
+
 /-- The units of the counted keys, at their weights, fit the unit terms of `pinReserve`.
 
 A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes a seat unit.
@@ -12945,7 +13055,6 @@ A key credited only by a consolidation of X takes row H's unit.
 A key slashed only on R's branch takes its unit in `branchR`. -/
 private theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
@@ -12963,8 +13072,126 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
         3 * (pinTerms config pulled anc fin).unitGain *
           (pinTerms config pulled anc fin).consolidationsXCount +
         3 * ((pinTerms config pulled anc fin).unitGain *
-          (pinTerms config pulled anc fin).slashedR) :=
-  sorry
+          (pinTerms config pulled anc fin).slashedR) := by
+  classical
+  obtain ⟨N, units, slots⟩ := creditUnits_eq config pulled anc fin
+  obtain ⟨d45, d46, d56, -⟩ := classes_disjoint h
+  have credited := credited_classes_le h tailC highC
+  have five := card_K5_le h tailC
+  -- The consolidation counts read the pulled epoch as their horizon.
+  obtain ⟨eventsF', replayedF'⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  have replayedC' : tailC.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsC :=
+    (DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tailC
+      (high := (getCurrentEpoch pulled).toNat) (localHigh := highC) h.near endEpochC).trans
+      replayedC
+  set G4 := (K4 pulled counted V).filter fun v => 0 < flowCredit
+    (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+    (credC tailC highC v.toNat)
+  set G5 := (K5 counted V).filter fun v => 0 < flowCredit
+    (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+    (propC tailC highC v.toNat)
+  set G6 := (K6 pulled counted).filter fun v => 0 < flowCredit
+    (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+    (credC tailC highC v.toNat)
+  have s4 : ∑ v ∈ K4 pulled counted V,
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
+        (pinTerms config pulled anc fin).unitGain * G4.card :=
+    sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat
+  have s5 : ∑ v ∈ K5 counted V,
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+        (propC tailC highC v.toNat) =
+        (pinTerms config pulled anc fin).unitGain * G5.card :=
+    sum_unitK _ tailC highC eventsC events eventsF _ fun v => propC tailC highC v.toNat
+  have s6 : ∑ v ∈ K6 pulled counted,
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
+        (pinTerms config pulled anc fin).unitGain * G6.card :=
+    sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat
+  set All := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted
+  set Co := All.filter fun v => 0 < consAmt eventsC v.toNat
+  set A := All.filter fun v => 0 < syncD eventsF v.toNat
+  set B := All.filter fun v => 0 < syncD events v.toNat
+  set Sl := All.filter fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true
+  set Cr4 := (K4 pulled counted V).filter fun v => creditedKey tailC highC v = true
+  set Cr5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
+  set Cr6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
+  -- A key with a unit is credited, or a consolidation, a seat debit or a slashing takes it.
+  have route : ∀ (v : ValidatorIndex) (cred : ℕ), v ∈ All →
+      (cred = credC tailC highC v.toNat ∨ cred = propC tailC highC v.toNat) →
+      0 < flowCredit (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
+        v.toNat cred →
+      creditedKey tailC highC v = true ∨ v ∈ Co ∪ (A ∪ B) ∪ Sl := by
+    intro v cred inAll source positive
+    rcases unit_gate h tailC highC replayedC events eventsF v source positive with
+      credit | consolidated | debitF | debitR | slashed
+    · exact .inl credit
+    · exact .inr (Finset.mem_union_left _ (Finset.mem_union_left _
+        (Finset.mem_filter.mpr ⟨inAll, consolidated⟩)))
+    · exact .inr (Finset.mem_union_left _ (Finset.mem_union_right _
+        (Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inAll, debitF⟩))))
+    · exact .inr (Finset.mem_union_left _ (Finset.mem_union_right _
+        (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, debitR⟩))))
+    · exact .inr (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, slashed⟩))
+  have cover : G4 ∪ G5 ∪ G6 ⊆ (Cr4 ∪ Cr5 ∪ Cr6) ∪ (Co ∪ (A ∪ B) ∪ Sl) := by
+    intro v member
+    rcases Finset.mem_union.mp member with m45 | m6
+    · rcases Finset.mem_union.mp m45 with m4 | m5
+      · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m4
+        rcases route v _ (Finset.mem_union_left _ (Finset.mem_union_left _ inK)) (.inl rfl)
+          positive with credit | rest
+        · exact Finset.mem_union_left _ (Finset.mem_union_left _ (Finset.mem_union_left _
+            (Finset.mem_filter.mpr ⟨inK, credit⟩)))
+        · exact Finset.mem_union_right _ rest
+      · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m5
+        rcases route v _ (Finset.mem_union_left _ (Finset.mem_union_right _ inK)) (.inr rfl)
+          positive with credit | rest
+        · exact Finset.mem_union_left _ (Finset.mem_union_left _ (Finset.mem_union_right _
+            (Finset.mem_filter.mpr ⟨inK, credit⟩)))
+        · exact Finset.mem_union_right _ rest
+    · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m6
+      rcases route v _ (Finset.mem_union_right _ inK) (.inl rfl) positive with credit | rest
+      · exact Finset.mem_union_left _ (Finset.mem_union_right _
+          (Finset.mem_filter.mpr ⟨inK, credit⟩))
+      · exact Finset.mem_union_right _ rest
+  have apart45 : Disjoint G4 G5 := Finset.disjoint_left.mpr fun v a b =>
+    Finset.disjoint_left.mp d45 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
+  have apart456 : Disjoint (G4 ∪ G5) G6 := Finset.disjoint_left.mpr fun v a b => by
+    rcases Finset.mem_union.mp a with a | a
+    · exact Finset.disjoint_left.mp d46 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
+    · exact Finset.disjoint_left.mp d56 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
+  have total := Finset.card_le_card cover
+  rw [Finset.card_union_of_disjoint apart456, Finset.card_union_of_disjoint apart45] at total
+  have union1 := Finset.card_union_le (Cr4 ∪ Cr5 ∪ Cr6) (Co ∪ (A ∪ B) ∪ Sl)
+  have union2 := Finset.card_union_le (Cr4 ∪ Cr5) Cr6
+  have union3 := Finset.card_union_le Cr4 Cr5
+  have union4 := Finset.card_union_le (Co ∪ (A ∪ B)) Sl
+  have union5 := Finset.card_union_le Co (A ∪ B)
+  -- The counts of the credited keys, the consolidations, the seat debits and the slashings.
+  have consolidations := cons_keys_le h fromFin tailC (getCurrentEpoch pulled).toNat h.near
+    (Nat.le_refl _) replayedF' replayedC' Co fun v hv => (Finset.mem_filter.mp hv).2
+  have seats := debit_keys_le h fromFin tail tailC high replayed replayedF A B
+    (fun v hv => (Finset.mem_filter.mp hv).2) fun v hv => (Finset.mem_filter.mp hv).2
+  have slashed : Sl.card ≤ (pinTerms config pulled anc fin).slashedR :=
+    slashedRB_card_le config pulled anc fin All
+  have inFive : G5.card ≤ (K5 counted V).card := Finset.card_le_card (Finset.filter_subset _ _)
+  have key : G4.card + G6.card + 3 * G5.card ≤ N +
+      2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+          (pinTerms config pulled anc fin).queueKeys)) +
+      3 * (pinTerms config pulled anc fin).consolidationsXCount +
+      3 * (pinTerms config pulled anc fin).slashedR := by
+    omega
+  rw [s4, s5, s6, units]
+  calc (pinTerms config pulled anc fin).unitGain * G4.card +
+        3 * ((pinTerms config pulled anc fin).unitGain * G5.card) +
+        (pinTerms config pulled anc fin).unitGain * G6.card
+      = (pinTerms config pulled anc fin).unitGain * (G4.card + G6.card + 3 * G5.card) := by ring
+    _ ≤ (pinTerms config pulled anc fin).unitGain * (N +
+        2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
+          (pinTerms config pulled anc fin).exitingB i = true).card +
+            (pinTerms config pulled anc fin).queueKeys)) +
+        3 * (pinTerms config pulled anc fin).consolidationsXCount +
+        3 * (pinTerms config pulled anc fin).slashedR) := Nat.mul_le_mul_left _ key
+    _ = _ := by ring
 
 /-- The leak that the counted keys' sync debits on R's branch induce, at their weights.
 
@@ -13596,8 +13823,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
   have f1 := flow_split (config := config) h tail high endEpoch replayed fromFin replayedF tailC
     highC endEpochC replayedC
-  have u1 := bud_units (config := config) h tail high endEpoch replayed fromFin replayedF tailC
-    highC endEpochC replayedC
+  have u1 := bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
+    endEpochC replayedC
   have l1 := bud_syncLeak (config := config) h tail high endEpoch replayed fromFin replayedF tailC
     highC endEpochC replayedC
   have cg := creditGain_split config pulled anc fin
