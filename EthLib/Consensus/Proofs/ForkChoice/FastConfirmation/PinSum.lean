@@ -2339,7 +2339,9 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
           (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
           (before.snoc step).append after = seg → ∀ w,
           n.state.validators.data[i.toNat]? = some w →
-          (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∧
+          ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+            ∀ u, m.state.validators.data[i.toNat]? = some u →
+              (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) ∧
           (getCurrentEpoch m.state).toNat < (getCurrentEpoch wS).toNat +
             preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
               (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -2381,7 +2383,9 @@ private theorem segment_potential (h : Setting config checks g split fin pulled 
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
       (before.snoc step).append after = seg → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     (slack ρn ρd : ℕ)
     (start : effectiveAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat ≤
       actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat +
@@ -2435,7 +2439,9 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
       (before.snoc step).append after = wholeRun → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     (slack ρn ρd floor : ℕ)
     (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
       actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -2505,7 +2511,9 @@ private theorem cfloor_origin (h : Setting config checks g split fin pulled anc 
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
       (before.snoc step).append after = wholeRun → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
     (r2 : Run config checks p ⟨fork, e⟩) (whole : r1.append r2 = wholeRun) :
     effectiveAt p i.toNat = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ∨
@@ -2550,7 +2558,9 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
       (before.snoc step).append after = wholeRun → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     (slack ρn ρd floor : ℕ)
     (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
       actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
@@ -2632,7 +2642,9 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
       (before.snoc step).append after = fromFin.append tailC → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     (base0 X low finEB floorC : ℕ)
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
@@ -5322,12 +5334,14 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
   have retained : ∀ {m n : ForkedBeaconState preset} (b : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (a : Run config checks n ⟨fork, se⟩),
       (b.snoc step).append a = pre → ∀ w, n.state.validators.data[v.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat := by
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[v.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat := by
     intro m n b step a cut' w found
     obtain ⟨last, located, kept⟩ := a.registryLifecycle.validators v.toNat w found
     by_cases e : w.exitEpoch = FAR_FUTURE_EPOCH
     · rw [e]
-      exact getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+      exact .inl (getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled)
     · exact absurd ((kept.exitEpoch e).symm.trans (far last located)) e
   have syncLe : (before.map (syncDebit v.toNat)).sum ≤ (events.map (syncDebit v.toNat)).sum :=
     (isPrefix.sublist.map (syncDebit v.toNat)).sum_le_sum fun _ _ => Nat.zero_le _
@@ -5771,7 +5785,9 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
       (before.snoc step).append after = fromFin.append tailC → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
-      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
     (quarter : 4 * preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (ρn ρd : ℕ) (positive : 0 < ρd)
     (leaky : ∀ eb : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ eb →

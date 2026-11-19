@@ -1109,7 +1109,8 @@ private theorem FloorTrace.run_potential_core
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1129,7 +1130,7 @@ private theorem FloorTrace.run_potential_core
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨Or.inl retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
+        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
           quotient_le, noCrossing⟩) replayed
   exact ⟨potential, fun aligned => origin aligned fulu⟩
 
@@ -1148,7 +1149,8 @@ theorem FloorTrace.run_potential_floor
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1189,7 +1191,8 @@ theorem FloorTrace.run_potential_floor_once
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1233,7 +1236,8 @@ theorem FloorTrace.run_effective_origin
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
