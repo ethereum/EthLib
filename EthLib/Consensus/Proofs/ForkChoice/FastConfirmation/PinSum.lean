@@ -1029,7 +1029,7 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pulled⟩),
       (before.snoc step).append after = rest → ∀ w,
       n.state.validators.data[i.toNat]? = some w → high + 1 < w.exitEpoch.toNat) :
-    min (actualBalanceAt ⟨fork, zs⟩ i.toNat) (capAt ⟨fork, zs⟩ i.toNat) ≤
+    min (actualBalanceAt ⟨fork, zs⟩ i.toNat) (PinSplit2.capAt ⟨fork, zs⟩ i.toNat) ≤
       actualBalanceAt ⟨fork, pulled⟩ i.toNat +
         (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
         (events.map (syncDebit i.toNat)).sum +
@@ -1038,9 +1038,9 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have finZ : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch zs).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-  have capEq : capAt ⟨fork, zs⟩ i.toNat =
+  have capEq : PinSplit2.capAt ⟨fork, zs⟩ i.toNat =
       (withdrawalMaxEffectiveBalance preset fork val).toNat := by
-    simp [capAt, initial]
+    simp [PinSplit2.capAt, initial]
   rw [capEq]
   -- The slashing quotient at `zs` is the guard's, which is positive.
   have atFin := DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
@@ -1100,9 +1100,9 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   obtain ⟨fromFin⟩ := h.fromFin
   have floor := key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed
     stays retained
-  have capEq : capAt ⟨fork, split⟩ i.toNat =
+  have capEq : PinSplit2.capAt ⟨fork, split⟩ i.toNat =
       (withdrawalMaxEffectiveBalance preset fork val).toNat := by
-    simp [capAt, initial]
+    simp [PinSplit2.capAt, initial]
   rwa [capEq] at floor
 
 /-! ### One key's reward in an epoch pass -/
