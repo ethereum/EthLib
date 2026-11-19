@@ -6571,7 +6571,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat P
         (PinSplit5.effectiveAt_le_capMax (shared.append (fromFin.append pre)) h.genesis h.caps
           mEarly v)
-        (rateAll (fromFin.append pre) (by simp only at mEpoch ⊢; omega)))
+        (.inr (rateAll (fromFin.append pre) (by simp only at mEpoch ⊢; omega))))
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   have epochs : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤
@@ -8987,7 +8987,7 @@ private theorem slot_zero_step {g m n : ForkedBeaconState preset}
   obtain ⟨events, replayed⟩ := (Step.slot ok : Step config checks m n).balanceEvents_ok early
   have base := PinSplit2.step_balance_le (Step.slot ok : Step config checks m n) early v
   have rewards := PinSplit2.epochRewards_le (Step.slot ok : Step config checks m n) altair early v
-    known 0 P envelope rate
+    known 0 P envelope (.inr rate)
   have rewardsZero : PinSplit2.epochRewards v (Step.slot ok : Step config checks m n) = 0 := by
     simpa using rewards
   have sources := step_credit_le_sources shared genesis (Step.slot ok : Step config checks m n)
