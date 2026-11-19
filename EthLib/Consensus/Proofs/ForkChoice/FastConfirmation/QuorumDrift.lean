@@ -818,7 +818,7 @@ The finalized block's state `fin` is reached from genesis, and the split state f
 From the split state, runs reach the pulled-up head state and the counting state.
 
 The split state is at or after the finalized epoch and at or before the call's epoch. -/
-private theorem setting_runs_of_call
+theorem setting_runs_of_call
     {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
       genesisTimeMs) J}
     {limit : ℕ} {anchor : Store preset fork} {horizon : Epoch}

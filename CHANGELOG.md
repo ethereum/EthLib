@@ -31,6 +31,11 @@ Not yet released.
   `justifiedHonestlySigned` is its instance with `p` the honest set, and its statement is unchanged.
   The pin's reader takes `p` to be the voters of a call.
 
+- `setting_runs_of_call` is public: it gives the runs and epochs of the pin's setting, for one call and one counting state.
+  The finalized block's state is reached from genesis, and a split state from it.
+  Runs from the split state reach the pulled-up state of the call and the counting state.
+  The pin's reader reads it.
+
 - `Run.slashed_withdrawable_eq` says that a validator that is slashed, with an assigned exit, keeps its withdrawable epoch along a run.
   The pin's floors read it for the keys that C slashes before the split.
 
