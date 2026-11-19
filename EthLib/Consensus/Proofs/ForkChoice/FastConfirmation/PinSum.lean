@@ -2922,16 +2922,19 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
         P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
-      (PinSplit2.creditBound post i high E P -
-        PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E) :
-    effectiveAt y i ≤ max (effectiveAt n i) (min (PinSplit2.creditBound post i high E P -
-      PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
+      (PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
+        PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E) :
+    effectiveAt y i ≤ max (effectiveAt n i) (min
+      (PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
+        PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
   obtain ⟨-, -, third, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat high E P
   have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
   exact (third _ aligned startCap
-    (fun z member => Nat.le_trans (Nat.min_le_left _ _) (balances z member)) capCeil).1
+    (fun z member => balances z member) capCeil).1
 
 /-- A key that switches on C's branch has an effective balance within its switch balance and gain.
 
@@ -2958,14 +2961,16 @@ private theorem key_capped_credits {n y : ForkedBeaconState preset}
         P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
-      (PinSplit2.creditBound post i high E P -
-        PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E)
+      (PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
+        PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (depth Cr e0 U1 U2 B0 : ℕ) (floor : preset.MIN_ACTIVATION_BALANCE.toNat ≤ B0)
     (startBal : actualBalanceAt n i ≤ B0)
     (hE : E = e0 + Cr + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (epochs : (getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat ≤ depth)
-    (credits : PinSplit2.creditBound post i high E P ≤ actualBalanceAt n i + Cr +
+    (credits : PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat ≤
+      actualBalanceAt n i + Cr +
       ((getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat) *
         (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat))
@@ -2980,9 +2985,11 @@ private theorem key_capped_credits {n y : ForkedBeaconState preset}
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P e0 Cr
     ((getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat) depth incPos epochs
   rw [← hE] at split
-  have rounded : PinSplit2.creditBound post i high E P -
-      PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-        PinSplit2.creditBound post i high E P := Nat.sub_le _ _
+  have rounded : PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat -
+      PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+      PinSplit2.creditBound post i high E P preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
+    Nat.sub_le _ _
   unfold gainOn
   refine Nat.le_trans ceiling (max_le (by omega) (Nat.le_trans (Nat.min_le_left _ _) ?_))
   omega
