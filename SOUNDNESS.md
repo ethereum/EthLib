@@ -83,6 +83,11 @@ The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`)
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 It says nothing about unforgeability.
 
+The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
+Key generation makes at most `13434881` calls and signing at most `8630239231`.
+Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
+Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
+
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
 It proves that the signer's own calls before each search add none.
@@ -424,6 +429,10 @@ The correctness theorem is `verify_keyGen_sign` (`Proofs/Sphincs/Correctness.lea
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message, then `verify` accepts that signature under that public key.
 
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
+
+The hash calls of each algorithm, under a fixed answer function, are in `Proofs/Sphincs/Cost.lean`, when each call of `H` makes exactly one query.
+Key generation makes exactly `264193` calls, and signing at most `12885841387`.
+Verification makes at most `491` calls, and exactly `491` when it accepts.
 
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
 The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts.
