@@ -6843,7 +6843,7 @@ private theorem branchR_split (config : Config)
             preset.SYNC_COMMITTEE_SIZE.toNat *
               (((getCurrentEpoch state).toNat + 1) /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
-                ancestor.finalizedCheckpoint.epoch.toNat /
+                (getCurrentEpoch finalizedState).toNat /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
@@ -6876,7 +6876,7 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
           preset.SYNC_COMMITTEE_SIZE.toNat *
             (((getCurrentEpoch pulled).toNat + 1) /
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
-              anc.finalizedCheckpoint.epoch.toNat /
+              (getCurrentEpoch fin).toNat /
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
               (pinTerms config pulled anc fin).depth /
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)))) :
