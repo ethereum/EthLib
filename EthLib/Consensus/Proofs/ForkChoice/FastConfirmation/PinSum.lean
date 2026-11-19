@@ -5241,6 +5241,29 @@ private theorem bud_deposits_of (h : Setting config checks g split fin pulled an
   have capacity := deposit_events_le h tail (Nat.le_succ _) high endEpoch replayed
   omega
 
+/-- The deposits credited to a set of keys on C's run fit the window's deposit churn.
+
+The credits are read as the scan of the deposit events.
+
+Each deposit event credits the set at most its funding credit. -/
+private theorem deposits_scan_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (S : Finset ValidatorIndex)
+    (each : ∀ e ∈ eventsC, e.source = .deposits →
+      ∑ v ∈ S, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
+    3 * ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      tailC).1 ≤ (pinTerms config pulled anc fin).queueDep := by
+  have scan := creditScan_sum_le S (fun _ => false) (fun s => decide (s = .deposits)) highC
+    DirectSafety.funding_deposit_credit tailC replayedC fun e member selected =>
+      each e member (by simpa using selected)
+  have capacity := deposit_events_le h tailC h.near highC endEpochC replayedC
+  have chain : ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      tailC).1 ≤ (eventsC.map DirectSafety.funding_deposit_credit).sum :=
+    scan.trans (List.sum_le_sum fun e _ => by split <;> omega)
+  omega
+
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
