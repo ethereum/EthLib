@@ -9901,6 +9901,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     positivity
   have proposerPos : 0 ≤ ((pinTerms config pulled anc fin).depth : ℤ) *
       ((pinTerms config pulled anc fin).syncProposer : ℤ) := by positivity
+  have unitPos : 0 ≤ ((pinTerms config pulled anc fin).unitGain : ℤ) *
+      ((pinTerms config pulled anc fin).consolidationsXCount : ℤ) := by positivity
   -- A key of `K6` whose exit R reads weighs once in the drift and three times in `exiting`.
   have exitingK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
       (pinTerms config pulled anc fin).exitingB v.toNat = true, (balanceAt pulled v.toNat : ℤ) :=
