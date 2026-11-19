@@ -21877,6 +21877,64 @@ section Closure
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The shared run to the split has a state `b` at the start of the split's epoch.
+
+The run from `b` to the split, `pre`, is the end of the shared run.
+
+The state `b` comes after the finalized state, or before it in its epoch.
+
+No genesis fact is read.
+
+If the finalized state and genesis are in the split's epoch, then `b` is genesis. -/
+private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) :
+    ∃ (b : BeaconState preset fork) (toB : Run config checks g ⟨fork, b⟩)
+      (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩),
+      toB.append pre = toFin.append fromFin ∧ getCurrentEpoch split = getCurrentEpoch b ∧
+      (Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
+        ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩,
+          getCurrentEpoch fin = getCurrentEpoch b) := by
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have gFin : (getCurrentEpoch g.state).toNat ≤ (getCurrentEpoch fin).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toFin.chainSteps)
+  by_cases inFin : (getCurrentEpoch fin).toNat = (getCurrentEpoch split).toNat
+  · by_cases atGenesis : (getCurrentEpoch g.state).toNat = (getCurrentEpoch fin).toNat
+    · -- the whole shared run is in one epoch
+      have gFork := Run.fork_eq_of_same_epoch toFin (UInt64.toNat_inj.mp atGenesis.symm)
+      obtain ⟨gf, gs⟩ := g
+      subst gFork
+      dsimp only at atGenesis
+      exact ⟨gs, Run.nil, toFin.append fromFin, run_nil_append _, UInt64.toNat_inj.mp (by omega),
+        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩⟩
+    · -- the boundary into the split's epoch is in the run to the finalized state
+      obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, -, hn⟩ := Run.cross_split toFin
+        ((getCurrentEpoch fin).toNat - 1) (by omega)
+        (by change _ < (getCurrentEpoch fin).toNat; omega)
+      dsimp only at hn
+      have nEpoch : getCurrentEpoch fin = getCurrentEpoch ns :=
+        UInt64.toNat_inj.mp (by omega)
+      have nFork := Run.fork_eq_of_same_epoch rest nEpoch
+      dsimp only at nFork
+      subst nFork
+      subst cut
+      exact ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin, Run.append_assoc _ _ _,
+        UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩⟩
+  · -- the boundary into the split's epoch is in the run from the finalized state
+    obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, -, hn⟩ := Run.cross_split fromFin
+      ((getCurrentEpoch split).toNat - 1) (by change (getCurrentEpoch fin).toNat ≤ _; omega)
+      (by change _ < (getCurrentEpoch split).toNat; omega)
+    dsimp only at hn
+    have nEpoch : getCurrentEpoch split = getCurrentEpoch ns :=
+      UInt64.toNat_inj.mp (by omega)
+    have nFork := Run.fork_eq_of_same_epoch rest nEpoch
+    dsimp only at nFork
+    subst nFork
+    subst cut
+    exact ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest, (Run.append_assoc _ _ _).symm,
+      nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩⟩
+
 private theorem sum_eq_U {S W : Finset ValidatorIndex} (sub : S ⊆ W) (f : ValidatorIndex → ℤ) :
     ∑ v ∈ S, f v = ∑ v ∈ W, if v ∈ S then f v else 0 := by
   rw [Finset.sum_ite_mem, Finset.inter_eq_right.mpr sub]
