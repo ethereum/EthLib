@@ -1362,18 +1362,8 @@ theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
 theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : Consensus.processWithdrawals state capella payload = .ok after) :
-    R state after := by
-  unfold Consensus.processWithdrawals at computed
-  split at computed
-  · split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, applied⟩ := computed
-      exact laws.applyExpectedWithdrawals keep applied
-    · cases computed
-      exact laws.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact laws.applyExpectedWithdrawals keep applied
+    R state after :=
+  processWithdrawals_of R (laws.refl _) (fun _ => laws.applyExpectedWithdrawals keep) computed
 
 end EpochFrameLaws
 

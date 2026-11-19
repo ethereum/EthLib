@@ -471,17 +471,9 @@ theorem payloadInputs_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 theorem payloadInputs_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    PayloadInputs state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
-      exact payloadInputs_applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases computed
-      exact PayloadInputs.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact payloadInputs_applyExpectedWithdrawals applied
+    PayloadInputs state after :=
+  processWithdrawals_of PayloadInputs (PayloadInputs.refl _)
+    (fun _ => payloadInputs_applyExpectedWithdrawals) computed
 
 /-! ## The operations of a block -/
 
