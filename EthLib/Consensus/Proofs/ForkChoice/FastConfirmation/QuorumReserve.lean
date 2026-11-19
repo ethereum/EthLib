@@ -395,8 +395,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   --
-  -- Two more units per epoch pay the floors of the rates.
-  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10 + 2
+  -- Three more units per epoch pay the floors of the rates.
+  --
+  -- At eleven tenths they still cover the two floor units of every epoch.
+  let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10 + 3
   -- A key's rate is low when its gain from the finalized block's state stays below an increment.
   --
   -- Eleven times its gain plus one over the depth must also stay within its bound.
