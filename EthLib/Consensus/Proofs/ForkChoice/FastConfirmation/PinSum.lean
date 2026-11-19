@@ -11577,25 +11577,46 @@ private theorem key_core_flip (h : Setting config checks g split fin pulled anc 
     keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
   sorry
 
+/-- A key off the kept arm rises by its whole headroom to the largest cap.
+
+Within the withdrawal delay, the kept arm fails only at the gain test, which `lowRate` repeats.
+
+So `capFor` reads the largest cap. -/
+private theorem rise_of_notKept (h : Setting config checks g split fin pulled anc counted V) (i : ℕ)
+    (notKept : ¬ (pinTerms config pulled anc fin).keptArm i = true) :
+    (pinTerms config pulled anc fin).rise i =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat - balanceAt pulled i := by
+  have shallow := h.shallow
+  unfold pinTerms at notKept ⊢
+  simp only at notKept ⊢
+  rw [ite_eq_right notKept]
+  simp only [Bool.and_eq_true, decide_eq_true_eq, not_and] at notKept
+  rw [ite_eq_right]
+  intro low
+  exact notKept shallow (of_decide_eq_true (Bool.and_eq_true_iff.mp low).2)
+
 /-- The per-key core of the rise for a key on the headroom arm.
 
-Its rise is its whole headroom.
+Its rise is its whole headroom, to the largest cap.
 
-The replays are read at R's epoch. -/
+The cap holds the balance on C's branch, whatever the replays read. -/
 private theorem key_core_headroom (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {events : List (BalanceEvent preset)}
-    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {eventsF : List (BalanceEvent preset)}
-    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (v : ValidatorIndex)
+    {eventsC : List (BalanceEvent preset)} (v : ValidatorIndex)
     (notKept : ¬ (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
-  sorry
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
+  obtain ⟨shared⟩ := h.toFin
+  have capped := PinSplit5.effectiveAt_le_capMax (shared.append (fromFin.append tailC))
+    h.genesis h.caps h.early v.toNat
+  have headroom := rise_of_notKept h v.toNat notKept
+  have countedLe : balanceAt counted v.toNat ≤
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := capped
+  unfold keyCeiling
+  omega
 
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
@@ -11680,8 +11701,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
           v voter inFin frozen kept
     · exact key_core_created h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC
         v voter inside (Nat.le_of_not_lt inFin) kept
-  · exact key_core_headroom h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC v
-      kept
+  · exact key_core_headroom h tail fromFin tailC highC v kept
 
 /-- D-7 (rise): other keys active in both. -/
 theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
