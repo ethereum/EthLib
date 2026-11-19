@@ -6839,7 +6839,7 @@ theorem run_partial_queue_trace
   rw [partials_entries_due_sum] at partials
   exact ⟨calls, trace, firsts, rates, partials⟩
 
-/-- The partial cost of a branch, plus its kept entries queued at the end, fits the kept entries.
+/-- A branch's partial cost plus the kept due entries it leaves is at most those it had and added.
 
 An entry is kept when `keep` selects it.
 

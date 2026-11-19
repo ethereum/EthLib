@@ -63,7 +63,7 @@ Not yet released.
 
 - `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
   The pin's bound on the penalties and partials of a key on R's branch reads it.
-  `run_partial_queue_kept` is now its projection.
+  `run_partial_queue_kept` follows from it.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
