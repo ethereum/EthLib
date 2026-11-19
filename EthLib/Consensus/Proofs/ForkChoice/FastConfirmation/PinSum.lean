@@ -5592,8 +5592,8 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
       tailC.departureCharges := by
     rw [cut, Run.departureCharges_append]
     simp [Run.departureCharges, inStep]
-  rw [find_charge inRun (beq_iff_eq.mpr rfl)
-    (fun d inD hd => charge_unique tailC inD inRun (beq_iff_eq.mp hd))]
+  rw [find_charge inRun (by simp)
+    (fun d inD hd => charge_unique tailC inD inRun (by simpa using hd))]
   simp [effectiveAt, foundA]
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
