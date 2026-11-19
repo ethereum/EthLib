@@ -6032,8 +6032,9 @@ The keys of `SC` are slashed at C, so they are not in `K4`, `K5`, `K6` or `V`.
 
 Their credits join those of `K4`, `K5` and `K6` in the bound.
 
-A whistleblower's share of their amounts is at most the amounts, and a due entry that names one adds
-its band.
+A whistleblower's share of their amounts is at most the amounts.
+
+A due entry that names one of them adds its band.
 
 A key of `V` or `K5` weighs three, and the others one.
 
@@ -6254,7 +6255,6 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
       _ = preset.MAX_EFFECTIVE_BALANCE.toNat * dK + preset.MAX_EFFECTIVE_BALANCE.toNat * dV :=
         Nat.mul_add _ _ _
   omega
-
 
 /-- L10: the keys whose exit started on R's branch after the split, in `K6`. -/
 theorem bud_exitedR :
