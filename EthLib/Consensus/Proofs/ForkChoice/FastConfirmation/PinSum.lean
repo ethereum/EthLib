@@ -7693,6 +7693,10 @@ The balance counts up to the key's cap at each state, which rises at most once a
 
 The balance at the split is at most R's balance plus R's debits, by the floor premise.
 
+The start of the ceiling is that bound, held to the cap at the split.
+
+R's balance can exceed that cap, and the balance counts only up to it.
+
 R's penalty and partial debits are at most the leak at the cap and the net partials.
 
 The credits are `Cr`, which covers C's net credits `credits`, and the sync debits of R's.
@@ -7759,9 +7763,10 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         min (pinTerms config pulled anc fin).depth
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) ∧
       ∀ z ∈ tailC.balancePath, min (actualBalanceAt z v.toNat) (PinSplit2.capAt z v.toNat) ≤
-        actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
-          (events.map (syncDebit v.toNat)).sum + W +
+          (events.map (syncDebit v.toNat)).sum + W)
+          (PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat) +
           Cr +
           (gc + (min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
@@ -7916,15 +7921,14 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         (UInt64.toNat_inj.mp (sameEpoch inside)) i insideM)
       (by omega) startKey (by omega)
     refine ⟨gc, hform, hgc, fun z member => ?_⟩
-    have := min_le_left
-      (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
-      preset.MIN_ACTIVATION_BALANCE.toNat
     rcases flip_path_cover pre step post notSlot cut z member with inPre | inPost
     · have := bPre z inPre
       have := capsPre z inPre
+      rw [capMin]
       omega
     · have := bPost z inPost
       have := capCeil z member
+      rw [capMin]
       omega
   · -- the cap of C's branch is the cap at the split throughout
     have same : PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
@@ -7934,9 +7938,10 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     obtain ⟨gc, hform, hgc, bound, -⟩ := c_ceiling_abstract tailC h.early h.fulu i inside highC P
       (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) alignedC
       (by omega) capCeil rateAll endEpochC incPos D Cr (Cr + Ds + DsF) e0 C
-      (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W) capI) W
+      (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
+        (PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i)) W
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q rfl hq' alignedE0 hC epochs
-      (le_min (by rw [same]; exact floorR) (by rw [same]; omega)) startEff'
+      (le_min (by rw [same]; exact floorR) (by rw [same]; exact min_le_right _ _)) startEff'
       credits startKey (by omega)
     refine ⟨gc, hform, hgc, fun z member => ?_⟩
     have := bound z member
@@ -14693,7 +14698,13 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
             ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat))) := by
     intro z member
     have := bound z member
-    rwa [capEq z member] at this
+    rw [capEq z member] at this
+    have := Nat.min_le_left
+      (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
+        (events.map (syncDebit v.toNat)).sum + slashW (pinTerms config pulled anc fin) v.toNat)
+      (PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat)
+    omega
   -- the names of the parts of the ceilings
   obtain ⟨Df, hDf⟩ : ∃ Df, Df = (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat :=
     ⟨_, rfl⟩
