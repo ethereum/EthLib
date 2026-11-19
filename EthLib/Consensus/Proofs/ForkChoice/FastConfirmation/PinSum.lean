@@ -1059,11 +1059,13 @@ private def flowCredit (t : PinTerms preset) {x y : ForkedBeaconState preset}
 
 It is one floor of all the flows; the closure splits it by kind in aggregate.
 
-Its rate is floored once, after the increments, as the gain of the credits is. -/
+Its rate is floored once, after the increments, as the gain of the credits is.
+
+A gain-carrying run starts at the split, so the gain runs over at most the shorter window. -/
 private def flowGain (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : ℕ :=
-  t.depth * (11 * flowCredit t tailC high eventsC events eventsF i /
+  min t.depth t.depthFin * (11 * flowCredit t tailC high eventsC events eventsF i /
     (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * t.perIncrement *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat)
 
