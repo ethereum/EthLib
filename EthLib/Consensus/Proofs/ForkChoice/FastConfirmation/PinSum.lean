@@ -2699,6 +2699,18 @@ private theorem stub_V_of (h : Setting config checks g split fin pulled anc coun
   push_cast at total exits ⊢
   omega
 
+/-- A key that is unslashed at the end of a run is unslashed at its start.
+
+A slashed validator stays slashed at its index along a run. -/
+private theorem unslashed_of_run {x y : ForkedBeaconState preset} (run : Run config checks x y)
+    {i : ℕ} {a : Validator} (found : x.state.validators.data[i]? = some a)
+    (clean : ∀ w, y.state.validators.data[i]? = some w → w.slashed = false) :
+    a.slashed = false := by
+  cases flag : a.slashed
+  · rfl
+  · obtain ⟨u, read, marked⟩ := run.slashedPersistence i a found flag
+    simp [clean u read] at marked
+
 /-- The guards of the floor trace of a run from a state `zs` of the run from the finalized block.
 
 The run ends at any state `y` that is at most one epoch after `pulled`.
@@ -3001,11 +3013,7 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
   obtain ⟨positive, guards⟩ := floor_guards h (zs := wS) (y := pS) pre endEpoch
   refine ⟨endEpoch, fun w found => ?_, _, positive, fun before step after cut w found =>
     ⟨retained before step after cut w found, guards before step after⟩⟩
-  cases flag : w.slashed
-  · rfl
-  · obtain ⟨u, foundU, marked⟩ := rest.slashedPersistence i.toNat w found flag
-    have := clean u foundU
-    simp [marked] at this
+  exact unslashed_of_run rest found clean
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The potential floor of a segment of C's run, read at the state where the segment starts.
@@ -5452,11 +5460,7 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
     cases found : split.validators.data[i]? with
     | none => rfl
     | some w =>
-      cases flagged : w.slashed with
-      | false => simp [flagged]
-      | true =>
-        obtain ⟨u, read, marked⟩ := pre.slashedPersistence i w found flagged
-        simp [read, marked] at unslashedA
+      simp [unslashed_of_run pre found (fun u read => by simpa [read] using unslashedA)]
   have slashedCounted : (counted.validators.data[i]?.map (·.slashed)).getD false = true := by
     cases found : b.state.validators.data[i]? with
     | none => simp [found] at slashedB
@@ -5662,15 +5666,7 @@ private theorem exitQ_floor (h : Setting config checks g split fin pulled anc co
   -- the ends
   obtain ⟨w, final, _⟩ := (fromFin.append tailC).registryLifecycle.validators v.toNat val initial
   have cleanEnd := clean w final
-  have unslashed : val.slashed = false := by
-    cases flag : val.slashed with
-    | false => rfl
-    | true =>
-      obtain ⟨last, located, marked⟩ :=
-        (fromFin.append tailC).slashedPersistence v.toNat val initial flag
-      have same := Option.some.inj (located.symm.trans final)
-      subst last
-      simp [cleanEnd] at marked
+  have unslashed : val.slashed = false := unslashed_of_run (fromFin.append tailC) initial clean
   have stopEarly : stop.state.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps stop.post.chainSteps) h.early
   have near := h.near
@@ -7242,14 +7238,8 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
   have near : (getCurrentEpoch se).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
   obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix pre post
     (getCurrentEpoch pulled).toNat events (by rw [cut]; exact replayed)
-  have clean : ∀ w, se.validators.data[v.toNat]? = some w → w.slashed = false := by
-    intro w found
-    cases flag : w.slashed with
-    | false => rfl
-    | true =>
-      obtain ⟨last, located, marked⟩ := post.slashedPersistence v.toNat w found flag
-      have := cleanC last located
-      simp [this] at marked
+  have clean : ∀ w, se.validators.data[v.toNat]? = some w → w.slashed = false :=
+    fun w found => unslashed_of_run post found cleanC
   have retained : ∀ {m n : ForkedBeaconState preset} (b : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (a : Run config checks n ⟨fork, se⟩),
       (b.snoc step).append a = pre → ∀ w, n.state.validators.data[v.toNat]? = some w →
@@ -10006,19 +9996,16 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
   obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
     ⟨_, Array.getElem?_eq_getElem
       (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
-  -- a key unslashed at the end of a run is unslashed at its start
-  have back : ∀ {a b : ForkedBeaconState preset} (run : Run config checks a b)
-      {ua ub : Validator}, a.state.validators.data[v.toNat]? = some ua →
-      b.state.validators.data[v.toNat]? = some ub → ub.slashed = false → ua.slashed = false := by
-    intro a b run ua ub fa fb clean
-    cases flag : ua.slashed
-    · rfl
-    · obtain ⟨u, fu, marked⟩ := run.slashedPersistence v.toNat ua fa flag
-      have same := Option.some.inj (fu.symm.trans fb)
-      subst same
-      simp [clean] at marked
-  have cleanS : uS.slashed = false := back tailC foundS foundC cleanC
-  have cleanF : uF.slashed = false := back fromFin foundF foundS cleanS
+  -- a record that is unslashed is the unslashed record at its index
+  have only : ∀ {s : BeaconState preset fork} {u : Validator},
+      s.validators.data[v.toNat]? = some u → u.slashed = false →
+      ∀ w, s.validators.data[v.toNat]? = some w → w.slashed = false :=
+    fun fu cu w fw => by
+      rw [fu] at fw
+      cases fw
+      exact cu
+  have cleanS : uS.slashed = false := unslashed_of_run tailC foundS (only foundC cleanC)
+  have cleanF : uF.slashed = false := unslashed_of_run fromFin foundF (only foundS cleanS)
   -- the voter's exit at R is not before the finalized epoch, so it is late for the whole run
   have late : (getCurrentEpoch pulled).toNat + 1 <
       wP.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
@@ -10136,7 +10123,7 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
       rw [capEq] at floor
       omega
     · have cleanP : wP.slashed = false := by simpa using slashedP
-      have cleanZ : val.slashed = false := back rest foundZ foundP cleanP
+      have cleanZ : val.slashed = false := unslashed_of_run rest foundZ (only foundP cleanP)
       have floor := key_floorR_from h pre rest (getCurrentEpoch pulled).toNat (Nat.le_succ _) ev v
         val foundZ cleanZ
         (fun w fw => by
