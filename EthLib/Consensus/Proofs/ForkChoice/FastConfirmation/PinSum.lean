@@ -5255,6 +5255,65 @@ private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrem
   simp only [getBaseRewardPerIncrement, liftArith, mapError_ok_iff, bind_ok_iff]
   exact ⟨scaled, scaledOk, divChecked_ok_iff.mpr ⟨root, by rw [UInt64.toNat_div]⟩⟩
 
+/-- The depth times the reward rate for each increment stays below an eleventh of an increment.
+
+It follows from the second test of the low rate at an aligned bound.
+
+Its units are the gwei of the reward, scaled by the weight denominator. -/
+private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 < WD)
+    (alignedE : e0 % I = 0) (rateLow : 11 * D * (e0 / I * P * F / WD + 1) ≤ e0) :
+    11 * D * (P * F) < WD * I := by
+  rcases Nat.eq_zero_or_pos D with zero | pos
+  · subst zero
+    simpa using Nat.mul_pos hWD hI
+  · obtain ⟨m, hm⟩ := Nat.dvd_of_mod_eq_zero alignedE
+    have e : e0 / I = m := by rw [hm, Nat.mul_div_cancel_left _ hI]
+    have rate' := rateLow
+    rw [e] at rate'
+    have big : 11 ≤ e0 := Nat.le_trans (by
+      have := Nat.mul_le_mul (show 11 ≤ 11 * D by omega)
+        (Nat.le_add_left 1 (m * P * F / WD))
+      simpa using this) rate'
+    have mPos : 0 < m := Nat.pos_of_ne_zero (fun z => by rw [z] at hm; omega)
+    have a : m * P * F < WD * (m * P * F / WD + 1) := Nat.lt_mul_div_succ _ hWD
+    have b := Nat.mul_lt_mul_of_pos_left a (show 0 < 11 * D by omega)
+    have d := Nat.mul_le_mul_left WD rate'
+    have f : (11 * D * (P * F)) * m < (WD * I) * m := by
+      calc (11 * D * (P * F)) * m = 11 * D * (m * P * F) := by ring
+        _ < 11 * D * (WD * (m * P * F / WD + 1)) := b
+        _ = WD * (11 * D * (m * P * F / WD + 1)) := by ring
+        _ ≤ WD * e0 := d
+        _ = (WD * I) * m := by rw [hm]; ring
+    exact Nat.lt_of_mul_lt_mul_right f
+
+/-- The gain on a credit rounded up to an increment is at most an eleventh of the credit.
+
+The credit is a whole number of increments, so its rounding up is itself.
+
+The rate for each increment is the one that `rate_per_increment` bounds. -/
+private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I) (hWD : 0 < WD)
+    (alignedC : C % I = 0) (key : 11 * D * (P * F) < WD * I) :
+    11 * (D * ((C + I - 1) / I * P * F / WD)) ≤ C := by
+  have gain : ∀ k, 11 * (D * (k * P * F / WD)) ≤ I * k := fun k => by
+    have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
+    have h1 : WD * (11 * (D * (k * P * F / WD))) ≤ WD * (I * k) := by
+      calc WD * (11 * (D * (k * P * F / WD))) = 11 * D * (WD * (k * P * F / WD)) := by ring
+        _ ≤ 11 * D * (k * P * F) := Nat.mul_le_mul_left _ fl
+        _ = k * (11 * D * (P * F)) := by ring
+        _ ≤ k * (WD * I) := Nat.mul_le_mul_left _ key.le
+        _ = WD * (I * k) := by ring
+    exact Nat.le_of_mul_le_mul_left h1 hWD
+  have cdiv : (C + I - 1) / I = C / I := by
+    obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
+    rw [hu, Nat.mul_div_cancel_left _ hI,
+      show I * u + I - 1 = I * u + (I - 1) by omega, Nat.mul_add_div hI,
+      Nat.div_eq_of_lt (by omega)]
+    simp
+  rw [cdiv]
+  have := gain (C / I)
+  have e : I * (C / I) = C := Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero alignedC)
+  omega
+
 /-- The closure test of the credit ceiling is arithmetic in the rate, the credits and the stake.
 
 The stake, the credits and the gain at the base stake stay below the bound by an increment.
@@ -5271,49 +5330,8 @@ private theorem ceiling_closed (I WD F P e0 D Df Cr Cr' S W C q r : ℕ) (hDf : 
     S + Cr + (D * ((C + I - 1) / I * P * F / WD) + (D * q + D * (r + 2))) <
       e0 + C + I + I := by
   subst hq hr
-  have key : 11 * D * (P * F) < WD * I := by
-    rcases Nat.eq_zero_or_pos D with zero | pos
-    · subst zero
-      simpa using Nat.mul_pos hWD hI
-    · obtain ⟨m, hm⟩ := Nat.dvd_of_mod_eq_zero alignedE
-      have e : e0 / I = m := by rw [hm, Nat.mul_div_cancel_left _ hI]
-      have rate' := rateLow
-      rw [e] at rate'
-      have big : 11 ≤ e0 := Nat.le_trans (by
-        have := Nat.mul_le_mul (show 11 ≤ 11 * D by omega)
-          (Nat.le_add_left 1 (m * P * F / WD))
-        simpa using this) rate'
-      have mPos : 0 < m := Nat.pos_of_ne_zero (fun z => by rw [z] at hm; omega)
-      have a : m * P * F < WD * (m * P * F / WD + 1) := Nat.lt_mul_div_succ _ hWD
-      have b := Nat.mul_lt_mul_of_pos_left a (show 0 < 11 * D by omega)
-      have d := Nat.mul_le_mul_left WD rate'
-      have f : (11 * D * (P * F)) * m < (WD * I) * m := by
-        calc (11 * D * (P * F)) * m = 11 * D * (m * P * F) := by ring
-          _ < 11 * D * (WD * (m * P * F / WD + 1)) := b
-          _ = WD * (11 * D * (m * P * F / WD + 1)) := by ring
-          _ ≤ WD * e0 := d
-          _ = (WD * I) * m := by rw [hm]; ring
-      exact Nat.lt_of_mul_lt_mul_right f
-  have gain : ∀ k, 11 * (D * (k * P * F / WD)) ≤ I * k := fun k => by
-    have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
-    have h1 : WD * (11 * (D * (k * P * F / WD))) ≤ WD * (I * k) := by
-      calc WD * (11 * (D * (k * P * F / WD))) = 11 * D * (WD * (k * P * F / WD)) := by ring
-        _ ≤ 11 * D * (k * P * F) := Nat.mul_le_mul_left _ fl
-        _ = k * (11 * D * (P * F)) := by ring
-        _ ≤ k * (WD * I) := Nat.mul_le_mul_left _ key.le
-        _ = WD * (I * k) := by ring
-    exact Nat.le_of_mul_le_mul_left h1 hWD
-  have cdiv : (C + I - 1) / I = C / I := by
-    obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
-    rw [hu, Nat.mul_div_cancel_left _ hI,
-      show I * u + I - 1 = I * u + (I - 1) by omega, Nat.mul_add_div hI,
-      Nat.div_eq_of_lt (by omega)]
-    simp
-  have credit : 11 * (D * ((C + I - 1) / I * P * F / WD)) ≤ C := by
-    rw [cdiv]
-    have := gain (C / I)
-    have e : I * (C / I) = C := Nat.mul_div_cancel' (Nat.dvd_of_mod_eq_zero alignedC)
-    omega
+  have key := rate_per_increment I WD F P e0 D hI hWD alignedE rateLow
+  have credit := gain_credit_le I WD F P D C hI hWD alignedC key
   have base : 11 * (D * (e0 / I * P * F / WD)) + 30 * Df + 10 ≤ 10 * I := by
     have h1 : 11 * (e0 / I * P * F / WD) ≤ 10 * ((11 * (e0 / I * P * F / WD) + 9) / 10) := by
       omega
