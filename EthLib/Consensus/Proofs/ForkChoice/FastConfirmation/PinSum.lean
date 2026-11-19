@@ -13831,6 +13831,47 @@ private def keyCeiling (anc : BeaconState preset fork)
     slashR (pinTerms config pulled anc fin) i + bandC tailC highC i +
     bandR (eventsF ++ events) i + bandX fin highC i
 
+/-- Under the guard, the window from the finalized epoch through R's horizon is under half a vector.
+
+It is the short window of the guard, read at R's horizon. -/
+private theorem depthFin_lt_half (h : Setting config checks g split fin pulled anc counted V) :
+    (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat <
+      preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, short, _⟩ := id h.guard
+  change (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat + 2 <
+    preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 at short
+  omega
+
+/-- A slashing penalty and the gain on it over the window fit below one increment.
+
+The penalty leaves a downward band, which is at least a quarter of the increment.
+
+The penalty alone gains the unit gain, as it is under ten elevenths of an increment.
+
+The unit gain is a gain per increment over the window, and two more gwei for each epoch.
+
+`key` bounds the gain per increment by an eleventh of an increment. -/
+private theorem slash_gain_small {I db WD F P D W : ℕ} (hI : 0 < I)
+    (key : 11 * D * (P * F) < WD * I) (band : I ≤ 4 * db) (slashBand : W + db ≤ I)
+    (window : 88 * D ≤ 3 * I) :
+    W + (D * (11 * W / (10 * I) * P * F / WD) +
+      if 0 < W then D * (P * F / WD + 2) else 0) < I := by
+  have zero : 11 * W / (10 * I) = 0 := Nat.div_eq_of_lt (by omega)
+  have small : 11 * (D * (P * F / WD)) < I := by
+    have h1 := Nat.mul_le_mul_left (11 * D) (Nat.mul_div_le (P * F) WD)
+    have h2 : WD * (11 * (D * (P * F / WD))) < WD * I :=
+      calc WD * (11 * (D * (P * F / WD))) = 11 * D * (WD * (P * F / WD)) := by ring
+        _ ≤ 11 * D * (P * F) := h1
+        _ < WD * I := key
+    exact Nat.lt_of_mul_lt_mul_left h2
+  rw [zero]
+  split_ifs
+  · rw [Nat.mul_add]
+    simp only [Nat.zero_mul, Nat.zero_div, Nat.mul_zero, Nat.zero_add]
+    omega
+  · simp only [Nat.zero_mul, Nat.zero_div, Nat.mul_zero, Nat.zero_add]
+    omega
+
 /-- The per-key core of the rise for a counted voter of R's finalized registry with a frozen cap.
 
 The key keeps its cap from the finalized state to R and C, and its rise is on the kept arm.

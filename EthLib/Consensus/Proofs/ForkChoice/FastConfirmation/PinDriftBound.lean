@@ -941,20 +941,29 @@ private structure PinPresetFacts (preset : Preset) : Prop where
       preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
   /-- (preset fact) The increment times the base reward factor does not overflow a `Gwei`. -/
   fits : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
+  /-- (preset fact) An increment is at most four downward bands, which rules out a tiny band. -/
+  bandLow : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ 4 * preset.downwardBand
+  /-- (preset fact) Forty-four slashings vectors fit in three increments.
+
+  It compares epochs with gwei, since the unit gain adds two gwei of rounding for each epoch.
+
+  It rules out a slashings vector longer than `3 * increment / 44` epochs. -/
+  vectorSmall : 44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+    3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
-    by decide, by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide, by decide, by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
-    by decide, by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide, by decide, by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
