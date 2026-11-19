@@ -1018,13 +1018,12 @@ No upgrade runs from Fulu, so no step records a crossing.
 
 It is the part of the floor of a key, on R's run and on C's, that does not read the key. -/
 private theorem floor_guards (h : Setting config checks g split fin pulled anc counted V)
-    {zs : BeaconState preset fork} {y : ForkedBeaconState preset}
-    (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩) (early : y.fork < .glamsterdam)
-    (endpoint : (getCurrentEpoch y.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    {zs y : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    (endpoint : (getCurrentEpoch y).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
     0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
       (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩ (getCurrentEpoch pulled).toNat) ∧
     ∀ {m n : ForkedBeaconState preset}, Run config checks ⟨fork, zs⟩ m →
-      ∀ step : Step config checks m n, Run config checks n y →
+      ∀ step : Step config checks m n, Run config checks n ⟨fork, y⟩ →
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch zs).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1055,7 +1054,7 @@ private theorem floor_guards (h : Setting config checks g split fin pulled anc c
   · intro added addedOk
     exact DirectSafety.Apriori.Internal.no_crossing_of_regime (toFin.append pre) before
       h.genesis h.caps step
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) early)
+      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
       (.inl (Nat.le_trans electra (fork_le_of_chainSteps before.chainSteps))) addedOk
 
 /-- R's balance of a key that does not exit in the window falls only by its debit events.
@@ -1088,7 +1087,7 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
         (events.map (syncDebit i.toNat)).sum +
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
   obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨positive, guards⟩ := floor_guards h pre (y := ⟨fork, pulled⟩) h.early (Nat.le_succ _)
+  obtain ⟨positive, guards⟩ := floor_guards h pre (y := pulled) (Nat.le_succ _)
   refine Run.balanceFloor_events_or_fulu (toFin.append pre) rest h.genesis h.caps h.delay
     h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
   intro m n before step after cut w found
@@ -1206,6 +1205,10 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       floor ≤ actualBalanceAt p i.toNat := by
     intro p r1 r2 whole
     have early := forkEnd r2
+    obtain ⟨pFork, pState⟩ := p
+    obtain rfl : pFork = fork := Fork.ctorIdx_injective
+      (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps) (fork_le_of_chainSteps r1.chainSteps))
+    set p : ForkedBeaconState preset := ⟨fork, pState⟩ with hp
     have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
     simp only at order
     have endEpoch : (getCurrentEpoch p.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
@@ -1216,7 +1219,7 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     simp only at nonDecreasing
     obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
       (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
-    obtain ⟨positive, guards⟩ := floor_guards h (zs := fin) Run.nil early endEpoch
+    obtain ⟨positive, guards⟩ := floor_guards h (zs := fin) (y := pState) Run.nil endEpoch
     have cleanP : ∀ w, p.state.validators.data[i.toNat]? = some w → w.slashed = false := by
       intro w found
       cases flag : w.slashed
