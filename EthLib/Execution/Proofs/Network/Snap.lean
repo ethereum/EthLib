@@ -67,7 +67,8 @@ theorem toItem_hash_ne_empty (h : Hash32) : (Codec.toItem h : Item) ≠ .bytes .
 theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
     ofSlimAccount (slimAccount account root) = .ok (account, root) := by
   obtain ⟨nonce, balance, code⟩ := account
-  by_cases hr : root = EMPTY_TRIE_ROOT <;> by_cases hc : code = State.EMPTY_CODE_HASH <;>
+  by_cases hr : root = Trie.emptyTrieRoot Cryptography.Hash.Keccak.keccak256 <;>
+    by_cases hc : code = State.EMPTY_CODE_HASH <;>
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
 

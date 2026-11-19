@@ -159,22 +159,39 @@ theorem prEvent_otsSign_none_le (pkSeed : PkSeed) (prf : Prf (OracleComp HashSig
 
 The cache holds no trial input of the layer. -/
 theorem prEvent_signLayer_error_le (pkSeed : PkSeed) (prf : Prf (OracleComp HashSig.OracleWorld))
-    (layer : Layer) (idx : Nat) (msg : Digest) (cache : HashSig.HashSpec.QueryCache)
+    (layer : Layer) (idx : Nat) (tree : Merkle.Built Digest) (msg : Digest)
+    (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery (· = layer)) cache) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
-      (signLayer H pkSeed prf layer idx msg)).run' cache}[z.isOk = false]
+      (signLayer H pkSeed prf layer idx tree msg)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   unfold signLayer
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1 = none) _ fun z _ hz => ?_).trans ?_
   · rcases z with ⟨_ | ⟨counter, y⟩, c'⟩
     · exact absurd rfl hz
-    · dsimp only
-      exact prEvent_run'_romImpl_bind_pure_ok _ _ _
+    · simp [Except.isOk, Except.toBool]
   · rw [prEvent_run_romImpl_fst _ _ fun r => r = none]
     exact prEvent_otsSign_none_le pkSeed prf _ msg cache hcache
 
-/-- **A layer signs what its layer message gives, then signing goes on.**
+/-- **A tree's build keeps a bound that holds from every cache without trials.**
+
+The secrets come from a source that queries no trial input of the layers `S` selects. -/
+theorem prEvent_buildTree_bind_le {β : Type} {S : Layer → Prop} (pkSeed : PkSeed)
+    (prf : Prf (OracleComp HashSig.OracleWorld))
+    (hprf : ∀ A, IsDerivationAddress A → IsQueryBoundP (prf A) (IsTrialQuery S) 0)
+    (layer : Layer) (tree : Nat) (k : Merkle.Built Digest → OracleComp HashSig.OracleWorld β)
+    (E : β → Prop) {ε : ℝ≥0∞} {cache : HashSig.HashSpec.QueryCache}
+    (hcache : CacheAvoids (IsTrialQuery S) cache)
+    (hk : ∀ built c, CacheAvoids (IsTrialQuery S) c →
+      Pr{let y ← (simulateQ HashSig.HashSpec.romImpl (k built)).run' c}[E y] ≤ ε) :
+    Pr{let y ← (simulateQ HashSig.HashSpec.romImpl
+      (buildTree H pkSeed prf layer tree >>= k)).run' cache}[E y] ≤ ε :=
+  prEvent_run'_romImpl_bind_le _ _ _ _ (fun _ hz => cache_eq_none_of_mem_support_run_romImpl
+    (buildTree_isQueryBoundP_zero H prf (H_thInput_isQueryBoundP_trial S) hprf pkSeed layer tree)
+    hcache hz) hk
+
+/-- **A layer signs a message, then signing goes on.**
 
 The cache holds no trial input of the layer or of a layer above it.
 
@@ -183,25 +200,18 @@ After a success, the rest's event has probability at most `δ`.
 That holds from every cache with no trial input above the layer.
 
 Then the event has probability at most `exp(-2^18) + δ`. -/
-theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (pkSeed : PkSeed)
+theorem prEvent_signLayer_bind_le {β : Type} (pkSeed : PkSeed)
     (prf : Prf (OracleComp HashSig.OracleWorld))
     (hprf : ∀ S A, IsDerivationAddress A → IsQueryBoundP (prf A) (IsTrialQuery S) 0)
-    (layer : Layer) (idx : Nat)
+    (layer : Layer) (idx : Nat) (tree : Merkle.Built Digest) (msg : Digest)
     (k : Except SphincsError (LayerSignature layer) → OracleComp HashSig.OracleWorld β)
     (E : β → Prop) {δ : ℝ≥0∞} (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery (layer.toNat ≤ ·.toNat)) cache)
     (hk : ∀ sig c, CacheAvoids (IsTrialQuery (layer.toNat < ·.toNat)) c →
       Pr{let y ← (simulateQ HashSig.HashSpec.romImpl (k (.ok sig))).run' c}[E y] ≤ δ) :
     Pr{let y ← (simulateQ HashSig.HashSpec.romImpl
-      (layerMessage H pkSeed prf layer idx >>= fun msg =>
-        signLayer H pkSeed prf layer idx msg >>= k)).run' cache}[E y]
+      (signLayer H pkSeed prf layer idx tree msg >>= k)).run' cache}[E y]
       ≤ ENNReal.ofReal (Real.exp (-(2 ^ 18))) + δ := by
-  rw [run'_simulateQ_romImpl_bind]
-  refine prEvent_bind_le_of_forall_le_of_support _ _ _ fun z hz => ?_
-  -- What the layer signs queries no trial input.
-  have hc : CacheAvoids (IsTrialQuery (layer.toNat ≤ ·.toNat)) z.2 :=
-    cache_eq_none_of_mem_support_run_romImpl (layerMessage_isQueryBoundP_zero H prf
-      (H_thInput_isQueryBoundP_trial _) (hprf _) pkSeed layer idx) hcache hz
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_add_mul_prEvent_not_of_support _ _
     (fun w => w.1.isOk = false) E (ε := δ) fun w hw hok => ?_).trans ?_
@@ -210,13 +220,13 @@ theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (pkSeed : PkSeed)
     · exact absurd rfl hok
     refine hk sig c' (cache_eq_none_of_mem_support_run_romImpl
       (signLayer_isQueryBoundP_zero H prf (H_thInput_isQueryBoundP_trial _) (hprf _) pkSeed layer
-        idx (encodingAvoids_isTrialQuery (Nat.lt_irrefl _)) z.1)
-      (cacheAvoids_isTrialQuery_mono (fun _ => Nat.le_of_lt) hc) hw)
+        idx (encodingAvoids_isTrialQuery (Nat.lt_irrefl _)) tree msg)
+      (cacheAvoids_isTrialQuery_mono (fun _ => Nat.le_of_lt) hcache) hw)
   · -- The layer's own search fails rarely.
     rw [prEvent_run_romImpl_fst _ _ fun r : Except SphincsError (LayerSignature layer) =>
       r.isOk = false]
-    exact add_le_add (prEvent_signLayer_error_le pkSeed prf layer idx _ _
-        (cacheAvoids_isTrialQuery_mono (fun _ h => h ▸ le_refl _) hc))
+    exact add_le_add (prEvent_signLayer_error_le pkSeed prf layer idx _ _ _
+        (cacheAvoids_isTrialQuery_mono (fun _ h => h ▸ le_refl _) hcache))
       (mul_le_of_le_one_right' (prEvent_le_one _))
 
 /-! ## A whole signature fails rarely -/
@@ -226,10 +236,11 @@ theorem prEvent_layerMessage_bind_signLayer_le {β : Type} (pkSeed : PkSeed)
 The source queries no trial input, and the cache holds no trial input of any key. -/
 theorem prEvent_signDerived_error_le (prf : Prf (OracleComp HashSig.OracleWorld))
     (hprf : ∀ S A, IsDerivationAddress A → IsQueryBoundP (prf A) (IsTrialQuery S) 0)
-    (pk : PublicKey) (rho : Randomizer) (msg : Message) (cache : HashSig.HashSpec.QueryCache)
+    (pkSeed : PkSeed) (top : Merkle.Built Digest) (rho : Randomizer) (msg : Message)
+    (cache : HashSig.HashSpec.QueryCache)
     (hcache : CacheAvoids (IsTrialQuery fun _ => True) cache) :
     Pr{let z ← (simulateQ HashSig.HashSpec.romImpl
-      (signDerived H prf pk rho msg)).run' cache}[z.isOk = false]
+      (signDerived H prf pkSeed top rho msg)).run' cache}[z.isOk = false]
       ≤ 3 * ENNReal.ofReal (Real.exp (-(2 ^ 18))) := by
   have hinv : ∀ {α : Type} {oa : OracleComp HashSig.OracleWorld α},
       IsQueryBoundP oa (IsTrialQuery fun _ => True) 0 → ∀ c,
@@ -245,36 +256,25 @@ theorem prEvent_signDerived_error_le (prf : Prf (OracleComp HashSig.OracleWorld)
     (hinv (forsSign_isQueryBoundP_zero H prf (H_thInput_isQueryBoundP_trial _) (hprf _) _ _ _) _
       hc) fun fors c hc => ?_
   set ε := ENNReal.ofReal (Real.exp (-(2 ^ 18)))
-  refine (prEvent_layerMessage_bind_signLayer_le _ prf hprf .bottom _ _ _ (δ := ε + (ε + 0)) c
+  -- The bottom tree hashes no trial input, then the bottom key signs.
+  refine prEvent_buildTree_bind_le _ prf (hprf _) _ _ _ _ hc fun bottomTree c hc => ?_
+  refine (prEvent_signLayer_bind_le _ prf hprf .bottom _ _ _ _ _ (δ := ε + (ε + 0)) c
     (cacheAvoids_isTrialQuery_mono (fun _ _ => trivial) hc) fun sig c hc => ?_).trans
     (le_of_eq (by ring))
   dsimp only
   rw [pure_bind]
-  refine prEvent_layerMessage_bind_signLayer_le _ prf hprf .middle _ _ _ (δ := ε + 0) c hc
+  -- The middle tree hashes no trial input, then the middle key signs.
+  refine prEvent_buildTree_bind_le _ prf (hprf _) _ _ _ _ hc fun middleTree c hc => ?_
+  refine prEvent_signLayer_bind_le _ prf hprf .middle _ _ _ _ _ (δ := ε + 0) c hc
     fun sig c hc => ?_
   dsimp only
   rw [pure_bind]
-  refine prEvent_layerMessage_bind_signLayer_le _ prf hprf .top _ _ _ (δ := 0) c hc
+  -- The top tree is already built, so the top key signs at once.
+  refine prEvent_signLayer_bind_le _ prf hprf .top _ _ _ _ _ (δ := 0) c hc
     fun sig c hc => ?_
   dsimp only
   rw [pure_bind]
   simp [Except.isOk, Except.toBool]
-
-/-- **Building the top tree first keeps a bound that holds from every cache without trials.**
-
-The secrets come from a source that queries no trial input of the layers `S` selects. -/
-theorem prEvent_publicKeyOf_bind_le {β : Type} {S : Layer → Prop} (pkSeed : PkSeed)
-    (prf : Prf (OracleComp HashSig.OracleWorld))
-    (hprf : ∀ A, IsDerivationAddress A → IsQueryBoundP (prf A) (IsTrialQuery S) 0)
-    (f : PublicKey → OracleComp HashSig.OracleWorld β) (E : β → Prop) {ε : ℝ≥0∞}
-    {cache : HashSig.HashSpec.QueryCache} (hcache : CacheAvoids (IsTrialQuery S) cache)
-    (hf : ∀ pk c, CacheAvoids (IsTrialQuery S) c →
-      Pr{let y ← (simulateQ HashSig.HashSpec.romImpl (f pk)).run' c}[E y] ≤ ε) :
-    Pr{let y ← (simulateQ HashSig.HashSpec.romImpl
-      (publicKeyOf H pkSeed prf >>= f)).run' cache}[E y] ≤ ε :=
-  prEvent_run'_romImpl_bind_le _ _ _ _ (fun _ hz => cache_eq_none_of_mem_support_run_romImpl
-    (publicKeyOf_isQueryBoundP_zero H prf (H_thInput_isQueryBoundP_trial S) hprf pkSeed) hcache hz)
-    hf
 
 /-- **A leanSPHINCS signature fails with probability at most `3 exp(-2^18)`.**
 
@@ -298,15 +298,15 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (msg : Message)
       H_isQueryBoundP_trial_of_size (by rw [size_expandInput]; decide)) hcache hz)
     fun key c hc => ?_
   -- The top tree hashes at addresses of other types, and its secrets are derivations.
-  refine prEvent_publicKeyOf_bind_le _ _ (prf_isQueryBoundP_trial _ key.pkSeed sk.seed) _ _ hc
-    fun pk c hc => ?_
+  refine prEvent_buildTree_bind_le _ _ (prf_isQueryBoundP_trial _ key.pkSeed sk.seed) _ _ _ _ hc
+    fun top c hc => ?_
   -- `PRF_msg` hashes 93 bytes.
   refine prEvent_run'_romImpl_bind_le _ _ _ _ (fun z hz =>
     cache_eq_none_of_mem_support_run_romImpl (prfMsg_isQueryBoundP_zero H _ _ _
       (H_isQueryBoundP_trial_of_size (by rw [size_randomizerInput]; decide))) hc hz)
     fun rho c hc => ?_
   exact prEvent_signDerived_error_le _ (fun S => prf_isQueryBoundP_trial S key.pkSeed sk.seed)
-    pk rho msg c hc
+    key.pkSeed top rho msg c hc
 
 /-- From an empty cache, a leanSPHINCS signature fails with probability at most `3 exp(-2^18)`. -/
 theorem prEvent_signWith_error_le_empty (sk : SecretKey) (msg : Message) :

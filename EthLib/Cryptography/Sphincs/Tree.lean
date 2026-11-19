@@ -32,6 +32,8 @@ Every definition takes the hash `H`.
 
 A node computes its left subtree, then its right subtree, then its own hash.
 
+A build computes every node of a tree once, so it gives both the root and each key's path.
+
 Source: `xmss_node` and `xmss_pkFromSig` of [FIPS 205][fips205] §6.
 
 The layer heights are those of [leanSPHINCS.tex][note] §1.
@@ -71,6 +73,13 @@ def node (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree z j : Nat) : m Di
 /-- The root of tree `tree` of a layer: its one node at the top height. -/
 def treeRoot (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) : m Digest :=
   Merkle.root (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) layer.height
+
+/-- Every node of tree `tree` of a layer, each computed once.
+
+Its top value is the tree's root, and it holds the path of each of its keys. -/
+def buildTree (pkSeed : PkSeed) (prf : Prf m) (layer : Layer) (tree : Nat) :
+    m (Merkle.Built Digest) :=
+  Merkle.build (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree) ⟨layer.height, 0⟩
 
 /-! ## The path -/
 

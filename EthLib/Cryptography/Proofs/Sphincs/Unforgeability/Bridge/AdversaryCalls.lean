@@ -10,13 +10,13 @@ Under one answer function, a run of the game makes the calls of the adversary an
 
 Key generation makes 264193 calls.
 
-A signing request makes at most `939499 + 3 * 2^32` calls, each counter search at most `2^32`.
+A signing request makes at most `470595 + 3 * 2^32` calls, each counter search at most `2^32`.
 
 A verification makes at most 491 calls.
 
 With `q` calls of the adversary and `r` requests, a run makes at most `q + 264193 + r * S + 491`.
 
-Here `S` is `939499 + 3 * 2^32`.
+Here `S` is `470595 + 3 * 2^32`.
 -/
 
 @[expose] public section
@@ -185,7 +185,7 @@ def verifierOf (pk : PublicKey) (forgery : Forgery) : OracleComp HashSpec Bool :
 def verdictOf (forgery : Forgery) (log : QueryLog SigningSpec) (verified : Bool) : Bool :=
   decide (Valid log ∧ ¬Contains log forgery) && verified
 
-/-- A signing request makes at most `939499 + 3 * 2^32` calls. -/
+/-- A signing request makes at most `470595 + 3 * 2^32` calls. -/
 theorem hashCalls_signerOf_le (sk : SecretKey) (msg : Message) :
     hashCalls f (signerOf sk msg) ≤ signCalls :=
   (hashCalls_map f _ _).trans_le (Cost.hashCalls_signWith_le f H (hashCalls_queryH f) sk msg)
@@ -253,7 +253,7 @@ theorem adversaryGameCore_eq (adversary : Adversary) :
 
 /-- A run of the game makes the adversary's calls, those of key generation and of verification.
 
-It also makes at most `939499 + 3 * 2^32` calls per signing request. -/
+It also makes at most `470595 + 3 * 2^32` calls per signing request. -/
 theorem calls_adversaryGameCore (adversary : Adversary) :
     ∀ r ∈ support (countedRun f (adversaryGameCore adversary)),
       r.2 ≤ r.1.2.1 + keyGenCalls + r.1.2.2 * signCalls + verifyCalls := by

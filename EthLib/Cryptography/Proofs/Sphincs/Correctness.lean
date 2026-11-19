@@ -42,18 +42,6 @@ open EthLib.Cryptography.Sphincs.Constants
 
 /-! ## Indices -/
 
-/-- A key's leaf index is a leaf of its tree. -/
-theorem OtsKey.ofIndex_leaf_lt (layer : Layer) (idx : Nat) :
-    (OtsKey.ofIndex layer idx).leaf < 2 ^ layer.height :=
-  Nat.mod_lt _ (Nat.two_pow_pos _)
-
-/-- An index of 26 bits leads to the one top tree, tree 0. -/
-theorem OtsKey.ofIndex_top_tree {idx : Nat} (h : idx < 2 ^ HEIGHT) :
-    (OtsKey.ofIndex .top idx).tree = 0 := by
-  -- The top tree number is the bits above all three layers, of which there are none.
-  simp only [OtsKey.ofIndex, Layer.below, Layer.height, Nat.shiftRight_eq_div_pow]
-  exact Nat.div_eq_of_lt (by simpa [HEIGHT, TOP_HEIGHT, LOWER_HEIGHT] using h)
-
 /-- Each key's leaf, read below its own tree, is the tree the layer under it uses.
 
 - For the middle key, `tree * 2^8 + leaf = idx >> 8`, the bottom key's tree.
@@ -79,10 +67,13 @@ variable {f : ByteArray → Vector UInt8 32}
 /-- An honest layer signature leads to the root of its key's tree. -/
 theorem layerRoot_signLayer {pkSeed : PkSeed} {prf : Prf Id} {layer : Layer} {idx : Nat}
     {msg : Digest} {sig : LayerSignature layer}
-    (h : (signLayer (pureHash f) pkSeed prf layer idx msg).run = .ok sig) :
+    (h : (signLayer (pureHash f) pkSeed prf layer idx
+      (buildTree (pureHash f) pkSeed prf layer (OtsKey.ofIndex layer idx).tree).run msg).run
+        = .ok sig) :
     (layerRoot (pureHash f) pkSeed layer idx msg sig).run
       = some (treeRoot (pureHash f) pkSeed prf layer (OtsKey.ofIndex layer idx).tree).run := by
   obtain ⟨hots, hpath⟩ := signLayer_eq_ok h
+  rw [path_buildTree_run (OtsKey.ofIndex_leaf_lt layer idx)] at hpath
   -- The one-time signature recovers the key's leaf, and the honest path climbs to the root.
   rw [layerRoot_run, otsLeaf_otsSign hots, Option.map_some, hpath]
   exact congrArg some (fold_path_root (OtsKey.ofIndex_leaf_lt layer idx))
@@ -96,7 +87,7 @@ theorem verify_sign {sk : SecretKey} {m : Message} {σ : Signature}
     (h : (signWith (pureHash f) sk m).run = .ok σ) :
     (verifyWith (pureHash f) (keyGenWith (pureHash f) sk.seed).run.2 m σ).run = true := by
   obtain ⟨-, hfors, hbottom, hmiddle, htop⟩ := sign_eq_ok rfl h
-  simp only [layerMessage_run] at hbottom hmiddle htop
+  simp only [value_buildTree_run] at hmiddle htop
   rw [verify_iff, signatureRoot]
   -- Step 1: the FORS openings recover the FORS public key the bottom key signed.
   rw [hfors, forsRecover_forsSign]

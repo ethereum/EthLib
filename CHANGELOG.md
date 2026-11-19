@@ -25,7 +25,7 @@ Not yet released.
   XMSS bounds key generation and signing on every path: at most `13434881` and `8616804556` calls.
   Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
   leanSPHINCS counts the calls under a fixed answer function.
-  Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
+  Key generation makes exactly `264193`, signing at most `12885372483`, and verification at most `491`, exactly `491` when it accepts.
   `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
 - `Unforgeability.Bridge.unforgeable_adversary` bounds a SPHINCS forgery by the adversary's own hash calls ([#3336](https://github.com/ethereum/EthLib/issues/3336)).
   An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + schemeCalls r) / 2^127`.
@@ -38,6 +38,13 @@ Not yet released.
   `Merkle.build` computes every node under a position, with the calls of the node there, in the same order.
   The signing bound drops from `8630239231` to `8616804556` calls, and a request's bound `requestQueries` from `2^33 + 615 * 2^16` to `2^33 + 410 * 2^16 + 204`.
   `Cost.signCalls_eq`, `isQueryBoundP_signDerived`, `isQueryBoundP_signWith` and `lifetimeQueries_eq` state the new constants.
+
+- leanSPHINCS signing builds each tree once: the top tree, the two lower trees and the 24 FORS trees ([#3401](https://github.com/ethereum/EthLib/pull/3401)).
+  Each build gives both the path of a key and the root that the layer above signs.
+  `signWith_eq_recompute` proves that every signature stays the same, byte for byte, for every hash function.
+  `signDerived` now takes `PK.seed` and the built top tree, `signLayer` takes the key's built tree, and `forsSign` also returns the FORS public key.
+  The signing bound drops from `939499 + 3 * 2^32` to `470595 + 3 * 2^32` calls, and so does `signCalls` in `schemeCalls`.
+  `Cost.signCalls_eq` and `hashCalls_signWith_le` state the new constants, and `unforgeable_adversary` keeps its 127 bits.
 
 - `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
   An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
@@ -331,7 +338,7 @@ Not yet released.
 - Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
   `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
   The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
-  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store whose filtered tree reads has a head.
+  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store has a head.
   The alternatives are a collision of two honest stores and `HistoricalDirectSafetyEvidence`.
   `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` with the same alternatives.
   The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
@@ -340,6 +347,35 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The root of an ancestor walk does not depend on the payload status of its start.
+  So a read at an earlier epoch goes through the checkpoint of a later one.
+  A caller drops the first explicit argument.
+
+- In Lean, `Store.isAncestor_of_getCheckpointBlock` holds at every fork and no longer takes `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the walk reaches the checkpoint's block with some payload status.
+  The ancestor test against a pending node accepts every status.
+  A caller drops the first explicit argument.
+
+- In Lean, `HonestHeadsExist` no longer takes the store's filtered tree: every up-to-date honest store in the interval has a head ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
+  `Execution.honestHeadsExist_or_evidence` derives the filtered tree from the held justified block and the epoch room that the tree needs.
+  It no longer takes `positive`, which its `parameters.slots` gives.
+  It takes `seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64` after `scoreFits`, which `Config.CommitteeWindowsFit.seeds` gives.
+  `Execution.callRolloverRead_or_evidence` no longer takes `history`, which its `parameters.lookahead` gives, and it takes the same `seeds` in place of `fit`.
+  A caller that applied `HonestHeadsExist` to `nodes` and `tree` drops both arguments.
+  A caller of `Execution.honestHeadsExist_or_evidence` drops `positive` and passes `fit.seeds` after `scoreFits`.
+  A caller of `Execution.callRolloverRead_or_evidence` drops `history` and passes `fit.seeds` in place of `fit`.
+
+- In Lean, `DirectSafety.Apriori.whistleblowerAllowanceAt` can now be below the cap form, which charges each slashable key at `MAX_EFFECTIVE_BALANCE_ELECTRA` (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  From Electra, when `WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA` is at least 2, it is the smaller of `whistleblowerAllowance` and a new bound.
+  The new bound is the new `slashableBase`, plus `windowIssuance`, the deposit carry and the exit flow of the window, over one less than that quotient.
+  `slashableBase` sums the larger of the effective and the actual balance over the validators that are unslashed and not yet withdrawable at the reference state.
+  `creditBudget`, `gainBudget` and `drift` read the allowance, so each is at most its former value.
+  `accountable_safety_apriori` keeps its statement, with that smaller drift, so it implies the former statement.
+  A caller that unfolded `whistleblowerAllowanceAt` to `whistleblowerAllowance` now gets the `if` form.
+  The new `Apriori.Internal.otherCredit_le_allowanceAt_electra` bounds the other funding credits of a branch by the allowance.
+  The new `DirectSafety.replayRewards_sources` (DirectSafety/IntervalFunding.lean) states that the rewards pass records only reward, penalty and inactivity events; `epochReplay_events` and the allowance proof read it.
 
 - The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
   Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.

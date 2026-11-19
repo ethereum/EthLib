@@ -152,7 +152,7 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
         · exact ok
         · rw [(reached u caller n).anchorState_root, Except.ok.injEq] at zero
           exact absurd zero (roots u caller n within callerKey anchorBlock callerAnchor)
-      rw [Store.getCheckpointBlock_trans preGloas rootRead belowJustified]
+      rw [Store.getCheckpointBlock_trans rootRead belowJustified]
       exact justifiedRead
     -- So the signer reads it too.
     have signerFinal : ((e.world k).state v).getCheckpointBlock root
