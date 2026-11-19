@@ -1856,8 +1856,8 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.add_mul, Nat.one_mul] at times
       omega
     | some score =>
-      have grown := DirectSafety.Apriori.Internal.runScore_le_start toM altair h.early (.inl electra)
-        altair (i := v) read
+      have grown := DirectSafety.Apriori.Internal.runScore_le_start toM altair h.early
+        (.inl electra) altair (i := v) read
       simp only [Option.map_some, Option.getD_some]
       rw [Nat.add_mul, Nat.one_mul] at times
       simp only at grown
