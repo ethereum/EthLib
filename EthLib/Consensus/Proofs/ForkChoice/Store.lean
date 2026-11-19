@@ -589,12 +589,22 @@ theorem getCheckpointBlock_walk {root checkpoint : Root} {epoch : Epoch}
 
 /-- A successful checkpoint read names a held ancestor at or before its epoch boundary. -/
 theorem isAncestor_of_getCheckpointBlock {root checkpoint : Root} {epoch : Epoch}
-    (before : fork < .glamsterdam)
     (read : store.getCheckpointBlock root epoch = .ok checkpoint) :
     ∃ boundary block, computeStartSlotAtEpoch preset epoch = .ok boundary ∧
       store.blocks[checkpoint]? = some block ∧ block.slot ≤ boundary ∧
       store.isAncestor ⟨root, .pending⟩ ⟨checkpoint, .pending⟩ = .ok true := by
-  obtain ⟨boundary, boundaryOk, walk⟩ := getCheckpointBlock_walk before read
+  by_cases gloas : .glamsterdam ≤ fork
+  · -- From Gloas the walk reaches the checkpoint block, and a pending ancestor accepts any status.
+    unfold getCheckpointBlock at read
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at read
+    obtain ⟨boundary, boundaryOk, ancestor, walk, rfl⟩ := read
+    obtain ⟨block, held, le⟩ := getAncestor_le walk
+    have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok ancestor := by
+      rw [getAncestor_trans le walk, getAncestor_of_le held (UInt64.le_refl _)]
+    exact ⟨boundary, block, mapError_ok_iff.mp boundaryOk, held, le, by
+      simp [isAncestor_pending gloas, block_ok_iff.mpr held, stops, bind, Except.bind, pure,
+        Except.pure]⟩
+  obtain ⟨boundary, boundaryOk, walk⟩ := getCheckpointBlock_walk (Nat.lt_of_not_le gloas) read
   obtain ⟨block, held, le⟩ := getAncestor_le walk
   exact ⟨boundary, block, boundaryOk, held, le, isAncestor_of_getAncestor walk⟩
 
@@ -634,7 +644,7 @@ theorem getCheckpointBlock_of_ancestor_epoch (before : fork < .glamsterdam)
     (le : epoch.toNat ≤ (computeEpochAtSlot preset aboveBlock.slot).toNat)
     (read : store.getCheckpointBlock above epoch = .ok checkpoint) :
     store.getCheckpointBlock root epoch = .ok checkpoint := by
-  obtain ⟨boundary, -, boundaryOk, -, -, -⟩ := isAncestor_of_getCheckpointBlock before read
+  obtain ⟨boundary, -, boundaryOk, -, -, -⟩ := isAncestor_of_getCheckpointBlock read
   exact getCheckpointBlock_of_isAncestor before aboveFound descends boundaryOk
     (computeStartSlotAtEpoch_le_of_epoch_le boundaryOk le) read
 
@@ -647,7 +657,7 @@ theorem getCheckpointBlock_self (before : fork < .glamsterdam)
     ∃ block : BeaconBlock preset fork, store.blocks[checkpoint]? = some block ∧
       (computeEpochAtSlot preset block.slot).toNat ≤ epoch.toNat ∧
       store.getCheckpointBlock checkpoint epoch = .ok checkpoint := by
-  obtain ⟨boundary, block, boundaryOk, found, le, -⟩ := isAncestor_of_getCheckpointBlock before read
+  obtain ⟨boundary, block, boundaryOk, found, le, -⟩ := isAncestor_of_getCheckpointBlock read
   have epochEq := computeEpochAtSlot_computeStartSlotAtEpoch
     (UInt64.lt_iff_toNat_lt.mpr positive) boundaryOk
   refine ⟨block, found, ?_, ?_⟩

@@ -193,7 +193,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
   have callerParent := Store.block_ok_iff.mp parentOk
   -- The caller's checkpoint block, at or before the first slot of the checkpoint's epoch.
   obtain ⟨boundary, checkpointBlock, boundaryOk, checkpointFound, checkpointLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas callerRead
+    Store.isAncestor_of_getCheckpointBlock callerRead
   have parentEpochNat : (computeEpochAtSlot preset parent.slot).toNat =
       parent.slot.toNat / preset.SLOTS_PER_EPOCH.toNat := by
     simp only [computeEpochAtSlot, UInt64.toNat_div]
@@ -220,7 +220,7 @@ theorem Execution.receiverWindowExitsNear_of_sourceOnParentChain
     boundaryOk boundaryLe receiverRead
   -- The block states of the checkpoint block and of the head.
   obtain ⟨-, receiverCheckpoint, -, receiverCheckpointFound, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas headRead
+    Store.isAncestor_of_getCheckpointBlock headRead
   obtain ⟨base, baseFound, -, -⟩ :=
     (reached w receiver k).blockStatesFromParents receiverCheckpointFound
   obtain ⟨headState, headStateFound, -, -⟩ :=

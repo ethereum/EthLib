@@ -305,7 +305,6 @@ The head state must be before the mix that the seed of the epoch reads is writte
 private theorem Execution.mem_window_of_target {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (preGloas : fork < .glamsterdam)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -338,10 +337,10 @@ private theorem Execution.mem_window_of_target {anchor : Store preset fork}
   have targetEpoch := Store.epoch_eq_of_getCurrentTarget epochRead targetOk
   have rootEq : attestation.data.target.root = targetRoot := congrArg Checkpoint.root targetEq
   obtain ⟨_, rootBlock, _, rootFound, _, headDescends⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas headTarget
+    Store.isAncestor_of_getCheckpointBlock headTarget
   have voteTarget := origin.targetRoot
   rw [rootEq] at voteTarget
-  obtain ⟨_, _, _, _, _, voteDescends⟩ := Store.isAncestor_of_getCheckpointBlock preGloas voteTarget
+  obtain ⟨_, _, _, _, _, voteDescends⟩ := Store.isAncestor_of_getCheckpointBlock voteTarget
   rw [← rootEq] at rootFound headDescends voteDescends
   -- The head has a state, at or before the current slot.
   obtain ⟨headBlock, headBlockFound, -⟩ := Store.slot_le_of_isAncestor rootFound headDescends
@@ -413,7 +412,6 @@ For a head with a block in the current epoch, or a block at most one epoch back,
 private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (preGloas : fork < .glamsterdam)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 1 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
@@ -434,7 +432,7 @@ private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset f
     v ∈ participants := by
   by_cases atOrAfter : ∀ headBlock : BeaconBlock preset fork,
       ((e.world k).state w).blocks[head.root]? = some headBlock → first ≤ headBlock.slot
-  · exact Execution.mem_window_of_target anchored start anchorSlot preGloas minLookahead
+  · exact Execution.mem_window_of_target anchored start anchorSlot minLookahead
       maxLookahead ring honest slotOk firstOk lastOk windowOk targetOk origin (.inr atOrAfter)
   -- The block of the head is before the start of the epoch, so it is the block of the target.
   obtain ⟨headBlock, headFound, below⟩ : ∃ headBlock : BeaconBlock preset fork,
@@ -459,7 +457,7 @@ private theorem Execution.mem_window_of_target_or_stale {anchor : Store preset f
     exact rooted.symm
   by_cases near : (computeEpochAtSlot preset slot).toNat ≤
       (computeEpochAtSlot preset headBlock.slot).toNat + 1
-  · refine Execution.mem_window_of_target anchored start anchorSlot preGloas minLookahead
+  · refine Execution.mem_window_of_target anchored start anchorSlot minLookahead
       maxLookahead ring honest slotOk firstOk lastOk windowOk targetOk origin (.inl ?_)
     intro rootBlock found
     rw [rootIsHead, headFound, Option.some.injEq] at found
@@ -571,7 +569,7 @@ theorem Execution.honestTargetVotes_of_byzantineStakeAtMost [DecidablePred (· �
       rw [targetEq]
       exact targetOk
     exact Store.mem_activeMembers.mpr
-      ⟨Execution.mem_window_of_target_or_stale anchored start anchorSlot preGloas minLookahead
+      ⟨Execution.mem_window_of_target_or_stale anchored start anchorSlot minLookahead
         maxLookahead ring stale caller bounded headRead slotOk startOk lastOk participantsOk
         currentTarget origin,
         countedFound v (List.mem_toFinset.mp (Finset.mem_filter.mp member).1)⟩

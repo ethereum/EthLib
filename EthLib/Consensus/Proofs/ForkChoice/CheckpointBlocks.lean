@@ -1355,7 +1355,7 @@ theorem Store.getCheckpointBlock_of_shared_origin {A B : Store preset fork}
     (above : B.isAncestor ⟨x, .pending⟩ ⟨origin, .pending⟩ = .ok true) :
     B.getCheckpointBlock x epoch = .ok checkpoint := by
   obtain ⟨boundary, checkpointBlock, boundaryOk, checkpointHeld, checkpointLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock before headRead
+    Store.isAncestor_of_getCheckpointBlock headRead
   have early : boundary ≤ originBlock.slot := by
     have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
     rw [UInt64.le_iff_toNat_le, boundaryNat, ← originEpoch]

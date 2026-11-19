@@ -576,7 +576,7 @@ private theorem anchor_cover {Δ : ℕ} {anchor : Store preset fork} {limit : �
   obtain ⟨anchorRoot, hashed, -, -, -, final, -⟩ := getForkchoiceStore_anchor ctx.anchored
   have read := reached.getCheckpointBlock_anchor ctx.anchorSlot ctx.anchorBoundary
     (ctx.absent a ha i bound) headFound hashed
-  obtain ⟨-, -, -, -, -, descends⟩ := Store.isAncestor_of_getCheckpointBlock ctx.preGloas read
+  obtain ⟨-, -, -, -, -, descends⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨headRoot, status⟩ := hd
   dsimp only at pending
   subst pending
@@ -820,7 +820,7 @@ private theorem finalized_invariant {Δ : ℕ} {anchor : Store preset fork}
     -- The receiver reads that finality below its justified root.
     have read := good.finality u ctx.caller a honest n i nBound iBound le
     obtain ⟨-, finalBlock, -, finalFound, -, below⟩ :=
-      Store.isAncestor_of_getCheckpointBlock ctx.preGloas read
+      Store.isAncestor_of_getCheckpointBlock read
     have headDescends := Store.isAncestor_getHead headOk
     obtain ⟨justifiedBlock, justifiedFound⟩ := Store.held_of_isAncestor headDescends
     exact Store.isAncestor_trans_of_lt ctx.preGloas justifiedFound finalFound headDescends below

@@ -341,6 +341,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Store.isAncestor_of_getCheckpointBlock` holds at every fork and no longer takes `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the walk reaches the checkpoint's block with any payload status, and a pending ancestor accepts each.
+  A caller drops the first explicit argument.
+
 - The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
   Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
   The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.

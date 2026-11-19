@@ -878,7 +878,7 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
       .ok target0.root := by
     obtain ⟨_, _, _, blockRead, rfl⟩ := Store.getCurrentTarget_eq_ok_iff.mp target0Ok
     exact blockRead
-  obtain ⟨-, block0, -, held0, -, -⟩ := Store.isAncestor_of_getCheckpointBlock preGloas read0
+  obtain ⟨-, block0, -, held0, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read0
   obtain ⟨anc, ancStored, -⟩ := reachedU.blockStatesFromParents held0
   obtain ⟨fin, finRead, finAnchor⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedU sound anchorSlot params nonzeroU ancStored
@@ -1474,7 +1474,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
     exact tRead
   have targetNat := congrArg UInt64.toNat targetEpoch
   obtain ⟨-, targetBlock, -, targetHeld, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   obtain ⟨anc, ancStored, -⟩ := reachedQ.blockStatesFromParents targetHeld
   obtain ⟨fin, finRead, finAnchor⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedQ sound anchorSlot params
