@@ -1018,12 +1018,13 @@ No upgrade runs from Fulu, so no step records a crossing.
 
 It is the part of the floor of a key, on R's run and on C's, that does not read the key. -/
 private theorem floor_guards (h : Setting config checks g split fin pulled anc counted V)
-    {zs y : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-    (endpoint : (getCurrentEpoch y).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    {zs : BeaconState preset fork} {y : ForkedBeaconState preset}
+    (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩) (early : y.fork < .glamsterdam)
+    (endpoint : (getCurrentEpoch y.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
     0 < DirectSafety.Apriori.minSlashingPenaltyQuotient preset
       (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩ (getCurrentEpoch pulled).toNat) ∧
     ∀ {m n : ForkedBeaconState preset}, Run config checks ⟨fork, zs⟩ m →
-      ∀ step : Step config checks m n, Run config checks n ⟨fork, y⟩ →
+      ∀ step : Step config checks m n, Run config checks n y →
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch zs).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1054,7 +1055,7 @@ private theorem floor_guards (h : Setting config checks g split fin pulled anc c
   · intro added addedOk
     exact DirectSafety.Apriori.Internal.no_crossing_of_regime (toFin.append pre) before
       h.genesis h.caps step
-      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
+      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) early)
       (.inl (Nat.le_trans electra (fork_le_of_chainSteps before.chainSteps))) addedOk
 
 /-- R's balance of a key that does not exit in the window falls only by its debit events.
@@ -1087,7 +1088,7 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
         (events.map (syncDebit i.toNat)).sum +
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
   obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨positive, guards⟩ := floor_guards h pre (y := pulled) (Nat.le_succ _)
+  obtain ⟨positive, guards⟩ := floor_guards h pre (y := ⟨fork, pulled⟩) h.early (Nat.le_succ _)
   refine Run.balanceFloor_events_or_fulu (toFin.append pre) rest h.genesis h.caps h.delay
     h.early high endEpoch i val initial unslashed (Or.inr h.fulu) _ positive ?_ stays replayed
   intro m n before step after cut w found
@@ -1122,6 +1123,143 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   obtain ⟨fromFin⟩ := h.fromFin
   exact key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed stays
     retained
+
+/-- A state of the balance path of a run is the end of a prefix of the run.
+
+The state inside a slot step, after the epoch transition and before the upgrades, is the end of the
+step, since no fork upgrade runs when the fork does not rise. -/
+private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
+    (rp : Run config checks x m) (rest : Run config checks m y) (back : y.fork ≤ x.fork)
+    {p : ForkedBeaconState preset} (member : p ∈ rp.balancePath) :
+    ∃ (r1 : Run config checks x p) (r2 : Run config checks p y),
+      r1.append r2 = rp.append rest := by
+  rcases PinSplit.Run.mem_balancePath_split rp member with
+    ⟨rq, rest', eq⟩ | ⟨q, n, rq, ok, rest', adv, eq, -, hp, up⟩
+  · subst eq
+    exact ⟨rq, rest'.append rest, Run.append_assoc _ _ _⟩
+  · subst eq
+    have order : n.fork ≤ q.fork :=
+      Nat.le_trans (fork_le_of_chainSteps rest'.chainSteps)
+        (Nat.le_trans (fork_le_of_chainSteps rest.chainSteps)
+          (Nat.le_trans back (fork_le_of_chainSteps rq.chainSteps)))
+    have same := processUpgrades_eq_of_fork_le up order
+    have pn : p = n := hp.trans same.symm
+    subst pn
+    exact ⟨rq.snoc (Step.slot ok), rest'.append rest, Run.append_assoc _ _ _⟩
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The balance of a key at every state of a prefix of C's run from the finalized block is above
+`floor`, if `floor` is below what the potential floor gives.
+
+The potential floor is `FloorTrace.run_potential_floor`, read at the end of each prefix.
+
+The guards are `floor_guards`, with the exit guard `retained` and the pass rate `pass`.
+
+The step `arith` is the arithmetic that fits the closed form of the potential floor to `floor`.
+
+It holds for each epoch count up to C's, and each debit that is at most the key's sync and partial
+debits over the whole run.
+
+The effective balance of the key at the end of the prefix is then at least the least of its
+effective balance at the finalized block, its cap there, and `floor` rounded down to an
+increment. -/
+private theorem cfloor_endpoint (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (clean : ∀ w, counted.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+    (slack ρn ρd floor : ℕ)
+    (start : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat + slack)
+    (pass : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+      step.balanceEvents = .ok evs →
+      (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd)
+    (arith : ∀ a D k : ℕ,
+      k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+      D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+      (ρd - ρn * k) * (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+          (withdrawalMaxEffectiveBalance preset fork val).toNat +
+        (preset.downwardBand + slack)) ≤ ρd * (a + D + (preset.downwardBand + slack)) →
+      floor ≤ a)
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC) :
+    min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+        (min (withdrawalMaxEffectiveBalance preset fork val).toNat
+          (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
+      effectiveAt z i.toNat := by
+  obtain ⟨toFin⟩ := h.toFin
+  have forkEnd : ∀ {p : ForkedBeaconState preset} (r2 : Run config checks p ⟨fork, counted⟩),
+      p.fork < .glamsterdam := fun r2 =>
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+  -- the balance at the end of each prefix of the run is above `floor`
+  have endpointFloor : ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+      (r2 : Run config checks p ⟨fork, counted⟩), r1.append r2 = fromFin.append tailC →
+      floor ≤ actualBalanceAt p i.toNat := by
+    intro p r1 r2 whole
+    have early := forkEnd r2
+    have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+    simp only at order
+    have endEpoch : (getCurrentEpoch p.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+      have := h.near
+      omega
+    have nonDecreasing := UInt64.le_iff_toNat_le.mp
+      (currentEpoch_le_of_chainSteps r1.chainSteps)
+    simp only at nonDecreasing
+    obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
+      (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
+    obtain ⟨positive, guards⟩ := floor_guards h (zs := fin) Run.nil early endEpoch
+    have cleanP : ∀ w, p.state.validators.data[i.toNat]? = some w → w.slashed = false := by
+      intro w found
+      cases flag : w.slashed
+      · rfl
+      · obtain ⟨u, foundU, marked⟩ := r2.slashedPersistence i.toNat w found flag
+        have := clean u foundU
+        simp [marked] at this
+    obtain ⟨D, split, closed⟩ := FloorTrace.run_potential_floor toFin r1 h.genesis h.caps
+      h.delay early h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i val initial cleanP
+      _ positive
+      (fun before' step after cut' w found => by
+        have whole' : (before'.snoc step).append (after.append r2) = fromFin.append tailC := by
+          rw [Run.append_assoc, cut', whole]
+        exact ⟨retained before' step (after.append r2) whole' w found,
+          guards before' step after⟩)
+      beforeOk slack ρn ρd start
+      (fun before' step after cut' evs ok => by
+        have whole' : (before'.snoc step).append (after.append r2) = fromFin.append tailC := by
+          rw [Run.append_assoc, cut', whole]
+        exact pass before' step (after.append r2) whole' evs ok)
+    have splitDebit : (before.map (floorPenaltyDebit i.toNat)).sum =
+        (before.map (penaltyDebit i.toNat)).sum + (before.map (syncDebit i.toNat)).sum := by
+      rw [← List.sum_map_add]
+      rfl
+    obtain ⟨rest', rfl⟩ := isPrefix
+    simp only [List.map_append, List.sum_append]
+    refine arith _ D _ (by omega) (by omega) closed
+  have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
+      ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, counted⟩),
+        r1.append r2 = fromFin.append tailC := fun member => by
+    obtain ⟨r1, r2, whole⟩ := balancePath_endpoint rp rest (Nat.le_refl _) member
+    exact ⟨r1, r2, whole.trans cut⟩
+  have inside : i.toNat < fin.validators.data.size := (Array.getElem?_eq_some_iff.mp initial).1
+  refine PinSplit2.Run.effective_floor_rounded rp (forkEnd rest) h.fulu i.toNat inside floor
+    (withdrawalMaxEffectiveBalance preset fork val).toNat ?_ ?_
+  · intro p member
+    obtain ⟨r1, r2, whole⟩ := pathEndpoint member
+    exact endpointFloor r1 r2 whole
+  · intro p member
+    obtain ⟨r1, r2, -⟩ := pathEndpoint member
+    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
+      (forkEnd r2) i.toNat val initial
+    simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
 
 /-! ### One key's reward in an epoch pass -/
 
