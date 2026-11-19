@@ -872,8 +872,7 @@ private theorem processSyncCommitteeUpdates_eq_of_inside {altair : .altair ≤ f
   Except.ok.inj (ok.symm.trans
     (processSyncCommitteeUpdates_inside (processSyncCommitteeUpdates_epoch ok) inside))
 
-/-- Every epoch stage but the committee and lookahead updates keeps both committees and the
-lookahead. -/
+/-- An epoch stage other than the two updates keeps the committees and the lookahead. -/
 private theorem stage_same (altair : .altair ≤ fork) {k : EpochStage}
     (other : k ≠ .syncCommittees) (look : k ≠ .proposerLookahead) {a b : BeaconState preset fork}
     (edge : EpochStage.Edge config checks k a b) : SameSyncCommittees a b := by
@@ -1410,7 +1409,8 @@ private theorem stages_lookahead (altair : .altair ≤ fork) {stages : List Epoc
     (fun k member _ _ computed =>
       have edge := EpochStage.action_cases.mp computed
       ⟨edge.slot_eq,
-        SyncCommitteeKeys.stage_lookahead altair (fun same => absurd (by rw [← same]; exact member) absent) edge⟩)
+        SyncCommitteeKeys.stage_lookahead altair
+          (fun same => absurd (by rw [← same]; exact member) absent) edge⟩)
 
 /-- From Fulu, an epoch draws its new last epoch of proposers from a state just before the draw.
 

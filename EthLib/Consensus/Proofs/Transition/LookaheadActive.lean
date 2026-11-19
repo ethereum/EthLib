@@ -8,9 +8,9 @@ public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 /-!
 # Proofs: each proposer of the lookahead is active in its epoch along a run
 
-From Fulu the state keeps the proposers of the current epoch and of the next `MIN_SEED_LOOKAHEAD` ones.
+From Fulu the state keeps the proposers of the current epoch and of the epochs after it.
 
-The proposer at position `k` of the lookahead is a validator active in the epoch `k / SLOTS_PER_EPOCH` after the current one.
+The proposer at position `k` is active in the epoch `k / SLOTS_PER_EPOCH` after the current one.
 
 The upgrade to Fulu draws the lookahead from the registry of the upgrade.
 
@@ -18,7 +18,9 @@ The epoch step shifts the lookahead by one epoch and draws the new last epoch fr
 
 Every other step keeps the lookahead.
 
-The steps keep activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`, which covers the whole lookahead.
+The steps keep activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
+
+That bound covers the whole lookahead.
 
 So along a run from genesis each entry of the lookahead is active in its epoch.
 
@@ -39,7 +41,8 @@ Position `k` is `k / SLOTS_PER_EPOCH` epochs after the current epoch. -/
 def LookaheadActive (state : BeaconState preset fork) : Prop :=
   ∀ fulu : .fusaka ≤ fork,
     ∀ (k : Nat) (inside : k < (preset.MIN_SEED_LOOKAHEAD.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat),
-      ∀ epoch : Epoch, epoch.toNat = (getCurrentEpoch state).toNat + k / preset.SLOTS_PER_EPOCH.toNat →
+      ∀ epoch : Epoch,
+        epoch.toNat = (getCurrentEpoch state).toNat + k / preset.SLOTS_PER_EPOCH.toNat →
         isActiveAt state epoch ((state.proposerLookahead fulu)[k]'inside).toNat = true
 
 /-- An epoch in the lookahead is no later than the fixed epoch, one epoch on. -/
@@ -124,7 +127,8 @@ private theorem epoch_next {slot next : Slot} (sum : next.toNat = slot.toNat + 1
     · intro divides
       exact UInt64.toNat_inj.mp (by simpa using Nat.mod_eq_zero_of_dvd divides)
   have step : next.toNat / preset.SLOTS_PER_EPOCH.toNat = slot.toNat /
-      preset.SLOTS_PER_EPOCH.toNat + if preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat then 1 else 0 := by
+      preset.SLOTS_PER_EPOCH.toNat +
+        if preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat then 1 else 0 := by
     rw [sum]
     exact Nat.succ_div
   exact ⟨fun zero => by rw [step]; simp [divides.mp zero],
@@ -151,7 +155,8 @@ private theorem LookaheadActive.advanceSlot
     obtain ⟨ahead, last, aheadEq, drawn, spec⟩ := processProposerLookahead_spec draw
     have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
       Nat.pos_of_ne_zero fun zero => by simp [zero] at inside
-    have epochNext : (getCurrentEpoch ({ epoched with slot := next } : BeaconState preset fork)).toNat =
+    have epochNext :
+        (getCurrentEpoch ({ epoched with slot := next } : BeaconState preset fork)).toNat =
         (getCurrentEpoch state).toNat + 1 := by
       simp only [getCurrentEpoch_toNat]
       exact boundary end_
@@ -213,7 +218,8 @@ private theorem LookaheadActive.chainStep
   | slot ok =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
     exact processUpgrades_induction (config := config) (checks := checks)
-      (forked := ⟨x.fork, advanced⟩) (property := fun u => u.fork < .glamsterdam → LookaheadActive u.state)
+      (forked := ⟨x.fork, advanced⟩)
+      (property := fun u => u.fork < .glamsterdam → LookaheadActive u.state)
       (fun _ stepOk later => LookaheadActive.upgradeNext stepOk later)
       (fun _ => h.advanceSlot covers advancedOk) upgraded early
   | block engine signed validated ok =>
