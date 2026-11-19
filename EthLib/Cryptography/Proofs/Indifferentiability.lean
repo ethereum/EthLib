@@ -40,6 +40,10 @@ For such a game, the composition below is their Theorem 3.1.
 
 Their §4 shows that the composition fails for games with several stages that share no state.
 
+Bertoni et al. bound the advantage of the sponge by the exact term of their Lemma 5.
+
+`spongeExact_le_spongeBound` proves that the closed form of their equation (6) bounds that term.
+
 [sponge]: https://keccak.team/files/SpongeIndifferentiability.pdf
 [rss]: https://hovav.net/ucsd/dist/revindiff.pdf
 -/
@@ -138,17 +142,157 @@ def Indifferentiable [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
       realProb H game ≤ romProb (romGame S s₀ game) + ε N ∧
         romProb (romGame S s₀ game) ≤ realProb H game + ε N
 
+/-- A larger bound keeps indifferentiability. -/
+theorem Indifferentiable.mono [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
+    {H : (A → A) → Msg → Dg} {hashCost : Msg → ℕ} {ε ε' : ℕ → ℝ≥0∞}
+    (h : Indifferentiable H hashCost ε) (hε : ∀ N, ε N ≤ ε' N) :
+    Indifferentiable H hashCost ε' := by
+  obtain ⟨σ, s₀, S, hS, hgame⟩ := h
+  exact ⟨σ, s₀, S, hS, fun game N hN => ⟨(hgame game N hN).1.trans (add_le_add le_rfl (hε N)),
+    (hgame game N hN).2.trans (add_le_add le_rfl (hε N))⟩⟩
+
+/-- The exact term of Bertoni et al., §4.3, Lemma 5, for rate `r`, capacity `c` and a cost `N`.
+
+It is `1 - prod_{i < N} (1 - (i + 1) / 2^c) / (1 - i / (2^r 2^c))`, computed in the reals.
+
+Their Lemma 5 bounds the advantage by this term for `N` below `2^c`.
+
+Their Theorem 2 rests on that lemma.
+
+From `N = 2^c` on, a factor of the product is zero, so the term is 1. -/
+noncomputable def spongeExact (r c N : ℕ) : ℝ≥0∞ :=
+  ENNReal.ofReal (1 - ∏ i ∈ Finset.range N,
+    (1 - ((i : ℝ) + 1) / 2 ^ c) / (1 - (i : ℝ) / (2 ^ r * 2 ^ c)))
+
 /-- The closed form of Bertoni et al., §4.3, equation (6), for rate `r` and capacity `c`.
 
 It is `((1 - 2^-r) N^2 + (1 + 2^-r) N) / 2^(c + 1)`, for a cost `N`.
 
-Their Theorem 2 bounds the advantage by the exact term of their Lemma 5.
+Write `x` for it.
 
-Equation (6) gives this closed form as an upper bound of that term, which EthLib does not prove.
+For `N` well below `2^c`, equation (6) approximates the exact term by `1 - e^-x`.
 
-For `N` at least `2^c` the closed form exceeds 1, so their condition `N < 2^c` costs nothing. -/
+It then notes that `1 - e^-x` is below `x`.
+
+`spongeExact_le_spongeBound` proves that `x` bounds the exact term, for every `N`.
+
+For `N` at least `2^c` the closed form is at least 1, so their condition `N < 2^c` costs nothing. -/
 noncomputable def spongeBound (r c N : ℕ) : ℝ≥0∞ :=
   ((1 - 2⁻¹ ^ r) * (N : ℝ≥0∞) ^ 2 + (1 + 2⁻¹ ^ r) * N) / 2 ^ (c + 1)
+
+/-! ## The closed form and the exact term -/
+
+/-- One factor of the exact term, in the reals.
+
+It needs `a` positive, `b` at least 1, `n` nonnegative and `n + 1` at most `a`.
+
+It needs the product `P` before the factor nonnegative and at most `1 - n / a`.
+
+Then the product with the factor is nonnegative and at most `1 - (n + 1) / a`.
+
+One minus the product grows by at most `(n + 1) / a - n / (b a)`. -/
+private theorem spongeFactor_bounds {a b n P S : ℝ} (ha : 0 < a) (hb : 1 ≤ b) (hn : 0 ≤ n)
+    (hna : n + 1 ≤ a) (h0 : 0 ≤ P) (h1 : P ≤ 1 - n / a) (h2 : 1 - P ≤ S) :
+    0 ≤ P * ((1 - (n + 1) / a) / (1 - n / (b * a))) ∧
+      P * ((1 - (n + 1) / a) / (1 - n / (b * a))) ≤ 1 - (n + 1) / a ∧
+      1 - P * ((1 - (n + 1) / a) / (1 - n / (b * a))) ≤ S + ((n + 1) / a - n / (b * a)) := by
+  have hba : n / (b * a) ≤ n / a :=
+    div_le_div_of_nonneg_left hn ha (le_mul_of_one_le_left ha.le hb)
+  have hna' : n / a < 1 := (div_lt_one ha).2 (by linarith)
+  have hd : 0 < 1 - n / (b * a) := by linarith
+  have hnum : 0 ≤ 1 - (n + 1) / a := sub_nonneg.2 ((div_le_one ha).2 hna)
+  have hgap : 0 ≤ (n + 1) / a - n / (b * a) := by
+    have : n / a ≤ (n + 1) / a := div_le_div_of_nonneg_right (by linarith) ha.le
+    linarith
+  have hPd : P ≤ 1 - n / (b * a) := h1.trans (by linarith)
+  have hy : 0 ≤ (1 - (n + 1) / a) / (1 - n / (b * a)) := div_nonneg hnum hd.le
+  have hdy : (1 - n / (b * a)) * ((1 - (n + 1) / a) / (1 - n / (b * a))) = 1 - (n + 1) / a :=
+    mul_div_cancel₀ _ hd.ne'
+  have hle : P * ((1 - (n + 1) / a) / (1 - n / (b * a))) ≤ 1 - (n + 1) / a :=
+    (mul_le_mul_of_nonneg_right hPd hy).trans hdy.le
+  refine ⟨mul_nonneg h0 hy, hle, ?_⟩
+  have hstep : P * (1 - (1 - (n + 1) / a) / (1 - n / (b * a))) ≤ (n + 1) / a - n / (b * a) := by
+    have hy1 : 1 - (1 - (n + 1) / a) / (1 - n / (b * a))
+        = ((n + 1) / a - n / (b * a)) / (1 - n / (b * a)) := by
+      rw [one_sub_div hd.ne']
+      congr 1
+      ring
+    rw [hy1]
+    calc P * (((n + 1) / a - n / (b * a)) / (1 - n / (b * a)))
+        ≤ (1 - n / (b * a)) * (((n + 1) / a - n / (b * a)) / (1 - n / (b * a))) :=
+          mul_le_mul_of_nonneg_right hPd (div_nonneg hgap hd.le)
+      _ = (n + 1) / a - n / (b * a) := mul_div_cancel₀ _ hd.ne'
+  nlinarith
+
+/-- The closed form in the reals grows by `(N + 1) / 2^c - N / (2^r 2^c)` from `N` to `N + 1`. -/
+private theorem closedForm_succ (r c N : ℕ) :
+    ((1 - 2⁻¹ ^ r) * ((N + 1 : ℕ) : ℝ) ^ 2 + (1 + 2⁻¹ ^ r) * ((N + 1 : ℕ) : ℝ)) / 2 ^ (c + 1)
+      = ((1 - 2⁻¹ ^ r) * (N : ℝ) ^ 2 + (1 + 2⁻¹ ^ r) * N) / 2 ^ (c + 1)
+        + (((N : ℝ) + 1) / 2 ^ c - N / (2 ^ r * 2 ^ c)) := by
+  rw [inv_pow]
+  push_cast
+  field_simp
+  ring
+
+/-- The product of the exact term in the reals, up to a cost `N` of at most `2^c`.
+
+It is nonnegative and at most `1 - N / 2^c`, and one minus it is at most the closed form. -/
+private theorem spongeProduct_bounds (r c : ℕ) {N : ℕ} (hN : N ≤ 2 ^ c) :
+    0 ≤ ∏ i ∈ Finset.range N, (1 - ((i : ℝ) + 1) / 2 ^ c) / (1 - (i : ℝ) / (2 ^ r * 2 ^ c)) ∧
+      ∏ i ∈ Finset.range N, (1 - ((i : ℝ) + 1) / 2 ^ c) / (1 - (i : ℝ) / (2 ^ r * 2 ^ c))
+        ≤ 1 - (N : ℝ) / 2 ^ c ∧
+      1 - ∏ i ∈ Finset.range N, (1 - ((i : ℝ) + 1) / 2 ^ c) / (1 - (i : ℝ) / (2 ^ r * 2 ^ c))
+        ≤ ((1 - 2⁻¹ ^ r) * (N : ℝ) ^ 2 + (1 + 2⁻¹ ^ r) * N) / 2 ^ (c + 1) := by
+  induction N with
+  | zero => simp
+  | succ n ih =>
+    obtain ⟨h0, h1, h2⟩ := ih (by omega)
+    have hna : (n : ℝ) + 1 ≤ 2 ^ c := by exact_mod_cast hN
+    have hb : (1 : ℝ) ≤ 2 ^ r := one_le_pow₀ (by norm_num)
+    obtain ⟨k0, k1, k2⟩ := spongeFactor_bounds (by positivity) hb (Nat.cast_nonneg n) hna h0 h1 h2
+    rw [Finset.prod_range_succ, closedForm_succ]
+    push_cast
+    exact ⟨k0, k1, k2⟩
+
+/-- The closed form in the extended reals is the one in the reals. -/
+private theorem spongeBound_eq_ofReal (r c N : ℕ) :
+    spongeBound r c N
+      = ENNReal.ofReal (((1 - 2⁻¹ ^ r) * (N : ℝ) ^ 2 + (1 + 2⁻¹ ^ r) * N) / 2 ^ (c + 1)) := by
+  have hq : (0 : ℝ) ≤ 2⁻¹ ^ r := by positivity
+  have hq1 : (0 : ℝ) ≤ 1 - 2⁻¹ ^ r := sub_nonneg.2 (pow_le_one₀ (by norm_num) (by norm_num))
+  rw [ENNReal.ofReal_div_of_pos (by positivity), ENNReal.ofReal_add (by positivity)
+    (by positivity), ENNReal.ofReal_mul hq1, ENNReal.ofReal_mul (by positivity),
+    ENNReal.ofReal_sub _ hq, ENNReal.ofReal_add zero_le_one hq]
+  simp [spongeBound, ENNReal.ofReal_pow, ENNReal.ofReal_inv_of_pos, inv_pow, ENNReal.inv_pow]
+
+/-- **The closed form of equation (6) bounds the exact term of Lemma 5.**
+
+This holds for every rate, capacity and cost.
+
+From `N = 2^c` on, the exact term is 1 and the closed form is at least 1. -/
+theorem spongeExact_le_spongeBound (r c N : ℕ) : spongeExact r c N ≤ spongeBound r c N := by
+  rw [spongeExact, spongeBound_eq_ofReal]
+  rcases le_or_gt N (2 ^ c) with hN | hN
+  · exact ENNReal.ofReal_le_ofReal (spongeProduct_bounds r c hN).2.2
+  · obtain ⟨h0, h1, h2⟩ := spongeProduct_bounds r c (le_refl (2 ^ c))
+    have hzero : ∏ i ∈ Finset.range (2 ^ c),
+        (1 - ((i : ℝ) + 1) / 2 ^ c) / (1 - (i : ℝ) / (2 ^ r * 2 ^ c)) = 0 := by
+      refine le_antisymm (h1.trans ?_) h0
+      push_cast
+      rw [div_self (by positivity), sub_self]
+    rw [← Finset.prod_range_mul_prod_Ico _ hN.le, hzero, zero_mul, sub_zero]
+    rw [hzero, sub_zero] at h2
+    refine ENNReal.ofReal_le_ofReal (h2.trans ?_)
+    have hc : ((2 ^ c : ℕ) : ℝ) ≤ N := by exact_mod_cast hN.le
+    have hq1 : (0 : ℝ) ≤ 1 - 2⁻¹ ^ r := sub_nonneg.2 (pow_le_one₀ (by norm_num) (by norm_num))
+    gcongr
+
+/-- Indifferentiability with the exact term gives indifferentiability with the closed form. -/
+theorem indifferentiable_spongeBound [FinEnum A] [DecidableEq Msg] [SampleableType Dg]
+    {H : (A → A) → Msg → Dg} {hashCost : Msg → ℕ} {r c : ℕ}
+    (h : Indifferentiable H hashCost (spongeExact r c)) :
+    Indifferentiable H hashCost (spongeBound r c) :=
+  h.mono (spongeExact_le_spongeBound r c)
 
 /-! ## The calls of the image -/
 
