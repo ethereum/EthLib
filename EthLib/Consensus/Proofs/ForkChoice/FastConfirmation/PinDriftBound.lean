@@ -1577,18 +1577,21 @@ private theorem sum_filter_rewards (events : List (BalanceEvent preset)) (v : �
 
 The increments that set the flag in the previous epoch are at most those active then.
 
-The rate read there is at most `P` times the active increments. -/
+The rate read there is at most `P` times the active increments.
+
+A key that is not active in the previous epoch earns nothing, so it needs no rate. -/
 private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : BeaconState preset f}
     (within : state.RegistryWithinLimit) {flag : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {rewards penalties : Array Gwei}
     (computed : getFlagIndexDeltas state altair flag = .ok (rewards, penalties))
     {total : Gwei} (active : getTotalActiveBalance state = .ok total) (P v : ℕ)
     (inside : v < state.validators.data.size)
-    (rate : ∀ perIncrement : Gwei, getBaseRewardPerIncrement preset total = .ok perIncrement →
-      perIncrement.toNat *
-          ((∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
-            balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (rate : v.toUInt64 ∉ getActiveValidatorIndices state (getPreviousEpoch state) ∨
+      ∀ perIncrement : Gwei, getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat *
+            ((∑ i ∈ (getActiveValidatorIndices state (getPreviousEpoch state)).toFinset,
+              balanceAt state i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
     (rewards.getD v 0).toNat *
         (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * WEIGHT_DENOMINATOR.toNat) ≤
       balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
@@ -1616,6 +1619,8 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
   by_cases present : v.toUInt64 ∈ participating
   swap
   · exact zero (by simp [(member.2 present).1])
+  have rate := rate.resolve_left fun idle =>
+    idle (mem_getUnslashedParticipatingIndices flaggedOk _ present).1
   obtain ⟨leak, leakOk, formula, -⟩ := member.1 present
   cases leak
   swap
@@ -1707,12 +1712,13 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
     {rewarded : BalanceReplay preset f}
     (replayed : replayRewards (config := config) (pass, []) = .ok rewarded) (P v : ℕ)
     (inside : v < pass.validators.data.size)
-    (rate : ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
-      getBaseRewardPerIncrement preset total = .ok perIncrement →
-      perIncrement.toNat *
-          ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
-            balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (rate : v.toUInt64 ∉ getActiveValidatorIndices pass (getPreviousEpoch pass) ∨
+      ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
+        getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat *
+            ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
+              balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
     (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0 ∨
       ∃ total : Gwei, getTotalActiveBalance pass = .ok total ∧
         (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum *
@@ -1733,7 +1739,7 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
   have flagBound (flag : Fin PARTICIPATION_FLAG_WEIGHTS.length) {deltas : Array Gwei × Array Gwei}
       (computed : getFlagIndexDeltas pass altair flag = .ok deltas) :=
     flagReward_le altair within (flag := flag) (rewards := deltas.1) (penalties := deltas.2)
-      computed active P v inside (fun per perOk => rate total per active perOk)
+      computed active P v inside (rate.imp_right fun rate per perOk => rate total per active perOk)
   have one := flagBound ⟨0, by decide⟩ sourceOk
   have two := flagBound ⟨1, by decide⟩ targetOk
   have three := flagBound ⟨2, by decide⟩ headOk
@@ -1845,12 +1851,13 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
     (v : ℕ) (known : v < m.state.validators.data.size ∨ BalancesMatch m.state) (E P : ℕ)
     (envelope : effectiveAt m v ≤ E)
-    (rate : ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
-      getBaseRewardPerIncrement preset total = .ok perIncrement →
-      perIncrement.toNat *
-          ((∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
-            effectiveAt m i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (rate : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
+      ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
+        getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat *
+            ((∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
+              effectiveAt m i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
     epochRewards v step ≤ ((getCurrentEpoch n.state).toNat - (getCurrentEpoch m.state).toNat) *
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) := by
@@ -1929,19 +1936,21 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
           getActiveValidatorIndices m.state (getPreviousEpoch m.state) := by
         rw [prevEpoch]
         simp only [getActiveValidatorIndices, validatorsEq]
-      have ratePass : ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
-          getBaseRewardPerIncrement preset total = .ok perIncrement →
-          perIncrement.toNat *
-              ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
-                balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-        intro total perIncrement totalOk perOk
+      have ratePass : v.toUInt64 ∉ getActiveValidatorIndices pass (getPreviousEpoch pass) ∨
+          ∀ total perIncrement : Gwei, getTotalActiveBalance pass = .ok total →
+            getBaseRewardPerIncrement preset total = .ok perIncrement →
+            perIncrement.toNat *
+                ((∑ i ∈ (getActiveValidatorIndices pass (getPreviousEpoch pass)).toFinset,
+                  balanceAt pass i.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+              P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+        rw [prevEq]
+        refine rate.imp_right fun rate total perIncrement totalOk perOk => ?_
         have sums : (∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
             balanceAt pass i.toNat) =
             ∑ i ∈ (getActiveValidatorIndices m.state (getPreviousEpoch m.state)).toFinset,
               effectiveAt m i.toNat :=
           Finset.sum_congr rfl fun i _ => balanceAtEq i.toNat
-        rw [prevEq, sums]
+        rw [sums]
         exact rate total perIncrement (totalEq.symm.trans totalOk) perOk
       have bound := replayRewards_credit_le altair within rewardedOk P v insidePass ratePass
       have small : balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
@@ -2137,13 +2146,15 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat) ∧
     (capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
       (∀ z ∈ tail.balancePath, capAt z i ≤ capHigh) →
-      (∀ z ∈ tail.balancePath, ∀ total perIncrement : Gwei,
-        getTotalActiveBalance z.state = .ok total →
-        getBaseRewardPerIncrement preset total = .ok perIncrement →
-        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-          (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+      (∀ z ∈ tail.balancePath,
+        i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) ∨
+        ∀ total perIncrement : Gwei,
+          getTotalActiveBalance z.state = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+            (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
       (getCurrentEpoch y.state).toNat ≤ high + 1 →
       max (effectiveAt x i) (min capHigh (creditBound tail i high E P capHigh -
         creditBound tail i high E P capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
@@ -2168,13 +2179,15 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       Nat.le_trans (by decide) (Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))
     have key : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
         (∀ z ∈ (pre.snoc step).balancePath, capAt z i ≤ capHigh) →
-        (∀ z ∈ (pre.snoc step).balancePath, ∀ total perIncrement : Gwei,
-          getTotalActiveBalance z.state = .ok total →
-          getBaseRewardPerIncrement preset total = .ok perIncrement →
-          perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
-            (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
-              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+        (∀ z ∈ (pre.snoc step).balancePath,
+          i.toUInt64 ∉ getActiveValidatorIndices z.state (getPreviousEpoch z.state) ∨
+          ∀ total perIncrement : Gwei,
+            getTotalActiveBalance z.state = .ok total →
+            getBaseRewardPerIncrement preset total = .ok perIncrement →
+            perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+              (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+                preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+              P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
         (getCurrentEpoch last.state).toNat ≤ high + 1 →
         max (effectiveAt x i) (min capHigh (creditBound (pre.snoc step) i high E P capHigh -
           creditBound (pre.snoc step) i high E P capHigh %
