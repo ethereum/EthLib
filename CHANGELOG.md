@@ -23,6 +23,10 @@ Not yet released.
 - `DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax` says that a key's effective balance at a state of a run from genesis is at most the largest one its credentials allow.
   The pin's floors read it.
 
+- `Step.slashed_activated` says that a key which a step newly slashes was activated by the epoch of the step's start, from Electra.
+  A key that has begun to exit before the step must be activated, as a hypothesis, and a block never appends a slashed key.
+  The pin's closure of the created keys reads it.
+
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
