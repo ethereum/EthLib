@@ -1565,17 +1565,22 @@ private theorem block_credit_keys {g : ForkedBeaconState preset}
     simp [altair, seats, blocksOne] at bound
     omega
 
-/-- A sync aggregate lowers the balance of a position only if its key is in the committee.
+/-- A sync aggregate changes the balance of a position only if its key is in the committee.
 
-The position is then the one of a validator that holds a seat, which the committee keeps. -/
-private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)
+The position is then the one of a validator that holds a seat, which the committee keeps.
+
+Otherwise the position is the proposer's, and its balance rises. -/
+private theorem sync_moved_seat {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)
     {aggregate : SyncAggregate preset}
     (synced : processSyncAggregate config checks c altair aggregate = .ok t)
     (matched : BalancesMatch t) {i : ℕ}
-    (lowered : actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i <
+    (moved : actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i ≠
       actualBalanceAt (⟨f, c⟩ : ForkedBeaconState preset) i) :
-    ∃ w, t.validators.data[i]? = some w ∧
-      w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList := by
+    (∃ w, t.validators.data[i]? = some w ∧
+      w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList) ∨
+    ∃ proposer, getBeaconProposerIndex c = .ok proposer ∧ proposer.toNat = i ∧
+      actualBalanceAt (⟨f, c⟩ : ForkedBeaconState preset) i <
+        actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i := by
   obtain ⟨vals, comm⟩ := BlockLedger.processSyncAggregate_kept synced
   have sizes := sameSizes_processSyncAggregate synced
   have matchedC : BalancesMatch c := by
@@ -1586,6 +1591,10 @@ private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair 
     by_contra outside
     have missing : actualBalanceAt (⟨f, c⟩ : ForkedBeaconState preset) i = 0 := by
       simp [actualBalanceAt, Array.getElem?_eq_none (Nat.le_of_not_lt outside)]
+    have outT : t.balances.data[i]? = none :=
+      Array.getElem?_eq_none (by have := sizes.2; omega)
+    have missingT : actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i = 0 := by
+      simp [actualBalanceAt, outT]
     omega
   have insideV : i < c.validators.data.size := by
     unfold BalancesMatch at matchedC
@@ -1593,12 +1602,13 @@ private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair 
   obtain ⟨w, found⟩ : ∃ w, c.validators.data[i]? = some w :=
     ⟨_, Array.getElem?_eq_getElem insideV⟩
   have foundT : t.validators.data[i]? = some w := by rw [vals]; exact found
-  refine ⟨w, foundT, ?_⟩
-  by_contra none
+  by_cases seat : w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList
+  · exact .inl ⟨w, foundT, seat⟩
+  refine .inr ?_
   have unseated : w.pubkey ∉ (c.currentSyncCommittee altair).value.pubkeys.toList := by
     rw [← congrFun comm altair]
-    exact none
-  obtain ⟨reward, proposerReward, members, chosen, -, -, membersOk, -, balances⟩ :=
+    exact seat
+  obtain ⟨reward, proposerReward, members, chosen, -, -, membersOk, signed, balances⟩ :=
     processSyncAggregate_balance synced
   have seatless : ∀ bit : Bool, ∀ member ∈ (members.zip
       aggregate.syncCommitteeBits.bits.toArray).toList, member.2 = bit →
@@ -1611,12 +1621,37 @@ private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair 
   obtain ⟨b, held⟩ : ∃ b, c.balances.data[i]? = some b :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
   obtain ⟨final, atFinal, value⟩ := balances i b held
-  have kept := (syncRewards_bounds (reward := reward.toNat)
+  have low := (syncRewards_bounds (reward := reward.toNat)
     (proposerReward := proposerReward.toNat) (index := i) (chosen := chosen) _ b.toNat).2
     (fun member inside _ => seatless member.2 member inside rfl)
-  rw [← value] at kept
-  simp only [actualBalanceAt, held, atFinal, Option.map_some, Option.getD_some] at lowered
-  omega
+  rw [← value] at low
+  simp only [actualBalanceAt, held, atFinal, Option.map_some, Option.getD_some] at moved ⊢
+  by_cases signer : ∃ member ∈ (members.zip aggregate.syncCommitteeBits.bits.toArray).toList,
+      member.2 = true ∧ chosen.toNat = i
+  · obtain ⟨member, inside, signedBit, same⟩ := signer
+    exact ⟨chosen, signed ⟨member, inside, signedBit⟩, same, by omega⟩
+  · exfalso
+    have high := (syncRewards_bounds (reward := reward.toNat)
+      (proposerReward := proposerReward.toNat) (index := i) (chosen := chosen) _ b.toNat).1
+      (fun member inside bit => ⟨seatless true member inside bit,
+        fun same => signer ⟨member, inside, bit, same⟩⟩)
+    rw [← value] at high
+    omega
+
+/-- A sync aggregate lowers the balance of a position only if its key is in the committee.
+
+The position is then the one of a validator that holds a seat, which the committee keeps. -/
+private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair : .altair ≤ f)
+    {aggregate : SyncAggregate preset}
+    (synced : processSyncAggregate config checks c altair aggregate = .ok t)
+    (matched : BalancesMatch t) {i : ℕ}
+    (lowered : actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i <
+      actualBalanceAt (⟨f, c⟩ : ForkedBeaconState preset) i) :
+    ∃ w, t.validators.data[i]? = some w ∧
+      w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList := by
+  rcases sync_moved_seat altair synced matched (Nat.ne_of_lt lowered) with seat | ⟨_, _, _, risen⟩
+  · exact seat
+  · omega
 
 /-- A list of at most one element has equal members. -/
 private theorem list_eq_of_length_le_one {α : Type} {L : List α} (short : L.length ≤ 1) {a b : α}
