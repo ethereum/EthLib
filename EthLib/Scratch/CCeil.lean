@@ -329,7 +329,8 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     have same : mf = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
     subst same
     have zEpoch : (getCurrentEpoch ms).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
-      have := epoch_le_of_slot_le ms.slot counted.slot (Run.slot_le r2)
+      have : (getCurrentEpoch ms).toNat ≤ (getCurrentEpoch counted).toNat :=
+        epoch_le_of_slot_le ms.slot counted.slot (Run.slot_le r2)
       omega
     rw [Pq]
     exact rate_of_guard h (fromFin.append r1) zEpoch pqOk total perIncrement totalOk perOk
