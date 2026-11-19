@@ -425,8 +425,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A slashing sets the withdrawable epoch at least `EPOCHS_PER_SLASHINGS_VECTOR` later.
   --
   -- Its effective balance can exceed what it is here by its rise, or by sync debits it had here.
+  --
+  -- It can also be its balance at the finalized state, after in-epoch debits before that state.
+  --
+  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let whistleblowerR := ((∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
-      (effective i + rise i)) + seatExcess * inc) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+      max (effective i + rise i) (finEB i)) + seatExcess * inc) /
+    p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
@@ -548,10 +553,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Those are the keys whose exit the call reads.
   --
   -- Outside the tight window, they include the keys that the queues let exit on the other branch.
+  --
+  -- A key's balance at the finalized state can exceed its balance and rise here.
+  --
+  -- Its debits between the start of that epoch and the finalized state are in neither.
+  --
+  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
-    max (effective i + rise i) (bF i)
+    max (effective i + rise i) (max (bF i) (finEB i))
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
@@ -13750,7 +13761,7 @@ The remainder `W` holds those and the unit gain.
 
 `Wh` pays the whistleblower reward of any set of keys that R's call reads as slashed on its branch.
 
-Each reward is at the key's effective balance and rise. -/
+Each reward is at the key's effective balance and rise, or at its balance at the finalized state. -/
 private theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     ∃ Wh W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
@@ -13778,8 +13789,9 @@ private theorem branchR_split (config : Config)
           (pinTerms config state ancestor finalizedState).slashedR ≤ W ∧
       ∀ A : Finset ValidatorIndex,
         ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
-          = true), (balanceAt state v.toNat +
-            (pinTerms config state ancestor finalizedState).rise v.toNat) /
+          = true), max (balanceAt state v.toNat +
+            (pinTerms config state ancestor finalizedState).rise v.toNat)
+              (balanceAt finalizedState v.toNat) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ Wh := by
   -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
   have charge : ∀ d p a b Q f : ℕ, f ≤ p → a ≤ b →
@@ -13812,15 +13824,16 @@ private theorem branchR_split (config : Config)
       U = (pinTerms config state ancestor finalizedState).unitGain ∧
       ∀ A : Finset ValidatorIndex,
         ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
-          = true), (balanceAt state v.toNat +
-            (pinTerms config state ancestor finalizedState).rise v.toNat) /
+          = true), max (balanceAt state v.toNat +
+            (pinTerms config state ancestor finalizedState).rise v.toNat)
+              (balanceAt finalizedState v.toNat) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ W := by
     refine ⟨_, _, _, rfl, ?_, rfl, fun A => ?_⟩
     · exact charge _ _ _ _ _ _ (flagRate_le _)
         (by rw [Nat.mul_assoc]; exact Nat.le_mul_of_pos_left _ (by norm_num))
     · -- The reward of a key is read at its position among the keys slashed on this branch.
-      refine floor_aux (A := A) (fun i => balanceAt state i +
-        (pinTerms config state ancestor finalizedState).rise i)
+      refine floor_aux (A := A) (fun i => max (balanceAt state i +
+        (pinTerms config state ancestor finalizedState).rise i) (balanceAt finalizedState i))
         (fun i => (pinTerms config state ancestor finalizedState).slashedRB i) fun v _ flag => ?_
       refine ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor finalizedState flag), ?_⟩
       rw [slashedRB_eq] at flag
@@ -15002,7 +15015,12 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
   have slashBound := slashR_le config pulled anc fin
     (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split)
   rw [Finset.sum_union dSC] at slashBound
-  have scFloor := floorW (SC pulled counted split)
+  have scFloor : ∑ v ∈ (SC pulled counted split).filter
+        (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+      (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ Wh :=
+    le_trans (Finset.sum_le_sum fun v _ => Nat.div_le_div_right (le_max_left _ _))
+      (floorW (SC pulled counted split))
   have scReward : ∑ v ∈ (SC pulled counted split).filter
         (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
       ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /

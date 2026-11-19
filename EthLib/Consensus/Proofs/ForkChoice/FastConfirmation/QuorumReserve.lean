@@ -558,8 +558,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- A slashing sets the withdrawable epoch at least `EPOCHS_PER_SLASHINGS_VECTOR` later.
   --
   -- Its effective balance can exceed what it is here by its rise, or by sync debits it had here.
+  --
+  -- It can also be its balance at the finalized state, after in-epoch debits before that state.
+  --
+  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let whistleblowerR := ((∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
-      (effective i + rise i)) + seatExcess * inc) / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+      max (effective i + rise i) (finEB i)) + seatExcess * inc) /
+    p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
@@ -720,10 +725,16 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- Those are the keys whose exit the call reads.
   --
   -- Outside the tight window, they include the keys that the queues let exit on the other branch.
+  --
+  -- A key's balance at the finalized state can exceed its balance and rise here.
+  --
+  -- Its debits between the start of that epoch and the finalized state are in neither.
+  --
+  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
-    max (effective i + rise i) (bF i)
+    max (effective i + rise i) (max (bF i) (finEB i))
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
         queueKeys * (preset.upwardBand + depth * gainRateMax))) /
