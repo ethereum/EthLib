@@ -254,6 +254,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
+  Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
+  The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.
+  The leanXMSS and VRF specifications are unchanged.
+
 - In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The index is the first with the key of the request.
   The validator there has execution credentials from the address of the request, and it may make a request.
@@ -1348,9 +1353,9 @@ Not yet released.
   Threads may call the exports at the same time, and a list that another thread changes during a call is read as a snapshot.
 - The consensus gossip and req/resp lists, the subscribed subnets and the SSZ root exports now take and return typed values ([#1551](https://github.com/ethereum/EthLib/pull/1551)).
   The C exports `eth_consensus_gossip_topics`, `eth_consensus_reqresp_protocol_ids`, `eth_consensus_reqresp_parse_protocol_id`, `eth_consensus_reqresp_request_bounds`, `eth_consensus_reqresp_response_bounds` and `eth_consensus_compute_subscribed_subnets` take the tuple of their arguments as one value.
-  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message`, `eth_consensus_merkle_proof` and `eth_pq_keys_ssz`.
+  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message` and `eth_consensus_merkle_proof`.
   A list comes back as a list, the subscribed subnets as a list of `int`, and a pair as a tuple, where each came back as JSON text.
-  The three SSZ exports return the root and the bytes as a pair, where they returned the two joined.
+  The two SSZ exports return the root and the bytes as a pair, where they returned the two joined.
   `eth_consensus_merkle_proof` returns the node and the list of its siblings, and `eth_consensus_compute_subscribed_subnets` takes the node ID as an `int`.
   In Python, a node ID of 2^256 or more, or an epoch or a generalized index of 2^64 or more, raises the error class of the method with code 0, where it raised `OverflowError`.
   A `bool` given for one of them raises the same error, where it read as 0 or 1.

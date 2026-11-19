@@ -8,9 +8,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The key generator is pinned by its digest in `tests/consensus/pq_keys/SHA256SUMS`.
-EXCLUDED = {Path("tests/consensus/pq_keys/generate.py")}
-
 # A line that ends a sentence, or introduces a list or a block.
 END = (".", ":", "!", "?")
 # A line that starts a list item.
@@ -33,7 +30,7 @@ def python_files(root: Path) -> list[Path]:
     ).stdout
     # A tracked file deleted from the working tree stays in the index until its deletion is staged.
     paths = sorted({Path(name) for name in listed.split("\0") if name})
-    return [path for path in paths if (root / path).is_file() and path not in EXCLUDED]
+    return [path for path in paths if (root / path).is_file()]
 
 
 def wrapped_lines(docstring: str) -> list[int]:
