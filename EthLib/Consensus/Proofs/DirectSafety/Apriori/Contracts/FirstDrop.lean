@@ -351,6 +351,185 @@ private theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (Array.mem_of_getElem? initial)
   simpa [effectiveAt, initial] using UInt64.le_iff_toNat_le.mp cap
 
+/-- A step that crosses no epoch keeps the closed form and the bound on the effective balance. -/
+private theorem potential_stay (ρn ρd k band g cap EB Pm Pn : ℕ) (gcap : g ≤ cap)
+    (ebcap : EB ≤ cap) (eb : EB ≤ Pm + band)
+    (ih : (ρd - ρn * k) * (g + band) ≤ ρd * (Pm + band)) (floor : min Pm cap ≤ Pn) :
+    (ρd - ρn * k) * (g + band) ≤ ρd * (Pn + band) ∧ EB ≤ Pn + band := by
+  by_cases kept : Pm ≤ Pn
+  · exact ⟨le_trans ih (Nat.mul_le_mul_left _ (by omega)), by omega⟩
+  · have capped : cap ≤ Pn := by omega
+    refine ⟨?_, by omega⟩
+    calc (ρd - ρn * k) * (g + band) ≤ ρd * (g + band) := Nat.mul_le_mul_right _ (Nat.sub_le _ _)
+      _ ≤ ρd * (Pn + band) := Nat.mul_le_mul_left _ (by omega)
+
+/-- A step that crosses an epoch loses at most its pass penalty, which the effective balance
+bounds. -/
+private theorem potential_cross (ρn ρd k band g cap EB Pm Pn pen : ℕ) (gcap : g ≤ cap)
+    (ebcap : EB ≤ cap) (eb : EB ≤ Pm + band)
+    (ih : (ρd - ρn * k) * (g + band) ≤ ρd * (Pm + band)) (floor : min Pm cap ≤ Pn + pen)
+    (rate : ρd * pen ≤ ρn * EB) :
+    (ρd - ρn * (k + 1)) * (g + band) ≤ ρd * (Pn + band) := by
+  by_cases big : ρd ≤ ρn * (k + 1)
+  · rw [Nat.sub_eq_zero_of_le big]
+    simp
+  have small : ρn * (k + 1) < ρd := Nat.lt_of_not_ge big
+  have rho : ρn ≤ ρd := Nat.le_trans (Nat.le_mul_of_pos_right ρn (Nat.succ_pos k)) small.le
+  have hpos : 0 < ρd := by omega
+  by_cases kept : Pm ≤ Pn + pen
+  · have first : (ρd - ρn) * (Pm + band) ≤ ρd * (Pn + band) := by
+      have h2 : (ρd - ρn) * (Pm + band) + ρn * (Pm + band) = ρd * (Pm + band) := by
+        rw [← Nat.add_mul, Nat.sub_add_cancel rho]
+      have h3 : ρd * pen ≤ ρn * (Pm + band) := le_trans rate (Nat.mul_le_mul_left _ eb)
+      have h4 : ρd * (Pm + band) ≤ ρd * (Pn + band) + ρd * pen := by
+        calc ρd * (Pm + band) ≤ ρd * (Pn + pen + band) := Nat.mul_le_mul_left _ (by omega)
+          _ = ρd * (Pn + band) + ρd * pen := by ring
+      omega
+    have second : (ρd - ρn) * ((ρd - ρn * k) * (g + band)) ≤
+        (ρd - ρn) * (ρd * (Pm + band)) := Nat.mul_le_mul_left _ ih
+    have split : ρn * (k + 1) = ρn * k + ρn := by ring
+    obtain ⟨a, ha⟩ : ∃ a, ρd = ρn * k + a := ⟨ρd - ρn * k, by omega⟩
+    obtain ⟨b, hb⟩ : ∃ b, ρd = ρn * (k + 1) + b := ⟨ρd - ρn * (k + 1), by omega⟩
+    have e1 : ρd - ρn * k = a := by omega
+    have e2 : ρd - ρn * (k + 1) = b := by omega
+    obtain ⟨c, hc⟩ : ∃ c, ρd = ρn + c := ⟨ρd - ρn, by omega⟩
+    have e4 : ρd - ρn = c := by omega
+    have hab : b + ρn = a := by omega
+    rw [e1] at second
+    rw [e4] at first second
+    have : ρd * b ≤ c * a := by
+      rw [hc, ← hab]
+      nlinarith [Nat.zero_le (ρn * b), Nat.zero_le (ρn * ρn), Nat.zero_le (c * ρn)]
+    have third : ρd * ((ρd - ρn * (k + 1)) * (g + band)) ≤ ρd * (ρd * (Pn + band)) := by
+      rw [e2]
+      calc ρd * (b * (g + band)) = (ρd * b) * (g + band) := by ring
+        _ ≤ (c * a) * (g + band) := Nat.mul_le_mul_right _ this
+        _ = c * (a * (g + band)) := by ring
+        _ ≤ c * (ρd * (Pm + band)) := second
+        _ = ρd * (c * (Pm + band)) := by ring
+        _ ≤ ρd * (ρd * (Pn + band)) := Nat.mul_le_mul_left _ first
+    exact Nat.le_of_mul_le_mul_left third hpos
+  · have capLe : cap ≤ Pn + pen := by omega
+    have h3 : ρd * pen ≤ ρn * cap := le_trans rate (Nat.mul_le_mul_left _ ebcap)
+    have h4 : (ρd - ρn) * (cap + band) ≤ ρd * (Pn + band) := by
+      have h2 : (ρd - ρn) * (cap + band) + ρn * (cap + band) = ρd * (cap + band) := by
+        rw [← Nat.add_mul, Nat.sub_add_cancel rho]
+      have h5 : ρd * (cap + band) ≤ ρd * (Pn + band) + ρd * pen := by
+        calc ρd * (cap + band) ≤ ρd * (Pn + pen + band) := Nat.mul_le_mul_left _ (by omega)
+          _ = ρd * (Pn + band) + ρd * pen := by ring
+      have h6 : ρn * (cap + band) ≥ ρn * cap := by nlinarith [Nat.zero_le (ρn * band)]
+      nlinarith [Nat.zero_le (ρn * band)]
+    calc (ρd - ρn * (k + 1)) * (g + band) ≤ (ρd - ρn) * (g + band) :=
+          Nat.mul_le_mul_right _
+            (Nat.sub_le_sub_left (Nat.le_mul_of_pos_right ρn (Nat.succ_pos k)) _)
+      _ ≤ (ρd - ρn) * (cap + band) := Nat.mul_le_mul_left _ (by omega)
+      _ ≤ ρd * (Pn + band) := h4
+
+/-- An upgrade from Fusaka lands at Glamsterdam or later. -/
+private theorem upgradeNext_glamsterdam_le {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}} (fulu : .fusaka ≤ pre.fork)
+    (computed : upgradeNext config checks pre = .ok post) : .glamsterdam ≤ post.val.fork := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork <;>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw, throwThe,
+      MonadExceptOf.throw, reduceCtorEq] at computed <;>
+    first
+      | exact absurd fulu (by decide)
+      | (obtain ⟨_, -, rfl⟩ := computed; decide)
+      | (subst computed; decide)
+
+/-- From Fusaka, the upgrades of a slot that ends before Glamsterdam leave the state as it is. -/
+private theorem processUpgrades_eq_of_early {forked after : ForkedBeaconState preset}
+    (fulu : .fusaka ≤ forked.fork) (early : after.fork < .glamsterdam)
+    (computed : processUpgrades config checks forked = .ok after) : after = forked := by
+  rw [processUpgrades] at computed
+  split at computed
+  · exfalso
+    obtain ⟨next, nextOk, rest⟩ := bind_ok_iff.mp computed
+    have far := upgradeNext_glamsterdam_le fulu nextOk
+    have order := processUpgrades_fork_le rest
+    exact absurd (lt_of_le_of_lt (le_trans far order) early) (lt_irrefl _)
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed.symm
+
+/-- A slot step that crosses an epoch leaves the state within the bands of hysteresis. -/
+private theorem hysteresis_of_crossing_slot {m n : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks m = .ok n) (bands : preset.IncrementWithinUpwardBand)
+    (fulu : .fusaka ≤ m.fork) (early : n.fork < .glamsterdam)
+    (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
+    Hysteresis n.state := by
+  obtain ⟨next, advanced, upgraded⟩ := bind_ok_iff.mp ok
+  have slot : n.state.slot = next.slot := processUpgrades_slot upgraded
+  obtain rfl := processUpgrades_eq_of_early (forked := ⟨m.fork, next⟩) fulu early upgraded
+  have boundary : next.slot % preset.SLOTS_PER_EPOCH = 0 := by
+    by_contra inside
+    obtain ⟨nextSlot, cached, epoched, sum, -, -, rfl⟩ := advanceSlot_ok advanced
+    have same := nextSlot_epoch_of_inside sum (by simpa using inside)
+    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat] at crossing
+    simp only at crossing
+    omega
+  exact hysteresis_of_advanceSlot bands advanced boundary
+
+/-- A slot step ends at most one epoch later. -/
+private theorem epoch_succ_of_slot {m n : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks m = .ok n) :
+    (getCurrentEpoch n.state).toNat ≤ (getCurrentEpoch m.state).toNat + 1 := by
+  have next := (advanceSlotAcross_cases ok).1
+  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, next, Nat.succ_div]
+  split <;> omega
+
+/-- A step that crosses an epoch is a slot step. -/
+private theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
+    advanceSlotAcross config checks m = .ok n := by
+  cases step with
+  | slot ok => exact ok
+  | block engine signed due ok =>
+    exfalso
+    have := processBlock_slot (applySignedBlock_ok ok).2.1
+    simp only [getCurrentEpoch, this] at crossing
+    omega
+
+/-- Events with no penalty or inactivity source debit no key as a penalty. -/
+private theorem penaltyDebit_sum_zero_of_free {events : List (BalanceEvent preset)}
+    (free : PenaltyFree events) (i : ℕ) : (events.map (penaltyDebit i)).sum = 0 := by
+  apply List.sum_eq_zero
+  intro d member
+  obtain ⟨e, mem, rfl⟩ := List.mem_map.mp member
+  have := free e mem
+  simp [penaltyDebit, this.1, this.2]
+
+/-- The debits of a key in a list of events that are no pass penalties: sync and partials. -/
+private def nonPassDebt (i : ValidatorIndex) (events : List (BalanceEvent preset)) : ℕ :=
+  (events.map (floorPenaltyDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum -
+    (events.map (penaltyDebit i.toNat)).sum
+
+/-- A pass penalty is part of the gross penalty debit of the same event. -/
+private theorem penaltyDebit_le_floor (i : ℕ) (events : List (BalanceEvent preset)) :
+    (events.map (penaltyDebit i)).sum ≤ (events.map (floorPenaltyDebit i)).sum :=
+  List.sum_le_sum fun e _ => by unfold floorPenaltyDebit; omega
+
+/-- The floor of a branch from its start: its effective balance stays within the potential.
+
+The potential is the balance plus the debits that are no pass penalties.
+Its closed form loses at most the pass rate for each epoch, and vanishes if that reaches one.
+The rate bounds a pass penalty by a fraction of the effective balance. -/
+private def PotentialFloor {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i : ValidatorIndex) (v : Validator) (events : List (BalanceEvent preset)) : Prop :=
+  ∀ ρn ρd slack : ℕ, .fusaka ≤ x.fork → preset.IncrementWithinUpwardBand →
+    (∀ w, y.state.validators.data[i.toNat]? = some w → w.slashed = false) →
+    effectiveAt x i.toNat ≤ actualBalanceAt x i.toNat + slack →
+    (∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ evs, step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) →
+    effectiveAt y i.toNat ≤
+        actualBalanceAt y i.toNat + nonPassDebt i events + (preset.downwardBand + slack) ∧
+      (ρd - ρn * ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)) *
+          (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat +
+            (preset.downwardBand + slack)) ≤
+        ρd * (actualBalanceAt y i.toNat + nonPassDebt i events + (preset.downwardBand + slack))
+
 /-- The per-key floor trace of a branch, for an activated key or a branch from Fulu. -/
 private theorem FloorTrace.run_of_le_cap_general_or_fulu
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -394,7 +573,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             (pre.snoc step).append post = tail → effectiveAt m i.toNat ≤ bound) →
           last.high ≤ max bound (effectiveAt y i.toNat) ∧
             ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
-        (v.slashed = true → last.slashedHigh = none) := by
+        (v.slashed = true → last.slashedHigh = none) ∧
+        PotentialFloor tail i v events := by
   have assignedStart : v.slashed = true → v.exitEpoch ≠ FAR_FUTURE_EPOCH := fun slashed =>
     run_slashed_exit_assigned shared genesis caps.activation caps.compounding
       (Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early) delay i.toNat v initial
@@ -413,11 +593,16 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       omega
     refine ⟨⟨actualBalanceAt x i.toNat, 0, effectiveAt x i.toNat, none⟩,
       .nil, rfl, by simp, le_rfl, v, initial, capped, by simp, ?_,
-      fun bound atStart _ => ⟨atStart.trans (Nat.le_max_left _ _), nofun⟩, fun _ => rfl⟩
-    intro p member
-    have same : p = x := List.mem_singleton.mp member
-    subst p
-    exact ⟨_, .nil, rfl, le_rfl, by simp⟩
+      fun bound atStart _ => ⟨atStart.trans (Nat.le_max_left _ _), nofun⟩, fun _ => rfl, ?_⟩
+    · intro p member
+      have same : p = x := List.mem_singleton.mp member
+      subst p
+      exact ⟨_, .nil, rfl, le_rfl, by simp⟩
+    · intro ρn ρd slack fulu bands clean start pass
+      simp only [nonPassDebt, List.map_nil, List.sum_nil, Nat.add_zero, Nat.sub_self,
+        Nat.sub_zero, Nat.mul_zero]
+      refine ⟨by omega, Nat.mul_le_mul_left _ ?_⟩
+      omega
   | @snoc m n pre step ih =>
     have middleEpoch := (UInt64.le_iff_toNat_le.mp
       (currentEpoch_le_of_chainSteps (Run.nil.snoc step).chainSteps)).trans endEpoch
@@ -446,7 +631,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       · simp only [Run.append, split]
       · exact found
     obtain ⟨before, trace, balance, debt, effective, u, middle, capped, flagged, earlier,
-      priorHigh, priorNone⟩ := ih middleEarly middleEpoch priorGuards priorOk
+      priorHigh, priorNone, priorPot⟩ := ih middleEarly middleEpoch priorGuards priorOk
     obtain ⟨w, final, _⟩ := (Run.nil.snoc step).registryLifecycle.validators i.toNat u middle
     obtain ⟨retained, window, quotient_le, noCrossing⟩ := guards pre step .nil rfl w final
     obtain ⟨old, located, life⟩ := pre.registryLifecycle.validators i.toNat v initial
@@ -475,7 +660,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         have equal := Option.some.inj (located.symm.trans final)
         subst z
         simp [marked]
-    refine ⟨last, done, atEnd, ?_, highBound, w, final, capBound, used, ?_, ?_, ?_⟩
+    refine ⟨last, done, atEnd, ?_, highBound, w, final, capBound, used, ?_, ?_, ?_, ?_⟩
     · simp only [exactEvents, List.map_append, List.sum_append]
       omega
     · intro p member
@@ -498,6 +683,123 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       have equal := Option.some.inj (located'.symm.trans middle)
       subst z
       exact stepNone marked (priorNone slashed)
+    · intro ρn ρd slack fulu bands clean start pass
+      have wClean := clean w final
+      have uClean : u.slashed = false := by
+        cases hu : u.slashed
+        · rfl
+        · simp [hu, wClean] at persists
+      have passPre : ∀ {a b : ForkedBeaconState preset} (head : Run config checks x a)
+          (edge : Step config checks a b) (rest : Run config checks b m),
+          (head.snoc edge).append rest = pre → ∀ evs, edge.balanceEvents = .ok evs →
+            (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt a i.toNat / ρd := by
+        intro a b head edge rest split evs evsOk
+        exact pass head edge (rest.snoc step) (by simp only [Run.append, split]) evs evsOk
+      obtain ⟨ebPre, closedPre⟩ := priorPot ρn ρd slack fulu bands
+        (fun w' found' => by
+          obtain rfl := Option.some.inj (middle.symm.trans found')
+          exact uClean) start passPre
+      have forkM : .fusaka ≤ m.fork := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
+      have altairM : .altair ≤ m.fork := Nat.le_trans (by decide) forkM
+      have room : i.toNat < m.state.validators.data.size :=
+        Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp initial).1 pre.registryLifecycle.size_le
+      have ebCap : effectiveAt m i.toNat ≤ (withdrawalMaxEffectiveBalance preset m.fork u).toNat :=
+        effectiveAt_le_withdrawalMax (shared.append pre) genesis caps middleEarly middle
+      have capMono : (withdrawalMaxEffectiveBalance preset x.fork v).toNat ≤
+          (withdrawalMaxEffectiveBalance preset m.fork u).toNat := by
+        obtain ⟨z, located', mono⟩ := pre.validatorCap_mono caps.activation caps.compounding
+          middleEarly i.toNat v initial
+        obtain rfl := Option.some.inj (located'.symm.trans middle)
+        exact UInt64.le_iff_toNat_le.mp mono
+      let fresh : FloorAccount := ⟨actualBalanceAt m i.toNat, 0, effectiveAt m i.toNat, none⟩
+      obtain ⟨last2, done2, balance2, debt2, -, -, used2, -, -, -, -⟩ :=
+        FloorTrace.step_general_or_fulu shared pre genesis caps step early delay addedOk i v u w
+          initial middle final assignedStart assigned
+          (by
+            cases flag : v.slashed
+            · exact .inl ⟨rfl, window.1 flag⟩
+            · exact .inr ⟨rfl, window.2 flag⟩)
+          high endEpoch retained (noCrossing added addedOk)
+          (low := min (actualBalanceAt m i.toNat)
+            (withdrawalMaxEffectiveBalance preset m.fork u).toNat)
+          (base := base) (quotient := quotient) (a := fresh) (b := fresh) .nil rfl
+          (by simp [fresh]) (max_le (Nat.min_le_right _ _) ebCap) le_rfl positive quotient_le
+      have none2 : last2.slashedHigh = none := by
+        cases h : last2.slashedHigh with
+        | none => rfl
+        | some _ => simp [h, wClean] at used2
+      have floor2 := FloorTrace.unslashed_balance_floor done2 (by simp [fresh]) none2
+      have stepFloor : min (actualBalanceAt m i.toNat)
+            (withdrawalMaxEffectiveBalance preset m.fork u).toNat ≤
+          actualBalanceAt n i.toNat + ((added.map (floorPenaltyDebit i.toNat)).sum +
+            (added.map (floorPartialDebit i)).sum) := by
+        have h := floor2
+        rw [balance2, debt2] at h
+        simp only [fresh] at h
+        omega
+      have penLe := penaltyDebit_le_floor i.toNat added
+      have penLePrior := penaltyDebit_le_floor i.toNat prior
+      have debtN : nonPassDebt i events = nonPassDebt i prior +
+          ((added.map (floorPenaltyDebit i.toNat)).sum +
+            (added.map (floorPartialDebit i)).sum - (added.map (penaltyDebit i.toNat)).sum) := by
+        simp only [nonPassDebt, exactEvents, List.map_append, List.sum_append]
+        omega
+      have xm := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+      by_cases sameEpoch : (getCurrentEpoch n.state).toNat ≤ (getCurrentEpoch m.state).toNat
+      · have eq : getCurrentEpoch n.state = getCurrentEpoch m.state :=
+          UInt64.le_antisymm (UInt64.le_iff_toNat_le.mpr sameEpoch)
+            (currentEpoch_le_of_chainSteps (Run.nil.snoc step).chainSteps)
+        have replay1 : (Run.nil.snoc step).balanceEvents high = .ok added := by
+          simp [Run.balanceEvents, middleEpoch, addedOk, bind, Except.bind, pure, Except.pure]
+        obtain ⟨effKept, free, -, -⟩ :=
+          epoch_sync_data (Run.nil.snoc step) altairM early eq high replay1
+        have ebEq : effectiveAt n i.toNat = effectiveAt m i.toNat := effKept i.toNat room
+        have penZero := penaltyDebit_sum_zero_of_free free i.toNat
+        have epochEq := congrArg UInt64.toNat eq
+        obtain ⟨stayEB, stayClosed⟩ := potential_stay ρn ρd
+          ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
+          (preset.downwardBand + slack)
+          (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
+          (withdrawalMaxEffectiveBalance preset m.fork u).toNat (effectiveAt m i.toNat)
+          (actualBalanceAt m i.toNat + nonPassDebt i prior)
+          (actualBalanceAt n i.toNat + nonPassDebt i events)
+          (Nat.le_trans (Nat.min_le_right _ _) capMono) ebCap ebPre closedPre (by omega)
+        refine ⟨by rw [ebEq]; omega, ?_⟩
+        rw [epochEq]
+        exact stayClosed
+      · have crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat := by
+          omega
+        have ok := slot_of_crossing step crossing
+        have succ := epoch_succ_of_slot ok
+        have hyst := hysteresis_of_crossing_slot ok bands forkM early crossing
+        have matched : n.state.balances.data.size = n.state.validators.data.size :=
+          reachable_balancesMatch (shared.append (pre.snoc step)) genesis
+        have insideN : i.toNat < n.state.validators.data.size :=
+          (Array.getElem?_eq_some_iff.mp final).1
+        have readN : n.state.balances.data[i.toNat]? = some n.state.balances.data[i.toNat] :=
+          Array.getElem?_eq_getElem (by rw [matched]; exact insideN)
+        have ebN : effectiveAt n i.toNat ≤ actualBalanceAt n i.toNat + preset.downwardBand := by
+          have := hyst.down i.toNat w _ final readN
+          simpa [effectiveAt, actualBalanceAt, final, readN] using this
+        have rate : ρd * (added.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat := by
+          have p := pass pre step .nil rfl added addedOk
+          by_cases zero : ρd = 0
+          · simp [zero]
+          · exact le_trans (Nat.mul_le_mul_left _ p) (Nat.mul_div_le _ _)
+        have crossClosed := potential_cross ρn ρd
+          ((getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat)
+          (preset.downwardBand + slack)
+          (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
+          (withdrawalMaxEffectiveBalance preset m.fork u).toNat (effectiveAt m i.toNat)
+          (actualBalanceAt m i.toNat + nonPassDebt i prior)
+          (actualBalanceAt n i.toNat + nonPassDebt i events)
+          ((added.map (penaltyDebit i.toNat)).sum)
+          (Nat.le_trans (Nat.min_le_right _ _) capMono) ebCap ebPre closedPre (by omega) rate
+        refine ⟨by omega, ?_⟩
+        have steps : (getCurrentEpoch n.state).toNat - (getCurrentEpoch x.state).toNat =
+            (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat + 1 := by omega
+        rw [steps]
+        exact crossClosed
 
 /-- The per-key accounting trace of a branch, from a floor.
 
@@ -556,9 +858,11 @@ theorem FloorTrace.run_of_le_cap_general
             (pre.snoc step).append post = tail → effectiveAt m i.toNat ≤ bound) →
           last.high ≤ max bound (effectiveAt y i.toNat) ∧
             ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
-        (v.slashed = true → last.slashedHigh = none) :=
-  FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
-    initial (Or.inl activated) low base quotient low_le positive guards replayed
+        (v.slashed = true → last.slashedHigh = none) := by
+  obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, marks, none, -⟩ :=
+    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+      initial (Or.inl activated) low base quotient low_le positive guards replayed
+  exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path, marks, none⟩
 
 /-- The per-key floor trace of a branch from a floor, for an activated key or a branch from Fulu. -/
 theorem FloorTrace.run_of_le_cap_or_fulu
@@ -604,6 +908,62 @@ theorem FloorTrace.run_of_le_cap_or_fulu
         exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
           noCrossing⟩) replayed
   exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path⟩
+
+/-- From Fusaka, a key that ends the branch unslashed keeps its balance above a closed form.
+
+The closed form loses at most the pass rate of the effective balance for each epoch the branch ends.
+It is vacuous exactly where that loss reaches the whole floor, which the truncated difference
+`ρd - ρn * k` shows as zero. -/
+theorem FloorTrace.run_potential_floor
+    (shared : Run config checks g x) (tail : Run config checks x y)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
+    (bands : preset.IncrementWithinUpwardBand) (high : Nat)
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (i : ValidatorIndex) (v : Validator)
+    (initial : x.state.validators.data[i.toNat]? = some v)
+    (clean : ∀ w, y.state.validators.data[i.toNat]? = some w → w.slashed = false)
+    (quotient : Nat) (positive : 0 < quotient)
+    (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      high + 1 < w.exitEpoch.toNat ∧
+      (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+          (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+      quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+      ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (slack ρn ρd : Nat) (start : effectiveAt x i.toNat ≤ actualBalanceAt x i.toNat + slack)
+    (pass : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      (pre.snoc step).append post = tail → ∀ evs, step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) :
+    ∃ D, D + (events.map (penaltyDebit i.toNat)).sum =
+          (events.map (floorPenaltyDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum ∧
+      (ρd - ρn * ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)) *
+          (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat +
+            (preset.downwardBand + slack)) ≤
+        ρd * (actualBalanceAt y i.toNat + D + (preset.downwardBand + slack)) := by
+  have unslashed : v.slashed = false := by
+    cases flag : v.slashed
+    · rfl
+    · obtain ⟨z, found, marked⟩ := tail.slashedPersistence i.toNat v initial flag
+      have := clean z found
+      simp [marked] at this
+  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, potential⟩ :=
+    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+      initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
+      (fun pre step post split w found => by
+        obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
+        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
+          noCrossing⟩) replayed
+  obtain ⟨-, closed⟩ := potential ρn ρd slack fulu bands clean start pass
+  refine ⟨nonPassDebt i events, ?_, closed⟩
+  have := penaltyDebit_le_floor i.toNat events
+  unfold nonPassDebt
+  omega
 
 /-- The per-key accounting trace of a branch, from a floor.
 
