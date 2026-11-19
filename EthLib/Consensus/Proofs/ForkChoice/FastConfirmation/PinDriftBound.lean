@@ -1174,6 +1174,76 @@ private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v hig
     · omega
     · exact ih
 
+/-- The credits of a set of keys over a run, read as a scan, fit one bound for each replayed event.
+
+A block step counts the events of `blockP`.
+
+A slot step counts the events of `slotP`.
+
+So an event of the run is counted at most once. -/
+private theorem creditScan_sum_le (S : Finset ValidatorIndex) (blockP slotP : BalanceSource → Bool)
+    (high : ℕ) (T : BalanceEvent preset → ℕ) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events)
+    (each : ∀ e ∈ events, (blockP e.source = true ∨ slotP e.source = true) →
+      ∑ v ∈ S, keyCredit v.toNat e ≤ T e) :
+    ∑ v ∈ S, (creditScan blockP slotP v.toNat high tail).1 ≤
+      (events.map fun e =>
+        if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum := by
+  induction tail generalizing events with
+  | nil =>
+    simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
+    subst replayed
+    exact Nat.le_zero.mpr (Finset.sum_eq_zero fun v _ => rfl)
+  | @snoc middle last pre step ih =>
+    simp only [Run.balanceEvents, bind_ok_iff] at replayed
+    obtain ⟨prior, priorOk, rest⟩ := replayed
+    by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
+    · simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
+      obtain ⟨added, addedOk, rfl⟩ := rest
+      have previous := ih priorOk fun e member => each e (List.mem_append_left _ member)
+      have swap (L : List (BalanceEvent preset)) : ∑ v ∈ S, (L.map (keyCredit v.toNat)).sum =
+          (L.map fun e => ∑ v ∈ S, keyCredit v.toNat e).sum := by
+        simpa using (Multiset.sum_map_sum (m := (L : Multiset (BalanceEvent preset)))
+          (s := S) (f := fun e v => keyCredit v.toNat e)).symm
+      have part (p : BalanceSource → Bool)
+          (sub : ∀ s, p s = true → blockP s = true ∨ slotP s = true) :
+          ∑ v ∈ S, ((added.filter fun x => p x.source).map (keyCredit v.toNat)).sum ≤
+            (added.map fun e =>
+              if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum := by
+        rw [swap]
+        calc ((added.filter fun x => p x.source).map fun e => ∑ v ∈ S, keyCredit v.toNat e).sum
+            ≤ ((added.filter fun x => p x.source).map T).sum := List.sum_le_sum fun e member =>
+              each e (List.mem_append_right _ (List.mem_filter.mp member).1)
+                (sub _ (by simpa using (List.mem_filter.mp member).2))
+          _ = (added.map fun e => if p e.source = true then T e else 0).sum := by
+              rw [List.sum_map_ite (fun e : BalanceEvent preset => p e.source = true) T
+                (fun _ => 0)]
+              simp
+          _ ≤ _ := List.sum_le_sum fun e _ => by
+              by_cases hp : p e.source = true
+              · have := sub _ hp
+                simp [hp, this]
+              · simp [hp]
+      have step_le : ∑ v ∈ S, stepCredit blockP slotP v.toNat step ≤
+          (added.map fun e =>
+            if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum := by
+        cases step with
+        | slot ok =>
+          simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
+          exact part slotP fun _ h => Or.inr h
+        | block engine signed due ok =>
+          simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
+          exact part blockP fun _ h => Or.inl h
+      simp only [creditScan_snoc_fst, selected, ↓reduceIte, Finset.sum_add_distrib,
+        List.map_append, List.sum_append]
+      omega
+    · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
+      obtain rfl := rest
+      have previous := ih priorOk each
+      simp only [creditScan_snoc_fst, selected, ↓reduceIte]
+      exact previous
+
 /-- The net rise of a key in one step.
 
 A block step counts the rise of the key's balance across it, and a slot step counts nothing. -/
