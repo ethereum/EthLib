@@ -5525,6 +5525,36 @@ private theorem gainOn_round (depth P C : ℕ)
 
 
 open DirectSafety.Apriori.Internal in
+/-- The amounts of the queued partial withdrawals of a key that are due by a cutoff.
+
+It is spelled as `pinTerms` spells `partialsX` and `partialsR`. -/
+private def dueAmount (state : BeaconState preset fork) (electra : .pectra ≤ fork) (i : ℕ)
+    (cutoff : ℕ) : ℕ :=
+  (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
+    w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ cutoff).map (·.amount.toNat)).sum
+
+/-- The bound `ebUp` on a key's effective balance is its largest balance or its rounded top.
+
+The top adds the leak at the cap, the net partials and a band to the balance at R.
+
+It reads the partials through `dueAmount`. -/
+private theorem ebUp_eq (config : Config) (pulled anc fin : BeaconState preset fork)
+    (electra : .pectra ≤ fork) (i t : ℕ)
+    (ht : t = actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        (pinTerms config pulled anc fin).leakAt
+          (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) i +
+      (dueAmount fin electra i ((getCurrentEpoch pulled).toNat + 1) -
+        dueAmount pulled electra i ((getCurrentEpoch pulled).toNat + 1)) +
+      preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) :
+    (pinTerms config pulled anc fin).ebUp i =
+      max (max (balanceAt pulled i) (balanceAt fin i))
+        (min (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i)
+          (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
+  subst ht
+  simp only [pinTerms, dueAmount, electra, ↓reduceDIte]
+  rfl
+
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
 
 The key is in the low regime, so its effective balance bound `ebUp` closes the ceiling.
@@ -5543,48 +5573,93 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
         (getTotalActiveBalance pulled).toOption.getD 0 / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
-    (i : ℕ) (inside : i < split.validators.data.size) (capI Dp Ds DsF W pd : ℕ)
-    (hcap : capI = ((pulled.validators.data[i]?).map fun v =>
-      (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0)
-    (alignedCap : capI % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤ capI)
-    (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z i ≤ capI)
-    (startEff : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤
-      (pinTerms config pulled anc fin).ebUp i + DsF)
-    (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) i) capI ≤
-      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
+    (v : ValidatorIndex) (inside : v.toNat < split.validators.data.size)
+    {events eventsF : List (BalanceEvent preset)} (W : ℕ)
+    (alignedCap : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z v.toNat ≤
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (startEff : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat + (eventsF.map (syncDebit v.toNat)).sum)
+    (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat)
+        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
+        (events.map (syncDebit v.toNat)).sum + W)
     (hW : W ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-    (debits : Dp ≤ ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-      (pinTerms config pulled anc fin).leakAt capI i + pd)
-    (top : min capI (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
+    (debits : (events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum ≤
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-        (pinTerms config pulled anc fin).leakAt capI i + pd + preset.downwardBand) ≤
-      (pinTerms config pulled anc fin).ebUp i)
+          (pinTerms config pulled anc fin).leakAt
+            (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat +
+        (dueAmount fin (Nat.le_trans (by decide) h.fulu) v.toNat
+            ((getCurrentEpoch pulled).toNat + 1) -
+          dueAmount pulled (Nat.le_trans (by decide) h.fulu) v.toNat
+            ((getCurrentEpoch pulled).toNat + 1)))
     (small : ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-      ((11 * (pinTerms config pulled anc fin).gainRate i + 9) / 10 + 3) <
+      ((11 * (pinTerms config pulled anc fin).gainRate v.toNat + 9) / 10 + 3) <
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (rateLow : 11 * (pinTerms config pulled anc fin).depth *
-      ((pinTerms config pulled anc fin).gainRate i + 1) ≤ (pinTerms config pulled anc fin).ebUp i) :
-    ∀ z ∈ tailC.balancePath, min (actualBalanceAt z i) capI ≤
-      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W +
-        (netScan i highC tailC +
-          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1) +
+      ((pinTerms config pulled anc fin).gainRate v.toNat + 1) ≤
+        (pinTerms config pulled anc fin).ebUp v.toNat) :
+    ∀ z ∈ tailC.balancePath, min (actualBalanceAt z v.toNat)
+        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
+        (events.map (syncDebit v.toNat)).sum + W +
+        (netScan v.toNat highC tailC +
+          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1) +
         (gainOn preset (min (pinTerms config pulled anc fin).depth
             ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) P
-          ((11 * (netScan i highC tailC +
-            (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 + Ds +
-              DsF) + 9) / 10) +
+          ((11 * (netScan v.toNat highC tailC +
+            (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 +
+              (events.map (syncDebit v.toNat)).sum + (eventsF.map (syncDebit v.toNat)).sum) +
+                9) / 10) +
           (min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-            (pinTerms config pulled anc fin).gainRate i +
+            (pinTerms config pulled anc fin).gainRate v.toNat +
           min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
             (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
               WEIGHT_DENOMINATOR.toNat + 2))) := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have incPos := h.bands.1
+  have top : min (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+      (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          (pinTerms config pulled anc fin).leakAt
+            (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) v.toNat +
+        (dueAmount fin electra v.toNat ((getCurrentEpoch pulled).toNat + 1) -
+          dueAmount pulled electra v.toNat ((getCurrentEpoch pulled).toNat + 1)) +
+        preset.downwardBand) ≤ (pinTerms config pulled anc fin).ebUp v.toNat := by
+    have key : ∀ T : ℕ, T ≤ (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) -
+        (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat := fun T => by
+      have := Nat.mod_lt (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) incPos
+      omega
+    rw [ebUp_eq config pulled anc fin electra v.toNat _ rfl]
+    exact le_trans (min_le_min le_rfl (key _)) (le_max_right _ _)
+  obtain ⟨i, hi⟩ : ∃ i, i = v.toNat := ⟨_, rfl⟩
+  rw [← hi] at inside alignedCap startCap capCeil startEff floorR debits small rateLow top ⊢
+  obtain ⟨capI, hcap0⟩ : ∃ capI, capI =
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i := ⟨_, rfl⟩
+  rw [← hcap0] at alignedCap startCap capCeil floorR debits top ⊢
+  obtain ⟨pd, hpd⟩ : ∃ pd, pd = dueAmount fin electra i ((getCurrentEpoch pulled).toNat + 1) -
+      dueAmount pulled electra i ((getCurrentEpoch pulled).toNat + 1) := ⟨_, rfl⟩
+  rw [← hpd] at debits top
+  obtain ⟨Dp, hDp⟩ : ∃ Dp, Dp =
+      (events.map (penaltyDebit i)).sum + (events.map (floorPartialDebit v)).sum := ⟨_, rfl⟩
+  obtain ⟨Ds, hDs⟩ : ∃ Ds, Ds = (events.map (syncDebit i)).sum := ⟨_, rfl⟩
+  obtain ⟨DsF, hDsF⟩ : ∃ DsF, DsF = (eventsF.map (syncDebit i)).sum := ⟨_, rfl⟩
+  rw [← hDp] at floorR debits ⊢
+  rw [← hDs] at floorR ⊢
+  rw [← hDsF] at startEff ⊢
+  have hcap : capI = ((pulled.validators.data[i]?).map fun v =>
+      (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0 := hcap0
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
-  have incPos := h.bands.1
   have near := h.near
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
   have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
