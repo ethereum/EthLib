@@ -93,6 +93,8 @@ Not yet released.
   `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
   `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
   `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+  `runScore_le_start` bounds the inactivity score of a key along a run by its start score plus a bias for each epoch.
+  The pin's bound on the penalty of one rewards pass at a state reads it.
 
 - Some earlier private declarations are now public, with unchanged statements.
   They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.

@@ -591,6 +591,31 @@ theorem runScores_le {x y : ForkedBeaconState preset} (tail : Run config checks 
   scoresBelowAt_run_all (start := fun _ => startInactivityScore config x) tail altair early era
     (scoresBelowAt_start x altair (i + 1)) later i (Nat.lt_succ_self i) score found
 
+/-- On a branch from `x` from Altair, a key's score is at most its start score plus a bias per epoch.
+
+The start score is the key's own at `x`, or zero for a key that the branch adds.
+
+`runScores_le` bounds every key by the largest start score instead. -/
+theorem runScore_le_start {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
+    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) (later : .altair ≤ y.fork) {i : Nat}
+    {score : UInt64} (found : (y.state.inactivityScores later).data[i]? = some score) :
+    score.toNat ≤ (((x.state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 +
+      config.INACTIVITY_SCORE_BIAS.toNat *
+        ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) := by
+  let start : Nat → Nat := fun j => if j = i then
+    (((x.state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0
+    else startInactivityScore config x
+  have initial : ScoresBelowAt (i + 1) start x := by
+    intro altair' j below score' read
+    by_cases same : j = i
+    · subst same
+      simp [start, read]
+    · simpa [start, same] using scoresBelowAt_start x altair' (i + 1) altair' j below score' read
+  have bound := scoresBelowAt_run_all tail altair early era initial later i (Nat.lt_succ_self i)
+    score found
+  simpa [start] using bound
+
 /-- After the update of pass `s`, each inactivity score of the registry at `x` is small.
 
 The pass ends epoch `s` of a branch from `x` from Altair, in the slot step from its last state `z`.
