@@ -4194,9 +4194,10 @@ private theorem round_add_le {inc x S U : ℕ} (incPos : 0 < inc)
     omega
 
 /-- The effective balance of a key that stays on its path is at most the rise of the main regime. -/
-private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Nat}
+private theorem rise_arith {inc band capFor high finEB start eR eC Bc capHigh S U : Nat}
     (incPos : 0 < inc)
-    (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max finEB (min (Bc - Bc % inc) capHigh)))
+    (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max start (min (Bc - Bc % inc) capHigh)))
+    (startLe : start ≤ max finEB ((high + S) - (high + S) % inc))
     (aligned : eC % inc = 0) (capped : eC ≤ capFor + S + U) (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
@@ -4210,8 +4211,6 @@ private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Na
     have first := alignedLe _ (show eC ≤ high + band + S by omega)
     have second : eC ≤ max finEB (high - high % inc) + S + U := by
       have r := rounded_mono inc ceiling
-      have a : eC ≤ max finEB (Bc - Bc % inc) := by
-        omega
       have b := round_add_le (x := high) incPos slack
       omega
     have third : eC ≤ high + band - (high + band) % inc + S + U := by
@@ -4749,6 +4748,7 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
   rise_arith incPos
     (key_stay rC rR early fulu later i inside Bc capHigh Bp capP alignedC startC alignedR startR
       balanceC capC balanceR capR)
+    (Nat.le_max_left _ _)
     (DirectSafety.Apriori.Internal.FloorTrace.effective_aligned (shared.append rC) genesis
       maxAligned i)
     capped ceiling (Or.imp_right Or.inl slack)
@@ -7302,7 +7302,8 @@ private theorem rise_close (config : Config) (pulled anc fin : BeaconState prese
     (kept : (pinTerms config pulled anc fin).keptArm i = true)
     {eC Bc S U start capHigh : ℕ}
     (alignedC : eC % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startLe : start ≤ max (balanceAt fin i) (H - H % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    (startLe : start ≤ max (balanceAt fin i)
+      ((H + S) - (H + S) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (stay : eC = balanceAt pulled i ∨ (eC ≤ Bc + preset.downwardBand ∧
       eC ≤ max start (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (capped : eC ≤ capForOf (pinTerms config pulled anc fin) pulled i + S + U)
@@ -7315,8 +7316,8 @@ private theorem rise_close (config : Config) (pulled anc fin : BeaconState prese
   have arith := rise_arith (finEB := max (balanceAt fin i)
       (H - H % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (capFor := capForOf (pinTerms config pulled anc fin) pulled i) incPos
-    (Or.imp_right (fun ⟨near, below⟩ => ⟨near, Nat.le_trans below (max_le_max startLe
-      (Nat.le_refl _))⟩) stay) alignedC capped ceiling slack
+    stay (Nat.le_trans startLe (max_le_max (Nat.le_max_left _ _) (Nat.le_refl _))) alignedC
+    capped ceiling slack
   rwa [max_assoc, max_self] at arith
 
 /-- The bound `ebUp` on a key's effective balance is its largest balance or its rounded top.
