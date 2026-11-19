@@ -354,7 +354,8 @@ Not yet released.
   A caller drops the first explicit argument.
 
 - In Lean, `Store.isAncestor_of_getCheckpointBlock` holds at every fork and no longer takes `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-  From Gloas the walk reaches the checkpoint's block with any payload status, and a pending ancestor accepts each.
+  From Gloas the walk reaches the checkpoint's block with some payload status.
+  The ancestor test against a pending node accepts every status.
   A caller drops the first explicit argument.
 
 - In Lean, `HonestHeadsExist` no longer takes the store's filtered tree: every up-to-date honest store in the interval has a head ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
