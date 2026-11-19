@@ -301,7 +301,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
   -- The exit carry is at most one epoch's exit churn, which `depositChurn` caps.
   let exitCarry := max capMax depositChurn
-  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
+  -- The finalized block's state can sit at an epoch below the finalized checkpoint's.
+  --
+  -- The depth from it is read as at least the depth from the checkpoint.
+  let depthFin := max depth (epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat)
   -- A deposit postponed at the head of the queue lets the deposits behind it spend the carry.
   --
   -- So the deposits applied from the finalized block's state are at most its carry and the churn.
@@ -699,6 +702,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- A key's whistleblower base is the larger of its envelope and its effective balance plus rise.
   --
+  -- Its credits count at eleven tenths, with one increment for each credited key.
+  --
+  -- Its seat debits on either branch count as a second seat term.
+  --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
   -- There each deposit the window can apply to a new key is charged up to the cap.
@@ -707,9 +714,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
-        depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
-        consolidationsX + depth * proposerCredit +
-        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + creditedKeys * inc) /
+        (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
+          consolidationsX + depth * proposerCredit +
+          2 * (depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)) + 9) / 10 +
+        creditedKeys * inc) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
