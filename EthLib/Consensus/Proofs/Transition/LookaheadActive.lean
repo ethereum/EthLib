@@ -96,7 +96,7 @@ private theorem LookaheadActive.upgradeToFulu {pre : BeaconState preset .pectra}
   have drawn := vector_mapM_ok_getElem mapped (k / preset.SLOTS_PER_EPOCH.toNat) div
   simp only [Vector.getElem_range, bind_ok_iff, liftArith, mapError_ok_iff] at drawn
   obtain ⟨epoch, counted, drawn⟩ := drawn
-  have sum := addChecked_ok_iff.mp counted
+  have sum := Uint64.addChecked_ok_iff.mp counted
   have small : (k / preset.SLOTS_PER_EPOCH.toNat).toUInt64.toNat =
       k / preset.SLOTS_PER_EPOCH.toNat := by
     simp only [Nat.toUInt64, UInt64.toNat_ofNat]
@@ -199,10 +199,6 @@ private theorem LookaheadActive.upgradeNext {pre : ForkedBeaconState preset}
       | (obtain ⟨_, upgraded, rfl⟩ := ok
          first
            | exact LookaheadActive.upgradeToFulu upgraded
-           | exact fun fulu => absurd fulu (by dsimp only; decide)
-           | exact absurd early (by dsimp only; decide))
-      | (subst ok
-         first
            | exact fun fulu => absurd fulu (by dsimp only; decide)
            | exact absurd early (by dsimp only; decide))
 
