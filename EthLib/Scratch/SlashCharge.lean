@@ -160,6 +160,37 @@ private theorem created_charge (h : Setting config checks g split fin pulled anc
           marked).trans (Nat.le_add_right _ _)
     · exact earlier step member i old foundA unset
 
+/-- A charge of a run that meets a test, and is the only one that meets it, is the first that does. -/
+private theorem find_charge {l : List DepartureCharge} {p : DepartureCharge → Bool}
+    {c : DepartureCharge} (member : c ∈ l) (hp : p c = true)
+    (unique : ∀ d ∈ l, p d = true → d = c) : l.find? p = some c := by
+  obtain ⟨d, chosen⟩ := Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, member, hp⟩)
+  obtain rfl := unique d (List.mem_of_find?_eq_some chosen) (List.find?_some chosen)
+  exact chosen
+
+/-- The keys whose exit is charged within the run's epochs pay at most the window of the queues.
+
+For such a key `chargeAmt` is the `exitQ` of the run. -/
+private theorem charge_amounts_le_queueWindow
+    (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex)
+    (charged : ∀ v ∈ S, ∃ c ∈ tailC.departureCharges,
+      c.index = v.toNat ∧ c.epoch ≤ (getCurrentEpoch counted).toNat) :
+    ∑ v ∈ S, chargeAmt tailC v.toNat ≤ (pinTerms config pulled anc fin).queueWindow := by
+  classical
+  have same : ∀ v ∈ S, chargeAmt tailC v.toNat = exitQ tailC v.toNat := by
+    intro v member
+    obtain ⟨c, inRun, index, epoch⟩ := charged v member
+    have unique : ∀ d ∈ tailC.departureCharges, d.index = v.toNat → d = c := fun d inD same =>
+      charge_unique tailC inD inRun (same.trans index.symm)
+    unfold chargeAmt exitQ
+    rw [find_charge inRun (by simp [index]) (fun d inD hd => unique d inD (by simpa using hd)),
+      find_charge inRun (by simp [index, epoch])
+        (fun d inD hd => unique d inD (by simpa using hd.1))]
+  rw [Finset.sum_congr rfl same]
+  refine (sum_exitQ_le tailC ((getCurrentEpoch counted).toNat - 1 + 1) (by simp only; omega) S).trans ?_
+  exact charges_le_queueWindow h tailC
+
 end Charge
 
 end PinSum
