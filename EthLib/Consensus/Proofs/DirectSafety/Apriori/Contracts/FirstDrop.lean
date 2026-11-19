@@ -1134,7 +1134,9 @@ private theorem FloorTrace.run_potential_core
           quotient_le, noCrossing⟩) replayed
   exact ⟨potential, fun aligned => origin aligned fulu⟩
 
-/-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form. -/
+/-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_potential_floor
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1176,7 +1178,9 @@ theorem FloorTrace.run_potential_floor
   unfold nonPassDebt
   omega
 
-/-- The potential floor of a run whose effective balance starts above its balance, charged once. -/
+/-- The potential floor of a run whose effective balance starts above its balance, charged once.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_potential_floor_once
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1221,7 +1225,9 @@ theorem FloorTrace.run_potential_floor_once
   · refine Nat.le_trans closed (Nat.add_le_add_left ?_ _)
     split <;> simp
 
-/-- From Fusaka, a key's effective balance after a run is its start value or an update's. -/
+/-- From Fusaka, a key's effective balance after a run is its start value or an update's.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_effective_origin
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
