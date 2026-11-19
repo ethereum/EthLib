@@ -8093,8 +8093,8 @@ private theorem exit_kept_of_le_fin (h : Setting config checks g split fin pulle
   · obtain ⟨charge, member, -, epoch⟩ := (fromFin.append toPulled).departure_charge_of_assigned i
       u w foundFin foundPulled unset assigned
     have late : (getCurrentEpoch fin).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ charge.epoch :=
-      (fromFin.append toPulled).departureCharges_epoch_ge_start (Nat.le_trans (by decide) h.fulu)
-        h.early charge member
+      DirectSafety.Run.departureCharges_epoch_ge_start (fromFin.append toPulled)
+        (Nat.le_trans (by decide) h.fulu) h.early charge member
     omega
   · obtain ⟨last, located, kept⟩ :=
       (fromFin.append toPulled).registryLifecycle.validators i u foundFin
