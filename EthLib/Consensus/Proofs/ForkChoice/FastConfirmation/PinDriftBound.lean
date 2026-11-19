@@ -1807,6 +1807,55 @@ private theorem reward_sum_le (S A K Ke P : ℕ)
     _ ≤ Ke * 54 * P := Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ small)
     _ = Ke * P * 54 := by ring
 
+/-- The rewards replay credits no key past the registry.
+
+It records an increase or a decrease at an index that the registry holds, and keeps its sizes. -/
+private theorem replayRewards_absent {f : Fork} {pass : BeaconState preset f}
+    {rewarded : BalanceReplay preset f}
+    (replayed : replayRewards (config := config) (pass, []) = .ok rewarded)
+    (matched : BalancesMatch pass) {v : ℕ} (outside : pass.validators.data.size ≤ v) :
+    (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0 := by
+  have final := replayRewards_induction (config := config)
+    (fun pre : BalanceReplay preset f => BalancesMatch pre.1 ∧
+      pre.1.validators = pass.validators ∧
+        (pre.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0)
+    (fun {pre post index reward} held ok => by
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, after, actionOk, rfl⟩ := ok
+      have increased := liftAccessor_ok.mp actionOk
+      obtain ⟨sizes, balances⟩ := sameSizes_increaseBalance increased
+      have registry := increaseBalance_validators increased
+      obtain ⟨preMatched, preSame, preSum⟩ := held
+      have preSize : pre.1.balances.data.size ≤ v := by
+        unfold BalancesMatch at preMatched
+        rw [preMatched, preSame]
+        exact outside
+      have afterMatched : BalancesMatch after := by
+        unfold BalancesMatch at preMatched ⊢
+        omega
+      refine ⟨afterMatched, registry.trans preSame, ?_⟩
+      simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
+        List.sum_nil, preSum, DirectSafety.Apriori.Internal.rewardCredit, ↓reduceIte,
+        actualBalanceAt, Array.getElem?_eq_none preSize,
+        Array.getElem?_eq_none (show after.balances.data.size ≤ v by omega), Option.map_none,
+        Option.getD_none, Nat.sub_self, Nat.add_zero])
+    (fun {source pre post index penalty} sourceCases held ok => by
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, after, actionOk, rfl⟩ := ok
+      have decreased := liftAccessor_ok.mp actionOk
+      obtain ⟨sizes, balances⟩ := sameSizes_decreaseBalance decreased
+      have registry := decreaseBalance_validators decreased
+      obtain ⟨preMatched, preSame, preSum⟩ := held
+      have afterMatched : BalancesMatch after := by
+        unfold BalancesMatch at preMatched ⊢
+        omega
+      refine ⟨afterMatched, registry.trans preSame, ?_⟩
+      rcases sourceCases with rfl | rfl <;>
+        simp [List.map_append, List.sum_append, preSum,
+          DirectSafety.Apriori.Internal.rewardCredit])
+    ⟨matched, rfl, rfl⟩ replayed
+  exact final.2.2
+
 open DirectSafety.Apriori.Internal in
 /-- One key's rewards credit in a step is at most a rate for each epoch that the step ends.
 
@@ -1814,10 +1863,12 @@ The step is a slot, and it ends an epoch exactly when it runs the epoch's pass.
 
 The key's stake at the start is at most `E`.
 
-`P` bounds the rate read at the active stake, scaled by the previous epoch's share of it. -/
+`P` bounds the rate read at the active stake, scaled by the previous epoch's share of it.
+
+A key past the registry of a state with matched balances gets no reward. -/
 private theorem epochRewards_le {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
-    (v : ℕ) (inside : v < m.state.validators.data.size) (E P : ℕ)
+    (v : ℕ) (known : v < m.state.validators.data.size ∨ BalancesMatch m.state) (E P : ℕ)
     (envelope : effectiveAt m v ≤ E)
     (rate : ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
       getBaseRewardPerIncrement preset total = .ok perIncrement →
@@ -1873,6 +1924,20 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
         pass_kept_of_effective (config := config) (checks := checks)
           (inner := (Run.nil : Run config checks m m)) (effectiveKept_refl m.state) rfl
           cachedOk justified scored
+      -- A key past the registry gets no reward, as the replay keeps the sizes of the balances.
+      by_cases inside : v < m.state.validators.data.size
+      swap
+      · have matched := known.resolve_left inside
+        have passBalances : pass.balances = m.state.balances := by
+          have first := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+          have second := scored.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
+          obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+          exact second.2.1.trans first.2.1
+        rw [replayRewards_absent rewardedOk (by
+          unfold BalancesMatch at matched ⊢
+          rw [passBalances, validatorsEq]
+          exact matched) (by rw [validatorsEq]; omega)]
+        exact Nat.zero_le _
       have within : pass.RegistryWithinLimit := pass.validators.bound mEarly
       have insidePass : v < pass.validators.data.size := by
         rw [validatorsEq]
@@ -2189,7 +2254,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
             (fun p member => capC p (List.mem_append_left _ member))
           rw [Nat.min_comm] at c1
           have envelope : effectiveAt middle i ≤ E := c1.trans closed
-          have rewards := epochRewards_le step altair early i room E P envelope
+          have rewards := epochRewards_le step altair early i (Or.inl room) E P envelope
             (rate middle (List.mem_append_left _ atMiddle))
           have stepBound := step_balance_le step early i
           have mid := ihPre _ atMiddle
