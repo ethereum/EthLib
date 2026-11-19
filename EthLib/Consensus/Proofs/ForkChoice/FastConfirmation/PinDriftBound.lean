@@ -559,7 +559,8 @@ private theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState prese
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[v.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[v.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -615,7 +616,8 @@ private theorem Run.balanceFloor_rates_or_fulu {g x y : ForkedBeaconState preset
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[v.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[v.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -679,7 +681,10 @@ private theorem Run.balanceFloor_rates {g x y : ForkedBeaconState preset}
         ∑ t ∈ Finset.Ico (getCurrentEpoch x.state).toNat (getCurrentEpoch y.state).toNat, pen t +
         (events.map (syncDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum :=
   Run.balanceFloor_rates_or_fulu shared tail genesis caps delay early altair high endEpoch v val
-    initial unslashed (Or.inl activated) quotient positive guards stays pen rate replayed
+    initial unslashed (Or.inl activated) quotient positive
+    (fun pre step post split w found => by
+      obtain ⟨retained, rest⟩ := guards pre step post split w found
+      exact ⟨Or.inl retained, rest⟩) stays pen rate replayed
 
 /-- The balance of a key that stays unslashed falls over a branch only by its debits.
 
@@ -911,18 +916,20 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   rewardScale : 2 ^ 35 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) An increment is at least `10 ^ 8` gwei, which rules out a small increment. -/
   incrementSize : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) A sync committee period has at least one epoch. -/
+  syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 

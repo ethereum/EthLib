@@ -116,6 +116,9 @@ structure PinTerms (preset : Preset) where
   ebUp : ℕ → ℕ
   leak : ℕ → ℕ
   partialsDue : ℕ → ℕ
+  base0 : ℕ → ℕ
+  gainRate : ℕ → ℕ
+  floorC : ℕ → ℕ
   drop : ℕ → ℕ
 
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
@@ -252,13 +255,12 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
   let base0 (i : ℕ) := min (actualFin i) (capFin i)
   let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
-  let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
-        partialsDue i)
-      let floorC := if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
-        else min (finEB i) (low - low % inc)
-      effective i - floorC
-    else effective i
+  let floorC (i : ℕ) :=
+    let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
+      partialsDue i)
+    if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
+      else min (finEB i) (low - low % inc)
+  let fall (i : ℕ) := if depthFin ≤ partialDelay then effective i - floorC i else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
   let capFor (i : ℕ) :=
@@ -541,7 +543,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     lowB := fun i => decide ((validator i).any (fun v =>
       decide (finalized < v.withdrawableEpoch.toNat) &&
         decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
-    lowEB, newKeySeats, newKeySlack, newKeyFloor, leakAt, ebUp, leak, partialsDue, drop }
+    lowEB, newKeySeats, newKeySlack, newKeyFloor, leakAt, ebUp, leak, partialsDue, base0, gainRate,
+    floorC, drop }
 /-- The copy is faithful: the named terms sum to `pinReserve`. -/
 theorem pinReserve_eq_total (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     pinReserve config state ancestor finalizedState =
@@ -585,6 +588,14 @@ theorem queueKeys_unfold (config : Config)
           (pinTerms config state ancestor finalizedState).exitFloor + 2 +
         (pinTerms config state ancestor finalizedState).lowKeys +
         (pinTerms config state ancestor finalizedState).newKeySeats := rfl
+
+/-- A key's fall is its effective balance less `floorC` within the delay, and all of it beyond. -/
+theorem fall_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config state ancestor finalizedState).fall i =
+      if (getCurrentEpoch state).toNat + 2 - (getCurrentEpoch finalizedState).toNat ≤
+          config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat then
+        balanceAt state i - (pinTerms config state ancestor finalizedState).floorC i
+      else balanceAt state i := rfl
 
 /-- `lowEB` takes the drops from the least of its starting balances, capped at activation. -/
 theorem lowEB_unfold (config : Config) (state ancestor finalizedState : BeaconState preset fork)
@@ -1878,7 +1889,8 @@ private theorem key_floorR_from (h : Setting config checks g split fin pulled an
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pulled⟩),
       (before.snoc step).append after = rest → ∀ w,
-      n.state.validators.data[i.toNat]? = some w → high + 1 < w.exitEpoch.toNat) :
+      n.state.validators.data[i.toNat]? = some w → high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
     min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
       actualBalanceAt ⟨fork, pulled⟩ i.toNat +
@@ -1911,7 +1923,8 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
     (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
       (step : Step config checks m n) (post : Run config checks n ⟨fork, pulled⟩),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat) :
+      high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
     min (actualBalanceAt ⟨fork, split⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
       actualBalanceAt ⟨fork, pulled⟩ i.toNat +

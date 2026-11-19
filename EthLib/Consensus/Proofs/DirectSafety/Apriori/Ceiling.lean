@@ -1643,7 +1643,9 @@ private theorem withdrawal_site_floor {x y : ForkedBeaconState preset}
     (initial : x.state.validators.data[i.toNat]? = some v)
     (final : y.state.validators.data[i.toNat]? = some w)
     (high : Nat) (epoch : (getCurrentEpoch event.before.state).toNat ≤ high + 1)
-    (retained : high + 1 < w.exitEpoch.toNat) :
+    (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < v.withdrawableEpoch.toNat ∧
+        0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)) :
     ∃ u, event.before.state.validators.data[i.toNat]? = some u ∧
       withdrawalMaxEffectiveBalance preset event.before.fork u =
         withdrawalMaxEffectiveBalance preset x.fork v ∧
@@ -1653,22 +1655,27 @@ private theorem withdrawal_site_floor {x y : ForkedBeaconState preset}
   obtain ⟨_, withdrawals, _, _, _, _, _, ordered, beforeLife, during, suffix, _⟩ :=
     step.balanceEvents_sites early holds caps.compounding replayed event member
   obtain ⟨u, found, _⟩ := beforeLife.validators i.toNat v initial
-  obtain ⟨last, lastFound, kept⟩ := (during.trans suffix).validators i.toNat u found
-  have same : last = w := Option.some.inj (lastFound.symm.trans final)
-  subst last
-  have exitBound := floor_exit_le kept
-  have waiting : getCurrentEpoch event.before.state < u.withdrawableEpoch := by
-    have order := UInt64.le_iff_toNat_le.mp (ordered u (Array.mem_of_getElem? found))
-    exact UInt64.lt_iff_toNat_lt.mpr (by omega)
-  have cap : withdrawalMaxEffectiveBalance preset event.before.fork u =
-      withdrawalMaxEffectiveBalance preset x.fork v := by
+  have startSame : u = v := by
     obtain ⟨block, s, before, header, _⟩ := withdrawals source
-    rw [before] at found ⊢
+    rw [before] at found
     obtain ⟨_, _, same⟩ := processBlockHeader_eq header
     rw [same] at found
-    have equal : u = v := Option.some.inj (found.symm.trans initial)
-    subst u
-    rfl
+    exact Option.some.inj (found.symm.trans initial)
+  have waiting : getCurrentEpoch event.before.state < u.withdrawableEpoch := by
+    apply UInt64.lt_iff_toNat_lt.mpr
+    rcases retained with old | ⟨start, _⟩
+    · obtain ⟨last, lastFound, kept⟩ := (during.trans suffix).validators i.toNat u found
+      have same : last = w := Option.some.inj (lastFound.symm.trans final)
+      subst last
+      have exitBound := floor_exit_le kept
+      have order := UInt64.le_iff_toNat_le.mp (ordered u (Array.mem_of_getElem? found))
+      omega
+    · rw [startSame]
+      omega
+  have cap : withdrawalMaxEffectiveBalance preset event.before.fork u =
+      withdrawalMaxEffectiveBalance preset x.fork v := by
+    obtain ⟨block, s, before, _⟩ := withdrawals source
+    simp only [startSame, before]
   refine ⟨u, found, cap, ?_⟩
   obtain ⟨block, s, before, header, unchanged | ⟨capella, expected, computed, paid⟩⟩ :=
     withdrawals source
@@ -1697,7 +1704,8 @@ private theorem FloorTrace.withdrawal_site {x y : ForkedBeaconState preset}
     (initial : x.state.validators.data[i.toNat]? = some v)
     (final : y.state.validators.data[i.toNat]? = some w)
     (high : Nat) (epoch : (getCurrentEpoch event.before.state).toNat ≤ high + 1)
-    (retained : high + 1 < w.exitEpoch.toNat)
+    (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < v.withdrawableEpoch.toNat ∧ 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat))
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt event.before i.toNat)
     (capped : max low b.high ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat) :
@@ -1724,7 +1732,8 @@ private theorem FloorTrace.event {x y : ForkedBeaconState preset}
     (high : Nat) (epoch : (getCurrentEpoch e.before.state).toNat ≤ high + 1)
     (pendingEpoch : e.source = .consolidations →
       (getCurrentEpoch e.before.state).toNat ≤ high)
-    (retained : high + 1 < w.exitEpoch.toNat)
+    (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < v.withdrawableEpoch.toNat ∧ 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat))
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt e.before i.toNat)
     (capped : max low b.high ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat) :
@@ -1759,17 +1768,26 @@ private theorem FloorTrace.event {x y : ForkedBeaconState preset}
   | consolidations =>
     obtain ⟨_, _, _, _, consolidation, _, _, ordered, beforeLife, during, suffix, _⟩ := sites
     obtain ⟨u, found, _⟩ := beforeLife.validators i.toNat v initial
-    obtain ⟨z, located, kept⟩ := (during.trans suffix).validators i.toNat u found
-    have same : z = w := Option.some.inj (located.symm.trans final)
-    subst z
-    have exitBound := floor_exit_le kept
     have waiting : getCurrentEpoch e.before.state + 1 < u.withdrawableEpoch := by
       have atEpoch := pendingEpoch source
-      have order := UInt64.le_iff_toNat_le.mp (ordered u (Array.mem_of_getElem? found))
       apply UInt64.lt_iff_toNat_lt.mpr
       rw [UInt64.toNat_add]
       simp only [UInt64.reduceToNat]
-      exact (Nat.mod_le _ _).trans_lt (by omega)
+      refine (Nat.mod_le _ _).trans_lt ?_
+      rcases retained with old | ⟨start, delay⟩
+      · obtain ⟨z, located, kept⟩ := (during.trans suffix).validators i.toNat u found
+        have same : z = w := Option.some.inj (located.symm.trans final)
+        subst z
+        have exitBound := floor_exit_le kept
+        have order := UInt64.le_iff_toNat_le.mp (ordered u (Array.mem_of_getElem? found))
+        omega
+      · obtain ⟨z, read, arm⟩ := step.consolidation_withdrawable early holds delay replayed member
+          source i.toNat v initial
+        obtain rfl : z = u := Option.some.inj (read.symm.trans found)
+        rcases arm with same | late
+        · rw [same]
+          omega
+        · omega
     simpa [floorPenaltyDebit, penaltyDebit, floorPartialDebit, source] using
       rise (consolidation source i.toNat u found (.inr waiting))
 
@@ -1786,7 +1804,8 @@ private theorem FloorTrace.step_events_general {x y : ForkedBeaconState preset}
     (high : Nat) (epochs : ∀ e ∈ events, (getCurrentEpoch e.before.state).toNat ≤ high + 1)
     (pendingEpochs : ∀ e ∈ events, e.source = .consolidations →
       (getCurrentEpoch e.before.state).toNat ≤ high)
-    (retained : high + 1 < w.exitEpoch.toNat)
+    (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < v.withdrawableEpoch.toNat ∧ 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat))
     (noCrossing : ∀ e ∈ events, e.source ≠ .crossing)
     {part : List (BalanceEvent preset)} (sublist : part.Sublist events)
     (linked : part.IsChain (fun e e' =>
@@ -1862,7 +1881,7 @@ theorem FloorTrace.step_events {x y : ForkedBeaconState preset}
         (if b.slashedHigh.isSome then 1 else 0) + part.countP (floorSlash i.toNat) := by
   obtain ⟨last, done, nil, finish, debt, kept, used, -⟩ :=
     trace.step_events_general step caps early holds replayed i v w initial final high epochs
-      pendingEpochs retained noCrossing sublist linked start budget capped slash
+      pendingEpochs (Or.inl retained) noCrossing sublist linked start budget capped slash
   exact ⟨last, done, nil, finish, debt, kept, used⟩
 
 /-- Block slashings spend the allowance once, at the recorded change of the slashed flag. -/
@@ -1979,7 +1998,8 @@ private theorem FloorTrace.block_step {fork : Fork} {s t : BeaconState preset fo
     (replayed : (Step.block engine signed due ok).balanceEvents = .ok events)
     (i : ValidatorIndex) (v w : Validator) (initial : s.validators.data[i.toNat]? = some v)
     (final : t.validators.data[i.toNat]? = some w) (high : Nat)
-    (endEpoch : (getCurrentEpoch t).toNat ≤ high + 1) (retained : high + 1 < w.exitEpoch.toNat)
+    (endEpoch : (getCurrentEpoch t).toNat ≤ high + 1) (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < v.withdrawableEpoch.toNat ∧ 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat))
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt ⟨fork, s⟩ i.toNat)
     (budget : (if b.slashedHigh.isSome then 1 else 0) +
@@ -2163,7 +2183,8 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
       (v.slashed = true ∧ (getCurrentEpoch m.state).toNat +
         (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < v.withdrawableEpoch.toNat))
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
-    (retained : high + 1 < w.exitEpoch.toNat)
+    (retained : high + 1 < w.exitEpoch.toNat ∨
+      (high + 1 < u.withdrawableEpoch.toNat ∧ 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat))
     (noCrossing : ∀ e ∈ events, e.source ≠ .crossing)
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt m i.toNat)
@@ -2240,7 +2261,7 @@ private theorem FloorTrace.slot_step {g x m y : ForkedBeaconState preset}
     flag.symm, lastDebt.trans debt, effective, cap, by simpa only [flag] using used,
     by rw [lastHigh, kept], fun h hh => marks h (flag.symm.trans hh)⟩
 
-/-- One step of the per-key floor trace, for an activated key or a step from Fulu. -/
+/-- One step of the floor trace, guarded by the final key's exit or its start withdrawable epoch. -/
 theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -2260,7 +2281,7 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
       (v.slashed = true ∧ (getCurrentEpoch m.state).toNat +
         (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat < v.withdrawableEpoch.toNat))
     (high : Nat) (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
-    (retained : high + 1 < w.exitEpoch.toNat)
+    (retained : high + 1 < w.exitEpoch.toNat ∨ high + 1 < u.withdrawableEpoch.toNat)
     (noCrossing : ∀ e ∈ events, e.source ≠ .crossing)
     {low base quotient : Nat} {a b : FloorAccount} (trace : FloorTrace low base quotient a b)
     (balance : b.balance = actualBalanceAt m i.toNat)
@@ -2297,7 +2318,8 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
   cases step with
   | @block fork s t engine signed due ok =>
     obtain ⟨last, done, balance', debt, kept, used, marks⟩ := trace.block_step early holds caps
-      replayed i u w middle final high endEpoch retained balance budget capped effective
+      replayed i u w middle final high endEpoch
+        (retained.imp_right (fun r => ⟨r, delay⟩)) balance budget capped effective
         positive quotient_le
     have tail : Run config checks ⟨fork, s⟩ ⟨fork, t⟩ := .snoc .nil (.block engine signed due ok)
     obtain ⟨z, located, mono⟩ := tail.validatorCap_mono caps.activation caps.compounding
@@ -2324,7 +2346,8 @@ theorem FloorTrace.step_general_or_fulu {g x m y : ForkedBeaconState preset}
     obtain ⟨before, last, folded, done, ⟨advanced, advanceOk, atBefore⟩,
       balance', sameDebt, sameFlag, debt, effective, cap, used, raised, marks⟩ :=
       trace.slot_step shared pre genesis caps ok early delay replayed i v u w initial middle
-        final assigned activated window high endEpoch retained noCrossing balance budget capped
+        final assigned activated window high endEpoch
+        (retained.imp_right (fun r => ⟨r, delay⟩)) noCrossing balance budget capped
         effective
     refine ⟨last, done, balance', debt, effective, cap, by omega, ?_, raised.le, marks, ?_⟩
     swap
@@ -2391,7 +2414,8 @@ theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
       (∀ h, last.slashedHigh = some h → b.slashedHigh = some h ∨ h = b.high) ∧
       (u.slashed = true → b.slashedHigh = none → last.slashedHigh = none) :=
   FloorTrace.step_general_or_fulu shared pre genesis caps step early delay replayed i v u w initial
-    middle final assigned (Or.inl activated) window high endEpoch retained noCrossing trace balance
+    middle final assigned (Or.inl activated) window high endEpoch (Or.inl retained) noCrossing trace
+    balance
     consumed capped effective positive quotient_le
 
 /-- Concrete Steps preserve the carried account and cover each balance-path point. -/
