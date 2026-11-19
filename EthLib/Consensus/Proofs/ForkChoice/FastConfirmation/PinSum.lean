@@ -10578,7 +10578,7 @@ private def creditedKey {x y : ForkedBeaconState preset} (tail : Run config chec
   decide (0 < grossScan v.toNat high tail +
     (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail).1)
 
-/-- `creditUnits` is a unit for the credited-key slots and for two more of each exiting key.
+/-- `creditUnits` is `unitGain` for the credited-key slots and for two more of each exiting key.
 
 The same holds for each queue key.
 
@@ -10586,10 +10586,11 @@ The slots are at least the proposers, the seats and the deposit recipients of th
 
 They also hold the seat units of R's branch and the shared segment. -/
 private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
-    ∃ N U : ℕ, (pinTerms config pulled anc fin).creditUnits =
+    ∃ N : ℕ, (pinTerms config pulled anc fin).creditUnits =
         (N + 2 * (((pinTerms config pulled anc fin).positions.filter fun i =>
           (pinTerms config pulled anc fin).exitingB i = true).card +
-            (pinTerms config pulled anc fin).queueKeys)) * U ∧
+            (pinTerms config pulled anc fin).queueKeys)) *
+          (pinTerms config pulled anc fin).unitGain ∧
       (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
         ((pinTerms config pulled anc fin).depth /
           max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
@@ -10603,7 +10604,7 @@ private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState p
           preset.SYNC_COMMITTEE_SIZE.toNat ≤ N := by
   dsimp only [pinTerms]
   simp only [decide_eq_true_eq]
-  exact ⟨_, _, rfl, by omega⟩
+  exact ⟨_, rfl, by omega⟩
 
 /-- The keys that a sync aggregate debits on the shared segment or R's branch fit the seat units.
 
@@ -12083,6 +12084,19 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
     replayed v toC fromC cutC inside (slashW (pinTerms config pulled anc fin) v.toNat) start
     (voter_floorAt h fromFin tail v voter toC fromC cutC inside late)
 
+/-- The keys of a set that the pin counts as slashed on this branch are at most `slashedR`. -/
+private theorem slashedRB_card_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (W : Finset ValidatorIndex) :
+    (W.filter fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat =
+      true).card ≤ (pinTerms config state ancestor finalizedState).slashedR := by
+  classical
+  rw [slashedR_eq]
+  refine Finset.card_le_card_of_injOn UInt64.toNat (fun v member => ?_)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)
+  obtain ⟨_, flag⟩ := Finset.mem_filter.mp member
+  exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor
+    finalizedState flag), flag⟩
+
 /-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
 private theorem slashR_le (config : Config)
     (state ancestor finalizedState : BeaconState preset fork)
@@ -12097,13 +12111,7 @@ private theorem slashR_le (config : Config)
     rw [Finset.sum_filter]
     rfl
   rw [sum, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
-  refine Nat.mul_le_mul_left _ ?_
-  rw [slashedR_eq]
-  refine Finset.card_le_card_of_injOn UInt64.toNat (fun v member => ?_)
-    (fun a _ b _ same => UInt64.toNat_inj.mp same)
-  obtain ⟨_, flag⟩ := Finset.mem_filter.mp member
-  exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor
-    finalizedState flag), flag⟩
+  exact Nat.mul_le_mul_left _ (slashedRB_card_le config state ancestor finalizedState W)
 
 /-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
 private theorem sum_bandR (events : List (BalanceEvent preset)) (T : Finset ValidatorIndex) :
