@@ -12576,6 +12576,46 @@ private theorem slashR_le (config : Config)
   rw [sum, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
   exact Nat.mul_le_mul_left _ (slashedRB_card_le config state ancestor finalizedState W)
 
+/-- A key that exited by the epoch of a run's start is inactive at the end of the run.
+
+The run keeps an assigned exit epoch, and the epoch of its end is not before that of its start. -/
+private theorem inactive_of_exited (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y) {i : ℕ} {v : Validator}
+    (found : x.state.validators.data[i]? = some v)
+    (exited : v.exitEpoch.toNat ≤ (getCurrentEpoch x.state).toNat) :
+    isActiveAt y.state (getCurrentEpoch y.state) i = false := by
+  have assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    intro same
+    rw [same] at exited
+    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    have bound := (getCurrentEpoch x.state).toNat_lt_size
+    simp only [UInt64.size] at bound
+    exact getCurrentEpoch_ne_farFuture twoSlots x.state (UInt64.toNat_inj.mp (by omega))
+  have forward := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+  exact inactive_from_exit tail found assigned
+    (UInt64.le_iff_toNat_le.mpr (Nat.le_trans exited forward))
+
+/-- No block of a run from the finalized state has as proposer a key that exited by that state.
+
+The key's exit is already assigned at the finalized state, so it is inactive on the whole run.
+
+A proposer is active, which the lookahead of the run gives. -/
+private theorem exited_not_proposer (h : Setting config checks g split fin pulled anc counted V)
+    {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
+    (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)
+    (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex) :
+    u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := sorry
+
+/-- A key with a sync credit over the events of the shared segment has a gross credit on C's run.
+
+The run is the shared segment followed by C's tail. -/
+private theorem syncCr_gross_shared (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (v : ℕ) (positive : 0 < syncCr eventsF v) :
+    0 < grossScan v high (fromFin.append tailC) := sorry
+
 /-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
 private theorem sum_bandR (events : List (BalanceEvent preset)) (T : Finset ValidatorIndex) :
     ∑ v ∈ T, bandR events v.toNat =
@@ -13038,25 +13078,6 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
   have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
     band keys).2.1
   exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
-
-/-- A key that exited by the epoch of a run's start is inactive at the end of the run.
-
-The run keeps an assigned exit epoch, and the epoch of its end is not before that of its start. -/
-private theorem inactive_of_exited (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
-    {x y : ForkedBeaconState preset} (tail : Run config checks x y) {i : ℕ} {v : Validator}
-    (found : x.state.validators.data[i]? = some v)
-    (exited : v.exitEpoch.toNat ≤ (getCurrentEpoch x.state).toNat) :
-    isActiveAt y.state (getCurrentEpoch y.state) i = false := by
-  have assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH := by
-    intro same
-    rw [same] at exited
-    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    have bound := (getCurrentEpoch x.state).toNat_lt_size
-    simp only [UInt64.size] at bound
-    exact getCurrentEpoch_ne_farFuture twoSlots x.state (UInt64.toNat_inj.mp (by omega))
-  have forward := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
-  exact inactive_from_exit tail found assigned
-    (UInt64.le_iff_toNat_le.mpr (Nat.le_trans exited forward))
 
 /-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
