@@ -5149,9 +5149,11 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     rw [pulledOk]
     rfl
   have seats : (pinTerms config pulled anc fin).syncSeats =
-      3 * (2 * (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
-        preset.SYNC_COMMITTEE_SIZE.toNat * PinSplit5.syncEnvelope preset
-          ((getTotalActiveBalance pulled).toOption.getD 0).toNat) := rfl
+      3 * (((pinTerms config pulled anc fin).depth +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+            PinSplit5.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat) := rfl
   have proposer : (pinTerms config pulled anc fin).syncProposer =
       preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
         (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
@@ -5165,26 +5167,47 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
   generalize PinSplit5.syncEnvelope preset pulledTotal.toNat = env at *
   generalize env * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) =
     share at *
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   have firstDepth :
       (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
     omega
   have secondDepth :
       (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth := by
     omega
+  have secondDepthFin : (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by
+    omega
   have firstLe := first.trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _
     (Nat.mul_le_mul_right _ firstDepth)))
-  have secondLe := second.trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _
-    (Nat.mul_le_mul_right _ secondDepth)))
+  -- The second run's seats weigh the envelope at the depth from the finalized state.
+  --
+  -- They weigh the proposer share at the depth from the anchor's finalized epoch.
+  have secondLe : ∑ i ∈ P, syncF eventsC i ≤
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+      depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share := by
+    refine second.trans ?_
+    rw [Nat.mul_add]
+    exact Nat.add_le_add
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ secondDepthFin)))
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ secondDepth)))
   have union : ∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat) +
       ∑ v ∈ K4 pulled counted V, (syncF events v.toNat + syncF eventsC v.toNat) +
       ∑ v ∈ K5 counted V, (syncF events v.toNat + syncF eventsC v.toNat) +
       ∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat) ≤
-        2 * (depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-          (env + share)) := by
+        depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
+        (((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+        depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
     rw [sets]
     omega
-  calc _ ≤ 3 * (2 * (depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-        (env + share))) := by omega
+  calc _ ≤ 3 * (depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (env + share) +
+        (((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+        depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) := by
+        omega
     _ = _ := by ring
 
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
