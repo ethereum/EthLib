@@ -1949,8 +1949,9 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
 
 The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`.
 
-The other credits are the net rises of its block steps and the slot-step credits that are not epoch
-rewards. -/
+The other credits are the net rises of its block steps and the credits of its slot steps.
+
+The slot-step credits leave out the epoch rewards. -/
 private def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i high E P : ℕ) : ℕ :=
   actualBalanceAt x i +
