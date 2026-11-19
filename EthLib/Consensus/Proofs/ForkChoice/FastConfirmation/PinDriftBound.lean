@@ -1889,8 +1889,8 @@ private theorem chain_credit_le (i : ℕ) :
       have joined := linked.1 i
       have expand : ((e :: e' :: rest').map (keyCredit i)).sum =
           keyCredit i e + ((e' :: rest').map (keyCredit i)).sum := by simp
+      have credit : keyCredit i e = actualBalanceAt e.after i - actualBalanceAt e.before i := rfl
       rw [expand]
-      unfold keyCredit
       omega
 
 /-- A step raises the balance of a key by at most the credits of its events. -/
@@ -1941,8 +1941,6 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
     have same : (events.filter fun e => !decide (e.source = .rewards)) =
         events.filter fun e => decide (e.source ≠ .rewards) := by
       congr 1
-      funext e
-      simp
     rw [same] at split
     omega
 
@@ -2006,7 +2004,8 @@ After a boundary, it is at most `ceil` plus the downward band.
 The epoch never moves back. -/
 private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork)
-    (i : ℕ) (inside : i < x.state.validators.data.size) (floor capLow top ceil capHigh : ℕ) :
+    (i : ℕ) (inside : i < x.state.validators.data.size)
+    (floor capLow top ceil capHigh high E P : ℕ) :
     ((∀ z ∈ tail.balancePath, floor ≤ actualBalanceAt z i) →
       (∀ z ∈ tail.balancePath, capLow ≤ capAt z i) →
       min (effectiveAt x i)
@@ -2026,25 +2025,112 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         effectiveAt y i = effectiveAt x i) ∧
       ((getCurrentEpoch x.state).toNat < (getCurrentEpoch y.state).toNat →
         effectiveAt y i ≤ ceil + preset.downwardBand) ∧
-      (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat) := by
+      (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat) ∧
+    (capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
+      (∀ z ∈ tail.balancePath, capAt z i ≤ capHigh) →
+      (∀ z ∈ tail.balancePath, ∀ total perIncrement : Gwei,
+        getTotalActiveBalance z.state = .ok total →
+        getBaseRewardPerIncrement preset total = .ok perIncrement →
+        perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+          (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+          P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+      (getCurrentEpoch y.state).toNat ≤ high + 1 →
+      max (effectiveAt x i) (min capHigh (creditBound tail i high E P -
+        creditBound tail i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
+      ∀ z ∈ tail.balancePath, actualBalanceAt z i ≤ creditBound tail i high E P) := by
   induction tail with
   | nil => exact ⟨fun _ _ => Nat.min_le_left _ _, fun _ _ _ _ => Nat.le_refl _,
       fun _ _ _ _ => ⟨Nat.le_max_left _ _, fun _ => rfl, fun h => absurd h (Nat.lt_irrefl _),
-        Nat.le_refl _⟩⟩
+        Nat.le_refl _⟩,
+      fun _ _ _ _ _ _ z hz => by
+        rw [Run.balancePath, List.mem_singleton] at hz
+        subst hz
+        simp [creditBound, PinSplit.creditScan]⟩
   | @snoc middle last pre step ih =>
     have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    obtain ⟨ihFloor, ihEnvelope, ihCeiling⟩ := ih middleEarly
+    obtain ⟨ihFloor, ihEnvelope, ihCeiling, ihCredit⟩ := ih middleEarly
     have room : i < middle.state.validators.data.size :=
       Nat.lt_of_lt_of_le inside pre.registryLifecycle.size_le
     have atMiddle : middle ∈ pre.balancePath :=
       List.mem_of_mem_getLast? (Run.balancePath_ends pre).2
+    have altair : .altair ≤ middle.fork :=
+      Nat.le_trans (by decide) (Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps))
+    have key : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → effectiveAt x i ≤ capHigh →
+        (∀ z ∈ (pre.snoc step).balancePath, capAt z i ≤ capHigh) →
+        (∀ z ∈ (pre.snoc step).balancePath, ∀ total perIncrement : Gwei,
+          getTotalActiveBalance z.state = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+            (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) →
+        (getCurrentEpoch last.state).toNat ≤ high + 1 →
+        max (effectiveAt x i) (min capHigh (creditBound (pre.snoc step) i high E P -
+          creditBound (pre.snoc step) i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E →
+        (∀ z ∈ step.balancePath, z = middle ∨ z = last) →
+        ∀ z ∈ (pre.snoc step).balancePath,
+          actualBalanceAt z i ≤ creditBound (pre.snoc step) i high E P := by
+      intro alignedHigh startCap capC rate endEp closed pathCases z hz
+      have xm : (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch middle.state).toNat :=
+        UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+      have ml : (getCurrentEpoch middle.state).toNat ≤ (getCurrentEpoch last.state).toNat :=
+        UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+      have within : (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
+      have scan := PinSplit.creditScan_snoc_fst (fun _ => true) (fun s => decide (s ≠ .rewards))
+        i high pre step
+      rw [if_pos within] at scan
+      have tailEq : creditBound (pre.snoc step) i high E P =
+          creditBound pre i high E P +
+            ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) *
+              (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+                WEIGHT_DENOMINATOR.toNat) +
+            PinSplit.stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
+        unfold creditBound
+        rw [scan]
+        generalize E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+          WEIGHT_DENOMINATOR.toNat = G
+        have split : ((getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat) * G =
+            ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) * G +
+              ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) * G := by
+          rw [← Nat.add_mul]
+          congr 1
+          omega
+        rw [split]
+        omega
+      have closedPre : max (effectiveAt x i) (min capHigh (creditBound pre i high E P -
+          creditBound pre i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E :=
+        le_trans (max_le_max le_rfl (min_le_min le_rfl (rounded_mono _ (by omega)))) closed
+      have ihPre := ihCredit alignedHigh startCap
+        (fun p member => capC p (List.mem_append_left _ member))
+        (fun p member => rate p (List.mem_append_left _ member)) within closedPre
+      rcases List.mem_append.mp hz with old | stepMember
+      · exact (ihPre z old).trans (by omega)
+      · rcases pathCases z stepMember with rfl | rfl
+        · exact (ihPre _ atMiddle).trans (by omega)
+        · have ceilings : ∀ p ∈ pre.balancePath,
+              min (actualBalanceAt p i) capHigh ≤ creditBound (pre.snoc step) i high E P :=
+            fun p member => (Nat.min_le_left _ _).trans ((ihPre p member).trans (by omega))
+          obtain ⟨c1, -, -, -⟩ := ihCeiling alignedHigh startCap ceilings
+            (fun p member => capC p (List.mem_append_left _ member))
+          rw [Nat.min_comm] at c1
+          have envelope : effectiveAt middle i ≤ E := c1.trans closed
+          have rewards := epochRewards_le step altair early i room E P envelope
+            (rate middle (List.mem_append_left _ atMiddle))
+          have stepBound := step_balance_le step early i
+          have mid := ihPre _ atMiddle
+          rw [tailEq]
+          omega
     cases step with
     | @block fork before after engine signed due ok =>
       have kept := effectiveKept_processBlock (applySignedBlock_ok ok).2.1 i room
       have epoch : (getCurrentEpoch after).toNat = (getCurrentEpoch before).toNat := by
         simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
       refine ⟨fun balanceFloor capFloor => ?_, fun aligned envelope near capFloor => ?_,
-        fun alignedHigh startCap balanceCeil capCeil => ?_⟩
+        fun alignedHigh startCap balanceCeil capCeil => ?_,
+        fun alignedHigh startCap capC rate endEp closed =>
+          key alignedHigh startCap capC rate endEp closed
+            (fun z hz => by simpa [Step.balancePath] using hz)⟩
       · rw [kept]
         exact ihFloor (fun p member => balanceFloor p (List.mem_append_left _ member))
           (fun p member => capFloor p (List.mem_append_left _ member))
@@ -2069,7 +2155,10 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         fuluMiddle early
       subst same
       refine ⟨fun balanceFloor capFloor => ?_, fun aligned envelope near capFloor => ?_,
-        fun alignedHigh startCap balanceCeil capCeil => ?_⟩
+        fun alignedHigh startCap balanceCeil capCeil => ?_,
+        fun alignedHigh startCap capC rate endEp closed =>
+          key alignedHigh startCap capC rate endEp closed
+            (fun z hz => by simpa [Step.balancePath, advanced, Except.toOption] using hz)⟩
       · have funded := balanceFloor _ (List.mem_append_right _ onPath)
         have capped := capFloor _ (List.mem_append_right _ onPath)
         have prior := ihFloor (fun p member => balanceFloor p (List.mem_append_left _ member))
@@ -2135,7 +2224,8 @@ private theorem Run.effective_floor_rounded {x y : ForkedBeaconState preset}
     (capFloor : ∀ z ∈ tail.balancePath, capLow ≤ capAt z i) :
     min (effectiveAt x i) (min capLow (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt y i :=
-  (Run.effective_floor_pair tail early fulu i inside floor capLow 0 0 0).1 balanceFloor capFloor
+  (Run.effective_floor_pair tail early fulu i inside floor capLow 0 0 0 0 0 0).1 balanceFloor
+    capFloor
 
 /-- H4. A balance floor and a cap floor along a run give an effective-balance floor.
 
@@ -2184,7 +2274,8 @@ private theorem Run.effective_floor_of_envelope {x y : ForkedBeaconState preset}
     (near : ∀ z ∈ tail.balancePath, top ≤ actualBalanceAt z i + preset.downwardBand)
     (capFloor : ∀ z ∈ tail.balancePath, effectiveAt x i ≤ capAt z i) :
     effectiveAt x i ≤ effectiveAt y i :=
-  (Run.effective_floor_pair tail early fulu i inside 0 0 top 0 0).2.1 aligned envelope near capFloor
+  (Run.effective_floor_pair tail early fulu i inside 0 0 top 0 0 0 0 0).2.1 aligned envelope near
+    capFloor
 
 /-- A balance ceiling and a cap ceiling along a run give an effective-balance ceiling.
 
@@ -2219,8 +2310,8 @@ private theorem Run.effective_ceiling_of_balance_ceiling {x y : ForkedBeaconStat
     ((getCurrentEpoch x.state).toNat < (getCurrentEpoch y.state).toNat →
       effectiveAt y i ≤ ceil + preset.downwardBand) ∧
     (getCurrentEpoch x.state).toNat ≤ (getCurrentEpoch y.state).toNat :=
-  (Run.effective_floor_pair tail early fulu i inside 0 0 0 ceil capHigh).2.2 alignedHigh startCap
-    balanceCeil capCeil
+  (Run.effective_floor_pair tail early fulu i inside 0 0 0 ceil capHigh 0 0 0).2.2.1 alignedHigh
+    startCap balanceCeil capCeil
 
 end PinSplit2
 
