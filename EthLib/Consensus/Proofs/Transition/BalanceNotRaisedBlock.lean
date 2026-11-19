@@ -1249,7 +1249,7 @@ theorem down_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
   (fixedZ_processParentExecutionPayload computed).1
 
 /-- The header step reads the proposer of the block. -/
-private theorem processBlockHeader_proposer {block : BeaconBlock preset fork}
+theorem processBlockHeader_proposer {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) :
     getBeaconProposerIndex state = .ok block.proposerIndex := by
   unfold processBlockHeader at computed

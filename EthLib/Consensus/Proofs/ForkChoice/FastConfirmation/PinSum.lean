@@ -1934,7 +1934,8 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
       events = rest ++ [⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, credit, debit⟩] ∧
       getBeaconProposerIndex c = .ok block.proposerIndex ∧
       processSyncAggregate config checks c altair aggregate = .ok t ∧
-      PassCredits block.proposerIndex.toNat rest := by
+      PassCredits block.proposerIndex.toNat rest ∧
+      getBeaconProposerIndex a = .ok block.proposerIndex := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
   have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra
   have before : fork < .hegota := Nat.lt_trans early (by decide)
@@ -2040,7 +2041,7 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
     Prod.mk.injEq] at syncOk
   obtain ⟨⟨credit, debit⟩, -, u, synced, rfl, rfl⟩ := syncOk
   exact ⟨consolidated.1, consolidated.2, altair, _, credit, debit, rfl, link, synced,
-    consolidatedC⟩
+    consolidatedC, processBlockHeader_proposer headerOk⟩
 
 /-- A key that an event of a block step credits is its proposer, or a seat holder for a sync event.
 
@@ -2054,18 +2055,20 @@ private theorem block_gross_keys {g : ForkedBeaconState preset}
     (shared : Run config checks g ⟨f, s⟩) (fulu : .fusaka ≤ f) (early : f < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.block engine signed due ok).balanceEvents = .ok events) :
-    ∃ K : Finset ℕ, K.card ≤ 1 ∧ ∀ e ∈ events, ∀ i, 0 < keyCredit i e →
+    ∃ K : Finset ℕ, K.card ≤ 1 ∧ (∀ k ∈ K, ∃ p, getBeaconProposerIndex s = .ok p ∧ p.toNat = k) ∧
+      ∀ e ∈ events, ∀ i, 0 < keyCredit i e →
       i ∈ K ∨ (e.source = .sync ∧ ∃ altair : .altair ≤ f, ∃ w, t.validators.data[i]? = some w ∧
         w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList) := by
   have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
-  obtain ⟨c, rest, altair, aggregate, credit, debit, split, read, synced, passes⟩ :=
+  obtain ⟨c, rest, altair, aggregate, credit, debit, split, read, synced, passes, header⟩ :=
     blockReplay_proposer_credits apart electra early (Step.balanceEvents_block early replayed)
   have bounded := step_events_bounded shared genesis (Step.block engine signed due ok) early
     replayed
   have matchedT : BalancesMatch t :=
     (frame_processBlock (applySignedBlock_ok ok).2.1).balancesMatch
       (run_justified_separated shared genesis).1.balancesMatch
-  refine ⟨{signed.message.proposerIndex.toNat}, by simp, fun e member i positive => ?_⟩
+  refine ⟨{signed.message.proposerIndex.toNat}, by simp,
+    fun k hk => ⟨_, header, (Finset.mem_singleton.mp hk).symm⟩, fun e member i positive => ?_⟩
   have member' := member
   rw [split] at member'
   rcases List.mem_append.mp member' with inRest | inSync
@@ -2098,17 +2101,18 @@ private theorem block_step_gross_keys {g : ForkedBeaconState preset}
     {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, s⟩ = false}
     {ok : applySignedBlock config checks engine s signed true = .ok t}
     (shared : Run config checks g ⟨f, s⟩) (fulu : .fusaka ≤ f) (early : f < .glamsterdam) :
-    ∃ K : Finset ℕ, K.card ≤ 1 ∧ ∀ i, 0 < stepCredit
+    ∃ K : Finset ℕ, K.card ≤ 1 ∧ (∀ k ∈ K, ∃ p, getBeaconProposerIndex s = .ok p ∧ p.toNat = k) ∧
+      ∀ i, 0 < stepCredit
         (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i
         (Step.block engine signed due ok) →
       i ∈ K ∨ ∃ altair : .altair ≤ f, ∃ w, t.validators.data[i]? = some w ∧
         w.pubkey ∈ (t.currentSyncCommittee altair).value.pubkeys.toList := by
   cases replayed : (Step.block engine signed due ok).balanceEvents with
   | error _ =>
-    exact ⟨∅, by simp, fun i pos => by simp [stepCredit, replayed, Except.toOption] at pos⟩
+    exact ⟨∅, by simp, by simp, fun i pos => by simp [stepCredit, replayed, Except.toOption] at pos⟩
   | ok events =>
-    obtain ⟨K, card, keys⟩ := block_gross_keys genesis apart shared fulu early replayed
-    refine ⟨K, card, fun i pos => ?_⟩
+    obtain ⟨K, card, proposers, keys⟩ := block_gross_keys genesis apart shared fulu early replayed
+    refine ⟨K, card, proposers, fun i pos => ?_⟩
     simp only [stepCredit, replayed, Except.toOption, Option.getD_some] at pos
     by_contra none
     refine absurd (List.sum_eq_zero fun x member => ?_) (Nat.pos_iff_ne_zero.mp pos)
@@ -2320,7 +2324,7 @@ private theorem credited_piece {g : ForkedBeaconState preset}
         exact carry i w found mem
     | @block f s t engine signed due ok =>
       have fulu' : .fusaka ≤ f := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
-      obtain ⟨K, cardK, hK⟩ := block_step_gross_keys (engine := engine) (signed := signed)
+      obtain ⟨K, cardK, -, hK⟩ := block_step_gross_keys (engine := engine) (signed := signed)
         (due := due) (ok := ok) genesis apart (shared.append pre) fulu' uEarly
       refine ⟨B ∪ K, D ∪ Ds, ?_, cardUnion, fun i pos => ?_, depMem, ?_⟩
       · exact (Finset.card_union_le _ _).trans (Nat.add_le_add cardB cardK)
