@@ -1876,7 +1876,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
   have perIncrement := toNat_getBaseRewardPerIncrement pqOk
-  rw [quarter] at perIncrement
+  simp only [quarter] at perIncrement
   refine Nat.le_of_eq ?_
   rw [perIncrement]
 
