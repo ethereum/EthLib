@@ -5247,6 +5247,76 @@ private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrem
   simp only [getBaseRewardPerIncrement, liftArith, mapError_ok_iff, bind_ok_iff]
   exact ⟨scaled, scaledOk, divChecked_ok_iff.mpr ⟨root, by rw [UInt64.toNat_div]⟩⟩
 
+/-- The pin has a rate `P` that bounds the reward rate at every state of a run from `fin`.
+
+The rate also bounds the largest gain rate, which `gainRateMax` is. -/
+private theorem pin_rate_exists (h : Setting config checks g split fin pulled anc counted V) :
+    ∃ P : ℕ,
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ≤
+          (pinTerms config pulled anc fin).gainRateMax ∧
+      ∀ {m : BeaconState preset fork} (_toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩),
+        (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
+        ∀ total perIncrement : Gwei, getTotalActiveBalance m = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat *
+              ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
+                effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
+                  preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        ((getBaseRewardPerIncrement preset
+          (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+            (getTotalActiveBalance pulled).toOption.getD 0 / 4
+          else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
+  by_cases anyOk : ∃ total perIncrement : Gwei,
+      getBaseRewardPerIncrement preset total = .ok perIncrement
+  · obtain ⟨total, perIncrement, perOk⟩ := anyOk
+    obtain ⟨pq, pqOk⟩ :=
+      quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
+    refine ⟨pq.toNat, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
+    rw [gainMax, pqOk]
+    simp only [Except.toOption, Option.getD_some, le_refl]
+  · refine ⟨0, ?_, fun _ _ total perIncrement _ perOk =>
+      absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
+    simp
+
+/-- The pin's rate bounds the reward rate at every state of a prefix of C's tail.
+
+The prefix ends at most one epoch after the call.
+
+Each state of its balance path is the end of a run from the finalized block.
+
+So the guard applies. -/
+private theorem key_rate_pre (h : Setting config checks g split fin pulled anc counted V)
+    {a : BeaconState preset fork} (pre : Run config checks ⟨fork, split⟩ ⟨fork, a⟩)
+    (near : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    ∃ P : ℕ, ∀ z ∈ pre.balancePath, ∀ total perIncrement : Gwei,
+      getTotalActiveBalance z.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
+  refine ⟨P, fun z member total perIncrement totalOk perOk => ?_⟩
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨r1, r2, -⟩ := balancePath_endpoint pre Run.nil
+    (show (⟨fork, a⟩ : ForkedBeaconState preset).fork ≤
+      (⟨fork, split⟩ : ForkedBeaconState preset).fork from Nat.le_refl _) member
+  obtain ⟨zf, zs⟩ := z
+  have sameFork : zf = fork := Fork.ctorIdx_injective
+    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
+      (fork_le_of_chainSteps r1.chainSteps))
+  subst sameFork
+  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+  simp only at order totalOk perOk ⊢
+  exact rateAll (fromFin.append r1) (by omega) total perIncrement totalOk perOk
+
+
 /-- The epoch rewards of a key over a run are at most the rate for each epoch of the run.
 
 Only the steps after the key's departure charge count, and the key is in the registry from then.
@@ -5303,38 +5373,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
   split
   swap
   · exact Nat.zero_le _
-  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-        ((getBaseRewardPerIncrement preset
-          (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-              ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
-            (getTotalActiveBalance pulled).toOption.getD 0 / 4
-          else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat *
-        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
-  obtain ⟨P, gainLe, rateAll⟩ : ∃ P : ℕ,
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
-        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ≤
-          (pinTerms config pulled anc fin).gainRateMax ∧
-      ∀ {m : BeaconState preset fork} (_toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩),
-        (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-        ∀ total perIncrement : Gwei, getTotalActiveBalance m = .ok total →
-          getBaseRewardPerIncrement preset total = .ok perIncrement →
-          perIncrement.toNat *
-              ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
-                effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
-                  preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-    by_cases anyOk : ∃ total perIncrement : Gwei,
-        getBaseRewardPerIncrement preset total = .ok perIncrement
-    · obtain ⟨total, perIncrement, perOk⟩ := anyOk
-      obtain ⟨pq, pqOk⟩ :=
-        quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
-      refine ⟨pq.toNat, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
-      rw [gainMax, pqOk]
-      simp only [Except.toOption, Option.getD_some, le_refl]
-    · refine ⟨0, ?_, fun _ _ total perIncrement _ perOk =>
-        absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
-      simp
+  obtain ⟨P, gainLe, rateAll⟩ := pin_rate_exists h
   have scan := riseScan_snd_le (config := config) (checks := checks) v highC
     (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) tailC
