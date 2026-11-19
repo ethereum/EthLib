@@ -2166,26 +2166,6 @@ private theorem stub_V_of (h : Setting config checks g split fin pulled anc coun
   push_cast at total exits ⊢
   omega
 
-/-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
-theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    cV1 pulled counted V + cV2 pulled counted V ≤
-      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
-        (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
-        (∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
-        (∑ v ∈ V, credDepR events v.toNat) +
-        (∑ v ∈ V, consAmt events v.toNat) + preset.upwardBand * dueAt fin high V +
-        (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
-        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true, eR pulled v) +
-        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true, eR pulled v) : ℕ) := sorry
-
 /-- The guards of the floor trace of a run from a state `zs` of the run from the finalized block.
 
 The run ends at any state `y` that is at most one epoch after `pulled`.
@@ -4498,6 +4478,65 @@ private theorem two_bands_le_exitingBands (config : Config)
   rw [parts]
   nlinarith
 
+/-- A key whose exit C assigned by C's epoch and that R does not read as exiting has a charge.
+
+The key is active at R's epoch or the one before it, if R's record has the exit of C's.
+
+The charge is on C's run, if the exit is not inherited from the split. -/
+private theorem exit_charged (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
+    {u : Validator} (foundU : counted.validators.data[v.toNat]? = some u)
+    (assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH)
+    (exited : u.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat)
+    (unslashedC : u.slashed = false)
+    (atR : ∀ w, pulled.validators.data[v.toNat]? = some w → w.exitEpoch = u.exitEpoch →
+      isActiveAt pulled (getPreviousEpoch pulled) v.toNat = true ∨
+        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true)
+    (flag : (pinTerms config pulled anc fin).exitingB v.toNat = false) :
+    ∃ c ∈ tailC.departureCharges, c.index = v.toNat := by
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  by_cases inherited : ∃ old, split.validators.data[v.toNat]? = some old ∧
+      old.exitEpoch ≠ FAR_FUTURE_EPOCH
+  · exfalso
+    obtain ⟨old, oldFound, oldAssigned⟩ := inherited
+    obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
+    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
+    rw [sameU] at keptC
+    obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
+    have exitU : u.exitEpoch = old.exitEpoch := keptC.exitEpoch oldAssigned
+    have exitW : w.exitEpoch = old.exitEpoch := keptP.exitEpoch oldAssigned
+    have exitWU : w.exitEpoch = u.exitEpoch := exitW.trans exitU.symm
+    have exitWNat : w.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+      rw [exitWU]
+      exact exited
+    have nearNat := h.near
+    have activeR := atR w foundW exitWU
+    have notSlashed : w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
+      cases slashed : w.slashed
+      · exact .inl rfl
+      · have delayed := slashed_waits (shared.append fromFin) h.genesis toPulled tailC h.early
+          h.caps h.delay foundW slashed (by simp [foundU, unslashedC])
+        have := UInt64.le_iff_toNat_le.mp h.finalized
+        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
+    have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
+      simp only [pinTerms, decide_eq_true_eq]
+      refine ⟨?_, ?_, ?_⟩
+      · rcases activeR with active | active <;> simp [active]
+      · simpa [foundW] using notSlashed
+      · simpa [foundW] using
+          (show w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
+    rw [flag] at marked
+    exact Bool.false_ne_true marked
+  · obtain ⟨c, member, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
+      (fun w hw => by
+        by_contra far
+        exact inherited ⟨w, hw, far⟩) u foundU assignedC
+    exact ⟨c, member, index⟩
+
 /-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
 private theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
@@ -4506,7 +4545,6 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have within := BeaconState.registryWithinLimit_of_lt h.early counted
   have inK5 := Finset.mem_filter.mp member
   simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
@@ -4524,73 +4562,27 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
   have assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
     notFar (UInt64.toNat_inj.mp (by rw [← exitC.2, far]))
-  by_cases inherited : ∃ old, split.validators.data[v.toNat]? = some old ∧
-      old.exitEpoch ≠ FAR_FUTURE_EPOCH
-  · exfalso
-    obtain ⟨old, oldFound, oldAssigned⟩ := inherited
-    obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
-    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
-    rw [sameU] at keptC
-    obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
-    have gap := (shared.append fromFin).exit_activation_gap h.genesis v.toNat old oldFound
-      oldAssigned
-    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-    have actAssigned : old.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-      intro far
-      rw [far, farNat] at gap
-      have := old.exitEpoch.toNat_lt
-      omega
-    have exitU : u.exitEpoch = old.exitEpoch := keptC.exitEpoch oldAssigned
-    have actU : u.activationEpoch = old.activationEpoch := keptC.activationEpoch actAssigned
-    have exitW : w.exitEpoch = old.exitEpoch := keptP.exitEpoch oldAssigned
-    have actW : w.activationEpoch = old.activationEpoch := keptP.activationEpoch actAssigned
-    have epochU : old.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
-      rw [← exitU]
-      exact exitC.2
-    have actLt : old.activationEpoch.toNat < (getCurrentEpoch counted).toNat := by
-      rw [← actU]
-      exact exitC.1
-    have laterNat := UInt64.le_iff_toNat_le.mp h.later
-    have nearNat := h.near
-    have previous := getPreviousEpoch_toNat pulled
-    have exitWNat : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
-      rw [exitW]
-      exact epochU
-    have actWNat : w.activationEpoch.toNat = old.activationEpoch.toNat := by rw [actW]
-    have activeAt (e : Epoch) (low : w.activationEpoch.toNat ≤ e.toNat)
-        (high : e.toNat < w.exitEpoch.toNat) : isActiveAt pulled e v.toNat = true :=
-      isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-          UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
-        exact ⟨low, high⟩⟩
-    have activeR : isActiveAt pulled (getPreviousEpoch pulled) v.toNat = true ∨
-        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true := by
-      rcases Nat.lt_or_ge (getCurrentEpoch pulled).toNat (getCurrentEpoch counted).toNat with
-        before | same
-      · exact .inr (activeAt _ (by omega) (by omega))
-      · exact .inl (activeAt _ (by omega) (by omega))
-    have notSlashed : w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
-        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
-      cases slashed : w.slashed
-      · exact .inl rfl
-      · have delayed := slashed_waits (shared.append fromFin) h.genesis toPulled tailC h.early
-          h.caps h.delay foundW slashed unslashedC
-        have := UInt64.le_iff_toNat_le.mp h.finalized
-        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
-    have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
-      simp only [pinTerms, decide_eq_true_eq]
-      refine ⟨?_, ?_, ?_⟩
-      · rcases activeR with active | active <;> simp [active]
-      · simpa [foundW] using notSlashed
-      · simpa [foundW] using
-          (show w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
-    rw [flag] at marked
-    exact Bool.false_ne_true marked
-  · obtain ⟨c, member, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
-      (fun w hw => by
-        by_contra far
-        exact inherited ⟨w, hw, far⟩) u foundU assignedC
-    exact ⟨c, member, index⟩
+  refine exit_charged h tailC foundU assignedC (Nat.le_of_eq exitC.2) (by simpa [foundU] using
+    unslashedC) (fun w foundW sameExit => ?_) flag
+  have gap := ((shared.append fromFin).append toPulled).exit_activation_gap h.genesis v.toNat w
+    foundW (sameExit ▸ assignedC)
+  have exitW : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
+    rw [sameExit]
+    exact exitC.2
+  have actLt : w.activationEpoch.toNat < (getCurrentEpoch counted).toNat := by omega
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have nearNat := h.near
+  have previous := getPreviousEpoch_toNat pulled
+  have activeAt (e : Epoch) (low : w.activationEpoch.toNat ≤ e.toNat)
+      (high : e.toNat < w.exitEpoch.toNat) : isActiveAt pulled e v.toNat = true :=
+    isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+        UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+      exact ⟨low, high⟩⟩
+  rcases Nat.lt_or_ge (getCurrentEpoch pulled).toNat (getCurrentEpoch counted).toNat with
+    before | same
+  · exact .inr (activeAt _ (by omega) (by omega))
+  · exact .inl (activeAt _ (by omega) (by omega))
 
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting :
@@ -5255,6 +5247,76 @@ private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrem
   simp only [getBaseRewardPerIncrement, liftArith, mapError_ok_iff, bind_ok_iff]
   exact ⟨scaled, scaledOk, divChecked_ok_iff.mpr ⟨root, by rw [UInt64.toNat_div]⟩⟩
 
+/-- The pin has a rate `P` that bounds the reward rate at every state of a run from `fin`.
+
+The rate also bounds the largest gain rate, which `gainRateMax` is. -/
+private theorem pin_rate_exists (h : Setting config checks g split fin pulled anc counted V) :
+    ∃ P : ℕ,
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ≤
+          (pinTerms config pulled anc fin).gainRateMax ∧
+      ∀ {m : BeaconState preset fork} (_toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩),
+        (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
+        ∀ total perIncrement : Gwei, getTotalActiveBalance m = .ok total →
+          getBaseRewardPerIncrement preset total = .ok perIncrement →
+          perIncrement.toNat *
+              ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
+                effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
+                  preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        ((getBaseRewardPerIncrement preset
+          (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+            (getTotalActiveBalance pulled).toOption.getD 0 / 4
+          else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
+  by_cases anyOk : ∃ total perIncrement : Gwei,
+      getBaseRewardPerIncrement preset total = .ok perIncrement
+  · obtain ⟨total, perIncrement, perOk⟩ := anyOk
+    obtain ⟨pq, pqOk⟩ :=
+      quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
+    refine ⟨pq.toNat, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
+    rw [gainMax, pqOk]
+    simp only [Except.toOption, Option.getD_some, le_refl]
+  · refine ⟨0, ?_, fun _ _ total perIncrement _ perOk =>
+      absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
+    simp
+
+/-- The pin's rate bounds the reward rate at every state of a prefix of C's tail.
+
+The prefix ends at most one epoch after the call.
+
+Each state of its balance path is the end of a run from the finalized block.
+
+So the guard applies. -/
+private theorem key_rate_pre (h : Setting config checks g split fin pulled anc counted V)
+    {a : BeaconState preset fork} (pre : Run config checks ⟨fork, split⟩ ⟨fork, a⟩)
+    (near : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    ∃ P : ℕ, ∀ z ∈ pre.balancePath, ∀ total perIncrement : Gwei,
+      getTotalActiveBalance z.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  obtain ⟨P, -, rateAll⟩ := pin_rate_exists h
+  refine ⟨P, fun z member total perIncrement totalOk perOk => ?_⟩
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨r1, r2, -⟩ := balancePath_endpoint pre Run.nil
+    (show (⟨fork, a⟩ : ForkedBeaconState preset).fork ≤
+      (⟨fork, split⟩ : ForkedBeaconState preset).fork from Nat.le_refl _) member
+  obtain ⟨zf, zs⟩ := z
+  have sameFork : zf = fork := Fork.ctorIdx_injective
+    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
+      (fork_le_of_chainSteps r1.chainSteps))
+  subst sameFork
+  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+  simp only at order totalOk perOk ⊢
+  exact rateAll (fromFin.append r1) (by omega) total perIncrement totalOk perOk
+
+
 /-- The depth times the reward rate for each increment stays below an eleventh of an increment.
 
 It follows from the second test of the low rate at an aligned bound.
@@ -5700,38 +5762,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
   split
   swap
   · exact Nat.zero_le _
-  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-        ((getBaseRewardPerIncrement preset
-          (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-              ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
-            (getTotalActiveBalance pulled).toOption.getD 0 / 4
-          else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat *
-        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
-  obtain ⟨P, gainLe, rateAll⟩ : ∃ P : ℕ,
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
-        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat ≤
-          (pinTerms config pulled anc fin).gainRateMax ∧
-      ∀ {m : BeaconState preset fork} (_toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩),
-        (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-        ∀ total perIncrement : Gwei, getTotalActiveBalance m = .ok total →
-          getBaseRewardPerIncrement preset total = .ok perIncrement →
-          perIncrement.toNat *
-              ((∑ i ∈ (getActiveValidatorIndices m (getPreviousEpoch m)).toFinset,
-                effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat) /
-                  preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
-            P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-    by_cases anyOk : ∃ total perIncrement : Gwei,
-        getBaseRewardPerIncrement preset total = .ok perIncrement
-    · obtain ⟨total, perIncrement, perOk⟩ := anyOk
-      obtain ⟨pq, pqOk⟩ :=
-        quarter_base_ok h.facts perOk ((getTotalActiveBalance pulled).toOption.getD 0)
-      refine ⟨pq.toNat, ?_, fun toM inside => rate_of_guard h toM inside pqOk⟩
-      rw [gainMax, pqOk]
-      simp only [Except.toOption, Option.getD_some, le_refl]
-    · refine ⟨0, ?_, fun _ _ total perIncrement _ perOk =>
-        absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
-      simp
+  obtain ⟨P, gainLe, rateAll⟩ := pin_rate_exists h
   have scan := riseScan_snd_le (config := config) (checks := checks) v highC
     (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) tailC
@@ -6157,6 +6188,38 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
   unfold potentialFloor
   omega
 
+/-- The charge of a key on C's run is its effective balance at a state where its exit is unset.
+
+The state is the stop of the charge.
+
+The runs to it and from it make C's run from the finalized block. -/
+private theorem exit_stop (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (v : ℕ)
+    (charged : ∃ c ∈ tailC.departureCharges, c.index = v)
+    (epochLe : ∀ c ∈ tailC.departureCharges, c.index = v →
+      c.epoch ≤ (getCurrentEpoch counted).toNat) :
+    ∃ (sd : ForkedBeaconState preset) (pre : Run config checks ⟨fork, fin⟩ sd)
+        (post : Run config checks sd ⟨fork, counted⟩),
+      pre.append post = fromFin.append tailC ∧
+      (∀ w, sd.state.validators.data[v]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH) ∧
+      exitQ tailC v = effectiveAt sd v := by
+  classical
+  obtain ⟨c0, member0, index0, -, amount0⟩ : ∃ c ∈ tailC.departureCharges,
+      c.index = v ∧ c.epoch ≤ (getCurrentEpoch counted).toNat ∧ exitQ tailC v = c.amount := by
+    obtain ⟨c, mem, idx⟩ := charged
+    rcases exitQ_cases tailC v with ⟨none, -⟩ | found
+    · exact absurd (epochLe c mem idx) (none c mem idx)
+    · exact found
+  obtain ⟨stop, chosen⟩ := stop_of_charge fromFin tailC member0 index0
+  have selected := stop.selected
+  rw [chosen] at selected
+  obtain ⟨-, -, amount, next, assignedStep, rest, split', charged', vv, w, atStop, atNext,
+    unset, assigned, epoch⟩ := selected
+  refine ⟨stop.state, stop.pre, stop.post, stop.split, fun w' found => ?_, by rw [amount0, amount]⟩
+  have same := Option.some.inj (found.symm.trans atStop)
+  subst same
+  exact unset
+
 /-- The key's effective balance at its exit call, from the potential floor of the run to the call.
 
 The key is in `K5`, activated at the finalized state, and charged on the run from the split. -/
@@ -6189,29 +6252,10 @@ private theorem exitQ_potential (h : Setting config checks g split fin pulled an
                 (pinTerms config pulled anc fin).partialsDue v.toNat) %
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       exitQ tailC v.toNat := by
-  classical
-  obtain ⟨c0, member0, index0, -, amount0⟩ : ∃ c ∈ tailC.departureCharges,
-      c.index = v.toNat ∧ c.epoch ≤ (getCurrentEpoch counted).toNat ∧
-        exitQ tailC v.toNat = c.amount := by
-    obtain ⟨c, mem, idx⟩ := charged
-    have le := charge_epoch_le_of_K5 h.early tailC member c mem idx
-    rcases exitQ_cases tailC v.toNat with ⟨none, -⟩ | found
-    · exact absurd le (none c mem idx)
-    · exact found
-  obtain ⟨stop, chosen⟩ := stop_of_charge fromFin tailC member0 index0
-  have selected := stop.selected
-  rw [chosen] at selected
-  obtain ⟨-, -, amount, next, assignedStep, rest, split', charged', vv, w, atStop, atNext,
-    unset, assigned, epoch⟩ := selected
-  have far : ∀ w', stop.state.state.validators.data[v.toNat]? = some w' →
-      w'.exitEpoch = FAR_FUTURE_EPOCH := by
-    intro w' found
-    have same := Option.some.inj (found.symm.trans atStop)
-    subst same
-    exact unset
-  rw [amount0, amount]
-  exact exitQ_at h fromFin tailC replayed stop.pre stop.post stop.split v member val initial far
-    ρn ρd leaky
+  obtain ⟨sd, pre, post, cut, far, amount⟩ := exit_stop fromFin tailC v.toNat charged
+    (charge_epoch_le_of_K5 h.early tailC member)
+  rw [amount]
+  exact exitQ_at h fromFin tailC replayed pre post cut v member val initial far ρn ρd leaky
 
 /-- The leak of an aligned effective balance is at most a rate times it.
 
@@ -6733,18 +6777,19 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
     simp only [PinSplit2.capAt, found, Option.map_some, Option.getD_some]
     exact cappedFin.trans this
 
-/-- A key that is active in C at its end keeps each state of C's run out of its withdrawal.
+/-- A key whose exit comes late keeps each state of C's run out of its withdrawal.
 
-Its exit epoch is constant from the state where it is set, and it is after C's epoch.
+Its exit epoch is constant from the state where it is set.
 
-So the withdrawable epoch of the key at each state is after the epoch of the call's cutoff.
+The withdrawable epoch is the delay after it, so it is after the epoch of the call's cutoff.
 
 A key with no exit has the withdrawable epoch that no epoch reaches, since it exits no later. -/
-private theorem retained_of_active (h : Setting config checks g split fin pulled anc counted V)
+private theorem retained_of_exit (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (i : ValidatorIndex)
     {wC : Validator} (foundC : counted.validators.data[i.toNat]? = some wC)
-    (active : (getCurrentEpoch counted).toNat < wC.exitEpoch.toNat) :
+    (late : (getCurrentEpoch pulled).toNat + 1 <
+      wC.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
       (before.snoc step).append after = fromFin.append tailC → ∀ w,
@@ -6753,7 +6798,6 @@ private theorem retained_of_active (h : Setting config checks g split fin pulled
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) := by
   obtain ⟨toFin⟩ := h.toFin
-  have later := UInt64.le_iff_toNat_le.mp h.later
   intro m n before step after cut w found
   refine .inr fun u foundU => ?_
   have holds := Run.invariant (Genesis.invariant h.genesis) (toFin.append before)
@@ -6768,18 +6812,145 @@ private theorem retained_of_active (h : Setting config checks g split fin pulled
   · have same := congrArg UInt64.toNat (kept.exitEpoch unset)
     have lastEq : last = wC := Option.some.inj (located.symm.trans foundC)
     have delayed := (toFin.append before).exit_withdrawable_delay h.genesis i.toNat u foundU unset
-    have := h.delay
     subst lastEq
     omega
 
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The events of C's run from the finalized block are those of its two parts.
+
+They are read at R's epoch. -/
+private theorem V_events (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {eventsF eventsC : List (BalanceEvent preset)} (high highC : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat =
+      .ok (eventsF ++ eventsC) := by
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have nearC := h.near
+  refine balanceEvents_append fromFin tailC _ ?_ ?_
+  · rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  · rw [balanceEvents_eq_of_endpoint_le tailC (localHigh := highC) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedC
+
+/-- The sync debits of a key over two runs are at most those that `stub_V` charges. -/
+private theorem V_sync_le (eventsF eventsC : List (BalanceEvent preset)) (v : ℕ) :
+    ((eventsF ++ eventsC).map (syncDebit v)).sum ≤
+      (eventsF.map (syncDebit v)).sum + syncF eventsC v := by
+  have := sum_syncDebit_eq eventsC v
+  unfold syncF
+  rw [List.map_append, List.sum_append]
+  omega
+
+/-- A key falls by at least its effective balance at R, less any bound of its floor.
+
+A key that is not in the finalized registry has the floor zero. -/
+private theorem fall_floor (h : Setting config checks g split fin pulled anc counted V)
+    (v : ValidatorIndex) (X : ℕ)
+    (bound : fin.validators.data[v.toNat]? = none ∨
+      (pinTerms config pulled anc fin).floorC v.toNat ≤ X) :
+    (eR pulled v : ℤ) ≤ ((pinTerms config pulled anc fin).fall v.toNat : ℤ) + X := by
+  have fallEq := fall_eq config pulled anc fin v.toNat
+  simp only [h.shallow, ↓reduceIte] at fallEq
+  have eRdef : eR pulled v = balanceAt pulled v.toNat := rfl
+  rcases bound with none | le
+  · obtain ⟨low, base, shape⟩ : ∃ low base : ℕ, (pinTerms config pulled anc fin).floorC v.toNat =
+        if max (balanceAt fin v.toNat) base ≤ low + preset.downwardBand then balanceAt fin v.toNat
+        else min (balanceAt fin v.toNat) (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :=
+      ⟨_, _, rfl⟩
+    have zero : balanceAt fin v.toNat = 0 := by simp [balanceAt, none]
+    have : (pinTerms config pulled anc fin).floorC v.toNat = 0 := by
+      rw [shape]
+      split
+      · exact zero
+      · rw [zero]
+        exact Nat.zero_min _
+    omega
+  · omega
+
+/-- C's floor of a key is below its effective balance at each state of C's run, with its debits.
+
+The debits are the key's sync debits over the run and their rounding band.
+
+The key is in the finalized registry, unslashed at C's end, and kept out of withdrawal. -/
+private theorem V_floor (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (val : Validator) (initial : fin.validators.data[v.toNat]? = some val)
+    (clean : ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[v.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[v.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat))
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC) :
+    (pinTerms config pulled anc fin).floorC v.toNat ≤ effectiveAt z v.toNat +
+      (events.map (syncDebit v.toNat)).sum + bandR events v.toNat := by
+  obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin h.bands.1 v.toNat
+  obtain ⟨base0, hbase0def⟩ : ∃ b, b = (pinTerms config pulled anc fin).base0 v.toNat := ⟨_, rfl⟩
+  have hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    rw [hbase0def]
+    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    rfl
+  obtain ⟨X, hX⟩ : ∃ X, X = ((pinTerms config pulled anc fin).leakAt
+        (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
+          actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        ((pinTerms config pulled anc fin).leakAt
+          (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat +
+            (pinTerms config pulled anc fin).gainRate v.toNat + 1) +
+      (pinTerms config pulled anc fin).partialsDue v.toNat := ⟨_, rfl⟩
+  have hfall : ((pinTerms config pulled anc fin).leakAt
+        (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
+          actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        ((pinTerms config pulled anc fin).leakAt
+          (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
+      (pinTerms config pulled anc fin).partialsDue v.toNat ≤ X := by
+    rw [hX]
+    have := Nat.mul_le_mul_left ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)
+      (show (pinTerms config pulled anc fin).leakAt
+          (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1 ≤
+        (pinTerms config pulled anc fin).leakAt
+          (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat +
+            (pinTerms config pulled anc fin).gainRate v.toNat + 1 by omega)
+    omega
+  have hfloorC : (pinTerms config pulled anc fin).floorC v.toNat =
+      if max (balanceAt fin v.toNat) base0 ≤ (base0 - X) + preset.downwardBand
+      then balanceAt fin v.toNat
+      else min (balanceAt fin v.toNat)
+        ((base0 - X) - (base0 - X) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+    rw [hX, hbase0def]
+    rfl
+  have hfin : balanceAt fin v.toNat =
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat := rfl
+  obtain ⟨slack, margin⟩ := floorC_margin h fromFin tailC replayed v val initial ρn ρd positive
+    leaky above base0 X (base0 - X) hbase0 rfl hfall
+  exact floorC_at h fromFin tailC replayed v val initial clean retained base0 X (base0 - X)
+    (balanceAt fin v.toNat) ((pinTerms config pulled anc fin).floorC v.toNat) hbase0 rfl hfin
+    hfloorC rp rest cut ⟨slack, ρn, ρd, margin⟩
+    (fun test sync => floorC_stay h fromFin tailC replayed v val initial clean retained
+      h.facts.quarterBand ρn ρd positive leaky above base0 X (base0 - X) (balanceAt fin v.toNat)
+      hbase0 rfl hfin hfall sync test rp rest cut)
+
 /-- A V key that is active in C falls by at most `fall` and what C's floor leaves out.
 
 C's floor is below the key's effective balance at C's end, plus its sync debits and their band.
 
-The fall is the key's effective balance at R, less that floor, within the delay.
-
-A key that is not in the finalized registry has the floor zero. -/
+The fall is the key's effective balance at R, less that floor, within the delay. -/
 private theorem V_active (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -6793,108 +6964,184 @@ private theorem V_active (h : Setting config checks g split fin pulled anc count
         ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) +
           bandR (eventsF ++ eventsC) v.toNat := by
   intro v member act
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  have nearC := h.near
-  have replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat =
-      .ok (eventsF ++ eventsC) := by
-    refine balanceEvents_append fromFin tailC _ ?_ ?_
-    · rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-        (by simp only; omega)]
-      exact replayedF
-    · rw [balanceEvents_eq_of_endpoint_le tailC (localHigh := highC) (by simp only; omega)
-        (by simp only; omega)]
-      exact replayedC
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have delay := h.delay
   obtain ⟨wC, foundC, isActive⟩ := active_of_activeVoters h.early (s := counted) act
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActive
-  have exitAfter : (getCurrentEpoch counted).toNat < wC.exitEpoch.toNat :=
-    UInt64.lt_iff_toNat_lt.mp isActive.2
-  have flag : wC.slashed = false := by
-    simpa [slashedFlagAt, foundC] using (h.voting v member).2
+  have exitAfter := UInt64.lt_iff_toNat_lt.mp isActive.2
   have clean : ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by
     intro w found
     rw [foundC] at found
     cases found
-    exact flag
-  have fallEq := fall_eq config pulled anc fin v.toNat
-  simp only [h.shallow, ↓reduceIte] at fallEq
-  have floorLe : (pinTerms config pulled anc fin).floorC v.toNat ≤ balanceAt fin v.toNat := by
-    obtain ⟨low, base, shape⟩ : ∃ low base : ℕ, (pinTerms config pulled anc fin).floorC v.toNat =
-        if max (balanceAt fin v.toNat) base ≤ low + preset.downwardBand then balanceAt fin v.toNat
-        else min (balanceAt fin v.toNat) (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :=
-      ⟨_, _, rfl⟩
-    rw [shape]
-    split
-    · exact Nat.le_refl _
-    · exact Nat.min_le_left _ _
-  have syncLe : (eventsC.map (syncDebit v.toNat)).sum ≤ syncF eventsC v.toNat := by
-    rw [sum_syncDebit_eq]
-    unfold syncF
-    omega
-  have splitSum : ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum =
-      (eventsF.map (syncDebit v.toNat)).sum + (eventsC.map (syncDebit v.toNat)).sum := by
-    rw [List.map_append, List.sum_append]
-  have eRdef : eR pulled v = balanceAt pulled v.toNat := rfl
+    simpa [slashedFlagAt, foundC] using (h.voting v member).2
+  have sync := V_sync_le eventsF eventsC v.toNat
+  have := fall_floor h v (balanceAt counted v.toNat + ((eventsF.map (syncDebit v.toNat)).sum +
+      syncF eventsC v.toNat) + bandR (eventsF ++ eventsC) v.toNat) (by
+    cases initial : fin.validators.data[v.toNat]? with
+    | none => exact .inl rfl
+    | some val =>
+      have floor := V_floor h fromFin tailC
+        (V_events h fromFin tailC high highC endEpoch endEpochC replayedF replayedC) v val initial
+        clean (retained_of_exit h fromFin tailC v foundC (by omega)) (fromFin.append tailC)
+        Run.nil rfl
+      exact .inr (by
+        have : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat =
+          balanceAt counted v.toNat := rfl
+        omega))
   have eCdef : eC counted v = balanceAt counted v.toNat := rfl
-  cases initial : fin.validators.data[v.toNat]? with
-  | none =>
-    have zero : balanceAt fin v.toNat = 0 := by simp [balanceAt, initial]
-    omega
-  | some val =>
-    obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin h.bands.1 v.toNat
-    obtain ⟨base0, hbase0def⟩ : ∃ b, b = (pinTerms config pulled anc fin).base0 v.toNat := ⟨_, rfl⟩
-    have hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
-        (withdrawalMaxEffectiveBalance preset fork val).toNat := by
-      rw [hbase0def]
-      simp only [pinTerms, initial, Option.map_some, Option.getD_some]
-      rfl
-    obtain ⟨X, hX⟩ : ∃ X, X = ((pinTerms config pulled anc fin).leakAt
-          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
-              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-          ((pinTerms config pulled anc fin).leakAt
-            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat +
-              (pinTerms config pulled anc fin).gainRate v.toNat + 1) +
-        (pinTerms config pulled anc fin).partialsDue v.toNat := ⟨_, rfl⟩
-    have hfall : ((pinTerms config pulled anc fin).leakAt
-          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
-            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat +
-              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-          ((pinTerms config pulled anc fin).leakAt
-            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
-        (pinTerms config pulled anc fin).partialsDue v.toNat ≤ X := by
-      rw [hX]
-      have := Nat.mul_le_mul_left ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)
-        (show (pinTerms config pulled anc fin).leakAt
-            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1 ≤
-          (pinTerms config pulled anc fin).leakAt
-            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat +
-              (pinTerms config pulled anc fin).gainRate v.toNat + 1 by omega)
+  omega
+
+/-- A V key that left C's active set is charged by its exit, its late activation or its floor.
+
+Its activation is at most R's epoch.
+
+If that is within the seed lookahead of the split, the two branches agree on its activity there.
+
+Then C's record exits it by C's epoch, which R reads as exiting or C charges.
+
+Otherwise R activated it after finalizing the split, and R reads it as late.
+
+R's registry may hold a key that C's does not, since the registries differ by position.
+
+Then `h.voting` holds with the unslashed flag read as false.
+
+Such a key activates late at R, so it is in the second case. -/
+private theorem V_left (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {eventsF eventsC : List (BalanceEvent preset)} (high highC : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    ∀ v ∈ VN counted V, (eR pulled v : ℤ) ≤
+      ((pinTerms config pulled anc fin).fall v.toNat +
+        ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) +
+        bandR (eventsF ++ eventsC) v.toNat + exitQ tailC v.toNat +
+        (if (pinTerms config pulled anc fin).exitingB v.toNat = true then eR pulled v else 0) +
+        (if (pinTerms config pulled anc fin).lateB v.toNat = true then eR pulled v
+          else 0) : ℕ) := by
+  intro v hv
+  obtain ⟨member, notAC⟩ := Finset.mem_filter.mp hv
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨w, foundW, activeWb⟩ := active_of_activeVoters h.early (h.voting v member).1
+  have activeW := activeWb
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
+    UInt64.lt_iff_toNat_lt] at activeW
+  have farEpoch := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have nearC := h.near
+  by_cases early : w.activationEpoch.toNat ≤
+      (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat
+  · -- the key's activity at its activation epoch is shared, so C holds it
+    have atAct : isActiveAt counted w.activationEpoch v.toNat = true := by
+      rw [← activity_shared h (e := w.activationEpoch) early v.toNat]
+      exact isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+          UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+        omega⟩
+    obtain ⟨u, foundU, activeU⟩ := isActiveAt_eq_true_iff.mp atAct
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, UInt64.le_iff_toNat_le,
+      UInt64.lt_iff_toNat_lt] at activeU
+    have exited : u.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+      by_contra later
+      apply notAC
+      simpa [AC, activeVoters] using mem_getActiveValidatorIndices_of_isActiveAt
+        (isActiveAt_eq_true_iff.mpr ⟨u, foundU, by
+          simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+            UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+          omega⟩)
+    have assigned : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
+      rw [far] at exited
       omega
-    have hfloorC : (pinTerms config pulled anc fin).floorC v.toNat =
-        if max (balanceAt fin v.toNat) base0 ≤ (base0 - X) + preset.downwardBand
-        then balanceAt fin v.toNat
-        else min (balanceAt fin v.toNat)
-          ((base0 - X) - (base0 - X) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-      rw [hX, hbase0def]
-      rfl
-    have hfin : balanceAt fin v.toNat =
-        effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat := rfl
-    obtain ⟨slack, margin⟩ := floorC_margin h fromFin tailC replayed v val initial ρn ρd positive
-      leaky above base0 X (base0 - X) hbase0 rfl hfall
-    have floorC := floorC_at h fromFin tailC replayed v val initial clean
-      (retained_of_active h fromFin tailC v foundC exitAfter) base0 X (base0 - X)
-      (balanceAt fin v.toNat) ((pinTerms config pulled anc fin).floorC v.toNat) hbase0 rfl hfin
-      hfloorC
-      (fromFin.append tailC) Run.nil rfl ⟨slack, ρn, ρd, margin⟩
-      (fun test sync => floorC_stay h fromFin tailC replayed v val initial clean
-        (retained_of_active h fromFin tailC v foundC exitAfter)
-        h.facts.quarterBand ρn ρd positive leaky above base0 X (base0 - X) (balanceAt fin v.toNat)
-        hbase0 rfl hfin hfall sync test (fromFin.append tailC) Run.nil rfl)
-    have effEq : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat =
-        balanceAt counted v.toNat := rfl
+    have unslashed : u.slashed = false := by
+      simpa [slashedFlagAt, foundU] using (h.voting v member).2
+    by_cases ex : (pinTerms config pulled anc fin).exitingB v.toNat = true
+    · simp only [ex, ↓reduceIte]
+      omega
+    · obtain ⟨c, mem, idx⟩ := exit_charged h tailC foundU assigned exited unslashed
+        (fun w' found _ => by
+          obtain rfl : w' = w := Option.some.inj (found.symm.trans foundW)
+          exact .inr (isActiveAt_eq_true_iff.mpr ⟨w', foundW, activeWb⟩))
+        (by simpa using ex)
+      have exitOf : ∀ c ∈ tailC.departureCharges, c.index = v.toNat →
+          u.exitEpoch.toNat = c.epoch := by
+        intro c' mem' idx'
+        obtain ⟨x, found, -, epoch⟩ := Run.departure_charge_exit tailC c' mem'
+        rw [idx'] at found
+        obtain rfl : x = u := Option.some.inj (found.symm.trans foundU)
+        exact epoch
+      have startC := DirectSafety.Run.departureCharges_epoch_ge_start tailC
+        (Nat.le_trans (by decide) h.fulu) h.early c mem
+      simp only at startC
+      have exitC := exitOf c mem idx
+      have shallow := h.shallow
+      have finOrder := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+      simp only at finOrder
+      obtain ⟨sd, pre, post, cut, far, amount⟩ := exit_stop fromFin tailC v.toNat ⟨c, mem, idx⟩
+        (fun c' mem' idx' => by have := exitOf c' mem' idx'; omega)
+      have sync := V_sync_le eventsF eventsC v.toNat
+      have clean : ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by
+        intro w found
+        rw [foundU] at found
+        cases found
+        exact unslashed
+      have := fall_floor h v (exitQ tailC v.toNat + ((eventsF.map (syncDebit v.toNat)).sum +
+          syncF eventsC v.toNat) + bandR (eventsF ++ eventsC) v.toNat) (by
+        cases initial : fin.validators.data[v.toNat]? with
+        | none => exact .inl rfl
+        | some val =>
+          have floor := V_floor h fromFin tailC
+            (V_events h fromFin tailC high highC endEpoch endEpochC replayedF replayedC) v val
+            initial clean (retained_of_exit h fromFin tailC v foundU (by omega)) pre post cut
+          exact .inr (by omega))
+      omega
+  · -- R activated the key after finalizing the split, so it reads the key as late
+    have farAct : w.activationEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
+      rw [far] at activeW
+      omega
+    have eligible := Run.eligibility_le_finalized ((toFin.append fromFin).append toPulled)
+      h.genesis v.toNat w foundW farAct
+    have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+    have late := (lateB_iff config pulled anc fin v.toNat).mpr ⟨w, foundW, by
+      have := UInt64.le_iff_toNat_le.mp eligible
+      simp only at this
+      omega, by omega⟩
+    simp only [late, ↓reduceIte]
     omega
+
+/-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
+theorem stub_V (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    cV1 pulled counted V + cV2 pulled counted V ≤
+      ((∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) +
+        (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+        (∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
+        (∑ v ∈ V, credDepR events v.toNat) +
+        (∑ v ∈ V, consAmt events v.toNat) + preset.upwardBand * dueAt fin high V +
+        (∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).exitingB v.toNat = true,
+          eR pulled v) +
+        (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
+          eR pulled v) : ℕ) := by
+  have base := stub_V_of h tailC
+    (V_active h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
+    (V_left h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
+  have sync : ∑ v ∈ V, ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) ≤
+      ∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat)) :=
+    Finset.sum_le_sum fun v _ => by unfold syncD; omega
+  refine le_trans base (Int.ofNat_le.mpr ?_)
+  simp only [syncD, Finset.sum_add_distrib] at sync ⊢
+  omega
 
 end LowBound
 
