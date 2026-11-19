@@ -17758,7 +17758,20 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
         endEpochC replayedC activated absent)
     unfold keyCeiling
     omega
-  · sorry
+  · -- the key is created on the shared segment, and its envelope starts at its first state
+    have splitSize : v.toNat < split.validators.data.size := Nat.lt_of_not_le absent
+    obtain ⟨c, toC, fromC, cutC, insideC, before, floorStart⟩ := created_first_state h fromFin
+      tailC (activated_of_quorum h.early voter) created splitSize
+    by_cases frozen : PinSplit2.capAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat =
+        PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat ∧
+      PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
+        PinSplit2.capAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat
+    · exact key_core_frozen_from h tail replayed fromFin replayedF tailC highC endEpochC replayedC v
+        (voter_unslashed h v voter) (created_late h created) toC fromC cutC insideC before
+        (Or.inr floorStart) frozen.1 frozen.2 kept
+    · exact key_core_flip h tail replayed fromFin replayedF tailC highC endEpochC replayedC v
+        (voter_unslashed h v voter) (created_late h created) toC fromC cutC insideC before
+        (Or.inr floorStart) frozen kept
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The per-key core of the rise.
