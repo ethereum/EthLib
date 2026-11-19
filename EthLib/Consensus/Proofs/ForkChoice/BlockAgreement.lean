@@ -152,7 +152,7 @@ theorem Execution.exists_signed_of_blocks
   · exact .inr ⟨sb, pre, post, mem, msg, hash, rest⟩
 
 /-- A store that starts at the anchor store stays reachable from the anchor. -/
-private theorem Execution.reachable_of_start
+theorem Execution.reachable_of_start
     (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchor : Store preset fork}

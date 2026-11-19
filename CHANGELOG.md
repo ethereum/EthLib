@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Otherwise two honest stores collide.
+  The receiver must hold the payload of each envelope it accepts from its view as verified.
+  `Execution.reachable_of_start` shows that a store that starts at the anchor store stays reachable from the anchor.
+
 - `Execution.honestHeadsExist_or_evidence_of_gloas` shows that from Gloas an up-to-date honest store has a head ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Otherwise two honest stores collide, or direct-safety evidence holds.
   It is the Gloas companion of `Execution.honestHeadsExist_or_evidence`, which keeps its statement.

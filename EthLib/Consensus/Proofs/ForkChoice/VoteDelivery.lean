@@ -721,6 +721,61 @@ theorem VoteAt.accepted_at_next_slot_of_payloadVote {anchor : Store preset fork}
   exact vote.accepted_of_target_known anchored start honest receiver committees
     nBound arrivalBound targetKnown valid
 
+/-- From Gloas, a receiver passes the payload check of an honest duty vote for a block it holds.
+
+Otherwise two honest stores collide by `last`. -/
+theorem VoteAt.validatePayloadVote_or_collision {Δ : ℕ} (sync : e.Synchronous Δ)
+    (gloas : .glamsterdam ≤ fork) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {last : ℕ}
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    (startVoter : e.start v = anchor) (startReceiver : e.start w = anchor)
+    {slot : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (late : deadline + Δ ≤ (e.world arrival).time) (arrivalBound : (e.world arrival).time ≤ last)
+    (closed : ∀ (signed : SignedExecutionPayloadEnvelope preset fork) after,
+      .envelope gloas signed ∈ (e.world arrival).view w →
+      ((e.world arrival).state w).onExecutionPayloadEnvelope config checks sources gloas signed =
+        .ok after →
+      ((e.world arrival).state w).isPayloadVerified gloas signed.message.beaconBlockRoot = true)
+    {voted : BeaconBlock preset fork}
+    (votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
+      some voted) :
+    ((e.world arrival).state w).validatePayloadVote gloas attestation voted = .ok () ∨
+      HonestCollision (e := e) last := by
+  rcases e.blocksAgree_or_collision last with agree | collision
+  swap
+  · exact .inr collision
+  -- The voter's head is the voted block, since the two stores agree.
+  obtain ⟨head, headBlock, -, state, headOk, headKnown, -, -, made⟩ := vote.honestData
+  obtain ⟨indexOk, -, slotEq, rootEq, -, -⟩ := getAttestationData_eq_ok_iff.mp made
+  have nBound : (e.world n).time ≤ last := by
+    have := vote.atTime
+    omega
+  obtain rfl : headBlock = voted := agree v honest w receiver n arrival nBound arrivalBound _ _ _
+    (by rw [rootEq]; exact headKnown) votedKnown
+  -- A vote at its head's slot or on an empty head names no payload.
+  by_cases same : headBlock.slot = state.slot
+  · rw [attestationDataIndex_of_glamsterdam_of_eq gloas same, Except.ok.injEq] at indexOk
+    exact .inl (by simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure])
+  rw [attestationDataIndex_of_glamsterdam_of_ne gloas same] at indexOk
+  cases status : head.payloadStatus <;> rw [status] at indexOk <;>
+    simp only [Except.ok.injEq, reduceCtorEq] at indexOk
+  · exact .inl (by simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure])
+  -- A full head has its payload verified at the voter, and synchrony delivers it.
+  have verified := Store.isPayloadVerified_of_getHead gloas headOk status
+  rw [← rootEq] at verified
+  obtain ⟨st, stFound, -⟩ :=
+    (e.reachable_of_start anchored startReceiver arrival).blockStatesFromParents votedKnown
+  rcases e.payloadVerified_of_partiallySynchronous sync gloas anchorSlot anchored honest receiver
+      startVoter startReceiver (by rw [vote.atTime, Nat.max_zero]; exact late) arrivalBound
+      closed verified ⟨st, stFound⟩ with delivered | collision
+  · have slotNe : headBlock.slot ≠ attestation.data.slot := slotEq ▸ same
+    exact .inl (by simp [Store.validatePayloadVote, ← indexOk, slotNe, delivered, pure,
+      Except.pure])
+  · exact .inr collision
+
 /-- A held duty vote is accepted at the next slot, or bounded honest stores name a collision.
 
 The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.

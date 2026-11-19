@@ -457,33 +457,12 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have payload : ∀ gloas : .glamsterdam ≤ fork,
       ((e.world arrival).state w).validatePayloadVote gloas attestation headBlock = .ok () := by
     intro gloas
-    obtain ⟨hd, hb, -, state, hdOk, hbKnown, -, -, made⟩ := vote.honestData
-    rw [headOk, Except.ok.injEq] at hdOk
-    subst hdOk
-    rw [headKnown, Option.some.injEq] at hbKnown
-    subst hbKnown
-    obtain ⟨indexOk, -, slotEq, rootEq, -, -⟩ := getAttestationData_eq_ok_iff.mp made
-    by_cases same : headBlock.slot = state.slot
-    · rw [attestationDataIndex_of_glamsterdam_of_eq gloas same, Except.ok.injEq] at indexOk
-      simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
-    rw [attestationDataIndex_of_glamsterdam_of_ne gloas same] at indexOk
-    cases status : head.payloadStatus <;> rw [status] at indexOk <;>
-      simp only [Except.ok.injEq, reduceCtorEq] at indexOk
-    · simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
-    · -- A full head has its payload verified at the voter, and so at the receiver.
-      have verified := Store.isPayloadVerified_of_getHead gloas headOk status
-      rw [← rootEq] at verified
-      obtain ⟨st, stFound, -⟩ :=
-        (forward w hw arrival).reachable.blockStatesFromParents votedKnown
-      rcases e.payloadVerified_of_partiallySynchronous sync gloas (UInt64.le_of_eq anchorSlot)
-          anchored hv hw (start v hv) (start w hw) (by simpa using late) arrivalBound
-          (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted) ▸
-            Store.onExecutionPayloadEnvelope_verified accepted) verified
-          ⟨st, stFound⟩ with delivered | collision
-      swap
-      · exact absurd collision noCollision
-      have slotNe : headBlock.slot ≠ attestation.data.slot := slotEq ▸ same
-      simp [Store.validatePayloadVote, ← indexOk, slotNe, delivered, pure, Except.pure]
+    rcases vote.validatePayloadVote_or_collision sync gloas (UInt64.le_of_eq anchorSlot) anchored
+        hv hw (start v hv) (start w hw) (by rw [← nTime]; exact late) arrivalBound
+        (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted) ▸
+          Store.onExecutionPayloadEnvelope_verified accepted) votedKnown with checked | collision
+    · exact checked
+    · exact absurd collision noCollision
   rcases vote.accepted_at_next_slot_of_payloadVote anchored start hv hw committees dataSlot
       nextOk arrivalSlot arrivalBound nBound votedKnown notFuture payload
       receiverRead with
