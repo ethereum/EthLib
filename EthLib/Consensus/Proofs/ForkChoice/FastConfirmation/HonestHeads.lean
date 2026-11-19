@@ -381,7 +381,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have dueLt := fits.due_lt_slot nextOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextOk slotTimeOk followingTimeOk deadline
   -- The duty vote carries the signed data, so its target is the justified checkpoint.
-  obtain ⟨dataSlot, dataEpoch, head, headBlock, headOk, headKnown, dataRoot, notFuture⟩ :=
+  obtain ⟨dataSlot, dataEpoch, head, headBlock, -, headKnown, dataRoot, notFuture⟩ :=
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start hv deadline dueOk dueLt
   have signedEpoch : data.target.epoch = computeEpochAtSlot preset data.slot := by
     obtain ⟨_, _, _, _, _, _, _, _, made⟩ := honestData
@@ -487,9 +487,9 @@ private theorem Execution.filteredTree_of_justifiedState {anchor : Store preset 
     (start : ∀ w ∈ J, e.start w = anchor) (sound : Invariant anchorState)
     (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (parameters : DirectSafety.Parameters preset)
     (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
       preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     {w : ValidatorIndex} (hw : w ∈ J) (k : ℕ)
     (unknown : ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
     {state : BeaconState preset fork}
@@ -497,9 +497,6 @@ private theorem Execution.filteredTree_of_justifiedState {anchor : Store preset 
       .ok state) :
     Store.ForwardReachable config anchorState anchorBlock ((e.world k).state w) ∧
       ∃ nodes, ((e.world k).state w).getFilteredNodeTree config = .ok nodes := by
-  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
-    have := parameters.lookahead
-    omega
   have reached := e.forwardReachableWith
     (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
   have forward := reached.forwardReachable
@@ -553,10 +550,13 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
       enough terminal with states | alternative
   · left
     have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+    have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+      have := parameters.lookahead
+      omega
     intro w hw k _ inTime upToDate
     obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
     obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
-      (UInt64.le_of_eq anchorSlot) anchorBoundary parameters seeds hw k (absent w hw k inTime)
+      (UInt64.le_of_eq anchorSlot) anchorBoundary seeds history hw k (absent w hw k inTime)
       stateOk
     -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
     exact Store.getHead_exists preGloas forward (UInt64.le_of_eq anchorSlot) (absent w hw k inTime)
@@ -963,11 +963,14 @@ theorem Execution.honestHeadsExist_or_evidence_of_gloas {Δ : ℕ} (sync : e.Syn
   have registries := e.honestRegistries_of_room slots gloas anchored start
     (UInt64.le_of_eq anchorSlot) sound bounded room
   left
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+    have := parameters.lookahead
+    omega
   intro w hw k _ inTime upToDate
   obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
   obtain ⟨held, within⟩ := registries w hw k inTime
   obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
-    (UInt64.le_of_eq anchorSlot) anchorBoundary parameters fit.seeds hw k (absent w hw k inTime)
+    (UInt64.le_of_eq anchorSlot) anchorBoundary fit.seeds history hw k (absent w hw k inTime)
     stateOk
   exact Store.getHead_exists_of_gloas gloas forward (UInt64.le_of_eq anchorSlot)
     (absent w hw k inTime) fit scoreFits weights tree stateOk (within state stateOk) held

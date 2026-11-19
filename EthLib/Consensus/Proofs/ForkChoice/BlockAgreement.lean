@@ -151,23 +151,6 @@ theorem Execution.exists_signed_of_blocks
   · exact .inl old
   · exact .inr ⟨sb, pre, post, mem, msg, hash, rest⟩
 
-/-- A store that starts at the anchor store stays reachable from the anchor. -/
-theorem Execution.reachable_of_start
-    (e : Execution (forkChoice config checks sources signed sends) J)
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {v : ν}
-    (start : e.start v = anchor) (i : ℕ) :
-    Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
-  induction i with
-  | zero =>
-    change Store.Reachable config anchorState anchorBlock (e.start v)
-    exact start ▸ Store.Reachable.anchor anchored
-  | succ i ih =>
-    rcases e.state_succ i v with same | ⟨_, moved⟩
-    · exact same ▸ ih
-    · exact moved.reachable ih
-
 /-- Stores from one anchor agree on states wherever their blocks agree. -/
 theorem Execution.blockStates_eq (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
@@ -587,7 +570,7 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
 
 Both stores start at the anchor store, and the receiver holds the state of the payload's block.
 
-The receiver holds the payload of each envelope in its view as verified, as up-to-date stores do.
+For each envelope in its view that the receiver accepts, its store already marks the root verified.
 
 The anchor block must not be after the anchor state, so that no walk reaches the anchor's parent.
 

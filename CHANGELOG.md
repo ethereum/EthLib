@@ -11,7 +11,7 @@ Not yet released.
 
 - `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Otherwise two honest stores collide.
-  The receiver must hold the payload of each envelope it accepts from its view as verified.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
   `Execution.reachable_of_start` shows that a store that starts at the anchor store stays reachable from the anchor.
 
 - `Execution.honestHeadsExist_or_evidence_of_gloas` shows that from Gloas an up-to-date honest store has a head ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
@@ -29,7 +29,7 @@ Not yet released.
 
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
-  The receiver's store must hold the payload of each envelope that it accepts from its view as verified.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
   Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
   `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
   `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
@@ -399,7 +399,7 @@ Not yet released.
 ### Changes that break callers
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
-  Its premise `closed` now asks only that the receiver holds the payload of each envelope it accepts from its view as verified.
+  Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
   It no longer asks that the envelope leaves the store unchanged.
   This survives two valid envelopes for one root.
   A caller with the old premise `old` passes `fun s a m h => old s a m h ▸ Store.onExecutionPayloadEnvelope_verified h`.
