@@ -9,6 +9,13 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It reaches each later honest receiver that holds its block state, or bounded honest stores collide.
+  `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
+  `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
+
+- `Store.getNodeChildren_held` shows that each child of a held node is held and lower in rank, at every fork.
+
 - `VoteAt.accepted_at_next_slot_of_payloadVote` accepts a held duty vote at the next slot at every fork, or names a collision of bounded honest stores ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   From Gloas it takes the receiver's check of the payload status that the vote names.
 
