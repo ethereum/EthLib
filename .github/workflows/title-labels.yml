@@ -34,6 +34,8 @@ concurrency:
 
 jobs:
   title-labels:
+    # A manual run reads the tables from master only.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -117,7 +119,11 @@ jobs:
               const labels = [`type: ${type}`];
               if (bang) labels.push(BREAKING);
               if (isIssue && scope) {
-                for (const part of scope.split(',')) labels.push(...(SCOPES[part.trim()] ?? []));
+                for (const part of scope.split(',')) {
+                  // Own keys only, so that a scope such as constructor finds nothing.
+                  const key = part.trim();
+                  if (Object.hasOwn(SCOPES, key)) labels.push(...SCOPES[key]);
+                }
               }
               return [...new Set(labels)];
             }

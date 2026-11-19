@@ -223,7 +223,6 @@
           - 'tests/execution/**'
           - 'bindings/python/tests/blocks/**'
           - 'bindings/python/tests/evm/**'
-          - 'bindings/python/tests/evm/**'
           - 'bindings/python/tests/fees/**'
           - 'bindings/python/tests/state/**'
           - 'bindings/python/tests/transactions/**'
@@ -251,7 +250,6 @@
           - 'EthLib/Execution/Proofs/Exports/Evm*.lean'
           - 'bindings/python/tests/evm/**'
           - 'EthLib/Execution/Exports/Precompiles*.lean'
-          - 'bindings/python/tests/evm/**'
 
 "execution: fees":
   - changed-files:
