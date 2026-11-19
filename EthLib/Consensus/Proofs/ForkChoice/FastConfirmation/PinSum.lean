@@ -2242,8 +2242,11 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       p.fork < .glamsterdam := fun r2 =>
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
   -- the balance at the end of each prefix of the run is above `floor`
-  have endpointFloor := cfloor_balance h e wholeRun near replayed i val initial clean retained
-    slack ρn ρd floor start pass arith
+  have endpointFloor : ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+      (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
+      floor ≤ actualBalanceAt p i.toNat := fun r1 r2 whole =>
+    cfloor_balance h e wholeRun near replayed i val initial clean retained slack ρn ρd floor start
+      pass arith r1 r2 whole
   have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
       ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, e⟩),
         r1.append r2 = wholeRun := fun member => by
