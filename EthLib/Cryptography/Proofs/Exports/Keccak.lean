@@ -84,7 +84,7 @@ private theorem ofLanes_laneAt {state : ByteArray} (h : state.size = 200) :
   have bit : z.val % 8 = index x y z % 8 := by
     simp only [index]
     omega
-  rw [byte, bit, EthLib.Base.byteAt, dif_pos hb]
+  rw [byte, bit, EthLib.Base.byteAt, dite_eq_left hb]
   rfl
 
 /-- The bytes of the 25 lanes, in order, are the 200 output bytes of the bit state. -/
@@ -111,16 +111,10 @@ private theorem bytesOfLanes_eq (B : Keccak.State) :
         B.lane ⟨(i / 8) % 5, by omega⟩ ⟨i / 40, by omega⟩ := by
       have h8 : i / 8 < 25 := by omega
       rw [Keccak.State.lane]
-      try dsimp only
+      dsimp only
       rw [show (i / 8) % 5 + 5 * (i / 40) = i / 8 by omega]
-      first
-        | exact (getElem!_pos _ (i / 8) h8).symm
-        | simp [h8]
-    first
-      | simp only [lane]
-      | exact congrArg (fun v => (Keccak.Internal.bytesOfLane v)[i % 8]'(by
-          simp only [Keccak.Internal.bytesOfLane, List.length_cons, List.length_nil]
-          omega)) lane
+      exact (getElem!_pos _ (i / 8) h8).symm
+    simp only [lane]
 
 /-- For every 200-byte state, the export returns Keccak-f[1600] of the bit model.
 
