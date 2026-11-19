@@ -1368,9 +1368,13 @@ private theorem key_stay {fin pulled counted : BeaconState preset fork}
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
     (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
     (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
-    (balanceC : ∀ z ∈ rC.balancePath, actualBalanceAt z i ≤ Bc)
+    (alignedC : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startC : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capHigh)
+    (alignedR : capP % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startR : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capP)
+    (balanceC : ∀ z ∈ rC.balancePath, min (actualBalanceAt z i) capHigh ≤ Bc)
     (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
-    (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
+    (balanceR : ∀ z ∈ rR.balancePath, min (actualBalanceAt z i) capP ≤ Bp)
     (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP) :
     effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
         effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i ∨
@@ -1379,12 +1383,12 @@ private theorem key_stay {fin pulled counted : BeaconState preset fork}
           max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
             (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)) := by
   obtain ⟨ceilC, sameC, afterC, -⟩ :=
-    PinSplit2.Run.effective_ceiling_of_balance_ceiling rC early fulu i inside Bc capHigh balanceC
-      capC
+    PinSplit2.Run.effective_ceiling_of_balance_ceiling rC early fulu i inside Bc capHigh alignedC
+      startC balanceC capC
   by_cases flat : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch fin).toNat
   · obtain ⟨-, sameR, -, -⟩ :=
-      PinSplit2.Run.effective_ceiling_of_balance_ceiling rR early fulu i inside Bp capP balanceR
-        capR
+      PinSplit2.Run.effective_ceiling_of_balance_ceiling rR early fulu i inside Bp capP alignedR
+        startR balanceR capR
     have atFin : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch fin).toNat := by omega
     exact .inl ((sameC flat).trans (sameR atFin).symm)
   · have after : (getCurrentEpoch fin).toNat < (getCurrentEpoch counted).toNat := by omega
@@ -1434,9 +1438,13 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
     (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork)
     (later : (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat)
     (i : ℕ) (inside : i < fin.validators.data.size) (Bc capHigh Bp capP : ℕ)
-    (balanceC : ∀ z ∈ rC.balancePath, actualBalanceAt z i ≤ Bc)
+    (alignedC : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startC : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capHigh)
+    (alignedR : capP % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startR : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤ capP)
+    (balanceC : ∀ z ∈ rC.balancePath, min (actualBalanceAt z i) capHigh ≤ Bc)
     (capC : ∀ z ∈ rC.balancePath, PinSplit2.capAt z i ≤ capHigh)
-    (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
+    (balanceR : ∀ z ∈ rR.balancePath, min (actualBalanceAt z i) capP ≤ Bp)
     (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP)
     (capFor high S U : ℕ)
     (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor + S + U)
@@ -1451,7 +1459,8 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
               (high - high % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) -
           effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) + S + U :=
   rise_arith incPos
-    (key_stay rC rR early fulu later i inside Bc capHigh Bp capP balanceC capC balanceR capR)
+    (key_stay rC rR early fulu later i inside Bc capHigh Bp capP alignedC startC alignedR startR
+      balanceC capC balanceR capR)
     (effective_aligned (shared.append rC) genesis maxAligned i) capped ceiling slack
 
 /-- The per-key core of the rise.
