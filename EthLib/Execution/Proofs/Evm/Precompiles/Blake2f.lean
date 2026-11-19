@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Precompiles.Blake2f
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: `Precompiles.Blake2f`
@@ -35,7 +36,7 @@ namespace EthLib.Execution.Evm.Precompiles.Blake2f
 /-- The price of a 213-byte input is one gas per round. -/
 theorem gasCost_of_size (data : ByteArray) (h : data.size = INPUT_BYTES) :
     gasCost data = GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat := by
-  simp [gasCost, h]
+  simp [gasCost, Base.exactBytes?, Base.exactArray?, h]
 
 /-- A call with a 213-byte input and too little gas runs out of gas, whatever its flag byte. -/
 theorem blake2f_outOfGas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}
@@ -56,7 +57,7 @@ theorem blake2f_invalidInputLength (data : ByteArray) (h : data.size ≠ INPUT_B
 /-- An input that is not 213 bytes long is rejected, whatever it holds. -/
 theorem output_invalidInputLength (data : ByteArray) (h : data.size ≠ INPUT_BYTES) :
     output data = .error (.invalidInputLength data.size) := by
-  simp [output, h]
+  simp [output, Base.exactBytes_of_size_ne _ h, bind, Except.bind]
 
 /-- A flag byte above `1` is rejected. -/
 theorem readFlag_invalid (flag : UInt8) (hf : 1 < flag) : readFlag flag = .error (.invalidFlag flag) := by
@@ -75,7 +76,7 @@ theorem output_invalidFlag (data : ByteArray) (h : data.size = INPUT_BYTES)
   -- Byte 212 is in range, so reading it with a default gives the byte itself.
   have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, h, INPUT_BYTES]; omega
   rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some] at hf ⊢
-  simp [output, h, readFlag_invalid _ hf]
+  simp [output, Base.exactBytes_of_size_eq _ h, readFlag_invalid _ hf, bind, Except.bind]
 
 /-- A 213-byte input whose flag byte reads as `f` returns F on its fields, with that flag. -/
 theorem output_ok (data : ByteArray) (h : data.size = INPUT_BYTES) {f : Bool}
@@ -84,7 +85,7 @@ theorem output_ok (data : ByteArray) (h : data.size = INPUT_BYTES) {f : Bool}
   -- Byte 212 is in range, so reading it with a default gives the byte itself.
   have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, h, INPUT_BYTES]; omega
   rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some] at hf
-  simp [output, h, hf]
+  simp [output, Base.exactBytes_of_size_eq _ h, hf, bind, Except.bind, pure, Except.pure]
 
 /-- The three errors of a call, in the order the call checks them.
 
@@ -280,9 +281,10 @@ theorem output_eq_ok_iff (data : ByteArray) (v : Vector UInt8 OUTPUT_BYTES) :
   · -- Byte 212 is in range, so reading it with a default gives the byte itself.
     have hlt : 212 < data.data.size := by simp only [ByteArray.size_data, hsize, INPUT_BYTES]; omega
     rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hlt, Option.getD_some]
-    simp only [output, hsize, dite_true, exists_true_left]
-    cases hf : readFlag data.data[212] <;> simp [hf, eq_comm]
-  · simp [output, hsize]
+    simp only [output, Base.exactBytes_of_size_eq _ hsize, hsize, exists_true_left]
+    cases hf : readFlag data.data[212] <;>
+      simp [hf, eq_comm, bind, Except.bind, pure, Except.pure]
+  · simp [output, Base.exactBytes_of_size_ne _ hsize, hsize, bind, Except.bind]
 
 /--
 A call succeeds exactly when the input is 213 bytes, the gas covers the price and the flag decodes.

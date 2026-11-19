@@ -127,7 +127,7 @@ theorem decodeOpening_isSome_iff (bytes : ByteArray) :
 /-- A root that is not 32 bytes is rejected. -/
 theorem verifyBytes_badRoot {root opening : ByteArray} {index : Nat}
     (h : root.size ≠ VRF_HASH_SIZE) : verifyBytes root index opening = none := by
-  simp [verifyBytes, h]
+  simp [verifyBytes, Base.exactBytes?, Base.exactArray?, h]
 
 /-- An index outside `[0, 2^32)` is rejected. -/
 theorem verifyBytes_badIndex {root opening : ByteArray} {index : Nat}
@@ -141,20 +141,17 @@ theorem verifyBytes_badOpening {root opening : ByteArray} {index : Nat}
     unfold decodeOpening
     simp [h]
   unfold verifyBytes
-  split
-  · split
+  cases Base.exactBytes? VRF_HASH_SIZE root with
+  | none => rfl
+  | some _ =>
+    split
     · simp [hnone]
     · rfl
-  · rfl
 
 /-- On encoded inputs, verification over bytes is typed verification. -/
 theorem verifyBytes_encode (root : Digest) (i : UInt32) (o : Opening) :
     verifyBytes (packBytes root) i.toNat (encodeOpening o) = verify root i o := by
-  have hroot : readBytes (packBytes root) 0 VRF_HASH_SIZE (by simp) = root := by
-    apply Vector.ext
-    intro k hk
-    simp [Base.readBytes_eq_ofFn_data, packBytes]
   have hi : i.toNat < 2 ^ VRF_TREE_HEIGHT := i.toNat_lt
-  simp [verifyBytes, hi, hroot]
+  simp [verifyBytes, hi]
 
 end EthLib.Cryptography.Vrf

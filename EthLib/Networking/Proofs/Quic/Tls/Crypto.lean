@@ -69,7 +69,7 @@ theorem sharedSecret_x25519_nonzero (privateKey peer output : Vector UInt8 32)
 theorem sharedSecret_x25519_agree (a b : Vector UInt8 32) :
     sharedSecret 0x001d a (packBytes (X25519.publicKey b)) =
       sharedSecret 0x001d b (packBytes (X25519.publicKey a)) := by
-  simp [sharedSecret, X25519.x25519_agree a b]
+  simp [sharedSecret, X25519.x25519_agree a b, bind, Except.bind]
 
 /-- CertificateVerify checks both the P-256/SHA-256 identifier and its strict DER signature. -/
 theorem verifyCertificateVerify_eq_true_iff (algorithm : Wire.CodePoint)
