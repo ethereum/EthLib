@@ -6829,6 +6829,13 @@ private theorem riseQ_eq_zero {x y : ForkedBeaconState preset} (tail : Run confi
     none c member same
   simp [riseQ, unseen]
 
+/-- A key with no charge on a run has no charge amount. -/
+private theorem chargeAmt_eq_zero {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    {i : ℕ} (none : ¬ ∃ c ∈ tail.departureCharges, c.index = i) : chargeAmt tail i = 0 := by
+  unfold chargeAmt
+  rw [List.find?_eq_none.mpr fun c member same => none ⟨c, member, by simpa using same⟩]
+  rfl
+
 /-- A key of `K5` that has a charge on the run exits by the run's last epoch. -/
 private theorem charge_epoch_le_of_K5 (early : fork < .glamsterdam)
     {x : ForkedBeaconState preset} (tail : Run config checks x ⟨fork, counted⟩)
@@ -17791,6 +17798,111 @@ private theorem whistle_slack (h : Setting config checks g split fin pulled anc 
             else (pinTerms config pulled anc fin).unitGain) :=
   sorry
 
+/-- A charge on C's run of a key not active at C is due by C's epoch.
+
+It is also due after the split's epoch and the seed lookahead, as every charge of the run is.
+
+The key is activated at the step that starts its exit, so it is inactive at C only by its exit.
+
+That step is a seed lookahead before the charge's epoch, so the activation is by R's epoch. -/
+private theorem charge_due (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {i : ℕ}
+    (inactive : ¬ isActiveAt counted (getCurrentEpoch counted) i = true)
+    {c : DepartureCharge} (member : c ∈ tailC.departureCharges) (index : c.index = i) :
+    (getCurrentEpoch split).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ c.epoch ∧
+      c.epoch ≤ (getCurrentEpoch counted).toNat ∧
+      ∀ wC, counted.validators.data[i]? = some wC →
+        wC.activationEpoch.toNat ≤ (getCurrentEpoch pulled).toNat := by
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨stop, chosen⟩ := stop_of_charge fromFin tailC member index
+  have selected := stop.selected
+  rw [chosen] at selected
+  obtain ⟨-, -, -, next, step, remaining, -, inStep, v, w, atStop, atNext, unset, assigned, -⟩ :=
+    selected
+  have stopElectra : .pectra ≤ stop.state.fork :=
+    Nat.le_trans electra (fork_le_of_chainSteps stop.pre.chainSteps)
+  have activated := step.chainStep.exit_assigned_activated stopElectra atStop atNext unset assigned
+  have activatedNat := UInt64.le_iff_toNat_le.mp activated
+  have toCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps stop.post.chainSteps)
+  simp only at toCounted
+  have stepLow := DirectSafety.Run.departureCharges_epoch_ge_start (Run.nil.snoc step) stopElectra
+    (Nat.lt_of_le_of_lt (fork_le_of_chainSteps remaining.chainSteps) h.early) c
+    (by simpa [Run.departureCharges] using inStep)
+  obtain ⟨last, located, kept⟩ := stop.post.registryLifecycle.validators i v atStop
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots stop.state.state
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have sameActivation := kept.activationEpoch (fun same => by
+    rw [same] at activatedNat
+    omega)
+  obtain ⟨wC, foundC, -, epochC⟩ := Run.departure_charge_exit tailC c member
+  rw [index] at foundC
+  obtain rfl : last = wC := Option.some.inj (located.symm.trans foundC)
+  have notActive : isActiveValidator last (getCurrentEpoch counted) = false := by
+    cases now : isActiveValidator last (getCurrentEpoch counted)
+    · rfl
+    · exact absurd (isActiveAt_eq_true_iff.mpr ⟨last, located, now⟩) inactive
+  simp only [isActiveValidator, Bool.and_eq_false_iff, decide_eq_false_iff_not] at notActive
+  have due : c.epoch ≤ (getCurrentEpoch counted).toNat := by
+    rw [← epochC]
+    rcases notActive with late | exited
+    · exact absurd (UInt64.le_iff_toNat_le.mpr (by rw [sameActivation]; omega)) late
+    · exact Nat.le_of_not_lt fun lt => exited (UInt64.lt_iff_toNat_lt.mpr lt)
+  refine ⟨DirectSafety.Run.departureCharges_epoch_ge_start tailC electra h.early c member, due,
+    fun wC' found => ?_⟩
+  obtain rfl : wC' = last := Option.some.inj (found.symm.trans located)
+  have near := h.near
+  have lookahead := h.window.lookahead
+  rw [sameActivation]
+  omega
+
+/-- Positions charged on C's run that are not active at C pay at most the window, and are few.
+
+Each such position holds a validator at C, so it is a validator index.
+
+Its charge is due by C's epoch, and it is activated by R's epoch, so `charged_count_of` counts it.
+-/
+private theorem charged_window (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (T : Finset ℕ)
+    (keys : ∀ i ∈ T, ¬ isActiveAt counted (getCurrentEpoch counted) i = true ∧
+      ∃ c ∈ tailC.departureCharges, c.index = i) :
+    ∑ i ∈ T, chargeAmt tailC i ≤ (pinTerms config pulled anc fin).queueWindow ∧
+      T.card ≤ (pinTerms config pulled anc fin).queueKeys := by
+  classical
+  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have small : ∀ i ∈ T, i < 2 ^ 64 := by
+    intro i member
+    obtain ⟨-, c, inRun, index⟩ := keys i member
+    obtain ⟨w, found, -⟩ := Run.departure_charge_exit tailC c inRun
+    rw [index] at found
+    have : i < counted.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
+    omega
+  have injective : Set.InjOn (fun i => (UInt64.ofNat i : ValidatorIndex)) T :=
+    fun a ha b hb same => by
+      have := congrArg UInt64.toNat same
+      rwa [UInt64.toNat_ofNat_of_lt' (small a ha), UInt64.toNat_ofNat_of_lt' (small b hb)] at this
+  have back : ∀ v ∈ T.image (fun i => (UInt64.ofNat i : ValidatorIndex)), v.toNat ∈ T ∧
+      ¬ isActiveAt counted (getCurrentEpoch counted) v.toNat = true ∧
+      ∃ c ∈ tailC.departureCharges, c.index = v.toNat := by
+    intro v member
+    obtain ⟨i, inT, rfl⟩ := Finset.mem_image.mp member
+    rw [UInt64.toNat_ofNat_of_lt' (small i inT)]
+    exact ⟨inT, keys i inT⟩
+  have image : ∑ v ∈ T.image (fun i => (UInt64.ofNat i : ValidatorIndex)),
+      chargeAmt tailC v.toNat = ∑ i ∈ T, chargeAmt tailC i := by
+    rw [Finset.sum_image injective]
+    exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
+  refine ⟨image ▸ charge_amounts_le_queueWindow h tailC _ fun v member => ?_, ?_⟩
+  · obtain ⟨-, inactive, c, inRun, index⟩ := back v member
+    exact ⟨c, inRun, index, (charge_due h tailC inactive inRun index).2.1⟩
+  · rw [← Finset.card_image_of_injOn injective]
+    refine charged_count_of h tailC _ fun v member => ?_
+    obtain ⟨-, inactive, c, inRun, index⟩ := back v member
+    exact ⟨(charge_due h tailC inactive inRun index).2.2,
+      fun d dRun dIndex => (charge_due h tailC inactive dRun dIndex).2.1, c, inRun, index⟩
+
 /-- (W-X) The keys that R exits are paid by `reserveW`, with the queue window of the created ones.
 
 A key of the split's registry that is not slashed at R is a term of `exitedSlashable`.
@@ -17824,8 +17936,152 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
           counted) i = true)), (chargeAmt tailC i + preset.upwardBand + (pinTerms config pulled anc
           fin).depth * (pinTerms config pulled anc fin).gainRateMax) / (parameters preset
           fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
-      (pinTerms config pulled anc fin).reserveW :=
-  sorry
+      (pinTerms config pulled anc fin).reserveW := by
+  classical
+  set G := preset.upwardBand + (pinTerms config pulled anc fin).depth *
+    (pinTerms config pulled anc fin).gainRateMax with hG
+  set W := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat with hW
+  set S1 := ((slashedOnC split counted).filter (fun i => i < split.validators.data.size)).filter
+    (fun i => exitedSlashable anc pulled i = true) with hS1
+  set S2 := (((slashedOnC split counted).filter (fun i => i < split.validators.data.size)).filter
+    (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+      ¬ exitedSlashable anc pulled i = true)).filter
+    (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true) with hS2
+  set S3 := ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
+    (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true) with hS3
+  set P := (Finset.range pulled.validators.data.size).filter fun i =>
+    ((pulled.validators.data[i]?).map (·.slashed)).getD false = false ∧
+      ((pulled.validators.data[i]?).map fun v =>
+        decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true ∧
+      (pulled.validators.data[i]?).any (fun v =>
+        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true with hP
+  have reserveEq : (pinTerms config pulled anc fin).reserveW =
+      3 * (∑ i ∈ P, max (balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+          (max ((pinTerms config pulled anc fin).bF i) (balanceAt fin i)) +
+        (if (pinTerms config pulled anc fin).tight = true then 0 else
+          (pinTerms config pulled anc fin).queueWindow +
+            (pinTerms config pulled anc fin).queueKeys * G)) / W := rfl
+  -- the keys that `exitedSlashable` marks are its terms
+  have group1 : ∑ i ∈ S1, whistleEnv (pinTerms config pulled anc fin) pulled anc fin i ≤
+      ∑ i ∈ P, max (balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+        (max ((pinTerms config pulled anc fin).bF i) (balanceAt fin i)) := by
+    have term : ∀ i ∈ S1, whistleEnv (pinTerms config pulled anc fin) pulled anc fin i =
+        max (balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+          (max ((pinTerms config pulled anc fin).bF i) (balanceAt fin i)) := by
+      intro i member
+      have marked := of_decide_eq_true (Finset.mem_filter.mp member).2
+      have notRB : ¬ (pinTerms config pulled anc fin).slashedRB i = true := by
+        rw [slashedRB_eq]
+        simp only [decide_eq_true_eq, not_and]
+        intro slashed
+        rw [marked.1] at slashed
+        exact absurd slashed Bool.false_ne_true
+      rw [whistleEnv, ite_eq_right_of_eq_false _ _ (eq_false notRB),
+        ite_eq_left_of_eq_true _ _ (eq_true (Or.inl (Finset.mem_filter.mp member).2))]
+    rw [Finset.sum_congr rfl term]
+    refine Finset.sum_le_sum_of_subset fun i member => ?_
+    have marked := of_decide_eq_true (Finset.mem_filter.mp member).2
+    obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (Or.inl marked.2.2)
+    exact Finset.mem_filter.mpr
+      ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, marked⟩
+  -- the keys charged on C's run, of the split's registry or created on it
+  have createdCharged : ∀ i ∈ S3, ∃ c ∈ tailC.departureCharges, c.index = i := by
+    intro i member
+    obtain ⟨⟨slashedC, created⟩, -⟩ := Finset.mem_filter.mp member |>.imp_left Finset.mem_filter.mp
+    obtain ⟨-, flags⟩ := Finset.mem_filter.mp slashedC
+    have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+    cases foundC : counted.validators.data[i]? with
+    | none => simp [foundC] at flags
+    | some w =>
+      have marked : w.slashed = true := by simpa [foundC] using flags.2
+      have assigned := (Internal.CapStep.run tailC h.caps.activation h.caps.compounding
+        h.early).1.appended h.delay i w (Nat.le_of_not_lt created) foundC marked
+      obtain ⟨c, inRun, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early i
+        (fun v found => absurd (Array.getElem?_eq_some_iff.mp found).1 created) w foundC assigned
+      exact ⟨c, inRun, index⟩
+  set T2 := S2.filter fun i => ∃ c ∈ tailC.departureCharges, c.index = i with hT2
+  have dropUncharged : ∑ i ∈ S2, (chargeAmt tailC i + riseQ tailC highC i) =
+      ∑ i ∈ T2, (chargeAmt tailC i + riseQ tailC highC i) := by
+    rw [hT2, Finset.sum_filter (p := fun i => ∃ c ∈ tailC.departureCharges, c.index = i)]
+    refine Finset.sum_congr rfl fun i _ => ?_
+    split_ifs with charged
+    · rfl
+    · rw [chargeAmt_eq_zero tailC charged,
+        riseQ_eq_zero tailC highC i fun c member same => charged ⟨c, member, same⟩]
+      rfl
+  have inT : ∀ i ∈ T2 ∪ S3, ¬ isActiveAt counted (getCurrentEpoch counted) i = true ∧
+      ∃ c ∈ tailC.departureCharges, c.index = i := by
+    intro i member
+    rcases Finset.mem_union.mp member with inT2 | inS3
+    · obtain ⟨inS2, charged⟩ := Finset.mem_filter.mp inT2
+      exact ⟨(Finset.mem_filter.mp inS2).2, charged⟩
+    · exact ⟨(Finset.mem_filter.mp inS3).2, createdCharged i inS3⟩
+  have apart : Disjoint T2 S3 := by
+    refine Finset.disjoint_left.mpr fun i one two => ?_
+    have small := (Finset.mem_filter.mp (Finset.mem_filter.mp (Finset.mem_filter.mp
+      (Finset.mem_filter.mp one).1).1).1).2
+    exact (Finset.mem_filter.mp (Finset.mem_filter.mp two).1).2 small
+  have queued : ∑ i ∈ T2, (chargeAmt tailC i + riseQ tailC highC i) +
+      ∑ i ∈ S3, (chargeAmt tailC i + preset.upwardBand +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).gainRateMax) ≤
+      (if (pinTerms config pulled anc fin).tight = true then 0 else
+        (pinTerms config pulled anc fin).queueWindow +
+          (pinTerms config pulled anc fin).queueKeys * G) := by
+    by_cases tight : (pinTerms config pulled anc fin).tight = true
+    · -- tight: no charge of the run is due by C's epoch
+      have empty : T2 ∪ S3 = ∅ := by
+        refine Finset.eq_empty_of_forall_notMem fun i member => ?_
+        obtain ⟨inactive, c, inRun, index⟩ := inT i member
+        have bounds := charge_due h tailC inactive inRun index
+        have depthBound := (tight_iff config pulled anc fin).mp tight
+        have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+        have near := h.near
+        omega
+      have none2 : T2 = ∅ := Finset.subset_empty.mp (empty ▸ Finset.subset_union_left)
+      have none3 : S3 = ∅ := Finset.subset_empty.mp (empty ▸ Finset.subset_union_right)
+      simp [none2, none3, tight]
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false tight)]
+      have rises : ∀ i ∈ T2, riseQ tailC highC i ≤ G := fun i _ => by
+        rw [hG]
+        exact riseQ_le h tailC highC i
+      obtain ⟨window, count⟩ := charged_window h tailC (T2 ∪ S3) inT
+      rw [Finset.sum_union apart] at window
+      rw [Finset.card_union_of_disjoint apart] at count
+      have riseSum : ∑ i ∈ T2, riseQ tailC highC i ≤ T2.card * G := by
+        simpa using Finset.sum_le_card_nsmul T2 _ G rises
+      have rewrite3 : ∑ i ∈ S3, (chargeAmt tailC i + preset.upwardBand +
+          (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).gainRateMax) =
+          ∑ i ∈ S3, chargeAmt tailC i + S3.card * G := by
+        rw [hG, Finset.sum_add_distrib, Finset.sum_add_distrib, Finset.sum_const, Finset.sum_const,
+          smul_eq_mul, smul_eq_mul]
+        ring
+      rw [Finset.sum_add_distrib, rewrite3]
+      have times := Nat.mul_le_mul_right G count
+      rw [Nat.add_mul] at times
+      omega
+  have floors := DirectSafety.Apriori.Internal.sum_div_le S1
+    (whistleEnv (pinTerms config pulled anc fin) pulled anc fin) W
+  have floors2 := DirectSafety.Apriori.Internal.sum_div_le S2
+    (fun i => chargeAmt tailC i + riseQ tailC highC i) W
+  have floors3 := DirectSafety.Apriori.Internal.sum_div_le S3
+    (fun i => chargeAmt tailC i + preset.upwardBand +
+      (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).gainRateMax) W
+  rw [reserveEq]
+  generalize ∑ i ∈ S1, whistleEnv (pinTerms config pulled anc fin) pulled anc fin i = a
+    at floors group1
+  generalize ∑ i ∈ S2, (chargeAmt tailC i + riseQ tailC highC i) = b at floors2 dropUncharged
+  generalize ∑ i ∈ S3, (chargeAmt tailC i + preset.upwardBand +
+    (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).gainRateMax) = c
+    at floors3 queued
+  have total : 3 * (a / W) + 3 * (b / W) + 3 * (c / W) ≤ 3 * (a + b + c) / W := by
+    calc 3 * (a / W) + 3 * (b / W) + 3 * (c / W) = 3 * (a / W + b / W + c / W) := by ring
+      _ ≤ 3 * ((a + b + c) / W) := Nat.mul_le_mul_left 3
+          ((Nat.add_le_add Nat.div_add_div_le_add_div (Nat.le_refl _)).trans
+            Nat.div_add_div_le_add_div)
+      _ ≤ 3 * (a + b + c) / W := Nat.mul_div_le_mul_div_assoc 3 (a + b + c) W
+  refine le_trans (Nat.add_le_add (Nat.add_le_add (Nat.mul_le_mul_left 3 floors)
+    (Nat.mul_le_mul_left 3 floors2)) (Nat.mul_le_mul_left 3 floors3)) (total.trans ?_)
+  exact Nat.div_le_div_right (Nat.mul_le_mul_left 3 (by omega))
 
 /-- (W-F) The other active keys of the split's registry pay from their own stake.
 
