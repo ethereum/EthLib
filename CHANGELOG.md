@@ -25,6 +25,12 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.justifiedSigned_at` generalizes `Execution.justifiedHonestlySigned` to one receiver and any set of signers.
+  A store's justified checkpoint after an epoch has a signer in a set `p`.
+  This holds when the quorum voters outside `p` hold less than two thirds of the total in each state that the store counts in.
+  `justifiedHonestlySigned` is its instance with `p` the honest set, and its statement is unchanged.
+  The pin's reader takes `p` to be the voters of a call.
+
 - `Run.slashed_withdrawable_eq` says that a validator that is slashed, with an assigned exit, keeps its withdrawable epoch along a run.
   The pin's floors read it for the keys that C slashes before the split.
 
