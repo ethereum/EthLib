@@ -570,9 +570,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let creditGain := if 11 * depth * (gainRateMax + 1) ≤ capMax
-    then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
-    else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  let creditGain :=
+    (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10 +
+      (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
+        else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
   let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
     WEIGHT_DENOMINATOR.toNat + 2)
   let creditUnits := (creditedKeys + 2 * (exitingCount + queueKeys)) * unitGain
