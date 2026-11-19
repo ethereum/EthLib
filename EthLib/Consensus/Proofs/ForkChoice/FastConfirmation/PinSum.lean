@@ -4184,6 +4184,65 @@ private theorem two_bands_le_exitingBands (config : Config)
   rw [parts]
   nlinarith
 
+/-- A key whose exit C assigned by C's epoch and that R does not read as exiting has a charge.
+
+The key is active at R's epoch or the one before it, if R's record has the exit of C's.
+
+The charge is on C's run, if the exit is not inherited from the split. -/
+private theorem exit_charged (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
+    {u : Validator} (foundU : counted.validators.data[v.toNat]? = some u)
+    (assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH)
+    (exited : u.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat)
+    (unslashedC : u.slashed = false)
+    (atR : ∀ w, pulled.validators.data[v.toNat]? = some w → w.exitEpoch = u.exitEpoch →
+      isActiveAt pulled (getPreviousEpoch pulled) v.toNat = true ∨
+        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true)
+    (flag : (pinTerms config pulled anc fin).exitingB v.toNat = false) :
+    ∃ c ∈ tailC.departureCharges, c.index = v.toNat := by
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  by_cases inherited : ∃ old, split.validators.data[v.toNat]? = some old ∧
+      old.exitEpoch ≠ FAR_FUTURE_EPOCH
+  · exfalso
+    obtain ⟨old, oldFound, oldAssigned⟩ := inherited
+    obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
+    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
+    rw [sameU] at keptC
+    obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
+    have exitU : u.exitEpoch = old.exitEpoch := keptC.exitEpoch oldAssigned
+    have exitW : w.exitEpoch = old.exitEpoch := keptP.exitEpoch oldAssigned
+    have exitWU : w.exitEpoch = u.exitEpoch := exitW.trans exitU.symm
+    have exitWNat : w.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+      rw [exitWU]
+      exact exited
+    have nearNat := h.near
+    have activeR := atR w foundW exitWU
+    have notSlashed : w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
+      cases slashed : w.slashed
+      · exact .inl rfl
+      · have delayed := slashed_waits (shared.append fromFin) h.genesis toPulled tailC h.early
+          h.caps h.delay foundW slashed (by simp [foundU, unslashedC])
+        have := UInt64.le_iff_toNat_le.mp h.finalized
+        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
+    have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
+      simp only [pinTerms, decide_eq_true_eq]
+      refine ⟨?_, ?_, ?_⟩
+      · rcases activeR with active | active <;> simp [active]
+      · simpa [foundW] using notSlashed
+      · simpa [foundW] using
+          (show w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
+    rw [flag] at marked
+    exact Bool.false_ne_true marked
+  · obtain ⟨c, member, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
+      (fun w hw => by
+        by_contra far
+        exact inherited ⟨w, hw, far⟩) u foundU assignedC
+    exact ⟨c, member, index⟩
+
 /-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
 private theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
@@ -4192,7 +4251,6 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have within := BeaconState.registryWithinLimit_of_lt h.early counted
   have inK5 := Finset.mem_filter.mp member
   simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
@@ -4210,73 +4268,27 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
   have assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
     notFar (UInt64.toNat_inj.mp (by rw [← exitC.2, far]))
-  by_cases inherited : ∃ old, split.validators.data[v.toNat]? = some old ∧
-      old.exitEpoch ≠ FAR_FUTURE_EPOCH
-  · exfalso
-    obtain ⟨old, oldFound, oldAssigned⟩ := inherited
-    obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
-    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
-    rw [sameU] at keptC
-    obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
-    have gap := (shared.append fromFin).exit_activation_gap h.genesis v.toNat old oldFound
-      oldAssigned
-    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-    have actAssigned : old.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-      intro far
-      rw [far, farNat] at gap
-      have := old.exitEpoch.toNat_lt
-      omega
-    have exitU : u.exitEpoch = old.exitEpoch := keptC.exitEpoch oldAssigned
-    have actU : u.activationEpoch = old.activationEpoch := keptC.activationEpoch actAssigned
-    have exitW : w.exitEpoch = old.exitEpoch := keptP.exitEpoch oldAssigned
-    have actW : w.activationEpoch = old.activationEpoch := keptP.activationEpoch actAssigned
-    have epochU : old.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
-      rw [← exitU]
-      exact exitC.2
-    have actLt : old.activationEpoch.toNat < (getCurrentEpoch counted).toNat := by
-      rw [← actU]
-      exact exitC.1
-    have laterNat := UInt64.le_iff_toNat_le.mp h.later
-    have nearNat := h.near
-    have previous := getPreviousEpoch_toNat pulled
-    have exitWNat : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
-      rw [exitW]
-      exact epochU
-    have actWNat : w.activationEpoch.toNat = old.activationEpoch.toNat := by rw [actW]
-    have activeAt (e : Epoch) (low : w.activationEpoch.toNat ≤ e.toNat)
-        (high : e.toNat < w.exitEpoch.toNat) : isActiveAt pulled e v.toNat = true :=
-      isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-          UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
-        exact ⟨low, high⟩⟩
-    have activeR : isActiveAt pulled (getPreviousEpoch pulled) v.toNat = true ∨
-        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true := by
-      rcases Nat.lt_or_ge (getCurrentEpoch pulled).toNat (getCurrentEpoch counted).toNat with
-        before | same
-      · exact .inr (activeAt _ (by omega) (by omega))
-      · exact .inl (activeAt _ (by omega) (by omega))
-    have notSlashed : w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
-        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
-      cases slashed : w.slashed
-      · exact .inl rfl
-      · have delayed := slashed_waits (shared.append fromFin) h.genesis toPulled tailC h.early
-          h.caps h.delay foundW slashed unslashedC
-        have := UInt64.le_iff_toNat_le.mp h.finalized
-        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
-    have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
-      simp only [pinTerms, decide_eq_true_eq]
-      refine ⟨?_, ?_, ?_⟩
-      · rcases activeR with active | active <;> simp [active]
-      · simpa [foundW] using notSlashed
-      · simpa [foundW] using
-          (show w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
-    rw [flag] at marked
-    exact Bool.false_ne_true marked
-  · obtain ⟨c, member, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
-      (fun w hw => by
-        by_contra far
-        exact inherited ⟨w, hw, far⟩) u foundU assignedC
-    exact ⟨c, member, index⟩
+  refine exit_charged h tailC foundU assignedC (Nat.le_of_eq exitC.2) (by simpa [foundU] using
+    unslashedC) (fun w foundW sameExit => ?_) flag
+  have gap := ((shared.append fromFin).append toPulled).exit_activation_gap h.genesis v.toNat w
+    foundW (sameExit ▸ assignedC)
+  have exitW : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
+    rw [sameExit]
+    exact exitC.2
+  have actLt : w.activationEpoch.toNat < (getCurrentEpoch counted).toNat := by omega
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have nearNat := h.near
+  have previous := getPreviousEpoch_toNat pulled
+  have activeAt (e : Epoch) (low : w.activationEpoch.toNat ≤ e.toNat)
+      (high : e.toNat < w.exitEpoch.toNat) : isActiveAt pulled e v.toNat = true :=
+    isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+        UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+      exact ⟨low, high⟩⟩
+  rcases Nat.lt_or_ge (getCurrentEpoch pulled).toNat (getCurrentEpoch counted).toNat with
+    before | same
+  · exact .inr (activeAt _ (by omega) (by omega))
+  · exact .inl (activeAt _ (by omega) (by omega))
 
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting :
