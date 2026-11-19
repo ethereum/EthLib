@@ -355,8 +355,7 @@ So verification makes exactly as many calls as its bound when it accepts. -/
 section Exact
 
 variable {ι : Type} {spec : OracleSpec ι} (F : QueryImpl spec Id)
-
-variable (H : ByteArray → OracleComp spec (Vector UInt8 32))
+  (H : ByteArray → OracleComp spec (Vector UInt8 32))
   (hH : ∀ x, (queriesWith F (H x)).length = 1)
 
 include hH

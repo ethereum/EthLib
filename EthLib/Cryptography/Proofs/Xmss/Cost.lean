@@ -6,15 +6,17 @@ public import EthLib.Cryptography.Proofs.HashSig.Calls
 /-!
 # Proofs: the hash calls of leanXMSS key generation, signing and verification
 
-Each call of `H` counts at most 1, on every path, as in the query bounds of the security games.
+For the bounds, each call of `H` makes at most one query on every path.
 
 - Key generation takes at most `1 + 205 * 2^16 = 13434881` calls.
 - Signing takes at most `2 + 2^33 + 615 * 2^16 - 3 = 8630239231` calls.
-- Verification takes at most `384` calls, by the query bounds of the algorithms' parts.
+- Verification takes at most `384` calls, as the query bounds of the algorithms already prove.
 
 The signing bound charges each of its two randomizer searches all `2^32` trials.
 
-Key generation does not search, so under fixed answers it makes exactly `13434881` calls.
+Key generation does not search.
+
+So under fixed answers, when each call of `H` makes exactly one query, it makes `13434881` calls.
 -/
 
 @[expose] public section

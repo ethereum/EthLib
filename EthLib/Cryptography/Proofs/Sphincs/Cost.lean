@@ -8,6 +8,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.VerifyQueries
 
 The calls are counted under a fixed answer function, as in the signing cost of the security proof.
 
+Each call of `H` makes exactly one query under that function, as the game's hash does.
+
 - Key generation makes exactly `264193` calls.
 - Signing makes at most `939499 + 3 * 2^32 = 12885841387` calls.
 - Verification makes at most `491` calls, and exactly `491` when it accepts.
