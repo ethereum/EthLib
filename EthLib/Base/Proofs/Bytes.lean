@@ -7,6 +7,8 @@ public import EthLib.Base.Bytes
 
 The bytes of a fixed-size object have its length.
 
+A read of a buffer gives the entries of its array of bytes.
+
 A read of those bytes returns the object.
 
 So two objects with the same bytes are the same object.
@@ -48,12 +50,20 @@ theorem byteArray_set_eq_set! (bytes : ByteArray) (index : Nat) (value : UInt8)
 @[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :
     (packBytes v).size = n := v.size_toArray
 
+/-- A read of a buffer gives the entries of its array of bytes, from the offset on.
+
+Proofs rewrite with it to reason about the array of bytes. -/
+theorem readBytes_eq_ofFn_data (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
+    readBytes b offset n h =
+      Vector.ofFn fun i => b.data[offset + i.val]'(by simp only [ByteArray.size] at h; omega) :=
+  rfl
+
 /-- Reading the bytes of an object returns that object. -/
 @[simp] theorem readBytes_packBytes {n : Nat} (v : Vector UInt8 n) (h) :
     readBytes (packBytes v) 0 n h = v := by
   apply Vector.ext
   intro i hi
-  simp [readBytes, packBytes]
+  simp [readBytes_eq_ofFn_data, packBytes]
 
 /-- Two objects with the same bytes are the same object. -/
 theorem packBytes_injective {n : Nat} :

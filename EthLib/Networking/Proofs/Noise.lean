@@ -157,7 +157,7 @@ private theorem readBytes_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag)
     readBytes (c ++ packBytes t) c.size 16 h = t := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_right (by simp)]
   simp [packBytes]
 
@@ -396,7 +396,7 @@ theorem unframe_frame {message bytes : ByteArray} (h : frame message = .ok bytes
       apply List.ext_getElem
       · simp [hlen]
       · intro i h1 h2
-        simp only [readBytes, Vector.toList_ofFn, List.getElem_ofFn, Nat.zero_add,
+        simp only [readBytes_eq_ofFn_data, Vector.toList_ofFn, List.getElem_ofFn, Nat.zero_add,
           ByteArray.data_append]
         rw [Array.getElem_append_left (by simp [hlen]; simp at h1; omega)]
         simp
