@@ -1738,23 +1738,6 @@ private theorem effective_aligned {g x : ForkedBeaconState preset}
     have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
     simpa [effectiveAt, found, UInt64.toNat_mod] using this
 
-/-- At any state, a key's cap is at most the largest cap of the preset. -/
-private theorem capAt_le_capMax (caps : CapOrder preset) (z : ForkedBeaconState preset) (i : ℕ) :
-    PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-  have order := UInt64.le_iff_toNat_le.mp caps.compounding
-  have first := UInt64.le_iff_toNat_le.mp caps.activation
-  simp only [PinSplit2.capAt]
-  cases found : z.state.validators.data[i]? with
-  | none => simp
-  | some v =>
-    simp only [Option.map_some, Option.getD_some, withdrawalMaxEffectiveBalance]
-    split
-    · simp only [getMaxEffectiveBalance]
-      split
-      · exact le_rfl
-      · exact order
-    · omega
-
 /-- A key's effective balance on C's branch is at most the cap that `capFor` reads. -/
 private theorem key_capped {g : ForkedBeaconState preset}
     {counted : BeaconState preset fork} (run : Run config checks g ⟨fork, counted⟩)
@@ -2031,10 +2014,7 @@ private theorem card_exitingB_le (config : Config)
   exact mem_positions_filter config state ancestor finalizedState found
     (p := fun i => (pinTerms config state ancestor finalizedState).exitingB i = true) (member v hv)
 
-/-- The two further bands of the keys of `K5` are paid by `exitingBands`.
-
-A key whose exit R reads is among the marked positions, and the others have a charge, so they are
-among the keys that `queueKeys` counts. -/
+/-- The two further bands of the keys of `K5` are at most `exitingBands`, given their charges. -/
 private theorem two_bands_le_exitingBands (config : Config)
     (pulled anc fin counted : BeaconState preset fork) (V : Finset ValidatorIndex)
     {x : ForkedBeaconState preset} (tailC : Run config checks x ⟨fork, counted⟩) (highC : ℕ)
@@ -2085,10 +2065,7 @@ private theorem two_bands_le_exitingBands (config : Config)
   rw [parts]
   nlinarith
 
-/-- A key of `K5` that R does not read as exiting has a departure charge on C's run.
-
-Its exit is C's epoch, so either the split already assigned it, and then R reads it too, or the
-run assigns it, and that is a charge. -/
+/-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
 private theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
     (member : v ∈ K5 counted V) (flag : (pinTerms config pulled anc fin).exitingB v.toNat = false) :
