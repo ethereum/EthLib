@@ -3584,6 +3584,34 @@ private theorem small_charge_claim (h : Setting config checks g split fin pulled
   have order := exitFloor_add_slack h
   omega
 
+/-- The total active balance at each step of a run from the finalized state is bounded.
+
+It is at most three halves of the pulled total.
+
+The run ends at most one epoch after the pulled epoch.
+
+This is `total_band_of_guard` at the states of the steps of the run. -/
+private theorem step_band_of_guard (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork} (r : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {pulledTotal : Gwei} (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
+    ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      r.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat := by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  intro u w step member T read
+  obtain ⟨pre, post, _, _, _⟩ := Run.contains_step_facts member h.early
+  have wEarly : w.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
+  have wEpoch : (getCurrentEpoch w.state).toNat ≤ (getCurrentEpoch e).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
+  exact total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots electra
+    h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) (pre.snoc step) wEarly
+    (by omega) pulledOk read
+
 /-- The keys whose sync debits from the finalized state exceed `newKeySlack` are at most the seats.
 
 The sync debits of any keys over the run from the finalized state to C's state fit one envelope.
@@ -3603,25 +3631,13 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
       (events.map (syncDebit v.toNat)).sum) :
     B.card ≤ (pinTerms config pulled anc fin).newKeySeats := by
   classical
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have near := h.near
   have called := UInt64.le_iff_toNat_le.mp h.called
   have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       (fromFin.append tailC).Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
-        2 * T.toNat ≤ 3 * pulledTotal.toNat := by
-    intro u w step member T read
-    obtain ⟨pre, post, _, _, _⟩ := Run.contains_step_facts member h.early
-    have wEarly : w.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
-    have wEpoch := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-    have counted' : (getCurrentEpoch (⟨fork, counted⟩ : ForkedBeaconState preset).state).toNat ≤
-        (getCurrentEpoch pulled).toNat + 1 := near
-    exact total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots electra
-      h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) (pre.snoc step) wEarly
-      (by omega) pulledOk read
+        2 * T.toNat ≤ 3 * pulledTotal.toNat :=
+    step_band_of_guard h (fromFin.append tailC) near pulledOk
   have debits := (PinSplit5.Run.syncDebits_le (fromFin.append tailC) h.fulu h.early
     (getCurrentEpoch pulled).toNat replayed pulledTotal.toNat band
     (B.image fun v : ValidatorIndex => v.toNat)).1
@@ -4243,11 +4259,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) := by
   classical
-  obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
   have called := UInt64.le_iff_toNat_le.mp h.called
   have later := UInt64.le_iff_toNat_le.mp h.later
@@ -4265,14 +4278,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         t.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
           2 * T.toNat ≤ 3 * pulledTotal.toNat := by
       intro u w step member T read
-      obtain ⟨pre, post, _, _, _⟩ := Run.contains_step_facts member h.early
-      have wEarly : w.fork < .glamsterdam :=
-        Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
-      have wEpoch : (getCurrentEpoch w.state).toNat ≤ (getCurrentEpoch e).toNat :=
-        UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-      exact total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots electra
-        h.guard (fromFin.append toPulled) h.early (Nat.le_succ _)
-        (fromFin.append (pre.snoc step)) wEarly (by omega) pulledOk read
+      exact step_band_of_guard h (fromFin.append t) within pulledOk step
+        ((Run.contains_append _ _ _).mpr (.inr member)) T read
     have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
       band keys).2
     exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
