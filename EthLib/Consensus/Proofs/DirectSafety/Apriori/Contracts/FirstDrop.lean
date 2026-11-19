@@ -558,10 +558,12 @@ private theorem effective_origin_slot {f : Fork} {s t : BeaconState preset f}
       omega
     have found : before.validators.data[i]? = some before.validators.data[i] :=
       Array.getElem?_eq_getElem insideBefore
-    have owned : before.balances.data[i]? = some before.balances.data[i] := by
+    have insideBalance : i < before.balances.data.size := by
       have m : epoched.balances.data.size = epoched.validators.data.size := matched
       rw [balances, validators] at m
-      exact Array.getElem?_eq_getElem (by omega)
+      omega
+    have owned : before.balances.data[i]? = some before.balances.data[i] :=
+      Array.getElem?_eq_getElem insideBalance
     obtain ⟨new, read, updatedOk⟩ :=
       processEffectiveBalanceUpdates_effectiveBalance_eq updated found owned
     have eNew : effectiveAt ⟨f, { epoched with slot := next }⟩ i = new.toNat := by
