@@ -16772,6 +16772,34 @@ private theorem short_end (h : Setting config checks g split fin pulled anc coun
   unfold whistleEnv
   split_ifs <;> omega
 
+/-- A state of C's run in the epoch of a state `c` has its effective balance within `whistleEnv`.
+
+The run from `c` to it stays in one epoch.
+
+So a key of the registry at `c` keeps its effective balance there.
+
+If that balance at `c` is within the finalized one, `short_end` reads it, plus any slack.
+
+The finalized state is the case `c = fin`. -/
+private theorem short_in_fin (h : Setting config checks g split fin pulled anc counted V)
+    {c : BeaconState preset fork}
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b)
+    (member : tailC.Contains step) (i : ℕ) (inside : i < c.validators.data.size)
+    (left : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤ balanceAt fin i) (slack : ℕ)
+    (sameEpoch : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch c).toNat) :
+    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i + slack := by
+  obtain ⟨pre, post, -⟩ := tailC.contains_split step member
+  have early : a.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le
+    (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early)
+  have forward : (getCurrentEpoch c).toNat ≤ (getCurrentEpoch a.state).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (fromC.append pre).chainSteps)
+  have same : getCurrentEpoch a.state = getCurrentEpoch c :=
+    UInt64.toNat_inj.mp (by omega)
+  have kept := (fromC.append pre).effectiveKept_of_same_epoch early same i inside
+  exact short_end h i (by rw [kept]; exact left) slack
+
 /-- The credits that raise the effective balance of a key of R's registry on C's branch.
 
 They are the key's credits at eleven tenths, rounded up, with the bands of credits and seat debits.
