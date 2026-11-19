@@ -25,7 +25,6 @@ def computeMerkleProof {α : Type} [SszType α] (value : α) (gindex : Nat) :
 /-- A branch as a vector of its length, or the error of a branch of another length. -/
 def branchVector (depth : Nat) (branch : List Bytes32) : Except LightClientError
     (Vector Bytes32 depth) :=
-  if h : branch.length = depth then .ok ⟨branch.toArray, by simpa using h⟩
-  else .error (.ssz (.count depth branch.length))
+  (Base.exactArray depth branch.toArray (.count depth)).mapError .ssz
 
 end EthLib.Consensus

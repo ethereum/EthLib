@@ -160,7 +160,7 @@ theorem checkChunks_ok_iff (nodes : List Bytes) :
   | nil => simp [checkChunks]
   | cons node nodes ih =>
     by_cases width : node.size = bytesPerChunk <;>
-      simp [checkChunks, checkChunk, width, Bind.bind, Except.bind, ih]
+      simp [checkChunks, checkChunk_eq, width, Bind.bind, Except.bind, ih]
 
 /-- Acceptance requires complete nodes and reconstruction of exactly the expected root. -/
 theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : Bytes) :
@@ -171,7 +171,7 @@ theorem verifyMerkleProof_eq_true_iff (leaf : Bytes) (proof : List Bytes) (index
   simp only [verifyMerkleProof, calculateMerkleRoot, ← checkChunks_ok_iff]
   cases checkChunks proof <;> cases calculateMerkleRootUnchecked leaf proof index <;>
     by_cases leafWidth : leaf.size = bytesPerChunk <;>
-    simp_all [checkChunk, Bind.bind, Except.bind, pure, Except.pure]
+    simp_all [checkChunk_eq, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- A branch that rebuilds a root has the depth of its index, and climbs to that root. -/
 theorem calculateMerkleRootUnchecked_shape {leaf root : Bytes} {proof : List Bytes} {index : Nat}
