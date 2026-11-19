@@ -14,7 +14,7 @@ Not yet released.
   Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
   leanSPHINCS counts the calls under a fixed answer function.
   Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
-  `HashSig.length_log_node` and its neighbours count the calls of the shared loops under fixed answers.
+  `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
 
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
@@ -248,6 +248,9 @@ Not yet released.
   The validator there has execution credentials from the address of the request, and it may make a request.
   `isActiveValidator_of_canRequest` gives that a validator that may make a request is active.
   A caller that matched the cases as `⟨index, exited⟩` and `⟨index, v, owed, withdrawn⟩` writes `⟨index, v, accepted, exited⟩` and `⟨index, v, owed, accepted, withdrawn⟩`.
+
+- In Lean, `queriesWith` and its lemmas move from `Sphincs.Unforgeability` to `HashSig`, so that XMSS can count its calls with them ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  A caller opens `EthLib.Cryptography.HashSig` or writes `HashSig.queriesWith`.
 
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
