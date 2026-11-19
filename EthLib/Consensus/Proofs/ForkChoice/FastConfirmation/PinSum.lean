@@ -6180,7 +6180,10 @@ The balance at the split is at most R's balance plus R's debits, by the floor pr
 
 R's penalty and partial debits are at most the leak at the cap and the net partials.
 
-The credits are those of C's run and the sync debits of R's runs. -/
+The credits are those of C's run and the sync debits of R's runs.
+
+Its gain on the credits is at most a tenth of the credits, the sync debits, the slack and the base
+gain. -/
 private theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
