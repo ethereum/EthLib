@@ -111,17 +111,13 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
       rw [h0] at hv
       cases hv
     · rfl
-  have hlr := Base.natToBytes_length 32 rr.val
-  have hls := Base.natToBytes_length 32 ss.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
-  refine verifyV4_eq_true_iff.mpr ⟨q, content, publicKeyV4_of_get hcurve hinf hid hkey, hc,
-    by rw [hsig]; simp [ByteArray.size, hlr, hls], ?_⟩
-  have hlist :
-      r.signature.data.toList = Base.natToBytes 32 rr.val ++ Base.natToBytes 32 ss.val := by
-    rw [hsig]
-  rw [hlist, List.take_left' hlr, List.drop_left' hlr, Base.bytesToNat_natToBytes,
-    Base.bytesToNat_natToBytes, hmod, hmod]
+  -- The signature is the written form of `(r, s)`, so it reads back as `(r, s)`.
+  have hsig' : r.signature = Base.packBytes (EcdsaSignature.toBytes rr.val ss.val) := hsig
+  unfold verifyV4
+  simp only [publicKeyV4_of_get hcurve hinf hid hkey, hc, hsig', EcdsaSignature.read?_packBytes,
+    EcdsaSignature.toNats_toBytes, hmod]
   exact hv
 
 /-- A record verifies when its signature is the deterministic one from its private key `sk`.
