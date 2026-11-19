@@ -13028,7 +13028,9 @@ The keys of `V` are on C's run, and those of `K4`, `K5` and `K6` are on R's run.
 
 The keys of `V` weigh three, as do those of `K5`, and the others weigh one.
 
-Each key that has a band holds a seat, and the seats of the two runs are counted together. -/
+Each key that has a band holds a seat, and the seats of the two runs are counted together.
+
+The seat holders of `SC` weigh one, and take seat slots that no class claims. -/
 private theorem bands_seats (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -13040,7 +13042,8 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         (∑ v ∈ K4 pulled counted V, bandR (eventsF ++ events) v.toNat) +
         3 * (∑ v ∈ K5 counted V, bandR (eventsF ++ events) v.toNat) +
-        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) ≤
+        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) +
+        (∑ v ∈ SC pulled counted split, bandR (eventsF ++ events) v.toNat) ≤
       3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
         (preset.SYNC_COMMITTEE_SIZE.toNat *
           (((getCurrentEpoch pulled).toNat + 1) /
@@ -13050,7 +13053,8 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
             max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) := by
   classical
   obtain ⟨d45, d46, d56, d4v, d5v, d6v⟩ := classes_disjoint h
-  rw [sum_bandR, sum_bandR, sum_bandR, sum_bandR]
+  obtain ⟨dSC, dSV⟩ := sc_disjoint h
+  rw [sum_bandR, sum_bandR, sum_bandR, sum_bandR, sum_bandR]
   generalize preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 = β
   generalize hSeats : preset.SYNC_COMMITTEE_SIZE.toNat *
     (((getCurrentEpoch pulled).toNat + 1) / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
@@ -13064,6 +13068,12 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hf5
   set f6 := (K6 pulled counted).filter fun v =>
     0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hf6
+  set fS := (SC pulled counted split).filter fun v =>
+    0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hfS
+  have dSK : Disjoint (f4 ∪ f5 ∪ f6) fS := dSC.mono
+    (Finset.union_subset_union (Finset.union_subset_union (Finset.filter_subset _ _)
+      (Finset.filter_subset _ _)) (Finset.filter_subset _ _)) (Finset.filter_subset _ _)
+  have dSf : Disjoint fV fS := dSV.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have d45' : Disjoint f4 f5 := d45.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have d46' : Disjoint f4 f6 := d46.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have d56' : Disjoint f5 f6 := d56.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
@@ -13074,9 +13084,9 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     UInt64.toNat_inj.mp same
   -- A key debited on the shared segment is debited on C's run, and any other on R's tail.
   have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
-    (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+    (((fV ∪ (f4 ∪ f5 ∪ f6 ∪ fS)).filter fun v =>
       0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum).image fun v => v.toNat)
-    (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+    (((fV ∪ (f4 ∪ f5 ∪ f6 ∪ fS)).filter fun v =>
       0 < (events.map (syncDebit v.toNat)).sum).image fun v => v.toNat)
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
@@ -13085,10 +13095,10 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       exact (Finset.mem_filter.mp hv).2)
   rw [hSeats] at union
-  have cover : ((fV ∪ (f4 ∪ f5 ∪ f6)).image fun v => v.toNat) ⊆
-      (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+  have cover : ((fV ∪ (f4 ∪ f5 ∪ f6 ∪ fS)).image fun v => v.toNat) ⊆
+      (((fV ∪ (f4 ∪ f5 ∪ f6 ∪ fS)).filter fun v =>
         0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum).image fun v => v.toNat) ∪
-      (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+      (((fV ∪ (f4 ∪ f5 ∪ f6 ∪ fS)).filter fun v =>
         0 < (events.map (syncDebit v.toNat)).sum).image fun v => v.toNat) := by
     intro i hi
     obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
@@ -13099,7 +13109,9 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
       · have pos : 0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum := by
           rcases Finset.mem_union.mp hv with hv | hv
           · rcases Finset.mem_union.mp hv with hv | hv
-            · exact (Finset.mem_filter.mp hv).2
+            · rcases Finset.mem_union.mp hv with hv | hv
+              · exact (Finset.mem_filter.mp hv).2
+              · exact (Finset.mem_filter.mp hv).2
             · exact (Finset.mem_filter.mp hv).2
           · exact (Finset.mem_filter.mp hv).2
         simp only [List.map_append, List.sum_append] at pos ⊢
@@ -13108,16 +13120,17 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     · exact Finset.mem_union_left _ (Finset.mem_image.mpr ⟨v, Finset.mem_filter.mpr ⟨hv, c⟩, rfl⟩)
     · exact Finset.mem_union_right _ (Finset.mem_image.mpr ⟨v, Finset.mem_filter.mpr ⟨hv, r⟩, rfl⟩)
   have union' := (Finset.card_le_card cover).trans union
-  have disjoint : Disjoint fV (f4 ∪ f5 ∪ f6) := by
-    rw [Finset.disjoint_union_right, Finset.disjoint_union_right]
-    exact ⟨⟨d4f, d5f⟩, d6f⟩
+  have disjoint : Disjoint fV (f4 ∪ f5 ∪ f6 ∪ fS) := by
+    rw [Finset.disjoint_union_right, Finset.disjoint_union_right, Finset.disjoint_union_right]
+    exact ⟨⟨⟨d4f, d5f⟩, d6f⟩, dSf⟩
   rw [Finset.card_image_of_injective _ inj, Finset.card_union_of_disjoint disjoint,
+    Finset.card_union_of_disjoint dSK,
     Finset.card_union_of_disjoint (Finset.disjoint_union_left.mpr ⟨d46', d56'⟩),
     Finset.card_union_of_disjoint d45'] at union'
-  have linear : 3 * fV.card + f4.card + 3 * f5.card + f6.card ≤ 3 * seats := by omega
+  have linear : 3 * fV.card + f4.card + 3 * f5.card + f6.card + fS.card ≤ 3 * seats := by omega
   have scaled := Nat.mul_le_mul_left β linear
-  calc 3 * (β * fV.card) + β * f4.card + 3 * (β * f5.card) + β * f6.card
-      = β * (3 * fV.card + f4.card + 3 * f5.card + f6.card) := by ring
+  calc 3 * (β * fV.card) + β * f4.card + 3 * (β * f5.card) + β * f6.card + β * fS.card
+      = β * (3 * fV.card + f4.card + 3 * f5.card + f6.card + fS.card) := by ring
     _ ≤ β * (3 * seats) := scaled
     _ = 3 * (β * seats) := by ring
 
@@ -13265,6 +13278,21 @@ private theorem ceil_div_le (c q : ℕ) : (c + q - 1) / q ≤ c := by
       rw [show c' + 1 + (q' + 1) - 1 = c' + q' + 1 by omega]
       nlinarith
 
+/-- The whistleblower reward of the keys of `SC` that R slashes, at R's effective balance and rise.
+
+Each key reads the quotient of its balance and rise, and the quotient of an increment rounded up.
+
+`bud_branchR` pays it and `bud_whistle` charges it. -/
+private def scSlashedReward (config : Config)
+    (pulled anc fin counted split : BeaconState preset fork) : ℕ :=
+  ∑ v ∈ (SC pulled counted split).filter
+      (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+    ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+      (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
+
 /-- R1 from the count of its rounding bands.
 
 The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
@@ -13273,13 +13301,16 @@ The sync part of the proposer credit fits the proposer credit of each epoch.
 
 The flag gain and the unit of each slashed key fit `W`, by `branchR_split`.
 
-The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`. -/
+The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`.
+
+The seat holders of `SC` weigh one in `bands`, and take seat slots that no class claims. -/
 private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
     {events eventsF eventsC : List (BalanceEvent preset)}
     (bands : 3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         (∑ v ∈ K4 pulled counted V, bandR (eventsF ++ events) v.toNat) +
         3 * (∑ v ∈ K5 counted V, bandR (eventsF ++ events) v.toNat) +
-        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) ≤
+        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) +
+        (∑ v ∈ SC pulled counted split, bandR (eventsF ++ events) v.toNat) ≤
       3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
         ((pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
           (pinTerms config pulled anc fin).depth *
@@ -13306,15 +13337,11 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
-        3 * (∑ v ∈ (SC pulled counted split).filter
-            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
-          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
-            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) ≤
+        3 * scSlashedReward config pulled anc fin counted split +
+        (∑ v ∈ SC pulled counted split, bandR (eventsF ++ events) v.toNat) ≤
       (pinTerms config pulled anc fin).branchR := by
   classical
+  unfold scSlashedReward
   obtain ⟨Wh, W, hW, gainW, floorW⟩ := branchR_split config pulled anc fin
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   obtain ⟨dSC, -⟩ := sc_disjoint h
@@ -13391,7 +13418,9 @@ That balance is at most R's balance and its rise, plus one increment for R's ini
 
 `whistleblowerR` pays the quotient of the first two.
 
-The increment is one of the slashed keys' increments, which no class spends for a key of `SC`. -/
+The increment is one of the slashed keys' increments, which no class spends for a key of `SC`.
+
+The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims. -/
 theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -13416,13 +13445,8 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
-        3 * (∑ v ∈ (SC pulled counted split).filter
-            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
-          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
-            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) ≤
+        3 * scSlashedReward config pulled anc fin counted split +
+        (∑ v ∈ SC pulled counted split, bandR (eventsF ++ events) v.toNat) ≤
       (pinTerms config pulled anc fin).branchR := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have nearC := h.near
@@ -15068,13 +15092,9 @@ theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
             (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, bandX fin high v.toNat) :
             ℕ) : ℤ) +
       -- The keys that R slashes after the split are read at the bound that `bud_branchR` pays.
-      ((3 * (∑ v ∈ (SC pulled counted split).filter
-            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
-          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
-            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) : ℕ) : ℤ) :=
+      ((3 * scSlashedReward config pulled anc fin counted split : ℕ) : ℤ) +
+      -- A seat holder of `SC` takes a seat slot of `branchR` that no class claims.
+      ((∑ v ∈ SC pulled counted split, bandR (eventsF ++ events) v.toNat : ℕ) : ℤ) :=
   sorry
 
 /-- Glue: V keys are current at R, and distinct keys have distinct positions. -/
