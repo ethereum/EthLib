@@ -73,19 +73,19 @@ theorem coreAggregateVerify_size_ne {pks msgs : Array ByteArray} (h : pks.size �
 theorem coreVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
     (pk msg dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
-  simp [coreVerify, exactBytes?, h]
+  simp [coreVerify, exactBytes?, EthLib.Base.exactArray?, h]
 
 /-- The core aggregate verification rejects a signature that is not 96 bytes. -/
 theorem coreAggregateVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
     (pks msgs : Array ByteArray) (dst : ByteArray) :
     coreAggregateVerify pks msgs sig dst = false := by
-  simp [coreAggregateVerify, exactBytes?, h]
+  simp [coreAggregateVerify, exactBytes?, EthLib.Base.exactArray?, h]
 
 /-- The core verification rejects a public key that is not 48 bytes. -/
 theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
   unfold coreVerify
-  rw [show exactBytes? 48 pk = none by simp [exactBytes?, h]]
+  rw [show exactBytes? 48 pk = none by simp [exactBytes?, EthLib.Base.exactArray?, h]]
   -- Every branch of the signature checks ends on the rejected key.
   split
   · simp

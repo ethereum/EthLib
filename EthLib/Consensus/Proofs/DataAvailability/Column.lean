@@ -8,6 +8,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryRoundTrip
 public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the data column sidecars
@@ -340,19 +341,19 @@ theorem blobKzgCommitmentsInclusionProof_valid (deneb : .dencun ≤ fork ∧ for
   unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex at built
   simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind,
     Except.bind] at built
-  split at built
-  · rename_i exact
-    cases built
-    have depth : Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
-      have := (Bool.and_eq_true_iff.mp valid).1
-      simp only [beq_iff_eq] at this
-      simp only [List.size_toArray] at exact
-      omega
-    refine ⟨leaf, root, rooted, bodyRoot, depth, ?_⟩
-    have listed : (⟨nodes.toArray, exact⟩ : Vector Bytes32 _).toList = nodes := by simp
-    rw [listed, ← depth]
-    exact valid
-  · cases built
+  -- The branch holds the nodes, so it has their number.
+  have listed : branch.toList = nodes := by
+    have same := congrArg Array.toList (Base.exactArray_eq_ok_iff.mp built)
+    exact same
+  have length : nodes.length = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+    rw [← listed, Vector.length_toList]
+  have depth : Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+    have := (Bool.and_eq_true_iff.mp valid).1
+    simp only [beq_iff_eq] at this
+    omega
+  refine ⟨leaf, root, rooted, bodyRoot, depth, ?_⟩
+  rw [listed, ← depth]
+  exact valid
 
 /-- For both presets, the branch of the list of commitments of a body is built.
 
@@ -373,10 +374,7 @@ theorem blobKzgCommitmentsInclusionProof_ok (named : preset = .mainnet ∨ prese
     omega
   unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex
   simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind, Except.bind]
-  split
-  · exact ⟨_, rfl⟩
-  · rename_i short
-    exact absurd (by simpa using length) short
+  exact ⟨_, Base.exactArray_of_size_eq _ (by simpa using length)⟩
 
 /-- A column sidecar whose inclusion check passes carries the root of the commitments of a body.
 

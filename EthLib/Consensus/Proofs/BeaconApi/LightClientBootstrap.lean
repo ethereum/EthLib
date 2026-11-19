@@ -225,8 +225,9 @@ theorem blockToLightClientHeader_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.toNa
     have long : proof.length = Nat.log2 (executionBranchGindex fork) := by
       rw [computeMerkleProof_length block.message.body (by decide) proved]
       simp [executionBranchGindex, gloas]
-    simp [LightClientError.specifiedFork, altair, gloas, bodyRooted, proved, branchVector, long,
-      LightClientError.liftRoot, Except.mapError, bind, Except.bind, pure, Except.pure]
+    simp [LightClientError.specifiedFork, altair, gloas, bodyRooted, proved, branchVector,
+      Base.exactArray, Base.exactArray?, long, LightClientError.liftRoot, Except.mapError, bind,
+      Except.bind, pure, Except.pure]
   · by_cases capella : Fork.shapella ≤ fork
     · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
       obtain ⟨payloadHeader, made⟩ := ExecutionPayload.header_total
@@ -241,8 +242,8 @@ theorem blockToLightClientHeader_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.toNa
         rw [computeMerkleProof_length block.message.body (by decide) proved]
         simp [executionBranchGindex, gloas]
       simp [LightClientError.specifiedFork, altair, gloas, capella, bodyRooted, made, proved,
-        branchVector, long, LightClientError.liftRoot, Except.mapError, bind, Except.bind, pure,
-        Except.pure]
+        branchVector, Base.exactArray, Base.exactArray?, long, LightClientError.liftRoot,
+        Except.mapError, bind, Except.bind, pure, Except.pure]
       split <;> simp
     · simp [LightClientError.specifiedFork, altair, gloas, capella, bodyRooted,
         LightClientError.liftRoot, Except.mapError, bind, Except.bind, pure, Except.pure]
@@ -283,7 +284,8 @@ theorem createLightClientBootstrap_exists [NeZero preset.BYTES_PER_LOGS_BLOOM.to
   unfold createLightClientBootstrap
   simp [LightClientError.specifiedFork, altair, LightClientError.require, eq_true fromAltair,
     eq_true atBlock, headed, headerRooted, blockRooted, layout, madeHeader, proved, branchVector,
-    long, LightClientError.liftRoot, Except.mapError, bind, Except.bind, pure, Except.pure]
+    Base.exactArray, Base.exactArray?, long, LightClientError.liftRoot, Except.mapError, bind,
+    Except.bind, pure, Except.pure]
 
 /-- Two layouts of the state whose current sync committee indices have one depth have one index.
 

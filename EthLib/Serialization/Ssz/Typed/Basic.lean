@@ -125,8 +125,7 @@ instance (priority := high) {n : Nat} : SszType (Vector UInt8 n) where
   desc := .byteVector n
   toValue v := .bytes v.toArray
   ofValue
-    | .bytes data =>
-      if exact : data.size = n then .ok ⟨data, exact⟩ else .error (.count n data.size)
+    | .bytes data => Base.exactArray n data (.count n)
     | _ => .error .typeMismatch
   -- The bytes are the encoding; a length of `2^32` or more is refused, as for any byte sequence.
   encode v :=
