@@ -4350,7 +4350,9 @@ private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run confi
     (same : c.index = d.index) : c = d :=
   List.inj_on_of_nodup_map (DirectSafety.departureCharges_run_indices tail) hc hd same
 
-/-- A run has no counted charge of a key and `exitQ` is zero, or `exitQ` is a counted charge's amount.
+/-- Either a run has no counted charge of a key and `exitQ` is zero.
+
+Or `exitQ` is the amount of a counted charge of the key.
 
 The counted charges are those whose exit epoch is at most the run's last epoch. -/
 private theorem exitQ_cases {x y : ForkedBeaconState preset} (tail : Run config checks x y)
