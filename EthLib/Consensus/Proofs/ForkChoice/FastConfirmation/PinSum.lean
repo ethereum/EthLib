@@ -13356,10 +13356,10 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
 
 It also holds the shares of `CS` and of the shared segment's exited keys of `SC`. -/
 theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
@@ -13546,7 +13546,7 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         (fork_le_of_chainSteps (pre.snoc (Step.block engine signed due ok)).chainSteps)) found
       rw [← same, inactive] at active
       exact Bool.false_ne_true active
-  have sharedRun := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
+  have sharedRun := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early high replayedF
     pulledTotal.toNat band ∅).2.2 PD PK dP apartK
   unfold PinSplit5.syncSeatMoves at sharedRun
   have sharedS : S ≤ ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat) *
@@ -14574,10 +14574,10 @@ The debits of the shared segment and of R's run take the epochs from the finaliz
 
 C's credits take the seats' envelope and the proposer's share, as `syncCredits_le` bounds them. -/
 private theorem flow_sync (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (keys : Finset ℕ) :
@@ -14595,7 +14595,7 @@ private theorem flow_sync (h : Setting config checks g split fin pulled anc coun
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   have called := UInt64.le_iff_toNat_le.mp h.called
   have credits := syncCredits_le h tailC highC replayedC keys
-  have shared := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
+  have shared := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early high replayedF
     pulledTotal.toNat (step_band_of_guard h fromFin (by omega) pulledOk) keys).1
   have own := (PinSplit5.Run.syncDebits_le tail h.fulu h.early high replayed pulledTotal.toNat
     (fun {u w} step member T read => step_band_of_guard h (fromFin.append tail) (Nat.le_succ _)
@@ -14773,7 +14773,7 @@ private theorem flow_split (h : Setting config checks g split fin pulled anc cou
     refine ⟨WB + _, hOther, fun keys => ?_⟩
     rw [Finset.sum_add_distrib]
     exact Nat.add_le_add (hWhist keys)
-      (flow_sync h fromFin high replayedF tail high replayed tailC highC replayedC keys)
+      (flow_sync h tail high replayed fromFin replayedF tailC highC replayedC keys)
   -- The credits of each class split by kind: the credit part, the consolidations, the rest.
   have split4 : ∀ (S : Finset ValidatorIndex) (r cr : ℕ → ℕ),
       (∀ v ∈ S, flowCredit t tailC highC eventsC events eventsF v.toNat (cr v.toNat) ≤
@@ -17594,7 +17594,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b4 := bud_credits (config := config) h tailC highC endEpochC replayedC
   have b5 := bud_branchR (config := config) h tail high endEpoch replayed fromFin replayedF
     tailC highC endEpochC replayedC
-  have b6 := bud_sync (config := config) h fromFin high replayedF tail high replayed tailC highC
+  have b6 := bud_sync (config := config) h tail high replayed fromFin replayedF tailC highC
     replayedC
   have b7 := bud_fall (config := config) h
   have b8 := bud_rise (config := config) h
