@@ -43,6 +43,11 @@ Not yet released.
   `processEffectiveBalanceUpdates_owned` says that the pass of the effective balances finds a balance at each position of its registry.
   The pin's balance bound for a key that switches to compounding on C's branch reads both.
 
+- `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
+  It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
+  `ledger_depositWithdrawalRequests` says that the deposit requests and then the withdrawal requests of a payload move no balance and keep the credentials.
+  The pin's balance bound for a key that switches to compounding reads both.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.

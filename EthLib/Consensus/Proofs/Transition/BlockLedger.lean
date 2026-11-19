@@ -1396,6 +1396,29 @@ private theorem ledger_processConsolidationRequest {electra : .pectra ≤ fork}
   · rename_i checked _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
     exact ⟨∅, Ledger.consolidate (getElem?_toNat_of_ofNatChecked checked) computed, by simp⟩
 
+/-- The deposit requests and then the withdrawal requests of a payload move no balance.
+
+They keep the credentials. -/
+theorem ledger_depositWithdrawalRequests {electra : .pectra ≤ fork}
+    {deposits : List DepositRequest} {withdrawals : List WithdrawalRequest}
+    {deposited withdrawn : BeaconState preset fork}
+    (depositsOk : deposits.foldlM (processDepositRequest · electra ·) s = .ok deposited)
+    (withdrawalsOk :
+      withdrawals.foldlM (processWithdrawalRequest config · electra ·) deposited = .ok withdrawn) :
+    Ledger s withdrawn ∅ ∅ 0 0 0 := by
+  have one : Ledger s deposited ∅ ∅ 0 0 0 := Ledger.foldlM (fun _ _ _ ok =>
+    Ledger.of_eq (by rw [(processDepositRequest_ok ok).2.2.1])
+      (by rw [(processDepositRequest_ok ok).2.1])) depositsOk
+  have two : Ledger deposited withdrawn ∅ ∅ 0 0 0 := by
+    refine Ledger.foldlM (fun _ _ _ ok => ?_) withdrawalsOk
+    rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, requested⟩
+    · exact Ledger.refl _
+    · exact Ledger.exit exited
+    -- A partial withdrawal keeps the registry and the balances.
+    · have kept := requestPartialWithdrawal_kept requested
+      exact Ledger.of_eq (congrArg (·.data) kept.2.1) (congrArg (·.data) kept.1)
+  simpa only [Finset.empty_union, add_zero] using one.trans two
+
 /-- The requests of the execution layer convert at most one validator per consolidation request.
 
 They move no other balance. -/
@@ -1406,17 +1429,7 @@ theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
       conv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨deposited, deposits, withdrawn, withdrawals, consolidations⟩ := computed
-  have one : Ledger s deposited ∅ ∅ 0 0 0 := Ledger.foldlM (fun _ _ _ ok =>
-    Ledger.of_eq (by rw [(processDepositRequest_ok ok).2.2.1])
-      (by rw [(processDepositRequest_ok ok).2.1])) deposits
-  have two : Ledger deposited withdrawn ∅ ∅ 0 0 0 := by
-    refine Ledger.foldlM (fun _ _ _ ok => ?_) withdrawals
-    rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, requested⟩
-    · exact Ledger.refl _
-    · exact Ledger.exit exited
-    -- A partial withdrawal keeps the registry and the balances.
-    · have kept := requestPartialWithdrawal_kept requested
-      exact Ledger.of_eq (congrArg (·.data) kept.2.1) (congrArg (·.data) kept.1)
+  have first := ledger_depositWithdrawalRequests (electra := electra.1) deposits withdrawals
   -- Each consolidation request converts at most one validator.
   have three : ∀ (requests : List ConsolidationRequest) (u : BeaconState preset fork),
       requests.foldlM (processConsolidationRequest config · electra.1 ·) u = .ok t →
@@ -1441,7 +1454,7 @@ theorem ledger_processExecutionRequests {body : BeaconBlockBody preset fork}
   obtain ⟨conv, ledger, card⟩ := three _ _ consolidations
   have bound := (body.executionRequests electra).consolidations.bound electra.2
   refine ⟨conv, ?_, ?_⟩
-  · simpa only [Finset.empty_union, add_zero] using (one.trans two).trans ledger
+  · simpa only [Finset.empty_union, add_zero] using first.trans ledger
   simp only [Array.length_toList] at card
   omega
 
