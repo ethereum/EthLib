@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.honestHeadsExist_or_evidence_of_gloas` shows that from Gloas an up-to-date honest store has a head ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Otherwise two honest stores collide, or direct-safety evidence holds.
+  It is the Gloas companion of `Execution.honestHeadsExist_or_evidence`, which keeps its statement.
+  `CheckpointRegistryStakeCeiling` assumes that the effective balances of each honest justified state add up to at most the cap.
+  `AnchorRegistryRoom` asks the anchor's registry to leave room for the pending deposits of each epoch up to the horizon.
+
+- The Gloas head endpoint adds these facts.
+  `Store.Reachable.validators_size_le_of_gloas` bounds the registry of each held block state and checkpoint state from Gloas by the anchor's registry and the epochs since the anchor.
+  `advanceSlots_validators_size_le`, `processSlots_validators_size_le` and `stateTransition_validators_size_le` bound the validators that runs of slots and a block from Gloas add.
+  `Store.ForwardReachableWith.registered_of_shared_checkpoint` puts each validator active in a held block state into a later checkpoint state.
+  Both blocks must read one checkpoint at or past that state's finality.
+
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
   The receiver's store must be closed under the envelopes that it accepts from its view.
@@ -384,6 +396,14 @@ Not yet released.
 - In Lean, `VoteAt.accepted_at_next_slot` and `VoteAt.recorded_at_next_slot` no longer take the premise `epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The honest vote data already puts the target at the epoch of the duty slot.
   A caller drops that argument.
+
+- In Lean, `pendingTailRun_processBlock` and `pendingTailRun_stateTransition` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the requests of the parent payload leave the entries past the boundary pending.
+  A caller drops the explicit argument `early`.
+
+- In Lean, `Store.onBlock_pulledUp` also states that the finalized checkpoint before the pull-up is the store's or that of the block's state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  A caller that destructures its result adds one pattern after the one for the justified checkpoint.
+  The callers in EthLib that do so are `Store.onBlock_unrealized_epoch_le` and two private callers in `Checkpoints.lean` and `CheckpointBlocks.lean`.
 
 - In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The root of an ancestor walk does not depend on the payload status of its start.
