@@ -161,7 +161,7 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     max_le (Nat.le_trans startEff (Nat.le_add_right _ _))
       (Nat.le_trans (Nat.min_le_right _ _)
         (floor_le_of_lt incPos alignedE (Nat.lt_of_le_of_lt bound closed)))
-  obtain ⟨-, -, -, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
+  obtain ⟨-, -, -, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0
     capHigh high (e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) P
   have balances := fourth alignedCap startCap capCeil rate endEpoch fixpoint
   intro z member
@@ -183,13 +183,10 @@ private theorem gainOn_round (depth P C : ℕ)
   generalize preset.EFFECTIVE_BALANCE_INCREMENT.toNat = I at *
   have : (I * ((C + I - 1) / I) + I - 1) / I = (C + I - 1) / I := by
     rw [show I * ((C + I - 1) / I) + I - 1 = I * ((C + I - 1) / I) + (I - 1) by omega,
-      Nat.mul_add_div incPos, Nat.div_eq_of_lt (by omega)]
+      Nat.mul_add_div incPos, Nat.div_eq_of_lt (show I - 1 < I by omega)]
     simp
   rw [this]
 
-
-end PinSum
-end EthLib.Consensus.Models.Network
 
 open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains. -/
