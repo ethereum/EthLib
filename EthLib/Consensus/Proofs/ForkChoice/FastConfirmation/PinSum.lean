@@ -4168,15 +4168,6 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
   omega
 
 
-/-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
-
-Split by `exitingB`: the keys whose exit R reads and those the queues let exit on C. -/
-theorem bud_exitingBands (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) :
-    2 * (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) ≤
-      (pinTerms config pulled anc fin).exitingBands := sorry
-
 /-- The window is tight when its depth is at most one more than the seed lookahead. -/
 private theorem tight_iff (config : Config) (pulled anc fin : BeaconState preset fork) :
     (pinTerms config pulled anc fin).tight = true ↔
@@ -6216,6 +6207,17 @@ private theorem charged_count (h : Setting config checks g split fin pulled anc 
   have splitSmall := (Finset.card_le_card coverSmall).trans (Finset.card_union_le _ _)
   rw [queueKeys_unfold]
   omega
+
+/-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
+
+Split by `exitingB`: the keys whose exit R reads and those the queues let exit on C. -/
+theorem bud_exitingBands (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) :
+    2 * (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) ≤
+      (pinTerms config pulled anc fin).exitingBands :=
+  two_bands_le_exitingBands config pulled anc fin counted V tailC highC
+    (fun _ member flag _ => K5_charged h tailC member flag) (charged_count h tailC)
 
 /-- K5 (`queueRise`): the rise of exiting keys after their exit starts on C's branch. -/
 theorem bud_queueRise (h : Setting config checks g split fin pulled anc counted V)
