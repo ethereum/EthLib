@@ -2658,7 +2658,7 @@ The guards of the floor trace are `floor_guards`, from the setting's guard at th
 
 Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed.
 
-A step may assign the key's exit within the window, if the key is not yet withdrawable.
+A step may assign the key's exit within the window, if its withdrawable epoch is beyond the window.
 
 No upgrade runs from Fulu, so no step records a crossing. -/
 private theorem slashed_floor (h : Setting config checks g split fin pulled anc counted V)

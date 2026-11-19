@@ -1091,7 +1091,7 @@ theorem FloorTrace.run_of_le_cap_or_fulu
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) := by
   obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, -⟩ :=
-    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+    FloorTrace.run_of_le_cap_general shared tail genesis caps delay early high endEpoch i v
       initial activated low base quotient low_le positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
