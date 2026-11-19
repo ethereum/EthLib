@@ -14,7 +14,7 @@ The calls are counted under a fixed answer function, as in the signing cost of t
 
 The counter search of a layer tries at most `2^32` counters, one call each.
 
-The three searches take at most `3 * 2^32` of the signing calls, and the rest at most `939499`.
+The signing bound charges each of the three searches all `2^32` counters.
 -/
 
 @[expose] public section
@@ -25,7 +25,7 @@ open OracleComp OracleSpec
 open EthLib.Cryptography.Sphincs.Constants
 open EthLib.Cryptography.Sphincs.Unforgeability
 open EthLib.Cryptography.Sphincs.Unforgeability.Bridge
-open HashSig (HashSpec)
+open HashSig (HashSpec queriesWith length_queriesWith_le)
 open SphincsSecurity.Security.Prefix (hashCalls hashCalls_bind hashCalls_pure)
 
 variable (f : QueryImpl HashSpec Id)
@@ -100,6 +100,8 @@ theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
 omit hH in
 /-- Verification makes at most `491` calls, when each call of `H` makes at most one query.
 
+It restates the bound of the verification proofs in the count of the signing proofs.
+
 The hypothesis bounds every path of `H`, so it holds under every answer function. -/
 theorem hashCalls_verifyWith_le (hHbound : ∀ input, IsTotalQueryBound (H input) 1)
     (pk : PublicKey) (msg : Message) (sig : Signature) :
@@ -107,7 +109,9 @@ theorem hashCalls_verifyWith_le (hHbound : ∀ input, IsTotalQueryBound (H input
   rw [hashCalls_eq_length_queriesWith, ← verifyCalls_eq]
   exact length_queriesWith_le f (verifyWith_isTotalQueryBound H hHbound pk msg sig)
 
-/-- A signature that verifies is checked with exactly `491` calls. -/
+/-- A signature that verifies is checked with exactly `491` calls.
+
+It restates the exact count of the verification proofs in the count of the signing proofs. -/
 theorem hashCalls_verifyWith_of_verify (pk : PublicKey) (msg : Message) (sig : Signature)
     (h : evalWithAnswerFn f (verifyWith H pk msg sig) = true) :
     hashCalls f (verifyWith H pk msg sig) = 491 := by

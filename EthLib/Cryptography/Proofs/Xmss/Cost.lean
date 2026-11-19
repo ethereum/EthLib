@@ -12,7 +12,7 @@ Each call of `H` counts at most 1, on every path, as in the query bounds of the 
 - Signing takes at most `2 + 2^33 + 615 * 2^16 - 3 = 8630239231` calls.
 - Verification takes at most `384` calls, by the query bounds of the algorithms' parts.
 
-The two randomizer searches of signing take at most `2^32` calls each.
+The signing bound charges each of its two randomizer searches all `2^32` trials.
 
 Key generation does not search, so under fixed answers it makes exactly `13434881` calls.
 -/
@@ -23,8 +23,8 @@ namespace EthLib.Cryptography.Xmss.Cost
 
 open OracleSpec OracleComp
 open EthLib.Cryptography.Xmss.Constants
-open EthLib.Cryptography.HashSig (length_log_bind length_log_ofFnInOrder length_log_chain
-  length_log_node log_pure)
+open EthLib.Cryptography.HashSig (queriesWith queriesWith_bind queriesWith_pure
+  length_queriesWith_ofFnInOrder_const length_queriesWith_chain length_queriesWith_node)
 
 /-! ## The constants -/
 
@@ -87,53 +87,56 @@ section Exact
 
 variable {ι : Type} {spec : OracleSpec ι} (f : QueryImpl spec Id)
   (H : ByteArray → OracleComp spec (Vector UInt8 32))
-  (hH : ∀ x, ((simulateQ f.withLogging (H x)).run).2.length = 1)
+  (hH : ∀ x, (queriesWith f (H x)).length = 1)
 
 include hH
 
 /-- A tweakable hash call is one call of `H`. -/
-theorem length_log_th (pp : PublicParam) (address : Address) (payload : ByteArray) :
-    ((simulateQ f.withLogging (th H pp address payload)).run).2.length = 1 := by
-  rw [th, length_log_bind, hH, log_pure, List.length_nil]
+theorem length_queriesWith_th (pp : PublicParam) (address : Address) (payload : ByteArray) :
+    (queriesWith f (th H pp address payload)).length = 1 := by
+  rw [th, queriesWith_bind, List.length_append, hH, queriesWith_pure, List.length_nil]
 
 /-- The starts of a key's chains are `29` derivations from the scheme seed. -/
-theorem length_log_chainStarts (s : Seed) (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    ((simulateQ f.withLogging (chainStarts pp (seedPrf H s) layer e)).run).2.length = V / 2 := by
-  rw [chainStarts, length_log_bind, length_log_ofFnInOrder f 1 (V / 2), log_pure,
-    List.length_nil, Nat.mul_one, Nat.add_zero]
+theorem length_queriesWith_chainStarts (s : Seed) (pp : PublicParam) (layer : Layer)
+    (e : UInt32) : (queriesWith f (chainStarts pp (seedPrf H s) layer e)).length = V / 2 := by
+  rw [chainStarts, queriesWith_bind, List.length_append,
+    length_queriesWith_ofFnInOrder_const f (V / 2) 1, queriesWith_pure, List.length_nil,
+    Nat.mul_one, Nat.add_zero]
   exact fun _ => hH _
 
 /-- A key's leaf is `29` derivations, `58 * 3` chain steps and one hash: `204` calls. -/
-theorem length_log_otsPublicLeaf (s : Seed) (pp : PublicParam) (layer : Layer) (e : UInt32) :
-    ((simulateQ f.withLogging (otsPublicLeaf H pp (seedPrf H s) layer e)).run).2.length =
-      204 := by
-  rw [otsPublicLeaf, length_log_bind, length_log_chainStarts f H hH, length_log_bind,
-    length_log_ofFnInOrder f (CHAIN_LENGTH - 1) V, otsLeafHash, length_log_th f H hH]
+theorem length_queriesWith_otsPublicLeaf (s : Seed) (pp : PublicParam) (layer : Layer)
+    (e : UInt32) : (queriesWith f (otsPublicLeaf H pp (seedPrf H s) layer e)).length = 204 := by
+  rw [otsPublicLeaf, queriesWith_bind, List.length_append,
+    length_queriesWith_chainStarts f H hH, queriesWith_bind, List.length_append,
+    length_queriesWith_ofFnInOrder_const f V (CHAIN_LENGTH - 1), otsLeafHash,
+    length_queriesWith_th f H hH]
   · decide
-  · exact fun _ => length_log_chain f _ (fun _ _ => length_log_th f H hH _ _ _) _ _ _ _
+  · exact fun _ => length_queriesWith_chain f _ (fun _ _ => length_queriesWith_th f H hH _ _ _)
+      _ _ _ _
 
 /-- A node at `level` is `2^level` leaves and `2^level - 1` hashes: `205 * 2^level - 1` calls. -/
-theorem length_log_node (s : Seed) (pp : PublicParam) (layer : Layer) (level j : Nat) :
-    ((simulateQ f.withLogging (node H pp (seedPrf H s) layer level j)).run).2.length =
-      205 * 2 ^ level - 1 :=
-  HashSig.length_log_node f _ _ 204 (fun _ _ _ => length_log_th f H hH _ _ _)
-    (fun _ => length_log_otsPublicLeaf f H hH s pp layer _) level j
+theorem length_queriesWith_xmssNode (s : Seed) (pp : PublicParam) (layer : Layer)
+    (level j : Nat) :
+    (queriesWith f (node H pp (seedPrf H s) layer level j)).length = 205 * 2 ^ level - 1 :=
+  length_queriesWith_node f _ _ 204 (fun _ _ _ => length_queriesWith_th f H hH _ _ _)
+    (fun _ => length_queriesWith_otsPublicLeaf f H hH s pp layer _) level j
 
 /-- Key generation makes exactly `1 + 205 * 2^16` calls under fixed answers.
 
 It does not search, so every run makes the same number of calls. -/
-theorem length_log_keyGenWith (seed : Seed) :
-    ((simulateQ f.withLogging (keyGenWith H seed)).run).2.length =
-      1 + 205 * 2 ^ LAYER_HEIGHT := by
-  have hseed : ((simulateQ f.withLogging (schemeSeed H seed)).run).2.length = 1 := hH _
-  have hpp : ∀ s, ((simulateQ f.withLogging (publicParamOf (seedPrf H s))).run).2.length = 1 :=
+theorem length_queriesWith_keyGenWith (seed : Seed) :
+    (queriesWith f (keyGenWith H seed)).length = 1 + 205 * 2 ^ LAYER_HEIGHT := by
+  have hseed : (queriesWith f (schemeSeed H seed)).length = 1 := hH _
+  have hpp : ∀ s, (queriesWith f (publicParamOf (seedPrf H s))).length = 1 := fun s => by
     -- The parameter has the type of a digest, but under another name.
-    fun s => (length_log_bind f (seedPrf H s (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam
-      .empty) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)).trans
-        (congrArg (· + 0) (hH _))
-  rw [keyGenWith, length_log_bind, hseed, length_log_bind, publicKeyOf, length_log_bind, hpp,
-    length_log_bind, length_log_node f H hH, log_pure, List.length_nil, log_pure,
-    List.length_nil]
+    have h := queriesWith_bind f (seedPrf H s (Vector.replicate PUBLIC_PARAM_LEN 0) addrParam
+      .empty) fun h => (pure (halfOf 0 h) : OracleComp spec PublicParam)
+    exact (congrArg List.length h).trans (by rw [List.length_append]; exact congrArg (· + 0) (hH _))
+  rw [keyGenWith, queriesWith_bind, List.length_append, hseed, queriesWith_bind,
+    List.length_append, publicKeyOf, queriesWith_bind, List.length_append, hpp,
+    queriesWith_bind, List.length_append, length_queriesWith_xmssNode f H hH, queriesWith_pure,
+    List.length_nil, queriesWith_pure, List.length_nil]
   have hpos : 1 ≤ 205 * 2 ^ LAYER_HEIGHT := Nat.one_le_iff_ne_zero.2 (by positivity)
   omega
 
