@@ -5258,6 +5258,27 @@ private theorem dueList_sum_le_all (X : BeaconState preset fork) (electra : .pec
 private theorem keyCredit_eq (i : ℕ) (e : BalanceEvent preset) :
     keyCredit i e = PinSplit.keyCredit i e := rfl
 
+/-- The classes `K4`, `K5` and `K6` share no key with each other or with `V`. -/
+private theorem classes_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V) (K5 counted V) ∧
+    Disjoint (K4 pulled counted V) (K6 pulled counted) ∧
+    Disjoint (K5 counted V) (K6 pulled counted) ∧
+    Disjoint V (K4 pulled counted V) ∧ Disjoint V (K5 counted V) ∧
+    Disjoint V (K6 pulled counted) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> refine Finset.disjoint_left.mpr fun v a b => ?_
+  · simp only [K4, K5, Finset.mem_filter] at a b
+    exact b.2.1 a.1
+  · simp only [K4, K6, Finset.mem_filter] at a b
+    exact b.2.2 a.2.1
+  · simp only [K5, K6, Finset.mem_filter] at a b
+    exact a.2.1 b.1
+  · simp only [K4, Finset.mem_filter] at b
+    exact b.2.2.2 a
+  · simp only [K5, Finset.mem_filter] at b
+    exact b.2.2 a
+  · simp only [K6, Finset.mem_filter] at b
+    exact b.2.2 (h.voting v a).1
+
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
@@ -5345,21 +5366,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
     simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
     exact Nat.le_add_left _ _
   -- The target sets are disjoint.
-  have d45 : Disjoint (K4 pulled counted V) (K5 counted V) := by
-    rw [Finset.disjoint_left]
-    intro v h4 h5
-    simp only [K4, K5, Finset.mem_filter] at h4 h5
-    exact h5.2.1 h4.1
-  have d46 : Disjoint (K4 pulled counted V) (K6 pulled counted) := by
-    rw [Finset.disjoint_left]
-    intro v h4 h6
-    simp only [K4, K6, Finset.mem_filter] at h4 h6
-    exact h6.2.2 h4.2.1
-  have d56 : Disjoint (K5 counted V) (K6 pulled counted) := by
-    rw [Finset.disjoint_left]
-    intro v h5 h6
-    simp only [K5, K6, Finset.mem_filter] at h5 h6
-    exact h5.2.1 h6.1
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   have d456 : Disjoint (K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
     Finset.disjoint_union_left.mpr ⟨d46, d56⟩
   have dKV : Disjoint Kall V := by
@@ -5509,27 +5516,6 @@ private theorem slashR_le (config : Config)
   obtain ⟨_, flag⟩ := Finset.mem_filter.mp member
   exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor
     finalizedState flag), flag⟩
-
-/-- The classes `K4`, `K5` and `K6` share no key with each other or with `V`. -/
-private theorem classes_disjoint (h : Setting config checks g split fin pulled anc counted V) :
-    Disjoint (K4 pulled counted V) (K5 counted V) ∧
-    Disjoint (K4 pulled counted V) (K6 pulled counted) ∧
-    Disjoint (K5 counted V) (K6 pulled counted) ∧
-    Disjoint V (K4 pulled counted V) ∧ Disjoint V (K5 counted V) ∧
-    Disjoint V (K6 pulled counted) := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ <;> refine Finset.disjoint_left.mpr fun v a b => ?_
-  · simp only [K4, K5, Finset.mem_filter] at a b
-    exact b.2.1 a.1
-  · simp only [K4, K6, Finset.mem_filter] at a b
-    exact b.2.2 a.2.1
-  · simp only [K5, K6, Finset.mem_filter] at a b
-    exact a.2.1 b.1
-  · simp only [K4, Finset.mem_filter] at b
-    exact b.2.2.2 a
-  · simp only [K5, Finset.mem_filter] at b
-    exact b.2.2 a
-  · simp only [K6, Finset.mem_filter] at b
-    exact b.2.2 (h.voting v a).1
 
 /-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
 
@@ -5682,23 +5668,11 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       band keys).2
     exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
   -- the four sets are pairwise disjoint
-  have voters : ∀ v ∈ V, v ∈ AR pulled := fun v member => (h.voting v member).1
-  have d1 : Disjoint V (K4 pulled counted V) := Finset.disjoint_left.mpr fun v first second =>
-    (Finset.mem_filter.mp second).2.2.2 first
+  obtain ⟨d45, d46, d56, d1, d15, d16⟩ := classes_disjoint h
   have d2 : Disjoint (V ∪ K4 pulled counted V) (K5 counted V) :=
-    Finset.disjoint_left.mpr fun v first second => by
-      rcases Finset.mem_union.mp first with inV | inK4
-      · exact (Finset.mem_filter.mp second).2.2 inV
-      · exact (Finset.mem_filter.mp second).2.1 (Finset.mem_filter.mp inK4).1
+    Finset.disjoint_union_left.mpr ⟨d15, d45⟩
   have d3 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
-    Finset.disjoint_left.mpr fun v first second => by
-      have notR := (Finset.mem_filter.mp second).2.2
-      have active := (Finset.mem_filter.mp second).1
-      rcases Finset.mem_union.mp first with first | inK5
-      · rcases Finset.mem_union.mp first with inV | inK4
-        · exact notR (voters v inV)
-        · exact notR (Finset.mem_filter.mp inK4).2.1
-      · exact (Finset.mem_filter.mp inK5).2.1 active
+    Finset.disjoint_union_left.mpr ⟨Finset.disjoint_union_left.mpr ⟨d16, d46⟩, d56⟩
   have sets : ∑ v ∈ V, (syncF events v.toNat + syncF eventsC v.toNat) +
       ∑ v ∈ K4 pulled counted V, (syncF events v.toNat + syncF eventsC v.toNat) +
       ∑ v ∈ K5 counted V, (syncF events v.toNat + syncF eventsC v.toNat) +
