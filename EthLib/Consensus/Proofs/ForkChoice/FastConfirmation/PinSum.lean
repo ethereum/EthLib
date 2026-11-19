@@ -13260,6 +13260,136 @@ private theorem effective_fin_le_ebUp (h : Setting config checks g split fin pul
   exact Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_left _ _)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The floor of a key slashed at the finalized state, from a state of a run to R.
+
+The key keeps its withdrawable epoch along every run, once it is slashed.
+
+Its withdrawable epoch at R is the slashings vector past the finalized epoch, and past R's horizon.
+
+So `slashed_floor` takes the floor of each state, with no slashing slack. -/
+private theorem slash_floor_from_slashed
+    (h : Setting config checks g split fin pulled anc counted V) (v : ValidatorIndex)
+    (inFin : v.toNat < fin.validators.data.size)
+    (slashedFin : ∀ u, fin.validators.data[v.toNat]? = some u → u.slashed = true)
+    (wP : Validator) (foundP : pulled.validators.data[v.toNat]? = some wP)
+    (frozen : (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+      wP.withdrawableEpoch.toNat)
+    (late : (getCurrentEpoch pulled).toNat + 1 < wP.withdrawableEpoch.toNat)
+    {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+    (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) {evs : List (BalanceEvent preset)}
+    (ev : r2.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs) :
+    min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
+        (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
+      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+        (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
+        (evs.map (floorPartialDebit v)).sum := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨uF, foundF⟩ : ∃ uF, fin.validators.data[v.toNat]? = some uF :=
+    ⟨_, Array.getElem?_eq_getElem inFin⟩
+  obtain ⟨val, foundZ, slashedZ⟩ := r1.slashedPersistence v.toNat uF foundF (slashedFin uF foundF)
+  have assigned : val.exitEpoch ≠ FAR_FUTURE_EPOCH :=
+    run_slashed_exit_assigned (shared.append r1) h.genesis h.caps.activation
+      h.caps.compounding h.early h.delay v.toNat val foundZ slashedZ
+  have kept := r2.slashed_withdrawable_eq h.caps.activation h.caps.compounding h.early
+    v.toNat val wP foundZ foundP slashedZ assigned
+  have capEq : PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat =
+      (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    simp [PinSplit2.capAt, foundZ]
+  have floor := slashed_floor h r1 (e := pulled) (Nat.le_succ _) r2
+    (getCurrentEpoch pulled).toNat (Nat.le_succ _) ev v val foundZ
+    (fun _ => by
+      have := frozen
+      rw [kept.2] at this
+      exact this)
+    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (fun z member => by
+      obtain ⟨q1, q2, -⟩ := balancePath_endpoint r2
+        (Run.nil : Run config checks ⟨fork, pulled⟩ ⟨fork, pulled⟩) (Nat.le_refl _) member
+      obtain ⟨zf, zs'⟩ := z
+      have same : fork = zf := (fork_eq_of_run q1 q2 (Nat.le_refl _)).symm
+      subst same
+      exact effective_le_cap_pulled h (r1.append q1) q2 v.toNat)
+    (fun before step after _ _ _ => .inr fun u foundU => by
+      have low := Nat.lt_of_le_of_lt
+        (fork_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps) h.early
+      have keptU := before.slashed_withdrawable_eq h.caps.activation h.caps.compounding low
+        v.toNat val u foundZ foundU slashedZ assigned
+      have lateW := late
+      rw [kept.2] at lateW
+      rw [keptU.2]
+      exact lateW)
+  rw [ite_eq_left slashedZ] at floor
+  omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a finalized key slashed at the split stays in its envelope on R's run.
+
+A key unslashed at the finalized state is slashed on the shared segment or on R's run.
+
+It takes its floor from `slash_floor_across` at the finalized state.
+
+A key slashed at the finalized state keeps its withdrawable epoch along every run.
+
+Its withdrawable epoch at R is the slashings vector past the finalized epoch, and past R's horizon.
+
+So `slashed_floor` takes its floor from each state, with no slashing slack.
+
+`prefix_envelope` turns the floor into the bound on the effective balance. -/
+private theorem kc_envelope (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (inFin : v.toNat < fin.validators.data.size)
+    (slashedSplit : ∃ u, split.validators.data[v.toNat]? = some u ∧ u.slashed = true)
+    (rb : (pinTerms config pulled anc fin).slashedRB v.toNat = true)
+    (frozen : ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+        w.withdrawableEpoch.toNat)
+    (late : ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) :
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        ((syncD eventsF v.toNat + syncD events v.toNat +
+            slashW (pinTerms config pulled anc fin) v.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  classical
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨uF, foundF⟩ : ∃ uF, fin.validators.data[v.toNat]? = some uF :=
+    ⟨_, Array.getElem?_eq_getElem inFin⟩
+  obtain ⟨uS, foundS, flagS⟩ := slashedSplit
+  obtain ⟨wP, foundP, slashedP⟩ := toPulled.slashedPersistence v.toNat uS foundS flagS
+  have floorAt : ∀ {zs : BeaconState preset fork}
+      (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
+      (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩),
+      pre.append rest = fromFin.append tail → ∀ {evs : List (BalanceEvent preset)},
+      rest.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs →
+      min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
+          (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
+        actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+          (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
+          (evs.map (floorPartialDebit v)).sum +
+            slashW (pinTerms config pulled anc fin) v.toNat := by
+    intro zs pre rest _ evs ev
+    by_cases cleanF : uF.slashed = false
+    · exact slash_floor_across h v Run.nil inFin (fun u fu => by
+        rw [← Option.some.inj (foundF.symm.trans fu)]
+        exact cleanF) wP foundP slashedP rb pre rest ev
+    · -- slashed at the finalized state, so slashed at every state of the run
+      have slashedF : uF.slashed = true := by simpa using cleanF
+      have := slash_floor_from_slashed h v inFin (fun u fu => by
+        rw [← Option.some.inj (foundF.symm.trans fu)]
+        exact slashedF) wP foundP (frozen wP foundP) (late wP foundP) pre rest ev
+      omega
+  exact prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF
+    replayed v Run.nil (fromFin.append tail) (run_nil_append (fromFin.append tail)) inFin
+    (slashW (pinTerms config pulled anc fin) v.toNat)
+    (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) floorAt
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key unslashed at `c` at each state of R's run from `c`.
 
 The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
@@ -17088,15 +17218,14 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
           ((syncD eventsF v.toNat + syncD events v.toNat +
               slashW (pinTerms config pulled anc fin) v.toNat) /
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := sorry
-  -- a key slashed at the split keeps its withdrawable epoch, so its envelope is the floor's
-  have kcFin : ∀ v ∈ Kc, v.toNat < fin.validators.data.size →
-      (∀ w, pulled.validators.data[v.toNat]? = some w →
-        (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) →
-      ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-          ((syncD eventsF v.toNat + syncD events v.toNat +
-              slashW (pinTerms config pulled anc fin) v.toNat) /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := sorry
+  -- a key slashed at the split that R reads as slashed withdraws a vector past `fin`
+  have kcFrozen : ∀ v ∈ Kc, ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+        w.withdrawableEpoch.toNat := by
+    intro v inKc w fw
+    have frozen := (Finset.mem_filter.mp inKc).2.2.2
+    simp only [fw, Option.any_some, decide_eq_true_eq] at frozen
+    exact frozen
   have envelope : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
       SC pulled counted split ∪ Kc, (∀ w, pulled.validators.data[v.toNat]? = some w →
         (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) →
@@ -17122,7 +17251,8 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
       exact Nat.zero_le _
     · by_cases inFin : v.toNat < fin.validators.data.size
       · by_cases inKc : v ∈ Kc
-        · exact kcFin v inKc inFin late z inPath
+        · exact kc_envelope h fromFin tail replayedF' replayed' v inFin (kcSlashed v inKc)
+            (Finset.mem_filter.mp inKc).2.2.1 (kcFrozen v inKc) late z inPath
         · have notKc : v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
               SC pulled counted split := (Finset.mem_union.mp member).resolve_right inKc
           have unslashed :
