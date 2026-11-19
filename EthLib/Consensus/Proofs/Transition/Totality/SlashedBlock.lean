@@ -181,7 +181,7 @@ private theorem same_withdrawals {s t : BeaconState preset fork} {capella : .sha
       (fun _ => rfl) (fun one two => two.trans one)
       (fun withdrawn => by rw [applyWithdrawal_eq withdrawn]) _ _ _ _ _ _ applied
     all_goals exact fun _ _ => rfl
-  exact processWithdrawals_of (fun a b => b.slashings = a.slashings) rfl expected ok
+  exact processWithdrawals_of (fun a b => b.slashings = a.slashings) rfl (fun _ => expected) ok
 
 private theorem same_blockExecution {s t : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}

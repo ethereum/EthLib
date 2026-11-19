@@ -248,7 +248,8 @@ private theorem down_processWithdrawals {capella : .shapella ≤ fork}
       obtain ⟨_, rfl⟩ := setBuilder_ok set
       exact BalanceDown.of_balances rfl
     · exact down_decreaseBalance step index
-  exact processWithdrawals_of (BalanceDown index) (BalanceDown.refl _ _) applied computed
+  exact processWithdrawals_of (BalanceDown index) (BalanceDown.refl _ _) (fun _ => applied)
+    computed
 
 /-! ## The proposer along a block -/
 
@@ -1066,7 +1067,8 @@ private theorem fixed_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 private theorem fixed_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) : BlockFixed state after :=
-  processWithdrawals_of BlockFixed (BlockFixed.refl _) fixed_applyExpectedWithdrawals computed
+  processWithdrawals_of BlockFixed (BlockFixed.refl _) (fun _ => fixed_applyExpectedWithdrawals)
+    computed
 
 /-- The execution part of a block keeps a balance from rising, and keeps the fields. -/
 theorem down_processBlockExecution {body : BeaconBlockBody preset fork}

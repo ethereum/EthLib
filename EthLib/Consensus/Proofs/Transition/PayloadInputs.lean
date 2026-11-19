@@ -472,8 +472,8 @@ theorem payloadInputs_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
     PayloadInputs state after :=
-  processWithdrawals_of PayloadInputs (PayloadInputs.refl _) payloadInputs_applyExpectedWithdrawals
-    computed
+  processWithdrawals_of PayloadInputs (PayloadInputs.refl _)
+    (fun _ => payloadInputs_applyExpectedWithdrawals) computed
 
 /-! ## The operations of a block -/
 

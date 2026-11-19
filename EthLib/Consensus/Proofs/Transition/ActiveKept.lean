@@ -309,7 +309,8 @@ private theorem stepKeeps_applyExpectedWithdrawals {capella : .shapella ≤ fork
 private theorem stepKeeps_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) : StepKeeps state after :=
-  processWithdrawals_of StepKeeps (StepKeeps.refl _) stepKeeps_applyExpectedWithdrawals computed
+  processWithdrawals_of StepKeeps (StepKeeps.refl _) (fun _ => stepKeeps_applyExpectedWithdrawals)
+    computed
 
 theorem stepKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :

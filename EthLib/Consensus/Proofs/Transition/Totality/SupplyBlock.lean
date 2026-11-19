@@ -479,7 +479,7 @@ private theorem rise_withdrawals {s t : BeaconState preset fork} {capella : .sha
     apply applyExpectedWithdrawals_of_setters (Rise 0) Rise.refl
       (fun one two => by simpa using one.trans two) withdraw _ _ _ _ _ _ applied
     all_goals exact fun _ _ => Fixed.rise ⟨rfl, rfl, rfl, rfl, rfl⟩
-  exact processWithdrawals_of (Rise 0) (Rise.refl _) expected ok
+  exact processWithdrawals_of (Rise 0) (Rise.refl _) (fun _ => expected) ok
 
 /-- The execution part of a block does not raise the supply. -/
 private theorem rise_blockExecution {engine : ExecutionEngine preset fork}
@@ -816,7 +816,7 @@ private theorem flags_withdrawals {s t : BeaconState preset fork} {capella : .sh
     apply applyExpectedWithdrawals_of_setters ParticipationKept ParticipationKept.refl
       (fun one two => one.trans two) withdraw _ _ _ _ _ _ applied
     all_goals exact fun _ _ => ⟨rfl, rfl⟩
-  exact processWithdrawals_of ParticipationKept (ParticipationKept.refl _) expected ok
+  exact processWithdrawals_of ParticipationKept (ParticipationKept.refl _) (fun _ => expected) ok
 
 private theorem flags_blockExecution {engine : ExecutionEngine preset fork}
     {s t : BeaconState preset fork} {body : BeaconBlockBody preset fork}

@@ -312,7 +312,7 @@ private theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (ok : Consensus.processWithdrawals state capella payload = .ok after) :
     SameSyncCommittees state after :=
-  processWithdrawals_of SameSyncCommittees (.refl _) applyExpectedWithdrawals ok
+  processWithdrawals_of SameSyncCommittees (.refl _) (fun _ => applyExpectedWithdrawals) ok
 
 private theorem processProposerSlashing {slashing : ProposerSlashing}
     (ok : Consensus.processProposerSlashing config checks state slashing = .ok after) :

@@ -287,7 +287,7 @@ private theorem withdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (ok : processWithdrawals state capella payload = .ok after) :
     QueueKept state after :=
-  processWithdrawals_of QueueKept rfl (fun applied => by
+  processWithdrawals_of QueueKept rfl (fun _ applied => by
     apply applyExpectedWithdrawals_of_setters QueueKept (fun _ => rfl)
       (fun one two => one.trans two) (fun ok => by rw [applyWithdrawal_eq ok]; rfl)
       _ _ _ _ _ _ applied

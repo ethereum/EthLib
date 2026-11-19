@@ -245,7 +245,8 @@ private theorem loadKept_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 private theorem loadKept_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) : LoadKept state after :=
-  processWithdrawals_of LoadKept (LoadKept.refl _) loadKept_applyExpectedWithdrawals computed
+  processWithdrawals_of LoadKept (LoadKept.refl _) (fun _ => loadKept_applyExpectedWithdrawals)
+    computed
 
 /-- The execution part of a block keeps the count. -/
 private theorem loadKept_processBlockExecution {body : BeaconBlockBody preset fork}

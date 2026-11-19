@@ -687,7 +687,8 @@ private theorem processWithdrawals_validators {capella : .shapella ≤ fork}
     exact applyExpectedWithdrawals_of (fun a b => b.validators = a.validators)
       (fun _ => rfl) (fun one two => two.trans one)
       (fun step => by rw [applyWithdrawal_eq step]) (fun _ same => same) ok
-  exact processWithdrawals_of (fun a b => b.validators = a.validators) rfl expected computed
+  exact processWithdrawals_of (fun a b => b.validators = a.validators) rfl (fun _ => expected)
+    computed
 
 /-- The execution part of a block keeps the validators, at every fork. -/
 theorem processBlockExecution_validators {body : BeaconBlockBody preset fork}

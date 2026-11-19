@@ -249,7 +249,7 @@ private theorem Kept.withdrawals {capella : .shapella ≤ fork}
         exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩)
       _ _ _ _ _ _ applied
     all_goals exact fun _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  exact processWithdrawals_of Kept (Kept.refl _) expected ok
+  exact processWithdrawals_of Kept (Kept.refl _) (fun _ => expected) ok
 
 private theorem Kept.blockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}

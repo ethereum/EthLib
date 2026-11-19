@@ -1363,7 +1363,7 @@ theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : Consensus.processWithdrawals state capella payload = .ok after) :
     R state after :=
-  processWithdrawals_of R (laws.refl _) (laws.applyExpectedWithdrawals keep) computed
+  processWithdrawals_of R (laws.refl _) (fun _ => laws.applyExpectedWithdrawals keep) computed
 
 end EpochFrameLaws
 
