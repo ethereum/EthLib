@@ -126,7 +126,6 @@ private theorem relation_of_checkpoint_lookahead {config : Config} {checks : Sig
 private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
-    (early : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork}
@@ -143,10 +142,10 @@ private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : Sign
       PendingTailRun count epoch boundary after := by
   exact relation_of_checkpoint_lookahead (PendingTailRun count epoch)
     PendingTailRun.refl (fun one two => one.trans two)
-    (fun ok => pendingTailRun_stateTransition early finite ok)
+    (fun ok => pendingTailRun_stateTransition finite ok)
     (fun slots bound ok => relation_of_processSlots_of_stateTransition (PendingTailRun count epoch)
       (fun one two => one.trans two) (fun rest => pendingTailRun_processSlots finite rest)
-      (fun step => pendingTailRun_processBlock early finite step) slots bound ok)
+      (fun step => pendingTailRun_processBlock finite step) slots bound ok)
     (fun ok => pendingTailRun_processSlots finite ok)
     anchorSlot reached target found startOk atOrAfter baseFound sourceFound advanced
 
@@ -157,7 +156,7 @@ The source lookahead transports its tail, while the receiver lookahead supplies 
 Historical applicability is still required separately; no validator identity is inferred. -/
 private theorem registry_of_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork} (early : fork < .glamsterdam)
+    {store : Store preset fork}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
@@ -188,7 +187,7 @@ private theorem registry_of_checkpointPrefix {config : Config} {checks : Signatu
     (fun ok => runKept_processSlots ok)
     anchorSlot reached walk found startOk bound boundaryBaseFound baseFound advanced
   obtain ⟨sourceBoundary, sourceBoundaryRun, related⟩ := pendingTailRun_checkpointPrefix
-    (count := boundary.validators.data.size) early anchorSlot reached sourceWalk
+    (count := boundary.validators.data.size) anchorSlot reached sourceWalk
     sourceBlockFound startOk sourceBound boundaryBaseFound sourceFound sourceRun finite
   have same : sourceBoundary = boundary :=
     Except.ok.inj (sourceBoundaryRun.symm.trans boundaryRun)
@@ -944,7 +943,7 @@ private theorem registry_of_honest_block {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (anchored : ∀ w ∈ J, e.start w = anchor)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
+    (positive : 0 < preset.SLOTS_PER_EPOCH)
     {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
     {boundaryBase source base cached : BeaconState preset fork}
     {root sourceRoot : Root} {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
@@ -977,7 +976,7 @@ private theorem registry_of_honest_block {anchor : Store preset fork}
   have sourceStart : start ≤ max sourceBlock.slot source.slot := by
     rw [UInt64.le_iff_toNat_le, toNat_max]
     exact Nat.le_trans (UInt64.le_iff_toNat_le.mp sourceBound) (Nat.le_max_left _ _)
-  exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
+  exact registry_of_checkpointPrefix anchorSlot reached anchorInvariant positive
     walk found startOk bound baseFound boundaryBaseFound advanced identity sourceWalk
     sourceBlockFound sourceStart sourceFound finalized finite
 
@@ -1124,7 +1123,7 @@ private theorem registry_of_genesis_window {anchor : Store preset fork}
     headFound hashed
   rw [← epochEq] at walk headWalk
   have inside := registry_of_honest_block anchorStore anchored anchorInvariant
-    (UInt64.le_of_eq anchorSlot) positive early honest boundaryBaseFound startOk walk found
+    (UInt64.le_of_eq anchorSlot) positive honest boundaryBaseFound startOk walk found
     UInt64.zero_le baseFound advanced headWalk headFound headStateFound
     UInt64.zero_le (by rw [genesis]; decide)
   intro v member
@@ -1211,7 +1210,7 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
   have finite := finalized_finite_of_anchor reached.reachable anchorInvariant
     (anchor_finite_of_parentNext reached.reachable anchorSlot parentFound unknown parentNext)
   have inside := registry_of_honest_block anchorStore anchored anchorInvariant
-    (UInt64.le_of_eq anchorSlot) positive early honest boundaryBaseFound startOk walk found
+    (UInt64.le_of_eq anchorSlot) positive honest boundaryBaseFound startOk walk found
     bound baseFound advanced headWalk headFound headStateFound headBound finite
   intro v member
   obtain ⟨epoch, active⟩ := active_of_committeeWindow early
