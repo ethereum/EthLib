@@ -368,6 +368,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `VoteAt.accepted_at_next_slot` and `VoteAt.recorded_at_next_slot` no longer take the premise `epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The honest vote data already puts the target at the epoch of the duty slot.
+  A caller drops that argument.
+
 - In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The root of an ancestor walk does not depend on the payload status of its start.
   So a read at an earlier epoch goes through the checkpoint of a later one.

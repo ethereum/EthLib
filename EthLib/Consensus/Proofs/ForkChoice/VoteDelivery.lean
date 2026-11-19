@@ -721,7 +721,6 @@ theorem VoteAt.accepted_at_next_slot_of_payloadVote {anchor : Store preset fork}
   exact vote.accepted_of_target_known anchored start honest receiver committees
     nBound arrivalBound targetKnown valid
 
-set_option linter.unusedVariables false in
 /-- A held duty vote is accepted at the next slot, or bounded honest stores name a collision.
 
 The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.
@@ -740,7 +739,6 @@ theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : 
       withTarget.checkpointState attestation.data.target = .ok targetState →
       checkAttestationCommittees targetState attestation = .ok ())
     (dataSlot : attestation.data.slot = slot)
-    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
     (nextOk : addChecked slot 1 = .ok next)
     (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
     (arrivalBound : (e.world arrival).time ≤ last) (nBound : (e.world n).time ≤ last)
@@ -775,7 +773,6 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
       withTarget.checkpointState attestation.data.target = .ok targetState →
       checkAttestationCommittees targetState attestation = .ok ())
     (dataSlot : attestation.data.slot = slot)
-    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
     (nextOk : addChecked slot 1 = .ok next)
     (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
     (late : deadline + Δ ≤ (e.world arrival).time)
@@ -795,7 +792,7 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
   rcases vote.accepted_at_next_slot preGloas anchored start honest receiver committees dataSlot
-      epoch nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
+      nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
       checkpoint with ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact .inr collision
