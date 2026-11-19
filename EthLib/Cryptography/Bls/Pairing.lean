@@ -156,13 +156,6 @@ def finalExponentiation (f : Fp12 F) : Fp12 F :=
 
 /-! ## The pairing -/
 
-/-- The pairing `e(P, Q)`, an element of `Fp12`.
-
-A point at infinity gives 1. -/
-def pairing (P : G1 F) (Q : G2 F) : Fp12 F :=
-  if P.isInfinity || Q.isInfinity then Fp12.one
-  else finalExponentiation (millerLoop blsX Q.toAffine P.toAffine).conjugate
-
 /-- The factor that one pair adds to the product of the pairing check.
 
 It is the Miller loop of the pair, conjugated because the BLS parameter `x` is negative.
@@ -171,6 +164,16 @@ A pair with a point at infinity adds no factor, since its pairing is 1. -/
 def pairFactor (pq : G1 F × G2 F) : Option (Fp12 F) :=
   if pq.1.isInfinity || pq.2.isInfinity then none
   else some (millerLoop blsX pq.2.toAffine pq.1.toAffine).conjugate
+
+/-- The pairing `e(P, Q)`, an element of `Fp12`.
+
+It is the final exponentiation of the factor of the pair.
+
+A point at infinity gives 1. -/
+def pairing (P : G1 F) (Q : G2 F) : Fp12 F :=
+  match pairFactor (P, Q) with
+  | none => Fp12.one
+  | some f => finalExponentiation f
 
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`.
 

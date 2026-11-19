@@ -43,10 +43,10 @@ private theorem finalExponentiation_one : finalExponentiation (1 : Fp12) = 1 := 
 /-- The pairing is the final exponentiation of the pair's factor, or 1 without a factor. -/
 theorem pairing_eq_factor (P : G1) (Q : G2) :
     pairing P Q = finalExponentiation ((pairFactor (P, Q)).getD 1) := by
-  unfold pairing pairFactor
-  split
-  · rw [Option.getD_none, finalExponentiation_one, Fp12.one_eq_one]
-  · rfl
+  unfold pairing
+  cases pairFactor (P, Q) with
+  | none => rw [Option.getD_none, finalExponentiation_one, Fp12.one_eq_one]
+  | some f => rfl
 
 /-- The final exponentiation of the folded factors is the product of the pairings. -/
 theorem finalExp_foldl (l : List (G1 × G2)) (acc : Fp12) :

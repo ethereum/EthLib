@@ -170,14 +170,14 @@ theorem pairingBilinear : PairingBilinear := by
   · subst ha
     have hi : (G1.mul (G1.generator : G1) 0).isInfinity = true :=
       (G1.mul_generator_isInfinity_iff 0).mpr rfl
-    simp only [pairing, hi, Bool.true_or, ↓reduceIte, Fr.val_zero, zero_mul, pow_zero,
-      Fp12.one_eq_one]
+    rw [pairing_eq_one_of_pairFactor (pairFactor_eq_none (by rw [hi, Bool.true_or])),
+      Fr.val_zero, zero_mul, pow_zero, Fp12.one_eq_one]
   by_cases hb : b = 0
   · subst hb
     have hi : (G2.mul (G2.generator : G2) 0).isInfinity = true :=
       (G2.mul_generator_isInfinity_iff 0).mpr rfl
-    simp only [pairing, hi, Bool.or_true, ↓reduceIte, Fr.val_zero, mul_zero, pow_zero,
-      Fp12.one_eq_one]
+    rw [pairing_eq_one_of_pairFactor (pairFactor_eq_none (by rw [hi, Bool.or_true])),
+      Fr.val_zero, mul_zero, pow_zero, Fp12.one_eq_one]
   have hia : (G1.mul (G1.generator : G1) a).isInfinity = false :=
     Bool.eq_false_iff.mpr fun h => ha ((G1.mul_generator_isInfinity_iff a).mp h)
   rw [pairing_eq_ateValue (G1.valid_mul G1.valid_generator a) hia
