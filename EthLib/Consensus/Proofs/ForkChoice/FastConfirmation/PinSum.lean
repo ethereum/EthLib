@@ -16222,6 +16222,10 @@ The cap enters only through `stay` and `cappedY`, which the cap arms prove.
 
 C's run may end at any state, so a prefix of it closes the same way.
 
+The start of the effective balance's ceiling is any state's, bounded as `rise_close` reads it.
+
+At the finalized state it is `balanceAt fin`, and the bound is `Nat.le_max_left`.
+
 It concludes with the flows and bands in the form of `keyExtra`, without the credits of `credC`.
 
 `keyCeiling_of_close` gives `keyCeiling` from it, and the credits `Cr` that it holds.
@@ -16274,9 +16278,14 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         ((syncD eventsF v.toNat + syncD events v.toNat +
             slashW (pinTerms config pulled anc fin) v.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    (start : ℕ)
+    (startLe : ∀ S : ℕ, start ≤ max (balanceAt fin v.toNat)
+      ((riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) -
+        (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) %
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
       (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
-        balanceAt ending v.toNat ≤ max (balanceAt fin v.toNat)
+        balanceAt ending v.toNat ≤ max start
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
       balanceAt ending v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
@@ -16415,7 +16424,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       balanceAt ending v.toNat ≤
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
     fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
-      alignedC (Nat.le_max_left _ _) stay cap ceiling slack
+      alignedC (hH ▸ startLe S) stay cap ceiling slack
   have fK : flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
       flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
     simp [flowK, kept]
@@ -16797,8 +16806,8 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
     (key_close h tail fromFin tailC highC v kept
     (voter_not_withdrawn h fromFin tail v voter inFin) P hP Df D q gc Cr M Bc _ hDf hD hq hM
     hform hBc
-    rateLow maxLe stay (fun _ => Nat.le_trans cappedC (Nat.le_add_right _ _)) creditsLe
-    noCredit) creditsLe
+    rateLow maxLe (balanceAt fin v.toNat) (fun _ => Nat.le_max_left _ _) stay
+    (fun _ => Nat.le_trans cappedC (Nat.le_add_right _ _)) creditsLe noCredit) creditsLe
 
 /-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
 
