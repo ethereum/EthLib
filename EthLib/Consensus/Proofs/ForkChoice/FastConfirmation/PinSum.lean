@@ -9076,37 +9076,70 @@ private theorem classes_disjoint (h : Setting config checks g split fin pulled a
   · simp only [K6, Finset.mem_filter] at b
     exact b.2.2 (h.voting v a).1
 
-/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
-private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
-    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
-    Disjoint V (SC pulled counted split) := by
-  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
-    intro v hv hs
-    simp only [Q, quorumVoters, Finset.mem_filter] at hv
-    have unslashed := hv.2
-    unfold slashedFlagAt at hs
-    rw [hs] at unslashed
-    simp at unslashed
-  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
-    intro v hv
-    simp only [Finset.mem_union] at hv
-    rcases hv with (h4 | h5) | h6
+/-- A key of `K4`, `K5` or `K6` is in C's quorum, so it is unslashed at C. -/
+private theorem classes_unslashed {v : ValidatorIndex}
+    (member : v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) :
+    slashedFlagAt counted v.toNat ≠ some true := by
+  have inQ : v ∈ Q counted := by
+    simp only [Finset.mem_union] at member
+    rcases member with (h4 | h5) | h6
     · simp only [K4, Finset.mem_filter] at h4
       exact h4.2.2.1
     · simp only [K5, Finset.mem_filter] at h5
       exact h5.1
     · simp only [K6, Finset.mem_filter] at h6
       exact h6.2.1
+  intro slashed
+  simp only [Q, quorumVoters, Finset.mem_filter] at inQ
+  have unslashed := inQ.2
+  unfold slashedFlagAt at slashed
+  rw [slashed] at unslashed
+  simp at unslashed
+
+/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
+private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
+    Disjoint V (SC pulled counted split) := by
   refine ⟨?_, ?_⟩
   · rw [Finset.disjoint_left]
     intro v hk hs
     simp only [SC, Finset.mem_filter] at hs
-    exact qS v (inQ v hk) hs.2.1
+    exact classes_unslashed hk hs.2.1
   · rw [Finset.disjoint_left]
     intro v hv hs
     simp only [SC, Finset.mem_filter] at hs
     have unslashed := (h.voting v hv).2
     rw [hs.2.1] at unslashed
+    simp at unslashed
+
+/-- The keys created after R's registry and slashed at C are in no other class.
+
+They are slashed at C, so they are not in C's quorum or in `V`.
+
+They are absent at the split, so they are not in `SC`. -/
+private theorem cs_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split)
+      (CS pulled counted) ∧ Disjoint V (CS pulled counted) := by
+  obtain ⟨toPulled⟩ := h.toPulled
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  refine ⟨?_, ?_⟩
+  · rw [Finset.disjoint_left]
+    intro v hk hc
+    simp only [CS, Finset.mem_filter] at hc
+    rcases Finset.mem_union.mp hk with quorum | created
+    · exact classes_unslashed quorum hc.2.2
+    · simp only [SC, Finset.mem_filter] at created
+      have absent : slashedFlagAt split v.toNat = none := by
+        simp only [slashedFlagAt, Option.map_eq_none_iff]
+        exact Array.getElem?_eq_none (by omega)
+      rw [absent] at created
+      cases created.2.2
+  · rw [Finset.disjoint_left]
+    intro v hv hc
+    simp only [CS, Finset.mem_filter] at hc
+    have unslashed := (h.voting v hv).2
+    rw [hc.2.2] at unslashed
     simp at unslashed
 
 /-- A key that a run credits.
@@ -9598,7 +9631,13 @@ The keys of `SC` are slashed at C, so they are not in `K4`, `K5`, `K6` or `V`.
 
 Their credits join those of `K4`, `K5` and `K6` in the bound.
 
-A whistleblower's share of their amounts is at most the amounts.
+The keys of `CS` are created after R's registry and slashed at C.
+
+So they are in none of those sets either.
+
+Their credits join the bound with the same share and bands.
+
+A whistleblower's share of the amounts of `SC` and `CS` is at most the amounts.
 
 A due entry that names one of them adds its band.
 
@@ -9630,7 +9669,9 @@ private theorem bud_consolidations_base
       3 * (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat) +
       3 * (∑ v ∈ V, consAmt events v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
-      (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat)) +
+      (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) +
+      wShare preset fork (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) +
+      (∑ v ∈ CS pulled counted, bandX fin highC v.toNat)) +
       preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
         dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
         3 * dueAt fin high V) ≤
@@ -9654,8 +9695,8 @@ private theorem bud_consolidations_base
   have wholeC := Apriori.Internal.balanceEvents_append fromFin tailC highC replayedFin replayedC
   have wholeR := Apriori.Internal.balanceEvents_append fromFin tail high replayedFinR replayed
   obtain ⟨Kall, hKall⟩ : ∃ K : Finset ValidatorIndex,
-      K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split :=
-      ⟨_, rfl⟩
+      K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
+        CS pulled counted := ⟨_, rfl⟩
   have boundC := PinSplit.Run.consolidation_credits_le_X_targets (config := config)
     (checks := checks) shared h.genesis h.caps (fromFin.append tailC) electra early highC wholeC
     endEpochC withinC delay (Kall.image UInt64.toNat)
@@ -9685,11 +9726,12 @@ private theorem bud_consolidations_base
   have d456 : Disjoint (K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
     Finset.disjoint_union_left.mpr ⟨d46, d56⟩
   obtain ⟨dS, dVS⟩ := sc_disjoint h
+  obtain ⟨dC, dVC⟩ := cs_disjoint h
   have dKV : Disjoint Kall V := by
     rw [hKall, Finset.disjoint_left]
     intro v hk hv
     simp only [Finset.mem_union] at hk
-    rcases hk with ((h4 | h5) | h6) | hS
+    rcases hk with (((h4 | h5) | h6) | hS) | hC
     · simp only [K4, Finset.mem_filter] at h4
       exact h4.2.2.2 hv
     · simp only [K5, Finset.mem_filter] at h5
@@ -9697,19 +9739,24 @@ private theorem bud_consolidations_base
     · simp only [K6, Finset.mem_filter] at h6
       exact h6.2.2 (h.voting v hv).1
     · exact Finset.disjoint_left.mp dVS hv hS
+    · exact Finset.disjoint_left.mp dVC hv hC
   -- The amounts and the entries split over the three sets of C's keys.
   have splitAmount : (∑ v ∈ Kall, consAmt eventsC v.toNat) =
       (∑ v ∈ K4 pulled counted V, consAmt eventsC v.toNat) +
         (∑ v ∈ K5 counted V, consAmt eventsC v.toNat) +
         (∑ v ∈ K6 pulled counted, consAmt eventsC v.toNat) +
-        (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) := by
-    rw [hKall, Finset.sum_union dS, Finset.sum_union d456, Finset.sum_union d45]
+        (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
+        (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) := by
+    rw [hKall, Finset.sum_union dC, Finset.sum_union dS, Finset.sum_union d456,
+      Finset.sum_union d45]
   have splitEntries : (dueList fin electra highC Kall).length =
       (dueList fin electra highC (K4 pulled counted V)).length +
         (dueList fin electra highC (K5 counted V)).length +
         (dueList fin electra highC (K6 pulled counted)).length +
-        (dueList fin electra highC (SC pulled counted split)).length := by
-    rw [hKall, dueList_length_union fin electra highC dS,
+        (dueList fin electra highC (SC pulled counted split)).length +
+        (dueList fin electra highC (CS pulled counted)).length := by
+    rw [hKall, dueList_length_union fin electra highC dC,
+      dueList_length_union fin electra highC dS,
       dueList_length_union fin electra highC d456, dueList_length_union fin electra highC d45]
   -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
   have floorOf (l : List Validator) : preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
@@ -9751,16 +9798,22 @@ private theorem bud_consolidations_base
     omega
   have shareS := wShare_le (fork := fork) h.facts
     (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat)
-  rw [bandX_sum fin electra highC (SC pulled counted split)]
+  have shareC := wShare_le (fork := fork) h.facts
+    (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat)
+  rw [bandX_sum fin electra highC (SC pulled counted split),
+    bandX_sum fin electra highC (CS pulled counted)]
   rw [dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra highC,
-    dueAt_eq fin electra highC, dueAt_eq fin electra high]
+    dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra high]
   rw [Nat.le_div_iff_mul_le (by norm_num)]
   generalize (dueList fin electra highC (K4 pulled counted V)).length = d4 at *
   generalize (dueList fin electra highC (K5 counted V)).length = d5 at *
   generalize (dueList fin electra highC (K6 pulled counted)).length = d6 at *
   generalize (dueList fin electra highC (SC pulled counted split)).length = dS' at *
+  generalize (dueList fin electra highC (CS pulled counted)).length = dC' at *
   generalize (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) = aS at *
   generalize wShare preset fork aS = wS at *
+  generalize (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) = aC at *
+  generalize wShare preset fork aC = wC at *
   generalize (dueList fin electra highC Kall).length = dK at *
   generalize (dueList fin electra high V).length = dV at *
   generalize ((dueList fin electra highC Kall).map fun v =>
@@ -9768,11 +9821,12 @@ private theorem bud_consolidations_base
   generalize ((dueList fin electra high V).map fun v =>
     (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PV at *
   generalize (pinTerms config pulled anc fin).consolidationsX = cX at *
-  have bandsK : preset.upwardBand * dS' + preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) ≤
-      3 * (preset.upwardBand * (dK + dV)) := by
-    have : dS' + (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (dK + dV) := by omega
-    calc preset.upwardBand * dS' + preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV)
-        = preset.upwardBand * (dS' + (d4 + d6 + 3 * d5 + 3 * dV)) := (Nat.mul_add _ _ _).symm
+  have bandsK : preset.upwardBand * dS' + preset.upwardBand * dC' +
+      preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (preset.upwardBand * (dK + dV)) := by
+    have : dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (dK + dV) := by omega
+    calc preset.upwardBand * dS' + preset.upwardBand * dC' +
+          preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV)
+        = preset.upwardBand * (dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV)) := by ring
       _ ≤ preset.upwardBand * (3 * (dK + dV)) := Nat.mul_le_mul_left _ this
       _ = 3 * (preset.upwardBand * (dK + dV)) := by ring
   have bandsM : 10 * (preset.upwardBand * (dK + dV)) ≤
