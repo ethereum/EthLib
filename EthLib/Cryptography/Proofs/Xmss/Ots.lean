@@ -79,6 +79,19 @@ theorem trialRandomizer_eq (base : Randomizer) (c : Nat) :
   rw [trialRandomizer, trialRandomizer_go _ _ _ (Nat.zero_le _), pow_zero, mul_one,
     show (2 : Nat) ^ 128 = 256 ^ RANDOMIZER_LEN by norm_num [RANDOMIZER_LEN], uintToBytes_mod_pow]
 
+/-- The search tests trial `c` on the digest of its randomizer `rho_c`, in any monad.
+
+It builds `P | A_msg(l, e) | M` once, and each trial hashes those bytes followed by `rho_c`.
+
+That is the input of the digest of `rho_c`, so the trials make the same hash calls. -/
+theorem Internal.findCodeword_eq {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
+    (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) (base : Randomizer)
+    (c fuel : Nat) :
+    Internal.findCodeword H pp layer e msg base c fuel =
+      Wots.findFirst (trialRandomizer base)
+        (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel := by
+  simp only [Internal.findCodeword, messageDigest, th, thInput, ByteArray.append_assoc]
+
 /-! ## Derivations from the seed -/
 
 section SeedPrf
@@ -148,7 +161,7 @@ theorem otsLeaf_otsSign {prf : SeedPrf Id} {msg : ByteArray} {rho : Randomizer}
   rw [otsSign_run, Option.map_eq_some_iff] at h
   obtain ⟨⟨rho', x⟩, hfind, hxy⟩ := h
   obtain ⟨rfl, rfl⟩ := Prod.mk.inj hxy
-  rw [Internal.findCodeword] at hfind
+  rw [Internal.findCodeword_eq] at hfind
   obtain ⟨-, -, -, -, hcw, -⟩ := Wots.findFirst_spec hfind
   unfold Id.run at hcw
   replace hcw : codeword? (messageDigest (pureHash f) pp layer e msg rho').run = some x := hcw

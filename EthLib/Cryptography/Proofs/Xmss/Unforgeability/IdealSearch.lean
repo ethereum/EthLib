@@ -226,6 +226,7 @@ theorem isSome_of_mem_support_findCodeword (pp : PublicParam) (layer : Layer) (e
       (Internal.findCodeword queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C)) :
     z.1.isSome := by
   obtain ⟨j, hj, y, hy, hcw⟩ := h
+  rw [Internal.findCodeword_eq] at hz
   exact Wots.isSome_of_mem_support_findFirst_romImpl (trialRandomizer base) _ _ _
     (codeword_messageDigest_queryH pp layer e msg) _ 0 C
     ⟨j, Nat.zero_le _, by omega, y, hy, hcw⟩ z hz
@@ -239,6 +240,7 @@ theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : La
     ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
       z.2 (trialInput pp layer e msg base j) = some y ∧
         codeword? (halfOf 0 (ofOutput y)) = some x := by
+  rw [Internal.findCodeword_eq] at hz
   obtain ⟨j, -, hj, rfl, y, hy, hcw⟩ := Wots.exists_cached_of_mem_support_findFirst_romImpl
     (trialRandomizer base) _ _ _ (codeword_messageDigest_queryH pp layer e msg) _ 0 C z hz rho x hx
   exact ⟨j, by omega, y, hy, hcw⟩

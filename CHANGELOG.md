@@ -328,6 +328,8 @@ Not yet released.
 
 - `processEpoch_registryCut` splits an epoch at its registry updates: the three stages before them, the registry updates, then the rest of the epoch.
 
+- Six epoch and deposit steps keep the inputs of a payload: `payloadInputs_applyPendingDeposit`, `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations` and `payloadInputs_processHistoricalSummariesUpdate`.
+
 - `roundToIncrement_share_bounds` bounds a share of a total that is at least the least churn and rounded down to an increment.
   The share is at least one increment, and at most the least churn plus the total.
 
@@ -847,14 +849,26 @@ Not yet released.
   Conclusions and the existing unbounded `Votes` definition are unchanged.
 
 - In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
-  `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
-  A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
+  `G1.compress` and `G1.infinityBytes` are a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
+  A caller that holds bytes of another length reads them with `exactBytes? 48`, and rejects `none` as decompression did.
+  `exactBytes?` moves from the BLS exports to `EthLib.Base`.
+  `exactBytes?_packBytes`, `packBytes_of_exactBytes?`, `packBytes_mk_data`, `packBytes_set` and `getElem_eq_get!_packBytes` are new in `EthLib.Base`.
   `G1.size_compress` and `keyValidatePoint_size_ne` are removed, since the type states the length.
-  `G1.uncompress_ok_cases` no longer states the size, and `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` state its facts on the bytes of the input.
-  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and the theorems on decoded setups state their facts through them.
+  `G1.uncompress_ok_cases` no longer states the size.
+  It and `uncompress_eq_zero_or` take a vector and read the flags in its first byte.
+  `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` are new, and state their facts on the bytes of the input.
+  `G1.compress_uncompress`, `uncompress_injective`, `uncompress_valid`, `keyValidatePoint_eq_ok_iff`, `exists_keyValidatePoint_of_isOk`, `exists_mul_generator_of_keyValidatePoint` and `Security.exists_decodeKey_of_uncompress` take the encoding as a vector.
+  `G1.compress_congr` and `Kzg.compress_eq_of_toPoint_eq` keep their meaning, and now equate vectors.
+  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and `TrustedSetup.decodeG1_eq_ok` relates the first to decompression.
+  `TrustedSetup.ofBytes_g1Monomial_mem`, `SetupLagrange.coords_of_encodes`, `SetupLagrange.ofBytes_getElem` and `SetupTorsion.modulus_smul_eq_zero` state their facts through `decodeG1`.
+  `Kzg.uncompress_G1_POINT_AT_INFINITY` and `validateKzgG1Point_eq_ok_iff` pass the 48 bytes to decompression with no conversion to bytes.
   `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
   `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
-  `SyncDrawable.keys` states key validation of each key as a vector.
+  `coreVerify_of_represents`, `pointToPubkey_bytes`, `pkBytes_eq`, `skToPk_bytes` and `Security.G1Sub.encode_eq_compress` state the key as the bytes of the compressed point, `packBytes (G1.compress P)`.
+  `Security.G1Sub.encode_def` is new, and states the encoding in the same form.
+  `Signatures.addPubkeyPoint_invalidPubkey` validates the key with no conversion to bytes, and `fastAggregateVerify_rogue` states the keys with `skToPk`.
+  `EpochDraws.keys`, `EpochDrawsEnd.keys`, `SyncDrawable.keys`, `UpgradeDraws` and `UpgradeDrawsEnd` validate each key as a vector.
+  So do the hypotheses of `getNextSyncCommittee_ok`, `processEpoch_total_of_altair_of_lt_electra`, `processEpoch_total_of_electra` and `runHypotheses_of_quiet_altair`, and the conclusion of `witnessKey_valid`.
   No C export or Python function changes.
 
 - In Lean, `EthLib.Execution.Exports.Proofs.Evm` and `EthLib.Execution.Exports.Proofs.Trie` move to `EthLib.Execution.Proofs.Exports.Evm` and `EthLib.Execution.Proofs.Exports.Trie` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).

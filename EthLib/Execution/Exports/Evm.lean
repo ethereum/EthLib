@@ -36,7 +36,7 @@ A sender or a salt of the wrong length fails with a code above every code of an 
 
 namespace EthLib.Execution.Evm.Exports
 
-open EthLib.Base (Address U256 bytesToNat readBytes)
+open EthLib.Base (Address U256 bytesToNat)
 open EthLib.Exports (Result PyValue pyExport)
 
 /-- Why an export rejects an argument: the argument has the wrong length. -/
@@ -172,8 +172,7 @@ def extendMemoryExport (args : PyValue) : Result PyValue :=
 
 /-- The address of exactly 20 bytes, or the error for any other length. -/
 def readAddress (bytes : ByteArray) : Result Address :=
-  if h : bytes.size = 20 then .ok (readBytes bytes 0 20 (by omega))
-  else .error (ArgumentError.senderLength bytes.size).toResult
+  Base.exactBytes 20 bytes fun size => (ArgumentError.senderLength size).toResult
 
 /-- The address of the contract that a sender makes with CREATE at a nonce.
 

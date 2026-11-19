@@ -116,42 +116,12 @@ theorem toAffine_congr {P Q : G2} (hP : Valid P) (hQ : Valid Q) (h : toPoint P =
 
 end G2
 
-/-- The factor that one pair adds to the product of the pairing check.
-
-A pair with a point at infinity adds no factor. -/
-def pairFactor (pq : G1 × G2) : Option Fp12 :=
-  if pq.1.isInfinity || pq.2.isInfinity then none
-  else some (millerLoop blsX pq.2.toAffine pq.1.toAffine).conjugate
-
-/-- The loop of the pairing check, as a fold over the factors of the pairs. -/
-private theorem forIn_eq_foldl (l : List (G1 × G2)) (acc : Fp12) :
-    (forIn (m := Id) l acc fun x r =>
-        match x with
-        | (p, q) =>
-          if (p.isInfinity || q.isInfinity) = true then pure (ForInStep.yield r)
-          else pure (ForInStep.yield (r * (millerLoop blsX q.toAffine p.toAffine).conjugate))) =
-      (l.filterMap pairFactor).foldl (· * ·) acc := by
-  induction l generalizing acc with
-  | nil => rfl
-  | cons pq l ih =>
-    obtain ⟨p, q⟩ := pq
-    rw [List.forIn_cons, List.filterMap_cons]
-    unfold pairFactor
-    by_cases h : (p.isInfinity || q.isInfinity) = true
-    · simp only [h, ↓reduceIte]
-      exact ih acc
-    · simp only [h, Bool.false_eq_true, ↓reduceIte, List.foldl_cons]
-      exact ih _
-
 /-- The pairing check is the final exponentiation of the product of the factors, in order. -/
 theorem pairingCheck_eq_finalExp_prod (pairs : Array (G1 × G2)) :
     pairingCheck pairs =
       (finalExponentiation ((pairs.toList.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne := by
   unfold pairingCheck
-  rw [← forIn_eq_foldl, Array.forIn_toList]
-  -- Only the monadic plumbing differs; the final exponentiation stays abstract, never unfolded.
-  generalize (finalExponentiation : Fp12 → Fp12) = fe
-  rfl
+  rw [← Array.foldl_toList, Array.toList_filterMap]
 
 /-- Pairs whose points have the same group elements have the same factor. -/
 theorem pairFactor_congr {p p' : G1} {q q' : G2}

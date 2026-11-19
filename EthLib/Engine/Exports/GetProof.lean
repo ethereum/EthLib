@@ -32,16 +32,14 @@ open EthLib.Execution.Rpc (accountProofOfJson)
 Otherwise each slot is true when it is set and holds its value, and false when it is not set. -/
 def verifyAccountProofOf (args : ByteArray × PyValue) : Result (Option (List Bool)) := do
   let (root, answer) := args
-  if h : root.size = 32 then
-    let p ← (accountProofOfJson answer.toJson).mapError fun reason => (0, reason)
-    match p.verify Cryptography.Hash.Keccak.keccak256 ⟨root.data, h⟩ with
-    | .ok .absent => return none
-    | .ok (.present slots) => return some (slots.map fun
-        | .set => true
-        | .absent => false)
-    | .error e => throw (e.code, s!"answer does not hold: {(repr e).pretty 1000000}")
-  else
-    throw (0, s!"bad root size: {root.size}, expected 32")
+  let root ← Base.exactBytes 32 root fun size => (0, s!"bad root size: {size}, expected 32")
+  let p ← (accountProofOfJson answer.toJson).mapError fun reason => (0, reason)
+  match p.verify Cryptography.Hash.Keccak.keccak256 root with
+  | .ok .absent => return none
+  | .ok (.present slots) => return some (slots.map fun
+      | .set => true
+      | .absent => false)
+  | .error e => throw (e.code, s!"answer does not hold: {(repr e).pretty 1000000}")
 
 /-- Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.
 

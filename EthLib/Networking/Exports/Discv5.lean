@@ -43,8 +43,7 @@ open EthLib.Networking.Enr.Exports (privateKeyOf)
 
 /-- A node ID of 32 bytes. -/
 def nodeIdOf (bytes : ByteArray) : Result NodeId :=
-  if h : bytes.size = 32 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"node ID has {bytes.size} bytes, not 32")
+  Base.exactBytes 32 bytes fun size => (0, s!"node ID has {size} bytes, not 32")
 
 /-- A public key in a SEC 1 encoding. -/
 def publicKeyOf (bytes : ByteArray) : Result Point :=
@@ -150,13 +149,11 @@ def reencodePacketExport (destId bytes : ByteArray) : Result ByteArray := do
 
 /-- An AES-128 key of 16 bytes. -/
 def aesKeyOf (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes128) :=
-  if h : bytes.size = 16 then pure ⟨bytes.data, h⟩
-  else throw (0, "key is not 16 bytes")
+  Base.exactBytes 16 bytes fun _ => (0, "key is not 16 bytes")
 
 /-- A nonce of 12 bytes. -/
 def nonceOf (bytes : ByteArray) : Result (Vector UInt8 12) :=
-  if h : bytes.size = 12 then pure ⟨bytes.data, h⟩
-  else throw (0, "nonce is not 12 bytes")
+  Base.exactBytes 12 bytes fun _ => (0, "nonce is not 12 bytes")
 
 /-- The encrypted message, the ciphertext then the 16-byte tag. -/
 @[export eth_discv5_encrypt_message]
@@ -237,8 +234,7 @@ def reencodeMessageExport (plaintext : ByteArray) : Result ByteArray := do
 
 /-- A vector of `n` bytes, or an error that names the field. -/
 def vectorOf (n : Nat) (field : String) (bytes : ByteArray) : Result (Vector UInt8 n) :=
-  if h : bytes.size = n then pure ⟨bytes.data, h⟩
-  else throw (0, s!"{field} has {bytes.size} bytes, not {n}")
+  Base.exactBytes n bytes fun size => (0, s!"{field} has {size} bytes, not {n}")
 
 /-- A session error, with its code or that of its packet error, and the reason. -/
 def runSession {α : Type} (act : Except SessionError α) : Result α :=

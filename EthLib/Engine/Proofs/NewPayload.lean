@@ -10,6 +10,8 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 Each fork from Paris to Glamsterdam has a version of the method, and no other fork has one.
 
+A version takes exactly the forks whose parameters are its own.
+
 Version 5 takes Glamsterdam alone.
 
 Below version 5 the payload decodes exactly as a structure of a version that the method takes.
@@ -84,6 +86,22 @@ theorem exists_acceptsFork_iff (fork : Fork) :
 /-- Version 5 of the method takes exactly Glamsterdam. -/
 theorem acceptsFork_five_iff (fork : Fork) : acceptsFork 5 fork = true ↔ fork = .glamsterdam := by
   simp [acceptsFork]
+
+/-- A version takes a fork exactly when its parameters are those of the fork.
+
+Versions 3 to 5 start at the forks that add their parameters: Dencun, Pectra and Glamsterdam.
+
+Each ends where the next one starts, and version 5 ends after Glamsterdam.
+
+Version 2 takes Paris and Shapella, and version 1 Paris alone. -/
+theorem acceptsFork_eq_true_iff (version : Nat) (fork : Fork) :
+    acceptsFork version fork = true ↔
+      1 ≤ version ∧ version ≤ 5 ∧ .paris ≤ fork ∧ fork < .hegota ∧
+        (version = 1 → fork < .shapella) ∧ (3 ≤ version ↔ .dencun ≤ fork) ∧
+        (4 ≤ version ↔ .pectra ≤ fork) ∧ (5 ≤ version ↔ .glamsterdam ≤ fork) := by
+  match version with
+  | 0 | 1 | 2 | 3 | 4 | 5 => cases fork <;> decide
+  | n + 6 => simp [acceptsFork]
 
 /-- The payload decoder of version 5 rejects a payload without its block access list.
 

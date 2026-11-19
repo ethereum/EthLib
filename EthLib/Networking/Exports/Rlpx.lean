@@ -57,8 +57,7 @@ def readPublicKey (bytes : ByteArray) : Result Point :=
 
 /-- A 16-byte initialization vector, or an error for any other length. -/
 def readIv (bytes : ByteArray) : Result (Vector UInt8 16) :=
-  if h : bytes.size = 16 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"bad iv size: {bytes.size}, expected 16")
+  Base.exactBytes 16 bytes fun size => (0, s!"bad iv size: {size}, expected 16")
 
 /-! ## ECIES -/
 
@@ -94,8 +93,7 @@ def runHandshake {α : Type} (act : Except HandshakeError α) : Result α :=
 
 /-- A 32-byte nonce, or an error for any other length. -/
 def readNonce (bytes : ByteArray) : Result (Vector UInt8 32) :=
-  if h : bytes.size = 32 then pure ⟨bytes.data, h⟩
-  else throw (0, s!"bad nonce size: {bytes.size}, expected 32")
+  Base.exactBytes 32 bytes fun size => (0, s!"bad nonce size: {size}, expected 32")
 
 /-- The keys of one side: a static key, an ephemeral key and a nonce. -/
 def readKeys (staticKey ephemeralKey nonce : ByteArray) : Result Keys := do
@@ -174,8 +172,7 @@ def runFrame {α : Type} (act : Except FrameError α) : Result α :=
 
 /-- A 32-byte secret as an AES-256 key, or an error for any other length. -/
 def readSecret (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes256) :=
-  if h : bytes.size = 32 then pure ⟨bytes.data, by simp [h, Cryptography.Aes.KeySize.Nk]⟩
-  else throw (0, s!"bad secret size: {bytes.size}, expected 32")
+  Base.exactBytes 32 bytes fun size => (0, s!"bad secret size: {size}, expected 32")
 
 /-- The state of one direction at its start: the zero counter, and the MAC after `macInit`. -/
 def readFrameState (aesSecret macSecret macInit : ByteArray) : Result FrameState := do
