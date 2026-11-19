@@ -5472,6 +5472,183 @@ private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run confi
     (same : c.index = d.index) : c = d :=
   List.inj_on_of_nodup_map (DirectSafety.departureCharges_run_indices tail) hc hd same
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The slashing credits of C's run are paid for each key by its envelope or its charge.
+
+A key of R's registry is paid by the envelope on its effective balance.
+
+A key beyond it is paid by the charge that its exit leaves. -/
+private theorem slashing_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (env cr : ℕ → ℕ)
+    (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, i < pulled.validators.data.size → effectiveAt a i ≤ env i)
+    (created : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, pulled.validators.data.size ≤ i →
+        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
+        effectiveAt a i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ cr i) :
+    (eventsC.map fun e => if e.source = .slashings then e.creditLimit else 0).sum ≤
+      ∑ i ∈ (Finset.range counted.validators.data.size).filter (fun i =>
+          (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
+            (counted.validators.data[i]?.map (·.slashed)).getD false = true),
+        (if i < pulled.validators.data.size then
+          env i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else cr i) := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  refine slashing_credits_le (shared.append fromFin) tailC h.genesis h.early h.caps.compounding
+    highC endEpochC _ _ ?_ replayedC
+  intro a b step member i inside flag
+  obtain ⟨pre, post, cut, aEarly, -⟩ := Run.contains_step_facts member h.early
+  have above : fork ≤ a.fork := fork_le_of_chainSteps pre.chainSteps
+  have below : a.fork ≤ fork := Nat.le_trans step.chainStep.fork_le
+    (fork_le_of_chainSteps post.chainSteps)
+  have sameFork : a.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
+  obtain ⟨unslashedA, slashedB⟩ := flag
+  have insideCounted : i < counted.validators.data.size :=
+    Nat.lt_of_lt_of_le (Finset.mem_range.mp inside) post.registryLifecycle.size_le
+  have unslashedSplit : (split.validators.data[i]?.map (·.slashed)).getD false = false := by
+    cases found : split.validators.data[i]? with
+    | none => rfl
+    | some w =>
+      cases flagged : w.slashed with
+      | false => simp [flagged]
+      | true =>
+        obtain ⟨u, read, marked⟩ := pre.slashedPersistence i w found flagged
+        simp [read, marked] at unslashedA
+  have slashedCounted : (counted.validators.data[i]?.map (·.slashed)).getD false = true := by
+    cases found : b.state.validators.data[i]? with
+    | none => simp [found] at slashedB
+    | some w =>
+      have marked : w.slashed = true := by simpa [found] using slashedB
+      obtain ⟨u, read, kept⟩ := post.slashedPersistence i w found marked
+      simp [read, kept]
+  refine ⟨Finset.mem_filter.mpr ⟨Finset.mem_range.mpr insideCounted, unslashedSplit,
+    slashedCounted⟩, ?_⟩
+  by_cases registered : i < pulled.validators.data.size
+  · simp only [registered, ↓reduceIte, sameFork]
+    exact Nat.div_le_div_right (registry step member i registered)
+  · simp only [registered, ↓reduceIte, sameFork]
+    exact created step member i (Nat.le_of_not_lt registered)
+      (by simp [unslashedA, slashedB])
+
+/-- The amount of the departure charge of a key on a run, or 0.
+
+The charge reads the effective balance before the step that assigns the exit. -/
+private def chargeAmt {x y : ForkedBeaconState preset} (tail : Run config checks x y) (i : ℕ) :
+    ℕ :=
+  ((tail.departureCharges.find? fun c => c.index == i).map (·.amount)).getD 0
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key that a step slashes with its exit unset is charged its effective balance before the step.
+
+The slashing assigns its exit, so the step records a departure charge of that amount.
+
+The charge of the run at the key is that one. -/
+private theorem slash_exit_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (old new : Validator) (foundA : a.state.validators.data[i]? = some old)
+    (foundB : b.state.validators.data[i]? = some new) (unset : old.exitEpoch = FAR_FUTURE_EPOCH)
+    (slashed : new.slashed = true) :
+    effectiveAt a i ≤ chargeAmt tailC i := by
+  classical
+  unfold chargeAmt
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨pre, post, cut, -, -⟩ := Run.contains_step_facts member h.early
+  have bEarly : b.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
+  have assigned : new.exitEpoch ≠ FAR_FUTURE_EPOCH :=
+    run_slashed_exit_assigned (((shared.append fromFin).append pre).snoc step) h.genesis
+      h.caps.activation h.caps.compounding bEarly h.delay i new foundB slashed
+  have inStep : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
+      step.departureCharges := by
+    apply List.mem_filterMap.mpr
+    refine ⟨(old, i), ?_, ?_⟩
+    · simpa only [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList] using foundA
+    · simp [foundB, unset, assigned]
+  have inRun : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
+      tailC.departureCharges := by
+    rw [cut, Run.departureCharges_append]
+    simp [Run.departureCharges, inStep]
+  have found : (tailC.departureCharges.find? fun c => c.index == i).isSome = true :=
+    List.find?_isSome.mpr ⟨_, inRun, beq_iff_eq.mpr rfl⟩
+  obtain ⟨c, chosen⟩ := Option.isSome_iff_exists.mp found
+  have selected := List.find?_some chosen
+  have same := charge_unique tailC (List.mem_of_find?_eq_some chosen) inRun
+    (beq_iff_eq.mp selected)
+  subst same
+  rw [chosen]
+  simp [effectiveAt, foundA]
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key beyond R's registry is charged the amount of its exit and what it gains after it.
+
+An exit that a step assigns by the slashing is the charge of that step.
+
+An earlier exit adds its gains, bands and credits, which `extra` bounds. -/
+private theorem created_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (extra : ℕ → ℕ)
+    (earlier : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ (i : ℕ) (old : Validator), a.state.validators.data[i]? = some old →
+        old.exitEpoch ≠ FAR_FUTURE_EPOCH → effectiveAt a i ≤ chargeAmt tailC i + extra i)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
+    effectiveAt a i ≤ chargeAmt tailC i + extra i := by
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
+  obtain ⟨-, slashedB⟩ := flag
+  cases foundA : a.state.validators.data[i]? with
+  | none => simp [effectiveAt, foundA]
+  | some old =>
+    by_cases unset : old.exitEpoch = FAR_FUTURE_EPOCH
+    · cases foundB : b.state.validators.data[i]? with
+      | none => simp [foundB] at slashedB
+      | some new =>
+        have marked : new.slashed = true := by simpa [foundB] using slashedB
+        exact (slash_exit_charge h fromFin tailC step member i old new foundA foundB unset
+          marked).trans (Nat.le_add_right _ _)
+    · exact earlier step member i old foundA unset
+
+/-- A charge that meets a test, and is the only one that does, is the first that does. -/
+private theorem find_charge {l : List DepartureCharge} {p : DepartureCharge → Bool}
+    {c : DepartureCharge} (member : c ∈ l) (hp : p c = true)
+    (unique : ∀ d ∈ l, p d = true → d = c) : l.find? p = some c := by
+  obtain ⟨d, chosen⟩ := Option.isSome_iff_exists.mp (List.find?_isSome.mpr ⟨c, member, hp⟩)
+  obtain rfl := unique d (List.mem_of_find?_eq_some chosen) (List.find?_some chosen)
+  exact chosen
+
+/-- The keys whose exit is charged within the run's epochs pay at most the window of the queues.
+
+For such a key `chargeAmt` is the `exitQ` of the run. -/
+private theorem charge_amounts_le_queueWindow
+    (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex)
+    (charged : ∀ v ∈ S, ∃ c ∈ tailC.departureCharges,
+      c.index = v.toNat ∧ c.epoch ≤ (getCurrentEpoch counted).toNat) :
+    ∑ v ∈ S, chargeAmt tailC v.toNat ≤ (pinTerms config pulled anc fin).queueWindow := by
+  classical
+  have same : ∀ v ∈ S, chargeAmt tailC v.toNat = exitQ tailC v.toNat := by
+    intro v member
+    obtain ⟨c, inRun, index, epoch⟩ := charged v member
+    have unique : ∀ d ∈ tailC.departureCharges, d.index = v.toNat → d = c := fun d inD same =>
+      charge_unique tailC inD inRun (same.trans index.symm)
+    unfold chargeAmt exitQ
+    rw [find_charge inRun (by simp [index]) (fun d inD hd => unique d inD (by simpa using hd)),
+      find_charge inRun (by simp [index, epoch])
+        (fun d inD hd => unique d inD (by simp at hd; exact hd.1))]
+  rw [Finset.sum_congr rfl same]
+  refine (sum_exitQ_le tailC ((getCurrentEpoch counted).toNat - 1 + 1)
+    (by simp only; omega) S).trans ?_
+  exact charges_le_queueWindow h tailC
+
 /-- Either a run has no counted charge of a key and `exitQ` is zero.
 
 Or `exitQ` is the amount of a counted charge of the key.
