@@ -1612,7 +1612,7 @@ private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high
 
 /-- The reward per increment at a state of a run from the finalized state, times the previous
 epoch's active increments, is at most the pin's rate times the active increments. -/
-private theorem rate_of_guard (facts : PinPresetFacts preset)
+private theorem rate_of_guard
     (h : Setting config checks g split fin pulled anc counted V)
     {m : BeaconState preset fork} (toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩)
     (inside : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat)
@@ -1654,7 +1654,7 @@ private theorem rate_of_guard (facts : PinPresetFacts preset)
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
   rw [quarter]
-  exact rate_arith facts.rewardScale facts.incrementSize facts.reward clamp high band stake
+  exact rate_arith h.facts.rewardScale h.facts.incrementSize h.facts.reward clamp high band stake
 
 /-- The effective balance of a key that stays on its path is at most the rise of the main regime. -/
 private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Nat}
