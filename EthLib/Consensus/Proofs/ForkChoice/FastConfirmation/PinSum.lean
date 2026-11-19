@@ -5300,7 +5300,6 @@ private theorem existing_low_or_floor (h : Setting config checks g split fin pul
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (v : ValidatorIndex) (member : v ∈ K5 counted V) (val : Validator)
     (initial : fin.validators.data[v.toNat]? = some val)
-    (_activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH)
     (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :
     (pinTerms config pulled anc fin).lowEB v.toNat ≤
       exitQ tailC v.toNat + (events.map (syncDebit v.toNat)).sum := by
@@ -5374,7 +5373,7 @@ private theorem small_charge_claim (h : Setting config checks g split fin pulled
   · exact .inr rich
   refine .inl (lowB_intro config pulled anc fin
     (activated_key_at_pulled h tailC v member charged found activated) ?_)
-  have floor := existing_low_or_floor h fromFin tailC replayed v member w found activated charged
+  have floor := existing_low_or_floor h fromFin tailC replayed v member w found charged
   have order := exitFloor_add_slack h
   omega
 
