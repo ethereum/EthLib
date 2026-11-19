@@ -5191,6 +5191,38 @@ private theorem queueDep_eq (config : Config)
         (if electra : .pectra ≤ fork then
           (finalizedState.depositBalanceToConsume electra).toNat else 0)) := rfl
 
+/-- The funding credits of the deposit events of a run from the split fit the deposit churn.
+
+The run ends within one epoch of R's, and its events are read at any horizon that its end allows.
+
+The window is the carry of the finalized block and a churn for each epoch from it. -/
+private theorem deposit_events_le (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork} (tail : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
+    (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (high : ℕ)
+    (endEpoch : (getCurrentEpoch e).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
+    3 * (events.map DirectSafety.funding_deposit_credit).sum ≤
+      (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  -- Every step of the run starts within the epochs of `pulled`, so `high` can be that epoch.
+  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch within
+  have tailOk : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [← same]
+    exact replayed
+  obtain ⟨ef, efOk⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  have fullOk := DirectSafety.Apriori.Internal.balanceEvents_append fromFin tail
+    (getCurrentEpoch pulled).toNat efOk tailOk
+  have capacity := DirectSafety.funding_deposit_capacity toFin (fromFin.append tail) h.genesis
+    h.early (getCurrentEpoch pulled).toNat within (ef ++ events) fullOk
+  have bound : ((ef ++ events).map DirectSafety.funding_deposit_credit).sum ≤
+      (if electra : .pectra ≤ fork then (fin.depositBalanceToConsume electra).toNat else 0) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := capacity
+  rw [List.map_append, List.sum_append] at bound
+  rw [queueDep_eq]
+  omega
+
 /-- D-8 (deposit queue) from the per-event bound of V's deposit credits.
 
 The credits that a deposit event gives to V keys are at most its deposit credit.
@@ -5205,26 +5237,8 @@ private theorem bud_deposits_of (h : Setting config checks g split fin pulled an
     (each : ∀ e ∈ events, e.source = .deposits →
       ∑ v ∈ V, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
     3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  -- Every step of the run starts within the epochs of `pulled`, so `high` can be that epoch.
-  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch
-    (Nat.le_succ _)
-  have tailOk : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [← same]
-    exact replayed
-  obtain ⟨ef, efOk⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
-  have fullOk := DirectSafety.Apriori.Internal.balanceEvents_append fromFin tail
-    (getCurrentEpoch pulled).toNat efOk tailOk
-  have capacity := DirectSafety.funding_deposit_capacity toFin (fromFin.append tail) h.genesis
-    h.early (getCurrentEpoch pulled).toNat (Nat.le_succ _) (ef ++ events) fullOk
-  have bound : ((ef ++ events).map DirectSafety.funding_deposit_credit).sum ≤
-      (if electra : .pectra ≤ fork then (fin.depositBalanceToConsume electra).toNat else 0) +
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-          config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat := capacity
-  rw [List.map_append, List.sum_append] at bound
   have sum := credDepR_sum_le V events DirectSafety.funding_deposit_credit each
-  rw [queueDep_eq]
+  have capacity := deposit_events_le h tail (Nat.le_succ _) high endEpoch replayed
   omega
 
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
