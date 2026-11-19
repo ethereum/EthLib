@@ -4165,26 +4165,6 @@ private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step 
       exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
         plain foundN switched
 
-/-- A step that makes a key compound leaves its balance within the smaller of two bounds.
-
-Those are its balance before the step and the activation balance, each plus the credits of the step.
-
-Both bounds add the same credits, so the smaller of the two bases carries them. -/
-private theorem step_flip_min {m n : ForkedBeaconState preset} (step : Step config checks m n)
-    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
-    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
-    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
-    actualBalanceAt n i ≤ min (actualBalanceAt m i) preset.MIN_ACTIVATION_BALANCE.toNat +
-      stepCredit (fun _ => true) (fun _ => true) i step := by
-  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
-  have base := PinSplit2.step_balance_le_events step early i replayed
-  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
-      (events.map (keyCredit i)).sum := by
-    cases step <;> simp [stepCredit, replayed, Except.toOption]
-  have flip := step_flip_balance step early fulu invariant i flat large
-  rw [credit] at flip ⊢
-  omega
-
 /-- A step that makes a registered key compound is not a slot step.
 
 A slot step keeps whether each validator of its first state compounds. -/
@@ -6545,6 +6525,8 @@ open DirectSafety.Apriori.Internal in
 
 The key is in the low regime, so its effective balance bound `ebUp` closes the ceiling.
 
+The balance counts up to `capHigh`, which bounds the cap along C's run and is at most the cap at R.
+
 The balance at the split is at most R's balance plus R's debits, by the floor premise.
 
 R's penalty and partial debits are at most the leak at the cap and the net partials.
@@ -6562,20 +6544,19 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         (getTotalActiveBalance pulled).toOption.getD 0 / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
     (v : ValidatorIndex) (inside : v.toNat < split.validators.data.size)
-    {events eventsF : List (BalanceEvent preset)} (W : ℕ)
-    (alignedCap : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
+    {events eventsF : List (BalanceEvent preset)} (W : ℕ) (capHigh : ℕ)
+    (capLe : capHigh ≤ PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (alignedCap : capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (alignedP : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
-    (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z v.toNat ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+    (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤ capHigh)
+    (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z v.toNat ≤ capHigh)
     (startEff : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
       (pinTerms config pulled anc fin).ebUp v.toNat +
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           (((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) /
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
-    (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat)
-        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+    (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat) capHigh ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
         (events.map (syncDebit v.toNat)).sum + W)
@@ -6610,8 +6591,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
           (pinTerms config pulled anc fin).gainRate v.toNat +
         min (pinTerms config pulled anc fin).depth
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) ∧
-      ∀ z ∈ tailC.balancePath, min (actualBalanceAt z v.toNat)
-          (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+      ∀ z ∈ tailC.balancePath, min (actualBalanceAt z v.toNat) capHigh ≤
         actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
           (events.map (syncDebit v.toNat)).sum + W +
@@ -6645,10 +6625,10 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
           (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
     ⟨_, ebUp_eq config pulled anc fin electra v.toNat _ rfl⟩
   obtain ⟨i, hi⟩ : ∃ i, i = v.toNat := ⟨_, rfl⟩
-  rw [← hi] at inside alignedCap startCap capCeil startEff floorR debits rateLow top eb ⊢
+  rw [← hi] at inside capLe alignedP startCap capCeil startEff floorR debits rateLow top eb ⊢
   obtain ⟨capI, hcap0⟩ : ∃ capI, capI =
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i := ⟨_, rfl⟩
-  rw [← hcap0] at alignedCap startCap capCeil floorR debits top eb ⊢
+  rw [← hcap0] at capLe alignedP debits top eb
   obtain ⟨pd, hpd⟩ : ∃ pd, pd = dueAmount fin electra i ((getCurrentEpoch pulled).toNat + 1) -
       dueAmount pulled electra i ((getCurrentEpoch pulled).toNat + 1) := ⟨_, rfl⟩
   rw [← hpd] at debits top
@@ -6712,16 +6692,16 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         min a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := fun a b ha hb => by
       rcases min_choice a b with e | e <;> rw [e] <;> assumption
     rw [he0, ht]
-    exact maxAligned _ _ (maxAligned _ _ a1 a2) (minAligned _ _ alignedCap a3)
+    exact maxAligned _ _ (maxAligned _ _ a1 a2) (minAligned _ _ alignedP a3)
   obtain ⟨P', hP', rateAll⟩ := key_rate_pre h tailC h.near
   rw [hP'.trans hP.symm] at rateAll
   have hDle : D ≤ (pinTerms config pulled anc fin).depth := hD ▸ min_le_left _ _
   have epochs : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤ D := by
     rw [hD]
     exact Nat.le_min.mpr ⟨by omega, by omega⟩
-  have core := c_ceiling_abstract tailC h.early h.fulu i inside highC P capI alignedCap startCap
+  have core := c_ceiling_abstract tailC h.early h.fulu i inside highC P capHigh alignedCap startCap
     capCeil rateAll endEpochC incPos D Cr (Cr + Ds + DsF) e0 C
-    (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W) capI) W
+    (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W) capHigh) W
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q rfl hq' alignedE0 hC epochs
     (le_min floorR (min_le_right _ _)) startEff' hCr.ge
     (rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
@@ -6733,7 +6713,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   obtain ⟨gc, hform, hgc, bound, -⟩ := core
   refine ⟨gc, hform, hgc, fun z member => ?_⟩
   have := min_le_left (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
-    capI
+    capHigh
   have := bound z member
   omega
 
@@ -6780,20 +6760,232 @@ private theorem cap_le_cap_of_run (h : Setting config checks g split fin pulled 
     simp only [found', Option.map_some, Option.getD_some]
     exact UInt64.le_iff_toNat_le.mp mono
 
-/-- On R's branch a key's effective balance is at most its cap at R. -/
-private theorem effective_le_cap_pulled (h : Setting config checks g split fin pulled anc counted V)
-    {z : BeaconState preset fork} (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, z⟩)
-    (post : Run config checks ⟨fork, z⟩ ⟨fork, pulled⟩) (i : ℕ) :
+/-- A key's effective balance at the end of a run from the finalized state is at most its cap.
+
+The cap is the one at that state. -/
+private theorem effective_le_cap_at (h : Setting config checks g split fin pulled anc counted V)
+    {z : BeaconState preset fork} (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, z⟩) (i : ℕ) :
     effectiveAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i := by
+      PinSplit2.capAt (⟨fork, z⟩ : ForkedBeaconState preset) i := by
   obtain ⟨shared⟩ := h.toFin
-  refine Nat.le_trans ?_ (cap_le_cap_of_run h post i)
   cases found : z.validators.data[i]? with
   | none => simp [effectiveAt, found]
   | some w =>
     have capped := DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax (shared.append toZ)
       h.genesis h.caps h.early found
     simpa [PinSplit2.capAt, found] using capped
+
+/-- On R's branch a key's effective balance is at most its cap at R. -/
+private theorem effective_le_cap_pulled (h : Setting config checks g split fin pulled anc counted V)
+    {z : BeaconState preset fork} (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, z⟩)
+    (post : Run config checks ⟨fork, z⟩ ⟨fork, pulled⟩) (i : ℕ) :
+    effectiveAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i :=
+  Nat.le_trans (effective_le_cap_at h toZ i) (cap_le_cap_of_run h post i)
+
+/-- A state of the balance path of a run between two states of one fork is a state of that fork.
+
+It is the end of a run from the start and the start of a run to the end. -/
+private theorem balancePath_state {a b : BeaconState preset fork}
+    (r : Run config checks ⟨fork, a⟩ ⟨fork, b⟩) {z : ForkedBeaconState preset}
+    (member : z ∈ r.balancePath) :
+    ∃ zs : BeaconState preset fork, z = ⟨fork, zs⟩ ∧
+      Nonempty (Run config checks ⟨fork, a⟩ ⟨fork, zs⟩) ∧
+      Nonempty (Run config checks ⟨fork, zs⟩ ⟨fork, b⟩) := by
+  obtain ⟨r1, r2, -⟩ := balancePath_endpoint r
+    (Run.nil : Run config checks ⟨fork, b⟩ ⟨fork, b⟩) (Nat.le_refl _) member
+  obtain ⟨zf, zs⟩ := z
+  have same : fork = zf := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
+  subst same
+  exact ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩
+
+/-- The effective balance of a key along a run is bounded by its capped balance.
+
+The cap of the key may rise once, at a step that makes it compound.
+
+The cap of a key in the registry is the activation balance, or the largest balance if it compounds.
+
+The balance counts up to the cap at each state, so a ceiling on it holds before and after the rise.
+
+A key whose cap does not rise is the constant-cap case.
+
+Otherwise the run splits at the step that makes the key compound.
+
+The part before it has the activation balance as its cap, and the part after it the largest balance.
+
+The step leaves the epoch, so it keeps the effective balance. -/
+private theorem effective_ceiling_flip (h : Setting config checks g split fin pulled anc counted V)
+    {x y : BeaconState preset fork} (tail : Run config checks ⟨fork, x⟩ ⟨fork, y⟩)
+    (invariant : Invariant x) (i : ℕ) (inside : i < x.validators.data.size)
+    (ceil capHigh : ℕ)
+    (capped : ∀ z ∈ tail.balancePath, effectiveAt z i ≤ PinSplit2.capAt z i)
+    (capCeil : ∀ z ∈ tail.balancePath, PinSplit2.capAt z i ≤ capHigh)
+    (balanceCeil : ∀ z ∈ tail.balancePath,
+      min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ ceil) :
+    effectiveAt (⟨fork, y⟩ : ForkedBeaconState preset) i ≤
+        max (effectiveAt (⟨fork, x⟩ : ForkedBeaconState preset) i)
+          (min (ceil - ceil % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh) ∧
+      ((getCurrentEpoch y).toNat ≤ (getCurrentEpoch x).toNat →
+        effectiveAt (⟨fork, y⟩ : ForkedBeaconState preset) i =
+          effectiveAt (⟨fork, x⟩ : ForkedBeaconState preset) i) ∧
+      ((getCurrentEpoch x).toNat < (getCurrentEpoch y).toNat →
+        effectiveAt (⟨fork, y⟩ : ForkedBeaconState preset) i ≤ ceil + preset.downwardBand) ∧
+      (getCurrentEpoch x).toNat ≤ (getCurrentEpoch y).toNat := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have capOrder := h.caps
+  have minMax := UInt64.le_iff_toNat_le.mp capOrder.compounding
+  have alignedMin : preset.MIN_ACTIVATION_BALANCE.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.1
+  have alignedMax : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.2
+  -- a run of constant cap `c0`, below `capHigh`, is the constant-cap case
+  have seg : ∀ {a b : BeaconState preset fork}
+      (r : Run config checks ⟨fork, a⟩ ⟨fork, b⟩) (c0 : ℕ),
+      c0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 → c0 ≤ capHigh →
+      i < a.validators.data.size →
+      effectiveAt (⟨fork, a⟩ : ForkedBeaconState preset) i ≤ c0 →
+      (∀ z ∈ r.balancePath, PinSplit2.capAt z i = c0) →
+      (∀ z ∈ r.balancePath, min (actualBalanceAt z i) (PinSplit2.capAt z i) ≤ ceil) →
+      effectiveAt (⟨fork, b⟩ : ForkedBeaconState preset) i ≤
+          max (effectiveAt (⟨fork, a⟩ : ForkedBeaconState preset) i)
+            (min (ceil - ceil % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh) ∧
+        ((getCurrentEpoch b).toNat ≤ (getCurrentEpoch a).toNat →
+          effectiveAt (⟨fork, b⟩ : ForkedBeaconState preset) i =
+            effectiveAt (⟨fork, a⟩ : ForkedBeaconState preset) i) ∧
+        ((getCurrentEpoch a).toNat < (getCurrentEpoch b).toNat →
+          effectiveAt (⟨fork, b⟩ : ForkedBeaconState preset) i ≤ ceil + preset.downwardBand) ∧
+        (getCurrentEpoch a).toNat ≤ (getCurrentEpoch b).toNat := by
+    intro a b r c0 aligned le insideA start cap bal
+    obtain ⟨p1, p2, p3, p4⟩ := PinSplit2.Run.effective_ceiling_of_balance_ceiling r h.early h.fulu
+      i insideA ceil c0 aligned start
+      (fun z member => by rw [← cap z member]; exact bal z member)
+      (fun z member => (cap z member).le)
+    exact ⟨le_trans p1 (max_le_max le_rfl (min_le_min le_rfl le)), p2, p3, p4⟩
+  -- the cap of a key in the registry is one of two values
+  have kind : ∀ z : BeaconState preset fork, i < z.validators.data.size →
+      PinSplit2.capAt (⟨fork, z⟩ : ForkedBeaconState preset) i =
+        preset.MIN_ACTIVATION_BALANCE.toNat ∨
+      PinSplit2.capAt (⟨fork, z⟩ : ForkedBeaconState preset) i =
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := fun z within => by
+    obtain ⟨w, found⟩ : ∃ w, z.validators.data[i]? = some w :=
+      ⟨_, Array.getElem?_eq_getElem within⟩
+    rw [capAt_of_found (z := (⟨fork, z⟩ : ForkedBeaconState preset)) electra found]
+    split
+    · exact .inr rfl
+    · exact .inl rfl
+  obtain ⟨rest, atHead⟩ := Run.balancePath_head tail
+  have headMem : (⟨fork, x⟩ : ForkedBeaconState preset) ∈ tail.balancePath := by
+    rw [atHead]
+    exact List.mem_cons_self
+  obtain ⟨last, atLast⟩ := Run.balancePath_last tail
+  have lastMem : (⟨fork, y⟩ : ForkedBeaconState preset) ∈ tail.balancePath := by
+    rw [atLast]
+    simp
+  -- a run that ends with the activation cap has the activation cap throughout
+  have lowRun : ∀ {a b : BeaconState preset fork} (r : Run config checks ⟨fork, a⟩ ⟨fork, b⟩),
+      i < a.validators.data.size →
+      PinSplit2.capAt (⟨fork, b⟩ : ForkedBeaconState preset) i ≤
+        preset.MIN_ACTIVATION_BALANCE.toNat →
+      ∀ z ∈ r.balancePath,
+        PinSplit2.capAt z i = preset.MIN_ACTIVATION_BALANCE.toNat :=
+    fun r within atEnd z member => by
+      obtain ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩ := balancePath_state r member
+      have hi := cap_le_cap_of_run h r2 i
+      rcases kind zs (Nat.lt_of_lt_of_le within (registryGrows_of_chainSteps r1.chainSteps)) with
+        low | high
+      · exact low
+      · omega
+  -- a run that starts above the activation cap has the largest cap throughout
+  have highRun : ∀ {a b : BeaconState preset fork} (r : Run config checks ⟨fork, a⟩ ⟨fork, b⟩),
+      i < a.validators.data.size →
+      preset.MIN_ACTIVATION_BALANCE.toNat <
+        PinSplit2.capAt (⟨fork, a⟩ : ForkedBeaconState preset) i →
+      ∀ z ∈ r.balancePath,
+        PinSplit2.capAt z i = preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
+    fun r within atStart z member => by
+      obtain ⟨zs, rfl, ⟨r1⟩, ⟨r2⟩⟩ := balancePath_state r member
+      have lo := cap_le_cap_of_run h r1 i
+      rcases kind zs (Nat.lt_of_lt_of_le within (registryGrows_of_chainSteps r1.chainSteps)) with
+        low | high
+      · omega
+      · exact high
+  by_cases compoundsEnd : preset.MIN_ACTIVATION_BALANCE.toNat <
+      PinSplit2.capAt (⟨fork, y⟩ : ForkedBeaconState preset) i
+  · by_cases compoundsStart : preset.MIN_ACTIVATION_BALANCE.toNat <
+        PinSplit2.capAt (⟨fork, x⟩ : ForkedBeaconState preset) i
+    · -- the cap is the largest balance along the whole run
+      have all := highRun tail inside compoundsStart
+      have atX := all _ headMem
+      exact seg tail _ alignedMax (by have := capCeil _ headMem; omega) inside
+        (by have := capped _ headMem; omega) all balanceCeil
+    · -- the cap is the activation balance until the step that makes the key compound
+      obtain ⟨m, n, pre, step, post, cut, flatM, largeN, -, sameEpoch⟩ :=
+        Run.flip_split tail h.early h.fulu invariant i
+          (by omega) compoundsEnd
+      obtain ⟨mf, ms⟩ := m
+      obtain ⟨nf, ns⟩ := n
+      have sameM : fork = mf :=
+        (fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)).symm
+      have sameN : fork = nf := (fork_eq_of_run (pre.snoc step) post (Nat.le_refl _)).symm
+      subst sameM sameN
+      have insideM : i < ms.validators.data.size :=
+        Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps)
+      have insideN : i < ns.validators.data.size :=
+        Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps (pre.snoc step).chainSteps)
+      have path := Run.balancePath_append (pre.snoc step) post
+      rw [cut] at path
+      have preMem : ∀ z ∈ pre.balancePath, z ∈ tail.balancePath := fun z member => by
+        rw [path]
+        simp [Run.balancePath, member]
+      obtain ⟨restPost, headPost⟩ := Run.balancePath_head post
+      have nMem : (⟨fork, ns⟩ : ForkedBeaconState preset) ∈ tail.balancePath := by
+        rw [path]
+        have inStep := List.mem_of_mem_getLast? (Step.balancePath_ends step).2
+        simp [Run.balancePath, inStep]
+      have postMem : ∀ z ∈ post.balancePath, z ∈ tail.balancePath := fun z member => by
+        rw [headPost] at member
+        rcases List.mem_cons.mp member with rfl | inRest
+        · exact nMem
+        · rw [path]
+          simp [headPost, inRest]
+      have capsPre := lowRun pre inside flatM
+      have capsPost := highRun post insideN largeN
+      have atX := kind x inside
+      have atY := kind y (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps tail.chainSteps))
+      have capX := capCeil _ headMem
+      have capY := capCeil _ lastMem
+      have effX := capped _ headMem
+      have effN := capped _ nMem
+      have capN := capsPost _ (by
+        rw [headPost]
+        exact List.mem_cons_self)
+      have first := seg pre _ alignedMin (by omega) inside (by omega) capsPre
+        (fun z member => balanceCeil z (preMem z member))
+      have second := seg post _ alignedMax (by omega) insideN (by omega) capsPost
+        (fun z member => balanceCeil z (postMem z member))
+      have epochN : getCurrentEpoch ns = getCurrentEpoch ms :=
+        UInt64.toNat_inj.mp (sameEpoch inside)
+      have keep := step_same_epoch_effective step (Nat.lt_of_le_of_lt
+        (fork_le_of_chainSteps post.chainSteps) h.early) epochN i insideM
+      have epochs : (getCurrentEpoch ns).toNat = (getCurrentEpoch ms).toNat := sameEpoch inside
+      obtain ⟨f1, f2, f3, f4⟩ := first
+      obtain ⟨s1, s2, s3, s4⟩ := second
+      refine ⟨by omega, fun back => ?_, fun before => ?_, by omega⟩
+      · have e1 := f2 (by omega)
+        have e2 := s2 (by omega)
+        omega
+      · by_cases later : (getCurrentEpoch ns).toNat < (getCurrentEpoch y).toNat
+        · exact s3 later
+        · have e1 := f3 (by omega)
+          have e2 := s2 (by omega)
+          omega
+  · -- the cap is the activation balance along the whole run
+    have all := lowRun tail inside (Nat.le_of_not_lt compoundsEnd)
+    have atX := all _ headMem
+    exact seg tail _ alignedMin (by have := capCeil _ headMem; omega) inside
+      (by have := capped _ headMem; omega) all balanceCeil
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The debits of a key on R's branch that the pin charges at the top: its passes and its partials.
@@ -6859,13 +7051,15 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The balance of a key at each state of R's run from the finalized state has a ceiling.
+/-- The balance of a key at a state of R's run from the finalized state has a ceiling.
+
+The balance counts up to the key's cap at that state.
 
 The ceiling is R's balance, the leak at `M` over the window and the net partials.
 
 It adds the sync debits of the two runs and the slack `W`.
 
-The floor of each state gives it, with the debits of the run after the state.
+The floor of the state gives it, with the debits of the run after the state.
 
 The bound `M` is at least the key's effective balance at each state of the run. -/
 private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc counted V)
@@ -6874,22 +7068,21 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (v : ValidatorIndex) (inFin : v.toNat < fin.validators.data.size) (W M : ℕ)
-    (floorAt : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-      (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append rest = fromFin.append tail →
-      ∀ {evs : List (BalanceEvent preset)}, rest.balanceEvents high = .ok evs →
-      min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
-          (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
-        actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
-          (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
-          (evs.map (floorPartialDebit v)).sum + W)
+    (v : ValidatorIndex) (W M : ℕ)
     (below : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
       (post : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append post = fromFin.append tail →
       effectiveAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat ≤ M)
     {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-    (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) (cut : r1.append r2 = fromFin.append tail) :
+    (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩) (cut : r1.append r2 = fromFin.append tail)
+    (inside : v.toNat < zs.validators.data.size)
+    (floorAt : ∀ {evs : List (BalanceEvent preset)}, r2.balanceEvents high = .ok evs →
+      min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
+          (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
+        actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
+          (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
+          (evs.map (floorPartialDebit v)).sum + W) :
     min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
-        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+        (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         (((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
             (pinTerms config pulled anc fin).leakAt M v.toNat +
@@ -6904,9 +7097,8 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
   have app := Apriori.Internal.balanceEvents_append r1 r2 high ok1 ok2
   rw [cut, whole] at app
   have eq : eventsF ++ events = e1 ++ e2 := Except.ok.inj app
-  have floor := floorAt r1 r2 cut ok2
-  have debit := debits_le_top h r1 r2 high endEpoch ok1 ok2 v
-    (Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps r1.chainSteps)) M
+  have floor := floorAt ok2
+  have debit := debits_le_top h r1 r2 high endEpoch ok1 ok2 v inside M
     (fun pre post same => below (r1.append pre) post
       (by rw [← Run.append_assoc, ← same]; exact cut))
   have sums : (e2.map (syncDebit v.toNat)).sum ≤
@@ -6917,13 +7109,21 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a key at each state of R's run from the finalized state is bounded.
+/-- The effective balance of a key at each state of R's run from a state `c` is bounded.
 
-It is within `ebUp` and a few increments.
+The run from `c` is the rest of the run from the finalized state to the split, then the run to R.
+
+The finalized state is `c` for a key of the finalized registry.
+
+The effective balance of a key at `c` is within `ebUp`.
+
+It is within `ebUp` and a few increments at each state after `c`.
 
 The increments are the whole ones of its sync debits and its slashing slack.
 
-The balance at each state of R's run from the finalized state is at least R's less R's debits.
+The balance at each state of R's run from `c` is at least R's less R's debits.
+
+The balance counts up to the cap of the key at that state, which rises at most once.
 
 The passes and partials cost at most the leak at the cap and the net partials, by `debits_le_top`.
 
@@ -6938,18 +7138,21 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (v : ValidatorIndex) (inFin : v.toNat < fin.validators.data.size) (W : ℕ)
-    (alignedCap : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
-    (floorAt : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-      (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append rest = fromFin.append tail →
+    (v : ValidatorIndex) {c : BeaconState preset fork}
+    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (inside : v.toNat < c.validators.data.size) (W : ℕ)
+    (start : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat)
+    (floorAt : ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, c⟩ ⟨fork, zs⟩)
+      (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append rest = fromC.append tail →
       ∀ {evs : List (BalanceEvent preset)}, rest.balanceEvents high = .ok evs →
       min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
-          (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+          (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
         actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
           (evs.map (floorPartialDebit v)).sum + W) :
-    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+    ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z v.toNat ≤
       (pinTerms config pulled anc fin).ebUp v.toNat +
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           (((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) /
@@ -6968,45 +7171,47 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
       ((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) :=
     ⟨_, rfl⟩
   -- the balance ceiling at each state of that run
-  have ceiling : ∀ {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-      (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), r1.append r2 = fromFin.append tail →
+  have ceiling : ∀ {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, c⟩ ⟨fork, zs⟩)
+      (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), r1.append r2 = fromC.append tail →
       min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
-        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤ B := by
+        (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤ B := by
     intro zs r1 r2 cut
-    have := prefix_ceiling h fromFin tail high endEpoch replayedF replayed v inFin W
-      (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) floorAt
-      (fun pre post _ => effective_le_cap_pulled h pre post v.toNat) r1 r2 cut
+    have := prefix_ceiling h fromFin tail high endEpoch replayedF replayed v W
+      (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
+      (fun pre post _ => effective_le_cap_pulled h pre post v.toNat) (toC.append r1) r2
+      (by rw [← Run.append_assoc, cut, Run.append_assoc, cutC])
+      (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps r1.chainSteps))
+      (fun {evs} ev => floorAt r1 r2 cut ev)
     omega
   intro z member
-  obtain ⟨r1, r2, cutZ⟩ := balancePath_endpoint (fromFin.append tail)
+  obtain ⟨r1, r2, cutZ⟩ := balancePath_endpoint (fromC.append tail)
     (Run.nil : Run config checks ⟨fork, pulled⟩ ⟨fork, pulled⟩) (Nat.le_refl _) member
   obtain ⟨zf, zs⟩ := z
   have same : fork = zf := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   subst same
-  -- every state of the run to `zs` is the end of a run from the finalized state to R's
+  -- every state of the run to `zs` is the end of a run from `c` to R's
   have atPath : ∀ z' ∈ r1.balancePath, ∃ (zs' : BeaconState preset fork)
-      (s1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs'⟩)
+      (s1 : Run config checks ⟨fork, c⟩ ⟨fork, zs'⟩)
       (s2 : Run config checks ⟨fork, zs'⟩ ⟨fork, pulled⟩),
-      z' = ⟨fork, zs'⟩ ∧ s1.append s2 = fromFin.append tail := by
+      z' = ⟨fork, zs'⟩ ∧ s1.append s2 = fromC.append tail := by
     intro z' member'
     obtain ⟨s1, s2, cutS⟩ := balancePath_endpoint r1 r2 (Nat.le_refl _) member'
     obtain ⟨zf', zs'⟩ := z'
     have same' : fork = zf' := (fork_eq_of_run s1 s2 (Nat.le_refl _)).symm
     subst same'
     exact ⟨zs', s1, s2, rfl, cutS.trans cutZ⟩
-  have startCap : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat :=
-    effective_le_cap_pulled h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩)
-      (fromFin.append tail) v.toNat
-  have bound := PinSplit2.Run.effective_ceiling_of_balance_ceiling r1 h.early
-    h.fulu v.toNat inFin B (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
-    alignedCap startCap
+  have bound := effective_ceiling_flip h r1
+    (Run.invariant h.genesis.invariant (shared.append toC)) v.toNat inside B
+    (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
-      exact ceiling s1 s2 cut)
+      exact effective_le_cap_at h (toC.append s1) v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
       exact cap_le_cap_of_run h s2 v.toNat)
+    (fun z' member' => by
+      obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
+      exact ceiling s1 s2 cut)
   obtain ⟨origin, -⟩ := bound
   -- the envelope `ebUp` and the rounding
   obtain ⟨t, ht⟩ :
@@ -7016,10 +7221,6 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     ((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) incPos
   have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat
     (show A + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1 ≤ t by omega)
-  have finLe : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat ≤
-      (pinTerms config pulled anc fin).ebUp v.toNat := by
-    rw [up]
-    exact Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_left _ _)
   have upper : min (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
       (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
         (pinTerms config pulled anc fin).ebUp v.toNat := by
@@ -10814,9 +11015,69 @@ private theorem slashedRB_lt (config : Config)
   simp [none] at h
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The floor of a counted voter at each state of R's run from the finalized state.
+/-- The exit of a counted voter of the finalized registry is late at R.
 
-The floor starts from the smaller of the voter's balance there and its cap at R.
+The voter is not active at `counted` since an exit before the finalized epoch is excluded.
+
+Its exit at R is then at least the finalized epoch, so it is late for the whole run. -/
+private theorem voter_late (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (v : ValidatorIndex) (voter : v ∈ Q counted) :
+    ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 <
+        w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  classical
+  intro wP foundP
+  obtain ⟨tailC⟩ := h.toCounted
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  have inQ := voter
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inQ
+  obtain ⟨listed, -⟩ := inQ
+  obtain ⟨uC, foundC, activeC⟩ : ∃ uC, counted.validators.data[v.toNat]? = some uC ∧
+      (isActiveValidator uC (getCurrentEpoch counted) = true ∨
+        isActiveValidator uC (getPreviousEpoch counted) = true) := by
+    rcases listed with now | before
+    · obtain ⟨u, foundU, act⟩ := (mem_getActiveValidatorIndices within).mp now
+      exact ⟨u, foundU, .inl act⟩
+    · obtain ⟨u, foundU, act⟩ := (mem_getActiveValidatorIndices within).mp before
+      exact ⟨u, foundU, .inr act⟩
+  -- the voter's exit at R is not before the finalized epoch, so it is late for the whole run
+  have short := window_short h
+  by_cases exitedFin : wP.exitEpoch.toNat < (getCurrentEpoch fin).toNat
+  · exfalso
+    obtain ⟨uF', foundF', sameExit⟩ := exit_kept_of_le_fin h foundP (Nat.le_of_lt exitedFin)
+    have exitNat : uF'.exitEpoch.toNat = wP.exitEpoch.toNat := congrArg UInt64.toNat sameExit
+    have assigned : uF'.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
+      have far1 := getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
+      have far2 := congrArg UInt64.toNat far
+      omega
+    have previous := getPreviousEpoch_toNat counted
+    have idle : ∀ e : Epoch, uF'.exitEpoch ≤ e → isActiveValidator uC e = false :=
+      fun e reached => by
+        have inactive := inactive_from_exit (fromFin.append tailC) foundF' assigned reached
+        cases act : isActiveValidator uC e
+        · rfl
+        · exact absurd (inactive.symm.trans (isActiveAt_eq_true_iff.mpr ⟨uC, foundC, act⟩))
+            Bool.false_ne_true
+    rcases activeC with act | act
+    · rw [idle (getCurrentEpoch counted) (UInt64.le_iff_toNat_le.mpr (by omega))] at act
+      exact Bool.false_ne_true act
+    · rw [idle (getPreviousEpoch counted) (UInt64.le_iff_toNat_le.mpr (by omega))] at act
+      exact Bool.false_ne_true act
+  · omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The floor of a counted voter at each state of R's run from a state `c`.
+
+The run from `c` is the rest of the run from the finalized state to the split, then the run to R.
+
+The floor starts from the smaller of the voter's balance there and its cap there.
+
+The cap there is the cap at R if it is frozen, and less if the voter switches to compounding on R.
 
 It is R's balance, the debits of the rest of R's run, and the slack of a slashing on R.
 
@@ -10824,29 +11085,31 @@ A voter unslashed at R takes it from `key_floorR_from`.
 
 A voter slashed at R takes it from `slashed_floor`, with the slack that `slashW` holds.
 
-The voter is unslashed at `counted`, so at the split and at the finalized state.
+The voter is unslashed at `counted`, so at the split and at `c`.
 
 A voter slashed on R was slashed after the split.
 
 The pin counts it, so `slashW` holds the slack.
 
-A voter that is not active at `counted` since an exit before the finalized epoch is excluded.
+The exit of the voter at R is late for the whole run.
 
-Its exit at R is then at least the finalized epoch, so it is late for the whole run.
-
-The cap is the same at the finalized state and at R, so it is the same at every state between. -/
+`voter_late` gives that for a finalized key. -/
 private theorem voter_floorAt (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
-    (v : ValidatorIndex) (voter : v ∈ Q counted) (inFin : v.toNat < fin.validators.data.size)
-    (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) :
-    ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-    (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append rest = fromFin.append tail →
+    (v : ValidatorIndex) (voter : v ∈ Q counted) {c : BeaconState preset fork}
+    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (inside : v.toNat < c.validators.data.size)
+    (late : ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 <
+        w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    ∀ {zs : BeaconState preset fork} (pre : Run config checks ⟨fork, c⟩ ⟨fork, zs⟩)
+    (rest : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), pre.append rest = fromC.append tail →
     ∀ {evs : List (BalanceEvent preset)},
     rest.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs →
     min (actualBalanceAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat)
-        (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) ≤
+        (PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat) ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
         (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
         (evs.map (floorPartialDebit v)).sum +
@@ -10857,32 +11120,28 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have laterNat := UInt64.le_iff_toNat_le.mp h.later
-  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
-    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
   -- the voter's records at the four states
   have within := BeaconState.registryWithinLimit_of_lt h.early counted
   have inQ := voter
   simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inQ
   obtain ⟨listed, unslashedC⟩ := inQ
-  obtain ⟨uC, foundC, activeC⟩ : ∃ uC, counted.validators.data[v.toNat]? = some uC ∧
-      (isActiveValidator uC (getCurrentEpoch counted) = true ∨
-        isActiveValidator uC (getPreviousEpoch counted) = true) := by
+  obtain ⟨uC, foundC⟩ : ∃ uC, counted.validators.data[v.toNat]? = some uC := by
     rcases listed with now | before
-    · obtain ⟨u, foundU, act⟩ := (mem_getActiveValidatorIndices within).mp now
-      exact ⟨u, foundU, .inl act⟩
-    · obtain ⟨u, foundU, act⟩ := (mem_getActiveValidatorIndices within).mp before
-      exact ⟨u, foundU, .inr act⟩
+    · obtain ⟨u, foundU, -⟩ := (mem_getActiveValidatorIndices within).mp now
+      exact ⟨u, foundU⟩
+    · obtain ⟨u, foundU, -⟩ := (mem_getActiveValidatorIndices within).mp before
+      exact ⟨u, foundU⟩
   have cleanC : uC.slashed = false := by
     simpa [foundC] using unslashedC
-  have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
+  have sizeC := registryGrows_of_chainSteps fromC.chainSteps
   have sizeSplit := registryGrows_of_chainSteps toPulled.chainSteps
-  obtain ⟨uF, foundF⟩ : ∃ uF, fin.validators.data[v.toNat]? = some uF :=
-    ⟨_, Array.getElem?_eq_getElem inFin⟩
+  obtain ⟨uB, foundB⟩ : ∃ uB, c.validators.data[v.toNat]? = some uB :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
   obtain ⟨uS, foundS⟩ : ∃ uS, split.validators.data[v.toNat]? = some uS :=
-    ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inFin sizeFin)⟩
+    ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inside sizeC)⟩
   obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
     ⟨_, Array.getElem?_eq_getElem
-      (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
+      (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inside sizeC) sizeSplit)⟩
   -- a record that is unslashed is the unslashed record at its index
   have only : ∀ {s : BeaconState preset fork} {u : Validator},
       s.validators.data[v.toNat]? = some u → u.slashed = false →
@@ -10892,46 +11151,19 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
       cases fw
       exact cu
   have cleanS : uS.slashed = false := unslashed_of_run tailC foundS (only foundC cleanC)
-  have cleanF : uF.slashed = false := unslashed_of_run fromFin foundF (only foundS cleanS)
-  -- the voter's exit at R is not before the finalized epoch, so it is late for the whole run
-  have late : (getCurrentEpoch pulled).toNat + 1 <
-      wP.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-    have short := window_short h
-    by_cases exitedFin : wP.exitEpoch.toNat < (getCurrentEpoch fin).toNat
-    · exfalso
-      obtain ⟨uF', foundF', sameExit⟩ := exit_kept_of_le_fin h foundP (Nat.le_of_lt exitedFin)
-      have exitNat : uF'.exitEpoch.toNat = wP.exitEpoch.toNat := congrArg UInt64.toNat sameExit
-      have assigned : uF'.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
-        have far1 := getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
-        have far2 := congrArg UInt64.toNat far
-        omega
-      have previous := getPreviousEpoch_toNat counted
-      have idle : ∀ e : Epoch, uF'.exitEpoch ≤ e → isActiveValidator uC e = false :=
-        fun e reached => by
-          have inactive := inactive_from_exit (fromFin.append tailC) foundF' assigned reached
-          cases act : isActiveValidator uC e
-          · rfl
-          · exact absurd (inactive.symm.trans (isActiveAt_eq_true_iff.mpr ⟨uC, foundC, act⟩))
-              Bool.false_ne_true
-      rcases activeC with act | act
-      · rw [idle (getCurrentEpoch counted) (UInt64.le_iff_toNat_le.mpr (by omega))] at act
-        exact Bool.false_ne_true act
-      · rw [idle (getPreviousEpoch counted) (UInt64.le_iff_toNat_le.mpr (by omega))] at act
-        exact Bool.false_ne_true act
-    · omega
-  intro zs pre rest cut evs ev
+  have cleanB : uB.slashed = false := unslashed_of_run fromC foundB (only foundS cleanS)
+  have finC := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toC.chainSteps)
+  have lateP := late wP foundP
+  intro zs pre rest cut' evs ev
+  have cut : (toC.append pre).append rest = fromFin.append tail := by
+    rw [← Run.append_assoc, cut', Run.append_assoc, cutC]
   obtain ⟨val, foundZ⟩ : ∃ val, zs.validators.data[v.toNat]? = some val :=
     ⟨_, Array.getElem?_eq_getElem
-      (Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps pre.chainSteps))⟩
-  -- the cap is the same at every state of R's run, by monotonicity
-  have capEq : (withdrawalMaxEffectiveBalance preset fork val).toNat =
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat := by
-    have lo := cap_le_cap_of_run h pre v.toNat
-    have hi := cap_le_cap_of_run h rest v.toNat
-    have atZ : PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat =
-        (withdrawalMaxEffectiveBalance preset fork val).toNat := by
-      simp [PinSplit2.capAt, foundZ]
-    omega
+      (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps))⟩
+  -- the cap of the voter at the state is the cap that the floor reads
+  have atZ : PinSplit2.capAt (⟨fork, zs⟩ : ForkedBeaconState preset) v.toNat =
+      (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    simp [PinSplit2.capAt, foundZ]
   have retainedZ : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, pulled⟩),
       (before.snoc step).append after = rest → ∀ w,
@@ -10940,9 +11172,11 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
         ∀ u, m.state.validators.data[v.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) :=
     fun before step after cutB w foundW =>
-      retained_of_exit h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_refl _) v foundP late
-        (pre.append before) step after
-        (by rw [← cut, ← cutB]; exact (Run.append_assoc pre (before.snoc step) after).symm)
+      retained_of_exit h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_refl _) v foundP lateP
+        ((toC.append pre).append before) step after
+        (by
+          rw [← cut, ← cutB]
+          exact (Run.append_assoc (toC.append pre) (before.snoc step) after).symm)
         w foundW
   by_cases slashedP : wP.slashed = true
   · -- slashed on R after the split: the pin counts it, and `slashW` holds its slack
@@ -10965,10 +11199,13 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
         simp [slashW, rb]
       rw [hW, parameters_of_fusaka h.fulu h.early]
       exact Nat.div_le_div_right (capAt_le_capMax h.caps electra v.toNat)
-    have floor := slashed_floor h pre (e := pulled) (Nat.le_succ _) rest
+    have floor := slashed_floor h (toC.append pre) (e := pulled) (Nat.le_succ _) rest
       (getCurrentEpoch pulled).toNat (Nat.le_succ _) ev v val foundZ
-      (fun flag => (pre.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
-        h.early h.delay v.toNat uF val foundF foundZ cleanF flag).2)
+      (fun flag => by
+        have newly := (pre.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+          h.early h.delay v.toNat uB val foundB foundZ cleanB flag).2
+        simp only at finC newly
+        omega)
       (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
       (fun z member => by
         obtain ⟨q1, q2, -⟩ := balancePath_endpoint rest
@@ -10976,68 +11213,67 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
         obtain ⟨zf, zs'⟩ := z
         have same : fork = zf := (fork_eq_of_run q1 q2 (Nat.le_refl _)).symm
         subst same
-        exact effective_le_cap_pulled h (pre.append q1) q2 v.toNat)
+        exact effective_le_cap_pulled h ((toC.append pre).append q1) q2 v.toNat)
       retainedZ
-    rw [capEq] at floor
+    rw [atZ]
     omega
   · have cleanP : wP.slashed = false := by simpa using slashedP
     have cleanZ : val.slashed = false := unslashed_of_run rest foundZ (only foundP cleanP)
-    have floor := key_floorR_from h pre rest (getCurrentEpoch pulled).toNat (Nat.le_succ _) ev v
+    have floor := key_floorR_from h (toC.append pre) rest (getCurrentEpoch pulled).toNat
+      (Nat.le_succ _) ev v
       val foundZ cleanZ
       (fun w fw => by
         rw [← Option.some.inj (foundP.symm.trans fw)]
         exact cleanP)
       retainedZ
-    rw [capEq] at floor
+    rw [atZ]
     omega
 
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a counted voter at each state of R's run from the finalized state.
+/-- The effective balance of a key at the finalized state is at most `ebUp`. -/
+private theorem effective_fin_le_ebUp (h : Setting config checks g split fin pulled anc counted V)
+    (i : ℕ) :
+    effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i ≤
+      (pinTerms config pulled anc fin).ebUp i := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  rw [ebUp_eq config pulled anc fin electra i _ rfl]
+  exact Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_left _ _)
 
-It is within `ebUp` and a few increments.
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a counted voter at each state of R's run from a state `c`.
+
+The run from `c` is the rest of the run from the finalized state to the split, then the run to R.
+
+It is within `ebUp` and a few increments, if it is within `ebUp` at `c`.
 
 The increments are the whole ones of its sync debits and its slashing slack.
 
-The floor of each state of R's run from the finalized state is `voter_floorAt`.
+The floor of each state of that run is `voter_floorAt`.
 
-`prefix_envelope` turns it into the bound on the effective balance.
-
-The cap is aligned, so the ceiling on the balance gives one on the effective balance. -/
+`prefix_envelope` turns it into the bound on the effective balance. -/
 private theorem envelope_of_voter (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)}
     (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
-    (v : ValidatorIndex) (voter : v ∈ Q counted) (inFin : v.toNat < fin.validators.data.size)
-    (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat =
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) :
-    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+    (v : ValidatorIndex) (voter : v ∈ Q counted) {c : BeaconState preset fork}
+    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (inside : v.toNat < c.validators.data.size)
+    (start : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat)
+    (late : ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 <
+        w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z v.toNat ≤
       (pinTerms config pulled anc fin).ebUp v.toNat +
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           ((syncD eventsF v.toNat + syncD events v.toNat +
               slashW (pinTerms config pulled anc fin) v.toNat) /
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-  obtain ⟨toPulled⟩ := h.toPulled
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
-  have sizeSplit := registryGrows_of_chainSteps toPulled.chainSteps
-  obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
-    ⟨_, Array.getElem?_eq_getElem
-      (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
-  have alignedCap : PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat %
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-    rw [capAt_of_found (z := (⟨fork, pulled⟩ : ForkedBeaconState preset)) electra foundP]
-    have aMin : preset.MIN_ACTIVATION_BALANCE.toNat %
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-      simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.1
-    have aMax : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-      simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.2
-    split <;> assumption
   exact prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF
-    replayed v inFin (slashW (pinTerms config pulled anc fin) v.toNat) alignedCap
-    (voter_floorAt h fromFin tail v voter inFin frozen)
+    replayed v toC fromC cutC inside (slashW (pinTerms config pulled anc fin) v.toNat) start
+    (voter_floorAt h fromFin tail v voter toC fromC cutC inside late)
 
 /-- The keys slashed on this branch after the finalized epoch cost one increment each, once. -/
 private theorem slashR_le (config : Config)
