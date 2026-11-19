@@ -79,6 +79,49 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
     exact created step member i (Nat.le_of_not_lt registered)
       (by simp [unslashedA, slashedB])
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key that a step slashes with its exit unset is charged its effective balance before the step.
+
+The slashing assigns its exit, so the step records a departure charge of that amount.
+
+The charge of the run at the key is that one. -/
+private theorem slash_exit_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (old new : Validator) (foundA : a.state.validators.data[i]? = some old)
+    (foundB : b.state.validators.data[i]? = some new) (unset : old.exitEpoch = FAR_FUTURE_EPOCH)
+    (slashed : new.slashed = true) :
+    effectiveAt a i ≤
+      ((tailC.departureCharges.find? fun c => c.index == i).map (·.amount)).getD 0 := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨pre, post, cut, -, -⟩ := Run.contains_step_facts member h.early
+  have bEarly : b.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
+  have assigned : new.exitEpoch ≠ FAR_FUTURE_EPOCH :=
+    run_slashed_exit_assigned (((shared.append fromFin).append pre).snoc step) h.genesis
+      h.caps.activation h.caps.compounding bEarly h.delay i new foundB slashed
+  have inStep : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
+      step.departureCharges := by
+    apply List.mem_filterMap.mpr
+    refine ⟨(old, i), ?_, ?_⟩
+    · simpa only [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList] using foundA
+    · simp [foundB, unset, assigned]
+  have inRun : (⟨i, new.exitEpoch.toNat, old.effectiveBalance.toNat⟩ : DepartureCharge) ∈
+      tailC.departureCharges := by
+    rw [cut, DirectSafety.Run.departureCharges_append]
+    simp [Run.departureCharges, inStep]
+  have found := List.find?_isSome.mpr
+    ⟨_, inRun, by simp⟩
+  obtain ⟨c, chosen⟩ := Option.isSome_iff_exists.mp found
+  have selected := List.find?_some chosen
+  have same := charge_unique tailC (List.mem_of_find?_eq_some chosen) inRun
+    (by simpa using selected)
+  subst same
+  simp only [chosen, Option.map_some, Option.getD_some]
+  simp [effectiveAt, foundA]
+
 end Charge
 
 end PinSum
