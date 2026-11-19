@@ -113,7 +113,7 @@ private theorem churnQueue_exists_ok
 /-- A share of a total, at least the least churn and rounded down to an increment, is bounded.
 
 It is at least one increment, and at most the least churn plus the total. -/
-private theorem roundToIncrement_share_bounds {config : Config} (total quotient : Gwei)
+theorem roundToIncrement_share_bounds {config : Config} (total quotient : Gwei)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA) :
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤

@@ -494,15 +494,23 @@ private theorem processParentExecutionPayload_registryLoad_le {gloas : .glamster
   simp only [Array.length_toList, Nat.one_mul] at one three
   omega
 
-/-- The operations raise the count by at most the deposits, twice from Electra, and the requests.
+/-- The operations keep the count and the queue, apart from their deposits and requests.
 
-From Gloas they keep the count. -/
-private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset fork}
-    {parentSlot : Slot}
+From Gloas every step keeps them.
+
+Before Gloas the deposits and then, from Electra, the requests sit between steps that keep them. -/
+private theorem processOperations_cut {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    registryLoad after ≤ registryLoad state +
-      (if .glamsterdam ≤ fork then 0 else
-        (if .pectra ≤ fork then 2 else 1) * blockDepositCount body + blockRequestCount body) := by
+    (.glamsterdam ≤ fork ∧ LoadKept state after) ∨
+      ∃ (gloas : ¬ .glamsterdam ≤ fork) (attested deposited changed : BeaconState preset fork),
+        LoadKept state attested ∧
+        (body.deposits (Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide))).data.toList.foldlM
+          (processDeposit config checks (Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)))
+          attested = .ok deposited ∧
+        LoadKept deposited changed ∧
+        (if electra : .pectra ≤ fork then
+            processExecutionRequests config changed body ⟨electra, Nat.lt_of_not_le gloas⟩
+          else (pure changed : Except TransitionError _)) = .ok after := by
   unfold processOperations at computed
   split at computed
   · rename_i gloas
@@ -510,7 +518,8 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    have same := (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
+    refine .inl ⟨gloas, ?_⟩
+    exact (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
       proposersOk).trans <|
       (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
       (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk).trans <|
@@ -520,10 +529,7 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
       LoadKept.foldlM (fun _ _ _ ok => by
         rw [processPayloadAttestation_eq ok]
         exact LoadKept.refl _) paid
-    simp only [gloas, ↓reduceIte]
-    exact Nat.le_of_eq same.registryLoad_eq
   rename_i gloas
-  have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
     exitsOk, changed, changesOk, requestsOk⟩ := computed
@@ -531,10 +537,7 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
     proposersOk).trans <|
     (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
     LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk
-  have deposited := foldlM_registryLoad_le
-    (fun _ _ _ ok => processDeposit_registryLoad_le ok) _ depositedOk
-  have exits := (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok)
-    exitsOk).registryLoad_eq
+  have exits := LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok) exitsOk
   have changes : LoadKept exited changed := by
     unfold processBlsToExecutionChanges at changesOk
     split at changesOk
@@ -542,6 +545,23 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
       exact LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processBlsToExecutionChange ok) changesOk
     · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
       exact changesOk ▸ LoadKept.refl _
+  exact .inr ⟨gloas, _, _, _, before, depositedOk, exits.trans changes, requestsOk⟩
+
+/-- The operations raise the count by at most the deposits, twice from Electra, and the requests.
+
+From Gloas they keep the count. -/
+private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    registryLoad after ≤ registryLoad state +
+      (if .glamsterdam ≤ fork then 0 else
+        (if .pectra ≤ fork then 2 else 1) * blockDepositCount body + blockRequestCount body) := by
+  rcases processOperations_cut computed with ⟨gloas, same⟩ |
+    ⟨gloas, _, _, changed, before, depositedOk, changes, requestsOk⟩
+  · simp only [gloas, ↓reduceIte]
+    exact Nat.le_of_eq same.registryLoad_eq
+  have deposited := foldlM_registryLoad_le
+    (fun _ _ _ ok => processDeposit_registryLoad_le ok) _ depositedOk
   have requested : registryLoad after ≤ registryLoad changed + blockRequestCount body := by
     split at requestsOk
     · rename_i electra
@@ -560,27 +580,15 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
   generalize (if Fork.pectra ≤ fork then 2 else 1) = perDeposit at *
   omega
 
-/-- From Gloas the steps before the operations raise the count by at most the parent requests.
-
-Before Gloas they keep the count. -/
-private theorem operationsInput_registryLoad_le {block : BeaconBlock preset fork}
+/-- The steps before the operations keep the count and the queue after the parent payload. -/
+private theorem operationsInput_parented {block : BeaconBlock preset fork}
     {input : BeaconState preset fork}
     (started : OperationsInput config checks engine state block input) :
-    registryLoad input ≤ registryLoad state +
-      (if .glamsterdam ≤ fork then blockRequestCount block.body else 0) := by
+    ∃ parented, (if gloas : .glamsterdam ≤ fork then
+        processParentExecutionPayload config checks state gloas block.body
+      else pure state) = .ok parented ∧ LoadKept parented input := by
   obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
     eth1Ok⟩ := started
-  have paid : registryLoad parented ≤ registryLoad state +
-      (if .glamsterdam ≤ fork then blockRequestCount block.body else 0) := by
-    split at paidOk
-    · rename_i gloas
-      have notElectra : ¬ (Fork.pectra ≤ fork ∧ fork < .glamsterdam) :=
-        fun range => Nat.not_le_of_lt range.2 gloas
-      have bound := processParentExecutionPayload_registryLoad_le paidOk
-      simp only [gloas, ↓reduceIte, blockRequestCount, notElectra, ↓reduceDIte]
-      exact bound
-    · cases paidOk
-      omega
   have header : LoadKept parented headed := by
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headerOk
     exact LoadKept.of_validators
@@ -599,7 +607,29 @@ private theorem operationsInput_registryLoad_le {block : BeaconBlock preset fork
       exact LoadKept.of_validators
     · cases eth1Ok
       exact LoadKept.refl _
-  have rest := (header.trans (execution.trans (randao.trans eth1))).registryLoad_eq
+  exact ⟨parented, paidOk, header.trans (execution.trans (randao.trans eth1))⟩
+
+/-- From Gloas the steps before the operations raise the count by at most the parent requests.
+
+Before Gloas they keep the count. -/
+private theorem operationsInput_registryLoad_le {block : BeaconBlock preset fork}
+    {input : BeaconState preset fork}
+    (started : OperationsInput config checks engine state block input) :
+    registryLoad input ≤ registryLoad state +
+      (if .glamsterdam ≤ fork then blockRequestCount block.body else 0) := by
+  obtain ⟨parented, paidOk, kept⟩ := operationsInput_parented started
+  have paid : registryLoad parented ≤ registryLoad state +
+      (if .glamsterdam ≤ fork then blockRequestCount block.body else 0) := by
+    split at paidOk
+    · rename_i gloas
+      have notElectra : ¬ (Fork.pectra ≤ fork ∧ fork < .glamsterdam) :=
+        fun range => Nat.not_le_of_lt range.2 gloas
+      have bound := processParentExecutionPayload_registryLoad_le paidOk
+      simp only [gloas, ↓reduceIte, blockRequestCount, notElectra, ↓reduceDIte]
+      exact bound
+    · cases paidOk
+      omega
+  have rest := kept.registryLoad_eq
   omega
 
 /-- A block raises the validators plus the pending deposits by at most its bound, at every fork.
@@ -723,45 +753,12 @@ private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
     (computed : processOperations config checks state body parentSlot = .ok after) :
     after.validators.data.size ≤ state.validators.data.size +
       (if .glamsterdam ≤ fork then 0 else blockDepositCount body) := by
-  unfold processOperations at computed
-  split at computed
-  · rename_i gloas
-    unfold processOperationsGloas at computed
-    simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
-      attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    have same := (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
-      proposersOk).trans <|
-      (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
-      (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk).trans <|
-      (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok) exitsOk).trans <|
-      (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processBlsToExecutionChange ok)
-        changesOk).trans <|
-      LoadKept.foldlM (fun _ _ _ ok => by
-        rw [processPayloadAttestation_eq ok]
-        exact LoadKept.refl _) paid
-    simp only [gloas, ↓reduceIte]
+  rcases processOperations_cut computed with ⟨gloas, same⟩ |
+    ⟨gloas, _, _, changed, before, depositedOk, changes, requestsOk⟩
+  · simp only [gloas, ↓reduceIte]
     exact Nat.le_of_eq same.1
-  rename_i gloas
-  have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le gloas) (by decide)
-  simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
-    exitsOk, changed, changesOk, requestsOk⟩ := computed
-  have before := (LoadKept.foldlM (fun _ _ _ ok => loadKept_processProposerSlashing ok)
-    proposersOk).trans <|
-    (LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttesterSlashing ok) attestersOk).trans <|
-    LoadKept.foldlM (fun _ _ _ ok => loadKept_processAttestation ok) attestedOk
   have deposited :=
     foldlM_validators_size_le (fun _ _ _ ok => processDeposit_size_le ok) depositedOk
-  have exits := (LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processVoluntaryExit ok)
-    exitsOk).1
-  have changes : LoadKept exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact LoadKept.foldlM (fun _ _ _ ok => loadKeptLaws.processBlsToExecutionChange ok) changesOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ LoadKept.refl _
   have requested : after.validators.data.size = changed.validators.data.size := by
     split at requestsOk
     · exact processExecutionRequests_size requestsOk
@@ -780,32 +777,13 @@ private theorem operationsInput_size {block : BeaconBlock preset fork}
     {input : BeaconState preset fork}
     (started : OperationsInput config checks engine state block input) :
     input.validators.data.size = state.validators.data.size := by
-  obtain ⟨parented, headed, executed, revealed, paidOk, headerOk, executionOk, randaoOk,
-    eth1Ok⟩ := started
+  obtain ⟨parented, paidOk, kept⟩ := operationsInput_parented started
   have paid : parented.validators.data.size = state.validators.data.size := by
     split at paidOk
     · exact processParentExecutionPayload_size paidOk
     · cases paidOk
       rfl
-  have header : LoadKept parented headed := by
-    obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headerOk
-    exact LoadKept.of_validators
-  have execution : LoadKept headed executed := by
-    split at executionOk
-    · exact loadKept_processBlockExecution executionOk
-    · cases executionOk
-      exact LoadKept.refl _
-  have randao : LoadKept executed revealed := by
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq randaoOk
-    exact LoadKept.of_validators
-  have eth1 : LoadKept revealed input := by
-    split at eth1Ok
-    · obtain ⟨_, _, rest⟩ := processEth1Data_eq eth1Ok
-      rw [← rest]
-      exact LoadKept.of_validators
-    · cases eth1Ok
-      exact LoadKept.refl _
-  have rest := (header.trans (execution.trans (randao.trans eth1))).1
+  have rest := kept.1
   omega
 
 /-- A block adds at most one validator for each deposit of the deposit contract that it applies.
