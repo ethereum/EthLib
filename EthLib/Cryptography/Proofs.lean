@@ -31,6 +31,7 @@ public import EthLib.Cryptography.Proofs.OneCallPermutation
 public import EthLib.Cryptography.Proofs.Indifferentiability
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
+public import EthLib.Cryptography.Proofs.Models.RandomPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
