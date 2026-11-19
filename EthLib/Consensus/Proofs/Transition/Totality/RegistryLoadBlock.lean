@@ -102,10 +102,9 @@ private theorem loadKept_slashValidator {slashedIndex : ValidatorIndex}
 private theorem loadKept_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
     LoadKept state after := by
-  have sizes := sameSizes_processProposerSlashing computed
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
-  exact ⟨sizes.1, (loadKept_slashValidator slashed).2⟩
+  exact loadKept_slashValidator slashed
 
 /-- An attester slashing keeps the count. -/
 private theorem loadKept_processAttesterSlashing {slashing : AttesterSlashing preset fork}
@@ -670,7 +669,7 @@ private theorem processParentExecutionPayload_size {gloas : .glamsterdam ≤ for
     after.validators.data.size = state.validators.data.size :=
   processParentExecutionPayload_step_of (fun s t => t.validators.data.size = s.validators.data.size)
     (fun _ => rfl) (fun one two => two.trans one) (fun _ same => by rw [same])
-    (fun ok => (loadKept_processWithdrawalRequest ok).1)
+    (fun ok => (sameSizes_processWithdrawalRequest ok).1)
     (fun ok => (sameSizes_processConsolidationRequest ok).1) computed
 
 /-- The operations add at most one validator for each deposit, and none from Gloas. -/
