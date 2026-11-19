@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Permutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsSponge
+public import EthLib.Cryptography.Proofs.Hash.Keccak.OneBlock
 
 /-!
 # Proofs: Keccak

@@ -1304,6 +1304,17 @@ The theorems below tie the code to the model, and only a reader who checks the m
 `size_pending_lt` proves that every hasher reached from the empty one keeps fewer pending bytes than the rate, so its digest pads them into one block.
 The Python tests (`bindings/python/tests/keccak`) check the hashes and the permutation against pinned vectors.
 
+`Proofs/Hash/Keccak/OneBlock.lean` bounds collisions and preimages of Keccak-256 on messages of at most 135 bytes.
+There Keccak-f[1600] is replaced by a uniform permutation of the 2^1600 states, which the adversary evaluates forward and backward.
+`spongeAbsorb_of_size_lt` proves that, below 136 bytes, the absorbing phase is one call to the permutation.
+The call is on the padded block with a zero capacity, whatever the permutation is.
+`oneCallHash_eq` proves that the hash of the games is that sponge, with only the permutation swapped.
+Let the adversary make `q` calls to the permutation and its inverse.
+`keccak256_collisionAdvantage_le` bounds its chance of a collision by `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
+`keccak256_preimageAdvantage_le` bounds its chance of a preimage of any given digest by `Q (2^1344 + 2^1088) / (2^1600 - Q)` with `Q = q + 1`, about `Q / 2^256 + Q / 2^512`.
+These bounds hold in the random permutation model only.
+Keccak-f[1600] is one fixed permutation, and treating it as a uniform one is a heuristic that EthLib assumes and does not prove.
+
 ### KZG
 
 No text is agreed yet as the normative KZG specification.
@@ -6616,6 +6627,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/DerivationTable.lean`
 - `EthLib/Cryptography/Proofs/EvalDistEq.lean`
 - `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/Hash/`
 - `EthLib/Cryptography/Proofs/HashSig/`
 - `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
 - `EthLib/Cryptography/Proofs/IndependentOutside.lean`
@@ -6624,6 +6636,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
 - `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
 - `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/OneCallPermutation.lean`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`
