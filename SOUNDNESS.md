@@ -467,6 +467,16 @@ An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
 So the adversary's budget of `q` hash calls carries over unchanged, and the model's theorem `h26_layered` gives the bound.
 
+A second theorem, `Unforgeability.Bridge.unforgeable_adversary`, counts only the adversary's own hash calls.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (939499 + 3 * 2^32) + 491`.
+At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`.
+At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
+`r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
+Key generation makes 264193 calls, and a signing request at most `939499 + 3 * 2^32`, when every counter search tries all `2^32` counters.
+A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
+The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
+
 ### VRF tree
 
 A VRF tree commits to secret outputs under one root, and later opens them one index at a time.
