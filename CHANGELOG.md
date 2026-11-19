@@ -61,6 +61,10 @@ Not yet released.
   `recordBalance_single` says that a recorded operation that succeeds runs its action at the input state and appends one event with its source, states and limits.
   The pin's balance bound for a key that switches to compounding reads these four lemmas.
 
+- `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
+  The pin's bound on the penalties and partials of a key on R's branch reads it.
+  `run_partial_queue_kept` follows from it.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.

@@ -743,6 +743,42 @@ private theorem partialCost_key (v : ValidatorIndex) :
     obtain ⟨e, present, rfl⟩ := List.mem_map.mp member
     simp [floorPartialDebit, slot_events_no_withdrawals ok early replayed e present]
 
+/-- The partial payments to one key, plus its entries left queued, fit its entries at the start.
+
+The branch is from Electra.
+
+The entries counted are those due by the cutoff.
+
+The cutoff is within the withdrawal delay of the start.
+
+An entry appended along the branch is due no earlier than the delay after the start. -/
+private theorem Run.partialDebit_net {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
+    (high cutoff : ℕ) (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff)
+    (short : cutoff < (getCurrentEpoch x.state).toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (v : ValidatorIndex) {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events) :
+    (events.map (floorPartialDebit v)).sum +
+        ((((y.state.pendingPartialWithdrawals
+          (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))).data.toList.filter
+            fun entry => decide (entry.validatorIndex = v)).filter
+              (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum ≤
+      ((((x.state.pendingPartialWithdrawals electra).data.toList.filter
+        fun entry => decide (entry.validatorIndex = v)).filter
+          (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum := by
+  obtain ⟨added, late, bound⟩ :=
+    run_partial_queue_net (partialCost_key v) high cutoff electra tail early replayed endpoint
+  have none : ((added.filter fun entry => decide (entry.validatorIndex = v)).filter
+      (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro entry member
+    have := late entry (List.mem_of_mem_filter member)
+    simp only [decide_eq_true_eq]
+    omega
+  rw [none] at bound
+  simpa using bound
+
 /-- The partial payments to one key over a branch from Electra fit its entries due by the cutoff.
 
 These are its entries of the queue at the start.
@@ -760,18 +796,9 @@ private theorem Run.partialDebit_le {x y : ForkedBeaconState preset}
     (events.map (floorPartialDebit v)).sum ≤
       ((((x.state.pendingPartialWithdrawals electra).data.toList.filter
         fun entry => decide (entry.validatorIndex = v)).filter
-          (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum := by
-  obtain ⟨added, late, bound⟩ :=
-    run_partial_queue_kept (partialCost_key v) high cutoff electra tail early replayed endpoint
-  have none : ((added.filter fun entry => decide (entry.validatorIndex = v)).filter
-      (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)) = [] := by
-    apply List.filter_eq_nil_iff.mpr
-    intro entry member
-    have := late entry (List.mem_of_mem_filter member)
-    simp only [decide_eq_true_eq]
-    omega
-  rw [none] at bound
-  simpa using bound
+          (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum :=
+  Nat.le_of_add_right_le (Run.partialDebit_net tail electra early high cutoff endpoint short v
+    replayed)
 
 /-! ## The band of totals from the guard at the finalized state -/
 
