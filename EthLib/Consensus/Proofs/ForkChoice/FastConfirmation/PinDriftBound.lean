@@ -2005,7 +2005,9 @@ The epoch never moves back.
 
 Fourth, suppose the cap stays at most `capHigh`, as in the third.
 
-Suppose the rate of the rewards at every state is at most `P`, and the run ends by the epoch `high + 1`.
+Suppose the rate of the rewards at every state is at most `P`.
+
+Suppose also that the run ends by the epoch `high + 1`.
 
 Suppose also that `E` is at least the greatest effective balance that the bound below allows.
 
@@ -2094,13 +2096,13 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have tailEq : creditBound (pre.snoc step) i high E P =
           creditBound pre i high E P +
             ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) *
-              (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-                WEIGHT_DENOMINATOR.toNat) +
+              (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+                (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
             PinSplit.stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
         unfold creditBound
         rw [scan]
-        generalize E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-          WEIGHT_DENOMINATOR.toNat = G
+        generalize E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat = G
         have split : ((getCurrentEpoch last.state).toNat - (getCurrentEpoch x.state).toNat) * G =
             ((getCurrentEpoch middle.state).toNat - (getCurrentEpoch x.state).toNat) * G +
               ((getCurrentEpoch last.state).toNat - (getCurrentEpoch middle.state).toNat) * G := by
@@ -2122,8 +2124,8 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
         · have ceilings : ∀ p ∈ pre.balancePath,
               min (actualBalanceAt p i) capHigh ≤ creditBound (pre.snoc step) i high E P :=
             fun p member => (Nat.min_le_left _ _).trans ((ihPre p member).trans (by omega))
-          obtain ⟨c1, -, -, -⟩ := ihCeiling (creditBound (pre.snoc step) i high E P) alignedHigh startCap
-            ceilings
+          obtain ⟨c1, -, -, -⟩ := ihCeiling (creditBound (pre.snoc step) i high E P)
+            alignedHigh startCap ceilings
             (fun p member => capC p (List.mem_append_left _ member))
           rw [Nat.min_comm] at c1
           have envelope : effectiveAt middle i ≤ E := c1.trans closed
