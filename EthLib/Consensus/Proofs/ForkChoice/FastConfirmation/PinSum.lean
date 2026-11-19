@@ -1876,8 +1876,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
-  rw [quarter]
-  exact Nat.le_refl _
+  simp only [quarter, Nat.le_refl]
 
 /-- The per-key core of the rise.
 
