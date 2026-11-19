@@ -999,7 +999,9 @@ Or it is slashed at the start, and its delayed penalty is not due along the bran
 
 The key is activated, or the branch is from Fulu.
 
-A step may assign the key's exit within the window, if the key is not yet withdrawable.
+At each step, the key's exit epoch after the step is beyond the window.
+
+Or its withdrawable epoch before the step is beyond the window.
 
 The high-water mark of the trace stays within any bound on the effective balance of the branch. -/
 theorem FloorTrace.run_of_le_cap_general
