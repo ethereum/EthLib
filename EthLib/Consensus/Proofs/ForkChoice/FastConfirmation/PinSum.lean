@@ -11036,7 +11036,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
             eventsC events eventsF i) + whistC tailC highC i +
       (syncF events i + syncF eventsC i) + slashR (pinTerms config pulled anc fin) i +
-      bandC tailC highC i + bandR events i :=
+      bandC tailC highC i + bandR events i + bandX fin highC i :=
   sorry
 
 /-- D-7 (rise): other keys active in both. -/
@@ -11055,7 +11055,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
             eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
       (syncF events v.toNat + syncF eventsC v.toNat) +
       slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat)) : ℕ) := by
+      bandR events v.toNat + bandX fin highC v.toNat)) : ℕ) := by
   have early := h.early
   have term : ∀ v ∈ K4 pulled counted V, ((eC counted v : ℤ) - eR pulled v) ≤
       (((pinTerms config pulled anc fin).rise v.toNat +
@@ -11064,7 +11064,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
               eventsC events eventsF v.toNat) +
         whistC tailC highC v.toNat + (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR events v.toNat : ℕ) : ℤ) := by
+        bandR events v.toNat + bandX fin highC v.toNat : ℕ) : ℤ) := by
     intro v member
     have active : v ∈ AR pulled := (Finset.mem_filter.mp member).2.1
     obtain ⟨w, found, -⟩ := active_of_activeVoters early (s := pulled) active
@@ -11110,7 +11110,7 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
         whistC tailC highC v.toNat +
         (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR events v.toNat)) : ℕ) := sorry
+        bandR events v.toNat + bandX fin highC v.toNat)) : ℕ) := sorry
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
@@ -11174,6 +11174,7 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
           bandR events v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
+      (∑ v ∈ (K6 pulled counted), bandX fin highC v.toNat) +
       (pinTerms config pulled anc fin).creditCap) : ℕ) := by
   classical
   -- `cJ` is the stake in C of the keys of `K6`.
@@ -11191,7 +11192,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
     replayedC
   -- The keys inside R's registry rise by `key_core`, and R's record puts each in a class.
   have core : ∀ v ∈ K6 pulled counted, v.toNat < pulled.validators.data.size →
-      eC counted v ≤ (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+      eC counted v ≤ (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat +
+          bandX fin highC v.toNat) +
         (((credC tailC highC v.toNat +
             keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
               eventsC events eventsF v.toNat) +
@@ -11237,7 +11239,8 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
     omega
   rw [notInside, ← hInside] at partition
   have insideSum : ∑ v ∈ inside, eC counted v ≤
-      ∑ v ∈ inside, (((eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+      ∑ v ∈ inside, (((eR pulled v + (pinTerms config pulled anc fin).rise v.toNat +
+          bandX fin highC v.toNat) +
         (((credC tailC highC v.toNat +
             keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
               eventsC events eventsF v.toNat) +
@@ -11248,6 +11251,14 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
     Finset.sum_le_sum fun v hv =>
       core v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2
   rw [Finset.sum_add_distrib] at insideSum
+  -- The consolidation bands of the inside keys are within those of `K6`.
+  have bandSplit : ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat +
+        bandX fin highC v.toNat) =
+      ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
+        ∑ v ∈ inside, bandX fin highC v.toNat := Finset.sum_add_distrib
+  have bandIn : ∑ v ∈ inside, bandX fin highC v.toNat ≤
+      ∑ v ∈ K6 pulled counted, bandX fin highC v.toNat :=
+    Finset.sum_le_sum_of_subset (Finset.filter_subset _ _)
   have classSum : ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) ≤
       (∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
           isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
@@ -11446,14 +11457,18 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     highLeR tailC highC endEpochC replayedC highLe band
   have b16 := bud_exitedR (config := config) (pulled := pulled) (anc := anc) (fin := fin)
     (counted := counted)
-  -- The band of each due entry naming a V key is paid by `bud_consolidations`' V share.
-  have bandV : 3 * (preset.upwardBand * dueAt fin high V) ≤
+  -- `bud_consolidations` pays the band of each due entry: the counted keys' bands and V's share.
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have bandV : ∑ v ∈ K4 pulled counted V, bandX fin highC v.toNat +
+        ∑ v ∈ K6 pulled counted, bandX fin highC v.toNat +
+        3 * ∑ v ∈ K5 counted V, bandX fin highC v.toNat +
+        3 * (preset.upwardBand * dueAt fin high V) =
       preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
         dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
         3 * dueAt fin high V) := by
-    rw [Nat.mul_left_comm]
-    exact Nat.mul_le_mul_left _ (by omega)
-  have b15' := Nat.le_trans (Nat.add_le_add_left bandV _) b15
+    rw [bandX_sum fin electra highC, bandX_sum fin electra highC, bandX_sum fin electra highC]
+    ring
+  have b15' := Nat.le_trans (Nat.add_le_add_left (Nat.le_of_eq bandV) _) b15
   have qs := queues_split config pulled anc fin
   have b14 := bud_whistle (config := config) h fromFin high replayedF tail high endEpoch replayed
     tailC highC endEpochC replayedC
