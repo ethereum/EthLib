@@ -1273,6 +1273,100 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       (forkEnd r2) i.toNat val initial
     simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
 
+/-- The sync debits of a key over a list of events are the debits of its sync events. -/
+private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
+    (events.map (syncDebit v)).sum =
+      ((events.filter (·.source = .sync)).map (keyDebit v)).sum := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih =>
+    by_cases sync : e.source = .sync
+    · simp [sync, syncDebit, keyDebit, ih]
+    · simp [sync, syncDebit, ih]
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- C's effective balance of a key at a state of its run from the finalized block is above the
+floor of its fall, less its sync debits and their band.
+
+The floor starts from the smaller of the key's balance and its cap at the finalized block.
+
+It falls by what `fall` charges, in `X`: the leak and the gain over the depth, and the partials.
+
+If the test of `fall` holds, the balance stays within a band of the envelope, and the effective
+balance stays at its finalized value, by `stay`.
+
+Otherwise the floor is rounded down to an increment, by `cfloor_endpoint`.
+
+The step `margin` fits the closed form of the potential floor to the floor of the fall.
+
+It is the margin step, which waits for the spec of `fall`, and `stay` is the credit case. -/
+private theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (clean : ∀ w, counted.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+    (base0 X low ebUp finEB floorC : ℕ)
+    (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat)
+    (hlow : low = base0 - X)
+    (hfin : finEB = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+    (hfloorC : floorC = if max ebUp base0 ≤ low + preset.downwardBand then finEB
+      else min finEB (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC)
+    (margin : ∃ slack ρn ρd : ℕ,
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat + slack ∧
+      (∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+        (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+        (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+        step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) ∧
+      ∀ a D k : ℕ, k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+        D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+        (ρd - ρn * k) * (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+            (withdrawalMaxEffectiveBalance preset fork val).toNat +
+          (preset.downwardBand + slack)) ≤ ρd * (a + D + (preset.downwardBand + slack)) →
+        low - (events.map (syncDebit i.toNat)).sum ≤ a)
+    (stay : max ebUp base0 ≤ low + preset.downwardBand →
+      finEB ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
+        bandR events i.toNat) :
+    floorC ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
+      bandR events i.toNat := by
+  obtain ⟨slack, ρn, ρd, start, pass, arith⟩ := margin
+  have eff := cfloor_endpoint h fromFin tailC replayed i val initial clean retained slack ρn ρd
+    (low - (events.map (syncDebit i.toNat)).sum) start pass arith rp rest cut
+  have incPos := h.bands.1
+  have bandEq : bandR events i.toNat = if 0 < (events.map (syncDebit i.toNat)).sum then
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0 := by
+    unfold bandR
+    rw [← sum_syncDebit_eq]
+  have lowLe : low ≤ (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    have := Nat.min_le_right (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat
+    omega
+  rw [hfloorC]
+  split
+  · next test => exact stay test
+  · rw [← hfin] at eff
+    have lowMod := Nat.mod_lt low incPos
+    have lowModLe := Nat.mod_le low preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    rcases Nat.eq_zero_or_pos (events.map (syncDebit i.toNat)).sum with zero | positive
+    · have same : low - (events.map (syncDebit i.toNat)).sum = low := by omega
+      rw [same] at eff
+      rw [bandEq, if_neg (by omega), zero]
+      omega
+    · have mod := Nat.mod_lt (low - (events.map (syncDebit i.toNat)).sum) incPos
+      rw [bandEq, if_pos positive]
+      omega
+
 /-! ### One key's reward in an epoch pass -/
 
 /-- The reward credits of a list of events are those of the events, read at one position. -/
