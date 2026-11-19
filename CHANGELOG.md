@@ -313,7 +313,7 @@ Not yet released.
 - Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
   `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
   The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
-  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store whose filtered tree reads has a head.
+  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store has a head.
   The alternatives are a collision of two honest stores and `HistoricalDirectSafetyEvidence`.
   `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` with the same alternatives.
   The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
@@ -322,6 +322,15 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- In Lean, `HonestHeadsExist` no longer takes the store's filtered tree: every up-to-date honest store in the interval has a head ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
+  `Execution.honestHeadsExist_or_evidence` derives the filtered tree from the held justified block and the epoch room that the tree needs.
+  It no longer takes `positive`, which its `parameters.slots` gives.
+  It takes `seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64` after `scoreFits`, which `Config.CommitteeWindowsFit.seeds` gives.
+  `Execution.callRolloverRead_or_evidence` no longer takes `history`, which its `parameters.lookahead` gives, and it takes the same `seeds` in place of `fit`.
+  A caller that applied `HonestHeadsExist` to `nodes` and `tree` drops both arguments.
+  A caller of `Execution.honestHeadsExist_or_evidence` drops `positive` and passes `fit.seeds` after `scoreFits`.
+  A caller of `Execution.callRolloverRead_or_evidence` drops `history` and passes `fit.seeds` in place of `fit`.
 
 - The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
   Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
