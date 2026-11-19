@@ -961,11 +961,16 @@ private def flowGain (t : PinTerms preset) {x y : ForkedBeaconState preset}
 
 /-- The flow gain of a key whose rise is on its kept arm, or that R's registry does not hold.
 
-On the other arm the rise is the key's whole headroom, which holds its gains already. -/
+On the other arm the rise is the key's whole headroom, which holds its gains already.
+
+A key that R's registry does not hold is charged here only in the low regime.
+
+In the high regime `creditCap` charges it up to the cap. -/
 private def flowK (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : ℕ :=
-  if t.keptArm i = true ∨ i ∉ t.positions then flowGain t tailC high eventsC events eventsF i
+  if t.keptArm i = true ∨ (i ∉ t.positions ∧ t.gainHigh = false) then
+    flowGain t tailC high eventsC events eventsF i
   else 0
 
 /-- One unit of gain for a key with any flow.
