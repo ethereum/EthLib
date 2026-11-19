@@ -1,0 +1,3 @@
+// sends a create transaction with dynamic fee
+>> {"jsonrpc":"2.0","id":1,"method":"eth_sendRawTransaction","params":["0x02f891870c72dd9d5e883e018201f483bc7ac882ea60802ab73d602d80600a3d3981f3363d3d373d3d3d363d734d11c446473105a02b5c1ab9ebe9b03f33902a295af43d82803e903d91602b57fd5bf3c080a07e04c33a4d6ab36db614d796ae19f446fcb10b132f1faacfc9520a85dff36803a070c682a0b34c1daed8cfdd3252855c05e2ba9a6c0b335bfef65339947c458b5a"]}
+<< {"jsonrpc":"2.0","id":1,"result":"0x059ebfaca990412c79920dd88df9960281567857d93e7e4147209c23f8cf97ba"}

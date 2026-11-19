@@ -180,12 +180,6 @@ theorem validateSidecarHeader_eq
   cases checked <;> simp only [ValidationResult.andThenM, ValidationResult.andThen, pure,
     Except.pure]
 
-/-- A check that may run fallible next checks accepts exactly when it and the next checks do. -/
-theorem andThenM_eq_ok_accept {ε : Type} {first : ValidationResult}
-    {next : Unit → Except ε ValidationResult} :
-    first.andThenM next = .ok accept ↔ first = accept ∧ next () = .ok accept := by
-  cases first <;> simp [andThenM, pure, Except.pure]
-
 /-- When the header checks accept, the proofs of the data of the sidecar accept too.
 
 This holds whatever the parent, the store and the clock. -/

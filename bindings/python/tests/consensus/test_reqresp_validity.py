@@ -7,6 +7,7 @@ from ethlib.consensus import (
     ResponseBlock,
     ResponseEnvelope,
     ResponseInclusionList,
+    ResponseLightClientUpdate,
     ResponseSidecar,
 )
 from ethlib.errors import ConsensusError
@@ -26,10 +27,13 @@ from raising import raises
 # - MAX_BLOBS_PER_BLOCK is 6, and MAX_BLOBS_PER_BLOCK_ELECTRA 9 from Electra.
 # - NUMBER_OF_COLUMNS is 128.
 # - INCLUSION_LIST_COMMITTEE_SIZE and MAX_REQUEST_INCLUSION_LIST are both 16.
+# - MAX_REQUEST_LIGHT_CLIENT_UPDATES is 128, and a sync committee period has 8192 slots.
+# - The periods of Altair, Deneb, Electra and Fulu start at 290, 1053, 1422 and 1607.
 #
-# The minimal preset and configuration change none of the values that a response check reads.
+# The light client check reads the fork epochs and the length of a period, which minimal changes.
+# The minimal preset and configuration change none of the values that the other checks read.
 # The limits above and the number of columns and seats are the same as on mainnet.
-# So no case runs under the name minimal, as its result could not differ from mainnet.
+# So only the light client check runs under the name minimal.
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -140,6 +144,160 @@ def test_blocks_by_range_ascending_slots_imply_count_bound() -> None:
 def test_blocks_by_root(items: list[ResponseBlock], valid: bool, version: int) -> None:
     protocol = _id("beacon_blocks_by_root", version)
     assert consensus.reqresp_is_valid_response("pectra", protocol, A + B, items) is valid
+
+
+# Blocks by head: the root C and a count of 3.
+# A block is its slot, parent root and root, and the response walks back from the block at C.
+
+BLOCKS_BY_HEAD = C + _u64(3)
+
+D = _root(0xD)
+
+
+def _ancestry(head_slot: int, length: int) -> list[ResponseBlock]:
+    # Blocks at descending slots from the head, each the parent of the one before it.
+    return [(head_slot - i, _root(i + 1), _root(i)) for i in range(length)]
+
+
+@pytest.mark.parametrize(
+    "items, valid",
+    [
+        pytest.param([], True, id="empty"),
+        pytest.param([(20, B, C)], True, id="head-only"),
+        pytest.param([(20, B, C), (18, A, B)], True, id="parent-linked"),
+        pytest.param([(20, B, C), (18, A, B), (9, D, A)], True, id="full-count"),
+        pytest.param([(20, B, A)], False, id="other-head"),
+        pytest.param([(18, A, B)], False, id="starts-below-head"),
+        pytest.param([(20, B, C), (18, A, D)], False, id="parent-not-linked"),
+        pytest.param([(20, B, C), (21, A, B)], False, id="slots-ascend"),
+        pytest.param([(20, B, C), (20, A, B)], False, id="slot-repeats"),
+        pytest.param([(20, B, C), (18, A, B), (9, D, A), (5, C, D)], False, id="over-count"),
+    ],
+)
+def test_blocks_by_head(items: list[ResponseBlock], valid: bool) -> None:
+    protocol = _id("beacon_blocks_by_head")
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, BLOCKS_BY_HEAD, items) is valid
+
+
+@pytest.mark.parametrize("fork", ["fusaka", "glamsterdam", "hegota"])
+def test_blocks_by_head_request_limit(fork: str) -> None:
+    # A count of 200 blocks allows more than the request limit of 128.
+    request, protocol = _root(0) + _u64(200), _id("beacon_blocks_by_head")
+    assert consensus.reqresp_is_valid_response(fork, protocol, request, _ancestry(1000, 128))
+    over = _ancestry(1000, 129)
+    assert not consensus.reqresp_is_valid_response(fork, protocol, request, over)
+
+
+def test_blocks_by_head_slots_descend_along_the_list() -> None:
+    # The second block may be at any lower slot, and the third must be lower still.
+    protocol = _id("beacon_blocks_by_head")
+    request = _root(0) + _u64(3)
+    gap = [(100, _root(1), _root(0)), (50, _root(2), _root(1)), (49, _root(3), _root(2))]
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, gap)
+    back = [(100, _root(1), _root(0)), (50, _root(2), _root(1)), (60, _root(3), _root(2))]
+    assert not consensus.reqresp_is_valid_response("fusaka", protocol, request, back)
+
+
+# Light client updates by range: start period 1500, count 4, so periods 1500 to 1503.
+# Each update is the slot of its attested header and the fork of its chunk.
+# Periods 1422 to 1606 are those of Electra, whose fork is named pectra.
+
+UPDATES_BY_RANGE = _u64(1500, 4)
+
+SLOTS_PER_PERIOD = 8192
+
+
+def _update(period: int, fork: str = "pectra", slot: int = 0) -> ResponseLightClientUpdate:
+    # An update whose attested header is at a slot of the period.
+    return (period * SLOTS_PER_PERIOD + slot, fork)
+
+
+@pytest.mark.parametrize(
+    "items, valid",
+    [
+        pytest.param([], True, id="empty"),
+        pytest.param([_update(1500)], True, id="first-period"),
+        pytest.param([_update(p) for p in range(1500, 1504)], True, id="every-period"),
+        pytest.param([_update(1501), _update(1503)], True, id="skipped-period"),
+        pytest.param([_update(1503, slot=8191)], True, id="last-slot"),
+        pytest.param([_update(1500, slot=-1)], False, id="before-start"),
+        pytest.param([_update(1504)], False, id="after-end"),
+        pytest.param([_update(1501), _update(1500)], False, id="periods-descend"),
+        pytest.param([_update(1500), _update(1500, slot=1)], False, id="period-repeats"),
+        pytest.param([_update(1500, "fusaka")], False, id="later-fork"),
+        pytest.param([_update(1500, "dencun")], False, id="earlier-fork"),
+    ],
+)
+def test_light_client_updates_by_range(items: list[ResponseLightClientUpdate], valid: bool) -> None:
+    protocol = _id("light_client_updates_by_range")
+    result = consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, items)
+    assert result is valid
+
+
+@pytest.mark.parametrize(
+    "items, valid",
+    [
+        pytest.param([_update(1606), _update(1607, "fusaka")], True, id="across-fulu"),
+        pytest.param([_update(1606), _update(1607)], False, id="electra-after-fulu"),
+        pytest.param([_update(1606, "fusaka")], False, id="fulu-before-fulu"),
+    ],
+)
+def test_light_client_updates_by_range_fork_of_chunk(
+    items: list[ResponseLightClientUpdate], valid: bool
+) -> None:
+    # The fork of a chunk is that of the epoch of the attested header, not the serving fork.
+    request, protocol = _u64(1605, 4), _id("light_client_updates_by_range")
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, items) is valid
+
+
+def test_light_client_updates_by_range_before_altair() -> None:
+    # A period before Altair has no light client update, at any fork of the chunk.
+    request, protocol = _u64(289, 2), _id("light_client_updates_by_range")
+    for chunk_fork in ("phase0", "altair"):
+        items = [_update(289, chunk_fork)]
+        assert not consensus.reqresp_is_valid_response("altair", protocol, request, items)
+    first = [_update(290, "altair")]
+    assert consensus.reqresp_is_valid_response("altair", protocol, request, first)
+
+
+def test_light_client_updates_by_range_request_limit() -> None:
+    # A count of 200 periods allows more updates than the request limit of 128.
+    # Periods 1100 to 1299 are those of Deneb, whose fork is named dencun.
+    request, protocol = _u64(1100, 200), _id("light_client_updates_by_range")
+    full = [_update(p, "dencun") for p in range(1100, 1228)]
+    assert consensus.reqresp_is_valid_response("pectra", protocol, request, full)
+    over = [*full, _update(1228, "dencun")]
+    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
+
+
+def test_light_client_updates_by_range_ascending_periods_imply_count_bound() -> None:
+    # Updates at ascending periods inside a range of count periods number at most the count.
+    # So a response over the count also breaks the order, and the count has no case of its own.
+    request, protocol = _u64(1500, 2), _id("light_client_updates_by_range")
+    both = [_update(1500), _update(1501)]
+    assert consensus.reqresp_is_valid_response("pectra", protocol, request, both)
+    over = [*both, _update(1501, slot=1)]
+    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
+
+
+def test_light_client_updates_by_range_minimal() -> None:
+    # The minimal configuration leaves Altair at the far future epoch, so every epoch is Phase 0.
+    # So no update is valid there, while the empty response is.
+    request, protocol = _u64(0, 4), _id("light_client_updates_by_range")
+    assert consensus.reqresp_is_valid_response("altair", protocol, request, [], name="minimal")
+    for chunk_fork in ("phase0", "altair"):
+        items = [(0, chunk_fork)]
+        result = consensus.reqresp_is_valid_response(
+            "altair", protocol, request, items, name="minimal"
+        )
+        assert not result
+
+
+def test_light_client_updates_by_range_unknown_fork() -> None:
+    protocol = _id("light_client_updates_by_range")
+    with raises(ConsensusError, "no fork named nofork") as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, [(0, "nofork")])
+    assert info.value.code == 0
 
 
 # Blob sidecars by range: start slot 100, count 3, so slots 100 to 102.
@@ -419,7 +577,7 @@ def test_committee_read_only_for_inclusion_lists() -> None:
         ("pectra", _id("metadata", 2)),
         ("pectra", _id("goodbye")),
         ("pectra", _id("light_client_bootstrap")),
-        ("fusaka", _id("beacon_blocks_by_head")),
+        ("pectra", _id("light_client_finality_update")),
     ],
 )
 def test_protocol_without_check(fork: str, protocol: str) -> None:

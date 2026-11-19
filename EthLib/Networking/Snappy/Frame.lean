@@ -71,16 +71,22 @@ def maskedCrc (data : ByteArray) : UInt32 :=
 
 /-- Every way decoding a stream can reject its input. -/
 inductive FrameError where
-  /-- The stream does not start with a stream identifier chunk (§1). -/
-  | missingStreamIdentifier
-  /-- The input ended inside the four header bytes of a chunk. -/
-  | headerTruncated
-  /-- The data of a chunk ran past the end of the input. -/
-  | chunkPastEnd
-  /-- A stream identifier chunk with a length or contents other than those of §4.1. -/
-  | badStreamIdentifier
-  /-- A data chunk too short to hold its four checksum bytes. -/
-  | checksumTruncated
+  /-- The stream does not start with a stream identifier chunk (§1).
+
+  The field holds the type of the first chunk, or nothing for an empty stream. -/
+  | missingStreamIdentifier (type : Option UInt8)
+  /-- The input ended inside the four header bytes of a chunk, with `available` bytes left. -/
+  | headerTruncated (available : Nat)
+  /-- The data of a chunk ran past the end of the input.
+
+  The header declares `length` bytes of data, and only `available` follow it. -/
+  | chunkPastEnd (length available : Nat)
+  /-- A stream identifier chunk with a length or contents other than those of §4.1.
+
+  The field holds the length of its data. -/
+  | badStreamIdentifier (length : Nat)
+  /-- A data chunk too short to hold its four checksum bytes, with its data of `length` bytes. -/
+  | checksumTruncated (length : Nat)
   /-- A data chunk holding more than 65536 uncompressed bytes (§4.2, §4.3). -/
   | chunkTooLarge (length : Nat)
   /-- The stored checksum differs from the masked CRC-32C of the uncompressed data (§3). -/
@@ -100,11 +106,11 @@ The codes start at 101, above every code of a block error, so that the two never
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def FrameError.code : FrameError → UInt32
-  | .missingStreamIdentifier => 101
-  | .headerTruncated => 102
-  | .chunkPastEnd => 103
-  | .badStreamIdentifier => 104
-  | .checksumTruncated => 105
+  | .missingStreamIdentifier _ => 101
+  | .headerTruncated _ => 102
+  | .chunkPastEnd .. => 103
+  | .badStreamIdentifier _ => 104
+  | .checksumTruncated _ => 105
   | .chunkTooLarge _ => 106
   | .checksumMismatch .. => 107
   | .block _ => 108
@@ -123,7 +129,7 @@ def verifyChecksum (checksum data : List UInt8) : Except FrameError (List UInt8)
 def decodeChunk (type : UInt8) (body : List UInt8) : Except FrameError (List UInt8) :=
   if type == compressedType then
     if body.length < 4 then
-      .error .checksumTruncated
+      .error (.checksumTruncated body.length)
     else
       let block := body.drop 4
       -- The preamble of the block declares the uncompressed length.
@@ -138,7 +144,7 @@ def decodeChunk (type : UInt8) (body : List UInt8) : Except FrameError (List UIn
             | .ok data => verifyChecksum (body.take 4) data
   else if type == uncompressedType then
     if body.length < 4 then
-      .error .checksumTruncated
+      .error (.checksumTruncated body.length)
     else
       let data := body.drop 4
       if maxChunkLength < data.length then
@@ -147,7 +153,7 @@ def decodeChunk (type : UInt8) (body : List UInt8) : Except FrameError (List UIn
         verifyChecksum (body.take 4) data
   -- A stream identifier after the first one is skipped, if it is well formed (§4.1).
   else if type == streamIdentifierType then
-    if body == streamIdentifier.drop 4 then .ok [] else .error .badStreamIdentifier
+    if body == streamIdentifier.drop 4 then .ok [] else .error (.badStreamIdentifier body.length)
   else if type < 0x80 then
     .error (.reservedUnskippable type)
   -- Reserved skippable chunks (§4.6) and padding (§4.4) are skipped unread.
@@ -162,10 +168,10 @@ def readChunk : List UInt8 → Except FrameError (List UInt8 × List UInt8)
   | type :: l0 :: l1 :: l2 :: rest =>
       let len := bytesToUint #v[l0, l1, l2]
       if rest.length < len then
-        .error .chunkPastEnd
+        .error (.chunkPastEnd len rest.length)
       else
         (decodeChunk type (rest.take len)).map fun out => (out, rest.drop len)
-  | _ => .error .headerTruncated
+  | bs => .error (.headerTruncated bs.length)
 
 /-- Decode the chunks of a stream, one after the other.
 
@@ -175,8 +181,8 @@ Each chunk takes at least its four header bytes, so the input length is enough f
 -/
 def decodeChunks : List UInt8 → Nat → Except FrameError (List UInt8)
   | [], _ => .ok []
-  -- Out of fuel: unreachable with enough fuel.
-  | _ :: _, 0 => .error .headerTruncated
+  -- Out of fuel: unreachable with enough fuel, so the field is arbitrary.
+  | bs@(_ :: _), 0 => .error (.headerTruncated bs.length)
   | bs@(_ :: _), fuel + 1 => do
       let (out, rest) ← readChunk bs
       (decodeChunks rest fuel).map (out ++ ·)
@@ -187,8 +193,8 @@ def decodeFramesList (bs : List UInt8) : Except FrameError (List UInt8) :=
   match bs with
   | type :: _ =>
       if type == streamIdentifierType then decodeChunks bs bs.length
-      else .error .missingStreamIdentifier
-  | [] => .error .missingStreamIdentifier
+      else .error (.missingStreamIdentifier (some type))
+  | [] => .error (.missingStreamIdentifier none)
 
 /-- The bytes a framed stream decodes to, or why it is not a valid stream. -/
 def decodeFrames (bs : ByteArray) : Except FrameError ByteArray :=
@@ -208,8 +214,8 @@ The fuel bounds the number of chunks. -/
 def readChunks (need : Nat) : List UInt8 → Nat →
     Except FrameError (List UInt8 × List UInt8)
   | [], _ => .ok ([], [])
-  -- Out of fuel: unreachable with enough fuel.
-  | _ :: _, 0 => .error .headerTruncated
+  -- Out of fuel: unreachable with enough fuel, so the field is arbitrary.
+  | bs@(_ :: _), 0 => .error (.headerTruncated bs.length)
   | bs@(_ :: _), fuel + 1 => do
       let (out, rest) ← readChunk bs
       if need ≤ out.length then .ok (out, rest)
@@ -226,8 +232,8 @@ def readFrames (n : Nat) (bs : List UInt8) :
   match bs with
   | type :: _ =>
       if type == streamIdentifierType then readChunks n bs bs.length
-      else .error .missingStreamIdentifier
-  | [] => .error .missingStreamIdentifier
+      else .error (.missingStreamIdentifier (some type))
+  | [] => .error (.missingStreamIdentifier none)
 
 /-- One uncompressed data chunk that holds `data`, at most 65536 bytes (§4.3).
 

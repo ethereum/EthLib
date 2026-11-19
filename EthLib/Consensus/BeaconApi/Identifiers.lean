@@ -71,7 +71,7 @@ inductive ValidatorId where
   | pubkey (pubkey : BLSPubkey)
   deriving DecidableEq, Repr
 
-/-- The number below 2⁶⁴ that a text writes in plain decimal, or none. -/
+/-- The number below 2^64 that a text writes in plain decimal, or none. -/
 def parseUInt64 (text : String) : Option UInt64 :=
   match readNat (.str text) with
   | .ok n => if n < UInt64.size then some (UInt64.ofNat n) else none

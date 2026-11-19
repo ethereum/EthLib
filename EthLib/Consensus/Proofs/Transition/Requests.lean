@@ -23,6 +23,12 @@ A source must wait when it is unslashed and cannot withdraw in the next epoch.
 They lower no balance of a validator that is slashed or cannot withdraw in the next epoch.
 
 A source that is slashable in the next epoch keeps its consolidation and at least its balance.
+
+From Electra, a request that meets every condition computes as the queueing of its source.
+
+Otherwise a request with two different keys that succeeds returns its state.
+
+With different keys, it returns its state while the churn is at most the activation balance.
 -/
 
 @[expose] public section
@@ -34,16 +40,32 @@ open Base Uint64
 variable {preset : Preset} {fork : Base.Fork} {config : Config}
   {state after : BeaconState preset fork}
 
-/-- A pass over the pending consolidations keeps the registry and the sum of the balances. -/
-theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
+/-- A pending-consolidation pass composes its actual balance transfers.
+
+The callback reads the queue entry before its debit and credit. -/
+theorem passPendingConsolidations_of {nextEpoch : Epoch}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {a b c}, R a b → R b c → R a c)
+    (allowed : PendingConsolidation → Prop)
+    (transfer : ∀ {s lowered raised : BeaconState preset fork} {entry : PendingConsolidation}
+      {source : Validator} {balance : Gwei}, allowed entry →
+      getValidator s entry.sourceIndex = .ok source →
+      getBalance s entry.sourceIndex = .ok balance →
+      decreaseBalance s entry.sourceIndex (min balance source.effectiveBalance) = .ok lowered →
+      increaseBalance lowered entry.targetIndex (min balance source.effectiveBalance) = .ok raised →
+      R s raised) :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      (∀ entry ∈ consolidations, allowed entry) →
       passPendingConsolidations nextEpoch state consolidations = .ok result →
-      result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state
-  | [], _, _, computed => by
+      ((result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state) ∧
+        result.1.proposerLookahead = state.proposerLookahead ∧
+        result.1.pendingPartialWithdrawals = state.pendingPartialWithdrawals) ∧ R state result.1
+  | [], _, _, _, computed => by
     simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨rfl, rfl⟩
-  | consolidation :: rest, state, result, computed => by
+    exact ⟨⟨⟨rfl, rfl⟩, rfl, rfl⟩, refl _⟩
+  | consolidation :: rest, state, result, permitted, computed => by
     unfold passPendingConsolidations at computed
     simp only [bind, Except.bind, pure, Except.pure] at computed
     split at computed
@@ -53,10 +75,12 @@ theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
       · cases computed
       rename_i recur
       cases computed
-      exact (passPendingConsolidations_kept (consolidations := rest) recur :)
+      have kept := passPendingConsolidations_of R refl trans allowed transfer
+        (fun entry member => permitted entry (List.mem_cons_of_mem _ member)) recur
+      exact kept
     split at computed
     · cases computed
-      exact ⟨rfl, rfl⟩
+      exact ⟨⟨⟨rfl, rfl⟩, rfl, rfl⟩, refl _⟩
     split at computed
     · cases computed
     rename_i balance found
@@ -72,13 +96,38 @@ theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
     cases computed
     have lowered := liftAccessor_ok.mp loweredOk
     have raised := liftAccessor_ok.mp raisedOk
-    obtain ⟨validators, summed⟩ := passPendingConsolidations_kept (consolidations := rest) recur
-    refine ⟨validators.trans ((increaseBalance_validators raised).trans
-      (decreaseBalance_validators lowered)), ?_⟩
-    have taken := balanceSum_decreaseBalance (liftAccessor_ok.mp found) Std.min_le_left lowered
-    have given := balanceSum_increaseBalance raised
-    simp only at summed ⊢
-    omega
+    obtain ⟨⟨⟨validators, summed⟩, cache, partials⟩, related⟩ :=
+      passPendingConsolidations_of R refl trans allowed transfer
+        (fun entry member => permitted entry (List.mem_cons_of_mem _ member)) recur
+    refine ⟨⟨⟨validators.trans ((increaseBalance_validators raised).trans
+      (decreaseBalance_validators lowered)), ?_⟩, ?_⟩, ?_⟩
+    · have taken := balanceSum_decreaseBalance (liftAccessor_ok.mp found) Std.min_le_left lowered
+      have given := balanceSum_increaseBalance raised
+      simp only at summed ⊢
+      omega
+    · obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raised
+      obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
+      exact ⟨cache, partials⟩
+    · exact trans (transfer (permitted consolidation (by simp))
+        (liftAccessor_ok.mp (by assumption)) (liftAccessor_ok.mp found) lowered raised) related
+
+private theorem passPendingConsolidations_kept_cache {nextEpoch : Epoch}
+    {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result}
+    (computed : passPendingConsolidations nextEpoch state consolidations = .ok result) :
+    (result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state) ∧
+      result.1.proposerLookahead = state.proposerLookahead ∧
+      result.1.pendingPartialWithdrawals = state.pendingPartialWithdrawals :=
+  (passPendingConsolidations_of (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => True) (fun _ _ _ _ _ => trivial)
+    (fun _ _ => trivial) computed).1
+
+/-- A pass over the pending consolidations keeps the registry and the sum of the balances. -/
+theorem passPendingConsolidations_kept {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork} {result},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      result.1.validators = state.validators ∧ balanceSum result.1 = balanceSum state := by
+  intro _ _ _ computed
+  exact (passPendingConsolidations_kept_cache computed).1
 
 /-- The pending consolidations of an epoch keep the registry and the sum of the balances. -/
 theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
@@ -92,6 +141,73 @@ theorem processPendingConsolidations_kept {electra : .pectra ≤ fork}
   rename_i passed
   cases computed
   exact passPendingConsolidations_kept passed
+
+/-- Processing pending consolidations leaves the cached proposers unchanged. -/
+theorem processPendingConsolidations_proposerLookahead {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.proposerLookahead = state.proposerLookahead := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact (passPendingConsolidations_kept_cache passed).2.1
+
+/-- Processing pending consolidations leaves the pending partial withdrawals unchanged. -/
+theorem processPendingConsolidations_pendingPartialWithdrawals {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.pendingPartialWithdrawals = state.pendingPartialWithdrawals := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact (passPendingConsolidations_kept_cache passed).2.2
+
+/-- A pass over the pending consolidations keeps the end of the exit queue and its balance. -/
+theorem passPendingConsolidations_exitQueue {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
+      {result : BeaconState preset fork × Nat},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      result.1.earliestExitEpoch = state.earliestExitEpoch ∧
+        result.1.exitBalanceToConsume = state.exitBalanceToConsume
+  | [], _, _, computed => by
+    cases computed
+    exact ⟨rfl, rfl⟩
+  | consolidation :: rest, state, result, computed => by
+    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := bind_ok_iff.mp computed
+      cases computed
+      exact passPendingConsolidations_exitQueue (result := (passed, read)) passedOk
+    split at computed
+    · cases computed
+      exact ⟨rfl, rfl⟩
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, _, loweredOk, _, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ := computed
+    cases computed
+    obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp loweredOk
+    obtain ⟨_, _, rfl⟩ := increaseBalance_eq_ok_iff.mp raisedOk
+    exact (passPendingConsolidations_exitQueue (result := (passed, read)) passedOk :)
+
+/-- The pending consolidations of an epoch keep the end of the exit queue and its balance. -/
+theorem processPendingConsolidations_exitQueue {electra : .pectra ≤ fork}
+    (computed : processPendingConsolidations state electra = .ok after) :
+    after.earliestExitEpoch = state.earliestExitEpoch ∧
+      after.exitBalanceToConsume = state.exitBalanceToConsume := by
+  simp only [processPendingConsolidations, bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · cases computed
+  split at computed
+  · cases computed
+  rename_i passed
+  cases computed
+  exact passPendingConsolidations_exitQueue passed
 
 /-- A pass leaves its list from the first source that is unslashed and cannot withdraw.
 
@@ -323,19 +439,70 @@ theorem getElem?_toNat_of_ofNatChecked {position : Fin state.validators.data.siz
   rw [getElem?_toNat_eq_of_ofNatChecked checked]
   simp
 
+/-- From Electra: the steps of queueing a consolidation.
+
+The consolidation churn writes only the churn left and the earliest consolidation epoch.
+
+The source then gets that epoch as its exit, and the withdrawable epoch a fixed delay later.
+
+The consolidation is appended to the queue. -/
+theorem queueConsolidation_steps {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    ∃ (epoch withdrawal : Epoch) (rest : Gwei) (written : BeaconState preset fork), ∃ pending,
+      computeConsolidationEpochAndUpdateChurn config state electra source.effectiveBalance =
+        .ok ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch }, epoch) ∧
+      addChecked epoch config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY = .ok withdrawal ∧
+      ({ state with
+          consolidationBalanceToConsume := fun _ => rest
+          earliestConsolidationEpoch := fun _ => epoch } : BeaconState preset fork).setValidator
+        sourceIndex { source with exitEpoch := epoch, withdrawableEpoch := withdrawal } =
+          .ok written ∧
+      appendWithinLimit (written.pendingConsolidations electra) ⟨sourceIndex, targetIndex⟩ =
+        .ok pending ∧
+      after = { written with pendingConsolidations := fun _ => pending } := by
+  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨⟨_, epoch⟩, churned, withdrawal, added, written, set, pending, appended, rfl⟩ :=
+    computed
+  have call := churned
+  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at churned
+  obtain ⟨_, _, _, _, ⟨_, rest⟩, _, churned⟩ := churned
+  cases churned
+  exact ⟨_, withdrawal, rest, written, pending, call, added, set, appended, rfl⟩
+
+/-- Queueing a consolidation keeps the size of the registry and every balance. -/
+private theorem queueConsolidation_kept {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    after.validators.data.size = state.validators.data.size ∧
+      after.balances = state.balances := by
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
+  have sizes := (sameSizes_setValidator set).1
+  obtain ⟨_, rfl⟩ := setValidator_ok set
+  exact ⟨sizes, rfl⟩
+
 /-- Queueing a consolidation keeps the sizes of the registry and the balances. -/
 theorem sameSizes_queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
     {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
-    SameSizes state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  obtain ⟨_, _, _, set, _, _, rfl⟩ := computed
-  obtain ⟨_, validators, balances⟩ := computeConsolidationEpochAndUpdateChurn_earliest churned
-  exact (SameSizes.trans ⟨congrArg (·.data.size) validators, congrArg (·.data.size) balances⟩
-    (sameSizes_setValidator set)).trans ⟨rfl, rfl⟩
+    SameSizes state after :=
+  have kept := queueConsolidation_kept computed
+  ⟨kept.1, congrArg (·.data.size) kept.2⟩
+
+/-- Queueing a consolidation keeps every balance. -/
+theorem queueConsolidation_balances {electra : .pectra ≤ fork} {sourceIndex : ValidatorIndex}
+    {source : Validator} {targetIndex : ValidatorIndex}
+    (computed :
+      queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
+    after.balances = state.balances :=
+  (queueConsolidation_kept computed).2
 
 /-- A consolidation request keeps the sizes of the registry and the balances. -/
 theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
@@ -350,6 +517,153 @@ theorem sameSizes_processConsolidationRequest {electra : .pectra ≤ fork}
     | (cases computed; exact SameSizes.refl _)
     | exact (switchToCompoundingValidator_compounding (liftAccessor_ok.mp computed)).1
     | exact sameSizes_queueConsolidation computed
+
+/-! ## The consolidation request -/
+
+/-- From Electra: when a request queues its source to consolidate into a target.
+
+The two keys differ, and the pending consolidations are not at their limit.
+
+The churn of consolidations is more than the activation balance.
+
+The source and the target are the first validators with their keys.
+
+The request comes from the address of the execution credentials of the source.
+
+The target has compounding credentials.
+
+Both are active in the current epoch, and neither has an exit epoch set.
+
+The source has been active for at least the shard committee period.
+
+The source has no pending balance to withdraw. -/
+structure ConsolidationAccepted (config : Config) (state : BeaconState preset fork)
+    (electra : .pectra ≤ fork) (request : ConsolidationRequest) (sourceIndex : ValidatorIndex)
+    (source : Validator) (targetIndex : ValidatorIndex) (target : Validator) : Prop where
+  different : request.sourcePubkey ≠ request.targetPubkey
+  room : (state.pendingConsolidations electra).data.size ≠ preset.PENDING_CONSOLIDATIONS_LIMIT.toNat
+  churn : ∃ churn, getConsolidationChurnLimit config state = .ok churn ∧
+    preset.MIN_ACTIVATION_BALANCE < churn
+  sourceFirst :
+    (findValidatorByPubkey state request.sourcePubkey).map (·.val) = some sourceIndex.toNat
+  sourceAt : state.validators.data[sourceIndex.toNat]? = some source
+  targetFirst :
+    (findValidatorByPubkey state request.targetPubkey).map (·.val) = some targetIndex.toNat
+  targetAt : state.validators.data[targetIndex.toNat]? = some target
+  execution : hasExecutionWithdrawalCredential source = true
+  address : credentialAddress source.withdrawalCredentials = request.sourceAddress
+  compounding : hasCompoundingWithdrawalCredential target = true
+  sourceActive : isActiveValidator source (getCurrentEpoch state) = true
+  targetActive : isActiveValidator target (getCurrentEpoch state) = true
+  sourceStays : source.exitEpoch = FAR_FUTURE_EPOCH
+  targetStays : target.exitEpoch = FAR_FUTURE_EPOCH
+  served : source.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat ≤
+    (getCurrentEpoch state).toNat
+  owed : getPendingBalanceToWithdraw state electra sourceIndex = .ok 0
+
+/-- From Electra: when a request switches a validator to compounding credentials.
+
+The source and the target have one key.
+
+The validator is the first with that key, at this index.
+
+It passes the check of a switch request. -/
+structure SwitchAccepted (state : BeaconState preset fork) (request : ConsolidationRequest)
+    (index : ValidatorIndex) (validator : Validator) : Prop where
+  same : request.sourcePubkey = request.targetPubkey
+  first : (findValidatorByPubkey state request.sourcePubkey).map (·.val) = some index.toNat
+  found : state.validators.data[index.toNat]? = some validator
+  valid : isValidSwitchToCompoundingRequest state request validator = true
+
+/-- From Electra, a consolidation request that meets every condition is the queueing of its source.
+
+The queueing step may still fail on its own. -/
+theorem processConsolidationRequest_eq_queueConsolidation {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest} {sourceIndex targetIndex : ValidatorIndex}
+    {source target : Validator}
+    (accepted :
+      ConsolidationAccepted config state electra request sourceIndex source targetIndex target) :
+    processConsolidationRequest config state electra request =
+      queueConsolidation config state electra sourceIndex source targetIndex := by
+  obtain ⟨different, room, ⟨churn, churnOk, above⟩, sourceFirst, sourceAt, targetFirst, targetAt,
+    execution, address, compounding, sourceActive, targetActive, sourceStays, targetStays, served,
+    owed⟩ := accepted
+  obtain ⟨sourcePosition, sourceFound, sourceValue⟩ := Option.map_eq_some_iff.mp sourceFirst
+  obtain ⟨targetPosition, targetFound, targetValue⟩ := Option.map_eq_some_iff.mp targetFirst
+  have sourceChecked : ofNatChecked sourcePosition.val = .ok sourceIndex :=
+    ofNatChecked_ok_iff.mpr ⟨sourceValue ▸ sourceIndex.toNat_lt, sourceValue.symm⟩
+  have targetChecked : ofNatChecked targetPosition.val = .ok targetIndex :=
+    ofNatChecked_ok_iff.mpr ⟨targetValue ▸ targetIndex.toNat_lt, targetValue.symm⟩
+  have sourceIs : state.validators.data[sourcePosition] = source := by
+    rw [← sourceValue] at sourceAt
+    simpa using sourceAt
+  have targetIs : state.validators.data[targetPosition] = target := by
+    rw [← targetValue] at targetAt
+    simpa using targetAt
+  have fits : source.activationEpoch.toNat + config.SHARD_COMMITTEE_PERIOD.toNat < 2 ^ 64 := by
+    have := (getCurrentEpoch state).toNat_lt
+    omega
+  have eligible := addChecked_of_lt fits
+  have early : ¬getCurrentEpoch state < source.activationEpoch + config.SHARD_COMMITTEE_PERIOD := by
+    rw [UInt64.lt_iff_toNat_lt, toNat_add_of_lt fits]
+    omega
+  simp [processConsolidationRequest, bind, Except.bind, liftAccessor, liftArith, Except.mapError,
+    different, room, churnOk, UInt64.not_le.mpr above, sourceFound, targetFound,
+    sourceChecked, targetChecked, sourceIs, targetIs, execution, address, compounding,
+    sourceActive, targetActive, sourceStays, targetStays, eligible, early, owed]
+
+/-- From Electra, a request with two different keys that succeeds returns its state, or queues.
+
+It queues only when every condition holds, for the first validators with the two keys. -/
+theorem eq_or_queueConsolidation_of_processConsolidationRequest {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest} (different : request.sourcePubkey ≠ request.targetPubkey)
+    (computed : processConsolidationRequest config state electra request = .ok after) :
+    after = state ∨ ∃ sourceIndex source targetIndex target,
+      ConsolidationAccepted config state electra request sourceIndex source targetIndex target ∧
+        queueConsolidation config state electra sourceIndex source targetIndex = .ok after := by
+  unfold processConsolidationRequest at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  split at computed
+  · simp_all
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; exact .inl rfl)
+    | skip
+  rename_i _ room _ churn churnOk above _ sourcePosition sourceFound _ targetPosition targetFound _
+    sourceIndex sourceChecked _ targetIndex targetChecked credentials compounding active stays _
+    eligible eligibleOk served _ owed owedOk positive
+  rw [liftAccessor_ok, liftArith, mapError_ok_iff] at eligibleOk
+  have sourceValue := (ofNatChecked_ok_iff.mp
+    (mapError_ok_iff.mp (liftAccessor_ok.mp sourceChecked))).2
+  have targetValue := (ofNatChecked_ok_iff.mp
+    (mapError_ok_iff.mp (liftAccessor_ok.mp targetChecked))).2
+  have none : owed = 0 := UInt64.toNat_inj.mp (by
+    rw [UInt64.lt_iff_toNat_lt] at positive
+    simp only [UInt64.toNat_zero] at positive ⊢
+    omega)
+  simp only [Bool.and_eq_true, beq_iff_eq] at credentials active stays
+  rw [UInt64.not_lt, UInt64.le_iff_toNat_le, (addChecked_ok_iff.mp eligibleOk).2] at served
+  refine .inr ⟨sourceIndex, _, targetIndex, state.validators.data[targetPosition],
+    ⟨different, by simpa using room, ⟨churn, liftAccessor_ok.mp churnOk, UInt64.not_le.mp above⟩,
+      by simp [sourceFound, sourceValue], getElem?_toNat_of_ofNatChecked sourceChecked,
+      by simp [targetFound, targetValue], getElem?_toNat_of_ofNatChecked targetChecked,
+      credentials.1, credentials.2, compounding, active.1, active.2, stays.1, stays.2, served,
+      none ▸ liftAccessor_ok.mp owedOk⟩, computed⟩
+
+/-- From Electra, a request with two different keys returns its state while the churn is too small.
+
+Too small means at most the activation balance. -/
+theorem processConsolidationRequest_eq_ok_of_churn_le {electra : .pectra ≤ fork}
+    {request : ConsolidationRequest} (different : request.sourcePubkey ≠ request.targetPubkey)
+    {churn : Gwei} (churnOk : getConsolidationChurnLimit config state = .ok churn)
+    (small : churn ≤ preset.MIN_ACTIVATION_BALANCE) :
+    processConsolidationRequest config state electra request = .ok state := by
+  unfold processConsolidationRequest
+  split
+  · simp_all
+  simp only [bind, Except.bind, pure, Except.pure, liftAccessor, Except.mapError, churnOk, small]
+  split <;> simp
 
 /-! ## All the operations of a block -/
 
@@ -368,7 +682,7 @@ theorem sameSizes_processExecutionRequests {body : BeaconBlockBody preset fork}
       (SameSizes.refl _) folded
   have requested := keep (fun _ _ _ ok =>
     ⟨congrArg (·.data.size) (processDepositRequest_ok ok).2.1,
-      congrArg (·.data.size) (processDepositRequest_ok ok).2.2⟩) depositedOk
+      congrArg (·.data.size) (processDepositRequest_ok ok).2.2.1⟩) depositedOk
   exact requested.trans <|
     (keep (fun _ _ _ ok => sameSizes_processWithdrawalRequest ok) withdrawnOk).trans
       (keep (fun _ _ _ ok => sameSizes_processConsolidationRequest ok) consolidated)
@@ -434,5 +748,103 @@ theorem balancesMatch_processOperations {checks : SignatureChecks}
   · exact balancesMatch_of_sameSizes (sameSizes_processExecutionRequests requestsOk) six
   · cases requestsOk
     exact six
+
+/-- A partial withdrawal writes the exit churn and the queue of partial withdrawals only. -/
+theorem requestPartialWithdrawal_kept {fork : Fork} {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex} {v : Validator} {amount owed : Gwei}
+    (ok : requestPartialWithdrawal config s electra index v amount owed = .ok t) :
+    t.validators = s.validators ∧ t.balances = s.balances ∧
+      t.pendingConsolidations = s.pendingConsolidations ∧
+      t.depositBalanceToConsume = s.depositBalanceToConsume := by
+  simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at ok
+  obtain ⟨_, _, _, _, ok⟩ := ok
+  split at ok
+  · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at ok
+    obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := ok
+    simp only [computeExitEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at churned
+    obtain ⟨_, _, _, _, _, _, final⟩ := churned
+    cases final
+    exact ⟨rfl, rfl, rfl, rfl⟩
+  · cases ok
+    exact ⟨rfl, rfl, rfl, rfl⟩
+
+/-- From Electra: when a withdrawal request is accepted for a validator.
+
+The validator is the first with the key of the request, at this index.
+
+It has execution credentials, from the address of the request.
+
+It may make a request: it is active, does not exit, and has been active for long enough. -/
+structure WithdrawalAccepted (config : Config) (state : BeaconState preset fork)
+    (request : WithdrawalRequest) (index : ValidatorIndex) (validator : Validator) : Prop where
+  first : (findValidatorByPubkey state request.validatorPubkey).map (·.val) = some index.toNat
+  found : state.validators.data[index.toNat]? = some validator
+  execution : hasExecutionWithdrawalCredential validator = true
+  address : credentialAddress validator.withdrawalCredentials = request.sourceAddress
+  allowed : canRequest config state validator = .ok true
+
+/-- A validator that may make a request is active. -/
+theorem isActiveValidator_of_canRequest {validator : Validator}
+    (allowed : canRequest config state validator = .ok true) :
+    isActiveValidator validator (getCurrentEpoch state) = true := by
+  unfold canRequest at allowed
+  dsimp only at allowed
+  split at allowed
+  · cases allowed
+  · rename_i active
+    have both := (not_or.mp (by simpa only [Bool.or_eq_true] using active)).1
+    simpa using both
+
+/-- Withdrawal requests do nothing, exit an accepted validator, or run its partial withdrawal. -/
+theorem withdrawalRequest_cases {fork : Fork} {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {request : WithdrawalRequest}
+    (ok : processWithdrawalRequest config s electra request = .ok t) :
+    t = s ∨ (∃ index validator, WithdrawalAccepted config s request index validator ∧
+        initiateValidatorExit config s index = .ok t) ∨
+      ∃ index validator owed, WithdrawalAccepted config s request index validator ∧
+        requestPartialWithdrawal config s electra index validator request.amount owed = .ok t := by
+  have accepted {position : Fin s.validators.data.size} {index : ValidatorIndex}
+      (located : findValidatorByPubkey s request.validatorPubkey = some position)
+      (checked : liftAccessor (liftArith (ofNatChecked position.val)) = .ok index)
+      (credentials : (hasExecutionWithdrawalCredential s.validators.data[position] &&
+        credentialAddress s.validators.data[position].withdrawalCredentials ==
+          request.sourceAddress) = true)
+      (allowed : canRequest config s s.validators.data[position] = .ok true) :
+      WithdrawalAccepted config s request index s.validators.data[position] := by
+    have value := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    simp only [Bool.and_eq_true, beq_iff_eq] at credentials
+    exact ⟨by simp [located, value], getElem?_toNat_of_ofNatChecked checked, credentials.1,
+      credentials.2, allowed⟩
+  unfold processWithdrawalRequest at ok
+  simp only [bind, Except.bind, pure, Except.pure] at ok
+  repeat' split at ok
+  all_goals try first
+    | (cases ok; exact .inl rfl)
+    | (cases ok; done)
+  all_goals subst_vars
+  · exact .inr (.inl ⟨_, _, accepted ‹_› ‹_› ‹_› ‹_›, liftAccessor_ok.mp ok⟩)
+  · exact .inr (.inr ⟨_, _, _, accepted ‹_› ‹_› ‹_› ‹_›, ok⟩)
+/-- Consolidation requests either do nothing, switch to compounding, or queue an accepted source. -/
+theorem consolidationRequest_cases {fork : Fork} {s t : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {request : ConsolidationRequest}
+    (ok : processConsolidationRequest config s electra request = .ok t) :
+    t = s ∨ (∃ index validator, SwitchAccepted s request index validator ∧
+        switchToCompoundingValidator s electra index = .ok t) ∨
+      ∃ sourceIndex source targetIndex target,
+        ConsolidationAccepted config s electra request sourceIndex source targetIndex target ∧
+          queueConsolidation config s electra sourceIndex source targetIndex = .ok t := by
+  by_cases same : request.sourcePubkey = request.targetPubkey
+  · unfold processConsolidationRequest at ok
+    simp only [same, beq_self_eq_true, ↓reduceIte, bind, Except.bind, pure, Except.pure] at ok
+    repeat' split at ok
+    all_goals try first
+      | (cases ok; exact .inl rfl)
+      | (cases ok; done)
+    rename_i _ position located _ index checked valid
+    have value := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp (liftAccessor_ok.mp checked))).2
+    exact .inr (.inl ⟨index, _, ⟨same, by simp [same, located, value],
+      getElem?_toNat_of_ofNatChecked checked, valid⟩, liftAccessor_ok.mp ok⟩)
+  · exact (eq_or_queueConsolidation_of_processConsolidationRequest same ok).imp_right .inr
 
 end EthLib.Consensus

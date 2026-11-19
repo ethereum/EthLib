@@ -17,6 +17,12 @@ extern lean_object*
 eth_engine_finalized_execution_block_hash(lean_object* args);
 
 extern lean_object*
+eth_engine_payload_attributes_event(lean_object* args);
+
+extern lean_object*
+eth_engine_payload_attributes_event_gloas(lean_object* args);
+
+extern lean_object*
 eth_consensus_get_custody_column_bits(lean_object* args);
 
 extern lean_object*
@@ -102,6 +108,18 @@ eth_consensus_verify_builder_request_auth_signature(
 );
 
 extern lean_object*
+eth_consensus_builder_request_auth_failures(lean_object* args);
+
+extern lean_object*
+eth_consensus_builder_preferences_failures(lean_object* args);
+
+extern lean_object*
+eth_consensus_default_auth_data(lean_object* args);
+
+extern lean_object*
+eth_consensus_relay_submission_bid(lean_object* args);
+
+extern lean_object*
 eth_consensus_builder_bid_value(
   lean_object* args
 );
@@ -133,26 +151,333 @@ extern lean_object*
 eth_consensus_builder_api_ssz(lean_object* args);
 
 extern lean_object*
-eth_pq_keys_ssz(
-  lean_object* args
-);
+eth_consensus_api_spec(lean_object* args);
 
 extern lean_object*
-eth_pq_keys_possession_signing_root(
-  lean_object* name,
-  lean_object* genesis_validators_root,
-  lean_object* pubkey,
-  lean_object* xmss_public_key
-);
+eth_consensus_api_fork_schedule(lean_object* args);
 
 extern lean_object*
-eth_pq_keys_is_valid_possession_proof(
-  lean_object* name,
-  lean_object* genesis_validators_root,
-  lean_object* pubkey,
-  lean_object* xmss_public_key,
-  lean_object* proof
-);
+eth_consensus_api_deposit_contract(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_genesis(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_state_query(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_state_query_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_validator_status(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_builder_status(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_registry_query(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_validator_balances_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_block_query(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_blobs(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_blobs_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_block_query_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_header(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_headers(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_columns(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_columns_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_payload_envelope(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_payload_envelope_ssz(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_light_client_bootstrap(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_bootstrap(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_bootstrap, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_bootstrap_ssz(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_bootstrap_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_bootstrap_ssz, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_updates(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_updates(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_updates, args, 5, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_updates_ssz(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_updates_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_updates_ssz, args, 6, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_decode_updates(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_decode_updates(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_decode_updates, args, 4, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_light_client_latest(lean_object* args);
+
+PyObject*
+py_consensus_api_light_client_latest(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_light_client_latest, args, 4, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_attestation_data(lean_object* args);
+
+PyObject*
+py_consensus_api_attestation_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_attestation_data, args, 9, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_payload_attestation_data(lean_object* args);
+
+PyObject*
+py_consensus_api_payload_attestation_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_attestation_data, args, 9, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_fork_choice(lean_object* args);
+
+PyObject*
+py_consensus_api_fork_choice(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_fork_choice, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_chain_heads(lean_object* args);
+
+PyObject*
+py_consensus_api_chain_heads(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_chain_heads, args, 8, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_chain_events(lean_object* args);
+
+PyObject*
+py_consensus_api_chain_events(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_chain_events, args, 10, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_fast_confirmation_event(lean_object* args);
+
+PyObject*
+py_consensus_api_fast_confirmation_event(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(
+    eth_consensus_api_fast_confirmation_event, args, 7, FORK_CHOICE_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_aggregate_attestation(lean_object* args);
+
+PyObject*
+py_consensus_api_aggregate_attestation(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_aggregate_attestation, args, 9, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_sync_committee_contribution(lean_object* args);
+
+PyObject*
+py_consensus_api_sync_committee_contribution(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_sync_committee_contribution, args, 8, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_attestation_rewards(lean_object* args);
+
+PyObject*
+py_consensus_api_attestation_rewards(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_attestation_rewards, args, 6, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_sync_committee_rewards(lean_object* args);
+
+PyObject*
+py_consensus_api_sync_committee_rewards(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_sync_committee_rewards, args, 5, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_block_rewards(lean_object* args);
+
+PyObject*
+py_consensus_api_block_rewards(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_block_rewards, args, 5, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_consensus_block_value(lean_object* args);
+
+PyObject*
+py_consensus_api_consensus_block_value(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_consensus_block_value, args, 5, TRANSITION_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_prefer_local_v3(lean_object* args);
+
+PyObject*
+py_consensus_api_prefer_local_v3(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_prefer_local_v3, args, 3, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_capped_bid_value(lean_object* args);
+
+PyObject*
+py_consensus_api_capped_bid_value(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_capped_bid_value, args, 1, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_bid_accepted(lean_object* args);
+
+PyObject*
+py_consensus_api_bid_accepted(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_bid_accepted, args, 1, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_select_payload(lean_object* args);
+
+PyObject*
+py_consensus_api_select_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_select_payload, args, 2, CONSENSUS_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_builder_config_terms(lean_object* args);
+
+PyObject*
+py_consensus_api_builder_config_terms(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_builder_config_terms, args, 2, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_api_duties(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_committees(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_sync_committees(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_ptc(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_ptc_ssz(lean_object* args);
 
 extern lean_object*
 eth_consensus_compute_shuffled_permutation(
@@ -502,6 +827,8 @@ extern lean_object* eth_consensus_get_data_column_sidecars_from_column_sidecar(l
 extern lean_object* eth_consensus_light_client_sync(lean_object* args);
 extern lean_object* eth_consensus_fork_choice(lean_object* args);
 extern lean_object* eth_consensus_gossip_validation(lean_object* args);
+extern lean_object* eth_consensus_api_post(lean_object* args);
+extern lean_object* eth_consensus_api_gossip_event(lean_object* args);
 extern lean_object* eth_consensus_block_to_light_client_header(lean_object* args);
 extern lean_object* eth_consensus_light_client_update_proofs(lean_object* args);
 extern lean_object* eth_consensus_is_better_update(lean_object* args);
@@ -633,6 +960,206 @@ py_consensus_builder_api_ssz(
 }
 
 PyObject*
+py_consensus_api_spec(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_spec, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_fork_schedule(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_fork_schedule, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_deposit_contract(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_deposit_contract, args, 2, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_genesis(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_genesis, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_state_query(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_state_query, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_state_query_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_state_query_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_validator_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_validator_status, args, 3, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_builder_status(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_builder_status, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_registry_query(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_registry_query, args, 7, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_validator_balances_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_validator_balances_ssz, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_block_query(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_block_query, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_blobs(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_blobs, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_blobs_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_blobs_ssz, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_block_query_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_block_query_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_header(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_header, args, 7, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_headers(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_headers, args, 9, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_columns(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_columns, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_columns_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_columns_ssz, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_payload_envelope(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_envelope, args, 8, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_payload_envelope_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_payload_envelope_ssz, args, 8, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_duties(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_duties, args, 8, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_committees(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_committees, args, 6, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_sync_committees(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_sync_committees, args, 4, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_ptc(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_ptc, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_ptc_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_ptc_ssz, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
 py_consensus_is_valid_builder_signature(
   PyObject* self,
   PyObject* args
@@ -697,6 +1224,104 @@ py_consensus_verify_builder_request_auth_signature(
 }
 
 PyObject*
+py_consensus_builder_request_auth_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_request_auth_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_builder_preferences_failures(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_builder_preferences_failures, args, 8, SSZ_ERROR);
+}
+
+PyObject*
+py_consensus_default_auth_data(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_default_auth_data, args, 1, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_relay_submission_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_submission_bid, args, 4, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_validators(lean_object* args);
+
+PyObject*
+py_consensus_relay_validators(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_validators, args, 4, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_delivered_payload(lean_object* args);
+
+PyObject*
+py_consensus_relay_delivered_payload(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_delivered_payload, args, 1, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_received_bid(lean_object* args);
+
+PyObject*
+py_consensus_relay_received_bid(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_received_bid, args, 1, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_delivered_keeps(lean_object* args);
+
+PyObject*
+py_consensus_relay_delivered_keeps(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_delivered_keeps, args, 6, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_received_keeps(lean_object* args);
+
+PyObject*
+py_consensus_relay_received_keeps(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_received_keeps, args, 5, SSZ_ERROR);
+}
+
+extern lean_object*
+eth_consensus_relay_sort_delivered(lean_object* args);
+
+PyObject*
+py_consensus_relay_sort_delivered(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_sort_delivered, args, 2, SSZ_ERROR);
+}
+
+PyObject*
 py_consensus_builder_bid_value(
   PyObject* self,
   PyObject* args
@@ -726,51 +1351,6 @@ py_consensus_upgrade_operation(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_upgrade_operation, args, 3, SSZ_ERROR);
-}
-
-PyObject*
-py_pq_keys_ssz(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_pq_keys_ssz, args, 2, SSZ_ERROR);
-}
-
-PyObject*
-py_pq_keys_possession_signing_root(
-  PyObject* self,
-  PyObject* args
-) {
-  PyObject *name_obj;
-  const uint8_t *root, *pubkey, *key;
-  Py_ssize_t root_len, pubkey_len, key_len;
-  if (!PyArg_ParseTuple(args, "Oy#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
-                        &key, &key_len)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_pq_keys_possession_signing_root(name, mk_bytearray(root, root_len),
-      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len)),
-    CONSENSUS_ERROR);
-}
-
-PyObject*
-py_pq_keys_is_valid_possession_proof(
-  PyObject* self,
-  PyObject* args
-) {
-  PyObject *name_obj;
-  const uint8_t *root, *pubkey, *key, *proof;
-  Py_ssize_t root_len, pubkey_len, key_len, proof_len;
-  if (!PyArg_ParseTuple(args, "Oy#y#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
-                        &key, &key_len, &proof, &proof_len)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybool(
-    eth_pq_keys_is_valid_possession_proof(name, mk_bytearray(root, root_len),
-      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len),
-      mk_bytearray(proof, proof_len)),
-    CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -1135,6 +1715,22 @@ py_consensus_gossip_validation(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_gossip_validation, args, 10, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_post(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_post, args, 9, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_gossip_event(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_gossip_event, args, 4, FORK_CHOICE_ERROR);
 }
 
 PyObject*
@@ -1911,6 +2507,22 @@ py_engine_prepare_execution_payload_gloas(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_prepare_execution_payload_gloas, args, 14, PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_payload_attributes_event(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_payload_attributes_event, args, 9, PROPOSER_ERROR);
+}
+
+PyObject*
+py_engine_payload_attributes_event_gloas(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_payload_attributes_event_gloas, args, 13, PROPOSER_ERROR);
 }
 
 PyObject*

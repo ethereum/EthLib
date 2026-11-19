@@ -95,6 +95,37 @@ def anyPayloadOf (p : Consensus.ExecutionPayload preset fork) : Option AnyPayloa
       excessBlobGas := sinceValue p.excessBlobGas }
   else none
 
+/-- The JSON parameters of a payload request, for the method the beacon chain calls at its fork.
+
+The payload comes first, with the fields of version 1, 2 or 3 of the structure for that fork.
+
+From Gloas it is version 4 of the structure, with the access list and the slot of the payload.
+
+From Deneb the versioned hashes and the parent beacon block root follow.
+
+From Electra the request lists follow.
+
+It has none when the logs Bloom filter of the preset does not have 256 bytes.
+
+It also has none when the request lists cannot be made.
+
+It has none before Bellatrix and from Heze, where the beacon chain calls no version. -/
+def newPayloadRequestJson (r : Consensus.NewPayloadRequest preset fork) : Option Lean.Json := do
+  guard (newPayloadVersion fork ≠ 0)
+  let p := r.executionPayload
+  let any ← anyPayloadOf p
+  let shape : Fork := if .dencun ≤ fork then .dencun else if .shapella ≤ fork then .shapella
+    else .paris
+  let payload ← (any.atFork shape).toOption
+  let requests ← r.requestsList.toOption
+  let amsterdam := do
+    let accessList ← sinceValue p.blockAccessList
+    let slot ← sinceValue p.slotNumber
+    pure (ByteArray.mk accessList.data, slot)
+  return newPayloadParamsJson (newPayloadVersion fork) payload amsterdam
+    (((sinceValue r.versionedHashes).map (·.data.toList)).getD [])
+    ((sinceValue r.parentBeaconBlockRoot).getD 0) ((sinceValue requests).getD [])
+
 /-- The block of a payload of the beacon chain, at the active fork of a chain configuration.
 
 The version of the method at the fork of the beacon chain must take that fork.

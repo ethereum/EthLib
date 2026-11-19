@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Vrf.Verify
 public import EthLib.Cryptography.Vrf.KeyGen
 public import EthLib.Cryptography.Proofs.Vrf.Hash
-public import EthLib.Cryptography.Proofs.Merkle.Binding
+public import EthLib.Cryptography.Proofs.Merkle.Binding.Collision
 
 /-!
 # Proofs: VRF verification
@@ -47,10 +47,11 @@ The output is then the output hash of the index and the secret.
 -/
 theorem verify_eq_some_iff {root : Digest} {i : UInt32} {o : Opening} {y : Digest} :
     verify root i o = some y ↔
-      (Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList).run = root ∧
+      (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash o.secret) o.path.toList).run = root ∧
         y = outputHash i o.secret := by
   unfold verify
-  by_cases hp : (Merkle.climb treeHash 0 i.toNat (leafHash o.secret) o.path.toList).run = root <;>
+  by_cases hp :
+      (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash o.secret) o.path.toList).run = root <;>
     simp [hp, eq_comm]
 
 /-- The output of a valid opening is the hash of its index and its secret. -/
@@ -66,7 +67,7 @@ theorem verify_opening (secrets : UInt32 → Digest) (i : UInt32) :
   refine verify_eq_some_iff.mpr ⟨?_, rfl⟩
   -- Leaf `i` of the tree commits to secret `i`.
   have hleaf : leaves secrets i.toNat = leafHash (secrets i) := by simp [leaves]
-  show (Merkle.climb treeHash 0 i.toNat (leafHash (secrets i))
+  show (Merkle.climb treeHash ⟨0, i.toNat⟩ (leafHash (secrets i))
     (Merkle.path treeHash (m := Id) (leaves secrets) VRF_TREE_HEIGHT i.toNat).run.toList).run = _
   rw [← hleaf]
   exact Merkle.climb_path_root treeHash (leaves secrets) i.toNat_lt
@@ -83,7 +84,7 @@ It is the two node inputs of the Merkle collision search, at the lowest level wh
 
 With none, it is the two leaf inputs, if the secrets differ but their leaves are equal. -/
 def findHashCollision (i : UInt32) (o o' : Opening) : Option (ByteArray × ByteArray) :=
-  match Merkle.findCollision treeHash 0 i.toNat (leafHash o.secret) (leafHash o'.secret)
+  match Merkle.findCollision treeHash ⟨0, i.toNat⟩ (leafHash o.secret) (leafHash o'.secret)
       o.path.toList o'.path.toList with
   | some c => some (nodeInput c.x.1 c.x.2, nodeInput c.y.1 c.y.2)
   | none =>
@@ -108,7 +109,7 @@ theorem findHashCollision_valid {i : UInt32} {o o' : Opening} {p : ByteArray × 
   · -- A node collision, which `findCollision_valid` proves valid.
     next c hc =>
     cases h
-    exact isHashCollision_of_collision (Merkle.findCollision_valid treeHash _ _ _ _ _ _ c hc).1
+    exact isHashCollision_of_collision (Merkle.findCollision_valid treeHash _ _ _ _ _ c hc).1
   · -- A leaf collision: a leaf input determines its secret, so the two inputs differ.
     split at h
     · next hleaf =>
@@ -160,7 +161,7 @@ theorem verify_secret_unique {root : Digest} {i : UInt32} {o o' : Opening} {y y'
     o.secret = o'.secret ∨ ∃ p, findHashCollision i o o' = some p ∧ IsHashCollision p := by
   -- Both paths lead to the same root from the same index.
   have hroot := (verify_eq_some_iff.mp h).1.trans (verify_eq_some_iff.mp h').1.symm
-  have binding := Merkle.climb_binding treeHash _ _ 0 i.toNat _ _ (by simp) hroot
+  have binding := Merkle.climb_binding treeHash _ _ ⟨0, i.toNat⟩ _ _ (by simp) hroot
   -- The search succeeds unless the secrets are equal.
   have found : o.secret = o'.secret ∨ (findHashCollision i o o').isSome := by
     unfold findHashCollision

@@ -21,6 +21,7 @@ A setup decodes from compressed points, or from the embedded hex strings of the 
 namespace EthLib.Cryptography.Kzg
 
 open EthLib.Cryptography.Kzg.Constants
+open EthLib.Base (exactBytes?)
 
 /-- The KZG trusted setup, as decoded points. -/
 structure TrustedSetup where
@@ -54,6 +55,22 @@ def hexToBytesAux : List Char → ByteArray → Option ByteArray
 def hexToBytes? (s : String) : Option ByteArray :=
   hexToBytesAux s.toList ByteArray.empty
 
+/-- Decode one compressed point of `G1` of the setup.
+
+A string of another length than 48 bytes, or one that does not decompress, is rejected. -/
+def decodeG1 (b : ByteArray) : Except KzgError Bls.G1 :=
+  match exactBytes? 48 b with
+  | some b => (Bls.G1.uncompress b).mapError fun _ => .invalidTrustedSetup
+  | none => .error .invalidTrustedSetup
+
+/-- Decode one compressed point of `G2` of the setup.
+
+A string of another length than 96 bytes, or one that does not decompress, is rejected. -/
+def decodeG2 (b : ByteArray) : Except KzgError Bls.G2 :=
+  match exactBytes? 96 b with
+  | some b => (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
+  | none => .error .invalidTrustedSetup
+
 /-- Decode a trusted setup from compressed points.
 
 The three lists have the lengths 4096, 4096 and 65.
@@ -63,13 +80,9 @@ A list of another length, or a point that does not decompress, is rejected.
 Decompression checks that a point is on its curve, not that it is in the subgroup. -/
 def ofBytes (g1LagrangeBytes g1MonomialBytes g2MonomialBytes : Array ByteArray) :
     Except KzgError TrustedSetup := do
-  let toG1 (b : ByteArray) : Except KzgError Bls.G1 :=
-    (Bls.G1.uncompress b).mapError fun _ => .invalidTrustedSetup
-  let toG2 (b : ByteArray) : Except KzgError Bls.G2 :=
-    (Bls.G2.uncompress b).mapError fun _ => .invalidTrustedSetup
-  let g1Lagrange ← g1LagrangeBytes.mapM toG1
-  let g1Monomial ← g1MonomialBytes.mapM toG1
-  let g2Monomial ← g2MonomialBytes.mapM toG2
+  let g1Lagrange ← g1LagrangeBytes.mapM decodeG1
+  let g1Monomial ← g1MonomialBytes.mapM decodeG1
+  let g2Monomial ← g2MonomialBytes.mapM decodeG2
   if h₁ : g1Lagrange.size = FIELD_ELEMENTS_PER_BLOB then
     if h₂ : g1Monomial.size = FIELD_ELEMENTS_PER_BLOB then
       if h₃ : g2Monomial.size = KZG_SETUP_G2_LENGTH then
@@ -87,7 +100,14 @@ def hexListToBytes (hex : Array String) : Except KzgError (Array ByteArray) :=
     | some b => .ok b
     | none   => .error .invalidTrustedSetup
 
-/-- Decode the embedded setup of the mainnet ceremony. -/
+/-- Decode the embedded setup of the mainnet ceremony.
+
+Compiled Lean evaluates each constant when its module is initialized.
+
+The attribute below inlines this slow decode at each compiled use, so no module initializer runs it.
+
+Every export reads the setup through one cached copy, so it decodes the setup once per process. -/
+@[macro_inline]
 def ofHex : Except KzgError TrustedSetup := do
   ofBytes (← hexListToBytes TrustedSetupData.g1LagrangeHex)
     (← hexListToBytes TrustedSetupData.g1MonomialHex)

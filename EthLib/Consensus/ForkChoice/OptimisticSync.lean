@@ -67,7 +67,9 @@ So a valid payload clears itself and only the payloads that it builds on.
 
 An invalid one clears itself and only the payloads that build on it.
 
-From Gloas the rule of the latest valid hash is not defined, so the caller names the first block.
+From Gloas the first invalid block is the block of the earliest invalid payload.
+
+The removal from the store of the fork choice finds it.
 
 From Gloas the latest verified ancestor of a node reads only the payloads that the node holds.
 
@@ -83,9 +85,9 @@ It happens too at an empty anchor of a store started from a checkpoint.
 
 From Gloas the status of a node is trusted: a full node must name a payload that the store holds.
 
-From Gloas the second case of an optimistic node is not yet specified here.
+From Gloas an invalid payload drops only the blocks built on it and their descendants.
 
-It needs the removal of an invalid payload from the store of the fork choice.
+The block of that payload stays, so its node without the payload can keep a branch viable.
 
 The store holds the blocks of one fork, so a payload chain never crosses into Fulu.
 
@@ -355,7 +357,9 @@ It leaves the set, with each known descendant whose payload chain holds it.
 
 Before Gloas those are all its known descendants.
 
-From Gloas the rule of the latest valid hash is not defined, and the caller names the block.
+From Gloas it is the block of the earliest invalid payload.
+
+The removal from the store of the fork choice finds it.
 
 Every other root stays.
 
@@ -464,13 +468,14 @@ The guide asks that every viable branch was invalidated, which needs history the
 
 This rule approximates it: one invalidated block above the justified block is enough.
 
-From Gloas the second case is not yet specified, and the rule fails when the head is not optimistic.
+From Gloas a dropped block is one built on an invalid payload, or a descendant of one.
 
-It also fails as the optimism of the head does. -/
+A block whose own payload is invalid stays, so its node without the payload can stay viable.
+
+It fails as the optimism of the head, the chains of the dropped blocks or the filter does. -/
 def isOptimisticNode (config : Config) (optimistic : OptimisticStore preset fork)
     (store : Store preset fork) : Except ForkChoiceError Bool := do
   if ← optimistic.isHeadOptimistic then return true
-  if .glamsterdam ≤ fork then throw (.forkNotYetSpecified fork)
   if !(← optimistic.invalidatedAbove store) then return false
   store.hasNoViableBranch config
 

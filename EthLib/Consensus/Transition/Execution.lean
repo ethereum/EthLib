@@ -219,15 +219,17 @@ def processExecutionPayload (config : Config) (engine : ExecutionEngine preset f
   let payload := body.executionPayload bellatrix
   let latest := state.latestExecutionPayloadHeader bellatrix
   ensure ((.shapella ≤ fork ∨ isMergeTransitionComplete state bellatrix = true) →
-    payload.parentHash = latest.blockHash) .wrongPayloadParentHash
+    payload.parentHash = latest.blockHash)
+    (.wrongPayloadParentHash payload.parentHash latest.blockHash)
   let mix ← liftAccessor (getRandaoMix state (getCurrentEpoch state))
-  ensure (payload.prevRandao = mix) .wrongPayloadRandao
+  ensure (payload.prevRandao = mix) (.wrongPayloadRandao payload.prevRandao mix)
   let time ← liftAccessor (liftArith (computeTimeAtSlot config state.genesisTime state.slot))
   ensure (payload.timestamp = time) (.wrongPayloadTimestamp payload.timestamp time)
   let blobs := (body.blobCommitments bellatrix).size
-  ensure (blobs ≤ (maxBlobsPerBlock config state).toNat) .tooManyBlobCommitments
+  ensure (blobs ≤ (maxBlobsPerBlock config state).toNat)
+    (.tooManyBlobCommitments blobs (maxBlobsPerBlock config state).toNat)
   let valid ← liftSsz (engine.verifyAndNotifyNewPayload (body.newPayloadRequest state bellatrix))
-  ensure (valid = true) .invalidExecutionPayload
+  ensure (valid = true) (.invalidExecutionPayload payload.blockHash)
   let header ← liftSsz payload.header
   return { state with latestExecutionPayloadHeader := fun _ => header }
 

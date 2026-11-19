@@ -1,4 +1,5 @@
 # Source: ethereum/beacon-APIs at 7911555e6a30c51f9b69bb168111a59f1ff8ee49
+97657de0e8b1297e86257e2b0f26ddadc5458cb6cbadaa7f9c436ffdec38d717  apis/eventstream/index.yaml
 2ceb5ffcb8bd7e207dcd6b7ab9ed74aa5b44c3aaa4868fadbb4b0b5811067ded  beacon-node-oapi.yaml
 f71b9a5ed11f9e2403bbf2ad177840167ac6870c1ab71b7c43cceab4f2c14558  types/altair/block.yaml
 03e545e8d4399258744b61524b3dd01cfd11821e2624cf9115889c632bd38890  types/altair/epoch_participation.yaml

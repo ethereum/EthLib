@@ -132,6 +132,11 @@ def padded (rateBits : Nat) (msg : ByteArray) : List Bool :=
 /-- FIPS 202 section 3.1.2 linear state index. -/
 def index (x y : Fin 5) (z : Fin 64) : Nat := 64 * (x.val + 5 * y.val) + z.val
 
+/-- The state of a bit string `S`, FIPS 202 section 3.1.2: `A[x, y, z] = S[64(5y + x) + z]`.
+
+FIPS 202 defines it for strings of 1600 bits; bits past the end of a shorter `S` read as zero. -/
+def ofString (S : List Bool) : State := fun x y z => S.getD (index x y z) false
+
 /-- Each padded message has a whole number of rate-sized blocks, at any positive bit rate. -/
 theorem padded_size_multiple {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) :
     (padded rateBits msg).length % rateBits = 0 := by
@@ -172,7 +177,9 @@ def paddedBlock {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray)
 
 /-- XOR one `rateBits`-bit block into the state, leaving the capacity unchanged.
 
-Bits at index 1600 and above are dropped, so the sponge requires a rate below 1600. -/
+Bits at index 1600 and above are dropped.
+
+FIPS 202 section 4 asks for a rate below 1600, where no bit is dropped. -/
 def absorb {rateBits : Nat} (a : State) (block : Block rateBits) : State := fun x y z =>
   let i := index x y z
   Bool.xor (a x y z) (if h : i < rateBits then block[i]'h else false)
@@ -183,7 +190,9 @@ def absorbAll {rateBits : Nat} (hr : 0 < rateBits) (msg : ByteArray) : State :=
     (fun a i => permutation (absorb a (paddedBlock hr msg i)))
     (fun _ _ _ => false)
 
-/-- The state bit at a linear index, modulo the state dimensions. -/
+/-- The state bit at a linear index, modulo the state dimensions.
+
+Bit `64(5y + x) + z` of the state string is `A[x, y, z]`, FIPS 202 section 3.1.3. -/
 def stateBit (a : State) (i : Nat) : Bool :=
   a (xy ((i / 64) % 5)) (xy ((i / 64) / 5)) (zcoord i)
 
@@ -198,17 +207,19 @@ def squeezeBytes (outBytes : Nat) (a : State) : Vector UInt8 outBytes :=
 
 /-- The sponge of FIPS 202 section 4, Algorithm 8, when `outBytes` fits in one rate block.
 
-FIPS 202 section 4 requires a rate below the 1600-bit width, so the capacity is positive. -/
-def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hb : rateBits < 1600)
-    (_hout : 8 * outBytes ≤ rateBits) (msg : ByteArray) : Vector UInt8 outBytes :=
+FIPS 202 section 4 asks for a rate below the 1600-bit width.
+
+At a larger rate, absorbing drops the block bits past 1600. -/
+def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hout : 8 * outBytes ≤ rateBits)
+    (msg : ByteArray) : Vector UInt8 outBytes :=
   squeezeBytes outBytes (absorbAll hr msg)
 
 /-- Original Keccak-256, FIPS 202 sections 4 and 5.2, at the 1088-bit rate. -/
 def keccak256 (msg : ByteArray) : Vector UInt8 32 :=
-  sponge (rateBits := 1088) (by decide) (by decide) (by decide) msg
+  sponge (rateBits := 1088) (by decide) (by decide) msg
 
 /-- Original Keccak-512, FIPS 202 sections 4 and 5.2, at the 576-bit rate. -/
 def keccak512 (msg : ByteArray) : Vector UInt8 64 :=
-  sponge (rateBits := 576) (by decide) (by decide) (by decide) msg
+  sponge (rateBits := 576) (by decide) (by decide) msg
 
 end EthLib.Cryptography.Models.KeccakBits

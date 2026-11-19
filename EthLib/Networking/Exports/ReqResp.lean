@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Networking.ReqResp.Encoding
 
 /-!
@@ -26,15 +26,16 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : ReqRespError → String
-  | .varint _ => "length prefix is not a valid varint"
+  | .varint e => s!"length prefix is not a valid varint: {reprStr e}"
   | .lengthOutOfBounds declared bound => s!"declared length {declared} is above {bound}"
   | .lengthBelowMinimum declared minimum => s!"declared length {declared} is below {minimum}"
   | .arith _ => "bound on the compressed size is 2^64 or more"
   | .compressedTooLong size bound => s!"{size} compressed bytes, more than {bound}"
-  | .frame _ => "payload is not a valid Snappy framed stream"
+  | .frame e => s!"payload is not a valid Snappy framed stream: {reprStr e}"
   | .lengthMismatch declared size => s!"payload has {size} bytes, not the declared {declared}"
   | .missingCode => "response chunk has no response code"
-  | .contextTruncated => "response chunk ends inside its context bytes"
+  | .contextTruncated needed available =>
+    s!"response chunk has {available} context bytes, not the {needed} of the method"
   | .trailingBytes count => s!"{count} bytes follow the last chunk of the payload"
 
 /-- Run a fallible computation, with its error as a code and a message. -/

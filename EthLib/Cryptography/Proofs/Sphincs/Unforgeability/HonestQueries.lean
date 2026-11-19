@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.Sphincs.Address
@@ -494,8 +495,9 @@ theorem otsLeaf_isQueryBoundP_zero (pkSeed : PkSeed) {key : OtsKey} (hE : Encodi
           fun _ => isQueryBoundP_pure _ _ _
 
 /-- A hypertree node hash queries `p` nowhere. -/
-theorem nodeHash_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat)
-    (left right : Digest) : IsQueryBoundP (nodeHash H pkSeed layer tree z j left right) p 0 :=
+theorem nodeHash_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree : Nat)
+    (q : Merkle.Position) (left right : Digest) :
+    IsQueryBoundP (nodeHash H pkSeed layer tree q left right) p 0 :=
   th_isQueryBoundP_zero H hH (not_isDerivationAddress_adrsNode _ _ _ _)
     (ne_adrsEnc (type := .tree) (by decide) _ _ _ _ _) (by simp; decide)
 
@@ -507,8 +509,8 @@ theorem forsLeafHash_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : F
 
 /-- A FORS node hash queries `p` nowhere. -/
 theorem forsNodeHash_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
-    (z j : Nat) (left right : Digest) :
-    IsQueryBoundP (forsNodeHash H pkSeed idx kappa z j left right) p 0 :=
+    (q : Merkle.Position) (left right : Digest) :
+    IsQueryBoundP (forsNodeHash H pkSeed idx kappa q left right) p 0 :=
   th_isQueryBoundP_zero H hH (not_isDerivationAddress_adrsFors _ _ _)
     (ne_adrsEnc (type := .forsTree) (by decide) _ _ _ _ _) (by simp; decide)
 
@@ -527,7 +529,7 @@ theorem treeRecover_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fi
   rw [treeRecover]
   exact isQueryBoundP_bind_zero _ _ (forsLeafHash_isQueryBoundP_zero H hH _ _ _ _ _) fun _ =>
     climb_isQueryBoundP_zero _
-      (fun _ _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _ _ _
+      (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _ _
 
 /-- Recovering a FORS public key queries `p` nowhere. -/
 theorem forsRecover_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat)
@@ -550,7 +552,7 @@ theorem layerRoot_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (idx : Na
   | none => exact isQueryBoundP_pure _ _ _
   | some leaf =>
     exact isQueryBoundP_bind_zero _ _ (climb_isQueryBoundP_zero _
-      (fun _ _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _ _ _)
+      (fun _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _ _)
       fun _ => isQueryBoundP_pure _ _ _
 
 include hprf
@@ -588,14 +590,14 @@ theorem otsSign_isQueryBoundP_zero (pkSeed : PkSeed) {key : OtsKey} (hE : Encodi
 theorem node_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat) :
     IsQueryBoundP (node H pkSeed prf layer tree z j) p 0 :=
   merkleNode_isQueryBoundP_zero _ _ (fun _ => otsPublicLeaf_isQueryBoundP_zero H prf hH hprf _ _)
-    (fun _ _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _
+    (fun _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _
 
 /-- A key's path queries `p` nowhere. -/
 theorem path_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree e : Nat) :
     IsQueryBoundP (path H pkSeed prf layer tree e) p 0 :=
   merkleSiblings_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_zero H prf hH hprf _ _)
-    (fun _ _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _ _
+    (fun _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _
 
 omit hH in
 /-- A FORS secret queries `p` nowhere, outside the derivations. -/
@@ -613,7 +615,7 @@ theorem forsLeaves_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin
 theorem forsNode_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
     (z j : Nat) : IsQueryBoundP (forsNode H pkSeed prf idx kappa z j) p 0 :=
   merkleNode_isQueryBoundP_zero _ _ (fun _ => forsLeaves_isQueryBoundP_zero H prf hH hprf _ _ _ _)
-    (fun _ _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _
+    (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _
 
 /-- A FORS public key queries `p` nowhere. -/
 theorem forsKey_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) :
@@ -628,7 +630,7 @@ theorem treeOpen_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin F
   isQueryBoundP_bind_zero _ _ (forsSecret_isQueryBoundP_zero prf hprf _ _ _) fun _ =>
     isQueryBoundP_bind_zero _ _ (merkleSiblings_isQueryBoundP_zero _ _
       (fun _ => forsLeaves_isQueryBoundP_zero H prf hH hprf _ _ _ _)
-      (fun _ _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _ _) _ _ _)
+      (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _)
       fun _ => isQueryBoundP_pure _ _ _
 
 /-- The FORS openings query `p` nowhere. -/

@@ -109,7 +109,7 @@ theorem runFrame_of_processMessage [LawfulGasMeter Meter] {message : Message for
           start within = .ok last ∧
         last.error = none ∧ ended.val.substate = last.substate := by
   obtain ⟨hpa, entry, entrySubstate, hentry, rfl⟩ := starts
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   obtain ⟨ended0, hdo, rolled⟩ := Base.map_ok_iff.mp h
   have hval := congrArg Subtype.val rolled
   simp only at hval
@@ -162,7 +162,7 @@ theorem runFrame_of_codeStarts [LawfulGasMeter Meter] {message : Message fork}
   | none =>
     simp only [ht] at h starts
     obtain ⟨prepared, hp, starts⟩ := starts
-    rw [processCreateMessage] at h
+    rw [processCreateMessage_unfold] at h
     obtain ⟨prepared', hp', h⟩ := Base.bind_ok_iff.mp h
     rw [hp] at hp'
     cases hp'

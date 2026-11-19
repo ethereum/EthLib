@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Except
 public import EthLib.Base.Except
 
 /-!
@@ -26,6 +27,8 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- Two folds whose steps agree on every item of the list read the same result.
+- A fold whose steps fail only with errors of a property fails only with them.
 - A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
 - A successful fold reads only inputs that its steps accept.
 - A fold over distinct keys changes the view of a key only in the step of that key.
@@ -35,9 +38,13 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 
 A mapped error leaves a success unchanged.
 
+A mapped computation fails exactly when the computation fails, with the map of its error.
+
 A map in `Option` that succeeds has one output per input, each the image of its input.
 
 It succeeds exactly when the function succeeds on every input.
+
+In a lawful monad, two continuations agree after a map when they agree on results of its length.
 -/
 
 @[expose] public section
@@ -340,19 +347,22 @@ theorem vector_mapM_eq_ok_iff {n : Nat} {xs : Vector α n} {ys : Vector β n} :
     rw [mapped] at onArray
     exact congrArg Except.ok (Vector.toArray_inj.mp (Except.ok.inj onArray))
 
+/-- Two monadic functions that agree on every element of a list map it to one result.
+
+For `Except`, errors included. -/
+theorem mapM_congr {m : Type → Type} [Monad m] [LawfulMonad m] {xs : List α} {φ g : α → m β}
+    (agree : ∀ x ∈ xs, φ x = g x) : xs.mapM φ = xs.mapM g := by
+  induction xs with
+  | nil => rfl
+  | cons y ys ih =>
+    simp only [List.mapM_cons, agree y (by simp), ih fun x member => agree x (by simp [member])]
+
 /-- Two functions that agree on every entry of a vector map it to one result. -/
 theorem vector_mapM_congr {n : Nat} {xs : Vector α n} {g : α → Except ε β}
     (agree : ∀ (i : Nat) (hi : i < n), f xs[i] = g xs[i]) : xs.mapM f = xs.mapM g := by
-  have onList : ∀ ys : List α, (∀ x ∈ ys, f x = g x) → ys.mapM f = ys.mapM g := by
-    intro ys
-    induction ys with
-    | nil => intro _; rfl
-    | cons y ys ih =>
-      intro same
-      simp only [List.mapM_cons, same y (by simp), ih fun x member => same x (by simp [member])]
   have onArray : Vector.toArray <$> xs.mapM f = Vector.toArray <$> xs.mapM g := by
     rw [Vector.toArray_mapM, Vector.toArray_mapM, Array.mapM_eq_mapM_toList,
-      Array.mapM_eq_mapM_toList, onList]
+      Array.mapM_eq_mapM_toList, mapM_congr]
     intro x member
     rw [Array.mem_toList_iff, Vector.mem_toArray_iff, Vector.mem_iff_getElem] at member
     obtain ⟨i, hi, rfl⟩ := member
@@ -433,10 +443,28 @@ theorem mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
         | zero => exact ⟨y, hx⟩
         | succ k => exact hbefore k (Nat.lt_of_succ_lt_succ hk)
 
+/-- A failed map fails with its error on one of its inputs. -/
+theorem exists_mem_of_mapM_error {xs : List α} {e : ε} (h : xs.mapM f = .error e) :
+    ∃ x ∈ xs, f x = .error e := by
+  obtain ⟨i, inside, entry, -⟩ := mapM_error h
+  exact ⟨_, List.getElem_mem inside, entry⟩
+
 /-- A computation with its error mapped succeeds with a value exactly when the computation does. -/
 theorem mapError_ok_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {value : α} :
     result.mapError g = .ok value ↔ result = .ok value := by
   cases result <;> simp [Except.mapError]
+
+/-- A computation with its error mapped fails exactly when the computation fails.
+
+The error it gives is the map of the error of the computation. -/
+theorem mapError_eq_error_iff {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'} :
+    result.mapError g = .error error ↔ ∃ e, result = .error e ∧ g e = error := by
+  cases result <;> simp [Except.mapError]
+
+/-- A computation with its error mapped fails only with the map of an error of the computation. -/
+theorem mapError_eq_error {ε' : Type} {g : ε → ε'} {result : Except ε α} {error : ε'}
+    (h : result.mapError g = .error error) : ∃ e, result = .error e ∧ g e = error :=
+  mapError_eq_error_iff.mp h
 
 /-- A property that each successful step keeps holds after a successful fold. -/
 theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
@@ -449,6 +477,46 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
+
+/-- A fold keeps a property when each step of an item of the list keeps it. -/
+theorem foldlM_ok_invariant_of_mem {g : β → α → Except ε β} (P : β → Prop) :
+    ∀ {xs : List α}, (∀ b x b', x ∈ xs → P b → g b x = .ok b' → P b') →
+      ∀ {b b' : β}, P b → xs.foldlM g b = .ok b' → P b'
+  | [], _, _, _, holds, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ holds
+  | x :: _, step, b, _, holds, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
+    exact foldlM_ok_invariant_of_mem P (fun b y b' mem => step b y b' (List.mem_cons_of_mem x mem))
+      (step b x middle List.mem_cons_self holds first) rest
+
+/-- A fold reads the same result when its two steps agree on every element of the list. -/
+theorem foldlM_congr_mem {α β ε : Type} {f g : β → α → Except ε β} :
+    ∀ (items : List α) (init : β), (∀ x ∈ items, ∀ acc, f acc x = g acc x) →
+      items.foldlM f init = items.foldlM g init
+  | [], _, _ => rfl
+  | x :: rest, init, agree => by
+    simp only [List.foldlM_cons, agree x List.mem_cons_self init]
+    cases g init x with
+    | error _ => rfl
+    | ok next =>
+      exact foldlM_congr_mem rest next fun y member acc =>
+        agree y (List.mem_cons_of_mem _ member) acc
+
+/-- A fold whose steps fail only with errors of a property fails only with them.
+
+The steps need only do so from an accumulator that holds an invariant. -/
+theorem foldlM_error_of_step {g : β → α → Except ε β} (I : β → Prop) (Q : ε → Prop)
+    (keep : ∀ b x b', I b → g b x = .ok b' → I b')
+    (step : ∀ b x e, I b → g b x = .error e → Q e) :
+    ∀ {xs : List α} {b : β} {e : ε}, I b → xs.foldlM g b = .error e → Q e
+  | [], _, _, _, h => by cases h
+  | x :: _, b, e, hb, h => by
+    rw [List.foldlM_cons] at h
+    rcases bind_eq_error h with h | ⟨b', hb', h⟩
+    · exact step b x e hb h
+    · exact foldlM_error_of_step I Q keep step (keep b x b' hb hb') h
 
 /-- A fold succeeds when each step succeeds and keeps an invariant that holds at the start. -/
 theorem foldlM_exists_ok_of_invariant {σ : Type} {g : σ → α → Except ε σ}
@@ -747,5 +815,20 @@ theorem isSome_mapM_iff {α β : Type} {g : α → Option β} :
     have ih := isSome_mapM_iff (g := g) (xs := xs)
     simp only [List.mapM_cons, bind, Option.bind, pure, List.mem_cons, forall_eq_or_imp]
     cases hx : g x <;> cases hr : xs.mapM g <;> simp_all
+
+/-! ## Maps in a lawful monad -/
+
+/-- Two continuations of a map agree after it, when they agree on every result of its length. -/
+theorem mapM_bind_congr_length {m : Type → Type} [Monad m] [LawfulMonad m] {α β γ : Type}
+    (g : α → m β) (xs : List α) {k k' : List β → m γ}
+    (same : ∀ ys : List β, ys.length = xs.length → k ys = k' ys) :
+    xs.mapM g >>= k = xs.mapM g >>= k' := by
+  induction xs generalizing k k' with
+  | nil =>
+    simp only [List.mapM_nil, pure_bind]
+    exact same [] rfl
+  | cons x rest ih =>
+    simp only [List.mapM_cons, bind_assoc, pure_bind]
+    exact bind_congr fun y => ih fun ys count => same (y :: ys) (by simp [count])
 
 end EthLib.Base

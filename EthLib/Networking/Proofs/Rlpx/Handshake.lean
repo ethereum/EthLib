@@ -195,6 +195,30 @@ theorem leadingFields_append {count : Nat} {fields : List Item} (extra : List It
   simp [leadingFields, Item.toItems, bind, Except.bind, h, Nat.le_add_right_of_le h,
     List.take_append_of_le_length h]
 
+/-- A step after the leading fields succeeds exactly when it succeeds on the first `count` items.
+
+The item must be a list that starts with those items, and any items may follow them. -/
+theorem leadingFields_bind_eq_ok {β : Type} {count : Nat} {item : Item}
+    {f : List Item → Except RlpError β} {y : β} :
+    (leadingFields count item >>= f) = .ok y ↔
+      ∃ fields extra, item = .list (fields ++ extra) ∧ fields.length = count ∧
+        f fields = .ok y := by
+  cases item with
+  | bytes b => simp [leadingFields, Item.toItems, bind, Except.bind]
+  | list items =>
+    by_cases h : count ≤ items.length
+    · simp only [leadingFields, Item.toItems, bind, Except.bind, h, ↓reduceIte, Item.list.injEq]
+      constructor
+      · intro hf
+        exact ⟨items.take count, items.drop count, (List.take_append_drop _ _).symm,
+          List.length_take_of_le h, hf⟩
+      · rintro ⟨fields, extra, rfl, rfl, hf⟩
+        simpa using hf
+    · simp only [leadingFields, Item.toItems, bind, Except.bind, h, ↓reduceIte, reduceCtorEq,
+        Item.list.injEq, false_iff, not_exists, not_and]
+      rintro fields extra rfl rfl
+      simp at h
+
 /-- `auth` reads the same from four or more items, whatever items follow them, as EIP-8 asks. -/
 theorem AuthMessage.ofItem_append {fields : List Item} (extra : List Item)
     (h : 4 ≤ fields.length) :

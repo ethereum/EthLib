@@ -44,5 +44,13 @@ def test_state_transition(recent: list, message: str) -> None:
 @pytest.mark.parametrize("recent, message", BAD)
 def test_new_payload_on_chain(recent: list, message: str) -> None:
     with raises(EngineError, message) as error:
-        engine.new_payload_on_chain(CONFIG, STATE, recent, "engine_newPayloadV1", [])
+        engine.new_payload_on_chain(
+            CONFIG,
+            STATE,
+            recent,
+            "engine_newPayloadV1",
+            [],
+            terminal_total_difficulty=0,
+            total_difficulty=0,
+        )
     assert error.value.code == 0

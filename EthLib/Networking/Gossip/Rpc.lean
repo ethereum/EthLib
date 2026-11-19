@@ -33,6 +33,22 @@ A singular field that occurs twice keeps its last value, as [the encoding guide]
 
 Each occurrence of the control field is decoded alone, then their lists are joined in order.
 
+The extension fields come from the [v1.3 schema][v13] and the [partial messages schema][partial].
+
+A singular message field that occurs twice keeps its last occurrence whole, a choice of EthLib.
+
+Protobuf would merge the occurrences field by field instead.
+
+The extensions of the control field keep their last occurrence too, across its occurrences.
+
+The encoder writes the flags of the extensions only when true, and their messages only when present.
+
+It writes the partial message and the parts metadata of a partial message only when present.
+
+So an RPC without extensions encodes as it did before them.
+
+The experimental extension fields are skipped, as every field the schema does not name.
+
 [rpc]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-rpc
 [message]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#the-message
 [policy]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/README.md#signature-policy-options
@@ -40,6 +56,8 @@ Each occurrence of the control field is decoded alone, then their lists are join
 [v11]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.1.md#protobuf
 [v12]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.2.md#protobuf-extension
 [string]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/proto2.md#scalar-value-types-scalar
+[v13]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.3.md#protobuf
+[partial]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/partial-messages.md#protobuf
 [last]: https://github.com/protocolbuffers/protocolbuffers.github.io/blob/bc2f346991e20631ed0a884e345110738228bfae/content/programming-guides/encoding.md#last-one-wins-last-one-wins
 -/
 
@@ -53,6 +71,10 @@ open EthLib.Networking.Encoding.Protobuf
 structure SubOpts where
   subscribe : Bool := false
   topicId : String := ""
+  /-- The sender asks for partial messages on the topic. -/
+  requestsPartial : Bool := false
+  /-- The sender can send partial messages on the topic. -/
+  supportsSendingPartial : Bool := false
   deriving DecidableEq
 
 /-- A published message, under the `StrictNoSign` policy. -/
@@ -97,6 +119,12 @@ structure IDontWant where
   messageIds : List ByteArray := []
   deriving DecidableEq
 
+/-- The extensions that a peer supports, from gossipsub v1.3. -/
+structure ControlExtensions where
+  /-- The peer supports the partial message extension. -/
+  partialMessages : Bool := false
+  deriving DecidableEq
+
 /-- The control messages of one RPC. -/
 structure Control where
   ihave : List IHave := []
@@ -104,13 +132,31 @@ structure Control where
   graft : List Graft := []
   prune : List Prune := []
   idontwant : List IDontWant := []
+  /-- The extensions that the sender supports, sent at most once, in its first RPC. -/
+  extensions : Option ControlExtensions := none
   deriving DecidableEq
 
-/-- One RPC: subscription changes, published messages and control messages. -/
+/-- A partial message: a part of a full message, or the parts that the sender has and wants. -/
+structure PartialMessagesExtension where
+  /-- The topic. -/
+  topicId : ByteArray := .empty
+  /-- The ID of the group that the full message belongs to. -/
+  groupId : ByteArray := .empty
+  /-- The encoded partial message; a peer that did not ask for it must get none. -/
+  partialMessage : Option ByteArray := none
+  /-- The encoded parts that the sender has and wants. -/
+  partsMetadata : Option ByteArray := none
+  deriving DecidableEq
+
+/-- One RPC: subscription changes, published messages and control messages.
+
+It may carry a partial message too. -/
 structure Rpc where
   subscriptions : List SubOpts := []
   publish : List Message := []
   control : Control := {}
+  /-- The field `partial` of the schema, renamed since `partial` is a keyword of Lean. -/
+  partialMessage : Option PartialMessagesExtension := none
   deriving DecidableEq
 
 /-- Every way an RPC can be rejected. -/
@@ -172,6 +218,13 @@ def singular (read : Nat → Value → Except RpcError α) (default : α) (rs : 
     (field : Nat) : Except RpcError α :=
   return (← repeated read rs field).getLastD default
 
+/-- The last value of a singular message field, decoded, or none when it is missing.
+
+Every occurrence must still decode. -/
+def lastMessage (decode : ByteArray → Except RpcError α) (rs : List Record) (field : Nat) :
+    Except RpcError (Option α) :=
+  return (← (← repeated bytesOf rs field).mapM decode).getLast?
+
 /-- The records of a message. -/
 def recordsOf (bytes : ByteArray) : Except RpcError (List Record) :=
   (records bytes.data.toList).mapError .protobuf
@@ -183,7 +236,13 @@ def decodeSubOpts (bytes : ByteArray) : Except RpcError SubOpts := do
   --
   -- Reading any other value as true is a choice of EthLib.
   let subscribe ← singular uint64Of 0 rs 1
-  return { subscribe := subscribe != 0, topicId := ← singular stringOf "" rs 2 }
+  let requestsPartial ← singular uint64Of 0 rs 3
+  let supportsSendingPartial ← singular uint64Of 0 rs 4
+  return {
+    subscribe := subscribe != 0
+    topicId := ← singular stringOf "" rs 2
+    requestsPartial := requestsPartial != 0
+    supportsSendingPartial := supportsSendingPartial != 0 }
 
 /-- A published message, which `StrictNoSign` forbids to hold any of four fields. -/
 def decodeMessage (bytes : ByteArray) : Except RpcError Message := do
@@ -223,6 +282,10 @@ def decodePrune (bytes : ByteArray) : Except RpcError Prune := do
 def decodeIDontWant (bytes : ByteArray) : Except RpcError IDontWant := do
   return { messageIds := ← repeated bytesOf (← recordsOf bytes) 1 }
 
+/-- The extensions of a control message. -/
+def decodeControlExtensions (bytes : ByteArray) : Except RpcError ControlExtensions := do
+  return { partialMessages := (← singular uint64Of 0 (← recordsOf bytes) 10) != 0 }
+
 /-- The control messages of an RPC. -/
 def decodeControl (bytes : ByteArray) : Except RpcError Control := do
   let rs ← recordsOf bytes
@@ -231,12 +294,24 @@ def decodeControl (bytes : ByteArray) : Except RpcError Control := do
     iwant := ← (← repeated bytesOf rs 2).mapM decodeIWant
     graft := ← (← repeated bytesOf rs 3).mapM decodeGraft
     prune := ← (← repeated bytesOf rs 4).mapM decodePrune
-    idontwant := ← (← repeated bytesOf rs 5).mapM decodeIDontWant }
+    idontwant := ← (← repeated bytesOf rs 5).mapM decodeIDontWant
+    extensions := ← lastMessage decodeControlExtensions rs 6 }
 
-/-- Merge two control messages: each list of the second follows that of the first. -/
+/-- Merge two control messages: each list of the second follows that of the first.
+
+The extensions of the second win, if it has some. -/
 def Control.merge (a b : Control) : Control :=
   ⟨a.ihave ++ b.ihave, a.iwant ++ b.iwant, a.graft ++ b.graft, a.prune ++ b.prune,
-    a.idontwant ++ b.idontwant⟩
+    a.idontwant ++ b.idontwant, b.extensions.or a.extensions⟩
+
+/-- A partial message. -/
+def decodePartial (bytes : ByteArray) : Except RpcError PartialMessagesExtension := do
+  let rs ← recordsOf bytes
+  return {
+    topicId := ← singular bytesOf .empty rs 1
+    groupId := ← singular bytesOf .empty rs 2
+    partialMessage := (← repeated bytesOf rs 3).getLast?
+    partsMetadata := (← repeated bytesOf rs 4).getLast? }
 
 /-- An RPC.
 
@@ -246,18 +321,20 @@ def decodeRpc (bytes : ByteArray) : Except RpcError Rpc := do
   let subscriptions ← (← repeated bytesOf rs 1).mapM decodeSubOpts
   let publish ← (← repeated bytesOf rs 2).mapM decodeMessage
   let control := (← (← repeated bytesOf rs 3).mapM decodeControl).foldl Control.merge {}
-  return { subscriptions, publish, control }
+  return { subscriptions, publish, control, partialMessage := ← lastMessage decodePartial rs 10 }
 
 /-! ## Encoding
 
-The encoder writes every singular field.
+The encoder writes every singular field, except the optional fields of the extensions.
 
-It writes the control field only when a control list is not empty.
+It writes the control field only when a control list is not empty, or it has extensions.
 -/
 
 /-- The bytes of a subscription change. -/
 def SubOpts.encode (s : SubOpts) : ByteArray :=
-  serialize [⟨1, .varint (if s.subscribe then 1 else 0)⟩, stringRecord 2 s.topicId]
+  serialize ([⟨1, .varint (if s.subscribe then 1 else 0)⟩, stringRecord 2 s.topicId] ++
+    (if s.requestsPartial then [⟨3, .varint 1⟩] else []) ++
+    if s.supportsSendingPartial then [⟨4, .varint 1⟩] else [])
 
 /-- The bytes of a message: its data, then its topic. -/
 def Message.encode (m : Message) : ByteArray :=
@@ -288,16 +365,49 @@ def Prune.encode (m : Prune) : ByteArray :=
 def IDontWant.encode (m : IDontWant) : ByteArray :=
   serialize (m.messageIds.map (lenRecord 1))
 
+/-- The bytes of the extensions of a control message. -/
+def ControlExtensions.encode (e : ControlExtensions) : ByteArray :=
+  serialize (if e.partialMessages then [⟨10, .varint 1⟩] else [])
+
 /-- The bytes of the control messages of an RPC. -/
 def Control.encode (c : Control) : ByteArray :=
   serialize (c.ihave.map (lenRecord 1 ∘ IHave.encode) ++
     c.iwant.map (lenRecord 2 ∘ IWant.encode) ++ c.graft.map (lenRecord 3 ∘ Graft.encode) ++
-    c.prune.map (lenRecord 4 ∘ Prune.encode) ++ c.idontwant.map (lenRecord 5 ∘ IDontWant.encode))
+    c.prune.map (lenRecord 4 ∘ Prune.encode) ++ c.idontwant.map (lenRecord 5 ∘ IDontWant.encode) ++
+    c.extensions.toList.map (lenRecord 6 ∘ ControlExtensions.encode))
+
+/-- The bytes of a partial message. -/
+def PartialMessagesExtension.encode (m : PartialMessagesExtension) : ByteArray :=
+  serialize ([lenRecord 1 m.topicId, lenRecord 2 m.groupId] ++
+    m.partialMessage.toList.map (lenRecord 3) ++ m.partsMetadata.toList.map (lenRecord 4))
 
 /-- The bytes of an RPC. -/
 def Rpc.encode (rpc : Rpc) : ByteArray :=
   serialize (rpc.subscriptions.map (lenRecord 1 ∘ SubOpts.encode) ++
     rpc.publish.map (lenRecord 2 ∘ Message.encode) ++
-    if rpc.control = {} then [] else [lenRecord 3 rpc.control.encode])
+    (if rpc.control = {} then [] else [lenRecord 3 rpc.control.encode]) ++
+    rpc.partialMessage.toList.map (lenRecord 10 ∘ PartialMessagesExtension.encode))
+
+/-! ## Rules of the partial message extension -/
+
+/-- Whether the sender asks for partial messages on the topic of a subscription change.
+
+The flag counts only in a subscription: an unsubscription ignores it. -/
+def SubOpts.asksPartial (s : SubOpts) : Bool :=
+  s.subscribe && s.requestsPartial
+
+/-- Whether the sender can send partial messages on the topic of a subscription change.
+
+A sender that asks for partial messages can send them too.
+
+The flags count only in a subscription: an unsubscription ignores them. -/
+def SubOpts.sendsPartial (s : SubOpts) : Bool :=
+  s.subscribe && (s.supportsSendingPartial || s.requestsPartial)
+
+/-- Whether only the first RPC of a stream carries extensions, if any does.
+
+Two extensions within one RPC are not seen here, since the decoder keeps the last one. -/
+def checkExtensionsOrder (rpcs : List Rpc) : Bool :=
+  rpcs.drop 1 |>.all (·.control.extensions.isNone)
 
 end EthLib.Networking.Gossip

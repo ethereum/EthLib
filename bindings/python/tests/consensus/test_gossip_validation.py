@@ -2,6 +2,7 @@
 
 import hashlib
 from pathlib import Path
+from typing import Any, TypedDict
 
 import pytest
 from ruamel.yaml import YAML
@@ -62,7 +63,7 @@ _YAML = YAML(typ="safe")
 # The topics of the messages that a case of another topic sends, by the prefix of their file.
 # A bid case sends the preferences and the envelopes.
 # From Heze it also sends the inclusion lists that its bids rely on.
-_MESSAGE_TOPICS = {
+MESSAGE_TOPICS = {
     "proposer_preferences": "proposer_preferences",
     "execution_payload_envelope": "execution_payload",
     "inclusion_list": "inclusion_list",
@@ -88,7 +89,7 @@ def _hex(value: str) -> bytes:
     return bytes.fromhex(value.removeprefix("0x"))
 
 
-def _read(case: Path, name: str) -> bytes:
+def read(case: Path, name: str) -> bytes:
     """The bytes of an SSZ file of a case, without the Snappy framing."""
     return snappy.decompress((case / f"{name}.ssz_snappy").read_bytes())
 
@@ -104,36 +105,46 @@ def _partial_messages(case: Path, meta: dict) -> list:
     The column of a sidecar takes the place of the subnet.
     """
     headers = [
-        (0, 0, b"\x01" + _hex(entry["block_root"]) + _read(case, entry["header"]))
+        (0, 0, b"\x01" + _hex(entry["block_root"]) + read(case, entry["header"]))
         for entry in meta.get("seen_partial_data_column_headers", [])
     ]
     sidecars = [
         (
             message.get("current_time_ms", 0),
             message["column_index"],
-            b"\x00" + _read(case, message["group_id"]) + _read(case, message["message"]),
+            b"\x00" + read(case, message["group_id"]) + read(case, message["message"]),
         )
         for message in meta["messages"]
     ]
     return headers + sidecars
 
 
-def run_case(preset: str, fork: str, case: Path) -> None:
-    """Validate the messages of a case in turn, and compare each outcome and reason."""
-    meta = _YAML.load((case / "meta.yaml").read_text())
+class CaseStore(TypedDict):
+    """The arguments of a case that build its store."""
+
+    anchor_state: bytes
+    anchor_block: bytes
+    verify: bool
+    config: dict[str, Any] | None
+    blocks: list[tuple[int, int | None, bytes, bytes]]
+    finalized: tuple[int, bytes] | None
+
+
+def case_store(preset: str, fork: str, case: Path, meta: dict) -> CaseStore:
+    """The arguments of a case that build its store, its configuration and its signature checks."""
     blocks = [
         (
             1 if entry.get("failed") else 2 if entry.get("pending") else 0,
             _STATUSES.get(entry.get("payload_status")),
-            _read(case, entry["block"]),
-            _read(case, entry["payload"]) if "payload" in entry else b"",
+            read(case, entry["block"]),
+            read(case, entry["payload"]) if "payload" in entry else b"",
         )
         for entry in meta["blocks"][1:]
     ]
     # Kind 3 gives the anchor again, for the envelope of its payload.
     anchor = meta["blocks"][0]
     if "payload" in anchor:
-        blocks.insert(0, (3, None, _read(case, anchor["block"]), _read(case, anchor["payload"])))
+        blocks.insert(0, (3, None, read(case, anchor["block"]), read(case, anchor["payload"])))
     finalized = meta.get("finalized_checkpoint")
     if finalized is not None:
         # A checkpoint names its root, or the signed block whose message has the root.
@@ -142,16 +153,29 @@ def run_case(preset: str, fork: str, case: Path) -> None:
             bytes.fromhex(finalized["root"][2:])
             if "root" in finalized
             else consensus.ssz_static(
-                preset, FORKS[fork], "BeaconBlock", _read(case, finalized["block"])[100:]
+                preset, FORKS[fork], "BeaconBlock", read(case, finalized["block"])[100:]
             )[0]
         )
         finalized = (finalized["epoch"], root)
-    # Setting 2 marks placeholder signatures, which the case must not check.
-    verify = meta.get("bls_setting", 0) != 2
     config_file = case / "config.yaml"
-    config = (
-        replacements(_YAML.load(config_file.read_text()), preset) if config_file.exists() else None
-    )
+    return {
+        "anchor_state": read(case, "state"),
+        "anchor_block": read(case, anchor["block"]),
+        # Setting 2 marks placeholder signatures, which the case must not check.
+        "verify": meta.get("bls_setting", 0) != 2,
+        "config": (
+            replacements(_YAML.load(config_file.read_text()), preset)
+            if config_file.exists()
+            else None
+        ),
+        "blocks": blocks,
+        "finalized": finalized,
+    }
+
+
+def run_case(preset: str, fork: str, case: Path) -> None:
+    """Validate the messages of a case in turn, and compare each outcome and reason."""
+    meta = _YAML.load((case / "meta.yaml").read_text())
     if meta["topic"] == "partial_data_column_sidecar":
         messages = _partial_messages(case, meta)
     else:
@@ -159,22 +183,17 @@ def run_case(preset: str, fork: str, case: Path) -> None:
             (
                 message.get("current_time_ms", 0),
                 message.get("subnet_id", 0),
-                _read(case, message["message"]),
-                _MESSAGE_TOPICS.get(message["message"].rsplit("_0x", 1)[0], ""),
+                read(case, message["message"]),
+                MESSAGE_TOPICS.get(message["message"].rsplit("_0x", 1)[0], ""),
             )
             for message in meta["messages"]
         ]
     outcomes = consensus.gossip_validation(
-        preset,
-        FORKS[fork],
-        _read(case, "state"),
-        _read(case, meta["blocks"][0]["block"]),
-        meta["topic"],
-        messages,
-        verify,
-        config,
-        blocks,
-        finalized,
+        name=preset,
+        fork=FORKS[fork],
+        topic=meta["topic"],
+        messages=messages,
+        **case_store(preset, fork, case, meta),
     )
     expected = [(message["expected"], message.get("reason")) for message in meta["messages"]]
     assert outcomes == expected
@@ -241,7 +260,7 @@ def test_archive_case(preset, fork, case):
     run_case(preset, fork, case)
 
 
-def _valid_case(handler: str) -> Path:
+def valid_case(handler: str) -> Path:
     """The vendored Capella case of a handler with one valid message."""
     return (
         FILES
@@ -255,7 +274,7 @@ def _valid_case(handler: str) -> Path:
 
 
 def test_unknown_topic():
-    case = _valid_case("gossip_voluntary_exit")
+    case = valid_case("gossip_voluntary_exit")
     with raises(
         consensus.ForkChoiceError,
         "gossip validation of the topic light_client_optimistic_update at shapella is not yet "
@@ -264,7 +283,7 @@ def test_unknown_topic():
         consensus.gossip_validation(
             "minimal",
             "shapella",
-            _read(case, "state"),
+            read(case, "state"),
             b"",
             "light_client_optimistic_update",
             [],
@@ -273,27 +292,27 @@ def test_unknown_topic():
 
 
 def test_change_of_credentials_before_capella():
-    case = _valid_case("gossip_voluntary_exit")
+    case = valid_case("gossip_voluntary_exit")
     with raises(
         consensus.ForkChoiceError,
         "gossip validation of the topic bls_to_execution_change at bellatrix is not yet specified",
     ):
         consensus.gossip_validation(
-            "minimal", "bellatrix", _read(case, "state"), b"", "bls_to_execution_change", []
+            "minimal", "bellatrix", read(case, "state"), b"", "bls_to_execution_change", []
         )
 
 
 def test_seen_keys_follow_valid_messages():
     # A valid exit records its validator, so the same exit is then ignored.
-    case = _valid_case("gossip_voluntary_exit")
+    case = valid_case("gossip_voluntary_exit")
     meta = _YAML.load((case / "meta.yaml").read_text())
     message = meta["messages"][0]
-    data = _read(case, message["message"])
+    data = read(case, message["message"])
     outcomes = consensus.gossip_validation(
         "minimal",
         "shapella",
-        _read(case, "state"),
-        _read(case, meta["blocks"][0]["block"]),
+        read(case, "state"),
+        read(case, meta["blocks"][0]["block"]),
         "voluntary_exit",
         [(message["current_time_ms"], 0, data)] * 2,
     )
@@ -355,12 +374,12 @@ def test_verify_must_be_a_bool(verify):
 
 def _envelope_error(envelope: bytes | None) -> tuple[int, str]:
     # The anchor block is empty, so the run stops at its decoding, after the blocks are read.
-    case = _valid_case("gossip_voluntary_exit")
+    case = valid_case("gossip_voluntary_exit")
     try:
         consensus.gossip_validation(
             "minimal",
             "shapella",
-            _read(case, "state"),
+            read(case, "state"),
             b"",
             "voluntary_exit",
             [],

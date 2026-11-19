@@ -65,10 +65,11 @@ def offsetSpansFrom : List Nat → Nat → List Nat → Except Err (List Nat)
   | [], _, done => .ok done.reverse
   -- The final body is closed by the budget rather than by another offset.
   | [start], scope, done =>
-      if scope < start then .error .offsetPastScope else .ok ((scope - start) :: done).reverse
+      if scope < start then .error (.offsetPastScope start scope)
+      else .ok ((scope - start) :: done).reverse
   -- Every other body ends where the next one begins.
   | start :: next :: rest, scope, done =>
-      if next < start then .error .offsetUnordered
+      if next < start then .error (.offsetUnordered start next)
       else offsetSpansFrom (next :: rest) scope ((next - start) :: done)
 
 /--
@@ -89,11 +90,12 @@ def readSlots : List Desc → Bytes → Nat → Except Err (List Slot × Nat)
   | field :: fields, data, position =>
     match field.fixedSize with
     | some width => do
-      if position + width > data.size then throw .truncated
+      if position + width > data.size then throw (.truncated (position + width) data.size)
       let (rest, ending) ← readSlots fields data (position + width)
       return (.inline (data.extract position (position + width)) :: rest, ending)
     | none => do
-      if position + bytesPerOffset > data.size then throw .truncated
+      if position + bytesPerOffset > data.size then
+        throw (.truncated (position + bytesPerOffset) data.size)
       let (rest, ending) ← readSlots fields data (position + bytesPerOffset)
       return (.body (readUint data position bytesPerOffset) :: rest, ending)
 
@@ -202,9 +204,9 @@ def listSlices (element : Desc) (limit : Option Nat) (data : Bytes) :
     -- The first offset is the table's own width, so it gives the count as well as the start.
     if scope < bytesPerOffset then throw (.scopeTooSmall bytesPerOffset scope)
     let first := readUint data 0 bytesPerOffset
-    if first < bytesPerOffset then throw .offsetBelowTable
-    if first % bytesPerOffset != 0 then throw .offsetUnaligned
-    if first > scope then throw .offsetPastScope
+    if first < bytesPerOffset then throw (.offsetBelowTable first)
+    if first % bytesPerOffset != 0 then throw (.offsetUnaligned first)
+    if first > scope then throw (.offsetPastScope first scope)
     let count := first / bytesPerOffset
     if let some cap := limit then
       if count > cap then throw (.overLimit cap count)
@@ -260,7 +262,8 @@ def deserialize : Desc → Bytes → Except Err Value
     if data.size != expected then throw (.scope expected data.size)
     -- Bits above the last declared one are padding, and a set one is not canonical.
     if length % 8 != 0 && data.size > 0 then
-      if data[data.size - 1]?.getD 0 >>> UInt8.ofNat (length % 8) != 0 then throw .paddingBits
+      let last := data[data.size - 1]?.getD 0
+      if last >>> UInt8.ofNat (length % 8) != 0 then throw (.paddingBits last)
     return .bits (unpackBits data length)
   | .bitList limit, data => return .bits (← unpackDelimited (some limit) data)
   | .progressiveBitList limit, data => return .bits (← unpackDelimited limit data)

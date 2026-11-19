@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Widths
+public import EthLib.Serialization.Proofs.Ssz.Codec.Table
 
 /-! Count and layout words preserve their information within their stated widths. -/
 

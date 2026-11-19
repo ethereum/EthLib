@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Resolution
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 public import EthLib.Cryptography.Proofs.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots
@@ -275,7 +275,7 @@ theorem erases_node (seed : MasterSeed) (d : Derivations) (layer : Xmss.Layer) (
       Erases (progCache seed d) (Xmss.node queryH (ofParam d.parameter) (realPrf seed)
           layer level j : OracleComp HashSpec Xmss.Digest)
         (ofDigest <$> EthLib.Cryptography.Merkle.node (Concrete.nodeAt d.parameter layer) leaves
-          level j)
+          ⟨level, j⟩)
   | 0, _, j, hj => by
     simpa [EthLib.Cryptography.Merkle.node_zero] using hleaves j (by simpa using hj)
   | l + 1, hlevel, j, hj => by
@@ -369,7 +369,7 @@ theorem realParam (h : Prepared seed d result cache) :
     rw [Xmss.Unforgeability.ofParam, Xmss.Unforgeability.ofBV_eq_uintToBytes]
     apply Vector.ext
     intro i hi
-    simp [Xmss.uintToBytes]
+    simp [EthLib.Base.uintToBytes_eq_div]
   -- The input is `0^128 | A_param | S`, the programmed parameter's.
   have hinput : (Xmss.thInput (ofParam (0 : PublicParameter)) Xmss.addrParam
       (Xmss.packBytes (ofSeed seed))).data.toList

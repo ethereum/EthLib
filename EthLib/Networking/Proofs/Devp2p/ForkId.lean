@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Hash.Crc
+public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 public import EthLib.Networking.Devp2p.ForkId
 public import EthLib.Serialization.Proofs.Rlp.Codec
 

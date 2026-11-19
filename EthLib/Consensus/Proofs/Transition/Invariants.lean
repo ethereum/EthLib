@@ -1,7 +1,9 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.BuilderPayments
+public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.EpochJustification
+public import EthLib.Consensus.Proofs.Transition.EpochPending
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Execution
@@ -37,6 +39,8 @@ Most steps change neither the slot, nor the checkpoints, nor the justification b
 They also keep the genesis time, and they keep the first two properties.
 
 They keep the fork versions and the genesis validators root, and they never shrink the registry.
+
+They never clear a slashed flag: a validator that is slashed before a step is slashed after it.
 
 Let the largest effective balances of the preset be whole numbers of increments.
 
@@ -79,6 +83,8 @@ The public keys of the validators before it are a prefix of the public keys afte
 
 When no two validators share a key before it, none share a key after it.
 
+A validator that is slashed before it is still slashed after it, at the same position.
+
 When each validator has one balance before it, each has one after it.
 
 It then also keeps each exit no later than its withdrawal.
@@ -98,27 +104,39 @@ structure Frame (state after : BeaconState preset fork) : Prop where
   registryGrows : state.validators.data.size ≤ after.validators.data.size
   pubkeysPrefix : validatorKeys state <+: validatorKeys after
   pubkeysDistinct : PubkeysDistinct state → PubkeysDistinct after
+  slashed : ∀ (position : Nat) (old validator : Validator),
+    state.validators.data[position]? = some old →
+    after.validators.data[position]? = some validator →
+    old.slashed = true → validator.slashed = true
   balancesMatch : BalancesMatch state → BalancesMatch after
   exitsOrdered : ExitsOrdered state → ExitsOrdered after
   aligned : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
     EffectiveBalancesAligned after
 
 theorem Frame.refl (state : BeaconState preset fork) : Frame state state :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, List.prefix_refl _, id, id, id,
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_refl _, List.prefix_refl _, id,
+    fun _ _ _ old found => by cases old.symm.trans found; exact id, id, id,
     fun _ => id⟩
 
 theorem Frame.trans {first second third : BeaconState preset fork} (one : Frame first second)
-    (two : Frame second third) : Frame first third :=
-  ⟨two.slot.trans one.slot, two.finalized.trans one.finalized,
+    (two : Frame second third) : Frame first third := by
+  refine ⟨two.slot.trans one.slot, two.finalized.trans one.finalized,
     two.previousJustified.trans one.previousJustified,
     two.currentJustified.trans one.currentJustified,
     two.justificationBits.trans one.justificationBits, two.genesisTime.trans one.genesisTime,
     two.forkVersions.trans one.forkVersions,
     two.genesisValidatorsRoot.trans one.genesisValidatorsRoot,
     Nat.le_trans one.registryGrows two.registryGrows,
-    one.pubkeysPrefix.trans two.pubkeysPrefix, two.pubkeysDistinct ∘ one.pubkeysDistinct,
+    one.pubkeysPrefix.trans two.pubkeysPrefix, two.pubkeysDistinct ∘ one.pubkeysDistinct, ?_,
     two.balancesMatch ∘ one.balancesMatch, two.exitsOrdered ∘ one.exitsOrdered,
     fun maxAligned => two.aligned maxAligned ∘ one.aligned maxAligned⟩
+  -- The registry never shrinks, so a position before both steps is a position between them.
+  intro position old validator before after slashed
+  have inside := (Array.getElem?_eq_some_iff.mp before).1
+  have middle : position < second.validators.data.size :=
+    Nat.lt_of_lt_of_le inside one.registryGrows
+  exact two.slashed position _ validator (Array.getElem?_eq_getElem middle) after
+    (one.slashed position old _ before (Array.getElem?_eq_getElem middle) slashed)
 
 /-- A step that keeps the slot, the checkpoints, the justification bits and the registry.
 
@@ -142,6 +160,7 @@ theorem Frame.of_validators (sizes : SameSizes state after)
     forkVersions, genesisValidatorsRoot, by rw [validators]; exact Nat.le_refl _,
     by rw [validatorKeys, validatorKeys, validators]; exact List.prefix_refl _,
     by unfold PubkeysDistinct validatorKeys; rw [validators]; exact id,
+    fun _ _ _ old found => by rw [validators, old] at found; cases found; exact id,
     balancesMatch_of_sameSizes sizes,
     fun ordered => by rw [ExitsOrdered, validators]; exact ordered,
     fun _ holds => by rw [EffectiveBalancesAligned, validators]; exact holds⟩
@@ -199,22 +218,30 @@ theorem EpochFrame.of_validators (sizes : SameSizes state after)
 
 /-- From Altair, each byte of flags after a step is the byte at its position before, or zero.
 
+A zero appears only at a position at or past the size of the registry before the step.
+
 This holds for the flags of the previous epoch and for those of the current epoch. -/
 def FlagsKeptOrZero (state after : BeaconState preset fork) : Prop :=
   ∀ (altair : .altair ≤ fork) (position : Nat) (flags : ParticipationFlags),
     ((after.previousEpochParticipation altair).data[position]? = some flags →
-      (state.previousEpochParticipation altair).data[position]? = some flags ∨ flags = 0) ∧
+      (state.previousEpochParticipation altair).data[position]? = some flags ∨
+        flags = 0 ∧ state.validators.data.size ≤ position) ∧
     ((after.currentEpochParticipation altair).data[position]? = some flags →
-      (state.currentEpochParticipation altair).data[position]? = some flags ∨ flags = 0)
+      (state.currentEpochParticipation altair).data[position]? = some flags ∨
+        flags = 0 ∧ state.validators.data.size ≤ position)
 
 theorem FlagsKeptOrZero.refl (state : BeaconState preset fork) : FlagsKeptOrZero state state :=
   fun _ _ _ => ⟨.inl, .inl⟩
 
+/-- Two steps keep or zero each byte of flags, when the registry does not shrink between them. -/
 theorem FlagsKeptOrZero.trans {first second third : BeaconState preset fork}
-    (one : FlagsKeptOrZero first second) (two : FlagsKeptOrZero second third) :
+    (one : FlagsKeptOrZero first second) (two : FlagsKeptOrZero second third)
+    (grows : first.validators.data.size ≤ second.validators.data.size) :
     FlagsKeptOrZero first third := fun altair position flags =>
-  ⟨fun found => ((two altair position flags).1 found).elim (one altair position flags).1 .inr,
-    fun found => ((two altair position flags).2 found).elim (one altair position flags).2 .inr⟩
+  ⟨fun found => ((two altair position flags).1 found).elim (one altair position flags).1
+      fun ⟨zero, late⟩ => .inr ⟨zero, Nat.le_trans grows late⟩,
+    fun found => ((two altair position flags).2 found).elim (one altair position flags).2
+      fun ⟨zero, late⟩ => .inr ⟨zero, Nat.le_trans grows late⟩⟩
 
 /-- Two states with the same lists of flags keep each byte of flags. -/
 theorem FlagsKeptOrZero.of_eq
@@ -238,7 +265,8 @@ theorem BlockFrame.refl (state : BeaconState preset fork) : BlockFrame state sta
 
 theorem BlockFrame.trans {first second third : BeaconState preset fork}
     (one : BlockFrame first second) (two : BlockFrame second third) : BlockFrame first third :=
-  ⟨one.toFrame.trans two.toFrame, two.blockRoots.trans one.blockRoots, one.flags.trans two.flags⟩
+  ⟨one.toFrame.trans two.toFrame, two.blockRoots.trans one.blockRoots,
+    one.flags.trans two.flags one.registryGrows⟩
 
 /-- A step that keeps the registry, the number of balances and the fields of a block frame. -/
 theorem BlockFrame.of_validators (sizes : SameSizes state after)
@@ -291,7 +319,7 @@ theorem MutatorFrame.refl (state : BeaconState preset fork) : MutatorFrame state
 theorem MutatorFrame.trans {first second third : BeaconState preset fork}
     (one : MutatorFrame first second) (two : MutatorFrame second third) :
     MutatorFrame first third :=
-  ⟨one.toEpochFrame.trans two.toEpochFrame, one.flags.trans two.flags⟩
+  ⟨one.toEpochFrame.trans two.toEpochFrame, one.flags.trans two.flags one.registryGrows⟩
 
 theorem MutatorFrame.toBlockFrame (frame : MutatorFrame state after) : BlockFrame state after :=
   ⟨frame.toFrame, frame.blockRoots, frame.flags⟩
@@ -329,6 +357,8 @@ theorem ExitsOrdered.putValidator {index : Nat} {validator : Validator}
 
 The new one must keep the public key of the old one.
 
+It must be slashed when the old one is.
+
 It must exit no later than it withdraws.
 
 Let the largest values of the preset and the effective balances before be aligned.
@@ -338,6 +368,7 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validato
     (set : state.setValidatorAt position validator = .ok after)
     (found : getValidatorAt state position = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
@@ -356,17 +387,31 @@ theorem frame_setValidatorAt_of_whole {position : Nat} {validator old : Validato
         state.validators.data[position].pubkey := by simp
     rw [← atKey]
     exact List.set_getElem_self _
-  exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
-    by rw [keys]; exact List.prefix_refl _, by unfold PubkeysDistinct; rw [keys]; exact id,
+  refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, Nat.le_of_eq sizes.1.symm,
+    by rw [keys]; exact List.prefix_refl _, by unfold PubkeysDistinct; rw [keys]; exact id, ?_,
     balancesMatch_of_sameSizes sizes,
     fun ordered => ordered.putValidator inside (le ordered),
     fun maxAligned holds =>
       effectiveBalancesAligned_setValidatorAt holds (whole maxAligned holds) set⟩,
     rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
+  -- Only the written position changes, and the new validator there is slashed if the old one was.
+  intro i previous next before after marked
+  simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set] at after
+  split at after
+  · rename_i equal
+    subst i
+    have same : previous = old := (Option.some.inj
+      (before.symm.trans (Array.getElem?_eq_getElem inside))).trans oldEq
+    cases after
+    exact slashed (same ▸ marked)
+  · cases before.symm.trans after
+    exact marked
 
 /-- Replacing a validator forms a mutator frame, if the new one exits no later than it withdraws.
 
 The new one must keep the public key of the old one.
+
+It must be slashed when the old one is.
 
 Let the largest values of the preset and the effective balances before be aligned.
 
@@ -375,26 +420,30 @@ theorem frame_setValidator_of_whole {index : ValidatorIndex} {validator old : Va
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (whole : MaxEffectiveBalancesAligned preset → EffectiveBalancesAligned state →
       validator.effectiveBalance % preset.EFFECTIVE_BALANCE_INCREMENT = 0) :
     MutatorFrame state after :=
   frame_setValidatorAt_of_whole (by rwa [← setValidator_eq_setValidatorAt])
-    (by rwa [← getValidator_eq_getValidatorAt]) key le whole
+    (by rwa [← getValidator_eq_getValidatorAt]) key slashed le whole
 
 /-- Replacing a validator by one with the same effective balance forms a mutator frame.
 
 The new one must keep the public key of the old one.
+
+It must be slashed when the old one is.
 
 It must exit no later than it withdraws. -/
 theorem frame_setValidator {index : ValidatorIndex} {validator old : Validator}
     (set : state.setValidator index validator = .ok after)
     (found : getValidator state index = .ok old)
     (key : validator.pubkey = old.pubkey)
+    (slashed : old.slashed = true → validator.slashed = true)
     (le : ExitsOrdered state → validator.exitEpoch ≤ validator.withdrawableEpoch)
     (balance : validator.effectiveBalance = old.effectiveBalance := by rfl) :
     MutatorFrame state after :=
-  frame_setValidator_of_whole set found key le fun _ holds => by
+  frame_setValidator_of_whole set found key slashed le fun _ holds => by
     rw [balance]
     exact holds old (mem_of_getValidator found)
 
@@ -437,7 +486,7 @@ theorem frame_initiateValidatorExit {index : ValidatorIndex}
   · exact MutatorFrame.refl _
   · have same := (exitQueue_validators queue).1
     refine (frame_exitQueue queue).trans (frame_setValidator (old := validator) set
-      (by rw [getValidator, same]; exact found) rfl fun _ => ?_)
+      (by rw [getValidator, same]; exact found) rfl id fun _ => ?_)
     have sum := (addChecked_ok_iff.mp summed).2
     exact UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
 
@@ -464,7 +513,7 @@ theorem frame_slashValidator {slashedIndex : ValidatorIndex}
   obtain ⟨_, validator, _, _, _, _, _, _, _, _, _, last, exitedOk, found, -, markedOk, -, -, -,
     loweredOk, -, -, raisedOk, lastOk, done⟩ := slashValidator_ok computed
   refine (frame_initiateValidatorExit exitedOk).trans <|
-    ((frame_setValidator markedOk found rfl
+    ((frame_setValidator markedOk found rfl (fun _ => rfl)
       fun ordered => ?_).trans
       (frame_slashings _ _)).trans <|
     (frame_decreaseBalance loweredOk).trans <| (frame_increaseBalance raisedOk).trans <|
@@ -597,7 +646,9 @@ The key must be one that no validator has.
 
 It goes at the end of the registry, so the keys before stay a prefix.
 
-Distinct keys stay distinct. -/
+Distinct keys stay distinct.
+
+Each validator before stays where it was, and so stays slashed. -/
 theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after)
@@ -617,6 +668,16 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
     intro a member b equal same
     have eq : b = pubkey := List.mem_singleton.mp equal
     exact fresh (eq ▸ same ▸ member)
+  have slashed : ∀ (position : Nat) (old validator : Validator),
+      state.validators.data[position]? = some old →
+      after.validators.data[position]? = some validator →
+      old.slashed = true → validator.slashed = true := by
+    intro position old validator found next marked
+    have inside := (Array.getElem?_eq_some_iff.mp found).1
+    rw [addValidatorToRegistry_validators_eq_push computed, Array.getElem?_push_lt inside] at next
+    rw [Array.getElem?_eq_getElem inside] at found
+    cases found.symm.trans next
+    exact marked
   have balances := balancesMatch_addValidatorToRegistry computed
   have exits : ExitsOrdered state → ExitsOrdered after := fun ordered validator member => by
     obtain ⟨_, found⟩ := Array.getElem?_of_mem member
@@ -634,22 +695,27 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ := computed
-    -- The new validator gets a zero byte of flags, and each other byte stays.
-    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
-      aligned⟩, rfl, rfl, rfl, rfl⟩, fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
+    obtain ⟨index, indexOk, _, _, _, _, previous, previousOk, current, currentOk, _, _, rfl⟩ :=
+      computed
+    have fresh := (getIndexForNewValidator_ok_iff.mp indexOk).2
+    -- The new validator gets a zero byte of flags at the registry size, and each other byte stays.
+    refine ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, slashed, balances,
+      exits, aligned⟩, rfl, rfl, rfl, rfl⟩,
+      fun _ position flags => ⟨fun found => ?_, fun found => ?_⟩⟩
     · rw [setOrAppendList_getElem? previousOk] at found
       split at found
-      · exact .inr (Option.some.inj found).symm
+      · rename_i hit
+        exact .inr ⟨(Option.some.inj found).symm, by omega⟩
       · exact .inl found
     · rw [setOrAppendList_getElem? currentOk] at found
       split at found
-      · exact .inr (Option.some.inj found).symm
+      · rename_i hit
+        exact .inr ⟨(Option.some.inj found).symm, by omega⟩
       · exact .inl found
   split at computed
   · cases computed
-    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, balances, exits,
-      aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
+    exact ⟨⟨⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, grows, kept, distinct, slashed, balances,
+      exits, aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
   · cases computed
 
 /-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
@@ -724,8 +790,8 @@ structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset for
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
   refl := MutatorFrame.refl
   trans := MutatorFrame.trans
-  setValidatorAt := fun set found key _ le whole =>
-    frame_setValidatorAt_of_whole set found key le whole
+  setValidatorAt := fun set found key flag le whole =>
+    frame_setValidatorAt_of_whole set found key (fun marked => flag.trans marked) le whole
   increaseBalance := frame_increaseBalance
   decreaseBalance := frame_decreaseBalance
   initiateValidatorExit := frame_initiateValidatorExit
@@ -951,11 +1017,7 @@ theorem frame_processVoluntaryExit {signed : SignedVoluntaryExit}
 theorem frame_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     BlockFrame state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok computed
   exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
 theorem frame_computeExitEpochAndUpdateChurn {electra : .pectra ≤ fork} {exitBalance : Gwei}
@@ -1021,14 +1083,10 @@ theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : Validator
 theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (computed : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     R state after := by
-  unfold Consensus.processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact laws.refl _)
-    | exact laws.initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact laws.requestPartialWithdrawal keep computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
+  · exact laws.refl _
+  · exact laws.initiateValidatorExit exited
+  · exact laws.requestPartialWithdrawal keep withdrawn
 
 theorem queueExcessActiveBalance {electra : .pectra ≤ fork} {index : ValidatorIndex}
     (computed : Consensus.queueExcessActiveBalance state electra index = .ok after) :
@@ -1058,35 +1116,28 @@ theorem queueConsolidation {electra : .pectra ≤ fork} {sourceIndex : Validator
     (computed : Consensus.queueConsolidation config state electra sourceIndex source targetIndex =
       .ok after) :
     R state after := by
-  simp only [Consensus.queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith,
-    mapError_ok_iff, addChecked_ok_iff, pure, Except.pure] at computed
-  obtain ⟨⟨churnedState, exitEpoch⟩, churned, withdrawable, ⟨_, sum⟩, _, set, _, _, computed⟩ :=
-    computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
+  obtain ⟨exitEpoch, withdrawable, _, _, _, churned, added, set, _, rfl⟩ :=
+    queueConsolidation_steps computed
+  have sum := (addChecked_ok_iff.mp added).2
   obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
   have le : exitEpoch ≤ withdrawable :=
-    UInt64.le_iff_toNat_le.mpr (by simp only at sum ⊢; omega)
-  have validators : churnedState.validators = state.validators :=
-    (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
+    UInt64.le_iff_toNat_le.mpr (by omega)
+  have validators := (computeConsolidationEpochAndUpdateChurn_earliest churned).2.1
   refine laws.trans (keep (frame_computeConsolidationEpochAndUpdateChurn churned) validators) <|
     laws.trans (laws.setValidator (old := state.validators.data[sourceIndex.toNat]) set
-      (by simp [getValidator_eq_getValidatorAt, getValidatorAt, validators, inside]) rfl rfl
-      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat] (by
-        rw [validators]; exact Array.getElem_mem inside))
+      (by simp [getValidator_eq_getValidatorAt, getValidatorAt, inside]) rfl rfl
+      (fun _ => le) fun _ holds => holds state.validators.data[sourceIndex.toNat]
+        (Array.getElem_mem inside))
       (keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl)
 
 theorem processConsolidationRequest {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (computed : Consensus.processConsolidationRequest config state electra request = .ok after) :
     R state after := by
-  unfold Consensus.processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact laws.refl _)
-    | exact laws.switchToCompoundingValidator keep (liftAccessor_ok.mp computed)
-    | exact laws.queueConsolidation keep (getElem?_toNat_of_ofNatChecked (by assumption)) computed
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
+  · exact laws.refl _
+  · exact laws.switchToCompoundingValidator keep switched
+  · exact laws.queueConsolidation keep accepted.sourceAt queued
 
 theorem processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
@@ -1110,19 +1161,30 @@ theorem applyWithdrawal {withdrawal : Withdrawal}
     exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
   · exact laws.decreaseBalance computed
 
-theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
+omit laws keep in
+private theorem updateNextWithdrawalIndex_of (refl : ∀ s, R s s)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value }) {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalIndex at computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
   · cases computed
-    exact laws.refl _
+    exact refl _
 
-omit laws in
-theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
+theorem updateNextWithdrawalIndex {withdrawals : Array Withdrawal}
+    (computed : Consensus.updateNextWithdrawalIndex state withdrawals = .ok after) :
+    R state after :=
+  updateNextWithdrawalIndex_of laws.refl
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
+
+omit laws keep in
+private theorem updateNextWithdrawalValidatorIndex_of
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value }) {capella : .shapella ≤ fork}
     {withdrawals : Array Withdrawal}
     (computed : Consensus.updateNextWithdrawalValidatorIndex state capella withdrawals =
       .ok after) :
@@ -1133,22 +1195,68 @@ theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
   split at computed
   · cases computed
   · cases computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
 
 omit laws in
-theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+theorem updateNextWithdrawalValidatorIndex {capella : .shapella ≤ fork}
+    {withdrawals : Array Withdrawal}
+    (computed : Consensus.updateNextWithdrawalValidatorIndex state capella withdrawals =
+      .ok after) : R state after :=
+  updateNextWithdrawalValidatorIndex_of
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
+
+omit laws keep in
+private theorem updateNextWithdrawalBuilderIndex_of (refl : ∀ s, R s s)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    {gloas : .glamsterdam ≤ fork} {count : Nat}
     (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
     R state after := by
   unfold Consensus.updateNextWithdrawalBuilderIndex at computed
   dsimp only at computed
   split at computed
   · cases computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact refl _
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, rfl⟩ := computed
-    exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    exact setIndex _ _
 
-theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
+omit laws in
+theorem updateNextWithdrawalBuilderIndex {gloas : .glamsterdam ≤ fork} {count : Nat}
+    (computed : Consensus.updateNextWithdrawalBuilderIndex state gloas count = .ok after) :
+    R state after :=
+  updateNextWithdrawalBuilderIndex_of (fun s => keep (BlockFrame.refl s) rfl)
+    (fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl) computed
+
+end EpochFrameLaws
+
+/-- A reflexive, transitive relation holds across the expected withdrawals.
+
+It must hold across each single withdrawal.
+
+It must also hold across each write of a withdrawal index or a builder withdrawal queue.
+
+For partial withdrawals, it need only hold when the processed prefix leaves the queue.
+
+It must also hold across each write of the expected withdrawals of the payload. -/
+theorem applyExpectedWithdrawals_of_updates
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value })
+    (setValidatorIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value })
+    (setBuilderIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    (setPayload : ∀ (s : BeaconState preset fork) value,
+      R s { s with payloadExpectedWithdrawals := value })
+    (setBuilders : ∀ (s : BeaconState preset fork) value,
+      R s { s with builderPendingWithdrawals := value })
+    (dropPartials : ∀ (s : BeaconState preset fork) (electra : .pectra ≤ fork) count,
+      R s (updatePendingPartialWithdrawals s electra count))
+    {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
     R state after := by
@@ -1158,7 +1266,8 @@ theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
   have one : R state applied := by
     unfold applyWithdrawals at appliedOk
     rw [← Array.foldlM_toList] at appliedOk
-    exact laws.foldlM (fun _ _ _ ok => laws.applyWithdrawal keep ok) appliedOk
+    exact foldlM_ok_invariant (R state)
+      (fun _ _ _ prior ok => trans prior (withdraw ok)) (refl state) appliedOk
   have queued : ∀ kept : BeaconState preset fork,
       R kept (if gloas : .glamsterdam ≤ fork then
         updateBuilderPendingWithdrawals
@@ -1166,25 +1275,89 @@ theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
           expected.processedBuilderWithdrawalsCount
       else kept) := by
     intro kept
-    split <;> exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    split
+    · exact trans (setPayload _ _) (setBuilders _ _)
+    · exact refl _
   have partials : ∀ kept : BeaconState preset fork,
       R kept (if electra : .pectra ≤ fork then
         updatePendingPartialWithdrawals kept electra expected.processedPartialWithdrawalsCount
       else kept) := by
     intro kept
-    split <;> exact keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+    split
+    · exact dropPartials _ _ _
+    · exact refl _
   have swept : ∀ kept : BeaconState preset fork,
       (if gloas : .glamsterdam ≤ fork then
         Consensus.updateNextWithdrawalBuilderIndex kept gloas expected.processedBuildersSweepCount
       else pure kept) = .ok finished → R kept finished := by
     intro kept ok
     split at ok
-    · exact EpochFrameLaws.updateNextWithdrawalBuilderIndex keep ok
+    · exact EpochFrameLaws.updateNextWithdrawalBuilderIndex_of refl setBuilderIndex ok
     · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ laws.refl _
-  exact laws.trans one <| laws.trans (laws.updateNextWithdrawalIndex keep indexedOk) <|
-    laws.trans (queued _) <| laws.trans (partials _) <| laws.trans (swept _ sweptOk)
-      (EpochFrameLaws.updateNextWithdrawalValidatorIndex keep last)
+      exact ok ▸ refl _
+  exact trans one <| trans (EpochFrameLaws.updateNextWithdrawalIndex_of refl setIndex indexedOk) <|
+    trans (queued _) <| trans (partials _) <| trans (swept _ sweptOk)
+      (EpochFrameLaws.updateNextWithdrawalValidatorIndex_of setValidatorIndex last)
+
+/-- A relation preserved by individual withdrawals and bookkeeping setters holds across the step. -/
+theorem applyExpectedWithdrawals_of_setters
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (setIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalIndex := value })
+    (setValidatorIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalValidatorIndex := value })
+    (setBuilderIndex : ∀ (s : BeaconState preset fork) value,
+      R s { s with nextWithdrawalBuilderIndex := value })
+    (setPayload : ∀ (s : BeaconState preset fork) value,
+      R s { s with payloadExpectedWithdrawals := value })
+    (setBuilders : ∀ (s : BeaconState preset fork) value,
+      R s { s with builderPendingWithdrawals := value })
+    (setPartials : ∀ (s : BeaconState preset fork) value,
+      R s { s with pendingPartialWithdrawals := value })
+    {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after :=
+  applyExpectedWithdrawals_of_updates R refl trans withdraw setIndex setValidatorIndex
+    setBuilderIndex setPayload setBuilders (fun s _ _ => setPartials s _) computed
+
+/-- A reflexive, transitive relation holds across the expected withdrawals.
+
+It must hold across each single withdrawal.
+
+It must also hold across each block frame that keeps the registry. -/
+theorem applyExpectedWithdrawals_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ s, R s s)
+    (trans : ∀ {s m t}, R s m → R m t → R s t)
+    (withdraw : ∀ {s t} {w : Withdrawal}, applyWithdrawal s w = .ok t → R s t)
+    (keep : ∀ {s t : BeaconState preset fork}, BlockFrame s t → t.validators = s.validators →
+      R s t)
+    {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after := by
+  apply applyExpectedWithdrawals_of_setters R refl trans withdraw (computed := computed)
+  all_goals exact fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+  (keep : ∀ {state after : BeaconState preset fork}, BlockFrame state after →
+    after.validators = state.validators → R state after)
+
+include laws keep
+
+theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
+    {expected : ExpectedWithdrawals}
+    (computed : Consensus.applyExpectedWithdrawals state capella expected = .ok after) :
+    R state after :=
+  applyExpectedWithdrawals_of R laws.refl laws.trans (fun ok => laws.applyWithdrawal keep ok)
+    keep computed
 
 theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
@@ -1379,13 +1552,43 @@ theorem frame_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq computed
   exact BlockFrame.of_validators ⟨rfl, rfl⟩
 
-/-- A relation holds across the execution part of a block when it holds across the withdrawals.
+/-- A relation holds across the execution part of a block when it holds across its operations.
 
 The relation must hold of each state to itself, and chain.
 
-It must hold across each step that keeps the registry and forms a block frame.
+It must hold across withdrawals, the bid from Gloas and the payload before it. -/
+theorem processBlockExecution_of
+    (step : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, step state state)
+    (trans : ∀ {first second third}, step first second → step second third → step first third)
+    (payload : ∀ {state after} {body : BeaconBlockBody preset fork}
+      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam},
+      processExecutionPayload config engine state body execution = .ok after → step state after)
+    (bid : ∀ {state after} {gloas : .glamsterdam ≤ fork}
+      {signed : SignedExecutionPayloadBid preset fork},
+      processExecutionPayloadBid config checks state gloas signed = .ok after → step state after)
+    (withdrawals : ∀ {state after} {capella : .shapella ≤ fork}
+      {payload : Until .glamsterdam fork (ExecutionPayload preset fork)},
+      processWithdrawals state capella payload = .ok after → step state after)
+    {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    step state after := by
+  unfold processBlockExecution at computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, offered⟩ := computed
+    exact trans (withdrawals withdrawnOk) (bid offered)
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, withdrawnOk, paid⟩ := computed
+    exact trans (withdrawals withdrawnOk) (payload paid)
+  · dsimp only at computed
+    split at computed
+    · exact payload computed
+    · cases computed
+      exact refl _
 
-The bid from Gloas and the payload before it are such steps. -/
+/-- The execution part preserves a relation when withdrawals and registry-preserving frames do. -/
 theorem processBlockExecution_step_of
     (step : BeaconState preset fork → BeaconState preset fork → Prop)
     (refl : ∀ state, step state state)
@@ -1397,27 +1600,12 @@ theorem processBlockExecution_step_of
       processWithdrawals state capella payload = .ok after → step state after)
     {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    step state after := by
-  have payload {s t : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (ok : processExecutionPayload config engine s body execution = .ok t) : step s t :=
-    keep (frame_processExecutionPayload ok)
-      (by obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok; rfl)
-  unfold processBlockExecution at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, bid⟩ := computed
-    exact trans (withdrawals withdrawnOk) (keep (frame_processExecutionPayloadBid bid)
-      (by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid; rfl))
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, paid⟩ := computed
-    exact trans (withdrawals withdrawnOk) (payload paid)
-  · dsimp only at computed
-    split at computed
-    · exact payload computed
-    · cases computed
-      exact refl _
+    step state after :=
+  processBlockExecution_of step refl trans
+    (fun ok => keep (frame_processExecutionPayload ok)
+      (by obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok; rfl))
+    (fun ok => keep (frame_processExecutionPayloadBid ok)
+      (by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq ok; rfl)) withdrawals computed
 
 theorem frame_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
@@ -1683,31 +1871,25 @@ theorem processBlock_operationsInput {block : BeaconBlock preset fork}
         else pure last) = .ok after := by
   unfold processBlock at computed
   split at computed
-  · unfold processBlockAltair at computed
+  · rename_i altair
+    unfold processBlockAltair at computed
     simp only [bind_ok_iff] at computed
-    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, _, votedOk, _, operatedOk,
-      synced⟩ := computed
+    obtain ⟨_, startedOk, _, operatedOk, synced⟩ := computed
+    simp only [stateBeforeOperations, bind_ok_iff] at startedOk
+    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, votedOk⟩ := startedOk
     refine ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operatedOk,
       frame_processSyncAggregate synced, ?_⟩
-    simp only [‹Fork.altair ≤ fork›, ↓reduceDIte]
+    simp only [altair, ↓reduceDIte]
     exact synced
   · rename_i altair
     simp only [bind_ok_iff] at computed
-    obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-    -- Before Altair neither the payload of the parent nor the execution part runs.
-    have gloas : ¬ Fork.glamsterdam ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have bellatrix : ¬ Fork.bellatrix ≤ fork := fun h => altair (Nat.le_trans (by decide) h)
-    have early : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
-    refine ⟨_, _, ⟨state, _, _, _, ?_, headerOk, ?_, randaoOk, ?_⟩, operationsOk,
+    obtain ⟨_, startedOk, operationsOk⟩ := computed
+    simp only [stateBeforeOperations, bind_ok_iff] at startedOk
+    obtain ⟨_, paidOk, _, headedOk, _, executedOk, _, revealedOk, votedOk⟩ := startedOk
+    refine ⟨_, _, ⟨_, _, _, _, paidOk, headedOk, executedOk, revealedOk, votedOk⟩, operationsOk,
       BlockFrame.refl _, ?_⟩
-    · simp only [gloas, ↓reduceDIte]
-      rfl
-    · simp only [bellatrix, ↓reduceDIte]
-      rfl
-    · simp only [early, ↓reduceDIte]
-      exact eth1Ok
-    · simp only [altair, ↓reduceDIte]
-      rfl
+    simp only [altair, ↓reduceDIte]
+    rfl
 
 /-- A block runs the steps of its operations input, then three folds, then a block frame.
 
@@ -1792,47 +1974,6 @@ private theorem queueForActivation_pubkey {validator queued : Validator}
     (computed : queueForActivation state validator = .ok queued) :
     queued.pubkey = validator.pubkey := by
   rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> rfl
-
-/-- The state that the epoch transition reaches before the step of the payments.
-
-It runs the steps of the epoch transition that come before that step, in their order.
-
-Before Altair it skips the inactivity scores, as the epoch transition does. -/
-def epochBeforePayments (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) : Except TransitionError (BeaconState preset fork) := do
-  let state ← processJustificationAndFinalization state
-  let state ← (if altair : .altair ≤ fork then processInactivityUpdates config state altair
-    else pure state)
-  let state ← processRewardsAndPenalties config state
-  let state ← processRegistryUpdates config state
-  let state ← processSlashings state
-  let state ← (if before : fork < .hegota then processEth1DataReset before state else pure state)
-  processPendingBalances config checks state
-
-/-- From Altair, the epoch transition first runs the steps that come before the payments.
-
-It then runs the rest of its steps in their order.
-
-So those first steps are a factor of the epoch transition, and not a second form of it. -/
-theorem processEpochAltair_eq_epochBeforePayments_bind (config : Config) (checks : SignatureChecks)
-    (state : BeaconState preset fork) (altair : .altair ≤ fork) :
-    processEpochAltair config checks state altair = (do
-      let state ← epochBeforePayments config checks state
-      let state ← (if gloas : .glamsterdam ≤ fork then
-          liftAccessor (processBuilderPendingPayments state gloas)
-        else pure state)
-      let state ← processEffectiveBalanceUpdates state
-      let state ← processSlashingsReset state
-      let state ← processRandaoMixesReset state
-      let state ← if capella : .shapella ≤ fork then processHistoricalSummariesUpdate state capella
-        else processHistoricalRootsUpdate state
-      let state := processParticipationFlagUpdates state altair
-      let state ← processSyncCommitteeUpdates state altair
-      let state ← (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead state fulu)
-        else pure state)
-      if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow state gloas)
-      else pure state) := by
-  simp only [processEpochAltair, epochBeforePayments, altair, ↓reduceDIte, bind_assoc]
 
 namespace EpochStepLaws
 
@@ -2114,6 +2255,43 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact (laws.ptcWindow _ _)
 
+/-- One stage that is neither justification, the payments, the flag rotation nor the deposits.
+
+Each such stage relates its states under the laws of the steps. -/
+theorem epochEdge {stage : EpochStage}
+    (ordinary : stage ≠ .justification ∧ stage ≠ .payments ∧ stage ≠ .participation ∧
+      stage ≠ .pendingDeposits)
+    (computed : EpochStage.action config checks stage state = .ok after) : R state after := by
+  have edge := EpochStage.action_cases.mp computed
+  cases stage <;> simp only [EpochStage.Edge] at edge
+  case justification | payments | participation | pendingDeposits => simp at ordinary
+  all_goals first
+    | exact laws.processRewardsAndPenalties edge
+    | exact laws.processRegistryUpdates edge
+    | exact laws.processSlashings edge
+    | exact laws.processEffectiveBalanceUpdates edge
+    | exact laws.processSlashingsReset edge
+    | exact laws.processRandaoMixesReset edge
+    | (split at edge
+       · first
+         | exact laws.processInactivityUpdates edge
+         | exact laws.processEth1DataReset edge
+         | exact laws.processPendingConsolidations edge
+         | exact laws.processHistoricalSummariesUpdate edge
+         | exact laws.processSyncCommitteeUpdates edge
+         | exact laws.processProposerLookahead edge
+         | exact laws.processPtcWindow edge
+       · first
+         | exact laws.processHistoricalRootsUpdate edge
+         | exact edge ▸ laws.refl _)
+
+private theorem epochTrace {stages : List EpochStage}
+    (ordinary : ∀ k ∈ stages, k ≠ .justification ∧ k ≠ .payments ∧ k ≠ .participation ∧
+      k ≠ .pendingDeposits)
+    (trace : EpochTrace (EpochStage.action config checks) stages state after) : R state after :=
+  trace.transport R laws.refl laws.trans
+    (fun k member _ _ ok => laws.epochEdge (ordinary k member) ok)
+
 /-- From Altair, the epoch transition first runs the steps before the payments.
 
 The builder payments follow, which change nothing before Gloas, then steps in the relation.
@@ -2127,32 +2305,49 @@ theorem processEpochAltair_paymentSplit {altair : .altair ≤ fork}
         liftAccessor (processBuilderPendingPayments pending gloas) else pure pending) =
           (Except.ok paid : Except TransitionError _) ∧
       R paid rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
-  rw [processEpochAltair_eq_epochBeforePayments_bind] at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨pending, pendingOk, paid, paidOk, balanced, balancedOk, cleared, clearedOk, mixed,
-    mixedOk, computed⟩ := computed
-  have middle : R paid mixed :=
-    laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
-    laws.trans (laws.processSlashingsReset clearedOk) (laws.processRandaoMixesReset mixedOk)
-  split at computed <;> simp only [bind_ok_iff] at computed <;>
-    obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
-  all_goals
-    have lookedFrame : R synced looked := by
-      split at lookedOk
-      · exact laws.processProposerLookahead (liftAccessor_ok.mp lookedOk)
-      · simp only [pure, Except.pure, Except.ok.injEq] at lookedOk
-        exact lookedOk ▸ laws.refl _
-    have windowedFrame : R looked after := by
-      split at windowed
-      · exact laws.processPtcWindow (liftAccessor_ok.mp windowed)
-      · simp only [pure, Except.pure, Except.ok.injEq] at windowed
-        exact windowed ▸ laws.refl _
-    refine ⟨pending, paid, rooted, pendingOk, paidOk, ?_, ?_⟩
-    · first
-      | exact laws.trans middle (laws.processHistoricalSummariesUpdate rootedOk)
-      | exact laws.trans middle (laws.processHistoricalRootsUpdate rootedOk)
-    · exact laws.trans (laws.processSyncCommitteeUpdates syncedOk)
-        (laws.trans lookedFrame windowedFrame)
+  rw [processEpochAltair_eq_run] at computed
+  have trace := EpochTrace.run_ok_iff.mp computed
+  obtain ⟨rooted, head, tail⟩ := EpochTrace.append_iff.mp trace
+  obtain ⟨pending, initial, middle⟩ := EpochTrace.append_iff.mp head
+  cases middle with
+  | cons paidOk middle =>
+    cases tail with
+    | cons rotated tail =>
+      have rotation := EpochStage.action_cases.mp rotated
+      simp only [EpochStage.Edge, altair, ↓reduceDIte] at rotation
+      subst rotation
+      refine ⟨pending, _, rooted, ?_, paidOk, laws.epochTrace (by simp) middle,
+        laws.epochTrace (by simp) tail⟩
+      rw [epochBeforePayments_eq_run]
+      exact EpochTrace.run_ok_iff.mpr initial
+
+/-- Before Altair, the epoch transition is justification, then steps in the relation. -/
+theorem processEpoch_split_of_lt_altair (before : fork < .altair)
+    (computed : Consensus.processEpoch config checks state = .ok after) :
+    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
+      R justified after := by
+  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
+  have later (stage : Fork) (ordered : Fork.altair ≤ stage) : ¬ stage ≤ fork :=
+    fun h => notAltair (Nat.le_trans ordered h)
+  have trace := processEpoch_trace computed
+  change EpochTrace _ (.justification :: _) _ _ at trace
+  cases trace with
+  | cons first rest =>
+    refine ⟨_, first, rest.transport R laws.refl laws.trans fun k member _ _ ok => ?_⟩
+    -- Before Altair the payments and the deposits change nothing, and the rotation is Phase 0's.
+    have edge := EpochStage.action_cases.mp ok
+    cases k
+    case justification => simp [EpochStage.middleStages, EpochStage.tailStages] at member
+    case payments =>
+      simp only [EpochStage.Edge, later .glamsterdam (by decide), ↓reduceDIte] at edge
+      exact edge ▸ laws.refl _
+    case participation =>
+      simp only [EpochStage.Edge, notAltair, ↓reduceDIte] at edge
+      exact laws.processParticipationRecordUpdates edge
+    case pendingDeposits =>
+      simp only [EpochStage.Edge, later .pectra (by decide), ↓reduceDIte] at edge
+      exact edge ▸ laws.refl _
+    all_goals exact laws.epochEdge (by simp) ok
 
 end EpochStepLaws
 
@@ -2164,51 +2359,11 @@ variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
 include laws
 
 theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      Consensus.passPendingDeposits config checks stop nextEpoch available state processed count
-        postponed deposits = .ok pass →
-      R state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [Consensus.passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact laws.refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold Consensus.passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact laws.refl _
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact laws.trans (laws.applyPendingDeposit credited)
-        (passPendingDeposits (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact passPendingDeposits (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact laws.refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact laws.trans (laws.applyPendingDeposit credited)
-      (passPendingDeposits (deposits := rest) ‹_›)
+    {available : Gwei} {deposits : List PendingDeposit} {state : BeaconState preset fork}
+    {processed : Gwei} {count : Nat} {postponed : Array PendingDeposit} {pass}
+    (computed : Consensus.passPendingDeposits config checks stop nextEpoch available state
+      processed count postponed deposits = .ok pass) : R state pass.1.state :=
+  passPendingDeposits_of R laws.refl laws.trans (fun ok => laws.applyPendingDeposit ok) computed
 
 theorem processPendingDeposits {electra : .pectra ≤ fork}
     (computed : Consensus.processPendingDeposits config checks state electra = .ok after) :
@@ -2237,46 +2392,41 @@ theorem epochBeforePayments_split
     (computed : epochBeforePayments config checks state = .ok after) :
     ∃ justified, processJustificationAndFinalization state = .ok justified ∧
       R justified after := by
-  simp only [epochBeforePayments, bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pendingOk⟩ := computed
-  have scoredFrame : R justified scored := by
-    split at scoredOk
-    · exact laws.processInactivityUpdates scoredOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at scoredOk
-      exact scoredOk ▸ laws.refl _
-  have resetFrame : R slashed reset := by
-    split at resetOk
-    · exact laws.processEth1DataReset resetOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-      exact resetOk ▸ laws.refl _
-  exact ⟨justified, justifiedOk, laws.trans scoredFrame <|
-    laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
-    laws.trans (laws.processRegistryUpdates registeredOk) <|
-    laws.trans (laws.processSlashings slashedOk) <|
-    laws.trans resetFrame (laws.processPendingBalances pendingOk)⟩
+  rw [epochBeforePayments_eq_run] at computed
+  have trace := EpochTrace.run_ok_iff.mp computed
+  cases trace with
+  | cons first rest =>
+    refine ⟨_, first, rest.transport R laws.refl laws.trans ?_⟩
+    intro k member a b ok
+    by_cases deposits : k = .pendingDeposits
+    · subst k
+      have edge := EpochStage.action_cases.mp ok
+      simp only [EpochStage.Edge] at edge
+      split at edge
+      · exact laws.processPendingDeposits edge
+      · exact edge ▸ laws.refl _
+    refine laws.toEpochStepLaws.epochEdge ⟨?_, ?_, ?_, deposits⟩ ok <;> rintro rfl <;>
+      simp at member
 
-/-- Before Altair, the epoch transition is justification, then steps in the relation. -/
-theorem processEpoch_split_of_lt_altair (before : fork < .altair)
-    (computed : Consensus.processEpoch config checks state = .ok after) :
-    ∃ justified, processJustificationAndFinalization state = .ok justified ∧
-      R justified after := by
-  have notAltair : ¬ .altair ≤ fork := Nat.not_le_of_lt before
-  unfold Consensus.processEpoch at computed
-  simp only [notAltair, ↓reduceDIte, bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, rewarded, rewardedOk, registered, registeredOk, slashed,
-    slashedOk, reset, resetOk, balanced, balancedOk, cleared, clearedOk, mixed, mixedOk, rooted,
-    rootedOk, rotated⟩ := computed
-  exact ⟨justified, justifiedOk,
-    laws.trans (laws.processRewardsAndPenalties rewardedOk) <|
-    laws.trans (laws.processRegistryUpdates registeredOk) <|
-    laws.trans (laws.processSlashings slashedOk) <|
-    laws.trans (laws.processEth1DataReset resetOk) <|
-    laws.trans (laws.processEffectiveBalanceUpdates balancedOk) <|
-    laws.trans (laws.processSlashingsReset clearedOk) <|
-    laws.trans (laws.processRandaoMixesReset mixedOk) <|
-    laws.trans (laws.processHistoricalRootsUpdate rootedOk)
-      (laws.processParticipationRecordUpdates rotated)⟩
+/-- From Altair, the epoch is justification, then steps in the relation, then the flag rotation.
+
+Then steps in the relation follow it, assuming the builder payments are in the relation. -/
+theorem processEpochAltair_rotationSplit
+    (payments : ∀ {state after : BeaconState preset fork} (gloas : .glamsterdam ≤ fork),
+      processBuilderPendingPayments state gloas = .ok after → R state after)
+    {altair : .altair ≤ fork}
+    (computed : Consensus.processEpochAltair config checks state altair = .ok after) :
+    ∃ justified rooted, processJustificationAndFinalization state = .ok justified ∧
+      R justified rooted ∧ R (processParticipationFlagUpdates rooted altair) after := by
+  obtain ⟨pending, paid, rooted, initial, payment, middle, tail⟩ :=
+    laws.processEpochAltair_paymentSplit computed
+  obtain ⟨justified, first, head⟩ := laws.epochBeforePayments_split initial
+  have paidStep : R pending paid := by
+    split at payment
+    · exact payments _ (liftAccessor_ok.mp payment)
+    · simp only [pure, Except.pure, Except.ok.injEq] at payment
+      exact payment ▸ laws.refl _
+  exact ⟨justified, rooted, first, laws.trans head (laws.trans paidStep middle), tail⟩
 
 end EpochFrameLaws
 
@@ -2430,15 +2580,8 @@ theorem processEpochAltair_split {altair : .altair ≤ fork}
     ∃ justified rooted, processJustificationAndFinalization state = .ok justified ∧
       MutatorFrame justified rooted ∧
       MutatorFrame (processParticipationFlagUpdates rooted altair) after := by
-  obtain ⟨pending, paid, rooted, pendingOk, paidOk, middle, tail⟩ :=
-    mutatorEpochFrameLaws.processEpochAltair_paymentSplit computed
-  obtain ⟨justified, justifiedOk, head⟩ := mutatorEpochFrameLaws.epochBeforePayments_split pendingOk
-  have paidFrame : MutatorFrame pending paid := by
-    split at paidOk
-    · exact frame_processBuilderPendingPayments (liftAccessor_ok.mp paidOk)
-    · simp only [pure, Except.pure, Except.ok.injEq] at paidOk
-      exact paidOk ▸ MutatorFrame.refl _
-  exact ⟨justified, rooted, justifiedOk, head.trans (paidFrame.trans middle), tail⟩
+  exact mutatorEpochFrameLaws.processEpochAltair_rotationSplit
+    (fun _ ok => frame_processBuilderPendingPayments ok) computed
 
 /-- From Altair, the epoch transition is justification, then steps that form an epoch frame. -/
 theorem processEpochAltair_frame {altair : .altair ≤ fork}
@@ -2657,20 +2800,40 @@ theorem advanceSlot_invariant (holds : Invariant state)
     · rw [cachedFrame.finalized]
       exact UInt64.le_refl _
 
-theorem advanceSlots_invariant :
+/-- Successful slots compose a relation while retaining the invariant and finalized order.
+
+Composition can use the finalized order of the remaining slots. -/
+theorem advanceSlots_invariant_of
+    (R : BeaconState preset fork → BeaconState preset fork → Prop)
+    (refl : ∀ state, R state state)
+    (trans : ∀ {first middle last},
+      middle.finalizedCheckpoint.epoch ≤ last.finalizedCheckpoint.epoch →
+      R first middle → R middle last → R first last)
+    (step : ∀ {state after}, Invariant state →
+      advanceSlot config checks state = .ok after → R state after) :
     ∀ {count : Nat} {state after : BeaconState preset fork}, Invariant state →
       advanceSlots config checks count state = .ok after →
-      Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch
+      Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch ∧
+        R state after
   | 0, state, after, holds, computed => by
     simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
     subst computed
-    exact ⟨holds, UInt64.le_refl _⟩
+    exact ⟨holds, UInt64.le_refl _, refl _⟩
   | count + 1, state, after, holds, computed => by
     simp only [advanceSlots, bind_ok_iff] at computed
     obtain ⟨next, nextOk, rest⟩ := computed
     obtain ⟨nextHolds, first⟩ := advanceSlot_invariant holds nextOk
-    obtain ⟨afterHolds, second⟩ := advanceSlots_invariant nextHolds rest
-    exact ⟨afterHolds, UInt64.le_trans first second⟩
+    obtain ⟨afterHolds, second, related⟩ :=
+      advanceSlots_invariant_of R refl trans step nextHolds rest
+    exact ⟨afterHolds, UInt64.le_trans first second, trans second (step holds nextOk) related⟩
+
+theorem advanceSlots_invariant
+    {count : Nat} {state after : BeaconState preset fork} (holds : Invariant state)
+    (computed : advanceSlots config checks count state = .ok after) :
+    Invariant after ∧ state.finalizedCheckpoint.epoch ≤ after.finalizedCheckpoint.epoch := by
+  obtain ⟨afterHolds, ordered, _⟩ := advanceSlots_invariant_of (fun _ _ => True)
+    (fun _ => trivial) (fun _ _ _ => trivial) (fun _ _ => trivial) holds computed
+  exact ⟨afterHolds, ordered⟩
 
 /-- Advancing to a later slot keeps the invariant.
 
@@ -2701,5 +2864,38 @@ theorem stateTransition_invariant
   refine ⟨frame.invariant advancedHolds, ?_⟩
   rw [frame.finalized]
   exact finalized
+
+/-- An epoch stage other than justification is a frame step. -/
+theorem EpochStage.Edge.frame {f : Fork} {a b : BeaconState preset f} {k : EpochStage}
+    (edge : EpochStage.Edge config checks k a b) (other : k ≠ .justification) :
+    Frame a b := by
+  by_cases ordinary : k ≠ .payments ∧ k ≠ .participation ∧ k ≠ .pendingDeposits
+  · exact mutatorEpochFrameLaws.toEpochStepLaws.epochEdge
+      ⟨other, ordinary⟩ (EpochStage.action_cases.mpr edge) |>.toFrame
+  cases k
+  case payments =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processBuilderPendingPayments edge).toFrame
+    · cases edge; exact Frame.refl _
+  case participation =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · cases edge; exact (frame_processParticipationFlagUpdates _ _).toFrame
+    · exact (frame_processParticipationRecordUpdates edge).toFrame
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact (frame_processPendingDeposits edge).toFrame
+    · cases edge; exact Frame.refl _
+  all_goals exact (ordinary ⟨nofun, nofun, nofun⟩).elim
+
+/-- An epoch stage other than justification preserves matching registry and balance sizes. -/
+theorem EpochStage.Edge.balancesMatch_of_not_justification
+    {preset : Preset} {config : Config} {checks : SignatureChecks}
+    {f : Fork} {a b : BeaconState preset f} {k : EpochStage}
+    (edge : EpochStage.Edge config checks k a b) (other : k ≠ .justification)
+    (matched : BalancesMatch a) : BalancesMatch b :=
+  (edge.frame other).balancesMatch matched
 
 end EthLib.Consensus

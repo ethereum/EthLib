@@ -4,7 +4,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
 public import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
 public import EthLib.Serialization.Proofs.Ssz.Codec.WalkerLaws
 public import EthLib.Serialization.Proofs.Ssz.Codec.BranchConstruction
-public import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
 
 /-! Multiproofs constructed from a value reconstruct its root without extending its leaf nodes. -/
 
@@ -15,85 +15,6 @@ namespace EthLib.Serialization.Ssz
 /-- Each indexed node is a successful read of the value's finite tree. -/
 def ReadNodes (read : Nat → Except Err Bytes) (nodes : List (Nat × Bytes)) : Prop :=
   ∀ index node, (index, node) ∈ nodes → read index = .ok node
-
-/-- A level fold preserves successful reads of a tree closed under parents and siblings. -/
-theorem foldLevelNodes_reads {read : Nat → Except Err Bytes} (closed : WalkerClosed read)
-    {depth : Nat} (positive : 0 < depth) {nodes pending : List (Nat × Bytes)}
-    (allRead : ReadNodes read nodes) (pendingRead : ReadNodes read pending)
-    {parents kept : List (Nat × Bytes)}
-    (folded : foldLevelNodes depth nodes pending = .ok (parents, kept)) :
-    ReadNodes read (parents ++ kept) := by
-  -- Only the parent of a genuinely readable pair needs a hash equation.
-  induction pending generalizing parents kept with
-  | nil => simp_all [foldLevelNodes, ReadNodes]
-  | cons pair rest ih =>
-    rcases pair with ⟨index, node⟩
-    have head := pendingRead index node (by simp)
-    -- The untouched suffix still consists of genuine reads from the same finite tree.
-    have tail : ReadNodes read rest := fun i v member => pendingRead i v (by simp [member])
-    simp only [foldLevelNodes] at folded
-    split at folded
-    · cases rec : foldLevelNodes depth nodes rest <;>
-        simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-      rcases folded with ⟨rfl, rfl⟩
-      have reads := ih tail rec
-      simp only [ReadNodes, List.mem_append, List.mem_cons] at reads ⊢
-      grind
-    · rename_i atDepth
-      have atDepth : levelOf index = depth := by simpa using atDepth
-      split at folded
-      · rename_i even
-        have even : index % 2 = 0 := by simpa using even
-        cases sibling : nodeAt nodes (index + 1) with
-        | none => simp [sibling, throw] at folded
-        | some siblingValue =>
-          -- The neighboring helper value is identified with the sibling returned by the actual tree reader.
-          have supplied := allRead (index + 1) siblingValue (nodeAt_member sibling)
-          obtain ⟨parent, siblingRead, parentRead, readsSibling, equation⟩ :=
-            closed index node (two_le_of_level_positive atDepth positive) head
-          obtain ⟨whole, siblingIndex⟩ := gindexSibling_even even
-          have siblingIndex : gindexSibling index = index + 1 := by omega
-          rw [siblingIndex, supplied] at readsSibling
-          cases readsSibling
-          -- The stored parent is the ordered hash of this readable child and its supplied sibling.
-          have parentAgrees : read (gindexParent index) = .ok (combine node siblingValue) := by
-            rw [ite_eq_left even] at equation
-            rwa [← equation]
-          cases rec : foldLevelNodes depth nodes rest <;>
-            simp [sibling, rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at folded
-          rcases folded with ⟨rfl, rfl⟩
-          have reads := ih tail rec
-          simp only [ReadNodes, List.mem_append, List.mem_cons] at reads ⊢
-          grind
-      · split at folded
-        · simp [throw] at folded
-        · exact ih tail folded
-
-/-- A successful complete fold returns the node actually stored at the root position. -/
-theorem foldToRoot_reads {read : Nat → Except Err Bytes} (closed : WalkerClosed read) :
-    ∀ depth nodes, ReadNodes read nodes → ∀ root,
-      foldToRoot depth nodes = .ok root → read 1 = .ok root := by
-  -- Each intermediate list still consists entirely of genuine tree reads.
-  intro depth
-  induction depth with
-  | zero =>
-    intro nodes reads root built
-    cases found : nodeAt nodes 1 <;> simp [foldToRoot, found] at built
-    subst root
-    exact reads 1 _ (nodeAt_member found)
-  | succ depth ih =>
-    intro nodes reads root built
-    cases level : foldLevel (depth + 1) nodes with
-    | error error => simp [foldToRoot, level, Bind.bind, Except.bind] at built
-    | ok result =>
-      -- One complete level reduction preserves genuine reads for both newly computed parents and retained nodes.
-      have resultReads : ReadNodes read result := by
-        unfold foldLevel at level
-        cases rec : foldLevelNodes (depth + 1) nodes nodes <;>
-          simp [rec, Bind.bind, Except.bind, Pure.pure, Except.pure] at level
-        subst result
-        exact foldLevelNodes_reads closed (by omega) reads reads rec
-      exact ih result resultReads root (by simpa [foldToRoot, level, Bind.bind, Except.bind] using built)
 
 /-- Reading a list preserves both its length and the value read at each paired index. -/
 theorem mapM_readNodes {read : Nat → Except Err Bytes} {indices : List Nat} {values : List Bytes}
@@ -116,18 +37,52 @@ theorem closed_multiproof_rebuilds_root {read : Nat → Except Err Bytes} (close
     (indexed : getHelperIndices indices = .ok helpers)
     (leafReads : indices.mapM read = .ok leaves) (helperReads : helpers.mapM read = .ok proof) :
     ∃ root, calculateMultiMerkleRootUnchecked leaves proof indices = .ok root ∧ read 1 = .ok root := by
-  -- Helper-frontier completeness supplies a result, and preserved reads identify it as the root.
   obtain ⟨leafCount, leavesRead⟩ := mapM_readNodes leafReads
   obtain ⟨proofCount, proofRead⟩ := mapM_readNodes helperReads
-  -- Helper-frontier completeness guarantees that reconstruction succeeds before read preservation identifies its result.
+  -- The reconstruction succeeds, as the Merkle rebuild of the nodes at their positions.
   obtain ⟨root, reconstructed⟩ := calculateMultiMerkleRootUnchecked_complete indexed leafCount proofCount
-  have reads : ReadNodes read (indices.zip leaves ++ helpers.zip proof) := fun i node member =>
-    (List.mem_append.mp member).elim (leavesRead i node) (proofRead i node)
   refine ⟨root, reconstructed, ?_⟩
-  have folded := reconstructed
-  simp only [calculateMultiMerkleRootUnchecked, leafCount, bne_self_eq_false, Bool.false_eq_true, ↓reduceIte, bind,
-    Except.bind, indexed, proofCount, List.map_append, List.foldl_append] at folded
-  exact foldToRoot_reads closed _ _ reads _ folded
+  obtain ⟨helpers', indexed', -, -, rebuilt⟩ :=
+    calculateMultiMerkleRootUnchecked_shape reconstructed
+  rw [indexed] at indexed'
+  cases indexed'
+  let H := gindexHeight indices
+  have valid := getHelperIndices_valid indexed
+  -- Every rebuilt node in the tree is the node the reader returns at its index.
+  have reads := Cryptography.Merkle.rebuild_go_induction sszNodeHash
+    (fun p v => InTree H p → read (positionGindex H p) = .ok v) (nodes :=
+      multiproofNodes H indices helpers leaves proof) ?_ ?_ H 0 root rebuilt
+    (Cryptography.Merkle.Position.IsAncestor.refl _)
+  · simpa [H, positionGindex] using reads
+  · -- A node given is read at its index.
+    intro e member _
+    rw [multiproofNodes, List.zip_map_left] at member
+    obtain ⟨⟨g, v⟩, pair, rfl⟩ := List.mem_map.mp member
+    obtain ⟨named, deep⟩ := valid g (List.of_mem_zip pair).1
+    rw [List.zip_append (by simp [leafCount])] at pair
+    show read (positionGindex H (gindexPosition H g)) = .ok v
+    rw [show positionGindex H (gindexPosition H g) = g from
+      positionGindex_gindexPosition named deep]
+    exact (List.mem_append.mp pair).elim (leavesRead g v) (proofRead g v)
+  · -- The reader closes the even child with its sibling into the parent.
+    intro p a b low left right inside
+    obtain ⟨leftInside, rightInside⟩ := inTree_children inside low
+    have top : p.level ≤ H := inside.level_le
+    have leftRead := left leftInside
+    have rightRead := right rightInside
+    rw [positionGindex_left low top] at leftRead
+    rw [positionGindex_right low top] at rightRead
+    have named := (positionGindex_bounds inside).1
+    obtain ⟨parent, sibling, parentRead, siblingRead, equation⟩ :=
+      closed _ a (by omega) leftRead
+    obtain ⟨-, siblingIndex⟩ := gindexSibling_even (index := 2 * positionGindex H p) (by omega)
+    rw [siblingIndex, show 2 * positionGindex H p / 2 = positionGindex H p by omega,
+      rightRead] at siblingRead
+    cases siblingRead
+    rw [show 2 * positionGindex H p / 2 = positionGindex H p by omega] at parentRead
+    rw [parentRead, equation]
+    simp only [Nat.mul_mod_right, ↓reduceIte]
+    rfl
 
 /-- A multiproof built from any readable value nodes reconstructs the actual value root. -/
 theorem buildMultiproof_rebuilds_value_root (shape : Desc) (value : Value) (root : Bytes)

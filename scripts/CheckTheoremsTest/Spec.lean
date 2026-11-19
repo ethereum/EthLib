@@ -1,0 +1,201 @@
+module
+
+/-!
+# Theorems retained by definitions, instances and simplification
+
+Findings have no retained consumer and no `simp` attribute.
+-/
+
+@[expose] public section
+
+namespace CheckTheoremsTest.Spec
+
+/-- A definition uses this theorem directly. -/
+theorem direct_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- A proof in a definition's result retains its theorem. -/
+def direct (n : Nat) : Fin (n + 1) := ⟨n, direct_bound n⟩
+
+/-- A public computational helper retains this theorem. -/
+theorem nested_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- The helper's enclosing function need not call it. -/
+def with_unused_helper (n : Nat) : Nat := n
+where
+  /-- A computational definition remains a root under its parent's namespace. -/
+  helper (n : Nat) : Fin (n + 1) := ⟨n, nested_bound n⟩
+
+/-- A retained theorem uses this helper. -/
+theorem transitive_helper (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- A definition uses this theorem, which retains its own helper. -/
+theorem transitive_bound (n : Nat) : n < n + 1 := transitive_helper n
+
+/-- The check follows the complete chain from this definition. -/
+def transitive (n : Nat) : Fin (n + 1) := ⟨n, transitive_bound n⟩
+
+/-- A reducible definition lets simplification erase its equality proof. -/
+def erasedValue (n : Nat) : Nat := n
+
+/-- The elaborated reference retains this lemma even when its proof term disappears. -/
+theorem erased_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- A retained theorem names its helper in a tactic block. -/
+theorem erased_bound (n : Nat) : erasedValue n < n + 1 := by
+  simp only [erased_helper]
+  exact Nat.lt_succ_self n
+
+/-- The computational root retains the complete chain of source references. -/
+def erased (n : Nat) : Fin (n + 1) := ⟨erasedValue n, erased_bound n⟩
+
+/-- A definition's own proof can also lose a named lemma during simplification. -/
+theorem erased_direct_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- This definition retains its own helper independently of the theorem's helper. -/
+def erased_direct (n : Nat) : Fin (n + 1) :=
+  ⟨erasedValue n, by simp only [erased_direct_helper]; exact Nat.lt_succ_self n⟩
+
+/-- A helper used only by an unretained proof remains a finding. -/
+theorem erased_unused_helper (n : Nat) : erasedValue n = n := rfl
+
+/-- Source references do not make an unretained theorem into a root. -/
+theorem erased_unused (n : Nat) : erasedValue n = n := by
+  simp only [erased_unused_helper]
+
+/-- The theorem belongs only to another unneeded theorem's proof. -/
+theorem unused_helper (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- Both this theorem and its helper are findings. -/
+theorem unused (n : Nat) : n + 0 = n := unused_helper n
+
+/-- Only a definition in a property module uses this theorem. -/
+theorem used_only_from_proofs (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- Only a definition in an export module uses this theorem. -/
+theorem used_only_from_exports (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- A retained simplification theorem uses this private helper. -/
+private theorem simp_helper (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- A definition whose simplification rule is public. -/
+def simpValue (n : Nat) : Nat := n + 0
+
+/-- The simplification attribute exempts this theorem from findings. -/
+@[simp] theorem simpValue_eq (n : Nat) : simpValue n = n := simp_helper n
+
+/-- A retained reverse simplification rule uses this private helper. -/
+private theorem reverse_helper (n : Nat) : n = n + 0 := (Nat.add_zero n).symm
+
+/-- A definition with a reverse simplification rule. -/
+def reverseValue (n : Nat) : Nat := n + 0
+
+/-- The persistent reverse attribute exempts this theorem from findings. -/
+theorem reverse_eq (n : Nat) : n = reverseValue n := reverse_helper n
+
+attribute [simp ←] reverse_eq
+
+/-- Only the imported simplification rule uses this helper. -/
+theorem removed_helper (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- A definition whose rule is erased in this module. -/
+def removedValue (n : Nat) : Nat := n + 0
+
+/-- The erasure below is local to this module, so importers still receive this rule. -/
+@[simp] theorem removed_eq (n : Nat) : removedValue n = n := removed_helper n
+
+attribute [-simp] removed_eq
+
+/-- A local simplification attribute does not retain this theorem after its section ends. -/
+theorem local_eq (n : Nat) : removedValue n = n := Nat.add_zero n
+
+section
+
+attribute [local simp] local_eq
+
+end
+
+/-- A proposition-valued instance retains this proof dependency. -/
+theorem instance_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- A proposition-valued class supplies an instance root. -/
+class HasBound (n : Nat) : Prop where
+  /-- The supplied bound. -/
+  bound : n < n + 1
+
+/-- An instance is retained even when no other definition uses it. -/
+instance (n : Nat) : HasBound n := ⟨instance_bound n⟩
+
+/-- A definition local to an unneeded proof must not retain this theorem. -/
+theorem proof_local_helper : True := True.intro
+
+/-- The helper definition belongs to this unneeded proof, so neither roots the other. -/
+theorem with_local_definition : True := helper.property
+where
+  /-- A generated definition of a theorem is not a specification entry point. -/
+  helper : { _value : Nat // True } := ⟨0, proof_local_helper⟩
+
+/-- Structural recursion produces equation lemmas which are not independent findings. -/
+def sumTo : Nat → Nat
+  | 0 => 0
+  | n + 1 => sumTo n + n + 1
+
+/-- Unfolding the recursion requests its generated equation lemmas. -/
+theorem sumTo_succ (n : Nat) : sumTo (n + 1) = sumTo n + n + 1 := by
+  simp only [sumTo]
+
+/-- A user theorem with a generated-looking name is still a finding. -/
+theorem orphan.eq_1 (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- A second generated-looking suffix must not hide a user theorem. -/
+theorem orphan._proof_1 (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- A generated-looking suffix under a real definition still names a user theorem. -/
+theorem direct._proof_99 (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- This private finding shares its user-facing name with one in another module. -/
+private theorem private_unused (n : Nat) : n + 0 = n := Nat.add_zero n
+
+/-- Only the unneeded private theorem's local definition uses this dependency. -/
+theorem private_local_helper : True := True.intro
+
+/-- A private theorem with a local definition is a finding too. -/
+private theorem private_with_local_definition : True := helper.property
+where
+  /-- This definition belongs to its private theorem, under the original private prefix. -/
+  helper : { _value : Nat // True } := ⟨0, private_local_helper⟩
+
+end CheckTheoremsTest.Spec
+
+namespace UnrelatedNamespace
+
+/-- The defining module determines scope even when the namespace differs from the library. -/
+theorem unused (n : Nat) : n + 0 = n := Nat.add_zero n
+
+end UnrelatedNamespace
+
+namespace CheckTheoremsTest.Spec
+
+/-- A definition retains this bound independently of its deprecation metadata. -/
+theorem deprecated_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- Use the bound before deprecating it, so the fixture produces no deprecation warning. -/
+def deprecated (n : Nat) : Fin (n + 1) := ⟨n, deprecated_bound n⟩
+
+attribute [deprecated direct_bound (since := "2026-11-15")] deprecated_bound
+
+-- The inherited docstring replaces a declaration doc comment for this fixture.
+@[inherit_doc direct_bound] theorem inherited_bound (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+/-- Inherited documentation does not stop a retained theorem from supporting its definition. -/
+def inherited (n : Nat) : Fin (n + 1) := ⟨n, inherited_bound n⟩
+
+/-- A deprecated alias with no retained consumer is still a movable theorem. -/
+@[deprecated direct_bound (since := "2026-11-15")]
+theorem deprecated_unused (n : Nat) : n < n + 1 := direct_bound n
+
+-- Documentation inherited by a command does not itself retain this theorem.
+theorem inherited_unused (n : Nat) : n < n + 1 := Nat.lt_succ_self n
+
+attribute [inherit_doc direct_bound] inherited_unused
+
+end CheckTheoremsTest.Spec

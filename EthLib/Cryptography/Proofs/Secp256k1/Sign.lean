@@ -21,7 +21,7 @@ namespace EthLib.Cryptography.Secp256k1
 
 namespace Ecdsa
 
-open Point
+open Point Rfc6979
 
 /-- What a successful run of the signing loop returns: SEC 1 v2 §4.1.3 for some nonce `k`. -/
 theorem signWith_spec {d e r s : Fn} {odd : Bool} :

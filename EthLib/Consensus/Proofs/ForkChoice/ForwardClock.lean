@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+import EthLib.Consensus.Proofs.Time
 
 /-!
 # Proofs: stores whose clock never goes back
@@ -155,16 +156,6 @@ theorem ForwardReachable.reachable
   | envelope _ accepted holds => exact holds.envelope accepted
   | inclusionList _ accepted holds => exact holds.inclusionList accepted
 
-/-- A block with the votes that it carries keeps a store reachable with a forward clock. -/
-theorem ForwardReachable.onBlockWithVotes {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
-    (forward : ForwardReachable config anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    ForwardReachable config anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) forward added
-
 /-- A store built with one setting of the checks has a forward clock. -/
 theorem ForwardReachableWith.forwardReachable {checks : SignatureChecks}
     (reached : ForwardReachableWith config checks anchorState anchorBlock store) :
@@ -184,18 +175,6 @@ theorem ForwardReachableWith.reachable {checks : SignatureChecks}
     (reached : ForwardReachableWith config checks anchorState anchorBlock store) :
     Reachable config anchorState anchorBlock store :=
   reached.forwardReachable.reachable
-
-/-- A block with the votes that it carries keeps a store built with one setting of the checks.
-
-The block and its votes must be handled with that setting. -/
-theorem ForwardReachableWith.onBlockWithVotes {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
-    (reached : ForwardReachableWith config checks anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    ForwardReachableWith config checks anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) reached added
 
 /-- A tick to a time no earlier than that of the store does not lower its current slot. -/
 theorem getCurrentSlot_le_of_onTick {timeMs : UInt64} {slot later : Slot}
@@ -218,6 +197,47 @@ theorem exists_getCurrentSlot_onTick_ge {timeMs : UInt64} {current : Slot}
   · rw [getCurrentSlot_onTick ticked, tickOk]
   · exact getCurrentSlot_le_of_onTick forward ticked slotOk
       (by rw [getCurrentSlot_onTick ticked, tickOk])
+
+/-- A forward store has a defined current slot when the slot duration is positive. -/
+theorem ForwardReachable.exists_getCurrentSlot
+    (forward : ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < config.SLOT_DURATION_MS) :
+    ∃ current, store.getCurrentSlot config = .ok current := by
+  induction forward with
+  | anchor made =>
+    exact ⟨_, getCurrentSlot_getForkchoiceStore positive made⟩
+  | tick _ forward ticked holds =>
+    obtain ⟨current, currentOk⟩ := holds
+    obtain ⟨later, laterOk, -⟩ := exists_getCurrentSlot_onTick_ge forward ticked currentOk
+    exact ⟨later, laterOk⟩
+  | block _ step holds =>
+    simpa only [(onBlock_sameClock step).getCurrentSlot] using holds
+  | attestation _ step holds =>
+    simpa only [(onAttestation_sameClock step).getCurrentSlot] using holds
+  | attesterSlashing _ step holds =>
+    simpa only [(onAttesterSlashing_sameClock step).getCurrentSlot] using holds
+  | payloadAttestation _ step holds =>
+    simpa only [(onPayloadAttestationMessage_sameClock step).getCurrentSlot] using holds
+  | envelope _ step holds =>
+    simpa only [(onExecutionPayloadEnvelope_sameClock step).getCurrentSlot] using holds
+  | inclusionList _ step holds =>
+    simpa only [(onInclusionList_sameClock step).getCurrentSlot] using holds
+
+open Uint64 in
+/-- The slot after one before a store's current slot exists, and starts by the store's clock.
+
+The store must follow the model's time of genesis. -/
+theorem nextSlotStart_le_clock {config : Config} {genesisTimeMs : UInt64}
+    {store : Store preset fork}
+    (genesisEq : store.genesisTimeMs = genesisTimeMs) {current slot : Slot}
+    (currentOk : store.getCurrentSlot config = .ok current) (before : slot < current) :
+    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
+      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
+      following.toNat ≤ store.timeMs.toNat := by
+  have read := mapError_ok_iff.mp currentOk
+  change computeSlotAtTimeMs config _ _ = .ok current at read
+  rw [genesisEq] at read
+  exact nextSlotStart_le_of_slotAtTime read before
 
 end Store
 

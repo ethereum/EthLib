@@ -223,6 +223,17 @@ A pull request that breaks one says why in its description.
 `scripts/check_layers.py` checks every rule that the import lines decide.
 
 - A module imports only from its own layer or from a lower one.
+- Within a layer, imports between directories form no cycle.
+  This includes specification, property, model and C export modules.
+  A C export's `meta import` of a property is a compile-time dependency and does not enter this runtime directory graph.
+  Lean rejects executable uses of that property's declarations in runtime definitions.
+  Each directory includes its subdirectories and its root file, such as `BuilderApi.lean` for `BuilderApi/`.
+  Imports between a directory and one inside it do not count.
+  The rule applies at every directory depth, so it checks both `Evm/` and `Evm/Gas/`.
+  The script follows imports at any depth, including through a module in a parent directory.
+  It reports each import that leaves its directory on the way to a cycle.
+  A shared module belongs in the parent directory or in a directory that both sides can import without a cycle.
+  A shared module in the parent directory imports neither side.
 - Execution and Consensus never import each other; only Engine imports both.
 - No module with an `Xmss` component reaches one with a `Sphincs` component through its imports, nor the reverse.
   What both hash-based signatures use lives in a neutral module, such as `HashSig` or `Wots`.
@@ -322,7 +333,9 @@ New operation boundaries carry a card.
 Existing ones, such as `ExecutionEngine`, `SignatureChecks` and `BlockSources`, do not yet carry cards.
 
 The conversions between Lean values and Python values, `ToPy`, `FromPy`, `ToPyItems` and `FromPyItems`, are not operation boundaries.
-No specification takes them as an argument, so their laws `LawfulPy` and `LawfulPyItems` stay with them in the Lake library `Exports`.
+No specification takes them as an argument, so the conversion types and the classes `LawfulPy` and `LawfulPyItems` that state their laws belong to `PythonConversions`.
+The instances for the base types live in `Base/Proofs/Exports/PyValue.lean` and enter the exports through `public meta import`.
+They check the conversions during elaboration and produce no runtime dependency on that property module.
 
 The card is a list in the doc comment, with one item per field, in this order:
 
@@ -533,21 +546,34 @@ Update the pin in one pull request, and check every test that reads from the rep
 
 ## Packages
 
-EthLib is one Lake package, and three libraries hold its code.
+EthLib is one Lake package, and four libraries hold its code.
 
 - The library `EthLib` holds the specifications.
 - The library `Proofs` holds the properties and the models, in the `Proofs/` directory of each layer.
 - The library `Exports` holds the C exports that the Python bindings call.
+- The library `PythonConversions` holds the Python conversion core and its law proofs, which import only that core and the Lean toolchain.
+  Separate ownership lets both `Exports` and `Proofs` import them without a cycle between native libraries.
 
-The package also builds three executables: `check-decls`, which checks the compiled declarations, `check-accessors`, which lists the defaulting accessors of the specification, and `gen-bindings`, which writes the binding contract from Lean.
-Two more libraries hold test cases, in `scripts/`: `CheckDeclsTest` for `check-decls`, and `CheckAccessorsTest` for `check-accessors`.
-They are not default targets, and `scripts/test_check_decls.sh` and `scripts/test_check_accessors.sh` build them.
+The bindings initialize the runtime phase of `EthLib.Exports` and link the objects reached through its ordinary imports.
+The linker hides EthLib's compile-time and legacy initializers so that their unused sections can be discarded.
+Runtime initializers and C exports remain public.
+So conversion proofs can enter through `meta import` without linking their objects into the extension.
+
+The executables `check-decls`, `check-accessors` and `check-theorems` inspect the compiled declarations.
+They check which constructs the declarations use, which defaulting accessors the specification calls, and which theorems it needs.
+`gen-bindings` writes the binding contract from Lean, and `known-answers` runs pinned test vectors.
+Four more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAccessorsTest`, `CheckTheoremsTest` and `CheckTheoremsAttributesTest`.
+They are not default targets.
+Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
+`CheckTheoremSupport` holds the source attribute inspection used by `check-theorems`.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.
 A specification or an export imports nothing beyond the Lean toolchain.
 So the code that clients and the bindings run depends on no other library.
 Lake still downloads Mathlib and VCVio for a project that requires EthLib, because a requirement holds for the whole package.
+Mathlib also runs a hook on `lake update`: it builds Mathlib's `cache` tool and downloads Mathlib's build files, which the specification and the exports never use.
+A project that imports only the specification or the exports can set `MATHLIB_NO_CACHE_ON_UPDATE=1` to skip it.
 
 A model is a module under `Proofs/`, like a property.
 The rule that, among the properties, only a refinement module imports a model directly is a rule between modules, not between packages.
@@ -570,12 +596,38 @@ Then the module follows the layout of `CONTRIBUTING.md`: the specification in `E
 A theorem stays in the specification file in two cases, because a specification never imports a property:
 
 - A definition or an instance of the specification uses it.
-  `gasHeld_runFrame_le` in `EthLib/Execution/Evm/Interpreter.lean` is one, since the recursion of messages needs its bound.
+  `gasHeld_le_of_measure_lt` in `EthLib/Execution/Evm/Interpreter.lean` is one, since `runFrameWith` needs its bound.
 - The users of a definition rely on it, such as a `@[simp]` lemma.
   A project that imports only the specification can then still use it.
 
-Every other theorem goes under `Proofs/`.
-Specification files already hold theorems that fit neither case, and a later change sorts them.
+`lake exe check-theorems` starts from definitions, instances and persistent `@[simp]` theorems.
+It follows constants in their types and private bodies, and resolved references recorded in Lean's `.ilean` files.
+These references retain a named lemma even when simplification erases its proof term.
+The search follows the helpers of every retained theorem, including simplification rules.
+
+Lean's `.ilean` files keep references attached to original source syntax.
+A lemma named only in a tactic macro can disappear from both those references and the compiled proof term.
+The checker can then report the lemma as movable despite a retained proof using it.
+No specification module defines a tactic macro.
+If one is added, review its hidden lemma dependencies before moving a reported theorem.
+
+The check reads persistent theorem attributes written in declarations or `attribute` commands.
+It permits `simp`, `deprecated` and `inherit_doc`; another attribute stops the check until it has a placement rule.
+The last two attributes carry deprecation or documentation metadata and do not retain a theorem by themselves.
+This guard parses declaration modifiers and standalone `attribute` commands, since Lean's compiled environment has no general query for applied attributes.
+It does not reparse bodies, whose local notation can disappear after import.
+The guard does not inspect attributes that custom command macros generate without an explicit source application.
+The search covers the specification modules and `EthLib.lean`, and identifies a declaration by its defining module, not its namespace.
+Definitions local to theorem proofs are not independent roots, but executable `where` helpers are.
+Generated theorems are not migration findings.
+Every other theorem goes under `Proofs/`, even when a property uses it through a specification import.
+
+`scripts/check_theorems_baseline.txt` records the findings awaiting migration.
+The check fails on a finding absent from the baseline and on a baseline entry absent from its findings.
+The baseline may only shrink.
+CI compares it with the base revision using `scripts/check_theorems_baseline.py` and rejects added entries.
+The first change that creates the baseline initializes it from the existing findings.
+It keeps the findings in `EthLib/Cryptography/Bls/` because their migration is outside the scope of issue [#2611](https://github.com/ethereum/EthLib/issues/2611).
 A model goes under `Proofs/` too, as the models of Casper FFG and LMD-GHOST do in `EthLib/Consensus/Proofs/Models/`.
 Modules of one kind share a directory, under the part of the layer that uses them.
 The precompiles are one kind, and only the EVM calls them, so ECRECOVER sits in `EthLib/Execution/Evm/Precompiles/Ecrecover.lean`, and its theorems in `EthLib/Execution/Proofs/Evm/Precompiles/Ecrecover.lean`.

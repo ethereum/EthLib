@@ -130,7 +130,8 @@ def test_changed_tag_fails():
 
 def test_wrong_destination():
     # Under another destination ID, the header unmasks to bytes without "discv5".
-    with raises(ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.protocolId"):
+    message = "invalid packet: EthLib.Networking.Discv5.PacketError.protocolId "
+    with raises(ValueError, message + "[23, 216, 229, 47, 233, 114, 184, 149]"):
         discv5.decode_packet(SRC_ID, PING_PACKET)
 
 
@@ -147,6 +148,6 @@ def test_packet_too_long():
 def test_whoareyou_with_a_message():
     # A WHOAREYOU packet carries no message, so one more byte is rejected.
     with raises(
-        ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.whoareyouMessage"
+        ValueError, "invalid packet: EthLib.Networking.Discv5.PacketError.whoareyouMessage 1"
     ):
         discv5.decode_packet(DEST_ID, WHOAREYOU_PACKET + b"\x00")

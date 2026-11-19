@@ -75,6 +75,31 @@ def expand (prk info : ByteArray) (length : Nat) : Except HkdfError ByteArray :=
     let count := (length + HASH_LEN - 1) / HASH_LEN
     .ok ((expandBlocks prk info ByteArray.empty 1 count).extract 0 length)
 
+/-- The blocks of the expansion are 32 bytes each. -/
+theorem expandBlocks_size (prk info previous : ByteArray) (i count : Nat) :
+    (expandBlocks prk info previous i count).size = HASH_LEN * count := by
+  induction count generalizing previous i with
+  | zero => rfl
+  | succ count ih =>
+    have hmac_size (key message : ByteArray) : (hmac key message).size = 32 :=
+      (hmac32 key message).size_toArray
+    simp only [expandBlocks, ByteArray.size_append, hmac_size, ih, HASH_LEN]
+    omega
+
+/-- A successful expansion has exactly the requested length. -/
+theorem expand_size {prk info okm : ByteArray} {length : Nat}
+    (h : expand prk info length = .ok okm) : okm.size = length := by
+  unfold expand at h
+  by_cases short : prk.size < HASH_LEN
+  · simp [short] at h
+  by_cases long : 255 * HASH_LEN < length
+  · simp [short, long] at h
+  simp only [short, long, ite_false] at h
+  -- The blocks cover the output, so the extraction keeps the requested length.
+  obtain rfl := Except.ok.inj h
+  simp only [ByteArray.size_extract, expandBlocks_size, HASH_LEN]
+  omega
+
 /--
 HKDF, RFC 5869 §2: extract, then expand.
 

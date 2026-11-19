@@ -6,7 +6,7 @@ public import VCVio.OracleComp.QueryTracking.CachingOracle
 public import VCVio.OracleComp.QueryTracking.RandomOracle.Simulation
 public import VCVio.OracleComp.SimSemantics.StateT.PreservesInv
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 
@@ -152,10 +152,11 @@ theorem eval_leafAt (cache : QueryCache HashSpec)
 /-- From the cache, a node hash is the cache's node hash. -/
 @[simp]
 theorem eval_nodeAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (layer : EthLib.Cryptography.Xmss.Layer) (level j : Nat) (left right : Digest) :
+    (layer : EthLib.Cryptography.Xmss.Layer) (q : Merkle.Position) (left right : Digest) :
     evalWithAnswerFn (answerFn cache)
-        (Concrete.nodeAt parameter layer level j left right : OracleComp HashSpec Digest) =
-      CacheView.nodeAt cache parameter layer level j left right := by
+        (Concrete.nodeAt parameter layer q left right : OracleComp HashSpec Digest) =
+      CacheView.nodeAt cache parameter layer q left right := by
+  obtain ⟨level, j⟩ := q
   rcases level with _ | level
   · rfl
   · by_cases hlevel : level < treeHeight
@@ -167,17 +168,17 @@ theorem eval_nodeAt (cache : QueryCache HashSpec) (parameter : PublicParameter)
 
 /-- From the cache, a climb of a layer's tree is the climb with the cache's node hash. -/
 theorem eval_climb (cache : QueryCache HashSpec) (parameter : PublicParameter)
-    (layer : EthLib.Cryptography.Xmss.Layer) (siblings : List Digest) (level j : Nat)
+    (layer : EthLib.Cryptography.Xmss.Layer) (siblings : List Digest) (p : Merkle.Position)
     (current : Digest) :
     evalWithAnswerFn (answerFn cache)
-        (Merkle.climb (Concrete.nodeAt parameter layer) level j current siblings :
+        (Merkle.climb (Concrete.nodeAt parameter layer) p current siblings :
           OracleComp HashSpec Digest) =
-      (Merkle.climb (CacheView.nodeAt cache parameter layer) level j current siblings).run := by
+      (Merkle.climb (CacheView.nodeAt cache parameter layer) p current siblings).run := by
   rw [Merkle.climb_map_monad (Concrete.nodeAt (m := OracleComp HashSpec) parameter layer)
     (fun {β} (x : OracleComp HashSpec β) => (evalWithAnswerFn (answerFn cache) x : Id β))
     (fun _ => rfl) (fun _ _ => evalWithAnswerFn_bind _ _ _)]
-  exact congrArg (fun hash => Merkle.climb hash level j current siblings)
-    (by funext level j left right; exact eval_nodeAt cache parameter layer level j left right)
+  exact congrArg (fun hash => Merkle.climb hash p current siblings)
+    (by funext q left right; exact eval_nodeAt cache parameter layer q left right)
 
 @[simp]
 theorem eval_treeNode (cache : QueryCache HashSpec)
@@ -189,8 +190,8 @@ theorem eval_treeNode (cache : QueryCache HashSpec)
   rw [Concrete.treeNode, treeNode, Merkle.node_map (Concrete.nodeAt parameter .bottom)
     (fun {β} (x : OracleComp HashSpec β) => (evalWithAnswerFn (answerFn cache) x : Id β))
     (fun _ _ => evalWithAnswerFn_bind _ _ _)]
-  exact congrArg₂ (fun hash leaves => Merkle.node hash leaves levels node.val)
-    (by funext level j left right; exact eval_nodeAt cache parameter .bottom level j left right)
+  exact congrArg₂ (fun hash leaves => Merkle.node hash leaves ⟨levels, node.val⟩)
+    (by funext q left right; exact eval_nodeAt cache parameter .bottom q left right)
     (funext fun j => eval_leafAt cache parameter secret _)
 
 @[simp]
@@ -235,8 +236,8 @@ theorem eval_topTreeNode (cache : QueryCache HashSpec)
   rw [Concrete.topTreeNode, topTreeNode, Merkle.node_map (Concrete.nodeAt parameter .top)
     (fun {β} (x : OracleComp HashSpec β) => (evalWithAnswerFn (answerFn cache) x : Id β))
     (fun _ _ => evalWithAnswerFn_bind _ _ _)]
-  exact congrArg₂ (fun hash leaves => Merkle.node hash leaves levels node.val)
-    (by funext level j left right; exact eval_nodeAt cache parameter .top level j left right)
+  exact congrArg₂ (fun hash leaves => Merkle.node hash leaves ⟨levels, node.val⟩)
+    (by funext q left right; exact eval_nodeAt cache parameter .top q left right)
     (funext fun j => eval_topLeafAt cache parameter topSecret _)
 
 @[simp]
@@ -433,7 +434,7 @@ theorem eval_verifyAfterLeaf (cache : QueryCache HashSpec) (publicKey : PublicKe
     evalWithAnswerFn (answerFn cache)
       (Concrete.verifyAfterLeaf publicKey leafIndex signature leaf : OracleComp HashSpec Bool) =
       Concrete.verifyTopFromCache cache publicKey (topKeyOf leafIndex)
-        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) 0 leafIndex.val leaf
+        (Merkle.climb (CacheView.nodeAt cache publicKey.parameter .bottom) ⟨0, leafIndex.val⟩ leaf
           (List.ofFn signature.authPath)).run signature.top := by
   simp [Concrete.verifyAfterLeaf_eq, eval_climb cache publicKey.parameter .bottom]
 

@@ -37,7 +37,8 @@ def custodyFuel : Nat := 2 ^ 16
 def custodyErrorText : CustodyError → String
   | .tooManyGroups count => s!"custody group count {count} exceeds the number of groups"
   | .groupOutOfRange group => s!"custody group {group} is not below the number of groups"
-  | .outOfFuel => "the search for custody groups ran out of steps"
+  | .outOfFuel found count =>
+    s!"the search for custody groups ran out of steps with {found} of {count} groups"
 
 /-- The result of a custody function, or the code and the message of its error. -/
 def custodyResult (result : Except CustodyError (List UInt64)) : Result (List UInt64) :=

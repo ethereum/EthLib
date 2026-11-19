@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.ChainConfig
 public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.Exports.PayloadBodies
 public import EthLib.Engine.GetPayload
 public import EthLib.Execution.Exports.Transition
@@ -69,9 +70,7 @@ def storedPayloadOf (entry : PayloadEntry) : Result (PayloadId × StoredPayload)
   return (id, { fork, built, bundle := .ofNetwork network, shouldOverrideBuilder, blockAccessList })
 
 /-- The version of an `engine_getPayloadV1` through `engine_getPayloadV6` method name. -/
-def getPayloadVersion (method : String) : Option Nat :=
-  ["engine_getPayloadV1", "engine_getPayloadV2", "engine_getPayloadV3", "engine_getPayloadV4",
-    "engine_getPayloadV5", "engine_getPayloadV6"].idxOf? method |>.map (· + 1)
+def getPayloadVersion (method : String) : Option Nat := methodVersion "getPayload" method
 
 /-- The answer to a get-payload request, from a snapshot of build processes. -/
 def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyValue := do
@@ -85,13 +84,17 @@ def getPayloadOf (args : PyValue × List PayloadEntry × PyValue) : Result PyVal
   let some version := getPayloadVersion method | throw (0, s!"no method {method}")
   let id ← (getPayloadParams (request.getObjValD "params")).mapError
     fun e => (e.code, s!"engine error: {reprStr e}")
-  let setup ← Cryptography.Kzg.Exports.embeddedSetup.mapError
+  let setup ← (Cryptography.Kzg.Exports.embeddedSetup ()).mapError
     fun e => (0, s!"setup: {e.message}")
   let r ← (getPayload config setup (fun id => entries.lookup id) version id).mapError fun
     | .engine e => (e.code, s!"engine error: {reprStr e}")
-    | .wrongFork => (0, "store: the fork is not the configured fork at the block")
+    | .wrongFork stored active =>
+      let active := match active with
+        | some fork => fork.name
+        | none => "no fork"
+      (0, s!"store: the fork {stored.name} is not the configured fork at the block, {active}")
     | .requests => (0, "store: execution requests out of order, too short or before Pectra")
-    | .blockValue => (0, "store: block value above 2^256")
+    | .blockValue value => (0, s!"store: block value {value} is 2^256 or more")
     | .noPayload => (0, "store: the block has no payload form")
     | .header e => (0, s!"store: the payload does not give the block: error {e.code}")
     | .bundle e => (0, s!"store: bundle error {e.code}")

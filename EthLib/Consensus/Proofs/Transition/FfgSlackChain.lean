@@ -174,6 +174,110 @@ theorem AttestationSite.frame {fork : Fork} {input checked : BeaconState preset 
     · exact mid
     · exact mid.trans (frame_processAttestation processed)
 
+/-- An attestation targets a recent epoch, the epoch of its slot, and is included late enough.
+
+Its target is the current or the previous epoch.
+
+It is included at least the least inclusion delay after its slot.
+
+That holds at every fork, as `process_attestation` checks it. -/
+private theorem processAttestation_window {fork : Fork}
+    {state after : BeaconState preset fork} {parentSlot : Slot}
+    {attestation : Attestation preset fork}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    (attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+        state.slot.toNat := by
+  by_cases altair : Fork.altair ≤ fork
+  · unfold processAttestation at computed
+    simp only [altair, ↓reduceDIte] at computed
+    unfold processAttestationAltair at computed
+    simp only [bind_ok_iff, liftAccessor_ok, ensure_ok_iff, liftArith, mapError_ok_iff,
+      Uint64.addChecked_ok_iff] at computed
+    obtain ⟨_, recent, _, epoch, earliest, ⟨_, sum⟩, _, early, -⟩ := computed
+    have := UInt64.le_iff_toNat_le.mp early
+    exact ⟨recent, epoch, by omega⟩
+  · obtain ⟨recent, epoch, early, -⟩ := processAttestation_checks (Nat.lt_of_not_le altair) computed
+    exact ⟨recent, epoch, early⟩
+
+/-- A block checks each of its attestations, and accepts it.
+
+The check runs on a state inside the block, after the operations start.
+
+It checks the indexed form that the state before the block reads, since the attesters agree.
+
+Its target is the current or the previous epoch of that state, and the epoch of its slot.
+
+The attestation was included at least the least inclusion delay after its slot.
+
+It holds for any signature checks.
+
+There must be more than `MIN_SEED_LOOKAHEAD + 2` epochs of mixes. -/
+theorem processBlock_attestation_checked
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {fork : Fork} {engine : ExecutionEngine preset fork} {state after : BeaconState preset fork}
+    {block : BeaconBlock preset fork} {attestation : Attestation preset fork}
+    (computed : processBlock config checks engine state block = .ok after)
+    (included : attestation ∈ block.body.attestations.data) :
+    ∃ (input checked : BeaconState preset fork) (indexed : IndexedAttestation preset fork),
+      OperationsInput config checks engine state block input ∧
+      AttestationSite config checks input block.body state.latestBlockHeader.slot checked
+        indexed ∧
+      getIndexedAttestation state attestation = .ok indexed ∧
+      isValidIndexedAttestation config checks checked indexed = .ok true ∧
+      (attestation.data.target.epoch = getPreviousEpoch state ∨
+        attestation.data.target.epoch = getCurrentEpoch state) ∧
+      attestation.data.target.epoch = computeEpochAtSlot preset attestation.data.slot ∧
+      attestation.data.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤
+        state.slot.toNat := by
+  obtain ⟨input, proposersDone, slashingsDone, _, started, proposers, slashings, folded, -⟩ :=
+    processBlock_folds computed
+  -- The attestation sits at a position of the attestations of the block.
+  obtain ⟨pre, post, mid, next, split, earlier, processedA⟩ :=
+    foldlM_ok_of_mem (Array.mem_toList_iff.mpr included) folded
+  have same := getAttestingIndices_attestationsStart apart started proposers slashings folded
+    (Array.mem_toList_iff.mpr included)
+  -- Up to the attestation, the registry and the mixes are those where the attestations start.
+  have midKept : mid.validators = slashingsDone.validators ∧
+      mid.randaoMixes = slashingsDone.randaoMixes :=
+    foldlM_ok_invariant (fun s => s.validators = slashingsDone.validators ∧
+        s.randaoMixes = slashingsDone.randaoMixes)
+      (fun _ _ _ held ok => ⟨(processAttestation_registry ok).1.trans held.1,
+        (processAttestation_registry ok).2.trans held.2⟩) ⟨rfl, rfl⟩ earlier
+  have kept : (if .altair ≤ fork then mid else next).validators = slashingsDone.validators ∧
+      (if .altair ≤ fork then mid else next).randaoMixes = slashingsDone.randaoMixes := by
+    by_cases altair : Fork.altair ≤ fork
+    · simp only [altair, ↓reduceIte]
+      exact midKept
+    · simp only [altair, ↓reduceIte]
+      exact ⟨(processAttestation_registry processedA).1.trans midKept.1,
+        (processAttestation_registry processedA).2.trans midKept.2⟩
+  -- The attesters at the check are those of the state before the block.
+  obtain ⟨indexed, indexedOk, valid⟩ := processAttestation_checked processedA
+  have attesters : getAttestingIndices (if .altair ≤ fork then mid else next) attestation =
+      getAttestingIndices state attestation :=
+    (getAttestingIndices_eq_of_eq (congrArg (·.data) kept.1)
+      (congrArg (·.elements) kept.2) attestation).trans same
+  have before : getIndexedAttestation state attestation = .ok indexed := by
+    rw [← indexedOk]
+    simp only [getIndexedAttestation, attesters]
+  have site : AttestationSite config checks input block.body state.latestBlockHeader.slot
+      (if .altair ≤ fork then mid else next) indexed :=
+    .attestation split proposers slashings earlier processedA indexedOk
+  -- The attestation reads the slot of the state before the block, which the site's frame keeps.
+  have slot : mid.slot = state.slot := by
+    have checkedSlot := site.frame.slot.trans (frame_operationsInput started).slot
+    by_cases altair : Fork.altair ≤ fork
+    · simpa only [altair, ↓reduceIte] using checkedSlot
+    · simp only [altair, ↓reduceIte] at checkedSlot
+      exact (frame_processAttestation processedA).slot.symm.trans checkedSlot
+  refine ⟨input, _, indexed, started, site, before, valid, ?_⟩
+  have window := processAttestation_window processedA
+  simp only [getPreviousEpoch, getCurrentEpoch, slot] at window
+  exact window
+
 /-- A vote of a block that applies is in an indexed attestation that the block checked.
 
 The voter is among its attesters, and its data is the data of the vote.
@@ -198,40 +302,14 @@ theorem blockVotes_verified
       vote.1 ∈ indexed.attestingIndices.data.toList ∧ indexed.data = vote.2 ∧
       isValidIndexedAttestation config checks checked indexed = .ok true := by
   obtain ⟨attestation, included, dataEq, indices, indicesOk, iMem⟩ := cast
-  obtain ⟨input, proposersDone, slashingsDone, _, started, proposers, slashings, folded, -⟩ :=
-    processBlock_folds computed
-  -- The attestation sits at a position of the attestations of the block.
-  obtain ⟨pre, post, mid, next, split, earlier, processedA⟩ :=
-    foldlM_ok_of_mem (Array.mem_toList_iff.mpr included) folded
-  have same := getAttestingIndices_attestationsStart apart started proposers slashings folded
-    (Array.mem_toList_iff.mpr included)
-  -- Up to the attestation, the registry and the mixes are those where the attestations start.
-  have midKept : mid.validators = slashingsDone.validators ∧
-      mid.randaoMixes = slashingsDone.randaoMixes :=
-    foldlM_ok_invariant (fun s => s.validators = slashingsDone.validators ∧
-        s.randaoMixes = slashingsDone.randaoMixes)
-      (fun _ _ _ held ok => ⟨(processAttestation_registry ok).1.trans held.1,
-        (processAttestation_registry ok).2.trans held.2⟩) ⟨rfl, rfl⟩ earlier
-  have kept : (if .altair ≤ fork then mid else next).validators = slashingsDone.validators ∧
-      (if .altair ≤ fork then mid else next).randaoMixes = slashingsDone.randaoMixes := by
-    by_cases altair : Fork.altair ≤ fork
-    · simp only [altair, ↓reduceIte]
-      exact midKept
-    · simp only [altair, ↓reduceIte]
-      exact ⟨(processAttestation_registry processedA).1.trans midKept.1,
-        (processAttestation_registry processedA).2.trans midKept.2⟩
-  -- The attesters at the check are those that the vote used.
-  obtain ⟨indexed, indexedOk, valid⟩ := processAttestation_checked processedA
-  have attestersX : getAttestingIndices (if .altair ≤ fork then mid else next) attestation =
-      .ok indices :=
-    ((getAttestingIndices_eq_of_eq (congrArg (·.data) kept.1)
-      (congrArg (·.elements) kept.2) attestation).trans same).trans indicesOk
+  obtain ⟨input, checked, indexed, started, site, indexedOk, valid, -⟩ :=
+    processBlock_attestation_checked apart computed included
+  -- The indexed form lists the attesters that the vote used.
   obtain ⟨indexed', indexedOk', listed, indexedData, -⟩ :=
-    getIndexedAttestation_of_getAttestingIndices attestersX
+    getIndexedAttestation_of_getAttestingIndices indicesOk
   have indexedEq : indexed' = indexed := Except.ok.inj (indexedOk'.symm.trans indexedOk)
   subst indexedEq
-  refine ⟨input, _, indexed', started,
-    .attestation split proposers slashings earlier processedA indexedOk, ?_, ?_, valid⟩
+  refine ⟨input, checked, indexed', started, site, ?_, ?_, valid⟩
   · rw [listed]
     simpa using iMem
   · rw [indexedData, ← dataEq]
@@ -514,11 +592,11 @@ theorem initializeBeaconStateFromEth1_slackChainInvariant {fork : Fork}
     SlackChainInvariant V U W (block (Vector.replicate 32 0)) attested block
       ⟨fork, state⟩ := by
   obtain ⟨before, holds⟩ := initializeBeaconStateFromEth1_invariant computed
-  obtain ⟨slot, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
-  refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed, fun later => ?_,
+  obtain ⟨-, previous, current⟩ := initializeBeaconStateFromEth1_checkpoints computed
+  refine ⟨holds, JustifiedEarly.of_initializeBeaconStateFromEth1 computed,
+    JustifiedSeparated.of_initializeBeaconStateFromEth1 computed,
     fun altair => absurd altair (Nat.not_le_of_lt before), fun _ current pending member => ?_,
     RootsAbove.of_initializeBeaconStateFromEth1 computed, ?_⟩
-  · simp [getCurrentEpoch, slot, computeEpochAtSlot, GENESIS_SLOT, GENESIS_EPOCH] at later
   · rw [initializeBeaconStateFromEth1_pending computed] at member
     simp at member
   · unfold SlackJustifiedCheckpoints

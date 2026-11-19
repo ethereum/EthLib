@@ -3,13 +3,18 @@ module
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
--- Showing that a written field is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
 
 The update is syncing exactly when the execution layer does not hold the head.
+
+A held head whose chain fails the terminal block check is invalid, with the zero hash.
+
+The head then does not change.
+
+A held head of proof of work fails that check exactly when it is not terminal.
 
 A valid head below the known finalized block is valid, and the head does not change.
 
@@ -19,21 +24,25 @@ Any other valid update selects a valid head that the execution layer holds.
 
 Its safe and finalized blocks are then zero, or the head or one of its known ancestors.
 
+They are zero only while the transition block is not finalized.
+
 The update fails in one case only.
 
-The head is valid and not below the known finalized block.
+The head is valid, and its chain passes the terminal block check.
 
-But its safe or its finalized block is neither zero nor on the chain of the head.
+The head is not below the known finalized block.
+
+Its safe or its finalized block is then zero after the transition, or neither zero nor on its chain.
 
 Otherwise such a head is valid and becomes the head.
 
 A head that the execution layer does not hold gives a syncing update.
 
-An invalid head names as latest valid hash a valid block of its own chain.
-
-That block is the valid block nearest the head.
+An invalid head names as latest valid hash the valid block of its chain nearest the head.
 
 There is none when no block of the chain is valid.
+
+That hash is zero when the block is of proof of work, and else a valid payload of the chain.
 
 Each block of a chain after the first is the parent of the block before it.
 
@@ -65,9 +74,21 @@ The attributes at that fork keep every field.
 
 A fork that the version does not take, or no fork at all, gives `-38005`.
 
+A version takes the forks from Paris to Glamsterdam whose attribute structure it decodes.
+
+No version takes another fork.
+
 A structure that is not that of the fork, or a timestamp not above the head's, gives `-38003`.
 
 The decoders read back the state, the attributes and the parameters that the writers write.
+
+A JSON value reads as a forkchoice response exactly when it is an object of this form.
+
+It holds a payload status, and its only other member that is not `null` may be an ID.
+
+The status is valid, invalid or syncing, and the ID 8 bytes in lowercase hex or absent.
+
+Attributes sent with a head that the update applies come back at the fork of the next block.
 -/
 
 public section
@@ -77,13 +98,13 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Serialization.JsonRpc (field field_eq_ok_iff fields fixed hasExactly paramsArray
   dataJson quantityJson listJson optionJson fields_mkObj hasExactly_of_perm field_of_perm
-  lookup_of_mem fixed_hexString uint64 uint64_toDigits address array isNull_str isNull_arr
+  lookup_of_mem fixed_hexString uint64 uint64_toDigits address array
   fixed_dataJson address_dataJson lookup_of_perm)
 open EthLib.Execution.Rpc (withdrawal withdrawalJson)
 open EthLib.Engine.Json (liftM_ok exists_since_iff sinceValue_of_since)
 
-variable {tree : PayloadTree} {finalized : Option Hash32} {state : ForkchoiceState}
-  {config : ChainConfig}
+variable {transition : TransitionConfiguration} {tree : PayloadTree} {finalized : Option Hash32}
+  {state : ForkchoiceState} {config : ChainConfig}
 
 /-- Each hash of the ancestors of a block is held by the tree. -/
 theorem lookup_of_mem_ancestors {fuel : Nat} {start h : Hash32}
@@ -170,75 +191,238 @@ theorem getElem?_succ_chainOf {h b : Hash32} {i : Nat} (hb : (chainOf tree h)[i 
     ∃ a p, (chainOf tree h)[i]? = some a ∧ tree.lookup a = some p ∧ b = p.parentHash :=
   getElem?_succ_ancestors hb
 
+/-- The latest valid hash of a block is zero, or a valid payload of its chain.
+
+So it is never the hash of a held block of proof of work, unless that hash is zero. -/
+theorem latestValidHash_spec {h v : Hash32} (hv : latestValidHash tree h = some v) :
+    v = ZERO_HASH ∨
+      v ∈ chainOf tree h ∧ ∃ p, tree.lookup v = some p ∧ p.valid = true ∧ p.isPow = false := by
+  unfold latestValidHash at hv
+  cases hl : latestValid tree h with
+  | none => simp [hl] at hv
+  | some w =>
+    simp only [hl, Option.map_some, Option.some.injEq] at hv
+    obtain ⟨hmem, hvalid⟩ := latestValid_spec hl
+    cases hk : tree.lookup w with
+    | none => simp [hk] at hvalid
+    | some p =>
+      by_cases hpow : p.isPow = true
+      · left
+        simp only [hk, hpow, Option.any_some, ↓reduceIte] at hv
+        exact hv.symm
+      · right
+        simp only [hk, hpow, Option.any_some, Bool.false_eq_true, ↓reduceIte] at hv
+        subst hv
+        exact ⟨hmem, p, hk, by simpa [hk] using hvalid, by simpa using hpow⟩
+
+/-- The latest valid hash is that of the latest valid block, or zero for a block of proof of work.
+-/
+theorem latestValidHash_eq_some_iff {h v : Hash32} :
+    latestValidHash tree h = some v ↔ ∃ w p, latestValid tree h = some w ∧
+      tree.lookup w = some p ∧ v = if p.isPow then ZERO_HASH else w := by
+  unfold latestValidHash
+  cases hl : latestValid tree h with
+  | none => simp
+  | some w =>
+    obtain ⟨-, hvalid⟩ := latestValid_spec hl
+    cases hk : tree.lookup w with
+    | none => simp [hk] at hvalid
+    | some p =>
+      simp only [Option.map_some, hk, Option.any_some, Option.some.injEq]
+      constructor
+      · rintro rfl
+        exact ⟨w, p, rfl, hk, rfl⟩
+      · rintro ⟨w', p', rfl, hp', rfl⟩
+        rw [hk] at hp'
+        cases hp'
+        rfl
+
+/-- The latest valid hash is zero when the latest valid block is of proof of work. -/
+theorem latestValidHash_of_isPow {h v : Hash32} {p : KnownPayload}
+    (hv : latestValid tree h = some v) (hp : tree.lookup v = some p) (hPow : p.isPow = true) :
+    latestValidHash tree h = some ZERO_HASH := by
+  simp [latestValidHash, hv, hp, hPow]
+
+/-- On the chain of a held block of proof of work, the most recent such block is itself. -/
+theorem latestPow_of_lookup {h : Hash32} {p : KnownPayload} {totals : Nat × Nat}
+    (hp : tree.lookup h = some p) (hPow : p.powTotalDifficulty = some totals) :
+    latestPow tree h = some totals := by
+  have hc := chainOf_head (tree := tree) hp
+  obtain ⟨rest, hrest⟩ : ∃ rest, chainOf tree h = h :: rest := by
+    cases hch : chainOf tree h with
+    | nil => simp [hch] at hc
+    | cons a rest =>
+      simp only [hch, List.head?_cons, Option.some.injEq] at hc
+      exact ⟨rest, by rw [hc]⟩
+  simp [latestPow, hrest, hp, hPow]
+
+/-- A tree that holds two distinct blocks has at least two entries. -/
+theorem two_le_length_of_lookup {a b : Hash32} {p q : KnownPayload}
+    (ha : tree.lookup a = some p) (hb : tree.lookup b = some q) (hne : a ≠ b) :
+    2 ≤ tree.length := by
+  induction tree with
+  | nil => simp at ha
+  | cons e rest ih =>
+    obtain ⟨k, v⟩ := e
+    cases rest with
+    | cons _ _ => simp
+    | nil =>
+      by_cases hka : a = k
+      · by_cases hkb : b = k
+        · exact absurd (hka.trans hkb.symm) hne
+        · have hbk : (b == k) = false := by simp [hkb]
+          simp [List.lookup, hbk] at hb
+      · have hak : (a == k) = false := by simp [hka]
+        simp [List.lookup, hak] at ha
+
+/-- On the chain of a held payload, the latest totals of proof of work are those of its parent.
+
+The tree must hold the parent, as a block of proof of work. -/
+theorem latestPow_of_parent {h : Hash32} {p q : KnownPayload} {totals : Nat × Nat}
+    (hp : tree.lookup h = some p) (hPayload : p.powTotalDifficulty = none)
+    (hq : tree.lookup p.parentHash = some q) (hPow : q.powTotalDifficulty = some totals) :
+    latestPow tree h = some totals := by
+  have hne : h ≠ p.parentHash := by
+    rintro rfl
+    rw [hp] at hq
+    cases hq
+    simp [hPayload] at hPow
+  obtain ⟨n, hn⟩ : ∃ n, tree.length = n + 2 :=
+    ⟨tree.length - 2, by have := two_le_length_of_lookup hp hq hne; omega⟩
+  simp [latestPow, chainOf, hn, ancestors, hp, hq, hPayload, hPow]
+
+/-- The check on the chain of a held block of proof of work is the check of that block. -/
+theorem chainPassesTerminalCheck_of_lookup {h : Hash32} {p : KnownPayload}
+    {totalDifficulty parentTotalDifficulty : Nat} (hp : tree.lookup h = some p)
+    (hPow : p.powTotalDifficulty = some (totalDifficulty, parentTotalDifficulty)) :
+    chainPassesTerminalCheck transition tree h =
+      isTerminalPowBlock transition totalDifficulty parentTotalDifficulty := by
+  simp [chainPassesTerminalCheck, latestPow_of_lookup hp hPow]
+
 /-- The update is syncing exactly when the tree does not hold the head. -/
 theorem forkchoiceUpdated_syncing_iff {result : PayloadStatus × Option Hash32}
-    (h : forkchoiceUpdated tree finalized state = .ok result) :
+    (h : forkchoiceUpdated transition tree finalized state = .ok result) :
     result.1.status = .syncing ↔ tree.lookup state.headBlockHash = none := by
   unfold forkchoiceUpdated at h
-  split at h
-  · rename_i hNone
-    cases h
-    simp [hNone]
-  · rename_i p hp
-    simp only [hp, reduceCtorEq, iff_false]
-    split at h
-    · cases h
-      simp
-    · split at h
-      · cases h
-        simp
-      · split at h
-        · cases h
-          simp
-        · cases h
+  cases hp : tree.lookup state.headBlockHash with
+  | none =>
+    simp only [hp, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    simp
+  | some p =>
+    simp only [reduceCtorEq, iff_false]
+    simp only [hp] at h
+    repeat' split at h
+    all_goals first
+      | (simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; simp)
+      | simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A held head whose chain fails the terminal block check is invalid, with the zero hash.
+
+The head does not change. -/
+theorem forkchoiceUpdated_of_not_terminal {p : KnownPayload}
+    (hp : tree.lookup state.headBlockHash = some p)
+    (hTerminal : chainPassesTerminalCheck transition tree state.headBlockHash = false) :
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.invalid, some ZERO_HASH⟩, none) := by
+  simp [forkchoiceUpdated, hp, hTerminal, pure, Except.pure]
+
+/-- A head of proof of work that is not terminal is invalid, with the zero hash.
+
+The head does not change. -/
+theorem forkchoiceUpdated_of_pow_not_terminal {p : KnownPayload}
+    {totalDifficulty parentTotalDifficulty : Nat}
+    (hp : tree.lookup state.headBlockHash = some p)
+    (hPow : p.powTotalDifficulty = some (totalDifficulty, parentTotalDifficulty))
+    (hTerminal : isTerminalPowBlock transition totalDifficulty parentTotalDifficulty = false) :
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.invalid, some ZERO_HASH⟩, none) := by
+  exact forkchoiceUpdated_of_not_terminal hp
+    (by rw [chainPassesTerminalCheck_of_lookup hp hPow, hTerminal])
+
+/-- A held payload whose parent is a held block of proof of work that is not terminal is invalid.
+
+Its latest valid hash is zero, and the head does not change. -/
+theorem forkchoiceUpdated_of_parent_not_terminal {p q : KnownPayload}
+    {totalDifficulty parentTotalDifficulty : Nat}
+    (hp : tree.lookup state.headBlockHash = some p) (hPayload : p.powTotalDifficulty = none)
+    (hq : tree.lookup p.parentHash = some q)
+    (hPow : q.powTotalDifficulty = some (totalDifficulty, parentTotalDifficulty))
+    (hTerminal : isTerminalPowBlock transition totalDifficulty parentTotalDifficulty = false) :
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.invalid, some ZERO_HASH⟩, none) :=
+  forkchoiceUpdated_of_not_terminal hp
+    (by simp [chainPassesTerminalCheck, latestPow_of_parent hp hPayload hq hPow, hTerminal])
 
 /-- A valid update of a head not below the known finalized block selects that head.
 
-The head is valid and known, and its safe and finalized blocks are on its chain.
+The head is valid and known, and its chain passes the terminal block check.
 
-A safe or finalized block of zero bytes stands for no block. -/
+Its safe and finalized blocks are on its chain.
+
+A safe or finalized block of zero bytes stands for no block.
+
+They are not zero once the transition block is finalized. -/
 theorem forkchoiceUpdated_valid {result : PayloadStatus × Option Hash32}
-    (h : forkchoiceUpdated tree finalized state = .ok result) (hValid : result.1.status = .valid)
+    (h : forkchoiceUpdated transition tree finalized state = .ok result)
+    (hValid : result.1.status = .valid)
     (hAbove : belowFinalized tree finalized state.headBlockHash = false) :
     (∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true) ∧
+      chainPassesTerminalCheck transition tree state.headBlockHash = true ∧
+      zeroAfterTransition tree finalized state = false ∧
       result = (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash) ∧
       onChain tree state.headBlockHash state.safeBlockHash = true ∧
       onChain tree state.headBlockHash state.finalizedBlockHash = true := by
   unfold forkchoiceUpdated at h
-  split at h
-  · cases h
+  cases hp : tree.lookup state.headBlockHash with
+  | none =>
+    simp only [hp, pure, Except.pure, Except.ok.injEq] at h
+    subst h
     simp at hValid
-  · rename_i p hp
-    split at h
-    · cases h
+  | some p =>
+    simp only [hp] at h
+    by_cases hT : chainPassesTerminalCheck transition tree state.headBlockHash = true
+    · by_cases hv : p.valid = true
+      · by_cases hz : zeroAfterTransition tree finalized state = true
+        · simp [hT, hv, hAbove, hz, throw, throwThe, MonadExceptOf.throw] at h
+        · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
+              onChain tree state.headBlockHash state.finalizedBlockHash = true
+          · simp only [hT, hv, hAbove, hz, hc, Bool.not_true, Bool.false_eq_true, ↓reduceIte,
+              Bool.and_self, pure, Except.pure, Except.ok.injEq] at h
+            subst h
+            exact ⟨⟨p, rfl, hv⟩, hT, by simpa using hz, rfl, hc.1, hc.2⟩
+          · simp [hT, hv, hAbove, hz, hc, throw, throwThe, MonadExceptOf.throw] at h
+      · simp only [hT, hv, Bool.not_true, Bool.false_eq_true, ↓reduceIte, Bool.not_false,
+          pure, Except.pure, Except.ok.injEq] at h
+        subst h
+        simp at hValid
+    · simp only [hT, Bool.not_false, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
+      subst h
       simp at hValid
-    · rename_i hNotInvalid
-      -- The branch of a head below the known finalized block is excluded.
-      rw [ite_eq_right (by simp [hAbove])] at h
-      split at h
-      · rename_i hChain
-        cases h
-        simp only [Bool.and_eq_true] at hChain
-        simp only [Bool.not_eq_true', Bool.not_eq_false] at hNotInvalid
-        exact ⟨⟨p, hp, by simpa using hNotInvalid⟩, rfl, hChain.1, hChain.2⟩
-      · cases h
 
 /-- A valid head below the known finalized block is valid, and the head does not change.
+
+Its chain must pass the terminal block check.
 
 Neither the safe nor the finalized block of the request is checked. -/
 theorem forkchoiceUpdated_of_belowFinalized {p : KnownPayload}
     (hp : tree.lookup state.headBlockHash = some p) (hValid : p.valid = true)
+    (hTerminal : chainPassesTerminalCheck transition tree state.headBlockHash = true)
     (hBelow : belowFinalized tree finalized state.headBlockHash = true) :
-    forkchoiceUpdated tree finalized state = .ok (⟨.valid, some state.headBlockHash⟩, none) := by
-  simp [forkchoiceUpdated, hp, hValid, hBelow, pure, Except.pure]
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.valid, some state.headBlockHash⟩, none) := by
+  simp [forkchoiceUpdated, hp, hValid, hTerminal, hBelow, pure, Except.pure]
 
 /-- An update is valid with no new head exactly for a valid head below the known finalized block.
 
+The chain of that head passes the terminal block check.
+
 This is the answer of step 2, with the head as the latest valid block. -/
 theorem forkchoiceUpdated_valid_none_iff {result : PayloadStatus × Option Hash32} :
-    (forkchoiceUpdated tree finalized state = .ok result ∧ result.1.status = .valid ∧
-        result.2 = none) ↔
+    (forkchoiceUpdated transition tree finalized state = .ok result ∧
+        result.1.status = .valid ∧ result.2 = none) ↔
       (∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true) ∧
+        chainPassesTerminalCheck transition tree state.headBlockHash = true ∧
         belowFinalized tree finalized state.headBlockHash = true ∧
         result = (⟨.valid, some state.headBlockHash⟩, none) := by
   unfold forkchoiceUpdated
@@ -248,77 +432,120 @@ theorem forkchoiceUpdated_valid_none_iff {result : PayloadStatus × Option Hash3
     rintro rfl
     simp
   | some p =>
-    by_cases hv : p.valid = true
-    · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
-      · simp only [hv, hb, Bool.not_true, Bool.false_eq_true, ↓reduceIte, pure, Except.pure,
-          Except.ok.injEq]
-        simp only [Option.some.injEq, exists_eq_left', hv, true_and]
-        constructor
-        · rintro ⟨rfl, -, -⟩
-          rfl
-        · rintro rfl
-          simp
-      · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
-            onChain tree state.headBlockHash state.finalizedBlockHash = true
-        · simp [hv, hb, hc, pure, Except.pure]
-          rintro rfl
-          simp
-        · simp [hv, hb, hc]
-    · simp [hv, pure, Except.pure]
+    by_cases hT : chainPassesTerminalCheck transition tree state.headBlockHash = true
+    · by_cases hv : p.valid = true
+      · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
+        · simp only [hT, hv, hb, Bool.not_true, Bool.false_eq_true, ↓reduceIte, pure,
+            Except.pure, Except.ok.injEq]
+          simp only [Option.some.injEq, exists_eq_left', hv, true_and]
+          constructor
+          · rintro ⟨rfl, -, -⟩
+            rfl
+          · rintro rfl
+            simp
+        · by_cases hz : zeroAfterTransition tree finalized state = true
+          · simp [hT, hv, hb, hz, throw, throwThe, MonadExceptOf.throw]
+          · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
+                onChain tree state.headBlockHash state.finalizedBlockHash = true
+            · simp [hT, hv, hb, hz, hc, pure, Except.pure]
+              rintro rfl
+              simp
+            · simp [hT, hv, hb, hz, hc, throw, throwThe, MonadExceptOf.throw]
+      · simp [hT, hv, pure, Except.pure]
+        rintro rfl
+        simp
+    · simp [hT, pure, Except.pure]
       rintro rfl
       simp
 
-/-- An invalid head that the tree holds is invalid, with the latest valid block of its chain. -/
+/-- An invalid head that the tree holds is invalid, with the latest valid hash of its chain.
+
+Its chain must pass the terminal block check. -/
 theorem forkchoiceUpdated_of_invalid {p : KnownPayload}
-    (hp : tree.lookup state.headBlockHash = some p) (hInvalid : p.valid = false) :
-    forkchoiceUpdated tree finalized state =
-      .ok (⟨.invalid, latestValid tree state.headBlockHash⟩, none) := by
-  simp [forkchoiceUpdated, hp, hInvalid, pure, Except.pure]
+    (hp : tree.lookup state.headBlockHash = some p) (hInvalid : p.valid = false)
+    (hTerminal : chainPassesTerminalCheck transition tree state.headBlockHash = true) :
+    forkchoiceUpdated transition tree finalized state =
+      .ok (⟨.invalid, latestValidHash tree state.headBlockHash⟩, none) := by
+  simp [forkchoiceUpdated, hp, hInvalid, hTerminal, pure, Except.pure]
 
 /-- An update of a head that the tree does not hold is syncing, and the head does not change. -/
 theorem forkchoiceUpdated_of_unknown (hNone : tree.lookup state.headBlockHash = none) :
-    forkchoiceUpdated tree finalized state = .ok (⟨.syncing, none⟩, none) := by
+    forkchoiceUpdated transition tree finalized state = .ok (⟨.syncing, none⟩, none) := by
   simp [forkchoiceUpdated, hNone, pure, Except.pure]
 
 /-- A valid head with its safe and finalized blocks zero or on its chain becomes the head.
 
-The head must not be below the known finalized block. -/
+The chain of the head must pass the terminal block check.
+
+The head must not be below the known finalized block.
+
+Zero hashes are allowed only until the transition block is finalized. -/
 theorem forkchoiceUpdated_of_onChain {p : KnownPayload}
     (hp : tree.lookup state.headBlockHash = some p) (hValid : p.valid = true)
+    (hTerminal : chainPassesTerminalCheck transition tree state.headBlockHash = true)
     (hAbove : belowFinalized tree finalized state.headBlockHash = false)
+    (hZero : zeroAfterTransition tree finalized state = false)
     (hSafe : onChain tree state.headBlockHash state.safeBlockHash = true)
     (hFinalized : onChain tree state.headBlockHash state.finalizedBlockHash = true) :
-    forkchoiceUpdated tree finalized state =
+    forkchoiceUpdated transition tree finalized state =
       .ok (⟨.valid, some state.headBlockHash⟩, some state.headBlockHash) := by
-  simp [forkchoiceUpdated, hp, hValid, hAbove, hSafe, hFinalized, pure, Except.pure]
+  simp [forkchoiceUpdated, hp, hValid, hTerminal, hAbove, hZero, hSafe, hFinalized, pure,
+    Except.pure]
+
+/-- After the transition, a zero safe or finalized hash is an invalid forkchoice state.
+
+The head is valid, and its chain passes the terminal block check.
+
+The head is not below the known finalized block. -/
+theorem forkchoiceUpdated_zero_after_transition {p : KnownPayload}
+    (hp : tree.lookup state.headBlockHash = some p) (hValid : p.valid = true)
+    (hTerminal : chainPassesTerminalCheck transition tree state.headBlockHash = true)
+    (hAbove : belowFinalized tree finalized state.headBlockHash = false)
+    (hTransition : transitionFinalized tree finalized = true)
+    (hZero : state.safeBlockHash = ZERO_HASH ∨ state.finalizedBlockHash = ZERO_HASH) :
+    forkchoiceUpdated transition tree finalized state =
+      .error (.invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash) := by
+  have hz : zeroAfterTransition tree finalized state = true := by
+    rcases hZero with hZero | hZero <;> simp [zeroAfterTransition, hTransition, hZero]
+  simp [forkchoiceUpdated, hp, hValid, hTerminal, hAbove, hz, throw, throwThe,
+    MonadExceptOf.throw]
 
 /-- An update fails in one case only.
 
-The head is valid and not below the known finalized block.
+The head is valid, and its chain passes the terminal block check.
 
-Its safe or its finalized block is then neither zero nor on the chain of the head.
+The head is not below the known finalized block.
+
+Then its safe or its finalized block is zero after the transition, or neither zero nor on its chain.
 
 The error is then that of an invalid forkchoice state. -/
 theorem forkchoiceUpdated_eq_error_iff {e : EngineError} :
-    forkchoiceUpdated tree finalized state = .error e ↔
-      e = .invalidForkchoiceState ∧
+    forkchoiceUpdated transition tree finalized state = .error e ↔
+      e = .invalidForkchoiceState state.safeBlockHash state.finalizedBlockHash ∧
         ∃ p, tree.lookup state.headBlockHash = some p ∧ p.valid = true ∧
+          chainPassesTerminalCheck transition tree state.headBlockHash = true ∧
           belowFinalized tree finalized state.headBlockHash = false ∧
-          ¬(onChain tree state.headBlockHash state.safeBlockHash = true ∧
-            onChain tree state.headBlockHash state.finalizedBlockHash = true) := by
+          (zeroAfterTransition tree finalized state = true ∨
+            ¬(onChain tree state.headBlockHash state.safeBlockHash = true ∧
+              onChain tree state.headBlockHash state.finalizedBlockHash = true)) := by
   unfold forkchoiceUpdated
   cases hp : tree.lookup state.headBlockHash with
   | none => simp [pure, Except.pure]
   | some p =>
-    by_cases hv : p.valid = true
-    · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
-      · simp [hv, hb, pure, Except.pure]
-      · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
-            onChain tree state.headBlockHash state.finalizedBlockHash = true
-        · simp [hv, hb, hc, pure, Except.pure]
-        · simp [hv, hb, hc, throw, throwThe, MonadExceptOf.throw]
-          exact eq_comm
-    · simp [hv, pure, Except.pure]
+    by_cases hT : chainPassesTerminalCheck transition tree state.headBlockHash = true
+    · by_cases hv : p.valid = true
+      · by_cases hb : belowFinalized tree finalized state.headBlockHash = true
+        · simp [hT, hv, hb, pure, Except.pure]
+        · by_cases hz : zeroAfterTransition tree finalized state = true
+          · simp [hT, hv, hb, hz, throw, throwThe, MonadExceptOf.throw]
+            exact eq_comm
+          · by_cases hc : onChain tree state.headBlockHash state.safeBlockHash = true ∧
+                onChain tree state.headBlockHash state.finalizedBlockHash = true
+            · simp [hT, hv, hb, hz, hc, pure, Except.pure]
+            · simp [hT, hv, hb, hz, hc, throw, throwThe, MonadExceptOf.throw]
+              exact eq_comm
+      · simp [hT, hv, pure, Except.pure]
+    · simp [hT, pure, Except.pure]
 
 /-- Without a known finalized block, no head is below it. -/
 @[simp] theorem belowFinalized_none (h : Hash32) : belowFinalized tree none h = false := rfl
@@ -429,16 +656,18 @@ theorem forkchoiceUpdatedParams_custody {version : Nat} (four : 4 ≤ version)
 The answer is the same as without them. -/
 theorem forkchoiceUpdatedCall_custody {stateJson attributes custody : Lean.Json}
     {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
-    forkchoiceUpdatedCall config 4 tree finalized (.arr #[stateJson, attributes, custody]) =
-      forkchoiceUpdatedCall config 4 tree finalized (.arr #[stateJson, attributes]) := by
+    forkchoiceUpdatedCall config transition 4 tree finalized
+        (.arr #[stateJson, attributes, custody]) =
+      forkchoiceUpdatedCall config transition 4 tree finalized (.arr #[stateJson, attributes]) := by
   simp only [forkchoiceUpdatedCall, forkchoiceUpdatedParams_custody (Nat.le_refl 4) decoded]
 
 /-- Without payload attributes, every version of the method gives the same answer.
 
 So version 4 answers as version 3. -/
 theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean.Json} :
-    forkchoiceUpdatedCall config version tree finalized (.arr #[stateJson, .null]) =
-      forkchoiceUpdatedCall config version' tree finalized (.arr #[stateJson, .null]) := by
+    forkchoiceUpdatedCall config transition version tree finalized (.arr #[stateJson, .null]) =
+      forkchoiceUpdatedCall config transition version' tree finalized
+        (.arr #[stateJson, .null]) := by
   cases hs : forkchoiceStateOfJson stateJson <;>
     simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, paramsArray, custodyColumnsOfJson,
       hs, bind, Except.bind, pure, Except.pure]
@@ -446,8 +675,8 @@ theorem forkchoiceUpdatedCall_of_null {version version' : Nat} {stateJson : Lean
 /-- Version 4 with custody columns that decode and no attributes answers as version 3. -/
 theorem forkchoiceUpdatedCall_four_of_null {stateJson custody : Lean.Json}
     {columns : Option (Vector UInt8 16)} (decoded : custodyColumnsOfJson custody = .ok columns) :
-    forkchoiceUpdatedCall config 4 tree finalized (.arr #[stateJson, .null, custody]) =
-      forkchoiceUpdatedCall config 3 tree finalized (.arr #[stateJson, .null]) := by
+    forkchoiceUpdatedCall config transition 4 tree finalized (.arr #[stateJson, .null, custody]) =
+      forkchoiceUpdatedCall config transition 3 tree finalized (.arr #[stateJson, .null]) := by
   rw [forkchoiceUpdatedCall_custody decoded, forkchoiceUpdatedCall_of_null]
 
 /-- Attributes without exactly the fields of a version of their structure do not decode at it. -/
@@ -492,10 +721,10 @@ theorem forkchoiceUpdatedCall_eq_error_of_attributes {version : Nat}
     {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
     {fs : List (String × Lean.Json)} {s : ForkchoiceState} {status : PayloadStatus}
     {head : Hash32} (hs : forkchoiceStateOfJson stateJson = .ok s)
-    (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
+    (hf : forkchoiceUpdated transition tree finalized s = .ok (status, some head))
     (hfs : fields "payloadAttributes" (.obj kvs) = .ok fs)
     (hx : ∀ v ∈ attributesVersions version, hasExactly fs (attributesFields v) = false) :
-    forkchoiceUpdatedCall config version tree finalized (.arr #[stateJson, .obj kvs]) =
+    forkchoiceUpdatedCall config transition version tree finalized (.arr #[stateJson, .obj kvs]) =
       .error .invalidPayloadAttributes := by
   have hm : payloadAttributesOfVersion version (.obj kvs) = .error .invalidPayloadAttributes :=
     payloadAttributesOfVersion_eq_error_iff.mpr ⟨rfl, fun v hv =>
@@ -510,49 +739,43 @@ theorem forkchoiceUpdatedCall_of_no_head {version : Nat}
     {stateJson : Lean.Json} {kvs : Std.TreeMap.Raw String Lean.Json compare}
     {s : ForkchoiceState} {status : PayloadStatus}
     (hs : forkchoiceStateOfJson stateJson = .ok s)
-    (hf : forkchoiceUpdated tree finalized s = .ok (status, none)) :
-    forkchoiceUpdatedCall config version tree finalized (.arr #[stateJson, .obj kvs]) =
+    (hf : forkchoiceUpdated transition tree finalized s = .ok (status, none)) :
+    forkchoiceUpdatedCall config transition version tree finalized (.arr #[stateJson, .obj kvs]) =
       .ok (status, none, none) := by
   simp [forkchoiceUpdatedCall, forkchoiceUpdatedParams, paramsArray, custodyColumnsOfJson,
     hs, hf, bind, Except.bind, pure, Except.pure]
 
 /-- An applied head is a head that the tree holds. -/
 theorem exists_lookup_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
-    (hf : forkchoiceUpdated tree finalized state = .ok (status, some head)) :
+    (hf : forkchoiceUpdated transition tree finalized state = .ok (status, some head)) :
     ∃ known, tree.lookup head = some known := by
   unfold forkchoiceUpdated at hf
   split at hf
   · simp [pure, Except.pure] at hf
   · next p hp =>
-    split at hf
-    · simp [pure, Except.pure] at hf
-    · split at hf
-      · simp [pure, Except.pure] at hf
-      · split at hf
-        · simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at hf
-          exact ⟨p, hf.2 ▸ hp⟩
-        · simp [throw, throwThe, MonadExceptOf.throw] at hf
+    repeat' split at hf
+    all_goals first
+      | simp [pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hf; done
+      | (simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at hf
+         exact ⟨p, hf.2 ▸ hp⟩)
 
 /-- An update applies only the head that it names, with its safe and finalized blocks on its chain.
 
 Each of the two blocks may instead be the zero hash. -/
 theorem onChain_of_forkchoiceUpdated {status : PayloadStatus} {head : Hash32}
-    (hf : forkchoiceUpdated tree finalized state = .ok (status, some head)) :
+    (hf : forkchoiceUpdated transition tree finalized state = .ok (status, some head)) :
     head = state.headBlockHash ∧ onChain tree head state.safeBlockHash = true ∧
       onChain tree head state.finalizedBlockHash = true := by
   unfold forkchoiceUpdated at hf
   split at hf
   · simp [pure, Except.pure] at hf
-  · split at hf
-    · simp [pure, Except.pure] at hf
-    · split at hf
-      · simp [pure, Except.pure] at hf
-      · split at hf
-        · next hc =>
+  · repeat' split at hf
+    all_goals first
+      | simp [pure, Except.pure, throw, throwThe, MonadExceptOf.throw] at hf; done
+      | (next hc =>
           simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq, Option.some.injEq] at hf
           rw [← hf.2]
-          simpa using hc
-        · simp [throw, throwThe, MonadExceptOf.throw] at hf
+          simpa using hc)
 
 /-- A block that is on the chain of a head and is not the zero hash is a block of that chain. -/
 theorem mem_chainOf_of_onChain {head hash : Hash32} (h : onChain tree head hash = true)
@@ -569,10 +792,10 @@ theorem forkchoiceUpdatedCall_of_attributes {version : Nat}
     {s : ForkchoiceState} {status : PayloadStatus} {head : Hash32} {known : KnownPayload}
     {decoded : Σ f, PayloadAttributes f}
     (hs : forkchoiceStateOfJson stateJson = .ok s)
-    (hf : forkchoiceUpdated tree finalized s = .ok (status, some head))
+    (hf : forkchoiceUpdated transition tree finalized s = .ok (status, some head))
     (hk : tree.lookup head = some known)
     (ha : payloadAttributesOfVersion version (.obj kvs) = .ok decoded) :
-    forkchoiceUpdatedCall config version tree finalized (.arr #[stateJson, .obj kvs]) =
+    forkchoiceUpdatedCall config transition version tree finalized (.arr #[stateJson, .obj kvs]) =
       (checkAttributes config version known decoded).map
         fun attributes => (status, some head, some attributes) := by
   cases hc : checkAttributes config version known decoded <;>
@@ -657,11 +880,42 @@ theorem checkAttributes_eq_error_of_unsupportedFork {version : Nat} {head : Know
     {a : Σ f, PayloadAttributes f}
     (h : ∀ fork, config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat = some fork →
       attributesTakeFork version fork = false) :
-    checkAttributes config version head a = .error .unsupportedFork := by
+    checkAttributes config version head a =
+      .error (.unsupportedFork
+        (config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat)) := by
   cases hF : config.activeFork (head.number.toNat + 1) a.2.timestamp.toNat with
   | none => simp [checkAttributes, hF, throw, throwThe, MonadExceptOf.throw]
   | some fork =>
     simp [checkAttributes, hF, h fork hF, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
+
+/-- A version takes exactly the forks from Paris to Glamsterdam whose attributes it decodes.
+
+The structure is that of the payload attributes at the fork.
+
+The source adds a field at Hegotá that these attributes lack, so the bound leaves Hegotá out. -/
+theorem attributesTakeFork_eq_true_iff (version : Nat) (fork : Fork) :
+    attributesTakeFork version fork = true ↔
+      .paris ≤ fork ∧ fork < .hegota ∧
+        attributesForkAt fork ∈ (attributesVersions version).map attributesFork := by
+  match version with
+  | 0 | 1 | 2 | 3 => cases fork <;> decide
+  | n + 4 => cases fork <;> simp [attributesTakeFork, attributesVersions, attributesFork] <;> decide
+
+/-- Some version of the method takes a fork exactly when the fork is from Paris to Glamsterdam. -/
+theorem exists_attributesTakeFork_iff (fork : Fork) :
+    (∃ version, attributesTakeFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+  constructor
+  · rintro ⟨version, h⟩
+    obtain ⟨hLow, hHigh, -⟩ := (attributesTakeFork_eq_true_iff version fork).mp h
+    exact ⟨hLow, hHigh⟩
+  · intro ⟨hLow, hHigh⟩
+    cases fork <;> first
+      | exact absurd hLow (by decide)
+      | exact absurd hHigh (by decide)
+      | exact ⟨1, rfl⟩
+      | exact ⟨2, rfl⟩
+      | exact ⟨3, rfl⟩
+      | exact ⟨4, rfl⟩
 
 /-- A version other than 2 takes only forks whose structure is the one structure that it takes.
 
@@ -669,12 +923,9 @@ So only version 2 can give `-38003` for the structure at the fork. -/
 theorem attributesForkAt_of_attributesTakeFork {version : Nat} (hv : version ≠ 2) {fork : Fork}
     (h : attributesTakeFork version fork = true) :
     attributesForkAt fork = attributesFork version := by
-  match version with
-  | 0 | 1 | 3 => revert h; cases fork <;> decide
-  | 2 => exact absurd rfl hv
-  | n + 4 =>
-    revert h
-    cases fork <;> simp [attributesTakeFork, attributesForkAt, attributesFork] <;> decide
+  have hmem := ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
+  match version, hv with
+  | 0, _ | 1, _ | 3, _ | _ + 4, _ => simpa [attributesVersions] using hmem
 
 /-- Attributes of a fork of the version, whose structure is not that of the fork, give `-38003`.
 
@@ -714,7 +965,7 @@ theorem forkchoiceStateOfJson_json (state : ForkchoiceState) :
       ("finalizedBlockHash", dataJson state.finalizedBlockHash.toList)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "forkchoiceState" hd
-    (by simp [dataJson, isNull_str])
+    (by simp [dataJson])
   refine forkchoiceStateOfJson_eq_ok_iff.mpr ⟨fs, hfs, hasExactly_of_perm hp,
     dataJson state.headBlockHash.toList, dataJson state.safeBlockHash.toList,
     dataJson state.finalizedBlockHash.toList,
@@ -753,7 +1004,7 @@ private theorem attributePairs_present {fork : Fork} (a : PayloadAttributes fork
   unfold attributePairs
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
     by_cases h3 : Fork.glamsterdam ≤ fork <;>
-    simp [h1, h2, h3, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+    simp [h1, h2, h3, dataJson, quantityJson, listJson]
 
 /-- When a version has the fork of the attributes, its fields are the names of the pairs. -/
 private theorem attributesFields_eq {fork : Fork} (a : PayloadAttributes fork) {v : Nat}
@@ -1006,7 +1257,8 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
     cases attributes with
     | none => exact Or.inl ⟨rfl, rfl⟩
     | some a =>
-      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs := ⟨_, rfl⟩
+      obtain ⟨kvs, hk⟩ : ∃ kvs, payloadAttributesJson a = .obj kvs :=
+        ⟨_, Base.Toolchain.Json.mkObj_eq _⟩
       exact Or.inr ⟨kvs, hk, by simp [hk]⟩
   unfold forkchoiceUpdatedParamsJson
   rw [forkchoiceUpdatedParams_eq_ok_iff]
@@ -1019,30 +1271,21 @@ theorem forkchoiceUpdatedParams_json {fork : Fork} (version : Nat) (state : Fork
 
 /-- The status of every answer of an update is valid, invalid or syncing. -/
 private theorem forkchoiceUpdated_status {result : PayloadStatus × Option Hash32}
-    (h : forkchoiceUpdated tree finalized state = .ok result) :
+    (h : forkchoiceUpdated transition tree finalized state = .ok result) :
     result.1.status = .valid ∨ result.1.status = .invalid ∨ result.1.status = .syncing := by
   unfold forkchoiceUpdated at h
-  split at h
-  · cases h
-    simp
-  · split at h
-    · cases h
-      simp
-    · split at h
-      · cases h
-        simp
-      · split at h
-        · cases h
-          simp
-        · cases h
+  repeat' split at h
+  all_goals first
+    | (simp only [pure, Except.pure, Except.ok.injEq] at h; subst h; simp)
+    | simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-- An answer of a call comes from its update, and names a build only with attributes that pass. -/
 private theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Json}
     {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
-    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    (h : forkchoiceUpdatedCall config transition version tree finalized params = .ok r) :
     ∃ state attributes status head,
       forkchoiceUpdatedParams version params = .ok (state, attributes) ∧
-      forkchoiceUpdated tree finalized state = .ok (status, head) ∧ r.1 = status ∧
+      forkchoiceUpdated transition tree finalized state = .ok (status, head) ∧ r.1 = status ∧
       (r.2 = (head, none) ∨
         ∃ j h' known decoded a, attributes = some j ∧ head = some h' ∧
           payloadAttributesOfVersion version j = .ok decoded ∧ tree.lookup h' = some known ∧
@@ -1053,7 +1296,7 @@ private theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Js
   | error e => simp [hp, bind, Except.bind] at h
   | ok pr =>
     obtain ⟨state, attributes⟩ := pr
-    cases hf : forkchoiceUpdated tree finalized state with
+    cases hf : forkchoiceUpdated transition tree finalized state with
     | error e => simp [hp, hf, bind, Except.bind] at h
     | ok pr2 =>
       obtain ⟨status, head⟩ := pr2
@@ -1086,7 +1329,7 @@ private theorem forkchoiceUpdatedCall_ok_cases {version : Nat} {params : Lean.Js
 /-- Every answer of a call has a status of the three that step 9 allows. -/
 theorem forkchoiceUpdatedCall_status {version : Nat} {params : Lean.Json}
     {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
-    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    (h : forkchoiceUpdatedCall config transition version tree finalized params = .ok r) :
     r.1.status = .valid ∨ r.1.status = .invalid ∨ r.1.status = .syncing := by
   obtain ⟨_, _, status, head, -, hf, h1, -⟩ := forkchoiceUpdatedCall_ok_cases h
   rw [h1]
@@ -1099,11 +1342,12 @@ That is when the update applies a head that the tree holds, and attributes that 
 The ID is then that of the head and the attributes at their fork. -/
 theorem forkchoiceUpdatedResponse_payloadId {version : Nat} {params : Lean.Json}
     {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
-    {id : PayloadId} (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) :
+    {id : PayloadId}
+    (h : forkchoiceUpdatedCall config transition version tree finalized params = .ok r) :
     (forkchoiceUpdatedResponse r).2 = some id ↔
       ∃ state j status head known decoded a,
         forkchoiceUpdatedParams version params = .ok (state, some j) ∧
-        forkchoiceUpdated tree finalized state = .ok (status, some head) ∧
+        forkchoiceUpdated transition tree finalized state = .ok (status, some head) ∧
         tree.lookup head = some known ∧
         payloadAttributesOfVersion version j = .ok decoded ∧
         checkAttributes config version known decoded = .ok a ∧
@@ -1144,9 +1388,11 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
       [("payloadStatus", a), ("payloadId", b)].lookup "payloadId" = some b :=
     fun _ _ => rfl
   have l1 : fs.lookup "payloadStatus" = some (Json.payloadStatusJson s e) := by
-    rw [look, k1]; rfl
+    rw [look, k1]
+    simp [Option.filter_some, Json.payloadStatusJson]
   have l2 : fs.lookup "payloadId" = id.map (dataJson ·.toList) := by
-    rw [look, k2]; cases id <;> rfl
+    rw [look, k2]
+    cases id <;> simp [optionJson, dataJson, Option.filter_some]
   have hall : (fs.all (["payloadStatus", "payloadId"].contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm
@@ -1160,15 +1406,165 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
   simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, Json.payloadStatusOfJson_json, h]
   cases id <;> simp [Json.lift, fixed_dataJson, Option.mapM] <;> rfl
 
+/-- A JSON value reads as a forkchoice response exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `payloadStatus` and, if present, `payloadId`.
+
+The value of `payloadStatus` reads as the payload status and the validation error.
+
+The status is valid, invalid or syncing.
+
+The payload ID is `0x` and 16 lowercase hex digits, or absent. -/
+theorem forkchoiceUpdatedResponseOfJson_eq_ok_iff {j : Lean.Json} {s : PayloadStatus}
+    {e : Option String} {id : Option PayloadId} :
+    forkchoiceUpdatedResponseOfJson j = .ok (s, e, id) ↔
+      ∃ fs, fields "forkchoiceUpdatedResponse" j = .ok fs ∧
+        (∀ f ∈ fs, f.1 = "payloadStatus" ∨ f.1 = "payloadId") ∧
+        (∃ status, fs.lookup "payloadStatus" = some status ∧
+          Json.payloadStatusOfJson status = .ok (s, e)) ∧
+        (s.status = .valid ∨ s.status = .invalid ∨ s.status = .syncing) ∧
+        fs.lookup "payloadId" = id.map fun i => .str (hexString i.toList) := by
+  unfold forkchoiceUpdatedResponseOfJson
+  simp only [bind_ok_iff, Json.liftM_eq_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  have allIff : fs.all (["payloadStatus", "payloadId"].contains ·.1) = true ↔
+      ∀ f ∈ fs, f.1 = "payloadStatus" ∨ f.1 = "payloadId" := by
+    simp [List.all_eq_true]
+  have restrictedIff : s.status.restricted = true ↔
+      s.status = .valid ∨ s.status = .invalid ∨ s.status = .syncing := by
+    cases s.status <;> simp [Status.restricted]
+  by_cases hall : fs.all (["payloadStatus", "payloadId"].contains ·.1) = true
+  · rw [and_iff_right (allIff.mp hall)]
+    simp only [hall, ite_true, bind_ok_iff, Json.liftM_eq_ok_iff, field_eq_ok_iff]
+    constructor
+    · rintro ⟨status, hs, ⟨s', e'⟩, hp, h⟩
+      by_cases hr : s'.status.restricted = true
+      · simp only [hr, ite_true, bind_ok_iff,
+          Json.lift_mapM_eq_ok_iff fun _ _ =>
+            Serialization.JsonRpc.fixed_false_eq_ok_iff] at h
+        obtain ⟨i, hi, h⟩ := h
+        cases h
+        exact ⟨⟨status, hs, hp⟩, restrictedIff.mp hr, hi⟩
+      -- A status that the method does not answer fails with an invalid parameter.
+      · simp only [bind, Except.bind] at h
+        split at h
+        · contradiction
+        · cases h
+    · rintro ⟨⟨status, hs, hp⟩, hr, hi⟩
+      refine ⟨status, hs, (s, e), hp, ?_⟩
+      simp only [restrictedIff.mpr hr, ite_true, bind_ok_iff,
+        Json.lift_mapM_eq_ok_iff fun _ _ =>
+          Serialization.JsonRpc.fixed_false_eq_ok_iff]
+      exact ⟨id, hi, rfl⟩
+  -- A member of another name fails with an invalid parameter, never with a response.
+  · constructor
+    · intro h
+      simp only [bind, Except.bind] at h
+      split at h
+      · contradiction
+      · cases h
+    · rintro ⟨members, -⟩
+      exact absurd (allIff.mpr members) hall
+
 /-- The decoder reads back the response of every call, with any validation error. -/
 theorem forkchoiceUpdatedResponseOfJson_call {version : Nat} {params : Lean.Json}
     {r : PayloadStatus × Option Hash32 × Option (Σ fork, PayloadAttributes fork)}
-    (h : forkchoiceUpdatedCall config version tree finalized params = .ok r) (e : Option String) :
+    (h : forkchoiceUpdatedCall config transition version tree finalized params = .ok r)
+    (e : Option String) :
     forkchoiceUpdatedResponseOfJson (forkchoiceUpdatedResponseJson (forkchoiceUpdatedResponse r).1
       e (forkchoiceUpdatedResponse r).2) =
       .ok ((forkchoiceUpdatedResponse r).1, e, (forkchoiceUpdatedResponse r).2) :=
   forkchoiceUpdatedResponseOfJson_json _ _ _ (by
     rcases forkchoiceUpdatedCall_status h with hs | hs | hs <;>
       simp [forkchoiceUpdatedResponse, hs, Status.restricted])
+
+/-! ## The attributes that the consensus layer sends -/
+
+/-- A fork that a version of the method takes has the structure of a version that it takes. -/
+theorem exists_attributesVersions_of_attributesTakeFork {version : Nat} {fork : Fork}
+    (h : attributesTakeFork version fork = true) :
+    ∃ v ∈ attributesVersions version, attributesFork v = attributesForkAt fork :=
+  List.mem_map.mp ((attributesTakeFork_eq_true_iff version fork).mp h).2.2
+
+/-- Attributes sent with a head that the update applies come back at the fork of the next block.
+
+The tree must hold the head.
+
+That fork is the active fork at the number after the head and at the timestamp of the attributes.
+
+The version of the method must take it, and its structure must be that of the attributes.
+
+The timestamp must be above that of the head.
+
+The custody columns, from version 4, do not matter.
+
+The attributes at that fork carry every value of the attributes sent. -/
+theorem forkchoiceUpdatedCall_payloadAttributesJson {version : Nat} {fork e : Fork}
+    {s : ForkchoiceState} {status : PayloadStatus} {known : KnownPayload}
+    (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
+    (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
+    (hKnown : tree.lookup s.headBlockHash = some known)
+    (hTime : known.timestamp < a.timestamp)
+    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some e)
+    (hTakes : attributesTakeFork version e = true)
+    (hShape : attributesForkAt e = attributesForkAt fork) :
+    ∃ a' : PayloadAttributes e,
+      forkchoiceUpdatedCall config transition version tree finalized
+          (forkchoiceUpdatedParamsJson version s (some a) custody) =
+        .ok (status, some s.headBlockHash, some ⟨e, a'⟩) ∧
+      a'.timestamp = a.timestamp ∧ a'.prevRandao = a.prevRandao ∧
+      a'.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+  -- The attributes read back at a structure that the version takes, which is that of their fork.
+  have takes := exists_attributesVersions_of_attributesTakeFork hTakes
+  rw [hShape] at takes
+  obtain ⟨b, hb, hat⟩ := payloadAttributesOfVersion_json a takes
+  have hstruct : attributesForkAt fork = b.1 :=
+    PayloadAttributes.atFork_isSome_iff.mp (by simp [hat])
+  obtain ⟨t1, t2, t3, t4, t5, t6, t7⟩ := PayloadAttributes.atFork_fields hat
+  -- At the fork of the payload they have the same structure, so they move there.
+  obtain ⟨a', ha'⟩ := Option.isSome_iff_exists.mp
+    (PayloadAttributes.atFork_isSome_iff.mpr (hShape.trans hstruct))
+  obtain ⟨u1, u2, u3, u4, u5, u6, u7⟩ := PayloadAttributes.atFork_fields ha'
+  have hcheck : checkAttributes config version known b = .ok ⟨e, a'⟩ :=
+    checkAttributes_eq_ok_iff.mpr ⟨t1 ▸ hFork, hTakes, ha', t1 ▸ hTime⟩
+  refine ⟨a', ?_, u1.trans t1.symm, u2.trans t2.symm, u3.trans t3.symm, u4.trans t4.symm,
+    u5.trans t5.symm, u6.trans t6.symm, u7.trans t7.symm⟩
+  unfold forkchoiceUpdatedCall
+  rw [forkchoiceUpdatedParams_json]
+  simp [hUpdate, hKnown, hb, hcheck, bind, Except.bind, pure, Except.pure]
+
+/-- From Glamsterdam, attributes sent with an applied head come back at Glamsterdam, at version 4.
+
+The tree must hold the head.
+
+The block after the head must be of Glamsterdam, and the timestamp above that of the head.
+
+The attributes at that fork carry every value of the attributes sent. -/
+theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
+    (gloas : .glamsterdam ≤ fork) {s : ForkchoiceState} {status : PayloadStatus}
+    {known : KnownPayload} (a : PayloadAttributes fork) (custody : Option (Vector UInt8 16))
+    (hUpdate : forkchoiceUpdated transition tree finalized s = .ok (status, some s.headBlockHash))
+    (hKnown : tree.lookup s.headBlockHash = some known)
+    (hTime : known.timestamp < a.timestamp)
+    (hFork : config.activeFork (known.number.toNat + 1) a.timestamp.toNat = some .glamsterdam) :
+    ∃ a' : PayloadAttributes .glamsterdam,
+      forkchoiceUpdatedCall config transition 4 tree finalized
+          (forkchoiceUpdatedParamsJson 4 s (some a) custody) =
+        .ok (status, some s.headBlockHash, some ⟨.glamsterdam, a'⟩) ∧
+      a'.timestamp = a.timestamp ∧ a'.prevRandao = a.prevRandao ∧
+      a'.suggestedFeeRecipient = a.suggestedFeeRecipient ∧
+      sinceValue a'.withdrawals = sinceValue a.withdrawals ∧
+      sinceValue a'.parentBeaconBlockRoot = sinceValue a.parentBeaconBlockRoot ∧
+      sinceValue a'.slotNumber = sinceValue a.slotNumber ∧
+      sinceValue a'.targetGasLimit = sinceValue a.targetGasLimit := by
+  have hShape : attributesForkAt .glamsterdam = attributesForkAt fork := by
+    cases fork <;> first | rfl | exact absurd gloas (by decide)
+  exact forkchoiceUpdatedCall_payloadAttributesJson a custody hUpdate hKnown hTime hFork rfl hShape
 
 end EthLib.Engine

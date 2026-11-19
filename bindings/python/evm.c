@@ -63,11 +63,16 @@ py_evm_immediate_depths(
   PyObject* self,
   PyObject* args
 ) {
-  unsigned long opcode, immediate;
-  if (!PyArg_ParseTuple(args, "kk", &opcode, &immediate)) return NULL;
-  /* The opcode and its immediate are one byte each. */
-  if (opcode > 0xff || immediate > 0xff) {
-    PyErr_SetString(PyExc_OverflowError, "the opcode and the immediate must be below 256");
+  PyObject *opcode_obj, *immediate_obj;
+  if (!PyArg_ParseTuple(args, "OO", &opcode_obj, &immediate_obj)) return NULL;
+  uint64_t opcode, immediate;
+  if (parse_uint64(opcode_obj, "opcode", &opcode) ||
+      parse_uint64(immediate_obj, "immediate", &immediate) ||
+      opcode > 0xff || immediate > 0xff) {
+    /* Keep type errors, and report the byte bound for every numeric range error. */
+    if (!PyErr_Occurred() || PyErr_ExceptionMatches(PyExc_OverflowError)) {
+      PyErr_SetString(PyExc_OverflowError, "the opcode and the immediate must be below 256");
+    }
     return NULL;
   }
   return except_into_pybytes(eth_evm_immediate_depths((uint8_t) opcode, (uint8_t) immediate),

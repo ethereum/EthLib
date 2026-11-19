@@ -38,15 +38,15 @@ def test_decode(value: int, encoded: str) -> None:
         # A megabyte of continuation bytes is rejected at byte eleven.
         (b"\x80" * 1048576 + b"\x01", "tooLong"),
         # 2^64 is one past the range, and still fits in ten bytes.
-        (bytes.fromhex("80808080808080808002"), "overflow"),
+        (bytes.fromhex("80808080808080808002"), "overflow 18446744073709551616"),
         # 80 00 is zero padded with an extra zero group.
-        (bytes.fromhex("8000"), "nonMinimal"),
+        (bytes.fromhex("8000"), "nonMinimal 2"),
         # A continuation bit with nothing after it.
         (bytes.fromhex("80"), "unterminated"),
         # No bytes at all.
         (b"", "unterminated"),
         # A last byte followed by more bytes.
-        (bytes.fromhex("0000"), "trailingBytes"),
+        (bytes.fromhex("0000"), "trailingBytes 1"),
     ],
 )
 def test_decode_rejected(data: bytes, fault: str) -> None:

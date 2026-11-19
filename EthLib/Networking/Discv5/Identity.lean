@@ -72,9 +72,8 @@ It is the SHA-256 of the text, the challenge data, the ephemeral public key and 
 SHA-256 gives 32 bytes, so the vector holds the whole hash. -/
 def idSignatureHash (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId) :
     Vector UInt8 32 :=
-  let hash := Sha256.hash (asciiBytes "discovery v5 identity proof" ++ challengeData ++
+  Sha256.hash32 (asciiBytes "discovery v5 identity proof" ++ challengeData ++
     ephemeralPubkey ++ ⟨nodeIdB.toArray⟩)
-  Vector.ofFn fun i => hash.data[i.val]?.getD 0
 
 /-- The ID signature of node A: the 64 bytes `r || s` of an ECDSA signature of the hash.
 

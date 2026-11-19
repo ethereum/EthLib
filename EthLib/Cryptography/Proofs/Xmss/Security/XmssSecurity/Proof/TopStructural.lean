@@ -330,10 +330,10 @@ theorem topMerkleCollision_afterKeygen
       (Concrete.CacheView.nodeInput keyResult.1.2.parameter .top level
         (key.val / 2 ^ (level.val + 1)) forged.1 forged.2) = some forgedOutput)
     (hne : forged ≠ honest)
-    (heq : (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top (level.val + 1)
-        (key.val / 2 ^ (level.val + 1)) forged.1 forged.2).run =
-      (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top (level.val + 1)
-        (key.val / 2 ^ (level.val + 1)) honest.1 honest.2).run)
+    (heq : (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top ⟨level.val + 1,
+        key.val / 2 ^ (level.val + 1)⟩ forged.1 forged.2).run =
+      (Concrete.CacheView.nodeAt finalCache keyResult.1.2.parameter .top ⟨level.val + 1,
+        key.val / 2 ^ (level.val + 1)⟩ honest.1 honest.2).run)
     (hhonest : honest =
       (Concrete.CacheReplay.topTreeNode finalCache keyResult.1.2.parameter
           keyResult.1.2.topChainStart level.val
@@ -521,6 +521,7 @@ theorem topPathCollision_afterKeygen (key : TopIndex) (part : LayerSignature)
       (keygenTopTargetInput keyResult.1.2 keyResult.2) := by
   obtain ⟨output, hforged⟩ := hcached
   obtain ⟨hne, heq⟩ := Merkle.CollidesAt.pairs _ hevent
+  rw [EthLib.Cryptography.Merkle.Position.ancestor_mk_zero] at heq
   exact topMerkleCollision_afterKeygen keyResult hkeygen finalCache hle key level _ _ output
     hforged hne heq (Concrete.CacheReplay.pairAt_honestTopPath finalCache keyResult.1.2 key level)
 
@@ -630,7 +631,7 @@ theorem CappedTop.detailed_execution_topQueriesCached
     Concrete.CacheReplay.TopQueriesCached execution.2 execution.1.secretKey.parameter
       (topKeyOf execution.1.forgery.leafIndex)
       (Merkle.climb (Concrete.CacheView.nodeAt execution.2 execution.1.secretKey.parameter .bottom)
-        0 execution.1.forgery.leafIndex.val
+        ⟨0, execution.1.forgery.leafIndex.val⟩
         (Concrete.CacheView.leafHash execution.2 execution.1.secretKey.parameter
           execution.1.forgery.leafIndex
           (recoveredEndpoints
@@ -698,8 +699,8 @@ noncomputable def OutcomeTopChainValueRevealed (cache : QueryCache HashSpec)
     TargetSum.decodeDigest
       (Concrete.CacheView.topEncodingHash cache outcome.secretKey.parameter
         (topKeyOf outcome.forgery.leafIndex)
-        ((Merkle.climb (Concrete.CacheView.nodeAt cache outcome.secretKey.parameter .bottom) 0
-          outcome.forgery.leafIndex.val
+        ((Merkle.climb (Concrete.CacheView.nodeAt cache outcome.secretKey.parameter .bottom)
+            ⟨0, outcome.forgery.leafIndex.val⟩
           (Concrete.CacheView.leafHash cache outcome.secretKey.parameter outcome.forgery.leafIndex
             (recoveredEndpoints
               (fun chain => Concrete.CacheView.chainStep cache outcome.secretKey.parameter

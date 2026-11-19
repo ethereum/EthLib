@@ -443,7 +443,7 @@ theorem spine_value (hboundary : BoundaryCorrect f parameter seed labels) (steps
           keptPosition parameter topLayer / 2 ^ steps := by
         simp only [spineIndex, Nat.add_sub_cancel_left, hpos]
       cases hb : (keptPosition parameter topLayer / 2 ^ steps).testBit 0 <;>
-        try simp only [Bool.false_eq_true, ↓reduceIte, eval_tweakableHash]
+        simp only [Bool.false_eq_true, ↓reduceIte, eval_tweakableHash]
       all_goals
         apply congrArg (fun input : HashInput => truncateHash (f input))
         have hb' := hb
@@ -554,7 +554,7 @@ theorem tree_path_value (hboundary : BoundaryCorrect f parameter seed labels)
       (quotient_range (layerHeight lay) level leaf.val hlevel hrange)
       (pathNode_kept parameter lay leaf hkept level hlower)]
     symm
-    rw [merkleValue, merkleFold_treeFold]
+    rw [merkleValue]
     exact eval_treeFold_path f parameter lay tree seed leaf _ level
       (fun k hk => canonicalPath_below f parameter seed lay tree leaf k (by omega))
   · have htop := top_of_above_kept lay level hlevel hlower
@@ -576,11 +576,13 @@ theorem tree_path_value (hboundary : BoundaryCorrect f parameter seed labels)
     simp only [hsum] at hspine
     rw [hspine]
     symm
-    rw [merkleValue, merkleFold_treeFold]
-    simpa only [hsum] using eval_treeFold_spine f parameter topLayer rootTree seed leaf hkept _
+    rw [merkleValue]
+    have h := eval_treeFold_spine f parameter topLayer rootTree seed leaf hkept _
       (fun k hk => canonicalPath_below f parameter seed topLayer rootTree leaf k hk)
       (level - keptHeight topLayer) (fun k hk => canonicalTreePath_surrogate f parameter
         topLayer rootTree seed leaf (keptHeight topLayer + k) (by omega) (by omega))
+    rw [hsum] at h
+    exact h
 
 include hconsistent in
 theorem tree_path_sibling (hboundary : BoundaryCorrect f parameter seed labels)
@@ -649,7 +651,7 @@ theorem tree_path_input (hboundary : BoundaryCorrect f parameter seed labels)
       (Nat.le_of_lt hlevel),
     tree_path_sibling f parameter seed labels hconsistent hboundary lay tree leaf hactive level
       hlevel]
-  simp only [merkleInput]
+  rw [merkleInput_eq]
   have hbit : (leaf.val / 2 ^ level).testBit 0 = leaf.val.testBit level := by
     simpa only [Nat.zero_add] using (Nat.testBit_add leaf.val 0 level).symm
   rw [hbit, Nat.div_div_eq_div_mul, ← Nat.pow_succ]
@@ -861,12 +863,12 @@ theorem fors_path_value (leaf : FLeaf) (level : Nat) (hlevel : level ≤ forsHei
     truncateHash (labels (forsPosition index κ level hlevel
       ⟨leaf.val / 2 ^ level, (Nat.div_le_self _ _).trans_lt leaf.isLt⟩)) =
     merkleValue f parameter (Fors.forsDomain index κ) leaf.val
-      (Fors.extendPath (Fors.canonicalPath f parameter index κ seed leaf))
+      (extendPath (Fors.canonicalPath f parameter index κ seed leaf))
       (Completeness.forsLeafValue f parameter index κ seed leaf) level := by
   rw [fnode_value f parameter seed labels hconsistent index κ level hlevel _
     (quotient_range forsHeight level leaf.val hlevel leaf.isLt)]
   symm
-  rw [merkleValue, Fors.merkleFold_forsFold _ _ _ _ _ _ hlevel, ← Completeness.forsNodeValue_zero]
+  rw [merkleValue, Fors.climb_forsFold _ _ _ _ _ _ hlevel, ← Completeness.forsNodeValue_zero]
   exact Completeness.eval_forsFold_path f parameter index κ seed leaf _ level hlevel
     (fun _ _ _ => rfl)
 
@@ -876,8 +878,8 @@ theorem fors_path_sibling (leaf : FLeaf) (level : Nat) (hlevel : level < forsHei
       ⟨Nat.xor (leaf.val / 2 ^ level) 1,
         Nat.xor_lt_two_pow ((Nat.div_le_self _ _).trans_lt leaf.isLt)
           (Nat.one_lt_two_pow (by have := Params.forsHeight_ge; omega))⟩)) =
-      Fors.extendPath (Fors.canonicalPath f parameter index κ seed leaf) level := by
-  rw [Fors.extendPath, dite_eq_left hlevel, Fors.canonicalPath]
+      extendPath (Fors.canonicalPath f parameter index κ seed leaf) level := by
+  rw [extendPath, dite_eq_left hlevel, Fors.canonicalPath]
   exact fnode_value f parameter seed labels hconsistent index κ level (Nat.le_of_lt hlevel) _
     (Nat.xor_lt_two_pow (quotient_range forsHeight level leaf.val (Nat.le_of_lt hlevel) leaf.isLt)
       (Nat.one_lt_two_pow (by omega)))
@@ -888,7 +890,7 @@ theorem fors_path_input (leaf : FLeaf) (level : Nat) (hlevel : level < forsHeigh
       (forsPosition index κ (level + 1) hlevel
         ⟨leaf.val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt leaf.isLt⟩) labels =
     merkleInput f parameter (Fors.forsDomain index κ) leaf.val
-      (Fors.extendPath (Fors.canonicalPath f parameter index κ seed leaf))
+      (extendPath (Fors.canonicalPath f parameter index κ seed leaf))
       (Completeness.forsLeafValue f parameter index κ seed leaf) level := by
   have hparent : (⟨leaf.val / 2 ^ (level + 1), (Nat.div_le_self _ _).trans_lt leaf.isLt⟩ : FLeaf) =
       ⟨(leaf.val / 2 ^ level) / 2,
@@ -900,7 +902,7 @@ theorem fors_path_input (leaf : FLeaf) (level : Nat) (hlevel : level < forsHeigh
     ⟨leaf.val / 2 ^ level, (Nat.div_le_self _ _).trans_lt leaf.isLt⟩,
     fors_path_value f parameter seed labels hconsistent index κ leaf level (Nat.le_of_lt hlevel),
     fors_path_sibling f parameter seed labels hconsistent index κ leaf level hlevel]
-  simp only [merkleInput]
+  rw [merkleInput_eq]
   have hbit : (leaf.val / 2 ^ level).testBit 0 = leaf.val.testBit level := by
     simpa only [Nat.zero_add] using (Nat.testBit_add leaf.val 0 level).symm
   rw [hbit]

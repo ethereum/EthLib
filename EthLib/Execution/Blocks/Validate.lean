@@ -5,7 +5,8 @@ public import EthLib.Execution.Blocks.BlockAccessList
 public import EthLib.Execution.Blocks.Difficulty
 public import EthLib.Execution.Blocks.ProofOfWork
 public import EthLib.Execution.Blocks.Requests
-public import EthLib.Execution.Evm.Machine.Errors
+public import EthLib.Execution.ErrorFormat
+public import EthLib.Execution.Evm.Errors
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Trie.Root
 public import EthLib.Execution.Fees.BaseFee
@@ -71,38 +72,42 @@ mutual
 inductive BlockError where
   /-- The header has number 0, which only the genesis block has. -/
   | genesisNumber
-  /-- The excess blob gas is not the one that the parent gives. -/
+  /-- The excess blob gas `actual` of the header is not `expected`, the one the parent gives. -/
   | wrongExcessBlobGas (expected actual : Nat)
-  /-- The block uses more gas than its gas limit. -/
-  | gasUsedAboveLimit
-  /-- The gas limit moves too far from the parent's, or is below the minimum. -/
-  | invalidGasLimit
-  /-- The base fee is not the one that the parent gives. -/
+  /-- The block uses `gasUsed` gas, more than its gas limit `gasLimit`. -/
+  | gasUsedAboveLimit (gasUsed gasLimit : Nat)
+  /-- The gas limit `gasLimit` moves too far from the parent's `parentGasLimit`, or is too low. -/
+  | invalidGasLimit (gasLimit parentGasLimit : Nat)
+  /-- The base fee `actual` of the header is not `expected`, the one the parent gives. -/
   | wrongBaseFee (expected actual : Nat)
-  /-- The timestamp is not after the parent's. -/
-  | timestampNotAfterParent
-  /-- The number is not the parent's plus 1. -/
-  | wrongNumber
-  /-- The extra data has more than 32 bytes. -/
-  | extraDataTooLong
-  /-- The difficulty is not 0. -/
-  | nonzeroDifficulty
-  /-- The nonce is not 8 zero bytes. -/
-  | nonzeroNonce
-  /-- The ommers hash is not the hash of the empty list. -/
-  | wrongOmmersHash
-  /-- The parent hash is not the hash of the parent's header. -/
-  | wrongParentHash
+  /-- The timestamp `timestamp` is not after the parent's `parentTimestamp`. -/
+  | timestampNotAfterParent (timestamp parentTimestamp : Nat)
+  /-- The number `actual` is not `expected`, the parent's plus 1. -/
+  | wrongNumber (expected actual : Nat)
+  /-- The extra data has `size` bytes, more than 32. -/
+  | extraDataTooLong (size : Nat)
+  /-- The difficulty `difficulty` is not 0. -/
+  | nonzeroDifficulty (difficulty : Nat)
+  /-- The nonce `nonce` is not 8 zero bytes. -/
+  | nonzeroNonce (nonce : Bytes8)
+  /-- The ommers hash `ommersHash` is not the hash of the empty list. -/
+  | wrongOmmersHash (ommersHash : Hash32)
+  /-- The parent hash `actual` of the header is not `expected`, the hash of the parent's header.
+
+  A parent at a later fork than the header fails this check at once.
+
+  Its hash is then none when its header has no RLP form. -/
+  | wrongParentHash (expected : Option Hash32) (actual : Hash32)
   /-- A header or a block has no RLP form. -/
   | encoding (error : RlpError)
-  /-- The RLP form of the block has more than the most bytes. -/
+  /-- The RLP form of the block has `size` bytes, more than the most bytes. -/
   | blockTooLarge (size : Nat)
-  /-- Before Paris, the difficulty is not the one that the parent gives. -/
+  /-- Before Paris, the difficulty `actual` is not `expected`, the one the parent gives. -/
   | wrongDifficulty (expected actual : Nat)
   /-- Before Paris, the proof of work fails. -/
   | proofOfWork (error : PowError)
-  /-- From Paris on, the parent is before London, so it has no base fee. -/
-  | parentBeforeLondon
+  /-- From Paris on, the parent is at `parentFork`, before London, so it has no base fee. -/
+  | parentBeforeLondon (parentFork : Fork)
   /-- A system call that must succeed finds no code at `address`. -/
   | systemContractEmpty (address : Address)
   /-- A system call that must succeed fails at `address` with `error`. -/
@@ -113,34 +118,40 @@ inductive BlockError where
   | aborted (error : Evm.EvmError)
   /-- The transaction `index`, counted from 0, cannot enter the block, by `error`. -/
   | invalidTransaction (index : Nat) (error : Transactions.InclusionError)
-  /-- The fork of the block is not the active fork of its chain at its number and its time. -/
-  | wrongFork
+  /-- The fork `fork` of the block is not `active`, the active fork of its chain at the block.
+
+  The active fork is none when the chain activates no fork at the number and the time. -/
+  | wrongFork (active : Option Fork) (fork : Fork)
   /-- The chain holds no parent for the block. -/
   | noParent
-  /-- From Paris, the block holds ommers. -/
-  | ommersAfterParis
-  /-- A block of the DAO Fork's first ten lacks the extra data `dao-hard-fork`. -/
-  | wrongDaoExtraData
+  /-- From Paris, the block holds `count` ommers. -/
+  | ommersAfterParis (count : Nat)
+  /-- A block of the DAO Fork's first ten has the extra data `extraData`, not `dao-hard-fork`. -/
+  | wrongDaoExtraData (extraData : ByteArray)
   /-- A deposit log of the block has no deposit request. -/
   | deposit (error : DepositError)
   /-- A root of the block has no trie. -/
   | trie (error : Trie.TrieError)
   /-- The gas used `actual` of the body is not the gas used `expected` of the header. -/
   | wrongGasUsed (expected actual : Nat)
-  /-- The transactions root is not the root of the transactions. -/
-  | wrongTransactionsRoot
-  /-- The state root is not the root of the state after the block. -/
-  | wrongStateRoot
-  /-- The receipts root is not the root of the receipts. -/
-  | wrongReceiptRoot
-  /-- The Bloom filter is not the filter of the logs of the block. -/
-  | wrongBloom
-  /-- From Shapella, the withdrawals root is not the root of the withdrawals. -/
-  | wrongWithdrawalsRoot
+  /-- The transactions root `expected` of the header is not `actual`, that of the transactions. -/
+  | wrongTransactionsRoot (expected actual : Hash32)
+  /-- The state root `expected` of the header is not `actual`, that of the state after the block.
+  -/
+  | wrongStateRoot (expected actual : Hash32)
+  /-- The receipts root `expected` of the header is not `actual`, that of the receipts. -/
+  | wrongReceiptRoot (expected actual : Hash32)
+  /-- The Bloom filter `expected` of the header is not `actual`, that of the logs. -/
+  | wrongBloom (expected actual : Bytes256)
+  /-- From Shapella, the root `actual` of the withdrawals is not the root `expected` of the header.
+
+  The root of the withdrawals is none only before Shapella, where no check reads it. -/
+  | wrongWithdrawalsRoot (expected : Hash32) (actual : Option Hash32)
   /-- From Dencun, the blob gas used `actual` of the body is not `expected` of the header. -/
   | wrongBlobGasUsed (expected actual : Nat)
-  /-- From Pectra, the requests hash is not the hash of the requests. -/
-  | wrongRequestsHash
+  /-- From Pectra, the requests hash `expected` of the header is not `actual`, that of the requests.
+  -/
+  | wrongRequestsHash (expected actual : Hash32)
   /-- Before Paris, the ommers are not valid, by `error`. -/
   | ommers (error : OmmerError)
   /-- A balance would reach `2^256`, which no rule of a block allows for. -/
@@ -151,149 +162,160 @@ inductive BlockError where
 
   The list that a body builds has the right form, so only its size can break a rule. -/
   | blockAccessList (error : BlockAccessList.Error)
-  /-- From Glamsterdam, the hash of the block access list is not the hash of the header. -/
-  | wrongBlockAccessListHash
+  /-- From Glamsterdam, the hash `actual` of the block access list is not `expected` of the header.
+
+  The hash of the list is none only before Glamsterdam, where no check reads it. -/
+  | wrongBlockAccessListHash (expected : Hash32) (actual : Option Hash32)
 
 /-- Why the ommers of a block are not valid. -/
 inductive OmmerError where
-  /-- The ommers hash of the header is not the hash of the ommers. -/
-  | wrongOmmersHash
-  /-- An ommer's number is 0, or not below the block's. -/
-  | numberOutOfRange
-  /-- The recent chain holds no block with the number of an ommer's parent. -/
-  | parentMissing
+  /-- The hash `actual` of the ommers is not the ommers hash `expected` of the header. -/
+  | wrongOmmersHash (expected actual : Hash32)
+  /-- An ommer's number `number` is 0, or not below the block's number `blockNumber`. -/
+  | numberOutOfRange (number blockNumber : Nat)
+  /-- The recent chain holds no parent for the ommer with number `number`. -/
+  | parentMissing (number : Nat)
   /-- An ommer is not a valid header against its parent. -/
   | invalidHeader (error : BlockError)
-  /-- The block holds more than two ommers. -/
-  | tooManyOmmers
-  /-- The block holds one ommer twice. -/
-  | duplicateOmmer
-  /-- An ommer is the block itself, or a block of the recent chain. -/
-  | ommerInChain
-  /-- An ommer is already an ommer of a recent block. -/
-  | ommerAlreadyIncluded
-  /-- An ommer is not one to six blocks older than the block. -/
-  | wrongAge
-  /-- The parent of an ommer is not a block of the recent chain. -/
-  | parentNotRecent
-  /-- An ommer has the parent of the block, so it is a sibling, not an ommer. -/
-  | siblingOfBlock
+  /-- The block holds `count` ommers, more than two. -/
+  | tooManyOmmers (count : Nat)
+  /-- The block holds the ommer with hash `hash` twice. -/
+  | duplicateOmmer (hash : Hash32)
+  /-- The ommer with hash `hash` is the block itself, or a block of the recent chain. -/
+  | ommerInChain (hash : Hash32)
+  /-- The ommer with hash `hash` is already an ommer of a recent block. -/
+  | ommerAlreadyIncluded (hash : Hash32)
+  /-- The ommer with hash `hash` is `age` blocks older than the block, not one to six. -/
+  | wrongAge (hash : Hash32) (age : Nat)
+  /-- The parent `parentHash` of the ommer with hash `hash` is not a block of the recent chain. -/
+  | parentNotRecent (hash parentHash : Hash32)
+  /-- The ommer with hash `hash` has the parent of the block, so it is a sibling, not an ommer. -/
+  | siblingOfBlock (hash : Hash32)
   /-- A header has no RLP form. -/
   | encoding (error : RlpError)
-  /-- An ommer in the first ten blocks of the DAO Fork lacks the extra data of that fork. -/
-  | wrongDaoExtraData
+  /-- An ommer in the first ten blocks of the DAO Fork has the extra data `extraData`.
+
+  It lacks the extra data of that fork. -/
+  | wrongDaoExtraData (extraData : ByteArray)
 
 end
 
 deriving instance DecidableEq for BlockError, OmmerError
 
+/-- A block error constructor, named in full, applied to its arguments. -/
+def blockErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Blocks.BlockError." ++ name) args prec
 
-/-- A constructor, named in full, applied to its arguments, in Lean syntax. -/
-def constructorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
-  let applied : Std.Format := .group (.nest 2 (args.foldl (fun f a => f ++ .line ++ a) name))
-  -- An argument position puts the application in parentheses, as `Repr.addAppParen` does.
-  if prec ≥ max_prec then .group (.nest 1 (.text "(" ++ applied ++ .text ")")) else applied
+/-- An ommer error constructor, named in full, applied to its arguments. -/
+def ommerErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Blocks.OmmerError." ++ name) args prec
 
 mutual
 
-/-- The form of a block error in Lean syntax, with its arguments. -/
-def instReprBlockError.reprPrec : BlockError → Nat → Std.Format
-  | .genesisNumber, _ => "EthLib.Execution.Blocks.BlockError.genesisNumber"
-  | .wrongExcessBlobGas expected actual, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongExcessBlobGas"
-      [reprArg expected, reprArg actual] prec
-  | .gasUsedAboveLimit, _ => "EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit"
-  | .invalidGasLimit, _ => "EthLib.Execution.Blocks.BlockError.invalidGasLimit"
-  | .wrongBaseFee expected actual, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongBaseFee"
-      [reprArg expected, reprArg actual] prec
-  | .timestampNotAfterParent, _ => "EthLib.Execution.Blocks.BlockError.timestampNotAfterParent"
-  | .wrongNumber, _ => "EthLib.Execution.Blocks.BlockError.wrongNumber"
-  | .extraDataTooLong, _ => "EthLib.Execution.Blocks.BlockError.extraDataTooLong"
-  | .nonzeroDifficulty, _ => "EthLib.Execution.Blocks.BlockError.nonzeroDifficulty"
-  | .nonzeroNonce, _ => "EthLib.Execution.Blocks.BlockError.nonzeroNonce"
-  | .wrongOmmersHash, _ => "EthLib.Execution.Blocks.BlockError.wrongOmmersHash"
-  | .wrongParentHash, _ => "EthLib.Execution.Blocks.BlockError.wrongParentHash"
-  | .encoding error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.encoding"
-      [reprArg error] prec
-  | .blockTooLarge size, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.blockTooLarge"
-      [reprArg size] prec
-  | .wrongDifficulty expected actual, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongDifficulty"
-      [reprArg expected, reprArg actual] prec
-  | .proofOfWork error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.proofOfWork"
-      [reprArg error] prec
-  | .parentBeforeLondon, _ => "EthLib.Execution.Blocks.BlockError.parentBeforeLondon"
-  | .systemContractEmpty address, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.systemContractEmpty"
-      [reprArg address] prec
-  | .systemCallFailed address error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.systemCallFailed"
-      [reprArg address, reprArg error] prec
-  | .aborted error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.aborted"
-      [reprArg error] prec
-  | .invalidTransaction index error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.invalidTransaction"
-      [reprArg index, reprArg error] prec
-  | .wrongFork, _ => "EthLib.Execution.Blocks.BlockError.wrongFork"
-  | .noParent, _ => "EthLib.Execution.Blocks.BlockError.noParent"
-  | .ommersAfterParis, _ => "EthLib.Execution.Blocks.BlockError.ommersAfterParis"
-  | .wrongDaoExtraData, _ => "EthLib.Execution.Blocks.BlockError.wrongDaoExtraData"
-  | .deposit error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.deposit"
-      [reprArg error] prec
-  | .trie error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.trie"
-      [reprArg error] prec
-  | .wrongGasUsed expected actual, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongGasUsed"
-      [reprArg expected, reprArg actual] prec
-  | .wrongTransactionsRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongTransactionsRoot"
-  | .wrongStateRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongStateRoot"
-  | .wrongReceiptRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongReceiptRoot"
-  | .wrongBloom, _ => "EthLib.Execution.Blocks.BlockError.wrongBloom"
-  | .wrongWithdrawalsRoot, _ => "EthLib.Execution.Blocks.BlockError.wrongWithdrawalsRoot"
-  | .wrongBlobGasUsed expected actual, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.wrongBlobGasUsed"
-      [reprArg expected, reprArg actual] prec
-  | .wrongRequestsHash, _ => "EthLib.Execution.Blocks.BlockError.wrongRequestsHash"
-  | .ommers error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.ommers"
-      [instReprOmmerError.reprPrec error max_prec] prec
-  | .state error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.state"
-      [reprArg error] prec
-  | .undecodableTransaction index error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.undecodableTransaction"
-      [reprArg index, reprArg error] prec
-  | .blockAccessList error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.BlockError.blockAccessList"
-      [reprArg error] prec
-  | .wrongBlockAccessListHash, _ => "EthLib.Execution.Blocks.BlockError.wrongBlockAccessListHash"
+/-- The form of a block error in Lean syntax, with its arguments.
 
-/-- The form of an ommer error in Lean syntax, with its arguments. -/
+Each value has its name, and each hash and byte string is in hex. -/
+def instReprBlockError.reprPrec : BlockError → Nat → Std.Format
+  | .genesisNumber, p => blockErrorFormat "genesisNumber" [] p
+  | .wrongExcessBlobGas expected actual, p =>
+    blockErrorFormat "wrongExcessBlobGas"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .gasUsedAboveLimit gasUsed gasLimit, p =>
+    blockErrorFormat "gasUsedAboveLimit"
+      [namedArg "gasUsed" gasUsed, namedArg "gasLimit" gasLimit] p
+  | .invalidGasLimit gasLimit parentGasLimit, p =>
+    blockErrorFormat "invalidGasLimit"
+      [namedArg "gasLimit" gasLimit, namedArg "parentGasLimit" parentGasLimit] p
+  | .wrongBaseFee expected actual, p =>
+    blockErrorFormat "wrongBaseFee" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .timestampNotAfterParent timestamp parentTimestamp, p =>
+    blockErrorFormat "timestampNotAfterParent"
+      [namedArg "timestamp" timestamp, namedArg "parentTimestamp" parentTimestamp] p
+  | .wrongNumber expected actual, p =>
+    blockErrorFormat "wrongNumber" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .extraDataTooLong size, p => blockErrorFormat "extraDataTooLong" [namedArg "size" size] p
+  | .nonzeroDifficulty difficulty, p =>
+    blockErrorFormat "nonzeroDifficulty" [namedArg "difficulty" difficulty] p
+  | .nonzeroNonce nonce, p => blockErrorFormat "nonzeroNonce" [namedArg "nonce" nonce] p
+  | .wrongOmmersHash ommersHash, p =>
+    blockErrorFormat "wrongOmmersHash" [namedArg "ommersHash" ommersHash] p
+  | .wrongParentHash expected actual, p =>
+    blockErrorFormat "wrongParentHash" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .encoding error, p => blockErrorFormat "encoding" [reprArg error] p
+  | .blockTooLarge size, p => blockErrorFormat "blockTooLarge" [namedArg "size" size] p
+  | .wrongDifficulty expected actual, p =>
+    blockErrorFormat "wrongDifficulty" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .proofOfWork error, p => blockErrorFormat "proofOfWork" [reprArg error] p
+  | .parentBeforeLondon parentFork, p =>
+    blockErrorFormat "parentBeforeLondon" [namedArg "parentFork" parentFork] p
+  | .systemContractEmpty address, p =>
+    blockErrorFormat "systemContractEmpty" [namedArg "address" address] p
+  | .systemCallFailed address error, p =>
+    blockErrorFormat "systemCallFailed" [namedArg "address" address, reprArg error] p
+  | .aborted error, p => blockErrorFormat "aborted" [reprArg error] p
+  | .invalidTransaction index error, p =>
+    blockErrorFormat "invalidTransaction" [namedArg "index" index, reprArg error] p
+  | .wrongFork active fork, p =>
+    blockErrorFormat "wrongFork" [namedArg "active" active, namedArg "fork" fork] p
+  | .noParent, p => blockErrorFormat "noParent" [] p
+  | .ommersAfterParis count, p => blockErrorFormat "ommersAfterParis" [namedArg "count" count] p
+  | .wrongDaoExtraData extraData, p =>
+    blockErrorFormat "wrongDaoExtraData" [namedArg "extraData" extraData] p
+  | .deposit error, p => blockErrorFormat "deposit" [reprArg error] p
+  | .trie error, p => blockErrorFormat "trie" [reprArg error] p
+  | .wrongGasUsed expected actual, p =>
+    blockErrorFormat "wrongGasUsed" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongTransactionsRoot expected actual, p =>
+    blockErrorFormat "wrongTransactionsRoot"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongStateRoot expected actual, p =>
+    blockErrorFormat "wrongStateRoot" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongReceiptRoot expected actual, p =>
+    blockErrorFormat "wrongReceiptRoot" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongBloom expected actual, p =>
+    blockErrorFormat "wrongBloom" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongWithdrawalsRoot expected actual, p =>
+    blockErrorFormat "wrongWithdrawalsRoot"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongBlobGasUsed expected actual, p =>
+    blockErrorFormat "wrongBlobGasUsed" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .wrongRequestsHash expected actual, p =>
+    blockErrorFormat "wrongRequestsHash"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .ommers error, p => blockErrorFormat "ommers" [instReprOmmerError.reprPrec error max_prec] p
+  | .state error, p => blockErrorFormat "state" [reprArg error] p
+  | .undecodableTransaction index error, p =>
+    blockErrorFormat "undecodableTransaction" [namedArg "index" index, reprArg error] p
+  | .blockAccessList error, p => blockErrorFormat "blockAccessList" [reprArg error] p
+  | .wrongBlockAccessListHash expected actual, p =>
+    blockErrorFormat "wrongBlockAccessListHash"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+
+/-- The form of an ommer error in Lean syntax, with its arguments.
+
+Each value has its name, and each hash and byte string is in hex. -/
 def instReprOmmerError.reprPrec : OmmerError → Nat → Std.Format
-  | .wrongOmmersHash, _ => "EthLib.Execution.Blocks.OmmerError.wrongOmmersHash"
-  | .numberOutOfRange, _ => "EthLib.Execution.Blocks.OmmerError.numberOutOfRange"
-  | .parentMissing, _ => "EthLib.Execution.Blocks.OmmerError.parentMissing"
-  | .invalidHeader error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.OmmerError.invalidHeader"
-      [instReprBlockError.reprPrec error max_prec] prec
-  | .tooManyOmmers, _ => "EthLib.Execution.Blocks.OmmerError.tooManyOmmers"
-  | .duplicateOmmer, _ => "EthLib.Execution.Blocks.OmmerError.duplicateOmmer"
-  | .ommerInChain, _ => "EthLib.Execution.Blocks.OmmerError.ommerInChain"
-  | .ommerAlreadyIncluded, _ => "EthLib.Execution.Blocks.OmmerError.ommerAlreadyIncluded"
-  | .wrongAge, _ => "EthLib.Execution.Blocks.OmmerError.wrongAge"
-  | .parentNotRecent, _ => "EthLib.Execution.Blocks.OmmerError.parentNotRecent"
-  | .siblingOfBlock, _ => "EthLib.Execution.Blocks.OmmerError.siblingOfBlock"
-  | .encoding error, prec =>
-    constructorFormat "EthLib.Execution.Blocks.OmmerError.encoding"
-      [reprArg error] prec
-  | .wrongDaoExtraData, _ => "EthLib.Execution.Blocks.OmmerError.wrongDaoExtraData"
+  | .wrongOmmersHash expected actual, p =>
+    ommerErrorFormat "wrongOmmersHash" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .numberOutOfRange number blockNumber, p =>
+    ommerErrorFormat "numberOutOfRange"
+      [namedArg "number" number, namedArg "blockNumber" blockNumber] p
+  | .parentMissing number, p => ommerErrorFormat "parentMissing" [namedArg "number" number] p
+  | .invalidHeader error, p =>
+    ommerErrorFormat "invalidHeader" [instReprBlockError.reprPrec error max_prec] p
+  | .tooManyOmmers count, p => ommerErrorFormat "tooManyOmmers" [namedArg "count" count] p
+  | .duplicateOmmer hash, p => ommerErrorFormat "duplicateOmmer" [namedArg "hash" hash] p
+  | .ommerInChain hash, p => ommerErrorFormat "ommerInChain" [namedArg "hash" hash] p
+  | .ommerAlreadyIncluded hash, p =>
+    ommerErrorFormat "ommerAlreadyIncluded" [namedArg "hash" hash] p
+  | .wrongAge hash age, p =>
+    ommerErrorFormat "wrongAge" [namedArg "hash" hash, namedArg "age" age] p
+  | .parentNotRecent hash parentHash, p =>
+    ommerErrorFormat "parentNotRecent" [namedArg "hash" hash, namedArg "parentHash" parentHash] p
+  | .siblingOfBlock hash, p => ommerErrorFormat "siblingOfBlock" [namedArg "hash" hash] p
+  | .encoding error, p => ommerErrorFormat "encoding" [reprArg error] p
+  | .wrongDaoExtraData extraData, p =>
+    ommerErrorFormat "wrongDaoExtraData" [namedArg "extraData" extraData] p
 
 end
 
@@ -313,62 +335,62 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def BlockError.code : BlockError → UInt32
   | .genesisNumber => 201
   | .wrongExcessBlobGas _ _ => 202
-  | .gasUsedAboveLimit => 203
-  | .invalidGasLimit => 204
+  | .gasUsedAboveLimit .. => 203
+  | .invalidGasLimit .. => 204
   | .wrongBaseFee _ _ => 205
-  | .timestampNotAfterParent => 206
-  | .wrongNumber => 207
-  | .extraDataTooLong => 208
-  | .nonzeroDifficulty => 209
-  | .nonzeroNonce => 210
-  | .wrongOmmersHash => 211
-  | .wrongParentHash => 212
+  | .timestampNotAfterParent .. => 206
+  | .wrongNumber .. => 207
+  | .extraDataTooLong .. => 208
+  | .nonzeroDifficulty .. => 209
+  | .nonzeroNonce .. => 210
+  | .wrongOmmersHash .. => 211
+  | .wrongParentHash .. => 212
   | .encoding _ => 213
   | .blockTooLarge _ => 214
   | .wrongDifficulty _ _ => 215
   | .proofOfWork _ => 216
-  | .parentBeforeLondon => 217
+  | .parentBeforeLondon .. => 217
   | .systemContractEmpty _ => 218
   | .systemCallFailed .. => 219
   | .aborted _ => 220
   | .invalidTransaction .. => 224
-  | .wrongFork => 225
+  | .wrongFork .. => 225
   | .noParent => 226
-  | .ommersAfterParis => 227
-  | .wrongDaoExtraData => 228
+  | .ommersAfterParis .. => 227
+  | .wrongDaoExtraData .. => 228
   | .deposit _ => 229
   | .trie _ => 230
   | .wrongGasUsed .. => 244
-  | .wrongTransactionsRoot => 245
-  | .wrongStateRoot => 246
-  | .wrongReceiptRoot => 247
-  | .wrongBloom => 248
-  | .wrongWithdrawalsRoot => 249
+  | .wrongTransactionsRoot .. => 245
+  | .wrongStateRoot .. => 246
+  | .wrongReceiptRoot .. => 247
+  | .wrongBloom .. => 248
+  | .wrongWithdrawalsRoot .. => 249
   | .wrongBlobGasUsed .. => 250
-  | .wrongRequestsHash => 251
+  | .wrongRequestsHash .. => 251
   | .ommers _ => 252
   | .state _ => 253
   | .undecodableTransaction .. => 254
   | .blockAccessList _ => 255
-  | .wrongBlockAccessListHash => 256
+  | .wrongBlockAccessListHash .. => 256
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
 The codes start at 231, above the codes of the header and proof-of-work errors. -/
 def OmmerError.code : OmmerError → UInt32
-  | .wrongOmmersHash => 231
-  | .numberOutOfRange => 232
-  | .parentMissing => 233
+  | .wrongOmmersHash .. => 231
+  | .numberOutOfRange .. => 232
+  | .parentMissing .. => 233
   | .invalidHeader _ => 234
-  | .tooManyOmmers => 235
-  | .duplicateOmmer => 236
-  | .ommerInChain => 237
-  | .ommerAlreadyIncluded => 238
-  | .wrongAge => 239
-  | .parentNotRecent => 240
-  | .siblingOfBlock => 241
+  | .tooManyOmmers .. => 235
+  | .duplicateOmmer .. => 236
+  | .ommerInChain .. => 237
+  | .ommerAlreadyIncluded .. => 238
+  | .wrongAge .. => 239
+  | .parentNotRecent .. => 240
+  | .siblingOfBlock .. => 241
   | .encoding _ => 242
-  | .wrongDaoExtraData => 243
+  | .wrongDaoExtraData .. => 243
 
 /-- The first error whose condition fails, in order, or success when every condition holds. -/
 def firstFailure : List (Bool × BlockError) → Except BlockError Unit
@@ -424,7 +446,9 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
     (schedule : Since .dencun fork BlobSchedule := BlobBaseFee.blobSchedule fork) :
     List (Bool × BlockError) :=
   let parentCheck :=
-    if .paris ≤ fork then [(decide (.london ≤ parentFork), BlockError.parentBeforeLondon)] else []
+    if .paris ≤ fork then
+      [(decide (.london ≤ parentFork), BlockError.parentBeforeLondon parentFork)]
+    else []
   let excessCheck :=
     if h : .dencun ≤ fork then
       if hLondon : .london ≤ parentFork then
@@ -444,20 +468,25 @@ def headerChecks {parentFork fork : Fork} (_hFork : parentFork ≤ fork)
       [(decide (header.difficulty = expectedDifficulty parent header),
         BlockError.wrongDifficulty (expectedDifficulty parent header) header.difficulty)]
     else
-      [(decide (header.difficulty = 0), BlockError.nonzeroDifficulty),
-        (decide (header.nonce = Vector.replicate 8 0), .nonzeroNonce),
-        (decide (header.ommersHash = EMPTY_OMMER_HASH), .wrongOmmersHash)]
+      [(decide (header.difficulty = 0), BlockError.nonzeroDifficulty header.difficulty),
+        (decide (header.nonce = Vector.replicate 8 0), .nonzeroNonce header.nonce),
+        (decide (header.ommersHash = EMPTY_OMMER_HASH), .wrongOmmersHash header.ommersHash)]
   let parentHashCheck :=
     match parent.hash with
-    | .ok parentHash => (decide (header.parentHash = parentHash), BlockError.wrongParentHash)
+    | .ok parentHash =>
+      (decide (header.parentHash = parentHash),
+        BlockError.wrongParentHash (some parentHash) header.parentHash)
     | .error e => (false, BlockError.encoding e)
   parentCheck ++ [(decide (1 ≤ header.number), .genesisNumber)] ++ excessCheck ++
-    [(decide (header.gasUsed ≤ header.gasLimit), .gasUsedAboveLimit),
+    [(decide (header.gasUsed ≤ header.gasLimit),
+        .gasUsedAboveLimit header.gasUsed header.gasLimit),
       (GasLimit.checkGasLimitAcross parentFork fork header.gasLimit parent.gasLimit,
-        .invalidGasLimit)] ++ baseFeeCheck ++
-    [(decide (parent.timestamp.toNat < header.timestamp.toNat), .timestampNotAfterParent),
-      (decide (header.number = parent.number + 1), .wrongNumber),
-      (decide (header.extraData.size ≤ MAX_EXTRA_DATA_BYTES), .extraDataTooLong)] ++
+        .invalidGasLimit header.gasLimit parent.gasLimit)] ++ baseFeeCheck ++
+    [(decide (parent.timestamp.toNat < header.timestamp.toNat),
+        .timestampNotAfterParent header.timestamp.toNat parent.timestamp.toNat),
+      (decide (header.number = parent.number + 1), .wrongNumber (parent.number + 1) header.number),
+      (decide (header.extraData.size ≤ MAX_EXTRA_DATA_BYTES),
+        .extraDataTooLong header.extraData.size)] ++
     workChecks ++ [parentHashCheck]
 
 /-- Check a header against its parent, every check but the proof of work.

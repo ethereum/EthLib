@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Execution.Trie.HexPrefix
 public import EthLib.Execution.Trie.Proof
@@ -78,7 +78,7 @@ def verifyProofExport (root : ByteArray) (secured : UInt8) (key proof : ByteArra
     match verifyProof Cryptography.Hash.Keccak.keccak256 ⟨root.data, h⟩ (secured != 0) key nodes with
     | .ok (some value) => return value
     | .ok none => return .empty
-    | .error e => throw (e.code, s!"proof does not verify: {repr e}")
+    | .error e => throw (e.code, s!"proof does not verify: {(repr e).pretty 1000000}")
   else
     throw (0, s!"bad root size: {root.size}, expected 32")
 
@@ -89,7 +89,7 @@ def verifyRangeOf (args : Hash32 × Hash32 × List (Hash32 × ByteArray) × List
     Result Bool := do
   let (root, start, entries, proof) := args
   (verifyRange Cryptography.Hash.Keccak.keccak256 root start entries proof).mapError fun e =>
-    (e.code, s!"range does not verify: {repr e}")
+    (e.code, s!"range does not verify: {(repr e).pretty 1000000}")
 
 /-- Check a range of the trie of a 32-byte root from a 32-byte start, with Keccak-256.
 

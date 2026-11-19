@@ -111,6 +111,39 @@ theorem readMessage_ok {s next : HandshakeState} {message payload : ByteArray}
   next _ _ hi hs => (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl, .inr (.inr ⟨hi, hs⟩)⟩
   next => cases hv
 
+/-- Writing keeps the local keys and the remote ephemeral key. -/
+theorem keys_of_writeMessage {s next : HandshakeState} {payload message : ByteArray}
+    (h : writeMessage s payload = .ok (next, message)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey ∧
+      next.remoteEphemeral = s.remoteEphemeral := by
+  dsimp only [writeMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  exact ⟨rfl, rfl, rfl⟩
+
+/-- Reading keeps the local keys. -/
+theorem keys_of_readMessage {s next : HandshakeState} {message payload : ByteArray}
+    (h : readMessage s message = .ok (next, payload)) :
+    next.staticKey = s.staticKey ∧ next.ephemeralKey = s.ephemeralKey := by
+  dsimp only [readMessage, Bind.bind, Pure.pure, Except.bind, Except.pure, throw, throwThe,
+    MonadExceptOf.throw] at h
+  split at h
+  · cases h
+  split at h
+  · cases h
+  rename_i v hv
+  split at h
+  · cases h
+  rename_i w hw
+  cases h
+  split at hv <;> (repeat' split at hv) <;> cases hv <;> exact ⟨rfl, rfl⟩
+
 private theorem size_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag) :
     (c ++ packBytes t).size = c.size + 16 := by
   rw [ByteArray.size_append, size_packBytes]
@@ -124,7 +157,7 @@ private theorem readBytes_append_tag (c : ByteArray) (t : ChaCha20Poly1305.Tag)
     readBytes (c ++ packBytes t) c.size 16 h = t := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_right (by simp)]
   simp [packBytes]
 
@@ -143,13 +176,13 @@ theorem encryptWithAd_eq_ok_of_key_eq_none {s : CipherState} {aad plaintext : By
 /-- Under no key, a plaintext above 65535 bytes, the limit of Noise §3, is refused. -/
 theorem encryptWithAd_eq_error_of_key_eq_none_of_size {s : CipherState}
     {aad plaintext : ByteArray} (hk : s.key = none) (hs : plaintext.size > 65535) :
-    encryptWithAd s aad plaintext = .error .messageTooLong := by
+    encryptWithAd s aad plaintext = .error (.messageTooLong plaintext.size) := by
   simp [encryptWithAd, hk, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- Under a key, a plaintext whose message with its 16-byte tag exceeds 65535 bytes is refused. -/
 theorem encryptWithAd_eq_error_of_size {s : CipherState} {aad plaintext : ByteArray}
     {key : ChaCha20Poly1305.Key} (hk : s.key = some key) (hs : plaintext.size + 16 > 65535) :
-    encryptWithAd s aad plaintext = .error .messageTooLong := by
+    encryptWithAd s aad plaintext = .error (.messageTooLong (plaintext.size + 16)) := by
   simp [encryptWithAd, hk, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- The greatest nonce never encrypts, as Noise revision 34, §5.1 reserves it for other use. -/
@@ -182,7 +215,7 @@ theorem encryptWithAd_eq_ok_of_encrypt {s : CipherState} {aad plaintext cipherte
 /-- A ciphertext above 65535 bytes is refused, with or without a key. -/
 theorem decryptWithAd_eq_error_of_size {s : CipherState} {aad ciphertext : ByteArray}
     (hs : ciphertext.size > 65535) :
-    decryptWithAd s aad ciphertext = .error .messageTooLong := by
+    decryptWithAd s aad ciphertext = .error (.messageTooLong ciphertext.size) := by
   simp [decryptWithAd, hs, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- Under no key, a ciphertext within 65535 bytes comes back unchanged, with the same state. -/
@@ -202,7 +235,7 @@ theorem decryptWithAd_eq_error_of_nonce_max {s : CipherState} {aad ciphertext : 
 theorem decryptWithAd_eq_error_of_lt {s : CipherState} {aad ciphertext : ByteArray}
     {key : ChaCha20Poly1305.Key} (hk : s.key = some key) (hs : ¬ciphertext.size > 65535)
     (hn : ¬s.nonce = 2 ^ 64 - 1) (h16 : ciphertext.size < 16) :
-    decryptWithAd s aad ciphertext = .error .truncated := by
+    decryptWithAd s aad ciphertext = .error (.truncated 16 ciphertext.size) := by
   simp [decryptWithAd, hk, hs, hn, Nat.not_le.mpr h16, throw, throwThe, MonadExceptOf.throw]
 
 /-- An accepted ciphertext and tag decrypt to the plaintext, and the nonce advances by one. -/
@@ -336,13 +369,14 @@ The frame is the one of the noise-libp2p "Wire Format": a 16-bit big-endian leng
 
 /-- Fewer than two bytes hold no length, and are refused as truncated. -/
 theorem unframe_eq_error_of_size_lt {bytes : ByteArray} (h : bytes.size < 2) :
-    unframe bytes = .error .truncated := by
+    unframe bytes = .error (.truncated 2 bytes.size) := by
   simp [unframe, Nat.not_le.mpr h, throw, throwThe, MonadExceptOf.throw]
 
 /-- Bytes whose leading two declare another length for the rest are refused. -/
 theorem unframe_eq_error_of_length_ne {bytes : ByteArray} (h : 2 ≤ bytes.size)
     (hne : bytesToNat (readBytes bytes 0 2 h).toList + 2 ≠ bytes.size) :
-    unframe bytes = .error .frameLength := by
+    unframe bytes =
+      .error (.frameLength (bytesToNat (readBytes bytes 0 2 h).toList) (bytes.size - 2)) := by
   simp [unframe, h, hne, throw, throwThe, MonadExceptOf.throw]
 
 /-- Reading back a written frame returns the message it was written from. -/
@@ -362,7 +396,7 @@ theorem unframe_frame {message bytes : ByteArray} (h : frame message = .ok bytes
       apply List.ext_getElem
       · simp [hlen]
       · intro i h1 h2
-        simp only [readBytes, Vector.toList_ofFn, List.getElem_ofFn, Nat.zero_add,
+        simp only [readBytes_eq_ofFn_data, Vector.toList_ofFn, List.getElem_ofFn, Nat.zero_add,
           ByteArray.data_append]
         rw [Array.getElem_append_left (by simp [hlen]; simp at h1; omega)]
         simp

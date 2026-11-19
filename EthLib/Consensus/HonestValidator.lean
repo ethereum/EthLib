@@ -79,16 +79,22 @@ inductive ValidatorDutyError where
   | forkChoice (error : ForkChoiceError)
   /-- A validator holds no seat in the committee or the subcommittee of its message. -/
   | notInCommittee (validatorIndex : ValidatorIndex)
-  /-- No message matches the one to aggregate. -/
-  | noMessages
+  /-- No message matches the one to aggregate.
+
+  The error gives the slot and the block root of the message to aggregate.
+
+  A message at that slot and root may still differ from it in another field. -/
+  | noMessages (slot : Slot) (beaconBlockRoot : Root)
   /-- The bits of a committee exceed the limit of an attestation. -/
   | tooManyBits (count limit : Nat)
   /-- The bits of an attestation do not have one bit for each member of its committee. -/
   | bitsLength (count expected : Nat)
   /-- A committee or a subcommittee index is not below the number of them. -/
   | indexOutOfRange (index limit : UInt64)
-  /-- From Gloas, a vote on a block of an earlier slot is given no empty or full payload status. -/
-  | pendingPayloadStatus
+  /-- From Gloas, a vote on a block of an earlier slot is given no empty or full payload status.
+
+  The error gives the slot of the vote, then the slot of the head block. -/
+  | pendingPayloadStatus (slot headSlot : Slot)
 
 /-- The code of an error at the C boundary, one for each constructor. -/
 def ValidatorDutyError.code : ValidatorDutyError → UInt32
@@ -100,11 +106,36 @@ def ValidatorDutyError.code : ValidatorDutyError → UInt32
   | .periodOutOfRange .. => 6
   | .forkChoice _ => 7
   | .notInCommittee _ => 8
-  | .noMessages => 9
+  | .noMessages .. => 9
   | .tooManyBits .. => 10
   | .bitsLength .. => 11
   | .indexOutOfRange .. => 12
-  | .pendingPayloadStatus => 13
+  | .pendingPayloadStatus .. => 13
+
+/-- The message of an error, with the values that its check compared. -/
+instance : ToString ValidatorDutyError where
+  toString
+    | .accessor error => s!"a state accessor fails: {reprStr error}"
+    | .ssz error => s!"a root cannot be computed: {reprStr error}"
+    | .bls error => s!"BLS: {error.message}"
+    | .arith error => s!"arithmetic: {reprStr error}"
+    | .epochTooFar epoch lastEpoch =>
+      s!"epoch {epoch} is after {lastEpoch}, the last epoch whose committees are known"
+    | .periodOutOfRange period currentPeriod =>
+      s!"sync committee period {period} is neither the current period {currentPeriod} " ++
+        "nor the next"
+    | .forkChoice error => s!"fork choice: {error}"
+    | .notInCommittee index => s!"validator {index} has no seat in the committee of its message"
+    | .noMessages slot root =>
+      s!"no message matches the one to aggregate, at slot {slot} for block " ++
+        hexString root.toList
+    | .tooManyBits count limit => s!"{count} committee bits exceed the limit {limit}"
+    | .bitsLength count expected =>
+      s!"{count} aggregation bits, expected one for each of {expected} members"
+    | .indexOutOfRange index limit => s!"index {index} is not below {limit}"
+    | .pendingPayloadStatus slot headSlot =>
+      s!"the head block at slot {headSlot}, not the slot {slot} of the vote, " ++
+        "has a pending payload status"
 
 /-! ## Assignments -/
 

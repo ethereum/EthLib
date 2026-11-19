@@ -66,6 +66,16 @@ def validatorKeys (state : BeaconState preset fork) : List BLSPubkey :=
 def PubkeysDistinct (state : BeaconState preset fork) : Prop :=
   (validatorKeys state).Nodup
 
+/-- With distinct keys, two positions holding the same key are the same position. -/
+theorem PubkeysDistinct.index_eq {state : BeaconState preset fork}
+    (unique : PubkeysDistinct state) {i j : Nat} {v w : Validator}
+    (one : state.validators.data[i]? = some v) (two : state.validators.data[j]? = some w)
+    (key : v.pubkey = w.pubkey) : i = j := by
+  obtain ⟨hi, rfl⟩ := Array.getElem?_eq_some_iff.mp one
+  obtain ⟨hj, rfl⟩ := Array.getElem?_eq_some_iff.mp two
+  exact unique.eq_of_getElem_eq (by simpa [validatorKeys] using hi)
+    (by simpa [validatorKeys] using hj) (by simpa [validatorKeys] using key)
+
 theorem balancesMatch_of_sameSizes (sizes : SameSizes state after)
     (holds : BalancesMatch state) : BalancesMatch after := by
   unfold BalancesMatch at holds ⊢
@@ -1164,6 +1174,41 @@ theorem applyPendingDeposit_cases {deposit : PendingDeposit}
     obtain ⟨index, _, computed⟩ := computed
     exact .inr (.inl ⟨index, computed⟩)
 
+/-- A block deposit changes nothing, queues a pending deposit, or applies at once.
+
+The first case covers a new key with an invalid signature.
+
+The second case is from Electra: it queues the deposit, after it adds a new key with no balance.
+
+The third case is before Electra: the deposit applies as a pending deposit. -/
+theorem applyDeposit_cases {pubkey : BLSPubkey} {credentials : Bytes32} {amount : Gwei}
+    {signature : BLSSignature}
+    (computed : applyDeposit config checks state pubkey credentials amount signature = .ok after) :
+    after = state ∨
+    (.pectra ≤ fork ∧ ∃ middle pending,
+      (middle = state ∨ addValidatorToRegistry state pubkey credentials 0 = .ok middle) ∧
+        after = { middle with pendingDeposits := fun _ => pending }) ∨
+    (fork < .pectra ∧ applyPendingDeposit config checks state
+      ⟨pubkey, credentials, amount, signature, GENESIS_SLOT⟩ = .ok after) := by
+  unfold applyDeposit at computed
+  split at computed
+  · rename_i electra
+    unfold applyDepositElectra at computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨_, _, computed⟩ := computed
+      split at computed
+      · simp only [bind_ok_iff, liftAccessor_ok] at computed
+        obtain ⟨middle, added, queued⟩ := computed
+        obtain ⟨pending, rfl⟩ := addPendingDeposit_eq queued
+        exact .inr (.inl ⟨electra, middle, pending, .inr added, rfl⟩)
+      · cases computed
+        exact .inl rfl
+    · obtain ⟨pending, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
+      exact .inr (.inl ⟨electra, state, pending, .inl rfl, rfl⟩)
+  · rename_i early
+    exact .inr (.inr ⟨Nat.lt_of_not_le early, computed⟩)
+
 /-- A deposit adds at most one entry to the registry, and keeps each validator there. -/
 theorem applyPendingDeposit_validators_size_le_and_mem {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
@@ -1318,19 +1363,23 @@ theorem recordDepositRequestsStart_eq {index : UInt64} :
 
 /-- From Electra, a deposit request joins the end of the pending deposits, at the current slot.
 
-The registry and the balances stay. -/
+The registry and the balances stay.
+
+Every other field stays too, except the start index of the deposit requests. -/
 theorem processDepositRequest_ok {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     (after.pendingDeposits electra).data = (state.pendingDeposits electra).data.push
         ⟨request.pubkey, request.withdrawalCredentials, request.amount, request.signature,
           state.slot⟩ ∧
-      after.validators = state.validators ∧ after.balances = state.balances := by
+      after.validators = state.validators ∧ after.balances = state.balances ∧
+      ∃ start pending,
+        after = { state with depositRequestsStartIndex := start, pendingDeposits := pending } := by
   obtain ⟨start, recorded⟩ :=
     recordDepositRequestsStart_eq (state := state) (index := request.index)
   simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
     pure, Except.pure, Except.ok.injEq] at computed
   obtain ⟨pending, appended, rfl⟩ := computed
-  exact ⟨appendWithinLimit_data appended, rfl, rfl⟩
+  exact ⟨appendWithinLimit_data appended, rfl, rfl, start, fun _ => pending, rfl⟩
 
 /-- A valid deposit lies in the deposit tree, at the next deposit index.
 

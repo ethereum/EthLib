@@ -6,7 +6,8 @@ public import EthLib.Serialization.Ssz.Type.Value
 public import EthLib.Serialization.Ssz.Type.Valid
 public import EthLib.Serialization.Ssz.Type.Default
 public import EthLib.Serialization.Ssz.Type.Paths
-public import EthLib.Serialization.Ssz.Codec.Error
+public import EthLib.Serialization.Ssz.Error
+public import EthLib.Serialization.Ssz.Packing
 public import EthLib.Serialization.Ssz.Codec.Serialize
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 public import EthLib.Serialization.Ssz.Codec.Layout
@@ -27,6 +28,7 @@ public import EthLib.Serialization.Ssz.Typed.Container
 public import EthLib.Serialization.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Ssz.Typed.Gindex
 public import EthLib.Serialization.Ssz.Typed.Since
+public import EthLib.Serialization.Ssz.Typed.Text
 public import EthLib.Serialization.Ssz.Typed.Rooted
 public import EthLib.Serialization.Ssz.Typed.RootedList
 public import EthLib.Serialization.Ssz.Typed.RootedValue

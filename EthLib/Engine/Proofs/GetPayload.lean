@@ -3,8 +3,7 @@ module
 public import EthLib.Engine.GetPayload
 public import EthLib.Engine.Proofs.Json
 public import EthLib.Execution.Proofs.Transactions.Network
--- Showing that a written result is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_getPayload`
@@ -23,6 +22,8 @@ Versions 3 and 4 return one proof per blob, and versions 5 and 6 return 128 per 
 
 The decoder reads back the parameters that the writer writes.
 
+It reads no JSON value other than what the writer writes.
+
 The result of a response reads back at its version and its fork.
 
 A bundle reads back exactly when it passes the length rules of its version.
@@ -35,13 +36,13 @@ namespace EthLib.Engine
 open EthLib.Base
 open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
-open EthLib.Execution.Blocks (Block)
+open EthLib.Execution.Blocks (Block MAX_EXTRA_DATA_BYTES)
 open EthLib.Execution.Transactions
 
 /-- A missing build process returns unknown payload, before any fork or bundle check. -/
 theorem getPayload_eq_error_of_store_eq_none (config : ChainConfig) (setup : TrustedSetup)
     (store : PayloadStore) (version : Nat) (id : PayloadId) (h : store id = none) :
-    getPayload config setup store version id = .error (.engine .unknownPayload) := by
+    getPayload config setup store version id = .error (.engine (.unknownPayload id)) := by
   simp [getPayload, h, throw, throwThe, MonadExceptOf.throw]
 
 /-- A returned payload is the stored block's, at its configured fork, with a checked bundle. -/
@@ -137,7 +138,9 @@ variable {config : ChainConfig} {setup : TrustedSetup} {store : PayloadStore} {v
 theorem getPayload_eq_error_of_activeFork_ne (hs : store id = some stored)
     (hf : config.activeFork stored.built.block.header.number
       stored.built.block.header.timestamp.toNat ≠ some stored.fork) :
-    getPayload config setup store version id = .error .wrongFork := by
+    getPayload config setup store version id =
+      .error (.wrongFork stored.fork (config.activeFork stored.built.block.header.number
+        stored.built.block.header.timestamp.toNat)) := by
   simp [getPayload, hs, hf, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build at a fork that the requested version does not return is refused. -/
@@ -145,7 +148,8 @@ theorem getPayload_eq_error_of_acceptsGetPayloadFork_eq_false (hs : store id = s
     (hf : config.activeFork stored.built.block.header.number
       stored.built.block.header.timestamp.toNat = some stored.fork)
     (hv : acceptsGetPayloadFork version stored.fork = false) :
-    getPayload config setup store version id = .error (.engine .unsupportedFork) := by
+    getPayload config setup store version id =
+      .error (.engine (.unsupportedFork (some stored.fork))) := by
   simp [getPayload, hs, hf, hv, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build whose stored requests do not have the shape of its fork is refused. -/
@@ -164,7 +168,7 @@ theorem getPayload_eq_error_of_blockValue_ge (hs : store id = some stored)
     (hv : acceptsGetPayloadFork version stored.fork = true)
     (hr : requestsOfFork stored.fork stored.built.requests = true)
     (hb : ¬stored.built.blockValue < 2 ^ 256) :
-    getPayload config setup store version id = .error .blockValue := by
+    getPayload config setup store version id = .error (.blockValue stored.built.blockValue) := by
   simp [getPayload, hs, hf, hv, hr, hb, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
 /-- A build whose block has no payload form is refused. -/
@@ -213,11 +217,28 @@ theorem getPayload_eq_error_of_validateBlobs_eq_error
   simp [getPayload, hs, hf, hv, hr, hb, hp, hh, hversion, hv3, bind, Except.bind,
     Except.mapError]
 
+/-- A JSON value reads as the parameters exactly when it is an array of one payload ID.
+
+The ID is `0x` and 16 lowercase hex digits, two for each of its 8 bytes. -/
+theorem getPayloadParams_eq_ok_iff {params : Lean.Json} {id : PayloadId} :
+    getPayloadParams params = .ok id ↔ params = .arr #[.str (hexString id.toList)] := by
+  cases params with
+  | arr items =>
+    obtain ⟨xs⟩ := items
+    simp only [getPayloadParams, Serialization.JsonRpc.paramsArray]
+    match xs with
+    | [] => simp [bind, Except.bind, pure, Except.pure]
+    | [j] =>
+      simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
+        ← Serialization.JsonRpc.fixed_false_eq_ok_iff (what := "payloadId")]
+      simp [bind, Except.bind, pure, Except.pure]
+    | _ :: _ :: _ => simp [bind, Except.bind, pure, Except.pure]
+  | _ => simp [getPayloadParams, Serialization.JsonRpc.paramsArray, bind, Except.bind]
+
 /-- The decoder of the parameters reads back the payload ID that the writer writes. -/
 theorem getPayloadParams_json (id : PayloadId) :
-    getPayloadParams (getPayloadParamsJson id) = .ok id := by
-  simp [getPayloadParams, getPayloadParamsJson, Serialization.JsonRpc.paramsArray, pure,
-    Except.pure, bind, Except.bind, Serialization.JsonRpc.fixed_dataJson]
+    getPayloadParams (getPayloadParamsJson id) = .ok id :=
+  getPayloadParams_eq_ok_iff.mpr rfl
 
 /-! ## The result -/
 
@@ -231,7 +252,7 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
       Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) b.proofs)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobsBundle" hd
-    (by simp [Serialization.JsonRpc.listJson, Serialization.JsonRpc.isNull_arr])
+    (by simp [Serialization.JsonRpc.listJson])
   have hex : Serialization.JsonRpc.hasExactly fs blobsBundleFields = true :=
     Serialization.JsonRpc.hasExactly_of_perm hp
   unfold blobsBundleOfJson blobsBundleJson
@@ -247,7 +268,8 @@ theorem blobsBundleOfJson_json (version : Nat) (b : BlobsBundle)
 
 /-- A payload form of a block holds at most 32 bytes of extra data. -/
 theorem payloadOfBlock_extraData {fork : Fork} {block : Block fork Transaction}
-    {p : ExecutionPayload fork} (h : payloadOfBlock block = some p) : p.extraData.size ≤ 32 := by
+    {p : ExecutionPayload fork} (h : payloadOfBlock block = some p) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
   unfold payloadOfBlock at h
   split at h
   · exact of_decide_eq_true (Option.filter_eq_some_iff.mp h).2
@@ -282,7 +304,8 @@ theorem getPayloadResultJson_bundle {r : GetPayloadResponse}
 
 /-- The payload of a result reads back with its access list and slot, in the form of its fork. -/
 private theorem resultPayloadOfJson_payloadJson {fork : Fork} (r : GetPayloadResult fork)
-    (extra : r.payload.extraData.size ≤ 32) (v4 : Bool) (hv4 : v4 = true ↔ .glamsterdam ≤ fork) :
+    (extra : r.payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES) (v4 : Bool)
+    (hv4 : v4 = true ↔ .glamsterdam ≤ fork) :
     resultPayloadOfJson v4 fork r.payloadJson =
       .ok (r.payload, r.blockAccessList, r.slotNumber) := by
   by_cases hg : Fork.glamsterdam ≤ fork
@@ -339,7 +362,7 @@ private theorem fork_of_accepts {version : Nat} {fork : Fork}
 private theorem payloadJson_isNull {fork : Fork} (r : GetPayloadResult fork) :
     r.payloadJson.isNull = false := by
   unfold GetPayloadResult.payloadJson Json.executionPayloadV4Json Json.executionPayloadJson
-  split <;> rfl
+  split <;> exact Base.Toolchain.Json.isNull_mkObj _
 
 /-- The result of a response, written and read back at its version and its fork, is that result.
 
@@ -393,13 +416,11 @@ theorem getPayloadResultOfJson_json {r : GetPayloadResponse}
   have hd : L.Pairwise fun a b => a.1 ≠ b.1 := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;> simp [hL, hbb, hso, her, h3, h4]
   have hbn : (blobsBundleJson r.stored.bundle).isNull = false := by
-    unfold blobsBundleJson; rfl
-  have hbo : ∀ o : Bool, (Lean.Json.bool o).isNull = false := fun _ => rfl
+    unfold blobsBundleJson; exact Base.Toolchain.Json.isNull_mkObj _
   have hpres : ∀ p ∈ L, p.2.isNull = false := by
     by_cases h3 : 3 ≤ version <;> by_cases h4 : 4 ≤ version <;>
-      simp [hL, hbb, hso, her, h3, h4, hbn, hbo, payloadJson_isNull,
-        Serialization.JsonRpc.quantityJson, Serialization.JsonRpc.isNull_str,
-        Serialization.JsonRpc.isNull_arr, Serialization.JsonRpc.listJson]
+      simp [hL, hbb, hso, her, h3, h4, hbn, payloadJson_isNull,
+        Serialization.JsonRpc.quantityJson, Serialization.JsonRpc.listJson]
   obtain ⟨fs, hfs, hperm⟩ := Serialization.JsonRpc.fields_mkObj "result" hd hpres
   have hex : Serialization.JsonRpc.hasExactly fs (getPayloadResultFields version) = true := by
     have := Serialization.JsonRpc.hasExactly_of_perm hperm

@@ -51,7 +51,9 @@ Every other pending deposit stays in the queue, in its order.
 
 A 64-bit overflow of a builder balance is an error.
 
-[EIP-7732] adds the fields, and [EIP-8282] the onboarding of builders.
+[EIP-7732] adds the fields and the onboarding of builders at the fork.
+
+[EIP-8282] keeps that onboarding and specifies the contract for later builder deposits.
 
 The upgrade to Heze first asserts that the state has processed every deposit of the contract.
 
@@ -258,7 +260,7 @@ def queuePreActivation {fork : Fork} (state : BeaconState preset fork) (electra 
   let validator ← liftAccessor (getValidator state index)
   let balance ← liftAccessor (getBalance state index)
   let deposit : PendingDeposit := ⟨validator.pubkey, validator.withdrawalCredentials, balance,
-    Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩
+    Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩
   let pending ← liftAccessor (appendWithinLimit (state.pendingDeposits electra) deposit)
   let validator := { validator with
     effectiveBalance := 0, activationEligibilityEpoch := FAR_FUTURE_EPOCH }

@@ -270,19 +270,19 @@ theorem forward_getElem_of_completion_keyOnlyOutsideRun (scheme : Scheme F G A M
   have hT₂ := outsideTranscript_of_mem_support_keyOnlyOutsideRun scheme adversary X
     (replayPathResult_mem_support_replayFirstRun (keyOnlyOutsideRun scheme adversary X) c₂.path
       (mem_support_replayFirstPath (keyOnlyOutsideRun scheme adversary X) c₂.path))
-  let before : QueryLog (OutsideSpec A) := occ.before
+  let before : QueryLog (OutsideSpec A) := occ.before.toList
   let log₁ : QueryLog (OutsideSpec A) :=
-    PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₁.path
+    (PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₁.path).toList
   let log₂ : QueryLog (OutsideSpec A) :=
-    PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₂.path
-  let rest₁ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
-    (occ.resume c₁.answer) c₁.suffix
-  let rest₂ : QueryLog (OutsideSpec A) := PFunctor.FreeM.Path.trace
-    (occ.resume c₂.answer) c₂.suffix
+    (PFunctor.FreeM.Path.trace (keyOnlyOutsideRun scheme adversary X) c₂.path).toList
+  let rest₁ : QueryLog (OutsideSpec A) := (PFunctor.FreeM.Path.trace
+    (occ.resume c₁.answer) c₁.suffix).toList
+  let rest₂ : QueryLog (OutsideSpec A) := (PFunctor.FreeM.Path.trace
+    (occ.resume c₂.answer) c₂.suffix).toList
   have hlog₁ : log₁ = before ++ ⟨.inr (), c₁.answer⟩ :: rest₁ :=
-    PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₁.answer c₁.suffix
+    congrArg FreeMonoid.toList (PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₁.answer c₁.suffix)
   have hlog₂ : log₂ = before ++ ⟨.inr (), c₂.answer⟩ :: rest₂ :=
-    PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₂.answer c₂.suffix
+    congrArg FreeMonoid.toList (PFunctor.FreeM.Cursor.Occurrence.trace_plug occ c₂.answer c₂.suffix)
   have hc : before.countQ (· = .inr ()) = s := by
     rw [QueryLog.countQ_eq_occurrences]
     simp [before]
@@ -507,8 +507,8 @@ theorem keyOnlyIndepAdvantage_le_forkIndex_add_notMem (scheme : Scheme F G A M)
         tr.verified = true ∧
           forgeryPoint scheme (x • scheme.g) tr.forgery ∉ tr.forward.map Prod.fst] := by
   rw [keyOnlyIndepAdvantage_eq_outside]
-  simp only [prEvent_bind_eq_tsum_prEvent, ← ENNReal.tsum_add, ← mul_add]
-  refine ENNReal.tsum_le_tsum fun x => mul_le_mul_right ?_ _
+  simp only [prEvent_bind_eq_tsum_prEvent, ← tsum_add, ← mul_add]
+  refine tsum_le_tsum fun x => mul_le_mul_right ?_ _
   exact prEvent_verified_and_not_bad_le_forkIndex_add_notMem scheme adversary _ (hq _)
 
 end EthLib.Cryptography.Secp256k1.Security

@@ -45,18 +45,18 @@ def signedStatic (staticKey : Key) : ByteArray :=
 
 /-- Serialize the payload, noise-libp2p "The libp2p Handshake Payload". -/
 def encodePayload (p : Payload) : Except NoiseError ByteArray := do
-  if p.publicKey.size + p.signature.size +
-      (p.extensions.map ByteArray.size).getD 0 > 65535 then throw .messageTooLong
+  let fields := p.publicKey.size + p.signature.size + (p.extensions.map ByteArray.size).getD 0
+  if fields > 65535 then throw (.messageTooLong fields)
   let extension := match p.extensions with
     | none => []
     | some value => [⟨4, .len value⟩]
   let encoded := Encoding.Protobuf.serialize
     (⟨1, .len p.publicKey⟩ :: ⟨2, .len p.signature⟩ :: extension)
-  if encoded.size ≤ 65535 then return encoded else throw .messageTooLong
+  if encoded.size ≤ 65535 then return encoded else throw (.messageTooLong encoded.size)
 
 /-- Decode protobuf singular bytes by last value and merge extension messages by concatenation. -/
 def decodePayload (bytes : ByteArray) : Except NoiseError Payload := do
-  if 65535 < bytes.size then throw .messageTooLong
+  if 65535 < bytes.size then throw (.messageTooLong bytes.size)
   let records ← (Encoding.Protobuf.records bytes.data.toList).mapError fun _ => .protobuf
   return records.foldl (init := {}) fun payload record =>
     match record with
@@ -71,7 +71,7 @@ def decodePayload (bytes : ByteArray) : Except NoiseError Payload := do
 Deriving the public key and signing fail only on an invalid secret or in ECDSA itself. -/
 def identitySecretError : Libp2p.IdentityError → NoiseError
   | .signing error => .signing error
-  | .privateKey | .publicKey | .peerId | .signature => .identitySecret
+  | .privateKey | .publicKey | .peerId _ | .signature => .identitySecret
 
 /-- Sign the Noise static public key with the secp256k1 identity secret.
 

@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Hash.Crc32c
 public import EthLib.Cryptography.Hash.Blake2b
 public import EthLib.Cryptography.Hash.Hmac
 public import EthLib.Cryptography.Hash.Hkdf
+public import EthLib.Cryptography.Hash.Tls13
 public import EthLib.Cryptography.Hash.ConcatKdf
 public import EthLib.Cryptography.Hash.Pbkdf2
 public import EthLib.Cryptography.Hash.Scrypt

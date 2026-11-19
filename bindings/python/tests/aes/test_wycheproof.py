@@ -63,10 +63,10 @@ def test_zero_length_iv(test: dict) -> None:
     # SP 800-38D §5.2.1.1 requires an IV of at least one bit, for encryption and decryption.
     key, iv, aad, msg, ct, tag = _fields(test)
     assert test["result"] == "invalid" and iv == b""
-    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength 0") as info:
         aes.gcm_encrypt(key, iv, msg, aad, len(tag))
     assert info.value.code == 3
-    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength") as info:
+    with raises(AesError, "EthLib.Cryptography.Aes.Gcm.Error.ivLength 0") as info:
         aes.gcm_decrypt(key, iv, ct, aad, tag, len(tag))
     assert info.value.code == 3
 

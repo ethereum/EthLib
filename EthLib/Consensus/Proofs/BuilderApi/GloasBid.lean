@@ -128,14 +128,14 @@ theorem validateBid_ok_true_iff {config : Config} {checks : SignatureChecks}
   rcases cover with _ | (_ | _) <;> rcases sig with _ | (_ | _) <;>
   by_cases hv : 0 < signed.message.value <;> simp [*]
 
-/-- A bid of value zero is never refused for the funds of its builder. -/
+/-- A bid of value zero is never refused for the funds of its builder, whatever the fields. -/
 theorem validateBid_zero_value {config : Config} {checks : SignatureChecks}
     {state : BeaconState preset fork} {gloas : .glamsterdam ≤ fork}
     {preferences : ProposerPreferences} {parentGasLimit : UInt64}
     {signed : SignedExecutionPayloadBid preset fork} {feeRecipient : ExecutionAddress}
-    (zero : signed.message.value = 0) :
+    (zero : signed.message.value = 0) (builderIndex : BuilderIndex) (value : Gwei) :
     validateBid config checks state gloas preferences parentGasLimit signed feeRecipient ≠
-      .error .cannotCoverBid := by
+      .error (.cannotCoverBid builderIndex value) := by
   have hv : ¬0 < signed.message.value := by simp [zero]
   unfold validateBid
   simp only [liftAccessor, liftSsz, liftArith, Except.mapError, bind, Except.bind, throw,

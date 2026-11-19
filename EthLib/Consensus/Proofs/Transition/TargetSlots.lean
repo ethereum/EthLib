@@ -26,6 +26,8 @@ It does not run in the first two epochs.
 
 So the proof needs the two justified checkpoints equal in those epochs, which the slots keep.
 
+Once justification runs, the source of each link is older than its target.
+
 Gasper §4.4, Definitions 4.5 and 4.6, justify a checkpoint by a supermajority link.
 
 The votes for that link carry more than 2/3 of the stake.
@@ -65,10 +67,9 @@ theorem JustifiedEarly.previousJustified_of_justification (early : JustifiedEarl
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
     exact (weighJustificationAndFinalization_checkpoints weighed).1
-  all_goals first
-    | simp only [bind_ok_iff] at computed
-      obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
-      exact (weighJustificationAndFinalization_checkpoints weighed).1
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, weighed⟩ := computed
+  exact (weighJustificationAndFinalization_checkpoints weighed).1
 
 /-! ## One slot -/
 
@@ -142,6 +143,51 @@ theorem JustifiedEarly.of_advanceSlot (early : JustifiedEarly state)
       rw [one, cachedEpoch, ← nextSlot_epoch_of_inside sum inside]
       exact afterEarly'))
 
+/-- One slot ends an epoch or stays inside it.
+
+Ending it runs the epoch step on the cached state, and the old current epoch becomes the previous.
+
+Justification there makes the old current justified checkpoint the previous one.
+
+Staying inside it keeps the cached state and both epochs. -/
+theorem advanceSlot_epochs (computed : advanceSlot config checks state = .ok after) :
+    ∃ next cached epoched, processSlot state = .ok cached ∧ after = { epoched with slot := next } ∧
+      ((processEpoch config checks cached = .ok epoched ∧
+          getPreviousEpoch after = getCurrentEpoch state ∧
+          (JustifiedEarly state →
+            after.previousJustifiedCheckpoint = state.currentJustifiedCheckpoint)) ∨
+        (epoched = cached ∧ getCurrentEpoch after = getCurrentEpoch state ∧
+          getPreviousEpoch after = getPreviousEpoch state)) := by
+  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  have cachedFrame := frame_processSlot cachedOk
+  have stateEpoch := getCurrentEpoch_toNat state
+  have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
+  dsimp only at afterEpoch
+  refine ⟨next, cached, epoched, cachedOk, rfl, ?_⟩
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · rename_i boundary
+    have epochs := nextSlot_epoch_of_boundary sum boundary
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+    refine .inl ⟨epochedOk, ?_, fun early => ?_⟩
+    · apply UInt64.toNat_inj.mp
+      rw [getPreviousEpoch_toNat, afterEpoch, stateEpoch, epochs]
+      rfl
+    · show epoched.previousJustifiedCheckpoint = _
+      rw [frame.previousJustified,
+        (early.of_frame cachedFrame).previousJustified_of_justification justifiedOk,
+        cachedFrame.currentJustified]
+  · rename_i inside
+    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    have currentEq : getCurrentEpoch { cached with slot := next } = getCurrentEpoch state := by
+      apply UInt64.toNat_inj.mp
+      rw [afterEpoch, stateEpoch]
+      exact nextSlot_epoch_of_inside sum inside
+    refine .inr ⟨rfl, currentEq, ?_⟩
+    unfold getPreviousEpoch
+    rw [currentEq]
+
 /-- Once justification runs, the previous justified epoch is below the previous epoch.
 
 It runs from the third epoch on. -/
@@ -155,6 +201,27 @@ theorem JustifiedSeparated.of_frame (frame : Frame state after)
   unfold JustifiedSeparated getPreviousEpoch getCurrentEpoch at separated ⊢
   rw [frame.slot, frame.previousJustified]
   exact separated
+
+/-- Once justification runs, the source of a link is older than its target.
+
+The link targets the current epoch from the current justified checkpoint.
+
+Or it targets the previous epoch from the previous justified checkpoint. -/
+theorem JustifiedSeparated.source_lt {state : BeaconState preset fork}
+    (separated : JustifiedSeparated state) (settled : JustifiedSettled state)
+    (later : GENESIS_EPOCH + 1 < getCurrentEpoch state) (current : Bool) :
+    (if current then state.currentJustifiedCheckpoint
+      else state.previousJustifiedCheckpoint).epoch <
+      if current then getCurrentEpoch state else getPreviousEpoch state := by
+  cases current
+  · exact separated later
+  · have settledNat := UInt64.le_iff_toNat_le.mp settled
+    have laterNat := UInt64.lt_iff_toNat_lt.mp later
+    apply UInt64.lt_iff_toNat_lt.mpr
+    simp only [getPreviousEpoch_toNat] at settledNat
+    rw [toNat_genesisEpoch_add_one] at laterNat
+    simp only [↓reduceIte]
+    omega
 
 /-- One slot keeps the previous justified epoch below the previous epoch once justification runs.
 
@@ -310,61 +377,37 @@ theorem TargetFlagsVoted.of_advanceSlot {votes : Set (ValidatorIndex × Attestat
       getBlockRoot after epoch = .ok root :=
     fun read near =>
       getBlockRoot_advanceSlot computed read (slot_lt_epoch_add_historical positive window near)
-  obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  obtain ⟨next, cached, epoched, cachedOk, rfl, split⟩ := advanceSlot_epochs computed
   have cachedFrame := frame_processSlot cachedOk
-  have cachedEarly' := early.of_frame cachedFrame
   obtain ⟨cachedPrevious, cachedCurrent⟩ := processSlot_participation cachedOk
-  have stateEpoch := getCurrentEpoch_toNat state
-  have afterEpoch := getCurrentEpoch_toNat { epoched with slot := next }
-  dsimp only at afterEpoch
   intro altair current position flagged
   obtain ⟨flags, found, set⟩ := flagged
   unfold recentParticipation at found
   dsimp only at found
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have epochs := nextSlot_epoch_of_boundary sum boundary
-    have previousEq : getPreviousEpoch { epoched with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [getPreviousEpoch_toNat, afterEpoch, stateEpoch, epochs]
-      rfl
-    simp only [processEpoch, altair, ↓reduceDIte] at epochedOk
+  rcases split with ⟨epochedOk, previousEq, previousJustified⟩ | ⟨rfl, currentEq, previousEq⟩
+  · simp only [processEpoch, altair, ↓reduceDIte] at epochedOk
     obtain ⟨justified, rooted, justifiedOk, head, tail⟩ := processEpochAltair_split epochedOk
     obtain ⟨-, -, -, -, -, -, -, -, -, justifiedCurrent⟩ :=
       processJustificationAndFinalization_keeps justifiedOk
-    have previousJustified := (cachedEarly'.previousJustified_of_justification justifiedOk)
     cases current
-    · rcases (tail.flags altair position flags).1 found with rotated | rfl
-      · rcases (head.flags altair position flags).2 rotated with old | rfl
+    · rcases (tail.flags altair position flags).1 found with rotated | ⟨rfl, -⟩
+      · rcases (head.flags altair position flags).2 rotated with old | ⟨rfl, -⟩
         · rw [justifiedCurrent, cachedCurrent] at old
           obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
             holds altair true position ⟨flags, old, set⟩
           refine ⟨vote, voted, index, ?_, ?_, roots rootOk (.inl epoch)⟩
           · exact epoch.trans previousEq.symm
-          · exact source.trans <|
-              (cachedFrame.currentJustified.symm.trans previousJustified.symm).trans
-                (head.previousJustified.symm.trans tail.previousJustified.symm)
+          · exact source.trans (previousJustified early).symm
         · exact absurd set (by decide)
       · exact absurd set (by decide)
-    · rcases (tail.flags altair position flags).2 found with rotated | rfl
+    · rcases (tail.flags altair position flags).2 found with rotated | ⟨rfl, -⟩
       · simp only [processParticipationFlagUpdates, Array.getElem?_replicate] at rotated
         split at rotated
         · cases rotated
           exact absurd set (by decide)
         · cases rotated
       · exact absurd set (by decide)
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have currentEq : getCurrentEpoch { cached with slot := next } = getCurrentEpoch state := by
-      apply UInt64.toNat_inj.mp
-      rw [afterEpoch, stateEpoch]
-      exact nextSlot_epoch_of_inside sum inside
-    have previousEq : getPreviousEpoch { cached with slot := next } = getPreviousEpoch state := by
-      unfold getPreviousEpoch
-      rw [currentEq]
-    cases current
+  · cases current
     · rw [cachedPrevious] at found
       obtain ⟨vote, voted, index, epoch, source, rootOk⟩ :=
         holds altair false position ⟨flags, found, set⟩

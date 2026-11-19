@@ -23,6 +23,31 @@ namespace EthLib.Consensus.DataAvailability
 
 variable {config : Config}
 
+/-- The first eight of 32 bytes give the same integer as those of their byte array. -/
+theorem firstUInt64_eq_byteRead (bytes : Base.Bytes32) :
+    firstUInt64 bytes =
+      (List.range 8).foldr
+        (fun i (acc : UInt64) => acc <<< 8 ||| ((Base.packBytes bytes).data.getD i 0).toUInt64)
+        0 := by
+  have hmap : (List.finRange 8).map Fin.val = List.range 8 := by
+    apply List.ext_getElem <;> simp
+  rw [firstUInt64, ← hmap, List.foldr_map]
+  apply congrArg (fun step : Fin 8 → UInt64 → UInt64 => (List.finRange 8).foldr step 0)
+  funext i acc
+  have hi : i.val < bytes.toArray.size := by simp; omega
+  simp only [Base.packBytes, Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem hi,
+    Option.getD_some, Vector.getElem_toArray]
+
+/-- The group of an ID: its first eight SHA-256 bytes, least significant first, modulo the count. -/
+theorem groupOfId_eq_byteRead (config : Config) (id : NodeID) :
+    groupOfId config id =
+      (List.range 8).foldr (fun i (acc : UInt64) => acc <<< 8 |||
+        ((Cryptography.Hash.Sha256.hash
+          ⟨(Base.U256.toBeBytes id).toArray.reverse⟩).data.getD i 0).toUInt64) 0 %
+        config.NUMBER_OF_CUSTODY_GROUPS := by
+  rw [groupOfId, firstUInt64_eq_byteRead]
+  rfl
+
 /-- Two errors with one code come from one constructor. -/
 theorem CustodyError.code_injective (e₁ e₂ : CustodyError) (h : e₁.code = e₂.code) :
     e₁.ctorIdx = e₂.ctorIdx := by

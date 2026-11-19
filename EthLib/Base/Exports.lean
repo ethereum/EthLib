@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Exports.Result
 public import EthLib.Base.Fork
 
 /-!
@@ -25,13 +26,6 @@ Without it, a later fork would silently get the rules of the fork before it.
 public section
 
 namespace EthLib.Exports
-
-/-- The result of an export: the value, or the code and the message of an error.
-
-`Except.error` is the first constructor, so the C layer reads it as tag 0.
-
-The fields of the pair are boxed, because the pair type is polymorphic. -/
-abbrev Result (α : Type) := Except (UInt32 × String) α
 
 /-- The fork with a name given as UTF-8 bytes. -/
 def forkOfName (name : ByteArray) : Result Base.Fork := do

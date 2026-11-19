@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.SettlementRebuild
@@ -433,7 +434,7 @@ theorem processMessageCall_rebuildState [LawfulGasMeter Meter]
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     RebuildState block output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   rcases hprep : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid
     with ⟨e, read⟩ | first
   · rw [hprep] at h
@@ -665,7 +666,7 @@ theorem processTransaction_rebuildEnd (hfork : .dencun ≤ fork) {env : BlockEnv
     (valid : Rebuildable block) (delegations : DelegationsHaveNonce (.ofBlock block))
     (h : processTransaction env block included tx = .ok output) :
     RebuildEnd block output.state := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

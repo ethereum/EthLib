@@ -61,7 +61,7 @@ def Enr.publicKeyV4 (r : Enr) : Except EnrError Point :=
         if key.size = 33 then (Point.decode key).mapError fun _ => .invalidPublicKey
         else .error .invalidPublicKey
       | _ => .error .invalidPublicKey
-    else .error .unknownScheme
+    else .error (.unknownScheme id)
 
 /-- Whether a record is a valid "v4" record: its signature verifies under its public key.
 

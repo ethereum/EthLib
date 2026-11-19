@@ -1,12 +1,31 @@
 module
 
 public import EthLib.Consensus.Accessors
+public import EthLib.Consensus.BeaconApi.Blocks
+public import EthLib.Consensus.BeaconApi.ChainEvents
+public import EthLib.Consensus.BeaconApi.Committees
+public import EthLib.Consensus.BeaconApi.Duties
+public import EthLib.Consensus.BeaconApi.Config
+public import EthLib.Consensus.BeaconApi.Debug
 public import EthLib.Consensus.BeaconApi.Encoding
+public import EthLib.Consensus.BeaconApi.Events
 public import EthLib.Consensus.BeaconApi.Identifiers
+public import EthLib.Consensus.BeaconApi.LightClient
+public import EthLib.Consensus.BeaconApi.ObjectEvents
+public import EthLib.Consensus.BeaconApi.Produce
+public import EthLib.Consensus.BeaconApi.Publish
+public import EthLib.Consensus.BeaconApi.Registries
+public import EthLib.Consensus.BeaconApi.Rewards
 public import EthLib.Consensus.BeaconApi.Spelling
+public import EthLib.Consensus.BeaconApi.StateQueries
+public import EthLib.Consensus.BeaconApi.Submit
+public import EthLib.Consensus.BeaconApi.Validators
+public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
+public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
 public import EthLib.Consensus.Builders
@@ -21,6 +40,7 @@ public import EthLib.Consensus.Containers.Attestation
 public import EthLib.Consensus.Containers.Bid
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.Containers.BuilderApi
+public import EthLib.Consensus.Containers.BuilderConfig
 public import EthLib.Consensus.Containers.Builder
 public import EthLib.Consensus.Containers.Execution
 public import EthLib.Consensus.Containers.InclusionList
@@ -29,6 +49,7 @@ public import EthLib.Consensus.Containers.Operations
 public import EthLib.Consensus.Containers.PayloadAttestation
 public import EthLib.Consensus.Containers.PowBlock
 public import EthLib.Consensus.Containers.ProposerPreferences
+public import EthLib.Consensus.Containers.RelayApi
 public import EthLib.Consensus.Containers.Requests
 public import EthLib.Consensus.Containers.Signing
 public import EthLib.Consensus.Containers.State
@@ -54,6 +75,7 @@ public import EthLib.Consensus.Gossip.Bid
 public import EthLib.Consensus.Gossip.Block
 public import EthLib.Consensus.Gossip.InclusionList
 public import EthLib.Consensus.Gossip.LightClient
+public import EthLib.Consensus.Gossip.Message
 public import EthLib.Consensus.Gossip.Bounds
 public import EthLib.Consensus.Gossip.Operations
 public import EthLib.Consensus.Gossip.Payload
@@ -74,11 +96,9 @@ public import EthLib.Consensus.LightClient.Branch
 public import EthLib.Consensus.LightClient.FullNode
 public import EthLib.Consensus.LightClient.Sync
 public import EthLib.Consensus.LightClient.Upgrade
-public import EthLib.Consensus.PqKeys.Containers
-public import EthLib.Consensus.PqKeys.Gossip
-public import EthLib.Consensus.PqKeys.Possession
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.Proposers
+public import EthLib.Consensus.RelayApi
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds

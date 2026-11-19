@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Containers.Block
+public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.ReqResp.Messages
 
 /-!
@@ -31,6 +32,43 @@ The request names blocks by the roots of their messages.
 
 - The response has at most as many blocks as the request has roots.
 - The root of each block is one of the requested roots.
+
+## Blocks by head
+
+From Fulu, a request names the blocks along the ancestry of a block root, that block first.
+
+- The response has at most as many blocks as the count, and at most the request limit of Deneb.
+- The root of its first block is the requested root.
+- Each block is the parent of the block before it, and has a lower slot.
+
+So the slots of the blocks decrease along the whole list.
+
+The walk also stops before an ancestor outside the epochs that clients must serve.
+
+That rule needs the current epoch, so it stays out with the rule that asks for at least one block.
+
+A block item carries no fork, so the check does not compare the context bytes of a chunk.
+
+## Light client updates by range
+
+From Altair, a request names the light client updates of a range of sync committee periods.
+
+The period of an update is the period of the slot of its attested header.
+
+- The response has at most as many updates as the count, and at most 128.
+- The period of each update lies in the requested periods.
+- Each update has a higher period than the one before it, so no period has two updates.
+- The fork of each update is the fork of the epoch of its attested header, and it is from Altair.
+
+That fork is the one that the context bytes of the chunk of the update name.
+
+The check compares forks, not digests.
+
+So from Fulu it does not tell apart the digests of the epochs of blob parameters.
+
+The source asks for updates in consecutive order by period, which may also mean periods with no gap.
+
+The check asks only for increasing periods, so it allows a period with no update.
 
 ## Sidecars by range
 
@@ -172,6 +210,61 @@ def isValidBlocksByRangeResponse (config : Config) (fork : Fork)
 def isValidBlocksByRootResponse {config : Config} {fork : Fork}
     (request : BeaconBlocksByRootRequest config fork) (blocks : List ResponseBlock) : Bool :=
   blocks.length ≤ request.data.size && blocks.all (fun block => request.data.contains block.root)
+
+/-- Whether each block of a list is the parent of the block before it, at a lower slot. -/
+def ResponseBlock.ancestryLinked (blocks : List ResponseBlock) : Bool :=
+  allAdjacent (fun a b => b.slot < a.slot && a.parentRoot == b.root) blocks
+
+/-- Whether the blocks of a response are valid for a request for blocks by head.
+
+The request limit is the one of Deneb, whatever the fork that serves the request. -/
+def isValidBlocksByHeadResponse (config : Config) (request : BeaconBlocksByHeadRequest)
+    (blocks : List ResponseBlock) : Bool :=
+  blocks.length ≤ request.count.toNat &&
+    blocks.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat &&
+    blocks.head?.all (fun first => first.root == request.beaconRoot) &&
+    ResponseBlock.ancestryLinked blocks
+
+/-- What a response check reads from a light client update: its attested slot and its fork.
+
+The attested slot is the slot of the attested header of the update.
+
+The fork is the one that the context bytes of the chunk of the update name. -/
+structure ResponseUpdate where
+  /-- The slot of the attested header. -/
+  attestedSlot : Slot
+  /-- The fork that the context bytes of the chunk name. -/
+  fork : Fork
+  deriving DecidableEq, Repr
+
+/-- What a response check reads from a light client update of a fork. -/
+def ResponseUpdate.ofUpdate {preset : Preset} {fork : Fork}
+    (update : LightClientUpdate preset fork) : ResponseUpdate :=
+  { attestedSlot := update.attestedHeader.beacon.slot, fork }
+
+/-- The sync committee period of an update: the period of the slot of its attested header. -/
+def ResponseUpdate.period (preset : Preset) (update : ResponseUpdate) : UInt64 :=
+  computeSyncCommitteePeriodAtSlot preset update.attestedSlot
+
+/-- Whether the fork of an update is the fork of the epoch of its attested header, from Altair. -/
+def ResponseUpdate.forkMatches (preset : Preset) (config : Config) (update : ResponseUpdate) :
+    Bool :=
+  .altair ≤ update.fork &&
+    update.fork == config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)
+
+/-- Whether the updates of a response are valid for a request for light client updates by range.
+
+The range of periods is computed without overflow, so a range past the largest period stops there.
+-/
+def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
+    (request : LightClientUpdatesByRangeRequest) (updates : List ResponseUpdate) : Bool :=
+  updates.length ≤ request.count.toNat &&
+    updates.length ≤ MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat &&
+    updates.all (fun update =>
+      request.startPeriod ≤ update.period preset &&
+        (update.period preset).toNat < request.startPeriod.toNat + request.count.toNat &&
+        update.forkMatches preset config) &&
+    allAdjacent (fun a b => a.period preset < b.period preset) updates
 
 /-- What a response check reads from a sidecar: the slot and root of its block, and its index.
 

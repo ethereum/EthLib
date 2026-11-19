@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StatementLemmas
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 
@@ -55,13 +55,14 @@ Node `j` on `level` lies above the leaves `j * 2^level` to `(j + 1) * 2^level - 
 It makes the queries of those leaves and of the node hashes between them. -/
 
 /-- A node queries `p` at most once if the only leaf that does lies below it, else never. -/
-theorem node_queryBound_leaf (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+theorem node_queryBound_leaf
+    (hash : EthLib.Cryptography.Merkle.Position → Digest → Digest → OracleComp HashSpec Digest)
     (leaves : Nat → OracleComp HashSpec Digest) (p : HashInput → Prop) [DecidablePred p]
     (count target : Nat)
     (hleaves : ∀ j < count, (leaves j).IsQueryBoundP p (if target = j then 1 else 0))
-    (hhash : ∀ level j left right, (hash level j left right).IsQueryBoundP p 0) :
+    (hhash : ∀ q left right, (hash q left right).IsQueryBoundP p 0) :
     ∀ level j, (j + 1) * 2 ^ level ≤ count →
-      (EthLib.Cryptography.Merkle.node hash leaves level j).IsQueryBoundP p
+      (EthLib.Cryptography.Merkle.node hash leaves ⟨level, j⟩).IsQueryBoundP p
         (if target / 2 ^ level = j then 1 else 0)
   | 0, j, hj => by
     simpa [EthLib.Cryptography.Merkle.node_zero] using hleaves j (by simpa using hj)
@@ -70,20 +71,21 @@ theorem node_queryBound_leaf (hash : Nat → Nat → Digest → Digest → Oracl
     refine (OracleComp.isQueryBoundP_bind (node_queryBound_leaf hash leaves p count target hleaves
       hhash level (2 * j) (by nlinarith)) fun _ _ => OracleComp.isQueryBoundP_bind
         (node_queryBound_leaf hash leaves p count target hleaves hhash level (2 * j + 1)
-          (by nlinarith)) fun _ _ => hhash _ _ _ _).mono ?_
+          (by nlinarith)) fun _ _ => hhash _ _ _).mono ?_
     rw [← Nat.div_div_eq_div_mul]
     split_ifs <;> omega
 
 /-- A node queries `p` at most once if the only node hash that does is at or below it, else never.
 
-That node hash sits at position `(K, I)`, above the leaves. -/
-theorem node_queryBound_node (hash : Nat → Nat → Digest → Digest → OracleComp HashSpec Digest)
+That node hash sits at level `K` and index `I`, above the leaves. -/
+theorem node_queryBound_node
+    (hash : EthLib.Cryptography.Merkle.Position → Digest → Digest → OracleComp HashSpec Digest)
     (leaves : Nat → OracleComp HashSpec Digest) (p : HashInput → Prop) [DecidablePred p]
     (count K I : Nat) (hK : 0 < K) (hleaves : ∀ j, (leaves j).IsQueryBoundP p 0)
     (hhash : ∀ level j left right, (j + 1) * 2 ^ level ≤ count →
-      (hash level j left right).IsQueryBoundP p (if level = K ∧ j = I then 1 else 0)) :
+      (hash ⟨level, j⟩ left right).IsQueryBoundP p (if level = K ∧ j = I then 1 else 0)) :
     ∀ level j, (j + 1) * 2 ^ level ≤ count →
-      (EthLib.Cryptography.Merkle.node hash leaves level j).IsQueryBoundP p
+      (EthLib.Cryptography.Merkle.node hash leaves ⟨level, j⟩).IsQueryBoundP p
         (if K ≤ level ∧ I / 2 ^ (level - K) = j then 1 else 0)
   | 0, j, _ => by
     simpa [EthLib.Cryptography.Merkle.node_zero, show ¬K ≤ 0 by omega] using hleaves j
@@ -110,9 +112,10 @@ theorem Concrete.nodeAt_queryBound_zero (parameter : PublicParameter) (p : HashI
     (hhash : ∀ level j payload,
       (Concrete.tweakableHash parameter (Concrete.nodeDomain layer level j)
         payload : OracleComp HashSpec Digest).IsQueryBoundP p 0)
-    (level j : Nat) (left right : Digest) :
-    (Concrete.nodeAt parameter layer level j left right :
+    (q : EthLib.Cryptography.Merkle.Position) (left right : Digest) :
+    (Concrete.nodeAt parameter layer q left right :
       OracleComp HashSpec Digest).IsQueryBoundP p 0 := by
+  obtain ⟨level, j⟩ := q
   rcases level with _ | level
   · simp [Concrete.nodeAt]
   · by_cases hlevel : level < treeHeight
@@ -125,7 +128,7 @@ theorem Concrete.nodeAt_queryBound_node (parameter : PublicParameter)
     (layer : EthLib.Cryptography.Xmss.Layer) (level : MerkleLevel) (I : Nat)
     (hI : I < Concrete.layerLeaves layer) (k j : Nat) (hj : j < Concrete.layerLeaves layer)
     (left right : Digest) :
-    (Concrete.nodeAt parameter layer k j left right : OracleComp HashSpec Digest).IsQueryBoundP
+    (Concrete.nodeAt parameter layer ⟨k, j⟩ left right : OracleComp HashSpec Digest).IsQueryBoundP
       (AtHashAddress parameter (Concrete.nodeDomain layer level I))
       (if k = level.val + 1 ∧ j = I then 1 else 0) := by
   rcases k with _ | k
@@ -220,7 +223,8 @@ theorem Concrete.topTreeNode_queryBound_zero_of_rejectsTop (htop : RejectsTop pa
   refine EthLib.Cryptography.Merkle.node_rec _ (fun x => OracleComp.IsQueryBoundP x p 0)
     (fun hx hf => OracleComp.isQueryBoundP_bind (m := 0) hx fun b _ => hf b) _ (fun _ => ?_)
     (Concrete.nodeAt_queryBound_zero parameter p .top fun _ _ _ =>
-      Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl)) levels node.val
+      Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p (htop _ _ rfl))
+    ⟨levels, node.val⟩
   refine OracleComp.isQueryBoundP_bind (m := 0) (Concrete.sequenceFin_queryBound_zero _ p
     fun chain => Concrete.topChainWalk_queryBound_zero_of_rejectsTop parameter p htop _ _ _ _ _) ?_
   intro endpoints _
@@ -271,7 +275,7 @@ theorem Concrete.treeNode_queryBound_zero_of_rejectsBottomTree
     (Concrete.nodeAt_queryBound_zero parameter p .bottom fun _ _ _ =>
       Concrete.tweakableHash_queryBound_zero_of_not parameter _ _ p
         (hbottom _ _ rfl (by simp [Concrete.nodeDomain])))
-    levels node.val
+    ⟨levels, node.val⟩
   refine OracleComp.isQueryBoundP_bind (m := 0) (Concrete.sequenceFin_queryBound_zero _ p
     fun chain => Concrete.chainWalk_queryBound_zero_of_rejectsBottomTree parameter p hbottom
       _ _ _ _ _) ?_

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Blocks
 public import EthLib.Execution.Transactions.Envelope
 public import EthLib.Serialization.Exports.Rlp
@@ -52,6 +52,10 @@ open EthLib.Exports (Result PyValue forkUpTo pyExport)
 open EthLib.Base
 open EthLib.Serialization.Rlp
 open EthLib.Serialization.Rlp.Exports (runRlp)
+
+/-- A value printed on one line, however long its numbers and hashes are. -/
+def oneLine {α : Type} [Repr α] (a : α) : String :=
+  (repr a).pretty 1000000
 
 /-- Run a fallible decoding or encoding, with its error as a code and a message. -/
 def runRlp {α : Type} (what : String) (act : Except RlpError α) : Result α :=
@@ -131,7 +135,7 @@ def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← runRlp "block rejected" (Block.decode (fun _ => fork) block)
   (validateBlockSize b).map (fun () => 1) |>.mapError
-    fun e => (e.code, s!"block invalid: {reprStr e}")
+    fun e => (e.code, s!"block invalid: {oneLine e}")
 
 /-- The blob schedules that a chain sets itself.
 
@@ -177,7 +181,7 @@ def validateHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
     (validateHeader hFork parent header schedule).mapError
-      fun e => (e.code, s!"header invalid: {reprStr e}")
+      fun e => (e.code, s!"header invalid: {oneLine e}")
   else throw (0, "the parent's fork is after the fork")
 
 /-- Check a header at a fork against its parent at the parent's fork, at every fork.
@@ -198,7 +202,7 @@ def checkHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
     (checkHeader hFork parent header schedule).mapError
-      fun e => (e.code, s!"header invalid: {reprStr e}")
+      fun e => (e.code, s!"header invalid: {oneLine e}")
   else throw (0, "the parent's fork is after the fork")
 
 /-- Check a header against its parent at two named forks, every check but the proof of work.
@@ -236,7 +240,7 @@ def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
   match act with
   | .ok hash => return ⟨hash.toArray⟩
   | .error (.rlp e) => throw (e.code, s!"no root: {reprStr e}")
-  | .error e => throw (0, s!"no root: {reprStr e}")
+  | .error e => throw (0, s!"no root: {oneLine e}")
 
 /-- The transactions root of the transactions of a block, decoded at the fork. -/
 @[export eth_block_transactions_root]

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Ethash.Hashimoto
 public import EthLib.Execution.Blocks.Header
+public import EthLib.Execution.ErrorFormat
 
 /-!
 # `Blocks.ProofOfWork`
@@ -40,19 +41,34 @@ open EthLib.Cryptography.Hash.Keccak (keccak256)
 inductive PowError where
   /-- The header without its mix digest and nonce has no RLP form. -/
   | encoding (error : RlpError)
-  /-- The mix digest of the header is not the one that Ethash gives. -/
-  | wrongMixDigest
-  /-- The result of Ethash is above `2^256` over the difficulty. -/
-  | resultAboveTarget
-  deriving DecidableEq, Repr
+  /-- The mix digest `actual` of the header is not `expected`, the one that Ethash gives. -/
+  | wrongMixDigest (expected : ByteArray) (actual : Bytes32)
+  /-- The result `result` of Ethash is above `target`, `2^256` over the difficulty. -/
+  | resultAboveTarget (result target : Nat)
+  deriving DecidableEq
+
+/-- The form of a proof-of-work error in Lean syntax, with its arguments.
+
+Each value has its name, and each byte string is in hex. -/
+def PowError.reprPrec : PowError → Nat → Std.Format
+  | .encoding error, p =>
+    constructorFormat "EthLib.Execution.Blocks.PowError.encoding" [reprArg error] p
+  | .wrongMixDigest expected actual, p =>
+    constructorFormat "EthLib.Execution.Blocks.PowError.wrongMixDigest"
+      [namedArg "expected" expected, namedArg "actual" actual] p
+  | .resultAboveTarget result target, p =>
+    constructorFormat "EthLib.Execution.Blocks.PowError.resultAboveTarget"
+      [namedArg "result" result, namedArg "target" target] p
+
+instance : Repr PowError := ⟨PowError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
 The codes start at 221, above the codes of the other block errors. -/
 def PowError.code : PowError → UInt32
   | .encoding _ => 221
-  | .wrongMixDigest => 222
-  | .resultAboveTarget => 223
+  | .wrongMixDigest .. => 222
+  | .resultAboveTarget .. => 223
 
 namespace Header
 
@@ -90,8 +106,10 @@ def powOutput {fork : Fork} (h : Header fork) : Except PowError PowOutput := do
 
 The mix digest is checked first. -/
 def checkPowOutput {fork : Fork} (h : Header fork) (out : PowOutput) : Except PowError Unit :=
-  if out.mixDigest ≠ ⟨h.prevRandao.toArray⟩ then .error .wrongMixDigest
-  else if powTarget h.difficulty < bytesToNat out.result.toList then .error .resultAboveTarget
+  if out.mixDigest ≠ ⟨h.prevRandao.toArray⟩ then
+    .error (.wrongMixDigest out.mixDigest h.prevRandao)
+  else if powTarget h.difficulty < bytesToNat out.result.toList then
+    .error (.resultAboveTarget (bytesToNat out.result.toList) (powTarget h.difficulty))
   else .ok ()
 
 /-- Check the proof of work of a header, as section 4.3.4 of the Yellow Paper asks. -/

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Networking.Rlpx.Frame
 
 /-!
@@ -114,7 +114,7 @@ def constSecretsSize (_ : Unit) : UInt64 := UInt64.ofNat SECRETS_SIZE
 
 /-- The 128 bytes of the secrets, with the digests of the MAC states after the probe. -/
 def secretsBytes (secrets : Secrets) (probe : ByteArray) : ByteArray :=
-  let digest (h : Cryptography.Hash.Keccak.Hasher) := (h.absorb probe).digest.toArray
+  let digest (h : Cryptography.Hash.Keccak.Hasher256) := (h.absorb probe).digest.toArray
   ⟨secrets.aesSecret.toArray ++ secrets.macSecret.toArray ++ digest secrets.egressMac ++
     digest secrets.ingressMac⟩
 
@@ -180,7 +180,7 @@ def readSecret (bytes : ByteArray) : Result (Cryptography.Aes.Key .aes256) :=
 /-- The state of one direction at its start: the zero counter, and the MAC after `macInit`. -/
 def readFrameState (aesSecret macSecret macInit : ByteArray) : Result FrameState := do
   return ⟨← readSecret aesSecret, Vector.replicate 16 0, ← readSecret macSecret,
-    Cryptography.Hash.Keccak.Hasher.empty.absorb macInit⟩
+    Cryptography.Hash.Keccak.Hasher256.empty.absorb macInit⟩
 
 /-- The frames of a list of frame data, one after another in one direction. -/
 def writeFrames (st : FrameState) : List ByteArray → Except FrameError ByteArray

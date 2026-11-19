@@ -90,7 +90,7 @@ theorem compress_eq_of_toPoint_eq {p₁ p₂ : G1}
   have hrep : q₁ = q₂ := by
     have hpt : G1.toPoint q₁ = G1.toPoint q₂ := hpt₁.trans (heq.trans hpt₂.symm)
     -- Decompression returns either `zero` or a point `(x, y, 1)`.
-    have hshape (b : ByteArray) (q : G1) (hu : G1.uncompress b = .ok q) :
+    have hshape (b : Vector UInt8 48) (q : G1) (hu : G1.uncompress b = .ok q) :
         q = G1.zero ∨ (q.z = Bls.Fp.one ∧ ¬ q.isInfinity = true) := by
       obtain rfl | ⟨x, y, -, -, rfl⟩ := G1.uncompress_eq_zero_or hu
       · exact Or.inl rfl
@@ -151,7 +151,7 @@ theorem compressG1_eq_of_toPoint_eq {p₁ p₂ : G1}
     (hv₁ : G1.Valid p₁) (hv₂ : G1.Valid p₂)
     (heq : G1.toPoint p₁ = G1.toPoint p₂) :
     compressG1 p₁ = compressG1 p₂ :=
-  Vector.toArray_inj.mp (congrArg ByteArray.data (compress_eq_of_toPoint_eq hv₁ hv₂ heq))
+  compress_eq_of_toPoint_eq hv₁ hv₂ heq
 
 /-! ## Cell coset vanishing polynomial: `Z_k(X) = X^64 - c_k` -/
 
@@ -381,8 +381,8 @@ private theorem coeff_toeplitzQuotient_mul_binomial (f : PolynomialCoeff) {n : N
     have hbin_poly :
         coefficientPolynomial (binomialVanishing n c) =
           Polynomial.X ^ n - Polynomial.C c := by
-      apply Polynomial.ext
-      intro k
+      apply AddMonoidAlgebra.ext
+      ext1 k
       rw [coeff_coefficientPolynomial, Polynomial.coeff_sub,
         Polynomial.coeff_X_pow, Polynomial.coeff_C]
       by_cases hk : k < n + 1
@@ -400,8 +400,8 @@ private theorem coeff_toeplitzQuotient_mul_binomial (f : PolynomialCoeff) {n : N
         exact (fr_sub_zero 0).symm
     rw [hbin_poly]
     -- Check coefficient by coefficient for every degree `j`.
-    apply Polynomial.ext
-    intro j
+    apply AddMonoidAlgebra.ext
+    ext1 j
     set q := toeplitzQuotient f n c
     rw [Polynomial.coeff_add, coeff_coefficientPolynomial f, coeff_coefficientPolynomial remArr,
       mul_sub, Polynomial.coeff_sub, Polynomial.coeff_mul_X_pow',

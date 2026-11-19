@@ -11,6 +11,16 @@ namespace EthLib.Serialization.Ssz
 
 variable {α : Type}
 
+/-- The zero subtree of depth zero is the zero node. -/
+@[simp] theorem zeroRoot_zero (combine : α → α → α) (zero : α) : zeroRoot combine zero 0 = zero :=
+  rfl
+
+/-- A zero subtree one level up hashes the zero subtree below with itself. -/
+theorem zeroRoot_succ (combine : α → α → α) (zero : α) (depth : Nat) :
+    zeroRoot combine zero (depth + 1)
+      = combine (zeroRoot combine zero depth) (zeroRoot combine zero depth) :=
+  rfl
+
 /-- A tree of depth zero is its one leaf. -/
 theorem subtreeRoot_zero (combine : α → α → α) (leaves : Nat → α) :
     subtreeRoot combine 0 leaves = leaves 0 :=
@@ -26,8 +36,8 @@ theorem subtreeRoot_halves (combine : α → α → α) (depth : Nat) (leaves : 
       = combine (subtreeRoot combine depth leaves)
           (subtreeRoot combine depth fun i => leaves (i + 2 ^ depth)) := by
   -- Each child of the root is the root of the tree over its own half of the leaves.
-  show combine (Cryptography.Merkle.node (m := Id) _ leaves depth 0).run
-      (Cryptography.Merkle.node (m := Id) _ leaves depth 1).run = _
+  show combine (Cryptography.Merkle.node (m := Id) _ leaves ⟨depth, 0⟩).run
+      (Cryptography.Merkle.node (m := Id) _ leaves ⟨depth, 1⟩).run = _
   rw [Cryptography.Merkle.node_const_shift combine depth leaves 0,
     Cryptography.Merkle.node_const_shift combine depth leaves 1]
   simp only [Nat.zero_mul, Nat.zero_add, Nat.one_mul, Nat.add_comm (2 ^ depth)]
@@ -79,7 +89,7 @@ theorem subtreeRoot_const_zero (combine : α → α → α) (zero : α) (depth :
   -- The leaf supply is the same constant at every level, so plain induction suffices.
   induction depth with
   | zero => rfl
-  | succ depth ih => simp [subtreeRoot_halves, zeroRoot, ih]
+  | succ depth ih => simp [subtreeRoot_halves, zeroRoot_succ, ih]
 
 /--
 Appending zero nodes to the data changes no leaf.
@@ -116,5 +126,50 @@ theorem subtreeRoot_padded_past_data (combine : α → α → α) (zero : α) (d
   rw [← subtreeRoot_const_zero combine zero depth]
   refine subtreeRoot_congr combine depth fun position _ => ?_
   simp [padded, Array.getElem?_eq_none (show chunks.size ≤ start + position by omega)]
+
+/-- An empty spine is the zero node. -/
+@[simp] theorem spineM_nil {m : Type → Type} [Monad m] (combine : α → α → m α) (zero : α) :
+    spineM combine zero [] = pure zero :=
+  rfl
+
+/-- A spine hashes its first top against the spine of the tops after it, computed first. -/
+theorem spineM_cons {m : Type → Type} [Monad m] [LawfulMonad m] (combine : α → α → m α)
+    (zero top : α) (rest : List α) :
+    spineM combine zero (top :: rest) = (do combine top (← spineM combine zero rest)) := by
+  simp [spineM, List.foldrM_cons]
+
+/-- An empty pure spine is the zero node. -/
+@[simp] theorem spine_nil (combine : α → α → α) (zero : α) : spine combine zero [] = zero :=
+  rfl
+
+/-- A pure spine hashes its first top against the spine of the tops after it. -/
+theorem spine_cons (combine : α → α → α) (zero top : α) (rest : List α) :
+    spine combine zero (top :: rest) = combine top (spine combine zero rest) := by
+  simp only [spine, spineM_cons]
+  rfl
+
+/-- The runs of a progressive spine: none past the data, else the next `4 ^ level` nodes first. -/
+theorem progressiveWindows_unfold (chunks : List α) (level : Nat) :
+    progressiveWindows chunks level
+      = if chunks.isEmpty then []
+        else (chunks.take (4 ^ level), level)
+          :: progressiveWindows (chunks.drop (4 ^ level)) (level + 1) := by
+  rw [progressiveWindows]
+
+/-- The progressive root closes an empty suffix with a zero node.
+
+Otherwise it hashes the root of one level against the root of the rest. -/
+theorem progressiveRoot_unfold (combine : α → α → α) (zero : α) (chunks : List α) (level : Nat) :
+    progressiveRoot combine zero chunks level
+      = if chunks.isEmpty then zero
+        else combine
+          (subtreeRoot combine (depthFor (4 ^ level))
+            (padded zero (chunks.take (4 ^ level)).toArray))
+          (progressiveRoot combine zero (chunks.drop (4 ^ level)) (level + 1)) := by
+  rw [progressiveRoot, progressiveWindows_unfold]
+  split
+  · rfl
+  · rw [List.map_cons, spine_cons]
+    rfl
 
 end EthLib.Serialization.Ssz

@@ -26,6 +26,12 @@ Slashing a validator sets its slashed flag and changes no flag of another valida
 
 From Gloas, slashing a validator cancels exactly the builder payments of the blocks it proposed.
 
+From Altair the proposer takes one eighth of the whistleblower reward of a slashing.
+
+A slashing changes no balance except those of the validator, the whistleblower and one index.
+
+From Fulu that index is the proposer of the slot.
+
 From Electra, the balance of a validator above the activation balance moves to the pending deposits.
 
 The balance and the amounts added to the queue keep their sum.
@@ -462,6 +468,32 @@ def slashedFlag (state : BeaconState preset fork) (index : ValidatorIndex) :
     Except AccessorError Bool :=
   (getValidator state index).map (·.slashed)
 
+/-- The slashed flag at a position of the registry, or nothing outside it.
+
+From Gloas the registry has no limit in its type, so a position may lie beyond every index.
+
+So results that hold at each position of the registry read the flag here. -/
+def slashedFlagAt (state : BeaconState preset fork) (position : Nat) : Option Bool :=
+  (state.validators.data[position]?).map (·.slashed)
+
+/-- A fold changes no slashed flag at a position that none of its inputs names.
+
+Each step may change slashed flags only at the positions of the indices that its input names.
+
+The fold may thread more than a state, as the steps of an attester slashing do. -/
+theorem slashedFlagAt_foldlM {β α ε : Type} (toState : β → BeaconState preset fork)
+    {step : β → α → Except ε β} (named : α → List ValidatorIndex)
+    (kept : ∀ b x b', step b x = .ok b' → ∀ position,
+      (∀ index ∈ named x, index.toNat ≠ position) →
+        slashedFlagAt (toState b') position = slashedFlagAt (toState b) position)
+    {items : List α} {start done : β} (computed : items.foldlM step start = .ok done)
+    (position : Nat) (outside : ∀ x ∈ items, ∀ index ∈ named x, index.toNat ≠ position) :
+    slashedFlagAt (toState done) position = slashedFlagAt (toState start) position :=
+  foldlM_ok_invariant_of_mem
+    (fun b => slashedFlagAt (toState b) position = slashedFlagAt (toState start) position)
+    (fun _ x _ member same ok => (kept _ x _ ok position (outside x member)).trans same)
+    rfl computed
+
 /-- A replaced validator is read back at its index. -/
 theorem getValidator_putValidator_self {state : BeaconState preset fork}
     {index : ValidatorIndex} (inside : index.toNat < state.validators.data.size)
@@ -569,27 +601,52 @@ theorem balance_decreaseBalance {state after : BeaconState preset fork}
       by simp [toNat_saturatingSub]⟩
   · exact ⟨balance, by simp [BeaconState.putBalance, same, found], by simp [same]⟩
 
-/-- Starting an exit changes no slashed flag. -/
-theorem slashedFlag_initiateValidatorExit {config : Config}
+/-- Equal slashed flags at the position of an index give equal reads of the flag at that index. -/
+theorem slashedFlag_eq_of_slashed {state after : BeaconState preset fork} {index : ValidatorIndex}
+    (same : slashedFlagAt after index.toNat = slashedFlagAt state index.toNat) :
+    slashedFlag after index = slashedFlag state index := by
+  unfold slashedFlag getValidator
+  unfold slashedFlagAt at same
+  revert same
+  cases after.validators.data[index.toNat]? <;> cases state.validators.data[index.toNat]? <;>
+    simp [Except.map]
+
+/-- A write that keeps the slashed flag of its validator keeps every slashed flag. -/
+theorem slashedFlagAt_setValidatorAt {state after : BeaconState preset fork} {index : Nat}
+    {old validator : Validator} (found : getValidatorAt state index = .ok old)
+    (set : state.setValidatorAt index validator = .ok after)
+    (flag : validator.slashed = old.slashed) (position : Nat) :
+    slashedFlagAt after position = slashedFlagAt state position := by
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  rw [getValidatorAt_eq_ok_iff] at found
+  simp only [slashedFlagAt, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+    Array.getElem?_set]
+  split
+  · rename_i equal
+    rw [← equal, found, Option.map_some, Option.map_some, flag]
+  · rfl
+
+/-- Starting an exit changes no slashed flag, at any position of the registry. -/
+theorem slashedFlagAt_initiateValidatorExit {config : Config}
     {state after : BeaconState preset fork} {index : ValidatorIndex}
-    (computed : initiateValidatorExit config state index = .ok after) (other : ValidatorIndex) :
-    slashedFlag after other = slashedFlag state other := by
+    (computed : initiateValidatorExit config state index = .ok after) (position : Nat) :
+    slashedFlagAt after position = slashedFlagAt state position := by
   obtain ⟨validator, found, ⟨_, rfl⟩ | ⟨_, queued, _, _, queue, _, set⟩⟩ :=
     initiateValidatorExit_ok computed
   · rfl
-  have same := getValidator_of_validators_eq (exitQueue_validators queue).1
-  by_cases equal : other = index
-  · subst equal
-    have foundQueued : getValidator queued other = .ok validator := (same other).trans found
-    simp [slashedFlag, getValidator_setValidator_self set, found, Except.map]
-  · simp [slashedFlag, getValidator_setValidator_of_ne set equal, same]
+  have same := (exitQueue_validators queue).1
+  rw [← getValidator_of_validators_eq same, getValidator_eq_getValidatorAt] at found
+  rw [setValidator_eq_setValidatorAt] at set
+  rw [slashedFlagAt_setValidatorAt found set rfl, slashedFlagAt, same]
+  rfl
 
-/-- Slashing a validator sets its slashed flag, and changes no other flag. -/
+/-- Slashing a validator sets its slashed flag, and changes no slashed flag at another position. -/
 theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState preset fork}
     {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     slashedFlag after slashedIndex = .ok true ∧
-      ∀ other, other ≠ slashedIndex → slashedFlag after other = slashedFlag state other := by
+      ∀ position, position ≠ slashedIndex.toNat →
+        slashedFlagAt after position = slashedFlagAt state position := by
   obtain ⟨exited, validator, withdrawable, slashedState, _, _, _, _, _, _, _, last, exitedOk, -, -,
     markedOk, -, -, -, lowered, -, -, raised, final, done⟩ := slashValidator_ok computed
   -- The balance steps keep the registry in which the validator is marked slashed.
@@ -600,12 +657,13 @@ theorem slashValidator_slashedFlag {config : Config} {state after : BeaconState 
     (by subst done; rfl)).1.trans ((increaseBalance_validators final).trans
     ((increaseBalance_validators raised).trans (decreaseBalance_validators lowered)))
   replace same : after.validators = slashedState.validators := same
-  refine ⟨?_, fun other distinct => ?_⟩
+  refine ⟨?_, fun position distinct => ?_⟩
   · simp [slashedFlag, getValidator_of_validators_eq same,
       getValidator_setValidator_self markedOk, Except.map]
-  · rw [slashedFlag, getValidator_of_validators_eq same,
-      getValidator_setValidator_of_ne markedOk distinct]
-    exact slashedFlag_initiateValidatorExit exitedOk other
+  · obtain ⟨_, rfl⟩ := setValidator_ok markedOk
+    rw [slashedFlagAt, same, BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+      Array.getElem?_set_ne _ (Ne.symm distinct)]
+    exact slashedFlagAt_initiateValidatorExit exitedOk position
 
 /-! ## The builder payments of a slashing -/
 
@@ -729,7 +787,7 @@ theorem queueExcessActiveBalance_balance {state after : BeaconState preset fork}
     have read := getBalance_setBalance_self setOk
     refine ⟨read, [⟨validator.pubkey,
       validator.withdrawalCredentials, balance - preset.MIN_ACTIVATION_BALANCE,
-      Cryptography.Bls.Signatures.infinitySignature, GENESIS_SLOT⟩], ?_, ?_⟩
+      Cryptography.Bls.Signatures.G2_POINT_AT_INFINITY, GENESIS_SLOT⟩], ?_, ?_⟩
     · show pending.data.toList = _
       rw [appendWithinLimit_data appended, Array.toList_push]
     · simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, Nat.add_zero]
@@ -759,6 +817,21 @@ theorem sameSizes_queueExcessActiveBalance {state after : BeaconState preset for
     subst computed
     exact SameSizes.refl _
 
+/-- Moving excess balance to the pending queue leaves the registry unchanged. -/
+theorem queueExcessActiveBalance_validators {state after : BeaconState preset fork}
+    {electra : .pectra ≤ fork} {index : ValidatorIndex}
+    (computed : queueExcessActiveBalance state electra index = .ok after) :
+    after.validators = state.validators := by
+  simp only [queueExcessActiveBalance, bind_ok_iff] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, setOk, rfl⟩ := computed
+    obtain ⟨_, rfl⟩ := setBalance_ok setOk
+    rfl
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    rw [computed]
+
 /-- A validator that switches to compounding credentials has compounding credentials.
 
 The sizes stay the same. -/
@@ -772,19 +845,149 @@ theorem switchToCompoundingValidator_compounding {state after : BeaconState pres
   refine ⟨(sameSizes_setValidator set).trans (sameSizes_queueExcessActiveBalance queued),
     { validator with withdrawalCredentials :=
       validator.withdrawalCredentials.set 0 COMPOUNDING_WITHDRAWAL_PREFIX[0] }, ?_, ?_⟩
-  · -- Moving the balance leaves the registry.
-    have same : after.validators = switched.validators := by
-      simp only [queueExcessActiveBalance, bind_ok_iff] at queued
-      obtain ⟨_, _, queued⟩ := queued
-      split at queued
-      · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
-        obtain ⟨_, _, _, _, _, setOk, rfl⟩ := queued
-        obtain ⟨_, rfl⟩ := setBalance_ok setOk
-        rfl
-      · simp only [pure, Except.pure, Except.ok.injEq] at queued
-        rw [queued]
-    rw [getValidator_of_validators_eq same]
+  · rw [getValidator_of_validators_eq (queueExcessActiveBalance_validators queued)]
     exact getValidator_setValidator_self set
   · simp [hasCompoundingWithdrawalCredential, isCompoundingWithdrawalCredential]
+
+/-! ## The balances of a slashing -/
+
+/-- The share of a whistleblower reward that goes to the proposer.
+
+From Altair it is one eighth of the reward.
+
+From Altair it fails exactly when eight times the reward reaches `2^64`.
+
+Before Altair it is the reward over the proposer reward quotient of the preset, and never fails. -/
+theorem proposerShare_eq_ok_iff {reward share : Gwei} :
+    proposerShare preset fork reward = .ok share ↔
+      if .altair ≤ fork then reward.toNat * 8 < 2 ^ 64 ∧ share.toNat = reward.toNat / 8
+      else share.toNat = reward.toNat / preset.PROPOSER_REWARD_QUOTIENT.toNat := by
+  unfold proposerShare
+  split
+  · have weight : PROPOSER_WEIGHT.toNat = 8 := rfl
+    have denominator : WEIGHT_DENOMINATOR.toNat = 64 := rfl
+    simp only [bind_ok_iff, liftArith, mapError_ok_iff, mulChecked_ok_iff, pure, Except.pure,
+      Except.ok.injEq, weight]
+    constructor
+    · rintro ⟨product, ⟨fits, value⟩, rfl⟩
+      refine ⟨fits, ?_⟩
+      rw [UInt64.toNat_div, value, denominator]
+      omega
+    · rintro ⟨fits, value⟩
+      refine ⟨reward * PROPOSER_WEIGHT, ⟨fits, ?_⟩, ?_⟩
+      · rw [UInt64.toNat_mul, weight, Nat.mod_eq_of_lt fits]
+      · rw [← UInt64.toNat_inj, UInt64.toNat_div, UInt64.toNat_mul, weight, Nat.mod_eq_of_lt fits,
+          denominator, value]
+        omega
+  · simp only [pure, Except.pure, Except.ok.injEq]
+    rw [eq_comm, ← UInt64.toNat_inj, UInt64.toNat_div]
+
+/-- The share of a whistleblower reward that goes to the proposer is at most the reward. -/
+theorem proposerShare_le {reward share : Gwei}
+    (computed : proposerShare preset fork reward = .ok share) : share.toNat ≤ reward.toNat := by
+  have value := proposerShare_eq_ok_iff.mp computed
+  split at value
+  · rw [value.2]
+    exact Nat.div_le_self _ _
+  · rw [value]
+    exact Nat.div_le_self _ _
+
+/-- Starting an exit keeps the balances. -/
+theorem balances_initiateValidatorExit {config : Config} {state after : BeaconState preset fork}
+    {position : ValidatorIndex}
+    (computed : initiateValidatorExit config state position = .ok after) :
+    after.balances = state.balances := by
+  obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
+  · rfl
+  · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    rfl
+
+/-- Starting an exit keeps the balances, the slot and the proposer lookahead.
+
+It keeps the effective balance of the validator that exits. -/
+theorem effectiveBalance_initiateValidatorExit {config : Config}
+    {state after : BeaconState preset fork} {index : ValidatorIndex} {validator : Validator}
+    (found : getValidator state index = .ok validator)
+    (computed : initiateValidatorExit config state index = .ok after) :
+    after.balances = state.balances ∧ after.slot = state.slot ∧
+      after.proposerLookahead = state.proposerLookahead ∧
+      ∃ exited, getValidator after index = .ok exited ∧
+        exited.effectiveBalance = validator.effectiveBalance := by
+  obtain ⟨read, readOk, ⟨_, rfl⟩ | ⟨_, queued, exitEpoch, withdrawableEpoch, queue, _, set⟩⟩ :=
+    initiateValidatorExit_ok computed
+  · exact ⟨rfl, rfl, rfl, validator, found, rfl⟩
+  · rw [found] at readOk
+    cases readOk
+    have self := getValidator_setValidator_self set
+    obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
+    obtain ⟨_, rfl⟩ := setValidator_ok set
+    exact ⟨rfl, rfl, rfl, _, self, rfl⟩
+
+/-- The balances after a slashing, with a whistleblower that is by default the proposer.
+
+The reward is the effective balance of the validator over the whistleblower reward quotient.
+
+The validator first loses its effective balance over the slashing penalty quotient, down to zero.
+
+One index then gains the proposer's share of the reward, and the whistleblower gains the rest.
+
+Every other balance stays.
+
+From Fulu that index is the proposer of the slot in the state before the slashing.
+
+Before Fulu this theorem does not say which index it is. -/
+theorem balance_slashValidator {config : Config} {state after : BeaconState preset fork}
+    {slashedIndex : ValidatorIndex} {whistleblowerIndex : Option ValidatorIndex}
+    {validator : Validator} (found : getValidator state slashedIndex = .ok validator)
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    ∃ proposer share,
+      (.fusaka ≤ fork → getBeaconProposerIndex state = .ok proposer) ∧
+      proposerShare preset fork
+        (validator.effectiveBalance / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT) =
+          .ok share ∧
+      ∀ j balance, state.balances.data[j]? = some balance →
+        ∃ paid, after.balances.data[j]? = some paid ∧
+          paid.toNat =
+            (if slashedIndex.toNat = j then balance.toNat -
+              (validator.effectiveBalance /
+                (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT).toNat
+            else balance.toNat) +
+            (if proposer.toNat = j then share.toNat else 0) +
+            (if (whistleblowerIndex.getD proposer).toNat = j then
+              (validator.effectiveBalance /
+                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT).toNat - share.toNat
+            else 0) := by
+  obtain ⟨exited, read, _, marked, _, _, slashings, lowered, proposer, share, raised, last,
+    exitedOk, readOk, _, markedOk, _, _, _, loweredOk, proposerOk, shareOk, raisedOk, lastOk,
+    done⟩ := slashValidator_ok computed
+  obtain ⟨balances, slot, lookahead, exitedValidator, exitedFound, effective⟩ :=
+    effectiveBalance_initiateValidatorExit found exitedOk
+  rw [readOk, Except.ok.injEq] at exitedFound
+  subst exitedFound
+  rw [effective] at shareOk lastOk loweredOk
+  have bound := UInt64.le_iff_toNat_le.mpr (proposerShare_le shareOk)
+  have kept : after.balances = last.balances :=
+    (slashValidator_last (last := last) (index := slashedIndex) (by subst done; rfl)).2
+  obtain ⟨_, markedEq⟩ := setValidator_ok markedOk
+  refine ⟨proposer, share, fun fulu => ?_, shareOk, fun j balance held => ?_⟩
+  · obtain ⟨_, set⟩ := decreaseBalance_ok loweredOk
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    subst markedEq
+    rw [← proposerOk]
+    simp only [getBeaconProposerIndex, fulu, ↓reduceDIte]
+    simp only [BeaconState.putBalance, BeaconState.putValidator, slot, lookahead]
+  · have start : ({ marked with slashings } : BeaconState preset fork).balances.data[j]? =
+        some balance := by
+      show marked.balances.data[j]? = _
+      rw [markedEq]
+      show exited.balances.data[j]? = _
+      rw [balances]
+      exact held
+    obtain ⟨penalized, penalizedAt, penalizedValue⟩ := balance_decreaseBalance loweredOk start
+    obtain ⟨rewarded, rewardedAt, rewardedValue⟩ := balance_increaseBalance raisedOk penalizedAt
+    obtain ⟨paid, paidAt, paidValue⟩ := balance_increaseBalance lastOk rewardedAt
+    refine ⟨paid, by rw [kept]; exact paidAt, ?_⟩
+    rw [paidValue, rewardedValue, penalizedValue, UInt64.toNat_sub_of_le _ _ bound]
 
 end EthLib.Consensus

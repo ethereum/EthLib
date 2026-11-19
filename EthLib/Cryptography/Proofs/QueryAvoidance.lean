@@ -62,38 +62,34 @@ theorem findFirst_isQueryBoundP_zero {κ β : Type} (trial : Nat → κ)
     | some x => exact isQueryBoundP_pure _ _ _
 
 /-- A Merkle node queries `p` nowhere when no leaf and no node hash does. -/
-theorem merkleNode_isQueryBoundP_zero {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
+theorem merkleNode_isQueryBoundP_zero {α : Type}
+    (hash : Merkle.Position → α → α → OracleComp spec α)
     (leaves : Nat → OracleComp spec α) (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0)
-    (level j : Nat) : IsQueryBoundP (Merkle.node hash leaves level j) p 0 :=
+    (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0)
+    (q : Merkle.Position) : IsQueryBoundP (Merkle.node hash leaves q) p 0 :=
   Merkle.node_rec hash (fun x => IsQueryBoundP x p 0)
-    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash level j
+    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash q
 
 /-- The siblings of a node query `p` nowhere when no leaf and no node hash does. -/
 theorem merkleSiblings_isQueryBoundP_zero {α : Type}
-    (hash : Nat → Nat → α → α → OracleComp spec α) (leaves : Nat → OracleComp spec α)
+    (hash : Merkle.Position → α → α → OracleComp spec α) (leaves : Nat → OracleComp spec α)
     (hleaves : ∀ j, IsQueryBoundP (leaves j) p 0)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0) :
-    ∀ (level j k : Nat), IsQueryBoundP (Merkle.siblings hash leaves level j k) p 0
-  | _, _, 0 => isQueryBoundP_pure _ _ _
-  | level, j, k + 1 => by
-    rw [Merkle.siblings]
-    exact isQueryBoundP_bind_zero _ _
-      (merkleNode_isQueryBoundP_zero hash leaves hleaves hhash _ _) fun _ =>
-        isQueryBoundP_bind_zero _ _
-          (merkleSiblings_isQueryBoundP_zero hash leaves hleaves hhash _ _ k)
-          fun _ => isQueryBoundP_pure _ _ _
+    (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0) :
+    ∀ (q : Merkle.Position) (k : Nat), IsQueryBoundP (Merkle.siblings hash leaves q k) p 0 :=
+  Merkle.siblings_rec hash (fun x => IsQueryBoundP x p 0) (fun _ => isQueryBoundP_pure _ _ _)
+    (fun hx hf => isQueryBoundP_bind_zero _ _ hx hf) leaves hleaves hhash
 
 /-- A climb queries `p` nowhere when no node hash does. -/
-theorem climb_isQueryBoundP_zero {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ level j left right, IsQueryBoundP (hash level j left right) p 0) :
-    ∀ (siblings : List α) (level j : Nat) (current : α),
-      IsQueryBoundP (Merkle.climb hash level j current siblings) p 0
-  | [], _, _, _ => isQueryBoundP_pure _ _ _
-  | _ :: rest, level, j, current => by
+theorem climb_isQueryBoundP_zero {α : Type}
+    (hash : Merkle.Position → α → α → OracleComp spec α)
+    (hhash : ∀ q left right, IsQueryBoundP (hash q left right) p 0) :
+    ∀ (siblings : List α) (q : Merkle.Position) (current : α),
+      IsQueryBoundP (Merkle.climb hash q current siblings) p 0
+  | [], _, _ => isQueryBoundP_pure _ _ _
+  | _ :: rest, q, current => by
     rw [Merkle.climb]
-    exact isQueryBoundP_bind_zero _ _ (hhash _ _ _ _) fun _ =>
-      climb_isQueryBoundP_zero hash hhash rest _ _ _
+    exact isQueryBoundP_bind_zero _ _ (hhash _ _ _) fun _ =>
+      climb_isQueryBoundP_zero hash hhash rest _ _
 
 end Loops
 

@@ -2,8 +2,9 @@ module
 
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Xmss.CodeSize
+public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Convert
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Convert
 
 /-!
 # Proofs: the codeword search rarely fails, in the random-oracle model
@@ -47,8 +48,9 @@ theorem card_digest : Fintype.card Digest = 2 ^ 128 :=
   Wots.card_bytes16
 
 /-- Every string of 64 digits is the digits of exactly one digest. -/
-theorem digits_bijective : Function.Bijective (Internal.digits) :=
-  Wots.digits4_bijective
+theorem digits_bijective : Function.Bijective (Internal.digits) := by
+  rw [digits_eq_digits4]
+  exact Wots.digits4_bijective
 
 /-- Exactly `|C|` digests are codewords.
 
@@ -71,7 +73,7 @@ theorem card_codeword : Nat.card {d : Digest // (codeword? d).isSome} = CODE_SIZ
   · obtain ⟨y, hy⟩ := digits_bijective.2
       (Vector.ofFn fun i : Fin DIGITS => if h : i.val < V then x.1[i.val] else ⟨0, by decide⟩)
     have hcw : codeword? y = some x.1 := by
-      simp only [codeword?, hy]
+      simp only [codeword?_eq_digits, hy]
       simp only [List.all_eq_true, beq_iff_eq, Bool.and_eq_true]
       simp
       refine ⟨fun z hz => ?_, x.2⟩
@@ -104,7 +106,7 @@ theorem prEvent_not_codeword :
 theorem trialRandomizer_inj (base : Randomizer) {j j' : ℕ} (hj : j < 2 ^ 32) (hj' : j' < 2 ^ 32)
     (h : trialRandomizer base j = trialRandomizer base j') : j = j' := by
   have := congrArg bytesToUint h
-  simp only [trialRandomizer, Base.bytesToUint_uintToBytes, RANDOMIZER_LEN] at this
+  simp only [trialRandomizer_eq, Base.bytesToUint_uintToBytes, RANDOMIZER_LEN] at this
   have hb := Base.bytesToUint_lt base
   simp only [RANDOMIZER_LEN] at hb
   omega

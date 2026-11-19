@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Execution.Evm.Measure
-public import EthLib.Execution.Evm.Call.TransferLog
+public import EthLib.Execution.Evm.TransferLog
 
 /-!
 # `Evm.Instructions.SelfDestruct`
@@ -153,6 +153,8 @@ def finishSelfdestruct (fork : Fork) (beneficiary : Address) (refund : Nat)
           if deletes then evm.substate.accountsToDelete.insert originator
           else evm.substate.accountsToDelete
         logs := pushTransferLog fork evm.substate.logs originator beneficiary balance
+        simulatedLogs :=
+          pushSimulatedTransferLog fork evm.substate.simulatedLogs originator beneficiary balance
         refundCounter := evm.substate.refundCounter + refund
         touchedAccounts := if touchesBeneficiary then touched.insert beneficiary else touched } }
 

@@ -38,8 +38,10 @@ inductive CustodyError where
   | tooManyGroups (count : UInt64)
   /-- The group index is not below the number of groups. -/
   | groupOutOfRange (group : CustodyIndex)
-  /-- The search for distinct groups ran out of steps. -/
-  | outOfFuel
+  /-- The search for distinct groups ran out of steps.
+
+  The error gives the number of groups found, then the number asked for. -/
+  | outOfFuel (found count : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -50,11 +52,11 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def CustodyError.code : CustodyError → UInt32
   | .tooManyGroups _ => 1
   | .groupOutOfRange _ => 2
-  | .outOfFuel => 3
+  | .outOfFuel .. => 3
 
 /-- The integer of the first eight bytes, least significant first. -/
-def firstUInt64 (bytes : ByteArray) : UInt64 :=
-  (List.range 8).foldr (fun i acc => acc <<< 8 ||| (bytes.data.getD i 0).toUInt64) 0
+def firstUInt64 (bytes : Bytes32) : UInt64 :=
+  (List.finRange 8).foldr (fun i acc => acc <<< 8 ||| (bytes[i.val]'(by omega)).toUInt64) 0
 
 /-- The group that one ID hashes to.
 
@@ -62,7 +64,7 @@ It hashes the 32 bytes of the ID, least significant first, with SHA-256.
 
 Its first eight bytes, least significant first, give an integer modulo the number of groups. -/
 def groupOfId (config : Config) (id : NodeID) : CustodyIndex :=
-  firstUInt64 (Cryptography.Hash.Sha256.hash ⟨(U256.toBeBytes id).toArray.reverse⟩) %
+  firstUInt64 (Cryptography.Hash.Sha256.hash32 ⟨(U256.toBeBytes id).toArray.reverse⟩) %
     config.NUMBER_OF_CUSTODY_GROUPS
 
 /-- The groups of `groups`, then those of the IDs from `id` upward, until `count` are found.
@@ -73,7 +75,7 @@ def collectGroups (config : Config) (count : Nat) :
   | fuel, id, groups =>
     if count ≤ groups.length then .ok groups
     else match fuel with
-      | 0 => .error .outOfFuel
+      | 0 => .error (.outOfFuel groups.length count)
       | fuel + 1 =>
         let group := groupOfId config id
         collectGroups config count fuel (id + 1)

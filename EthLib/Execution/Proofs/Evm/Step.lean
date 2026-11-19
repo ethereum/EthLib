@@ -39,6 +39,17 @@ open EthLib.Base (Fork U256 byteAt)
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
 
+/-- The rest of an instruction that keeps its reads fails only with an error that aborts the run.
+
+That error is the error of the rest. -/
+theorem keepReads_eq_error {α : Type} {evm : Evm fork Meter} {halted : Evm fork Meter → α}
+    {rest : Except EvmError α} {e : EvmError} :
+    keepReads evm halted rest = .error e ↔ rest = .error e ∧ e.aborts = true := by
+  unfold keepReads
+  split
+  · split <;> simp_all <;> rintro rfl <;> assumption
+  · simp
+
 /-- A stack that drops `k` words and gains one stays within the limit, for `k ≥ 1`. -/
 theorem length_cons_le {stack : Stack} {dropped rest : List U256} {x : U256}
     (h : stack.val = dropped ++ rest) (nonempty : dropped ≠ []) :

@@ -107,17 +107,17 @@ BAD_BLOCKS = [
     # A preamble declaring 2^32 bytes, one more than allowed.
     ("8080808010", "preambleTooLarge 4294967296"),
     # A literal of three bytes with one byte left in the input.
-    ("050841", "literalPastEnd"),
+    ("050841", "literalPastEnd 3 1"),
     # A literal whose two length bytes are cut off after one.
-    ("05f400", "literalPastEnd"),
+    ("05f400", "literalPastEnd 2 1"),
     # A copy with a two-byte offset and no offset bytes.
-    ("0500410e", "copyPastEnd"),
+    ("0500410e", "copyPastEnd 2 0"),
     # A copy with offset zero.
-    ("0500410100", "copyOffsetZero"),
+    ("0500410100", "copyOffsetZero 1"),
     # A copy of offset 5 after one byte of output.
-    ("0500410105", "copyOffsetTooLarge 5"),
+    ("0500410105", "copyOffsetTooLarge 5 1"),
     # A block that starts with a copy.
-    ("040101", "copyOffsetTooLarge 1"),
+    ("040101", "copyOffsetTooLarge 1 0"),
     # An output of one byte where the preamble declared two.
     ("020041", "lengthMismatch 2 1"),
     # An output of two bytes where the preamble declared one.
@@ -233,17 +233,17 @@ def test_encode_frames(data: bytes, types: list[int]) -> None:
 # Each rejected stream and the fault that rejects it.
 BAD_STREAMS = [
     # No bytes at all.
-    (b"", "missingStreamIdentifier"),
+    (b"", "missingStreamIdentifier none"),
     # An uncompressed chunk first, without the stream identifier.
-    (FRAMED_DIGITS[10:], "missingStreamIdentifier"),
+    (FRAMED_DIGITS[10:], "missingStreamIdentifier (some 1)"),
     # A stream identifier chunk that holds sNaPpX.
-    (bytes.fromhex("ff060000734e61507058"), "badStreamIdentifier"),
+    (bytes.fromhex("ff060000734e61507058"), "badStreamIdentifier 6"),
     # A stream that ends after two bytes of a chunk header.
-    (STREAM_IDENTIFIER + bytes.fromhex("010d"), "headerTruncated"),
+    (STREAM_IDENTIFIER + bytes.fromhex("010d"), "headerTruncated 2"),
     # A chunk that declares 13 bytes, with 12 left.
-    (FRAMED_DIGITS[:-1], "chunkPastEnd"),
+    (FRAMED_DIGITS[:-1], "chunkPastEnd 13 12"),
     # An uncompressed chunk of three bytes, too short for its checksum.
-    (STREAM_IDENTIFIER + bytes.fromhex("01030000000000"), "checksumTruncated"),
+    (STREAM_IDENTIFIER + bytes.fromhex("01030000000000"), "checksumTruncated 3"),
     # The digits chunk with its last checksum byte changed from c7 to c6.
     (
         FRAMED_DIGITS[:17] + b"\xc6" + FRAMED_DIGITS[18:],
@@ -254,7 +254,7 @@ BAD_STREAMS = [
     # A compressed chunk whose block starts with a copy.
     (
         STREAM_IDENTIFIER + bytes.fromhex("0007000000000000040101"),
-        "block (EthLib.Networking.Snappy.SnappyError.copyOffsetTooLarge 1)",
+        "block (EthLib.Networking.Snappy.SnappyError.copyOffsetTooLarge 1 0)",
     ),
     # A chunk of type 0x02, the first reserved unskippable type.
     (STREAM_IDENTIFIER + bytes.fromhex("02000000"), "reservedUnskippable 2"),

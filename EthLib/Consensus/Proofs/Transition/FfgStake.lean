@@ -107,6 +107,42 @@ theorem getTotalBalance_ok_iff_stake {state : BeaconState preset fork}
   refine and_congr_right fun _ => and_congr_right fun lt => ?_
   rw [← UInt64.toNat_inj, toNat_max, Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
 
+/-- A finite active stake supplies the checked total, without bounding inactive balances.
+
+The other existence lemma asks instead for the sum over the whole registry below `2^64`. -/
+theorem getTotalActiveBalance_exists {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit)
+    (bounded : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset < 2 ^ 64) :
+    ∃ total, getTotalActiveBalance state = .ok total := by
+  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    (stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset)
+  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt bounded
+  refine ⟨value.toUInt64, ?_⟩
+  unfold getTotalActiveBalance
+  rw [getActiveValidatorIndicesChecked_of_within within]
+  apply getTotalBalance_ok_iff_stake.mpr
+  refine ⟨?_, bounded, UInt64.toNat_ofNat_of_lt' fits⟩
+  exact fun v member => lt_size_of_mem_getActiveValidatorIndices member
+
+/-- A successful total also bounds a subset, without bounding inactive balances. -/
+theorem getTotalBalance_exists_of_subset {state : BeaconState preset fork}
+    {indices all : List ValidatorIndex} {total : Gwei}
+    (read : getTotalBalance state all = .ok total)
+    (subset : ∀ v ∈ indices, v ∈ all) :
+    ∃ result, getTotalBalance state indices = .ok result := by
+  obtain ⟨inside, bounded, -⟩ := getTotalBalance_ok_iff_stake.mp read
+  have small : stake (fun v => balanceAt state v.toNat) indices.toFinset < 2 ^ 64 :=
+    lt_of_le_of_lt (stake_mono fun v member =>
+      List.mem_toFinset.mpr (subset v (List.mem_toFinset.mp member))) bounded
+  let value := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    (stake (fun v => balanceAt state v.toNat) indices.toFinset)
+  have fits : value < 2 ^ 64 := max_lt preset.EFFECTIVE_BALANCE_INCREMENT.toNat_lt small
+  refine ⟨value.toUInt64, getTotalBalance_ok_iff_stake.mpr
+    ⟨fun v member => inside v (subset v member), small, ?_⟩⟩
+  exact UInt64.toNat_ofNat_of_lt' fits
+
 /-- Three times a part reaches twice a total, each raised to a floor.
 
 That holds exactly when it holds without the floor.

@@ -39,22 +39,24 @@ theorem forsNode_succ (z j : Nat) :
     forsNode H pkSeed prf idx kappa (z + 1) j = (do
       let left ← forsNode H pkSeed prf idx kappa z (2 * j)
       let right ← forsNode H pkSeed prf idx kappa z (2 * j + 1)
-      forsNodeHash H pkSeed idx kappa (z + 1) j left right) :=
+      forsNodeHash H pkSeed idx kappa ⟨z + 1, j⟩ left right) :=
   rfl
 
 /-- A node at height `z` is the same with any node hash that agrees on heights 1 to `z`. -/
-theorem forsNode_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest) {z : Nat}
-    (agree : ∀ k, 1 ≤ k → k ≤ z → forsNodeHash H pkSeed idx kappa k = hash' k) (j : Nat) :
+theorem forsNode_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest) {z : Nat}
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ z →
+      forsNodeHash H pkSeed idx kappa q = hash' q) (j : Nat) :
     forsNode H pkSeed prf idx kappa z j
-      = Merkle.node hash' (forsLeaves H pkSeed prf idx kappa) z j :=
-  Merkle.node_congr _ hash' _ z j agree
+      = Merkle.node hash' (forsLeaves H pkSeed prf idx kappa) ⟨z, j⟩ :=
+  Merkle.node_congr _ hash' _ ⟨z, j⟩ agree
 
 /-- A tree's root is the same with any node hash that agrees on heights 1 to 10. -/
-theorem forsRoot_eq_of_agree (hash' : Nat → Nat → Digest → Digest → m Digest)
-    (agree : ∀ k, 1 ≤ k → k ≤ FORS_HEIGHT → forsNodeHash H pkSeed idx kappa k = hash' k) :
+theorem forsRoot_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level ≤ FORS_HEIGHT →
+      forsNodeHash H pkSeed idx kappa q = hash' q) :
     forsRoot H pkSeed prf idx kappa
       = Merkle.root hash' (forsLeaves H pkSeed prf idx kappa) FORS_HEIGHT :=
-  Merkle.node_congr _ hash' _ _ 0 agree
+  Merkle.node_congr _ hash' _ _ agree
 
 /-- The leaf an opening reveals hashes to the honest node at height 0. -/
 theorem forsLeafHash_forsSecret (s : Nat) :
@@ -85,9 +87,9 @@ theorem treeOpen_run (s : Fin (2 ^ FORS_HEIGHT)) :
 /-- An opening's path is the same with any node hash that agrees on heights 1 to 9.
 
 The path holds nodes below height 10, so the hash at height 10 plays no part. -/
-theorem treeOpen_path_eq_of_agree (hash' : Nat → Nat → Digest → Digest → Id Digest)
-    (agree : ∀ k, 1 ≤ k → k < FORS_HEIGHT →
-      forsNodeHash (pureHash f) pkSeed idx kappa k = hash' k)
+theorem treeOpen_path_eq_of_agree (hash' : Merkle.Position → Digest → Digest → Id Digest)
+    (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level < FORS_HEIGHT →
+      forsNodeHash (pureHash f) pkSeed idx kappa q = hash' q)
     (s : Fin (2 ^ FORS_HEIGHT)) :
     (treeOpen (pureHash f) pkSeed prf idx kappa s).run.path
       = (Merkle.path hash' (forsLeaves (pureHash f) pkSeed prf idx kappa) FORS_HEIGHT s).run := by

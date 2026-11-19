@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.State.Account
+public import EthLib.Execution.State.Root
 public import EthLib.Execution.Trie.Proof
 
 /-!
@@ -55,6 +56,14 @@ The tests give such an address the [empty code][code], whose hash is the hash of
 EIP-1186 also gives that code hash for an account without code.
 
 The storage root of an account without storage is the root of the empty trie.
+
+A node builds its answer from a state, with the proofs that the tries of the state give.
+
+For an address with no account, it gives the fields of the empty account.
+
+That is the reading of an account with no code and no storage.
+
+It agrees with the empty code that the tests expect.
 
 [eip-1186]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1186.md
 [schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
@@ -114,9 +123,30 @@ inductive AccountProofError where
   | slot (index : Nat) (error : ProofError)
   /-- The value under the slot at an index is not the RLP form of a word. -/
   | slotEncoding (index : Nat)
-  /-- The word that the answer gives for the slot at an index is not the one its proof shows. -/
-  | slotMismatch (index : Nat)
-  deriving DecidableEq, Repr
+  /-- The slot at `index` has the word `actual` in the answer, not `expected` of its proof.
+
+  A slot that is not set, by its proof or since the account has no storage, has the word `0`.
+  -/
+  | slotMismatch (index : Nat) (expected actual : U256)
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def accountProofErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.State.AccountProofError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each word in decimal. -/
+def AccountProofError.reprPrec : AccountProofError → Nat → Std.Format
+  | .account error, p => accountProofErrorFormat "account" [reprArg error] p
+  | .accountEncoding, p => accountProofErrorFormat "accountEncoding" [] p
+  | .accountMismatch, p => accountProofErrorFormat "accountMismatch" [] p
+  | .slot index error, p =>
+    accountProofErrorFormat "slot" [namedArg "index" index, reprArg error] p
+  | .slotEncoding index, p => accountProofErrorFormat "slotEncoding" [namedArg "index" index] p
+  | .slotMismatch index expected actual, p =>
+    accountProofErrorFormat "slotMismatch"
+      [namedArg "index" index, namedArg "expected" expected, namedArg "actual" actual] p
+
+instance : Repr AccountProofError := ⟨AccountProofError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -129,7 +159,7 @@ def AccountProofError.code : AccountProofError → UInt32
   | .accountMismatch => 503
   | .slot .. => 504
   | .slotEncoding _ => 505
-  | .slotMismatch _ => 506
+  | .slotMismatch .. => 506
 
 /-- What the proof of a slot shows: the slot is set, or it is not. -/
 inductive SlotOutcome where
@@ -203,10 +233,10 @@ def verifySlot (hash : ByteArray → Hash32) (storageRoot : Hash32) (index : Nat
   match value with
   | some bytes =>
     let word ← (Codec.decode bytes : Except RlpError U256).mapError fun _ => .slotEncoding index
-    unless word = s.value do throw (.slotMismatch index)
+    unless word = s.value do throw (.slotMismatch index word s.value)
     return .set
   | none =>
-    unless s.value = 0 do throw (.slotMismatch index)
+    unless s.value = 0 do throw (.slotMismatch index 0 s.value)
     return .absent
 
 /-- Check each slot of the answer against its storage root, in order. -/
@@ -223,7 +253,7 @@ The account has no storage, so the proofs of its slots are not read. -/
 def verifyAbsentSlots : Nat → List StorageProof → Except AccountProofError Unit
   | _, [] => pure ()
   | index, s :: rest => do
-    unless s.value = 0 do throw (.slotMismatch index)
+    unless s.value = 0 do throw (.slotMismatch index 0 s.value)
     verifyAbsentSlots (index + 1) rest
 
 /-- Check a whole answer of `eth_getProof` against a state root: the account, then each slot.
@@ -238,6 +268,31 @@ def verify (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof)
   else
     verifyAbsentSlots 0 p.storageProof
     return .absent
+
+/-- The answer of `eth_getProof` that a state gives for an address and some slots.
+
+The account proof is the proof of the address in the state trie.
+
+An address with no account has the fields of the empty account, and the root of the empty trie.
+
+Each slot gives its word in the storage of the address, and its proof in the storage trie.
+
+The words of an address with no account are read from the state as well.
+
+It fails when a trie of the state cannot be encoded. -/
+def ofState (hash : ByteArray → Hash32) (state : State) (address : Address)
+    (keys : List Bytes32) : Except TrieError AccountProof := do
+  let accountProof ← getProof hash ⟨true, ← stateEntries hash state⟩ ⟨address.toArray⟩
+  let storage := state.storage.getD address ∅
+  let storageTrie : Trie := ⟨true, ← (storageEntries storage).mapError .rlp⟩
+  let account := state.accounts[address]?.getD EMPTY_ACCOUNT
+  let storageHash ← match state.accounts[address]? with
+    | some _ => root hash storageTrie
+    | none => pure (emptyTrieRoot hash)
+  let storageProof ← keys.mapM fun key => do
+    return (⟨key, storage.getD key 0, ← getProof hash storageTrie ⟨key.toArray⟩⟩ : StorageProof)
+  return ⟨address, account.nonce, account.balance, account.codeHash, storageHash, accountProof,
+    storageProof⟩
 
 end AccountProof
 

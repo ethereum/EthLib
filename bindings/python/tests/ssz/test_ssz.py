@@ -161,6 +161,30 @@ def test_hash_tree_root_rejects_value(ssz_type, value, fault: str) -> None:
         ssz.hash_tree_root(ssz_type, value)
 
 
+# A List[List[uint16, 4], 4], whose encoding starts with a table of four-byte offsets.
+NESTED_LIST = {"list": [{"list": [UINT16, 4]}, 4]}
+
+
+@pytest.mark.parametrize(
+    ("ssz_type", "encoded", "fault"),
+    [
+        # A first offset of 2 points inside its own four-byte entry.
+        (NESTED_LIST, "02000000", "offsetBelowTable 2"),
+        # A first offset of 6 is no whole number of four-byte entries.
+        (NESTED_LIST, "0600000000000000", "offsetUnaligned 6"),
+        # A first offset of 12 lies past the 8 bytes of the encoding.
+        (NESTED_LIST, "0c00000000000000", "offsetPastScope 12 8"),
+        # The second body would start at 4, before the first one at 8.
+        (NESTED_LIST, "0800000004000000", "offsetUnordered 8 4"),
+        # The byte 0x09 of a Bitvector[3] sets bit 3, above the three declared bits.
+        ({"bitvector": 3}, "09", "paddingBits 9"),
+    ],
+)
+def test_deserialize_rejects_input(ssz_type, encoded: str, fault: str) -> None:
+    with raises(SszError, "input rejected: EthLib.Serialization.Ssz.Err." + fault):
+        ssz.deserialize(ssz_type, bytes.fromhex(encoded))
+
+
 def test_hash_tree_root_rejects_type() -> None:
     # The root checks the type before it reads the value.
     with raises(SszError, "type rejected: EthLib.Serialization.Ssz.Err.uintWidth 3"):

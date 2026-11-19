@@ -108,9 +108,9 @@ theorem layerRoot_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
           some <$> SphincsSecurity.Concrete.treeFold P lay tree leaf
             (SphincsSecurity.Concrete.signaturePath sig lay) (SphincsSecurity.layerHeight lay)
             value) := by
-  have hclimb := climb_queryH (m := m) P lay (SphincsSecurity.Concrete.treeIndexAt index lay)
+  have hclimb := treeFold_queryH (m := m) P lay (SphincsSecurity.Concrete.treeIndexAt index lay)
     (SphincsSecurity.Concrete.leafIndexAt index lay)
-    (SphincsSecurity.Concrete.signaturePath sig lay)
+    (SphincsSecurity.Concrete.signaturePath sig lay) (SphincsSecurity.layerHeight lay)
   unfold layerRoot
   rw [ofIndex_eq]
   simp only [ofLayerSignature]
@@ -118,11 +118,8 @@ theorem layerRoot_queryH (P : SphincsSecurity.PublicParameter) (index : SphincsS
   refine bind_congr fun r => ?_
   rcases r with _ | value
   · simp
-  · have h := hclimb value (SphincsSecurity.layerHeight lay) 0
-    simp only [Nat.zero_add, SphincsSecurity.Concrete.treeFold, pure_bind, pow_zero,
-      Nat.div_one] at h
-    simp only [Option.map_some, fold, keyOf]
-    rw [toList_path_ofLayerSignature, ← h]
+  · simp only [Option.map_some, fold, keyOf]
+    rw [toList_path_ofLayerSignature, ← hclimb value]
     simp
 
 /-- EthLib's verifier is the model's, on the translated key, message and signature. -/

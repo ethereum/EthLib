@@ -20,7 +20,7 @@ So proofs can run the same code on another base field with the same operations.
 
 namespace EthLib.Cryptography.Bls
 
-/-- An element of the quadratic extension of `F`, written `c0 + c1 · i` with `i² = −1`.
+/-- An element of the quadratic extension of `F`, written `c0 + c1 · i` with `i^2 = −1`.
 
 The base field is `Fp` unless stated, so `Fp2` alone is the extension of BLS12-381. -/
 structure Fp2 (F : Type := Fp) where
@@ -61,7 +61,7 @@ instance : Neg (Fp2 F) := ⟨neg⟩
 /-- Frobenius (complex conjugation): `c0 + c1·i ↦ c0 − c1·i`. -/
 @[inline] def conjugate (a : Fp2 F) : Fp2 F := ⟨a.c0, -a.c1⟩
 
-/-- Multiplicative inverse: `(c0 + c1·i)⁻¹ = (c0 − c1·i) / (c0² + c1²)`. -/
+/-- Multiplicative inverse: `(c0 + c1·i)⁻¹ = (c0 − c1·i) / (c0^2 + c1^2)`. -/
 def inverse (a : Fp2 F) : Fp2 F :=
   let norm := a.c0 * a.c0 + a.c1 * a.c1   -- in the base field
   let invN := BaseField.inverse norm

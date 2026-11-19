@@ -24,7 +24,7 @@ A number outside the width names no value, so it is refused rather than wrapped.
 -/
 def ofUint {α : Type} (width : Nat) (make : Nat → α) : Value → Except Err α
   | .uint n =>
-    if n < 2 ^ (8 * width) then .ok (make n) else .error (.uintRange (2 ^ (8 * width)) n)
+    if uintFits width n then .ok (make n) else .error (.uintRange (2 ^ (8 * width)) n)
   | _ => .error .typeMismatch
 
 /--

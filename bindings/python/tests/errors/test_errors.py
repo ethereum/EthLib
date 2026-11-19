@@ -1,5 +1,9 @@
 """The exceptions of the bindings carry the code and the message of the Lean error."""
 
+import copy
+import pickle
+from collections.abc import Callable
+
 import pytest
 
 from ethlib import consensus, errors
@@ -53,8 +57,9 @@ def test_precompile_error_names_the_precompile() -> None:
     with raises(
         errors.PrecompileError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas 500 0)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.outOfGas "
+            "(cost := 500) (gas := 0))"
         ),
     ) as info:
         run("fusaka", 0x05, data, 0)
@@ -73,7 +78,7 @@ def test_state_error_code() -> None:
     # The RLP list of one account, given twice.
     # The account has a 20-byte address, nonce 0, balance 0, no code and no storage.
     account = bytes([0xD9, 0x94]) + bytes(20) + bytes([0x80, 0x80, 0x80, 0xC0])
-    with raises(StateError, "an address is given twice") as info:
+    with raises(StateError, f"address 0x{bytes(20).hex()} is given twice") as info:
         state_root(bytes([0xF4]) + account + account)
     # The code of an address given twice.
     assert info.value.code == 4
@@ -104,23 +109,31 @@ def test_concat_kdf_error_code() -> None:
             0x01,
             1,
             (
-                "ecrecover\n  "
-                "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas 3000 0)"
+                "ecrecover "
+                "(EthLib.Execution.Evm.Precompiles.Ecrecover.EcrecoverError.outOfGas "
+                "(cost := 3000) (gas := 0))"
             ),
         ),
-        (0x02, 2, "sha256\n  (EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas 60 0)"),
+        (
+            0x02,
+            2,
+            "sha256 (EthLib.Execution.Evm.Precompiles.Sha256.Sha256Error.outOfGas "
+            "(cost := 60) (gas := 0))",
+        ),
         (
             0x03,
             3,
             (
-                "ripemd160\n  "
-                "(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas 600 0)"
+                "ripemd160 "
+                "(EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error.outOfGas "
+                "(cost := 600) (gas := 0))"
             ),
         ),
         (
             0x04,
             4,
-            "identity\n  (EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas 15 0)",
+            "identity (EthLib.Execution.Evm.Precompiles.Identity.IdentityError.outOfGas "
+            "(cost := 15) (gas := 0))",
         ),
     ],
 )
@@ -139,9 +152,9 @@ def test_modexp_length_too_large() -> None:
     with raises(
         errors.PrecompileError,
         (
-            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp\n  "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge\n    "
-            "(EthLib.Execution.Evm.Precompiles.Modexp.LengthField.base)\n    1025)"
+            "EthLib.Execution.Evm.Precompiles.PrecompileError.modexp "
+            "(EthLib.Execution.Evm.Precompiles.Modexp.ModexpError.lengthTooLarge "
+            "(field := EthLib.Execution.Evm.Precompiles.Modexp.LengthField.base) (length := 1025))"
         ),
     ) as info:
         run("fusaka", 0x05, data, 10**6)
@@ -159,7 +172,11 @@ def test_enr_error_code() -> None:
 
 def test_reqresp_error_code() -> None:
     # A lone byte 0xff starts a varint and never ends it.
-    with raises(reqresp.ReqRespError, "length prefix is not a valid varint") as info:
+    with raises(
+        reqresp.ReqRespError,
+        "length prefix is not a valid varint: "
+        "EthLib.Networking.Encoding.Varint.VarintError.unterminated",
+    ) as info:
         reqresp.decode_payload(0, 100, b"\xff")
     # The code of a bad varint prefix.
     assert info.value.code == 1
@@ -197,7 +214,7 @@ def test_snappy_error_ranges() -> None:
     assert 1 <= info.value.code <= 8
     with raises(
         snappy.SnappyError,
-        "stream rejected: EthLib.Networking.Snappy.FrameError.missingStreamIdentifier",
+        "stream rejected: EthLib.Networking.Snappy.FrameError.missingStreamIdentifier (some 0)",
     ) as info:
         snappy.decode_frames(b"\x00")
     assert 101 <= info.value.code <= 109
@@ -266,3 +283,63 @@ def test_classes_keep_the_old_bases(cls: type, bases: tuple[type, ...]) -> None:
     assert issubclass(cls, errors.EthLibError)
     for base in bases:
         assert issubclass(cls, base)
+
+
+@pytest.mark.parametrize("cls", [getattr(errors, name) for name in errors.__all__])
+@pytest.mark.parametrize("clone", [copy.copy, copy.deepcopy])
+def test_errors_can_be_copied(
+    cls: type[errors.EthLibError],
+    clone: Callable[[errors.EthLibError], errors.EthLibError],
+) -> None:
+    error = cls(7, "bad step")
+    error.__dict__["details"] = ["step 3"]
+    restored = clone(error)
+    assert restored is not error
+    assert type(restored) is cls
+    assert (restored.code, restored.message) == (7, "bad step")
+    assert restored.args == ("bad step",)
+    assert str(restored) == "bad step"
+    assert restored.__dict__ == error.__dict__
+    assert (restored.__dict__["details"] is error.__dict__["details"]) == (clone is copy.copy)
+
+
+@pytest.mark.parametrize("cls", [getattr(errors, name) for name in errors.__all__])
+@pytest.mark.parametrize("protocol", range(pickle.HIGHEST_PROTOCOL + 1))
+def test_errors_can_be_pickled(cls: type[errors.EthLibError], protocol: int) -> None:
+    error = cls(7, "bad step")
+    error.__dict__["details"] = ["step 3"]
+    restored = pickle.loads(pickle.dumps(error, protocol=protocol))
+    assert restored is not error
+    assert type(restored) is cls
+    assert (restored.code, restored.message) == (7, "bad step")
+    assert restored.args == ("bad step",)
+    assert str(restored) == "bad step"
+    assert restored.__dict__ == error.__dict__
+    assert restored.__dict__["details"] is not error.__dict__["details"]
+
+
+def _subclasses(cls: type[errors.EthLibError]) -> set[type[errors.EthLibError]]:
+    return {cls}.union(*(_subclasses(sub) for sub in cls.__subclasses__()))
+
+
+def test_every_error_class_is_exported() -> None:
+    # The copy and pickle tests take their classes from the exports, so each class must be there.
+    defined = {cls for cls in _subclasses(errors.EthLibError) if cls.__module__ == errors.__name__}
+    assert defined == {getattr(errors, name) for name in errors.__all__}
+
+
+class _MessageOnly(errors.RlpError):
+    def __init__(self, message: str) -> None:
+        super().__init__(42, message)
+
+
+@pytest.mark.parametrize(
+    "clone",
+    [copy.copy, copy.deepcopy, lambda error: pickle.loads(pickle.dumps(error))],
+)
+def test_subclass_with_another_constructor_can_be_copied(
+    clone: Callable[[errors.EthLibError], errors.EthLibError],
+) -> None:
+    restored = clone(_MessageOnly("boom"))
+    assert type(restored) is _MessageOnly
+    assert (restored.code, restored.message, restored.args) == (42, "boom", ("boom",))

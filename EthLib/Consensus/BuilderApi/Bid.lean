@@ -97,12 +97,16 @@ def getBid (payload : ExecutionPayload preset fork) (value : U256) (pubkey : BLS
 
 /-- Why a proposer refuses a bid. -/
 inductive BidError where
-  /-- The parent hash of the header is not the latest block hash of the state. -/
-  | wrongParentHash
-  /-- The fee recipient of the header is not the one the proposer registered. -/
-  | wrongFeeRecipient
-  /-- The signature does not verify. -/
-  | badSignature
+  /-- The parent hash of the header is not the latest block hash of the state.
+
+  The error gives the latest block hash, then the parent hash of the header. -/
+  | wrongParentHash (expected actual : Hash32)
+  /-- The fee recipient of the header is not the one the proposer registered.
+
+  The error gives the registered fee recipient, then that of the header. -/
+  | wrongFeeRecipient (expected actual : ExecutionAddress)
+  /-- The signature does not verify against the builder key that the error gives. -/
+  | badSignature (pubkey : BLSPubkey)
   /-- The signing root cannot be computed. -/
   | root (fault : Err)
   deriving DecidableEq, Repr
@@ -121,11 +125,12 @@ def processBid (config : Config) (checks : SignatureChecks) (state : BeaconState
     (feeRecipient : ExecutionAddress) : Except BidError Unit := do
   let header := signed.message.header
   unless header.parentHash = (state.latestExecutionPayloadHeader range).blockHash do
-    throw .wrongParentHash
-  unless header.feeRecipient = feeRecipient do throw .wrongFeeRecipient
+    throw (.wrongParentHash (state.latestExecutionPayloadHeader range).blockHash header.parentHash)
+  unless header.feeRecipient = feeRecipient do
+    throw (.wrongFeeRecipient feeRecipient header.feeRecipient)
   match verifyBuilderBidSignature config checks signed with
   | .error fault => throw (.root fault)
-  | .ok false => throw .badSignature
+  | .ok false => throw (.badSignature signed.message.pubkey)
   | .ok true => pure ()
 
 end EthLib.Consensus.BuilderApi

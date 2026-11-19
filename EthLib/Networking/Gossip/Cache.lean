@@ -37,6 +37,14 @@ namespace EthLib.Networking.Gossip
 /-- The ID of a message on the consensus layer: 20 bytes. -/
 abbrev MessageId := Vector UInt8 20
 
+/-- The bytes of a message ID, as the IHAVE and IWANT messages carry them. -/
+def MessageId.toBytes (id : MessageId) : ByteArray :=
+  ⟨id.toArray⟩
+
+/-- The message ID of some bytes, if there are exactly 20 of them. -/
+def MessageId.ofBytes? (bytes : ByteArray) : Option MessageId :=
+  if h : bytes.size = 20 then some ⟨bytes.data, h⟩ else none
+
 /-- The message cache: its history windows, the newest first, each with its messages and IDs. -/
 structure MessageCache where
   /-- The windows, the newest first; each lists its messages, the newest first. -/

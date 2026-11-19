@@ -115,7 +115,7 @@ def is_eligible_for_bid(
     parent_hash: bytes,
     pubkey: bytes,
 ) -> bool:
-    """Whether a builder serves a request for a bid on its state at the slot, or TransitionError."""
+    """Whether a builder serves a request for a bid, given its signed registrations."""
     return _native.consensus_is_eligible_for_bid(
         name, fork, state, registry, slot, parent_hash, pubkey
     )
@@ -186,6 +186,103 @@ def verify_builder_request_auth_signature(
     return _native.consensus_verify_builder_request_auth_signature(name, fork, config, pubkey, data)
 
 
+def builder_request_auth_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    path_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request for a bid, in order."""
+    return _native.consensus_builder_request_auth_failures(
+        name, fork, config, agreed, path_slot, pubkey, version_header, data
+    )
+
+
+def builder_preferences_failures(
+    name: str,
+    fork: str,
+    agreed: bytes,
+    current_slot: int,
+    pubkey: bytes,
+    version_header: str | None,
+    data: bytes,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> list[str]:
+    """The names of the checks that fail on a Gloas request that submits preferences, in order."""
+    return _native.consensus_builder_preferences_failures(
+        name, fork, config, agreed, current_slot, pubkey, version_header, data
+    )
+
+
+def default_auth_data(url: str) -> bytes:
+    """From Gloas: a builder's default auth data, its URL's host lowercased, IPv6 compressed."""
+    return _native.consensus_default_auth_data(url)
+
+
+def relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from an SSZ block submission, with the key."""
+    return _native.consensus_relay_submission_bid(name, fork, data, pubkey)
+
+
+def relay_validators(
+    name: str, fork: str, state: bytes, registry: list[bytes]
+) -> list[dict[str, Any]]:
+    """At Fulu only: the JSON entries of the validators that a relay lists, from SSZ bytes."""
+    return _native.consensus_relay_validators(name, fork, state, registry)
+
+
+def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_delivered_payload(document)
+
+
+def relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid of the relay data API, checked and written back as canonical JSON."""
+    return _native.consensus_relay_received_bid(document)
+
+
+def relay_delivered_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    proposer_pubkey: bytes | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of delivered payloads with these filters keeps the payload."""
+    return _native.consensus_relay_delivered_keeps(
+        document, slot, block_hash, block_number, proposer_pubkey, builder_pubkey
+    )
+
+
+def relay_received_keeps(
+    document: dict[str, Any],
+    *,
+    slot: int | None = None,
+    block_hash: bytes | None = None,
+    block_number: int | None = None,
+    builder_pubkey: bytes | None = None,
+) -> bool:
+    """Whether a query of received bids with these filters keeps the bid."""
+    return _native.consensus_relay_received_keeps(
+        document, slot, block_hash, block_number, builder_pubkey
+    )
+
+
+def relay_sort_delivered(
+    order: Literal["value", "-value"], documents: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in an order; payloads of equal value keep their order."""
+    return _native.consensus_relay_sort_delivered(order, documents)
+
+
 def builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
     """The bid's value in Gwei, with its execution payment capped, not reduced to 64 bits."""
     return _native.consensus_builder_bid_value(value, execution_payment, max_execution_payment)
@@ -204,33 +301,6 @@ def consensus_version_fork(name: str) -> str:
 def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, bytes]:
     """The Gloas root and bytes of a Fulu attestation, indexed attestation or attester slashing."""
     return _native.consensus_upgrade_operation(name, type_name, data)
-
-
-def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
-    return _native.pq_keys_ssz(type_name, data)
-
-
-def pq_keys_possession_signing_root(
-    genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, name: str = "mainnet"
-) -> bytes:
-    """The root that an EIP-8450 proof of possession signs."""
-    return _native.pq_keys_possession_signing_root(
-        name, genesis_validators_root, pubkey, xmss_public_key
-    )
-
-
-def pq_keys_is_valid_possession_proof(
-    genesis_validators_root: bytes,
-    pubkey: bytes,
-    xmss_public_key: bytes,
-    proof: bytes,
-    name: str = "mainnet",
-) -> bool:
-    """Whether an EIP-8450 proof of possession is valid."""
-    return _native.pq_keys_is_valid_possession_proof(
-        name, genesis_validators_root, pubkey, xmss_public_key, proof
-    )
 
 
 def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list[int]:
@@ -289,11 +359,14 @@ ResponseSidecar: TypeAlias = tuple[int, bytes, int]
 ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 # An inclusion list: its slot, its validator index and its dependent root.
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
+# A light client update: the slot of its attested header and the fork of its chunk.
+ResponseLightClientUpdate: TypeAlias = tuple[int, str]
 ResponseItems: TypeAlias = (
     Sequence[ResponseBlock]
     | Sequence[ResponseSidecar]
     | Sequence[ResponseEnvelope]
     | Sequence[ResponseInclusionList]
+    | Sequence[ResponseLightClientUpdate]
 )
 
 
@@ -307,7 +380,7 @@ def reqresp_is_valid_response(
 ) -> bool:
     """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
     # The committee counts only for inclusion lists, as the validator of each seat.
-    native_items: list[tuple[int | bytes, ...]] = list(items)
+    native_items: list[tuple[int | bytes | str, ...]] = list(items)
     return _native.consensus_reqresp_response_valid(
         name, fork, protocol, request, native_items, list(committee)
     )
@@ -747,8 +820,15 @@ def fork_choice(
     verify: bool = True,
     # `Any`, because `dict` is invariant in its values.
     config: dict[str, Any] | None = None,
-) -> list:
-    """The outcome of each step of a fork choice case, from an anchor state and block."""
+) -> list[list[dict[str, Any] | ForkChoiceError | None]]:
+    """
+    The handler outcomes of each step of a fork choice case, from an anchor state and block.
+
+    Each input gives a list of outcomes: a read as a dict, None for success, or the rejection.
+    An admitted block gives its outcome, then those of its attestations and attester slashings.
+    A rejected block gives only its rejection, and its carried operations do not run.
+    Rejections are returned, not raised: a rejected handler changes nothing, and later handlers run.
+    """
     # A step is (kind, data), and its data is one of these:
     # - the tick in seconds
     # - the SSZ bytes of a block, an attestation, an attester slashing or a PoW block
@@ -765,7 +845,8 @@ def fork_choice(
     # From Fulu a block may come as (block, columns): the node samples those SSZ columns for it.
     # An empty list of columns means that the node cannot get them.
     # A "payload" step is (status, latest valid hash or None).
-    # It is the verdict of the execution layer on the payload of the next block.
+    # It is the verdict of the execution layer on the payload of the next block before Gloas.
+    # From Gloas it judges the payload of the next "execution_payload" step instead.
     # The status is given by its Engine API name.
     # A "fast_confirmation" step, with data None, runs the fast confirmation of the slot.
     return _native.consensus_fork_choice(
@@ -799,6 +880,688 @@ def api_resolve(
     )
 
 
+def api_spec(name: str, config: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The Beacon API spec map of a preset and the configuration of the same name."""
+    # A number is a str of decimal digits, bytes are a str of 0x and lowercase hex, a name is text.
+    # A schedule is a list of dicts of decimal strs.
+    # The values are `Any`, so that a caller indexes a schedule without narrowing it.
+    return _native.consensus_api_spec(name, config)
+
+
+def api_fork_schedule(name: str, config: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    """The Beacon API fork schedule of a configuration, Phase 0 first."""
+    return _native.consensus_api_fork_schedule(name, config)
+
+
+def api_deposit_contract(name: str, config: dict[str, Any] | None = None) -> dict[str, str]:
+    """The Beacon API deposit contract of a configuration."""
+    return _native.consensus_api_deposit_contract(name, config)
+
+
+def api_genesis(
+    name: str, fork: str, state: bytes, config: dict[str, Any] | None = None
+) -> dict[str, str]:
+    """The Beacon API genesis of a genesis state and a configuration, or ConsensusError."""
+    # The time and the root come from the state, the version from the configuration.
+    return _native.consensus_api_genesis(name, fork, state, config)
+
+
+def api_state_query(
+    name: str, fork: str, state: bytes, query: str, epoch: int | None = None
+) -> dict[str, Any]:
+    """The Beacon API response to a query that reads one field of a state, or ConsensusError."""
+    # The query is the last segment of the endpoint path, such as "finality_checkpoints".
+    # The response holds the data, and the version where the endpoint names one.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    # The values are `Any`, since the data differs by query.
+    # Only "randao" takes an epoch; an epoch on another query, or an unknown query, has code 0.
+    # A state before the fork that adds the field raises ConsensusError with code 400.
+    return _native.consensus_api_state_query(name, fork, state, query, epoch)
+
+
+def api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The Beacon API SSZ body of a query that reads one field of a state, or ConsensusError."""
+    # Only the queues, the proposer lookahead and the builder fields have an SSZ body.
+    return _native.consensus_api_state_query_ssz(name, fork, state, query)
+
+
+def api_registry_query(
+    name: str,
+    fork: str,
+    state: bytes,
+    query: str,
+    *,
+    ids: list[str] | None = None,
+    statuses: list[str] | None = None,
+    in_query: bool = False,
+) -> dict[str, Any]:
+    """The Beacon API response to a query on the registries of a state, or ConsensusError."""
+    # The query is the last segment of the endpoint path, such as "validator_balances".
+    # The query "validator" is the endpoint for one validator, and needs exactly one id.
+    # The ids and statuses are texts as the API writes them; None or an empty list means all ids.
+    # Only "validators" and "builders" take statuses.
+    # Only "validators" and "validator_balances" take in_query; more than 64 ids then raise 414.
+    # An argument that the query does not take raises ConsensusError with code 0.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_registry_query(name, fork, state, query, ids, statuses, in_query)
+
+
+def api_validator_balances_ssz(
+    name: str, fork: str, state: bytes, *, ids: list[str] | None = None, in_query: bool = False
+) -> bytes:
+    """The Beacon API SSZ body of the validator balances answer, or ConsensusError."""
+    # None or an empty list of ids means all validators.
+    # Set in_query for ids that come in a query string, where more than 64 raise code 414.
+    return _native.consensus_api_validator_balances_ssz(name, fork, state, ids, in_query)
+
+
+def api_block_query(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]:
+    """The Beacon API response to a query on a signed block, or ConsensusError."""
+    # The query is "block", "root", "attestations" or "blinded_block".
+    # From Gloas, "blinded_block" raises code 400, since such a block has no blinded form.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_block_query(name, fork, block, query)
+
+
+def api_blobs(
+    name: str,
+    fork: str,
+    block: bytes,
+    blobs: Sequence[bytes],
+    *,
+    hashes: Sequence[bytes] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API blobs of a signed block, in commitment order, or ConsensusError."""
+    # The blobs are those of the commitments of the block, one each, in order; else code 500.
+    # With hashes, only the blobs whose commitment has one of these versioned hashes remain.
+    # An empty list of hashes is a request for no blob, unlike None.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    chosen = None if hashes is None else list(hashes)
+    return _native.consensus_api_blobs(name, fork, block, list(blobs), chosen)
+
+
+def api_blobs_ssz(
+    name: str,
+    fork: str,
+    block: bytes,
+    blobs: Sequence[bytes],
+    *,
+    hashes: Sequence[bytes] | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the blobs of a signed block, or ConsensusError."""
+    chosen = None if hashes is None else list(hashes)
+    return _native.consensus_api_blobs_ssz(name, fork, block, list(blobs), chosen)
+
+
+def api_block_query_ssz(name: str, fork: str, block: bytes, query: str) -> bytes:
+    """The Beacon API SSZ body of a query on a signed block, or ConsensusError."""
+    # The query is "block" or "blinded_block"; the others have no SSZ body.
+    # From Gloas, "blinded_block" raises code 400, since such a block has no blinded form.
+    return _native.consensus_api_block_query_ssz(name, fork, block, query)
+
+
+def api_header(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    block: bytes,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API header of a signed block against a fork choice store, or ForkChoiceError."""
+    # The steps are those of `fork_choice`; the block is the SSZ of a signed block.
+    # The data holds the root, whether the block is on the chain of the head, and the header.
+    # The flags execution_optimistic and finalized are not computed, so they are absent.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_header(
+        name, fork, anchor_state, anchor_block, steps, verify, block
+    )
+
+
+def api_headers(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    headers: Sequence[bytes],
+    *,
+    slot: int | None = None,
+    parent_root: bytes | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API headers that match the filters, or ForkChoiceError."""
+    # The headers are the SSZ of the signed headers that the node holds, kept in their order.
+    # With neither filter, the slot is that of the head; with only a parent root, any slot.
+    # The store is built from the steps of a fork choice case.
+    # An API error carries its HTTP code in `.code`; a store without a head gives 500.
+    return _native.consensus_api_headers(
+        name, fork, anchor_state, anchor_block, steps, verify, list(headers), slot, parent_root
+    )
+
+
+def api_columns(
+    name: str,
+    fork: str,
+    sidecars: Sequence[bytes],
+    *,
+    indices: Sequence[int] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API data column sidecars with the requested indices, or ConsensusError."""
+    # The sidecars are the SSZ of those that the node holds for the block, kept in their order.
+    # The source allows any order; this answer keeps the order of the input.
+    # Before Fulu it raises code 400.
+    chosen = None if indices is None else list(indices)
+    return _native.consensus_api_columns(name, fork, list(sidecars), chosen)
+
+
+def api_columns_ssz(
+    name: str,
+    fork: str,
+    sidecars: Sequence[bytes],
+    *,
+    indices: Sequence[int] | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the requested data column sidecars, or ConsensusError."""
+    chosen = None if indices is None else list(indices)
+    return _native.consensus_api_columns_ssz(name, fork, list(sidecars), chosen)
+
+
+def api_payload_envelope(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    envelope: bytes,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API signed payload envelope of a block, or ForkChoiceError."""
+    # The store keeps envelopes without signatures, so the signed envelope is an input.
+    # It is answered when its message has the root of the envelope stored for the block.
+    # Otherwise, and before Gloas, it raises ForkChoiceError with code 404.
+    return _native.consensus_api_payload_envelope(
+        name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+    )
+
+
+def api_payload_envelope_ssz(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    envelope: bytes,
+    *,
+    verify: bool = True,
+) -> bytes:
+    """The Beacon API SSZ body of the signed payload envelope of a block, or ForkChoiceError."""
+    return _native.consensus_api_payload_envelope_ssz(
+        name, fork, anchor_state, anchor_block, steps, verify, root, envelope
+    )
+
+
+# A light client update that a node knows: its period, the name of its fork and its SSZ bytes.
+KnownUpdate: TypeAlias = tuple[int, str, bytes]
+
+
+def api_light_client_bootstrap(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API light client bootstrap of a block of the store, or ForkChoiceError."""
+    # The configuration replaces values of the named one for the bootstrap, not the fork choice.
+    # A block that the store lacks, or whose bootstrap cannot be built, raises code 404.
+    return _native.consensus_api_light_client_bootstrap(
+        name, fork, anchor_state, anchor_block, steps, verify, config, root
+    )
+
+
+def api_light_client_bootstrap_ssz(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    root: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    verify: bool = True,
+) -> bytes:
+    """The Beacon API SSZ body of the light client bootstrap of a block, or ForkChoiceError."""
+    return _native.consensus_api_light_client_bootstrap_ssz(
+        name, fork, anchor_state, anchor_block, steps, verify, config, root
+    )
+
+
+def api_light_client_updates(
+    name: str,
+    known: Sequence[KnownUpdate],
+    start_period: int,
+    count: int,
+    config: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """The Beacon API light client updates of a range of periods, as JSON, or ConsensusError."""
+    return _native.consensus_api_light_client_updates(
+        name, config, list(known), start_period, count
+    )
+
+
+def api_light_client_updates_ssz(
+    name: str,
+    genesis_validators_root: bytes,
+    known: Sequence[KnownUpdate],
+    start_period: int,
+    count: int,
+    config: dict[str, Any] | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the light client updates of a range, or ConsensusError."""
+    return _native.consensus_api_light_client_updates_ssz(
+        name, config, genesis_validators_root, list(known), start_period, count
+    )
+
+
+def api_light_client_decode_updates(
+    name: str, genesis_validators_root: bytes, data: bytes, config: dict[str, Any] | None = None
+) -> list[tuple[str, bytes]]:
+    """The fork name and the SSZ bytes of each update of an SSZ updates body, or ConsensusError."""
+    return _native.consensus_api_light_client_decode_updates(
+        name, config, genesis_validators_root, data
+    )
+
+
+def api_light_client_latest(
+    name: str, fork: str, kind: Literal["finality", "optimistic"], update: bytes | None
+) -> dict[str, Any]:
+    """The Beacon API latest finality or optimistic update, or ConsensusError with code 404."""
+    return _native.consensus_api_light_client_latest(name, fork, kind, update)
+
+
+def api_attestation_data(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    slot: int,
+    committee_index: int,
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API attestation data for a slot at the head of a store, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case.
+    # The committee index is read before Electra only; a request without one passes 0.
+    # An API error carries its HTTP code in `.code`.
+    # A head root among the optimistic roots raises code 503; a slot before the head, code 400.
+    return _native.consensus_api_attestation_data(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        list(optimistic_roots),
+        slot,
+        committee_index,
+    )
+
+
+def api_payload_attestation_data(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    slot: int,
+    *,
+    payload_present: bool,
+    blob_data_available: bool,
+    verify: bool = True,
+) -> dict[str, Any] | None:
+    """The Beacon API payload attestation data for a slot, None for 204, or ForkChoiceError."""
+    # None means the chain of the head has no block at the slot.
+    # An API error carries its HTTP code in `.code`.
+    # Before Gloas the request raises code 400.
+    return _native.consensus_api_payload_attestation_data(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        slot,
+        payload_present,
+        blob_data_available,
+    )
+
+
+def api_fork_choice(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API fork choice debug response of a store, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # The response has one node per block and payload status; before Gloas each node is "full".
+    # A store whose tree cannot be read raises code 500.
+    return _native.consensus_api_fork_choice(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
+def api_chain_heads(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> dict[str, Any]:
+    """The Beacon API chain heads: the leaves of the fork choice tree, or ForkChoiceError."""
+    # The store is built from the steps of a fork choice case, with its own config if it has one.
+    # Each leaf appears once by its block root; a store that cannot be read raises code 500.
+    return _native.consensus_api_chain_heads(
+        name, fork, anchor_state, anchor_block, steps, verify, list(optimistic_roots), config
+    )
+
+
+def api_chain_events(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    first: int,
+    genesis_root: bytes,
+    optimistic_roots: Sequence[bytes] = (),
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> list[tuple[str, str]]:
+    """The Beacon API events of the fork choice between two stores of a case, or ForkChoiceError."""
+    # The earlier store runs only the first `first` steps, the later one every step.
+    # Each event is the name of its topic and the text of its JSON data.
+    return _native.consensus_api_chain_events(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        verify,
+        first,
+        genesis_root,
+        list(optimistic_roots),
+        config,
+    )
+
+
+def api_fast_confirmation_event(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    *,
+    config: dict[str, Any] | None = None,
+    verify: bool = True,
+) -> tuple[str, str]:
+    """The Beacon API event of the last fast confirmation run of a case, or ForkChoiceError."""
+    # The slot of the clock is that of the store at that run.
+    # A case with no run of the rule that passed raises code 0.
+    return _native.consensus_api_fast_confirmation_event(
+        name, fork, anchor_state, anchor_block, steps, verify, config
+    )
+
+
+def api_aggregate_attestation(
+    name: str,
+    fork: str,
+    state: bytes,
+    data_root: bytes,
+    slot: int,
+    committee_index: int,
+    *,
+    attestations: Sequence[bytes] = (),
+    singles: Sequence[bytes] = (),
+    optimistic_roots: Sequence[bytes] = (),
+) -> dict[str, Any]:
+    """The Beacon API aggregate of the collected attestations, or ConsensusError."""
+    # Attestations count before Electra and single attestations from Electra, all as SSZ.
+    # No match raises code 404; a block root of the data among the optimistic roots, code 503.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_aggregate_attestation(
+        name,
+        fork,
+        state,
+        list(attestations),
+        list(singles),
+        list(optimistic_roots),
+        data_root,
+        slot,
+        committee_index,
+    )
+
+
+def api_sync_committee_contribution(
+    name: str,
+    fork: str,
+    state: bytes,
+    slot: int,
+    subcommittee_index: int,
+    root: bytes,
+    *,
+    messages: Sequence[bytes] = (),
+    optimistic_roots: Sequence[bytes] = (),
+) -> dict[str, Any]:
+    """The Beacon API sync committee contribution of the collected messages, or ConsensusError."""
+    # The messages are SSZ sync committee messages; the slot must be that of the state.
+    # No match raises code 404; a root among the optimistic roots, code 503.
+    # An API error carries its HTTP code in `.code`.
+    return _native.consensus_api_sync_committee_contribution(
+        name, fork, state, list(messages), list(optimistic_roots), slot, subcommittee_index, root
+    )
+
+
+def api_attestation_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    epoch: int,
+    *,
+    ids: Sequence[str] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API attestation rewards of an epoch, read from a state, or ConsensusError."""
+    # The state answers for its previous epoch; another epoch, or the first one, raises code 404.
+    # The identifiers are indices or public keys as the API writes them; none names every validator.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_attestation_rewards(name, fork, state, config, epoch, list(ids))
+
+
+def api_sync_committee_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    aggregate: bytes,
+    *,
+    ids: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The Beacon API sync committee rewards of a block, or ConsensusError."""
+    # The state is the one the sync aggregate step reads; a state before Altair raises code 400.
+    # The identifiers are indices or public keys as the API writes them; none names every member.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_sync_committee_rewards(name, fork, state, aggregate, list(ids))
+
+
+def api_block_rewards(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API rewards of the proposer of a signed block, or ConsensusError."""
+    # The state is the one at the slot of the block, before it; a failure raises code 500.
+    # The flags execution_optimistic and finalized come from the store and are absent.
+    return _native.consensus_api_block_rewards(name, fork, state, block, config)
+
+
+def api_consensus_block_value(
+    name: str,
+    fork: str,
+    state: bytes,
+    block: bytes,
+    *,
+    config: dict[str, Any] | None = None,
+) -> int:
+    """The consensus value of a signed block, in Wei, or TransitionError."""
+    # The state is the one at the slot of the block, before it.
+    return _native.consensus_api_consensus_block_value(name, fork, state, block, config)
+
+
+def api_prefer_local_v3(
+    exec_node_payload_value: int, builder_payload_value: int, builder_boost_factor: int
+) -> bool:
+    """Whether the v3 block production rule returns the local payload rather than the builder's."""
+    # Both values are in Wei, and the factor is a 64-bit percentage of the builder's value.
+    return _native.consensus_api_prefer_local_v3(
+        exec_node_payload_value, builder_payload_value, builder_boost_factor
+    )
+
+
+def api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The Gwei value of a candidate bid, its execution payment capped, saturated at 2**64 - 1."""
+    # A bid has the keys signer, value, execution_payment and terms.
+    # Its terms have the keys builder_pubkeys, max_execution_payment, min_bid, builder_boost_factor.
+    return _native.consensus_api_capped_bid_value(bid)
+
+
+def api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a candidate bid accept its signer and its value."""
+    return _native.consensus_api_bid_accepted(bid)
+
+
+def api_select_payload(local_value: int, bids: Sequence[dict[str, Any]]) -> dict[str, Any] | None:
+    """The bid that the v4 block production rule commits to, or None for the local payload."""
+    # The local value is in Wei, as the execution layer gives it; bid values are in Gwei.
+    return _native.consensus_api_select_payload(local_value, list(bids))
+
+
+def api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """The gossip and entry terms of an SSZ builder configuration for a slot, or SszError."""
+    # An entry with an empty URL or authentication data, or another slot, gives no terms.
+    # Of two entries with one URL and one authentication data, only the first gives terms.
+    return _native.consensus_api_builder_config_terms(data, slot)
+
+
+def api_duties(
+    name: str,
+    fork: str,
+    state: bytes,
+    kind: str,
+    epoch: int,
+    genesis_root: bytes,
+    *,
+    indices: Sequence[int] = (),
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The Beacon API duties of an epoch, computed from a state, or ConsensusError."""
+    # The kind is "attester", "proposer", "proposer_v2", "sync" or "ptc".
+    # The proposer duties read no indices; the sync answer has no dependent root.
+    # An epoch the state cannot answer for, or an index of no validator, raises code 400.
+    # So does an empty list of indices for the attester, sync and PTC duties.
+    # The first proposer version answers for the current epoch of the state only.
+    # The flag execution_optimistic comes from the store and is absent.
+    return _native.consensus_api_duties(
+        name, fork, state, config, kind, epoch, list(indices), genesis_root
+    )
+
+
+def api_committees(
+    name: str,
+    fork: str,
+    state: bytes,
+    *,
+    epoch: int | None = None,
+    index: int | None = None,
+    slot: int | None = None,
+) -> dict[str, Any]:
+    """The Beacon API beacon committees of an epoch of a state, or ConsensusError."""
+    # The epoch defaults to that of the state; an epoch after the next one raises code 400.
+    # A slot outside the epoch raises code 400; index and slot filter the committees.
+    return _native.consensus_api_committees(name, fork, state, epoch, index, slot)
+
+
+def api_sync_committees(
+    name: str, fork: str, state: bytes, *, epoch: int | None = None
+) -> dict[str, Any]:
+    """The Beacon API sync committee of a state by validator indices, or ConsensusError."""
+    # The epoch defaults to that of the state, and must be in its period or the next one.
+    # A state before Altair, or an epoch in another period, raises code 400.
+    return _native.consensus_api_sync_committees(name, fork, state, epoch)
+
+
+def api_ptc(
+    name: str,
+    fork: str,
+    state: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    slot: int | None = None,
+) -> dict[str, Any]:
+    """The Beacon API payload timeliness committee of a slot of a state, or ConsensusError."""
+    # The slot defaults to that of the state.
+    # A state before Gloas, or a slot outside the window of the state, raises code 400.
+    return _native.consensus_api_ptc(name, fork, state, config, slot)
+
+
+def api_ptc_ssz(
+    name: str,
+    fork: str,
+    state: bytes,
+    config: dict[str, Any] | None = None,
+    *,
+    slot: int | None = None,
+) -> bytes:
+    """The Beacon API SSZ body of the payload timeliness committee of a slot, or ConsensusError."""
+    return _native.consensus_api_ptc_ssz(name, fork, state, config, slot)
+
+
+def api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
+    """The Beacon API status of a validator and the name of its group, or ConsensusError."""
+    # The validator is the JSON of the API, as api_json writes a Validator.
+    # A Validator has the same fields at every fork, so the call takes no name and no fork.
+    return _native.consensus_api_validator_status(validator, balance, epoch)
+
+
+def api_builder_status(name: str, fork: str, state: bytes, index: int) -> str:
+    """The Beacon API status of the builder at an index of a state, or ConsensusError."""
+    return _native.consensus_api_builder_status(name, fork, state, index)
+
+
 def gossip_validation(
     name: str,
     fork: str,
@@ -830,6 +1593,59 @@ def gossip_validation(
         config,
         verify,
     )
+
+
+# A request to a Beacon API endpoint; a publish request may add its level of checks.
+# The levels are "gossip", "consensus" and "consensus_and_equivocation".
+PostRequest: TypeAlias = (
+    tuple[int, str, Sequence[bytes]] | tuple[int, str, Sequence[bytes], str | None]
+)
+
+
+def api_post(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    requests: Sequence[PostRequest],
+    verify: bool = True,
+    config: dict[str, Any] | None = None,
+    blocks: Sequence[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]]
+    | None = None,
+    finalized: tuple[int, bytes] | None = None,
+) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
+    """The status, the failed items and the events of each request to a pool or publish endpoint."""
+    # The store is built as for gossip_validation, from the anchor and the later blocks.
+    # A request is (time in milliseconds, endpoint name such as "attestations", SSZ items).
+    # A request to "blocks" or "execution_payload_envelopes" may add its level; None is gossip.
+    # The requests share the keys of the messages seen, which each accepted item extends.
+    # They also share the store, which each integrated block or envelope extends.
+    # A pool answer is 200, or 400 with the failed items and the reasons of gossip.
+    # A publish answer is 200 if integrated, 202 if broadcast only, 400 if refused at position 0.
+    # Each event is the name of its event stream topic and the text of its JSON data.
+    return _native.consensus_api_post(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        list(blocks or []),
+        finalized,
+        [
+            (request[0], request[1], list(request[2]))
+            if len(request) == 3
+            else (request[0], request[1], list(request[2]), request[3])
+            for request in requests
+        ],
+        config,
+        verify,
+    )
+
+
+def api_gossip_event(name: str, fork: str, topic: str, data: bytes) -> tuple[str, str] | None:
+    """The event topic and the text of the JSON data of an object that gossip accepts, or None."""
+    # The topic is a gossip topic without its subnet, such as "beacon_attestation".
+    # No gossip validation runs; a gossip topic without an event gives None.
+    return _native.consensus_api_gossip_event(name, fork, topic, data)
 
 
 def initialize_genesis(
@@ -1403,6 +2219,55 @@ __all__ = [
     "api_ssz",
     "builder_api_json",
     "builder_api_ssz",
+    "api_spec",
+    "api_fork_schedule",
+    "api_deposit_contract",
+    "api_genesis",
+    "api_state_query",
+    "api_state_query_ssz",
+    "api_registry_query",
+    "api_validator_balances_ssz",
+    "api_block_query",
+    "api_blobs",
+    "api_blobs_ssz",
+    "api_block_query_ssz",
+    "api_header",
+    "api_headers",
+    "api_columns",
+    "api_columns_ssz",
+    "api_payload_envelope",
+    "api_payload_envelope_ssz",
+    "api_light_client_bootstrap",
+    "api_light_client_bootstrap_ssz",
+    "api_light_client_decode_updates",
+    "api_light_client_latest",
+    "api_light_client_updates",
+    "api_light_client_updates_ssz",
+    "KnownUpdate",
+    "api_attestation_data",
+    "api_payload_attestation_data",
+    "api_fork_choice",
+    "api_chain_heads",
+    "api_chain_events",
+    "api_fast_confirmation_event",
+    "api_aggregate_attestation",
+    "api_sync_committee_contribution",
+    "api_attestation_rewards",
+    "api_sync_committee_rewards",
+    "api_block_rewards",
+    "api_consensus_block_value",
+    "api_prefer_local_v3",
+    "api_capped_bid_value",
+    "api_bid_accepted",
+    "api_select_payload",
+    "api_builder_config_terms",
+    "api_duties",
+    "api_committees",
+    "api_sync_committees",
+    "api_ptc",
+    "api_ptc_ssz",
+    "api_validator_status",
+    "api_builder_status",
     "is_valid_builder_signature",
     "process_registration",
     "is_eligible_for_bid",
@@ -1411,13 +2276,20 @@ __all__ = [
     "validate_bid",
     "unblind_signed_blinded_block",
     "verify_builder_request_auth_signature",
+    "builder_request_auth_failures",
+    "builder_preferences_failures",
+    "default_auth_data",
+    "relay_submission_bid",
+    "relay_validators",
+    "relay_delivered_payload",
+    "relay_received_bid",
+    "relay_delivered_keeps",
+    "relay_received_keeps",
+    "relay_sort_delivered",
     "builder_bid_value",
     "consensus_version",
     "consensus_version_fork",
     "upgrade_operation",
-    "pq_keys_ssz",
-    "pq_keys_possession_signing_root",
-    "pq_keys_is_valid_possession_proof",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
     "reqresp_protocol_ids",
@@ -1432,6 +2304,7 @@ __all__ = [
     "ResponseSidecar",
     "ResponseEnvelope",
     "ResponseInclusionList",
+    "ResponseLightClientUpdate",
     "ResponseItems",
     "reqresp_is_valid_response",
     "compute_subnet_for_attestation",
@@ -1465,6 +2338,9 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "fork_choice",
+    "api_post",
+    "api_gossip_event",
+    "PostRequest",
     "gossip_validation",
     "light_client_sync",
     "SyncStep",

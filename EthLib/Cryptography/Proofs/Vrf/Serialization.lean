@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Vrf.Serialization
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Cryptography.Proofs.Vrf.Verify
 
 /-!
@@ -38,7 +39,8 @@ private theorem readBytes_pack {m n : Nat} (s : Vector UInt8 m) (p : Vector (Vec
     readBytes (packBytes s ++ packBytes p.flatten) 0 m h = s := by
   apply Vector.ext
   intro k hk
-  simp only [readBytes, Vector.getElem_ofFn, Nat.zero_add, ByteArray.data_append, packBytes]
+  simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, Nat.zero_add, ByteArray.data_append,
+    packBytes]
   rw [Array.getElem_append_left (by simpa using hk)]
   simp
 
@@ -49,7 +51,7 @@ private theorem readBytes_pack_flatten {m n : Nat} (s : Vector UInt8 m)
     readBytes (packBytes s ++ packBytes p.flatten) (m + m * l) m h = p[l] := by
   apply Vector.ext
   intro k hk
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append, packBytes]
+  simp only [Base.readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append, packBytes]
   rw [Array.getElem_append_right (by simp; omega)]
   -- Position `m + m l + k` is byte `k` of item `l`.
   have hq : (m + m * l + k - m) / m = l := by
@@ -95,9 +97,9 @@ private theorem pack_readBytes {m n : Nat} (b : ByteArray) (hb : b.size = m + m 
     · intro k hk _
       by_cases hkm : k < m
       · rw [Array.getElem_append_left (by simpa using hkm)]
-        simp [readBytes]
+        simp [Base.readBytes_eq_ofFn_data]
       · rw [Array.getElem_append_right (by simp; omega)]
-        simp [readBytes]
+        simp [Base.readBytes_eq_ofFn_data]
         congr 1
         -- Byte `k - m` of the items is byte `(k - m) % m` of item `(k - m) / m`.
         have := Nat.div_add_mod (k - m) m
@@ -151,7 +153,7 @@ theorem verifyBytes_encode (root : Digest) (i : UInt32) (o : Opening) :
   have hroot : readBytes (packBytes root) 0 VRF_HASH_SIZE (by simp) = root := by
     apply Vector.ext
     intro k hk
-    simp [readBytes, packBytes]
+    simp [Base.readBytes_eq_ofFn_data, packBytes]
   have hi : i.toNat < 2 ^ VRF_TREE_HEIGHT := i.toNat_lt
   simp [verifyBytes, hi, hroot]
 

@@ -55,8 +55,8 @@ inductive Discv4Error where
   | tooLarge (size : Nat)
   /-- The packet has `size` bytes, too few for the hash, the signature and the packet type. -/
   | tooShort (size : Nat)
-  /-- The hash is not the Keccak-256 hash of the bytes after it. -/
-  | hashMismatch
+  /-- The stored hash `stored` is not `computed`, the Keccak-256 hash of the bytes after it. -/
+  | hashMismatch (stored computed : ByteArray)
   /-- No public key is recovered from the signature. -/
   | invalidSignature
   /-- Signing failed, which happens only for the private key zero. -/
@@ -74,7 +74,7 @@ The code ignores the arguments of the constructor, which the message carries.
 def Discv4Error.code : Discv4Error → UInt32
   | .tooLarge _ => 1
   | .tooShort _ => 2
-  | .hashMismatch => 3
+  | .hashMismatch .. => 3
   | .invalidSignature => 4
   | .secp256k1 _ => 5
   | .unknownType _ => 6
@@ -281,7 +281,7 @@ def decode (packet : ByteArray) : Except Discv4Error Received :=
     | type :: data =>
       if bytes.take 32 = (keccak (bytes.drop 32)).toList then
         readBody (keccak (bytes.drop 32)) (signatureOf bytes) type data
-      else .error .hashMismatch
+      else .error (.hashMismatch ⟨(bytes.take 32).toArray⟩ ⟨(keccak (bytes.drop 32)).toArray⟩)
 
 /--
 Whether the record of an ENRResponse is signed by the sender of the packet.

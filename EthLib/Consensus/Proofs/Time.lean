@@ -8,9 +8,13 @@ public import EthLib.Consensus.Time
 
 The first slot of an epoch lies in that epoch, and every slot lies after its epoch's first slot.
 
+A later slot is in the same epoch or a later one.
+
 The slots of an epoch exist exactly when its first slot plus its length fits in 64 bits.
 
 The slot at the start time of a slot is that slot, in milliseconds and in seconds.
+
+A genesis offset below one slot duration keeps the slot read at every slot start.
 
 Each conversion fails exactly when its result leaves the 64-bit range.
 
@@ -28,6 +32,32 @@ namespace EthLib.Consensus
 open Base Uint64
 
 variable {config : Config} {preset : Preset}
+
+/-- A slot no later than a representable boundary has a representable start time. -/
+theorem exists_timeAtSlotMs_of_le {genesisTimeMs : UInt64} {slot last : Slot}
+    {lastTime : UInt64}
+    (le : slot ≤ last)
+    (lastOk : computeTimeAtSlotMs config genesisTimeMs last = .ok lastTime) :
+    ∃ start, computeTimeAtSlotMs config genesisTimeMs slot = .ok start ∧
+      start.toNat = genesisTimeMs.toNat + slot.toNat * config.SLOT_DURATION_MS.toNat ∧
+      start ≤ lastTime := by
+  unfold computeTimeAtSlotMs at lastOk ⊢
+  simp only [bind_ok_iff] at lastOk
+  obtain ⟨offset, multiplied, added⟩ := lastOk
+  obtain ⟨bound, offsetEq⟩ := mulChecked_ok_iff.mp multiplied
+  obtain ⟨timeBound, timeEq⟩ := addChecked_ok_iff.mp added
+  have productLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
+    (UInt64.le_iff_toNat_le.mp le)
+  have productBound : slot.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
+  have productEq := mulChecked_of_lt productBound
+  have productNat := (mulChecked_ok_iff.mp productEq).2
+  have sumBound : genesisTimeMs.toNat +
+      (slot * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by omega
+  have sumEq := addChecked_of_lt sumBound
+  have sumNat := (addChecked_ok_iff.mp sumEq).2
+  refine ⟨genesisTimeMs + slot * config.SLOT_DURATION_MS,
+    ?_, by omega, UInt64.le_iff_toNat_le.mpr (by omega)⟩
+  simp only [productEq, bind, Except.bind, sumEq]
 
 /-- The first slot of an epoch exists exactly when it fits in 64 bits. -/
 theorem computeStartSlotAtEpoch_ok_iff {epoch : Epoch} {slot : Slot} :
@@ -57,6 +87,22 @@ theorem computeStartSlotAtEpoch_computeEpochAtSlot (slot : Slot) :
   rw [UInt64.toNat_mul, Nat.mod_eq_of_lt fits]
   rfl
 
+/-- A slot with zero distance from its epoch's first slot equals that first slot. -/
+theorem epoch_floor_eq_of_sub_eq_zero {slot : Slot}
+    (boundary : slot - slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH = 0) :
+    slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH = slot := by
+  have floor := (computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot)).2
+  have le : (slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat ≤ slot.toNat := by
+    rw [floor, computeEpochAtSlot, UInt64.toNat_div]
+    exact Nat.div_mul_le_self _ _
+  have zero := congrArg UInt64.toNat boundary
+  simp only [UInt64.toNat_sub, UInt64.toNat_zero] at zero
+  have upper := slot.toNat_lt
+  have lower := (slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH).toNat_lt
+  apply UInt64.toNat_inj.mp
+  omega
+
 /-- A slot lies in the epoch that starts at most one epoch's slots before it. -/
 theorem computeStartSlotAtEpoch_le_lt {slot start : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH)
@@ -69,6 +115,50 @@ theorem computeStartSlotAtEpoch_le_lt {slot start : Slot}
   · exact Nat.div_mul_le_self _ _
   · have := Nat.lt_div_mul_add (a := slot.toNat) positive
     exact this
+
+/-- A later slot is in the same epoch or a later one. -/
+theorem epoch_le_of_slot_le (a b : Slot) (le : a.toNat ≤ b.toNat) :
+    (computeEpochAtSlot preset a).toNat ≤ (computeEpochAtSlot preset b).toNat := by
+  simp only [computeEpochAtSlot, UInt64.toNat_div]
+  exact Nat.div_le_div_right le
+
+/-- The first slot of an epoch no later than a slot's epoch is no later than the slot. -/
+theorem computeStartSlotAtEpoch_le_of_epoch_le {epoch : Epoch} {boundary slot : Slot}
+    (startOk : computeStartSlotAtEpoch preset epoch = .ok boundary)
+    (le : epoch.toNat ≤ (computeEpochAtSlot preset slot).toNat) : boundary ≤ slot := by
+  have value := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+  rw [computeEpochAtSlot, UInt64.toNat_div] at le
+  have := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat le
+  have := Nat.div_mul_le_self slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
+/-- A time before the next slot maps to the slot whose start time it follows. -/
+theorem computeSlotAtTimeMs_inside {genesisTimeMs startTime timeMs due : UInt64} {slot : Slot}
+    (start : computeTimeAtSlotMs config genesisTimeMs slot = .ok startTime)
+    (time : timeMs.toNat = startTime.toNat + due.toNat)
+    (inside : due < config.SLOT_DURATION_MS) :
+    computeSlotAtTimeMs config genesisTimeMs timeMs = .ok slot := by
+  unfold computeTimeAtSlotMs at start
+  simp only [bind_ok_iff] at start
+  obtain ⟨offset, product, sum⟩ := start
+  have offsetValue := (mulChecked_ok_iff.mp product).2
+  have startValue := (addChecked_ok_iff.mp sum).2
+  have below := UInt64.lt_iff_toNat_lt.mp inside
+  have elapsed : subChecked timeMs genesisTimeMs = .ok (timeMs - genesisTimeMs) := by
+    apply subChecked_ok_iff.mpr
+    refine ⟨by omega, ?_⟩
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]
+  have value : (timeMs - genesisTimeMs).toNat =
+      slot.toNat * config.SLOT_DURATION_MS.toNat + due.toNat := by
+    rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]
+    omega
+  have quotient : divChecked (timeMs - genesisTimeMs) config.SLOT_DURATION_MS = .ok slot := by
+    apply divChecked_ok_iff.mpr
+    refine ⟨by intro zero; simp [zero] at below, ?_⟩
+    rw [value, Nat.add_div (by omega), Nat.mul_div_cancel _ (by omega),
+      Nat.div_eq_of_lt below]
+    simp [Nat.mod_eq_of_lt below, below]
+  simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
 
 /-- The epoch of an activation or an exit exists exactly when it fits in 64 bits.
 
@@ -110,6 +200,56 @@ theorem computeSlotAtTimeMs_computeTimeAtSlotMs {genesisTimeMs timeMs : UInt64} 
       rw [offsetValue, Nat.mul_div_cancel _ positive]
     simp only [computeSlotAtTimeMs, elapsed, quotient, bind, Except.bind]
 
+/-- A matching slot-start read bounds the genesis offset by one slot duration. -/
+theorem genesis_offset_of_slot_start {genesis actual : UInt64}
+    {slot : Slot} {begin : UInt64}
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
+    (slotOk : computeSlotAtTimeMs config actual begin = .ok slot) :
+    actual.toNat ≤ genesis.toNat ∧
+      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat := by
+  simp only [computeTimeAtSlotMs, bind_ok_iff] at beginOk
+  obtain ⟨offset, offsetOk, summed⟩ := beginOk
+  have offsetNat := (mulChecked_ok_iff.mp offsetOk).2
+  have beginNat := (addChecked_ok_iff.mp summed).2
+  simp only [computeSlotAtTimeMs, bind_ok_iff] at slotOk
+  obtain ⟨elapsed, elapsedOk, divided⟩ := slotOk
+  have elapsedNat := (subChecked_ok_iff.mp elapsedOk).2
+  have elapsedBound := (subChecked_ok_iff.mp elapsedOk).1
+  have quotient := (divChecked_ok_iff.mp divided).2
+  have positive := UInt64.lt_iff_toNat_lt.mp slots
+  have lower := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
+  have upper := Nat.lt_mul_div_succ elapsed.toNat positive
+  rw [← quotient] at lower upper
+  rw [Nat.mul_comm, Nat.add_mul, Nat.one_mul] at upper
+  omega
+
+/-- The same sub-slot genesis offset preserves the slot read at every slot start. -/
+theorem slot_at_start_of_genesis_offset {genesis actual : UInt64}
+    {slot : Slot} {begin : UInt64}
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (beginOk : computeTimeAtSlotMs config genesis slot = .ok begin)
+    (offset : actual.toNat ≤ genesis.toNat ∧
+      genesis.toNat < actual.toNat + config.SLOT_DURATION_MS.toNat) :
+    computeSlotAtTimeMs config actual begin = .ok slot := by
+  have parsed := beginOk
+  simp only [computeTimeAtSlotMs, bind_ok_iff] at parsed
+  obtain ⟨distance, distanceOk, summed⟩ := parsed
+  have distanceNat := (mulChecked_ok_iff.mp distanceOk).2
+  have beginNat := (addChecked_ok_iff.mp summed).2
+  have low : actual ≤ begin := UInt64.le_iff_toNat_le.mpr (by omega)
+  have elapsedNat : (begin - actual).toNat = begin.toNat - actual.toNat :=
+    UInt64.toNat_sub_of_le _ _ low
+  have quotient : (begin - actual).toNat / config.SLOT_DURATION_MS.toNat = slot.toNat := by
+    apply Nat.div_eq_of_lt_le
+    · omega
+    · rw [Nat.add_mul, Nat.one_mul]
+      omega
+  unfold computeSlotAtTimeMs
+  rw [subChecked_ok_iff.mpr ⟨low, elapsedNat⟩]
+  simp only [bind, Except.bind]
+  exact divChecked_ok_iff.mpr ⟨by intro zero; simp [zero] at slots, quotient.symm⟩
+
 /-- The slot at a time does not decrease as the time grows. -/
 theorem computeSlotAtTimeMs_mono {genesisTimeMs timeMs laterMs : UInt64} {slot later : Slot}
     (le : timeMs ≤ laterMs)
@@ -130,6 +270,57 @@ theorem computeSlotAtTimeMs_mono {genesisTimeMs timeMs laterMs : UInt64} {slot l
       rw [UInt64.le_iff_toNat_le, qA, qB]
       have := UInt64.le_iff_toNat_le.mp le
       exact Nat.div_le_div_right (by omega)
+
+/-- The slot at a time is at most the largest 64-bit integer divided by the slot duration. -/
+theorem computeSlotAtTimeMs_le {genesisTimeMs timeMs : UInt64} {slot : Slot}
+    (ok : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok slot) :
+    slot.toNat ≤ (2 ^ 64 - 1) / config.SLOT_DURATION_MS.toNat := by
+  unfold computeSlotAtTimeMs at ok
+  obtain ⟨elapsed, -, divided⟩ := bind_ok_iff.mp ok
+  obtain ⟨-, value⟩ := divChecked_ok_iff.mp divided
+  rw [value]
+  exact Nat.div_le_div_right (by have := elapsed.toNat_lt; omega)
+
+/-- A slot no later than the slot at a time starts by that time. -/
+theorem slotStart_le_of_slotAtTime {genesisTimeMs timeMs : UInt64} {current target : Slot}
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok current)
+    (before : target ≤ current) :
+    ∃ targetTime, computeTimeAtSlotMs config genesisTimeMs target = .ok targetTime ∧
+      targetTime.toNat ≤ timeMs.toNat := by
+  simp only [computeSlotAtTimeMs, bind_ok_iff] at currentOk
+  obtain ⟨elapsed, elapsedOk, quotient⟩ := currentOk
+  obtain ⟨_, elapsedNat⟩ := subChecked_ok_iff.mp elapsedOk
+  obtain ⟨_, quotientNat⟩ := divChecked_ok_iff.mp quotient
+  have floor := Nat.div_mul_le_self elapsed.toNat config.SLOT_DURATION_MS.toNat
+  have targetLe := Nat.mul_le_mul_right config.SLOT_DURATION_MS.toNat
+    (UInt64.le_iff_toNat_le.mp before)
+  rw [quotientNat] at targetLe
+  have clock := timeMs.toNat_lt
+  have productFits : target.toNat * config.SLOT_DURATION_MS.toNat < 2 ^ 64 := by omega
+  have productOk := mulChecked_of_lt productFits
+  have productNat := (mulChecked_ok_iff.mp productOk).2
+  have sumFits : genesisTimeMs.toNat + (target * config.SLOT_DURATION_MS).toNat < 2 ^ 64 := by
+    rw [productNat]
+    omega
+  have sumOk := addChecked_of_lt sumFits
+  refine ⟨_, by simp only [computeTimeAtSlotMs, productOk, bind, Except.bind]; exact sumOk, ?_⟩
+  rw [(addChecked_ok_iff.mp sumOk).2, productNat]
+  omega
+
+/-- The slot after a slot before the slot at a time exists, and starts by that time. -/
+theorem nextSlotStart_le_of_slotAtTime {genesisTimeMs timeMs : UInt64} {slot current : Slot}
+    (currentOk : computeSlotAtTimeMs config genesisTimeMs timeMs = .ok current)
+    (before : slot < current) :
+    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
+      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
+      following.toNat ≤ timeMs.toNat := by
+  have lt := UInt64.lt_iff_toNat_lt.mp before
+  have bound := current.toNat_lt
+  have nextNat : (slot + 1).toNat = slot.toNat + 1 := by
+    rw [UInt64.toNat_add, UInt64.toNat_one]
+    exact Nat.mod_eq_of_lt (by omega)
+  refine ⟨addChecked_ok_iff.mpr ⟨by simp only [UInt64.toNat_one]; omega, nextNat⟩, ?_⟩
+  exact slotStart_le_of_slotAtTime currentOk (UInt64.le_iff_toNat_le.mpr (by rw [nextNat]; omega))
 
 /-- A whole number of seconds that fits keeps its value, in milliseconds.
 
@@ -466,5 +657,70 @@ theorem nextSlot_epoch_of_inside {slot next : Slot} (sum : next.toNat = slot.toN
     simpa [UInt64.toNat_mod, sum] using Nat.mod_eq_zero_of_dvd divides
   rw [sum]
   exact Nat.succ_div_of_not_dvd notDvd
+
+/-- A defined slot stays defined at a later time, and does not decrease. -/
+theorem exists_computeSlotAtTimeMs_of_le {config : Config} {g t later : UInt64} {slot : Slot}
+    (le : t ≤ later) (ok : computeSlotAtTimeMs config g t = .ok slot) :
+    ∃ next, computeSlotAtTimeMs config g later = .ok next ∧ slot ≤ next := by
+  have original := ok
+  unfold computeSlotAtTimeMs at ok
+  simp only [bind_ok_iff, Uint64.subChecked_ok_iff, Uint64.divChecked_ok_iff] at ok
+  obtain ⟨elapsed, ⟨before, _⟩, nonzero, _⟩ := ok
+  have before' : g ≤ later := UInt64.le_trans (UInt64.le_iff_toNat_le.mpr before) le
+  refine ⟨(later - g) / config.SLOT_DURATION_MS, ?_, ?_⟩
+  · simp [computeSlotAtTimeMs, Uint64.subChecked, before', Uint64.divChecked, nonzero,
+      bind, Except.bind]
+  · apply computeSlotAtTimeMs_mono le
+    · exact original
+    · simp [computeSlotAtTimeMs, Uint64.subChecked, before', Uint64.divChecked, nonzero,
+        bind, Except.bind]
+
+/-- A slot of an earlier epoch is before the first slot of a later epoch. -/
+theorem slot_le_of_epoch_lt (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {slot : Slot}
+    {epoch : Epoch} (earlier : computeEpochAtSlot preset slot < epoch) :
+    slot.toNat ≤ epoch.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+  have lt := UInt64.lt_iff_toNat_lt.mp earlier
+  simp only [computeEpochAtSlot, UInt64.toNat_div] at lt
+  have := (Nat.div_lt_iff_lt_mul positive).mp lt
+  omega
+
+/-- The boundary of the epoch after an epoch is before a slot two epochs on. -/
+theorem exists_nextEpochStart_lt {epoch : Epoch} {current : Slot}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (late : epoch.toNat + 1 < (computeEpochAtSlot preset current).toNat) :
+    ∃ (next : Epoch) (boundary : Slot),
+      addChecked epoch 1 = .ok next ∧ computeStartSlotAtEpoch preset next = .ok boundary ∧
+      boundary < current := by
+  have curNat : (computeEpochAtSlot preset current).toNat =
+      current.toNat / preset.SLOTS_PER_EPOCH.toNat := by
+    simp only [computeEpochAtSlot, UInt64.toNat_div]
+  rw [curNat] at late
+  have twoBelow : (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat ≤ current.toNat :=
+    (Nat.le_div_iff_mul_le positive).mp (by omega)
+  have split : (epoch.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat =
+      (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat := by
+    simp only [Nat.add_mul]
+    omega
+  have fits : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < current.toNat := by omega
+  have currentFits := current.toNat_lt
+  have nextFits : epoch.toNat + 1 < 2 ^ 64 := by
+    have := Nat.le_mul_of_pos_right (epoch.toNat + 1) positive
+    omega
+  have nextNat : (epoch + 1).toNat = epoch.toNat + 1 := by
+    rw [UInt64.toNat_add, UInt64.toNat_one]
+    exact Nat.mod_eq_of_lt nextFits
+  have nextOk : addChecked epoch 1 = .ok (epoch + 1) :=
+    addChecked_ok_iff.mpr ⟨by rw [UInt64.toNat_one]; exact nextFits,
+      by rw [nextNat, UInt64.toNat_one]⟩
+  have boundaryNat : (UInt64.ofNat ((epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)).toNat =
+      (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [UInt64.toNat_ofNat']
+    exact Nat.mod_eq_of_lt (by omega)
+  have boundaryOk : computeStartSlotAtEpoch preset (epoch + 1) =
+      .ok (UInt64.ofNat ((epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat)) :=
+    computeStartSlotAtEpoch_ok_iff.mpr ⟨by rw [nextNat]; omega, by rw [boundaryNat, nextNat]⟩
+  exact ⟨epoch + 1, _, nextOk, boundaryOk,
+    UInt64.lt_iff_toNat_lt.mpr (by rw [boundaryNat]; exact fits)⟩
 
 end EthLib.Consensus

@@ -112,7 +112,7 @@ theorem processCreateMessage_eq_ok {message : Message fork} {state : Transaction
         (startFrame message (startState fork message prepared) substate
           (GasMeter.start message.gas message.reservoir)) (Nat.le_refl _) = .ok stopped ∧
       depositCode fork state (rollbackOnError prepared stopped) = .ok ended.val := by
-  rw [processCreateMessage] at h
+  rw [processCreateMessage_unfold] at h
   obtain ⟨prepared, hprep, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨ev, hrun, h⟩ := Base.bind_ok_iff.mp h
   have hdep : depositCode fork state ev.val = .ok ended.val := by

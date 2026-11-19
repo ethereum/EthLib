@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Precom
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ConcreteForgery
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopKeygenQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.TopVerificationQueryPresence
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 /-!
 # Key generation's cache: the bottom forest's nodes and the top layer
@@ -711,9 +711,11 @@ theorem Concrete.honestKeygen_topDecodingsSelected
   subst hresult
   rw [← hcache] at hroot
   have hselected := topDecodingsSelected_sequenceFin parameter key _ key
-    (fun index hne => OracleComp.isQueryBoundP_bind (m := 0) (htree index)
-      fun bottomRoot _ => OracleComp.isQueryBoundP_bind (m := 0) (by simp) fun base _ =>
-        topSignFrom_queryBound_zero_other_key parameter key index hne bottomRoot base _ 0)
+    -- Compare the computations: the kernel would otherwise decide the bound by running one.
+    (fun index hne => cast (congrArg (OracleComp.IsQueryBoundP · _ 0) (by rfl))
+      (OracleComp.isQueryBoundP_bind (m := 0) (htree index)
+        fun bottomRoot _ => OracleComp.isQueryBoundP_bind (m := 0) (by simp) fun base _ =>
+          topSignFrom_queryBound_zero_other_key parameter key index hne bottomRoot base _ 0))
     (fun initialCache finalCache result hcomponent hnone => by
       obtain ⟨bottomRoot, bottomCache, hbottomRun, hbase, _⟩ :=
         Concrete.CacheReplay.runsBelow_bind_left hcomponent

@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.Uint64
 public import EthLib.Consensus.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Time
+public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 
 /-!
 # Proofs: the balance-weighted selection and the payload timeliness committee
@@ -18,6 +19,12 @@ The indexed form of a vote lists the members whose bit is set, sorted, with any 
 After the window is initialized, the state reads the computed committee of each slot it covers.
 
 The covered slots are those of the current epoch and of the lookahead.
+
+The window has a committee for each slot from the epoch before the state's to the lookahead's end.
+
+That statement needs a slot from the Gloas fork epoch on, and an epoch of at least one slot.
+
+The last epoch of the lookahead and the length of the window must also fit in 64 bits.
 
 Initializing the window shares the seeds and the shuffle of each epoch among its committees.
 
@@ -353,6 +360,78 @@ theorem ptcWindowPosition_of_le {config : Config} {state : BeaconState preset fo
   simp [ptcWindowPosition, forkEpoch, notBefore, liftArith, lastOk, within, plusOneOk,
     offsetOk, positionOk, bind, Except.bind, Except.mapError]
 
+/-- The window has a position for a slot from the fork, from the epoch before the state's on.
+
+Its position is inside the window.
+
+It needs an epoch of at least one slot.
+
+It needs the epoch of the slot to be at most the last epoch of the seed lookahead.
+
+It needs that last epoch, and the length of the window, to fit in 64 bits. -/
+theorem ptcWindowPosition_ok_of {config : Config} {state : BeaconState preset fork}
+    {slot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    (windowFits :
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (forkLe : config.GLOAS_FORK_EPOCH ≤ computeEpochAtSlot preset slot)
+    (recent : (getCurrentEpoch state).toNat ≤ (computeEpochAtSlot preset slot).toNat + 1)
+    (lookahead : (computeEpochAtSlot preset slot).toNat ≤
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat) :
+    ∃ position, ptcWindowPosition config state slot = .ok position ∧
+      position.toNat < (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by
+  have remainder := Nat.mod_lt slot.toNat positive
+  by_cases lt : computeEpochAtSlot preset slot < getCurrentEpoch state
+  · -- The epoch just before that of the state.
+    have ltNat := UInt64.lt_iff_toNat_lt.mp lt
+    have next : computeEpochAtSlot preset slot + 1 = getCurrentEpoch state := by
+      apply UInt64.toNat_inj.mp
+      rw [Uint64.toNat_add_of_lt (by simp; omega)]
+      simp
+      omega
+    refine ⟨slot % preset.SLOTS_PER_EPOCH, ?_, ?_⟩
+    · simp only [ptcWindowPosition, forkLe, lt, next]
+      rfl
+    · rw [UInt64.toNat_mod, Nat.succ_mul]
+      omega
+  · -- The epoch of the state or one of its lookahead.
+    have current : getCurrentEpoch state ≤ computeEpochAtSlot preset slot := UInt64.not_lt.mp lt
+    obtain ⟨position, positionOk, positionNat⟩ :=
+      ptcWindowPosition_of_le (state := state) positive forkLe current lookahead fits windowFits
+    refine ⟨position, positionOk, ?_⟩
+    have currentNat := UInt64.le_iff_toNat_le.mp current
+    have spread : ((computeEpochAtSlot preset slot).toNat - (getCurrentEpoch state).toNat + 1) *
+        preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat ≤
+        (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat := by
+      rw [← Nat.succ_mul]
+      exact Nat.mul_le_mul_right _ (by omega)
+    omega
+
+/-- The window holds a committee for each slot of an epoch that it covers.
+
+It needs a fork from Gloas, and an epoch of at least one slot.
+
+It needs the epoch of the slot from the Gloas fork epoch on, and from the one before the state's on.
+
+It needs that epoch to be at most the last epoch of the seed lookahead.
+
+It needs the last epoch of the lookahead, and the length of the window, to fit in 64 bits. -/
+theorem getPtc_exists {config : Config} {state : BeaconState preset fork}
+    (gloas : .glamsterdam ≤ fork) {slot : Slot} (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    (windowFits :
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (forkLe : config.GLOAS_FORK_EPOCH ≤ computeEpochAtSlot preset slot)
+    (recent : (getCurrentEpoch state).toNat ≤ (computeEpochAtSlot preset slot).toNat + 1)
+    (lookahead : (computeEpochAtSlot preset slot).toNat ≤
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat) :
+    ∃ committee, getPtc config state gloas slot = .ok committee := by
+  obtain ⟨position, positionOk, positionLt⟩ :=
+    ptcWindowPosition_ok_of positive fits windowFits forkLe recent lookahead
+  refine ⟨(state.ptcWindow gloas).elements[position.toNat], ?_⟩
+  simp only [getPtc, positionOk, bind, Except.bind, Vector.getElem?_eq_getElem positionLt]
+  rfl
+
 /-- Initializing the window computes each committee after the previous epoch as that of its slot.
 
 The committees of an epoch share its two seeds, its shuffle and its count of committees per slot.
@@ -476,7 +555,6 @@ theorem getPtc_initializePtcWindow {config : Config} {state : BeaconState preset
   have moved : ptcWindowPosition config
       { state with ptcWindow := fun _ => .ofVector committees } other =
       .ok position := positionOk
-  have read : (RootedVector.ofVector committees).elements = committees := rfl
-  simp [getPtc, moved, read, bind, Except.bind, pure, Except.pure, inRange]
+  simp [getPtc, moved, bind, Except.bind, pure, Except.pure, inRange]
 
 end EthLib.Consensus

@@ -75,51 +75,55 @@ theorem isQueryBoundP_findFirst {κ β : Type} (trial : Nat → κ)
 
 section Merkle
 
-variable {α : Type} {hash : Nat → Nat → α → α → OracleComp spec α}
+variable {α : Type} {hash : Merkle.Position → α → α → OracleComp spec α}
   {leaves : Nat → OracleComp spec α} {c : Nat}
 
 /-- A node at `level` costs its `2^level` leaves of cost `c` and its `2^level - 1` hashes. -/
 theorem isQueryBoundP_merkleNode (hleaves : ∀ j, IsQueryBoundP (leaves j) p c)
-    (hhash : ∀ l j a b, IsQueryBoundP (hash l j a b) p 1) :
-    ∀ level j, IsQueryBoundP (Merkle.node hash leaves level j) p (2 ^ level * (c + 1) - 1)
-  | 0, j => (hleaves j).mono (by simp)
-  | level + 1, j => by
+    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ q : Merkle.Position,
+      IsQueryBoundP (Merkle.node hash leaves q) p (2 ^ q.level * (c + 1) - 1) := by
+  rintro ⟨level, j⟩
+  induction level generalizing j with
+  | zero => exact (hleaves j).mono (by simp)
+  | succ level ih =>
     rw [Merkle.node_succ]
     have h1 : 1 ≤ 2 ^ level * (c + 1) := Nat.one_le_iff_ne_zero.2 (by positivity)
     have h2 : 2 ^ (level + 1) * (c + 1) = 2 * (2 ^ level * (c + 1)) := by ring
-    refine (isQueryBoundP_bind (isQueryBoundP_merkleNode hleaves hhash level _) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_merkleNode hleaves hhash level _) fun _ _ =>
-        hhash _ _ _ _).mono ?_
+    refine (isQueryBoundP_bind (ih _) fun _ _ =>
+      isQueryBoundP_bind (ih _) fun _ _ => hhash _ _ _).mono ?_
+    simp only at h1 h2 ⊢
     omega
 
 /-- The `n` siblings above a node at `level` cost the nodes they are. -/
 theorem isQueryBoundP_merkleSiblings (hleaves : ∀ j, IsQueryBoundP (leaves j) p c)
-    (hhash : ∀ l j a b, IsQueryBoundP (hash l j a b) p 1) :
-    ∀ level j n, IsQueryBoundP (Merkle.siblings hash leaves level j n) p
-      (2 ^ (level + n) * (c + 1) - 2 ^ level * (c + 1))
-  | level, j, 0 => by simp [Merkle.siblings]
-  | level, j, n + 1 => by
+    (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ (q : Merkle.Position) (n : Nat), IsQueryBoundP (Merkle.siblings hash leaves q n) p
+      (2 ^ (q.level + n) * (c + 1) - 2 ^ q.level * (c + 1))
+  | q, 0 => by simp [Merkle.siblings]
+  | q, n + 1 => by
     simp only [Merkle.siblings]
-    have h1 : 1 ≤ 2 ^ level * (c + 1) := Nat.one_le_iff_ne_zero.2 (by positivity)
-    have h2 : 2 ^ (level + 1) * (c + 1) = 2 * (2 ^ level * (c + 1)) := by ring
-    have h3 : 2 ^ (level + 1) * (c + 1) ≤ 2 ^ (level + 1 + n) * (c + 1) :=
+    have h1 : 1 ≤ 2 ^ q.level * (c + 1) := Nat.one_le_iff_ne_zero.2 (by positivity)
+    have h2 : 2 ^ (q.level + 1) * (c + 1) = 2 * (2 ^ q.level * (c + 1)) := by ring
+    have h3 : 2 ^ (q.level + 1) * (c + 1) ≤ 2 ^ (q.level + 1 + n) * (c + 1) :=
       Nat.mul_le_mul_right _ (Nat.pow_le_pow_right (by norm_num) (by omega))
-    have h4 : level + (n + 1) = level + 1 + n := by omega
+    have h4 : q.level + (n + 1) = q.level + 1 + n := by omega
     rw [h4]
-    refine (isQueryBoundP_bind (isQueryBoundP_merkleNode hleaves hhash level _) fun _ _ =>
-      isQueryBoundP_bind (isQueryBoundP_merkleSiblings hleaves hhash (level + 1) (j / 2) n)
+    refine (isQueryBoundP_bind (isQueryBoundP_merkleNode hleaves hhash q.sibling) fun _ _ =>
+      isQueryBoundP_bind (isQueryBoundP_merkleSiblings hleaves hhash q.parent n)
         fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
+    simp only [Merkle.Position.sibling_level, Merkle.Position.parent_level]
     omega
 
 /-- A climb costs one hash per sibling. -/
-theorem isQueryBoundP_climb (hhash : ∀ l j a b, IsQueryBoundP (hash l j a b) p 1) :
-    ∀ (siblings : List α) (level j : Nat) (current : α),
-      IsQueryBoundP (Merkle.climb hash level j current siblings) p siblings.length
-  | [], _, _, _ => isQueryBoundP_pure _ _ _
-  | _ :: rest, level, j, current => by
+theorem isQueryBoundP_climb (hhash : ∀ q a b, IsQueryBoundP (hash q a b) p 1) :
+    ∀ (siblings : List α) (q : Merkle.Position) (current : α),
+      IsQueryBoundP (Merkle.climb hash q current siblings) p siblings.length
+  | [], _, _ => isQueryBoundP_pure _ _ _
+  | _ :: rest, q, current => by
     rw [Merkle.climb]
-    refine (isQueryBoundP_bind (hhash _ _ _ _) fun _ _ =>
-      isQueryBoundP_climb hhash rest _ _ _).mono ?_
+    refine (isQueryBoundP_bind (hhash _ _ _) fun _ _ =>
+      isQueryBoundP_climb hhash rest _ _).mono ?_
     simp only [List.length_cons]
     omega
 
@@ -171,7 +175,7 @@ theorem isQueryBoundP_node (hH : ∀ x, IsQueryBoundP (H x) p 1)
     (layer : Layer) (level j : Nat) :
     IsQueryBoundP (node H pp prf layer level j) p (2 ^ level * 205 - 1) :=
   isQueryBoundP_merkleNode (c := 204) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf _ _ _)
-    (fun _ _ _ _ => isQueryBoundP_th hH _ _ _) level j
+    (fun _ _ _ => isQueryBoundP_th hH _ _ _) ⟨level, j⟩
 
 /-- A key's path is the `16` nodes beside it, one per level. -/
 theorem isQueryBoundP_path (hH : ∀ x, IsQueryBoundP (H x) p 1)
@@ -180,7 +184,7 @@ theorem isQueryBoundP_path (hH : ∀ x, IsQueryBoundP (H x) p 1)
     IsQueryBoundP (path H pp prf layer e) p (2 ^ 16 * 205 - 205) := by
   have h := isQueryBoundP_merkleSiblings (c := 204) (hash := nodeHash H pp layer)
     (leaves := leaves H pp prf layer) (fun _ => isQueryBoundP_otsPublicLeaf hH hprf pp layer _)
-    (fun _ _ _ _ => isQueryBoundP_th hH pp _ _) 0 e LAYER_HEIGHT
+    (fun _ _ _ => isQueryBoundP_th hH pp _ _) ⟨0, e⟩ LAYER_HEIGHT
   unfold path Merkle.path
   exact h.mono (by simp [LAYER_HEIGHT])
 
@@ -290,8 +294,8 @@ theorem isQueryBoundP_layerRoot (hH : ∀ x, IsQueryBoundP (H x) p 1) (pp : Publ
     (n := 176 + (LAYER_HEIGHT + 0)) (by simp [LAYER_HEIGHT])
   rcases r with _ | leaf
   · exact isQueryBoundP_pure _ _ _
-  · refine isQueryBoundP_bind ((isQueryBoundP_climb (fun _ _ _ _ => isQueryBoundP_th hH pp _ _)
-      sig.path.toList 0 e leaf).mono (by simp)) fun _ _ => isQueryBoundP_pure _ _ 0
+  · refine isQueryBoundP_bind ((isQueryBoundP_climb (fun _ _ _ => isQueryBoundP_th hH pp _ _)
+      sig.path.toList ⟨0, e⟩ leaf).mono (by simp)) fun _ _ => isQueryBoundP_pure _ _ 0
 
 /-- Verification is the roots of both layers. -/
 theorem isQueryBoundP_verifyWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (pk : PublicKey)

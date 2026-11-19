@@ -45,12 +45,14 @@ def subnetTopicName (base : String) (subnetId : SubnetID) : String :=
 inductive TopicError where
   /-- The string does not start with `/eth2/`. -/
   | notEth2
-  /-- The fork digest is not eight lowercase hex digits followed by `/`. -/
-  | forkDigest
+  /-- The fork digest is not eight lowercase hex digits followed by `/`.
+
+  The field holds the nine characters after `/eth2/`, or fewer where the string ends. -/
+  | forkDigest (text : String)
   /-- The string does not end with `/ssz_snappy`. -/
   | encoding
-  /-- The name contains `/`. -/
-  | name
+  /-- The name `name` contains `/`. -/
+  | name (name : String)
   deriving Repr, DecidableEq
 
 /-- The rest of a list after a prefix, if the list starts with it. -/
@@ -78,10 +80,11 @@ def parseForkDigest : List Char → Option (Vector UInt8 4)
 /-- The fork digest and the name of a topic string. -/
 def parseTopic (topic : String) : Except TopicError (Vector UInt8 4 × String) := do
   let some rest := dropPrefix? "/eth2/".toList topic.toList | throw .notEth2
-  let some digest := parseForkDigest (rest.take 8) | throw .forkDigest
-  let some body := dropPrefix? ['/'] (rest.drop 8) | throw .forkDigest
+  let digestText := String.ofList (rest.take 9)
+  let some digest := parseForkDigest (rest.take 8) | throw (.forkDigest digestText)
+  let some body := dropPrefix? ['/'] (rest.drop 8) | throw (.forkDigest digestText)
   let some name := dropSuffix? "/ssz_snappy".toList body | throw .encoding
-  if '/' ∈ name then throw .name
+  if '/' ∈ name then throw (.name (String.ofList name))
   return (digest, String.ofList name)
 
 /-- The subnet ID that a decimal string writes.

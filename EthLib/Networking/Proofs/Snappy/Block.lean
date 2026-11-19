@@ -202,14 +202,14 @@ theorem copyBytes_spec {o : List UInt8} {offset : Nat} (n : Nat)
 
 /-- A copy into an empty output fails, whatever its offset. -/
 theorem copyBytes_nil {offset len : Nat} (hlen : 0 < len) :
-    copyBytes ByteArray.empty offset len = .error (.copyOffsetTooLarge offset) := by
+    copyBytes ByteArray.empty offset len = .error (.copyOffsetTooLarge offset 0) := by
   obtain ⟨k, rfl⟩ : ∃ k, len = k + 1 := ⟨len - 1, by omega⟩
-  rw [copyBytes, dite_eq_right (by simp)]
+  rw [copyBytes, dite_eq_right (by simp)]; rfl
 
 /-- A copy reaching past the start of the output fails. -/
 theorem copyBytes_tooLarge {out : ByteArray} {offset n : Nat}
     (hout : out.size < offset) :
-    copyBytes out offset (n + 1) = .error (.copyOffsetTooLarge offset) := by
+    copyBytes out offset (n + 1) = .error (.copyOffsetTooLarge offset out.size) := by
   rw [copyBytes, dite_eq_right (by omega)]
 
 /-! ## The element loop -/

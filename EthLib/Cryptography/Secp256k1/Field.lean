@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Inverse
+public import EthLib.Cryptography.Montgomery.Fin
 
 /-!
 # `Secp256k1.Field`
@@ -17,6 +18,8 @@ Each field is `Fin` of its modulus, so every element is below the modulus by con
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
 An inverse comes from the extended Euclidean algorithm.
+
+Point multiplication holds the coordinates of `Fp` in Montgomery limbs.
 
 A square root is a power too, because `p = 3 mod 4`.
 
@@ -61,6 +64,27 @@ def Fin.powBits {m : Nat} [NeZero m] : Nat → Fin m → Nat → Fin m
     if e % 2 = 1 then a * half else half
 
 namespace Fp
+
+/-- The Montgomery constants of `p`, with radix `R = 2^256`.
+
+Each one derives from `p` and `R`, and is checked against its defining equation. -/
+@[inline] def params : Montgomery.Modulus 8 where
+  p := modulus
+  pLimbs := ⟨0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+    0xffffffff, 0xffffffff⟩
+  r1 := ⟨0x3d1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0⟩
+  r2 := ⟨0xe90a1, 0x7a2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0⟩
+  pm2 := ⟨0xfffffc2d, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+    0xffffffff, 0xffffffff⟩
+  pinv := 0xd2253531
+  pLimbs_spec := by decide
+  pinv_spec := by decide
+  r1_spec := by decide
+  r2_spec := by decide
+  pm2_spec := by decide
+
+/-- A base-field element held in eight Montgomery limbs. -/
+abbrev Montgomery := EthLib.Cryptography.Montgomery params
 
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e

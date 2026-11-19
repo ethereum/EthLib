@@ -20,7 +20,7 @@ The code is generic in the base field, as for `Fp2`.
 
 namespace EthLib.Cryptography.Bls
 
-/-- An element of `Fp12`, written `c0 + c1·w` with `w² = v`.
+/-- An element of `Fp12`, written `c0 + c1·w` with `w^2 = v`.
 
 The base field is `Fp` unless stated. -/
 structure Fp12 (F : Type := Fp) where

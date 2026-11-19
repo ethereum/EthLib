@@ -51,7 +51,7 @@ theorem encrypt_size (key : Key) (nonce : Nonce) (aad plaintext ciphertext : Byt
 /-- A stream that would wrap the counter is refused. -/
 theorem crypt_eq_error_of_counter_exhausted (key : Key) (counter : UInt32) (nonce : Nonce)
     (input : ByteArray) (h : counter.toNat + (input.size + 63) / 64 > 2 ^ 32) :
-    crypt key counter nonce input = .error .counterExhausted := by
+    crypt key counter nonce input = .error (.counterExhausted counter.toNat input.size) := by
   simp only [crypt, h, ↓reduceIte]
 
 /-- A wrong tag is refused before the cipher is run. -/

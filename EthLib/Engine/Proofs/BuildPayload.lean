@@ -11,11 +11,11 @@ A built block passes the state transition of its chain, with the state that the 
 
 So `engine_newPayload` answers valid for a built block whose parameters pass its checks.
 
-A header filled from a body passes every check against what that body gave.
-
 The built block carries the timestamp, RANDAO mix, withdrawals, beacon root, slot and choices.
 
 From Pectra, its header commits to the requests that the build gives.
+
+Its value sums the priority fee of each of its transactions, at the gas that its run uses.
 
 A build on a chain from the attributes of a forkchoice update is such a build, at their fork.
 
@@ -28,60 +28,12 @@ namespace EthLib.Engine
 
 open EthLib.Base
 open EthLib.Execution.Blocks
-open EthLib.Execution.Transactions (Transaction)
+open EthLib.Execution.Evm (BlockEnvironment)
+open EthLib.Execution.Transactions (Transaction TransactionOutput checkInclusion
+  processTransaction priorityFeeOf baseFeeOf)
 
 variable {fork : Fork} {chain : BlockChain} {attributes : PayloadAttributes fork}
   {choices : BuildChoices} {transactions : List Transaction} {built : BuiltPayload fork}
-
-/-- A header filled from a body passes every check against what that body gave.
-
-The blob gas used must fit 64 bits.
-
-From Shapella the withdrawals root must exist, and from Glamsterdam the access list hash. -/
-theorem outputChecks_fillHeader {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} (hb : output.gas.blob < 2 ^ 64)
-    (hw : .shapella ≤ fork → roots.withdrawals.isSome)
-    (ha : .glamsterdam ≤ fork → output.accessListHash.isSome) :
-    firstFailure (outputChecks (fillHeader header output roots) output roots) = .ok () := by
-  rw [firstFailure_eq_ok_iff]
-  intro c hc
-  simp only [outputChecks, fillHeader, List.mem_append, List.mem_cons, List.not_mem_nil,
-    or_false] at hc
-  rcases hc with ((((hc | hc | hc | hc | hc) | hc) | hc) | hc) | hc <;>
-    (try subst hc) <;> (try simp only [decide_true])
-  · split at hc
-    · next h =>
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (hw h)
-      simp [hr]
-    · simp at hc
-  · split at hc
-    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      simp [Nat.mod_eq_of_lt hb]
-    · simp at hc
-  · split at hc
-    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      simp
-    · simp at hc
-  · split at hc
-    · next h =>
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hc
-      subst hc
-      obtain ⟨r, hr⟩ := Option.isSome_iff_exists.mp (ha h)
-      simp [hr]
-    · simp at hc
-
-/-- The body of a block runs alike before and after its header is filled.
-
-The body reads none of the fields that the fill sets. -/
-theorem runBody_fillHeader {header : Header fork} {output : BlockOutput fork}
-    {roots : OutputRoots} {withdrawals : Since .shapella fork (List Execution.Blocks.Withdrawal)} :
-    runBody chain ⟨fillHeader header output roots, transactions, [], withdrawals⟩ =
-      runBody chain ⟨header, transactions, [], withdrawals⟩ :=
-  rfl
 
 /-- From Hegotá a build is aborted, since the rules of that fork are not specified here yet. -/
 theorem buildPayload_eq_error_of_hegota_le (h : .hegota ≤ fork) :
@@ -106,7 +58,11 @@ private theorem buildPayload_spec
       firstFailure (outputChecks built.block.header result.output result.roots) = .ok () ∧
       built.block = ⟨fillHeader (buildHeader chain.config parent parentHash attributes choices)
         result.output result.roots, transactions, [], attributes.withdrawals⟩ ∧
-      built.state = result.post ∧ built.requests = result.output.requests := by
+      built.state = result.post ∧ built.requests = result.output.requests ∧
+      built.blockValue = priorityFees
+        (if h : .london ≤ fork then
+          (buildHeader chain.config parent parentHash attributes choices).baseFeePerGas h
+        else 0) transactions result.output.receipts := by
   have hH : ¬ .hegota ≤ fork := fun hc => by simp [buildPayload_eq_error_of_hegota_le hc] at h
   simp only [buildPayload, hH, reduceIte] at h
   split at h
@@ -119,7 +75,7 @@ private theorem buildPayload_spec
       subst hEq
       have hHash' : parent.header.hash = .ok parentHash := by
         cases hp : parent.header.hash <;> simp_all [Except.mapError]
-      exact ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl⟩
+      exact ⟨hH, parent, parentHash, result, hP, hA, hHash', hR, hC, hF, rfl, rfl, rfl, rfl⟩
     · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
@@ -173,28 +129,162 @@ theorem requestsHash_of_buildPayload
     (h : buildPayload chain attributes choices transactions = .ok built)
     (hPectra : .pectra ≤ fork) :
     built.block.header.requestsHash hPectra = requestsHash built.requests := by
-  obtain ⟨-, _, _, _, -, -, -, -, -, -, hBlock, -, hRequests⟩ := buildPayload_spec h
+  obtain ⟨-, _, _, _, -, -, -, -, -, -, hBlock, -, hRequests, -⟩ := buildPayload_spec h
   rw [hBlock, hRequests]
   rfl
+
+/-! ## The value of a built block -/
+
+/-- Differences of a list after a start value, with one value appended.
+
+The new difference is that value minus the last of the list, or minus the start when it is empty. -/
+private theorem zipWith_sub_append (c : List Nat) (start x : Nat) :
+    List.zipWith (· - ·) (c ++ [x]) (start :: (c ++ [x])) =
+      List.zipWith (· - ·) c (start :: c) ++ [x - (c.getLast?.getD start)] := by
+  induction c generalizing start with
+  | nil => rfl
+  | cons a c ih =>
+    simp only [List.cons_append, List.zipWith_cons_cons, ih a, List.cons.injEq, true_and]
+    cases c <;> rfl
+
+/-- A run of transactions with one more is the run of the others, then that one at its index. -/
+private theorem applyTransactions_append {env : BlockEnvironment fork} {body : BodyState}
+    {l : List Transaction} {tx : Transaction} :
+    applyTransactions env body (l ++ [tx]) =
+      applyTransactions env body l >>= fun before => applyTransaction env l.length before tx := by
+  simp [applyTransactions, List.zipIdx_append, List.foldlM_append]
+
+/-- A property of every list follows from the empty list and from adding one value at the end. -/
+private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : motive [])
+    (append_singleton : ∀ l a, motive l → motive (l ++ [a])) (l : List α) : motive l := by
+  rw [← List.reverse_reverse l]
+  induction l.reverse with
+  | nil => exact nil
+  | cons a r ih =>
+    rw [List.reverse_cons]
+    exact append_singleton _ _ ih
+
+/-- A run of transactions adds one receipt each, the last with the cumulative gas of the run.
+
+Its priority fees sum those of the output of each transaction, at the gas that output used.
+
+The run of each transaction follows the run of those before it. -/
+private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {body : BodyState}
+    (baseFee : Nat) {l : List Transaction} {output : BodyOutput fork}
+    (h : applyTransactions env body l = .ok output) :
+    output.receipts.length = l.length ∧
+      (output.receipts.map (·.2.cumulativeGasUsed)).getLast?.getD 0 = output.cumulativeGasUsed ∧
+      ∃ outs : List TransactionOutput, outs.length = l.length ∧
+        priorityFees baseFee l output.receipts =
+          (List.zipWith (fun tx out => priorityFeeOf baseFee out.gasUsed tx) l outs).sum ∧
+        ∀ i (hi : i < l.length), ∃ before included out, outs[i]? = some out ∧
+          applyTransactions env body (l.take i) = .ok before ∧
+          checkInclusion env.chainId env before.gas (.ofBlock before.block) l[i] = .ok included ∧
+          processTransaction env before.block included l[i] = .ok out := by
+  induction l using appendInduction generalizing output with
+  | nil =>
+    simp only [applyTransactions, List.zipIdx_nil, List.foldlM_nil, pure, Except.pure,
+      Except.ok.injEq] at h
+    subst h
+    exact ⟨rfl, rfl, [], rfl, rfl, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+  | append_singleton l tx ih =>
+    rw [applyTransactions_append] at h
+    obtain ⟨before, hBefore, hStep⟩ := bind_ok_iff.mp h
+    obtain ⟨hLen, hLast, outs, hOuts, hSum, hRuns⟩ := ih hBefore
+    obtain ⟨included, out, hInc, hProc, -, hCum, -⟩ := applyTransaction_eq_ok hStep
+    obtain ⟨outcome, logs, hReceipts⟩ := applyTransaction_receipts hStep
+    refine ⟨by simp [hReceipts, hLen], by simp [hReceipts, makeReceipt], outs ++ [out],
+      by simp [hOuts], ?_, ?_⟩
+    · have hUsed : (List.zipWith (· - ·) (before.receipts.map (·.2.cumulativeGasUsed))
+          (0 :: before.receipts.map (·.2.cumulativeGasUsed))).length = l.length := by
+        simp [hLen]
+      simp only [priorityFees, hReceipts, List.map_append, List.map_cons, List.map_nil]
+      rw [zipWith_sub_append, List.zipWith_append hUsed.symm,
+        List.zipWith_append hOuts.symm, List.sum_append, List.sum_append]
+      simp only [priorityFees] at hSum
+      rw [hSum]
+      simp only [makeReceipt, hLast, hCum, Nat.add_sub_cancel_left, List.zipWith_cons_cons,
+        List.zipWith_nil_left, List.sum_cons, List.sum_nil]
+    · intro i hi
+      simp only [List.length_append, List.length_cons, List.length_nil] at hi
+      rcases Nat.lt_or_ge i l.length with hlt | hge
+      · obtain ⟨b, inc, o, ho, hb, hinc, hproc⟩ := hRuns i hlt
+        refine ⟨b, inc, o, by rw [List.getElem?_append_left (by omega)]; exact ho, ?_, ?_, ?_⟩
+        · rw [List.take_append_of_le_length (by omega)]
+          exact hb
+        · rw [List.getElem_append_left hlt]
+          exact hinc
+        · rw [List.getElem_append_left hlt]
+          exact hproc
+      · have hi' : i = l.length := by omega
+        subst hi'
+        refine ⟨before, included, out, by simp [hOuts], by simpa using hBefore, ?_, ?_⟩
+        · simpa using hInc
+        · simpa using hProc
+
+/-- The value of a built block sums the priority fee of each transaction, at the gas its run uses.
+
+The body runs in the environment of the block, after the DAO transfer and the system calls.
+
+Each transaction runs after those before it.
+
+The priority fee is the gas used times the price above the base fee. -/
+theorem blockValue_of_buildPayload
+    (h : buildPayload chain attributes choices transactions = .ok built) :
+    ∃ hashes state body outs,
+      recentHashes chain.recent = .ok hashes ∧
+      daoTransfer chain.config fork built.block.header.number ⟨chain.state, ∅, ∅, ∅, ∅⟩ =
+        .ok state ∧
+      startSystemCalls (blockEnvironment chain.config hashes built.block.header)
+        built.block.header.parentHash (.init state) = .ok body ∧
+      outs.length = transactions.length ∧
+      built.blockValue = (List.zipWith (fun tx (out : TransactionOutput) =>
+        priorityFeeOf (baseFeeOf (blockEnvironment chain.config hashes built.block.header))
+          out.gasUsed tx) transactions outs).sum ∧
+      ∀ i (hi : i < transactions.length), ∃ before included out, outs[i]? = some out ∧
+        applyTransactions (blockEnvironment chain.config hashes built.block.header) body
+          (transactions.take i) = .ok before ∧
+        checkInclusion chain.config.chainId
+          (blockEnvironment chain.config hashes built.block.header) before.gas
+          (.ofBlock before.block) transactions[i] = .ok included ∧
+        processTransaction (blockEnvironment chain.config hashes built.block.header)
+          before.block included transactions[i] = .ok out := by
+  obtain ⟨-, parent, parentHash, result, -, -, -, hR, -, -, hBlock, -, -, hValue⟩ :=
+    buildPayload_spec h
+  obtain ⟨hashes, hHashes, hApply, -⟩ := runBody_eq_ok.mp hR
+  obtain ⟨state, body, txs, hDao, hStart, hTxs, hReceipts⟩ := applyBody_receipts hApply
+  rw [hBlock]
+  obtain ⟨-, -, outs, hOuts, hSum, hRuns⟩ :=
+    applyTransactions_priorityFees (baseFeeOf (blockEnvironment chain.config hashes
+      (buildHeader chain.config parent parentHash attributes choices))) hTxs
+  refine ⟨hashes, state, body, outs, hHashes, hDao, hStart, hOuts, ?_, fun i hi => ?_⟩
+  · rw [hValue, hReceipts]
+    exact hSum
+  · exact hRuns i hi
 
 /-- `engine_newPayload` answers that a built block is valid, on the chain that it was built on.
 
 The payload must pass the checks of the method before execution, with the built block.
 
+The last block of the chain must pass the terminal block check, as one from Paris on always does.
+
 The latest valid hash is the block's own hash, and the state after it is the state of the build.
 -/
-theorem newPayloadOnChain_of_buildPayload {version : Nat} {params : Lean.Json}
+theorem newPayloadOnChain_of_buildPayload {transition : TransitionConfiguration}
+    {totalDifficulty : Nat} {version : Nat} {params : Lean.Json}
     {checked : CheckedBlock version} {attributes : PayloadAttributes checked.fork}
     {built : BuiltPayload checked.fork}
     (hCheck : checkNewPayload chain.config version params = .ok (.ok checked))
     (h : buildPayload chain attributes choices transactions = .ok built)
-    (hBlock : built.block = checked.block) :
-    newPayloadOnChain chain version params =
+    (hBlock : built.block = checked.block)
+    (hTerminal : ∀ parent, chain.recent.getLast? = some parent →
+      passesTerminalCheck transition totalDifficulty parent = true) :
+    newPayloadOnChain transition totalDifficulty chain version params =
       .ok (⟨.valid, checked.block.header.hash.toOption⟩, none,
         some (⟨checked.fork, checked.block.header, []⟩, built.state)) := by
   obtain ⟨-, -, -, -, -, -, -, -, parent, hP, hHash, -⟩ := buildPayload_fields h
   rw [hBlock] at hHash
-  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash
+  exact newPayloadOnChain_of_stateTransition_ok hCheck hP hHash (hTerminal parent hP)
     (hBlock ▸ stateTransition_of_buildPayload h)
 
 /-- A build on a chain from decoded attributes is a build of a payload, at the fork it gives.
@@ -211,7 +301,7 @@ theorem buildPayload_of_buildPayloadOnChain {version : Nat}
       chain.recent.getLast? = some parent ∧
       checkAttributes chain.config version
         ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-          UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩ ∧
+          UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩ ∧
       decodeTransactions fork 0 encoded = .ok transactions ∧
       buildPayload chain attributes choices transactions = .ok built := by
   unfold buildPayloadOnChain at h
@@ -233,12 +323,16 @@ theorem buildPayload_eq_error_of_getLast?_eq_none (hh : ¬ .hegota ≤ fork)
     buildPayload chain attributes choices transactions = .error .noParent := by
   simp [buildPayload, hh, hp, throw, throwThe, MonadExceptOf.throw]
 
-/-- A build whose timestamp and parent do not give its own fork fails for the wrong fork. -/
+/-- A build whose timestamp and parent do not give its own fork fails for the wrong fork.
+
+The error holds the active fork at the next number and the fork of the build. -/
 theorem buildPayload_eq_error_of_activeFork_ne {parent : RecentBlock} (hh : ¬ .hegota ≤ fork)
     (hp : chain.recent.getLast? = some parent)
     (ha : chain.config.activeFork (parent.header.number + 1) attributes.timestamp.toNat
       ≠ some fork) :
-    buildPayload chain attributes choices transactions = .error .wrongFork := by
+    buildPayload chain attributes choices transactions =
+      .error (.wrongFork (chain.config.activeFork (parent.header.number + 1)
+        attributes.timestamp.toNat) fork) := by
   simp [buildPayload, hh, hp, ha, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- A build whose parent header does not encode fails with the error of that encoding. -/
@@ -310,7 +404,7 @@ theorem buildPayloadOnChain_eq_error_of_checkAttributes_eq_error {version : Nat}
     {error : EngineError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .error error) :
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.attributes error) := by
   simp [buildPayloadOnChain, hp, ha, bind, Except.bind, Except.mapError]
 
@@ -320,7 +414,7 @@ theorem buildPayloadOnChain_eq_error_of_decodeTransactions_eq_error {version : N
     {error : PayloadError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.transaction error) := by
   simp [buildPayloadOnChain, hp, ha, ht, bind, Except.bind, Except.mapError]
@@ -331,7 +425,7 @@ theorem buildPayloadOnChain_eq_error_of_buildPayload_eq_error {version : Nat}
     {error : BlockError} (hp : chain.recent.getLast? = some parent)
     (ha : checkAttributes chain.config version
       ⟨parent.header.parentHash, true, UInt64.ofNat parent.header.number,
-        UInt64.ofNat parent.header.timestamp.toNat⟩ decoded = .ok ⟨fork, attributes⟩)
+        UInt64.ofNat parent.header.timestamp.toNat, none⟩ decoded = .ok ⟨fork, attributes⟩)
     (ht : decodeTransactions fork 0 encoded = .ok transactions)
     (hb : buildPayload chain attributes choices transactions = .error error) :
     buildPayloadOnChain chain version decoded choices encoded = .error (.block error) := by

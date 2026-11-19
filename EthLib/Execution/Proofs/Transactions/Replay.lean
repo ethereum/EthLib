@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Unmarked
 public import EthLib.Execution.Proofs.Transactions.Deletion
 public import EthLib.Execution.Proofs.Transactions.Inclusion
@@ -137,7 +138,7 @@ theorem processMessageCall_keeps {Meter : Type} [GasMeter Meter] [LawfulGasMeter
       address ∉ output.accountsToDelete ∧
       (fork < .dencun → (output.state.getAccount address).codeHash = EMPTY_CODE_HASH) := by
   have marks := fun hd : .dencun ≤ fork => accountsToDelete_processMessageCall hd h empty
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -252,7 +253,7 @@ private theorem runTransaction_nonce_le {Meter : Type} [GasMeter Meter] [LawfulG
         (fork < .dencun → (bought.getAccount address).codeHash = EMPTY_CODE_HASH) →
         (bought.getAccount address).nonce ≤ (out.state.getAccount address).nonce ∧
           (fork < .dencun → (out.state.getAccount address).codeHash = EMPTY_CODE_HASH) := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   have hbought := mapError_ok_iff.mp hbought
@@ -303,7 +304,7 @@ private theorem processTransaction_nonce_le_bought {env : BlockEnvironment fork}
   by_cases hhegota : .hegota ≤ fork
   · rw [processTransaction_of_hegota_le hhegota] at h
     cases h
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   simp only [hhegota, ↓reduceIte] at h
   split at h
   · exact runTransaction_nonce_le hauth h

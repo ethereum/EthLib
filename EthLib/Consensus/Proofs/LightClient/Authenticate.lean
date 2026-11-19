@@ -11,6 +11,8 @@ An update carries a header that the sync committee signed, the attested header.
 
 Its finality branch proves a finalized root against the state root of that header.
 
+At the genesis slot, the finality check holds the finalized header to the empty header.
+
 Its committee branch proves the next sync committee against the same state root.
 
 A branch binds its leaf: take any value whose root is that state root.
@@ -105,6 +107,23 @@ theorem validateFinality_proves {config : Config} {update : LightClientUpdate pr
     obtain rfl := LightClientError.require_ok.mp rest
     exact ⟨gindex, leaf, indexed, .inr ⟨later, LightClientError.liftRoot_ok.mp rooted⟩,
       LightClientError.liftRoot_ok.mp checked⟩
+
+/-- At the genesis slot, an accepted finality check gives the beacon header of the empty header.
+
+It needs the check to accept the update, and the finalized header to be at the genesis slot.
+
+There the check asks the finalized header to have the SSZ value of the empty one. -/
+theorem validateFinality_beacon_of_genesis {config : Config}
+    {update : LightClientUpdate preset fork}
+    (accepted : validateFinality config update = .ok ())
+    (genesis : update.finalizedHeader.beacon.slot = GENESIS_SLOT) :
+    update.finalizedHeader.beacon = (LightClientHeader.empty preset fork).beacon := by
+  refine LightClientHeader.beacon_eq_of_sameSszValue ?_
+  unfold validateFinality at accepted
+  split at accepted
+  · exact LightClientError.require_ok.mp accepted
+  · obtain ⟨_, same, -⟩ := Base.bind_ok_iff.mp accepted
+    exact LightClientError.require_ok.mp same
 
 /-- An accepted committee branch verifies the root of the next committee of an update.
 
@@ -223,28 +242,9 @@ theorem validateLightClientUpdate_proves {config : Config} {checks : SignatureCh
           ((store.signatureCommittee update).participantKeys update.syncAggregate)
           (packBytes signingRoot) update.syncAggregate.syncCommitteeSignature =
           true := by
-  unfold validateLightClientUpdate at accepted
-  simp only [Base.bind_ok_iff, LightClientError.require_ok] at accepted
-  obtain ⟨_, -, _, participants, _, -, _, -, _, -, rest⟩ := accepted
-  refine ⟨participants, ?_⟩
-  -- Split on the three conditions of the branches, then read each chain of checks.
-  cases known : store.isNextSyncCommitteeKnown <;>
-    cases committee : update.isSyncCommitteeUpdate <;>
-    simp only [known, committee, Bool.not_true, Bool.not_false, Bool.false_eq_true, ↓reduceIte,
-      and_false, and_true, Base.bind_ok_iff, LightClientError.require_ok] at rest
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, _, empty, root, rooted, verified⟩ := rest
-    exact ⟨finality, nofun, fun _ => empty, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, ⟨⟩, branch, root, rooted, verified⟩ := rest
-    exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, _, empty, root, rooted, verified⟩ := rest
-    exact ⟨finality, nofun, fun _ => empty, root, rooted, verified⟩
-  · obtain ⟨_, -, _, -, ⟨⟩, finality, rest⟩ := rest
-    -- A next committee that the store knows must also match; the branch check follows.
-    split at rest <;> simp only [Base.bind_ok_iff, LightClientError.require_ok] at rest
-    · obtain ⟨_, -, ⟨⟩, branch, root, rooted, verified⟩ := rest
-      exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
-    · obtain ⟨⟨⟩, branch, root, rooted, verified⟩ := rest
-      exact ⟨finality, fun _ => branch, nofun, root, rooted, verified⟩
+  obtain ⟨-, participants, -, -, -, -, -, -, finality, empty, branch, signed⟩ :=
+    validateLightClientUpdate_eq_ok_iff.mp accepted
+  exact ⟨participants, finality, fun carried => (branch carried).2, empty, signed⟩
 
 /-- The finalized root of an accepted update is a node of the attested state.
 

@@ -1,7 +1,8 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Fees
+public import EthLib.Execution.Transactions.BlobGas
 public import EthLib.Execution.Transactions.Envelope
 
 /-!

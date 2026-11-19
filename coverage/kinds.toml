@@ -9,11 +9,12 @@
 # It also fails on a model that names no module, or that sits outside a Proofs directory.
 # It fails on a refinement entry that does not exist, is of the wrong kind, or reaches no model.
 # A module that only gathers imports, an aggregator and a model are exempt from the rule.
-# An import listed in scripts/check_layers_baseline.txt passes, each one with its reason.
+# An import listed in scripts/check_layers_baseline.txt under the label `model` passes, each one with its reason.
 
 models = [
   # Casper FFG, LMD-GHOST, the payload tree of Gloas, the network and the stake.
   "EthLib.Consensus.Proofs.Models",
+  "EthLib.Consensus.Proofs.ForkChoiceNetworkModel",
   # Keccak-f[1600] over bit vectors.
   "EthLib.Cryptography.Proofs.Models",
 ]
@@ -22,16 +23,20 @@ refinement = [
   # The direct accountable safety proof: the stake of registry keys against the stake model.
   "EthLib.Consensus.Proofs.DirectSafety.Identity",
   # The fork choice of the specification against the models of the fork choice and the network.
-  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationIndicators",
-  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmationSets",
+  "EthLib.Consensus.Proofs.ForkChoice.BlockAgreement",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets",
+  "EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes",
   "EthLib.Consensus.Proofs.ForkChoice.Ghost",
   "EthLib.Consensus.Proofs.ForkChoice.HonestDuties",
+  "EthLib.Consensus.Proofs.ForkChoice.HonestVotes",
   "EthLib.Consensus.Proofs.ForkChoice.Network",
   "EthLib.Consensus.Proofs.ForkChoice.Optimistic",
   "EthLib.Consensus.Proofs.ForkChoice.PayloadGhost",
   "EthLib.Consensus.Proofs.ForkChoice.PayloadReveal",
   "EthLib.Consensus.Proofs.ForkChoice.Reachable",
   "EthLib.Consensus.Proofs.ForkChoice.Supporters",
+  "EthLib.Consensus.Proofs.ForkChoice.VoteDelivery",
   # The justification and finality of the state transition against Casper FFG and the stake.
   "EthLib.Consensus.Proofs.Transition.FfgFinality",
   "EthLib.Consensus.Proofs.Transition.FfgFinalityChain",
@@ -45,6 +50,8 @@ refinement = [
   "EthLib.Consensus.Proofs.Transition.InactivityLeakStake",
   "EthLib.Consensus.Proofs.Transition.WeakSubjectivitySafety",
   # The Keccak permutation and sponge of the specification against the model over bit vectors.
-  "EthLib.Cryptography.Proofs.Hash.KeccakBitsPermutation",
-  "EthLib.Cryptography.Proofs.Hash.KeccakBitsSponge",
+  "EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation",
+  "EthLib.Cryptography.Proofs.Hash.Keccak.BitsSponge",
+  # The Keccak-f[1600] export against the model over bit vectors.
+  "EthLib.Cryptography.Proofs.Exports.Keccak",
 ]

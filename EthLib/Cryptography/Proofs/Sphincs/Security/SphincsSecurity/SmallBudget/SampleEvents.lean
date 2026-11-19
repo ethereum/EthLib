@@ -2,10 +2,10 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.Contact.Bound
 public import
-    EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.RefinedOutcome
+    EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.RefinedForgery.Outcome
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.OneCoinGame
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverPotential.StartValue
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.CoverBound.NearOption
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.PreparedRun.StartValue
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.SmallBudget.NearOption
 
 /-!
 # The events of one sample of the small-budget route
@@ -100,7 +100,7 @@ theorem expectedFlagged_le_digestF {α : Type} (comp : OracleComp (SourceCostSpe
       ∑' out, Pr{let x ← interp tg initial model comp budget s}[x = out] *
           (digestCount tg out.1.2.2.1 : ℝ≥0∞) := by
   unfold expectedFlagged
-  refine ENNReal.tsum_le_tsum fun out => ?_
+  refine tsum_le_tsum fun out => ?_
   by_cases hout : out ∈ support (interp tg initial model comp budget s)
   · exact mul_le_mul_right
       (by exact_mod_cast flagged_le_digestF tg initial model comp budget s out hout) _
@@ -217,7 +217,7 @@ theorem probEvent_le_endValueF (payoff : (Coordinate → Digest) → State → �
     Pr{let x ← completion s.known}[E x] ≤ endValue payoff s := by
   rw [OracleComp.prEvent_eq_tsum_ite]
   unfold endValue
-  refine ENNReal.tsum_le_tsum fun T => ?_
+  refine tsum_le_tsum fun T => ?_
   split_ifs with hT
   · rw [h T hT, mul_one]
   · exact bot_le

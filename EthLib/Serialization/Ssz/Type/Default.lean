@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Serialization.Ssz.Type.Value
-public import EthLib.Serialization.Ssz.Codec.Error
+public import EthLib.Serialization.Ssz.Error
 
 /-! The value a type takes when nothing is supplied, and how to tell one. -/
 

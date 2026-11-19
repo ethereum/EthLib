@@ -896,7 +896,7 @@ Without children the start counts alone, if it is a viable leaf.
 With children each child ranks lower, and its viable nodes join those of the start.
 
 The start comes last, after some viable node of a child. -/
-private theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
+theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkChoiceNode}
     (walk : store.filterNodeTree config node = .ok nodes) :
     ∃ children, store.getNodeChildren node = .ok children ∧
       ((children = [] ∧ ∃ isViable, store.isViableLeaf config node = .ok isViable ∧
@@ -938,7 +938,7 @@ private theorem filterNodeTree_cases {node : ForkChoiceNode} {nodes : List ForkC
 /-- The viable nodes below a child of a node are viable nodes of that node.
 
 The child ranks below the node. -/
-private theorem filterNodeTree_sub {node child : ForkChoiceNode}
+theorem filterNodeTree_sub {node child : ForkChoiceNode}
     {nodes children : List ForkChoiceNode}
     (walk : store.filterNodeTree config node = .ok nodes)
     (childrenOk : store.getNodeChildren node = .ok children) (childMem : child ∈ children) :
@@ -1383,6 +1383,211 @@ theorem isAncestor_getHead_of_majority_of_gloas {nodes : List ForkChoiceNode}
   isAncestor_getHead_of_majority_withBoost_of_gloas lower gloas noDecision justifiedState tree
     viable votes (by rw [boostScoreOfGloas_of_not_boost noBoost, Nat.add_zero]; exact majority)
     found
+
+/-! ## A viable leaf above a block keeps the block in the filtered tree -/
+
+/-- A path through the children that fork choice reads. -/
+private inductive NodePath (store : Store preset fork) :
+    ForkChoiceNode → ForkChoiceNode → Prop where
+  | refl (node) : NodePath store node node
+  | step {node child leaf children} : store.getNodeChildren node = .ok children →
+      child ∈ children → NodePath store child leaf → NodePath store node leaf
+
+/-- Child paths concatenate. -/
+private theorem NodePath.trans {a b c : ForkChoiceNode} (ab : store.NodePath a b)
+    (bc : store.NodePath b c) : store.NodePath a c := by
+  induction ab with
+  | refl => exact bc
+  | step read mem _ ih => exact .step read mem (ih bc)
+
+/-- Traversal succeeds along every child path, even when its result is empty. -/
+private theorem NodePath.filterNodeTree {node leaf : ForkChoiceNode}
+    (path : store.NodePath node leaf) {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config node = .ok nodes) :
+    ∃ below, store.filterNodeTree config leaf = .ok below ∧ ∀ y ∈ below, y ∈ nodes := by
+  induction path generalizing nodes with
+  | refl => exact ⟨nodes, walk, fun _ h => h⟩
+  | step childrenOk childMem _ ih =>
+    obtain ⟨below, -, belowOk, lift⟩ := filterNodeTree_sub walk childrenOk childMem
+    obtain ⟨result, resultOk, sub⟩ := ih belowOk
+    exact ⟨result, resultOk, fun y hy => lift y (sub y hy)⟩
+
+/-- A reached leaf has a successful viability read, whether it is viable or not. -/
+private theorem NodePath.isViableLeaf_ok {node leaf : ForkChoiceNode}
+    (path : store.NodePath node leaf) {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config node = .ok nodes)
+    (terminal : store.getNodeChildren leaf = .ok []) :
+    ∃ b, store.isViableLeaf config leaf = .ok b := by
+  obtain ⟨below, belowOk, -⟩ := path.filterNodeTree walk
+  obtain ⟨children, childrenOk, cases⟩ := filterNodeTree_cases belowOk
+  rw [terminal, Except.ok.injEq] at childrenOk
+  subst childrenOk
+  rcases cases with ⟨-, b, read, -⟩ | ⟨ne, -⟩
+  · exact ⟨b, read⟩
+  · exact absurd rfl ne
+
+/-- A viable leaf belongs to the filtered result of every start on its child path. -/
+private theorem NodePath.mem_filterNodeTree {node leaf : ForkChoiceNode}
+    (path : store.NodePath node leaf) {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config node = .ok nodes)
+    (terminal : store.getNodeChildren leaf = .ok [])
+    (viable : store.isViableLeaf config leaf = .ok true) : leaf ∈ nodes := by
+  obtain ⟨below, belowOk, lift⟩ := path.filterNodeTree walk
+  have result : below = [leaf] := by
+    rw [Store.filterNodeTree, terminal] at belowOk
+    simpa [viable, bind, Except.bind, pure, Except.pure] using belowOk.symm
+  exact lift leaf (result ▸ List.mem_singleton_self leaf)
+
+/-- Before Gloas, every ancestor relation between held roots gives a child path. -/
+private theorem nodePath_of_ancestor (before : fork < .glamsterdam)
+    {root leaf : Root} {block : BeaconBlock preset fork}
+    (found : store.blocks[root]? = some block)
+    (above : (blockTree lower).Ancestor (some root) (some leaf)) :
+    store.NodePath ⟨root, .pending⟩ ⟨leaf, .pending⟩ := by
+  induction h : store.nodeRank ⟨root, .pending⟩ using Nat.strong_induction_on
+      generalizing root block with
+  | _ rank ih =>
+  by_cases same : root = leaf
+  · subst same
+    exact .refl _
+  obtain ⟨child, childOf, childAbove⟩ := above.exists_child (by simpa using same)
+  cases child with
+  | none => exact False.elim (childOf.1 rfl)
+  | some child =>
+    obtain ⟨childBlock, childFound, parent⟩ := blockTree_isChild_iff.mp childOf
+    have childrenOk : ∃ children, store.getNodeChildren ⟨root, .pending⟩ = .ok children := by
+      have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+      simp [getNodeChildren, later, pure, Except.pure]
+    obtain ⟨children, childrenOk⟩ := childrenOk
+    have childMem : (⟨child, .pending⟩ : ForkChoiceNode) ∈ children :=
+      (mem_getNodeChildren before childrenOk).mpr ⟨rfl, childBlock, childFound, parent⟩
+    have slots := UInt64.lt_iff_toNat_lt.mp
+      (lower child childBlock block childFound (parent ▸ found))
+    have bound := childBlock.slot.toNat_lt
+    have rankLower : store.nodeRank ⟨child, .pending⟩ < store.nodeRank ⟨root, .pending⟩ := by
+      simp only [nodeRank, childFound, found, ↓reduceIte]
+      omega
+    exact .step childrenOk childMem (ih _ (h ▸ rankLower) childFound childAbove rfl)
+
+/-- A held block has a held leaf above it in the finite strict-slot tree, before Gloas. -/
+private theorem exists_leaf_above (lower : store.ParentsBelow) (before : fork < .glamsterdam)
+    {root : Root} {block : BeaconBlock preset fork}
+    (found : store.blocks[root]? = some block) :
+    ∃ leaf leafBlock, store.blocks[leaf]? = some leafBlock ∧
+      store.NodePath ⟨root, .pending⟩ ⟨leaf, .pending⟩ ∧
+      store.getNodeChildren ⟨leaf, .pending⟩ = .ok [] := by
+  induction h : store.nodeRank ⟨root, .pending⟩ using Nat.strong_induction_on
+      generalizing root block with
+  | _ rank ih =>
+  have childrenOk : ∃ children, store.getNodeChildren ⟨root, .pending⟩ = .ok children := by
+    have later : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt before
+    simp [getNodeChildren, later, pure, Except.pure]
+  obtain ⟨children, childrenOk⟩ := childrenOk
+  by_cases empty : children = []
+  · exact ⟨root, block, found, .refl _, empty ▸ childrenOk⟩
+  obtain ⟨child, childMem⟩ := List.exists_mem_of_ne_nil _ empty
+  obtain ⟨pending, childBlock, childFound, parent⟩ :=
+    (mem_getNodeChildren before childrenOk).mp childMem
+  have slots := UInt64.lt_iff_toNat_lt.mp
+    (lower child.root childBlock block childFound (parent ▸ found))
+  have bound := childBlock.slot.toNat_lt
+  have rankLower : store.nodeRank child < store.nodeRank ⟨root, .pending⟩ := by
+    simp only [nodeRank, childFound, found, pending, ↓reduceIte]
+    omega
+  have childEq : child = ⟨child.root, .pending⟩ := by cases child; simp_all
+  obtain ⟨leaf, leafBlock, leafFound, path, terminal⟩ :=
+    ih _ (h ▸ (childEq ▸ rankLower)) childFound rfl
+  exact ⟨leaf, leafBlock, leafFound, .step childrenOk childMem (childEq ▸ path), terminal⟩
+
+/-- Before Gloas, a child path follows the strict-slot block tree. -/
+private theorem NodePath.ancestor {node leaf : ForkChoiceNode} (path : store.NodePath node leaf)
+    (before : fork < .glamsterdam) :
+    (blockTree lower).Ancestor (some node.root) (some leaf.root) := by
+  induction path with
+  | refl => exact .refl _
+  | step read mem _ ih =>
+    obtain ⟨-, block, found, parent⟩ := (mem_getNodeChildren before read).mp mem
+    exact (blockTree_isChild_iff.mpr ⟨block, found, parent⟩).ancestor.trans ih
+
+/-- A held leaf above `top` has a viability read, and if viable keeps `mid` in the filtered tree.
+
+The block `mid` lies between the start of the walk and `top`, before Gloas. -/
+theorem exists_leaf_above_mem_filterNodeTree (before : fork < .glamsterdam) {start mid top : Root}
+    {midBlock topBlock : BeaconBlock preset fork} {nodes : List ForkChoiceNode}
+    (midFound : store.blocks[mid]? = some midBlock)
+    (topFound : store.blocks[top]? = some topBlock)
+    (below : (blockTree lower).Ancestor (some start) (some mid))
+    (above : (blockTree lower).Ancestor (some mid) (some top))
+    (walk : store.filterNodeTree config ⟨start, .pending⟩ = .ok nodes) :
+    ∃ leaf leafBlock, store.blocks[leaf]? = some leafBlock ∧
+      (blockTree lower).Ancestor (some top) (some leaf) ∧
+      (∃ b, store.isViableLeaf config ⟨leaf, .pending⟩ = .ok b) ∧
+      (store.isViableLeaf config ⟨leaf, .pending⟩ = .ok true →
+        (⟨mid, .pending⟩ : ForkChoiceNode) ∈ nodes) := by
+  obtain ⟨startBlock, startRead⟩ := filterNodeTree_known walk
+  have toMid := nodePath_of_ancestor before startRead below
+  have toTop := nodePath_of_ancestor before midFound above
+  obtain ⟨leaf, leafBlock, leafRead, leafPath, terminal⟩ :=
+    exists_leaf_above lower before topFound
+  refine ⟨leaf, leafBlock, leafRead, leafPath.ancestor before, ?_, ?_⟩
+  · exact (toMid.trans (toTop.trans leafPath)).isViableLeaf_ok walk terminal
+  intro viable
+  obtain ⟨result, resultOk, lift⟩ := toMid.filterNodeTree walk
+  exact lift _ (filterNodeTree_self resultOk (List.ne_nil_of_mem
+    ((toTop.trans leafPath).mem_filterNodeTree resultOk terminal viable)))
+
+/-- The viability read of a leaf is `true` from its two checks.
+
+The read is known to succeed, so the numeric arm does not overflow. -/
+theorem isViableLeaf_eq_true {leaf : Root} {verdict : Bool}
+    {epoch : Epoch} {source : Checkpoint}
+    (read : store.isViableLeaf config ⟨leaf, .pending⟩ = .ok verdict)
+    (epochOk : store.getCurrentStoreEpoch config = .ok epoch)
+    (sourceOk : store.getVotingSource config leaf = .ok source)
+    (justified : store.justifiedCheckpoint.epoch = GENESIS_EPOCH ∨
+      source.epoch = store.justifiedCheckpoint.epoch ∨ epoch.toNat ≤ source.epoch.toNat + 2)
+    (finalized : store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+      store.getCheckpointBlock leaf store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root) :
+    verdict = true := by
+  unfold isViableLeaf at read
+  simp only [epochOk, sourceOk, bind, Except.bind] at read
+  have finalTrue : ∀ fb, store.getCheckpointBlock leaf store.finalizedCheckpoint.epoch = .ok fb →
+      (decide (store.finalizedCheckpoint.epoch = GENESIS_EPOCH) ||
+        decide (store.finalizedCheckpoint.root = fb)) = true := by
+    intro fb fbOk
+    rcases finalized with genesis | finalRead
+    · simp [genesis]
+    · rw [finalRead, Except.ok.injEq] at fbOk
+      simp [fbOk]
+  by_cases shortcut : store.justifiedCheckpoint.epoch = GENESIS_EPOCH ∨
+      source.epoch = store.justifiedCheckpoint.epoch
+  · simp only [shortcut, ↓reduceIte, pure, Except.pure] at read
+    cases fin : store.getCheckpointBlock leaf store.finalizedCheckpoint.epoch with
+    | error err => simp [fin] at read
+    | ok fb =>
+      simp only [fin, Except.ok.injEq] at read
+      rw [← read, finalTrue fb fin]
+      rfl
+  · have recent : epoch.toNat ≤ source.epoch.toNat + 2 := by
+      rcases justified with h | h | h
+      · exact absurd (.inl h) shortcut
+      · exact absurd (.inr h) shortcut
+      · exact h
+    simp only [shortcut, ↓reduceIte] at read
+    cases addition : Uint64.addChecked source.epoch 2 with
+    | error err => simp [addition, Except.mapError] at read
+    | ok bound =>
+      have boundValue := (Uint64.addChecked_ok_iff.mp addition).2
+      change bound.toNat = source.epoch.toNat + 2 at boundValue
+      have within : epoch ≤ bound := UInt64.le_iff_toNat_le.mpr (by omega)
+      cases fin : store.getCheckpointBlock leaf store.finalizedCheckpoint.epoch with
+      | error err =>
+        simp [addition, fin, Except.mapError, pure, Except.pure] at read
+      | ok fb =>
+        simp only [addition, fin, Except.mapError, pure, Except.pure, Except.ok.injEq] at read
+        rw [← read, finalTrue fb fin]
+        simp [within]
 
 end Store
 

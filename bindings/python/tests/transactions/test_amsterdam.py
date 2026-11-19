@@ -77,7 +77,7 @@ def test_calldata_floor() -> None:
     floor = 21_000 + 64 * 100
     assert transactions.intrinsic_gas("glamsterdam", _fee_market(OTHER, 1, data)) == 22_600
     transactions.check("glamsterdam", CHAIN_ID, _fee_market(OTHER, 1, data, gas=floor))
-    with raises(transactions.TransactionError, "insufficientGas 27400 27399"):
+    with raises(transactions.TransactionError, "insufficientGas (needed := 27400) (gas := 27399)"):
         transactions.check("glamsterdam", CHAIN_ID, _fee_market(OTHER, 1, data, gas=floor - 1))
     # Before Glamsterdam the floor is 21000 plus 10 gas per token, 4 tokens per nonzero byte.
     transactions.check("bpo5", CHAIN_ID, _fee_market(OTHER, 1, data, gas=25_000))
@@ -87,10 +87,10 @@ def test_gas_limit_bounds() -> None:
     # EIP-8037 bounds the gas limit at 2^32 - 1 and moves the bound 2^24 of EIP-7825.
     high = _fee_market(OTHER, gas=2**24 + 1)
     transactions.check("glamsterdam", CHAIN_ID, high)
-    with raises(transactions.TransactionError, "gasLimitExceeded 16777217"):
+    with raises(transactions.TransactionError, "gasLimitExceeded (gas := 16777217)"):
         transactions.check("bpo5", CHAIN_ID, high)
     transactions.check("glamsterdam", CHAIN_ID, _fee_market(OTHER, gas=2**32 - 1))
-    with raises(transactions.TransactionError, "gasLimitExceeded 4294967296") as error:
+    with raises(transactions.TransactionError, "gasLimitExceeded (gas := 4294967296)") as error:
         transactions.check("glamsterdam", CHAIN_ID, _fee_market(OTHER, gas=2**32))
     assert error.value.code == 8
 
@@ -98,7 +98,7 @@ def test_gas_limit_bounds() -> None:
 def test_floor_above_bound() -> None:
     # A floor above 2^24 makes the transaction invalid, whatever its gas limit.
     tx = _fee_market(OTHER, data=b"\x01" * 270_000, gas=2**25)
-    with raises(transactions.TransactionError, "intrinsicGasAboveLimit 17295000") as error:
+    with raises(transactions.TransactionError, "intrinsicGasAboveLimit (gas := 17295000)") as error:
         transactions.check("glamsterdam", CHAIN_ID, tx)
     assert error.value.code == 16
 
@@ -107,10 +107,10 @@ def test_init_code_size() -> None:
     # EIP-7954 raises the bound on init code from 49152 to 131072 bytes.
     tx = _fee_market(b"", data=bytes(49_153), gas=2**24)
     transactions.check("glamsterdam", CHAIN_ID, tx)
-    with raises(transactions.TransactionError, "initCodeTooLarge 49153"):
+    with raises(transactions.TransactionError, "initCodeTooLarge (size := 49153)"):
         transactions.check("bpo5", CHAIN_ID, tx)
     too_large = _fee_market(b"", data=bytes(131_073), gas=2**24)
-    with raises(transactions.TransactionError, "initCodeTooLarge 131073"):
+    with raises(transactions.TransactionError, "initCodeTooLarge (size := 131073)"):
         transactions.check("glamsterdam", CHAIN_ID, too_large)
 
 
@@ -120,8 +120,8 @@ def test_order_of_checks() -> None:
     # A nonce of 2^64 - 1 is above the last nonce that EIP-2681 allows.
     tx = _fee_market(OTHER, 1, gas=20_000, nonce=2**64 - 1)
     # Before Glamsterdam, the gas comes first.
-    with raises(transactions.TransactionError, "insufficientGas 21000 20000"):
+    with raises(transactions.TransactionError, "insufficientGas (needed := 21000) (gas := 20000)"):
         transactions.check("pectra", CHAIN_ID, tx)
     # From Glamsterdam, the nonce comes first and the gas last.
-    with raises(transactions.TransactionError, "nonceOverflow"):
+    with raises(transactions.TransactionError, "nonceOverflow (nonce := 18446744073709551615)"):
         transactions.check("glamsterdam", CHAIN_ID, tx)

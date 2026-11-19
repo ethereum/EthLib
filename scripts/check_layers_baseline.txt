@@ -1,5 +1,17 @@
 # Imports that break a rule of ARCHITECTURE.md "Rules", each one on purpose.
 #
-# One import per line: the importing module, then the imported module.
+# One entry per line: the rule, the importing module, then the imported module.
+# The rule is one of these labels, and the entry allows the import to break only that rule:
+#   layer       the layer order, the imports of each kind of module, and the first tier of Cryptography
+#   import-all  only a module under EthLib/Base/Proofs/Toolchain/ reads bodies outside EthLib
+#   cycle       the directories of a layer never import each other in a cycle
+#   model       only a refinement module imports a model
 # Write the reason in a comment above the entry, and repeat it in the pull request.
-# A line that no longer matches an import that breaks a rule fails the check.
+# An entry whose import no longer breaks its rule fails the check, and so does a line of another form.
+
+# The infinity checks of BLS compression run `decide` on a literal encoding.
+# The kernel then reduces the body of the bounded `Nat.all`, and the proofs have not moved to equations.
+import-all EthLib.Cryptography.Proofs.Bls.Compress Init.Data.Nat.Fold
+import-all EthLib.Cryptography.Proofs.Bls.G2Compress Init.Data.Nat.Fold
+# The closed infinity check of G2 also reduces the derived equality of `Except`.
+import-all EthLib.Cryptography.Proofs.Bls.G2Compress Batteries.Data.Except

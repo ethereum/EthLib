@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Signer
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.Secrets
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.HashCalls
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.HiddenOracle.Cost
 
 @[expose] public section
 
@@ -164,7 +164,8 @@ theorem hashCalls_treeFold (f : QueryImpl HashSpec Id) (parameter : PublicParame
       OracleComp HashSpec Digest) = levels
   | 0, _ => hashCalls_pure f _
   | levels + 1, value => by
-      rw [treeFold, hashCalls_bind, hashCalls_treeFold f parameter lay tree leaf path levels value]
+      rw [treeFold_succ, hashCalls_bind,
+        hashCalls_treeFold f parameter lay tree leaf path levels value]
       dsimp only
       split <;> simp only [hashCalls_tweakableHash]
 
@@ -176,7 +177,7 @@ theorem hashCalls_forsFold (f : QueryImpl HashSpec Id) (parameter : PublicParame
         OracleComp HashSpec Digest) = levels
   | 0, _, _ => hashCalls_pure f _
   | levels + 1, value, hlevels => by
-      rw [forsFold, hashCalls_bind,
+      rw [forsFold_succ, hashCalls_bind,
         hashCalls_forsFold f parameter index κ leaf path levels value (by omega)]
       simp only [dite_eq_left (show levels < forsHeight by omega)]
       split <;> simp only [hashCalls_tweakableHash]

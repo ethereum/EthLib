@@ -7,6 +7,8 @@ public import EthLib.Serialization.Ssz.Typed.Collections
 
 A rooted vector holds its elements together with every level of their Merkle tree.
 
+The levels are a table of the generic Merkle nodes, filled one node step at a time.
+
 Writing one element then rehashes only the path above its leaf, one node per level.
 
 The root is read from the top level, and the proofs show that it is the root of the vector.
@@ -73,13 +75,20 @@ theorem ext {d e : Deferred α} (same : d.get = e.get) : d = e := by
 end Deferred
 
 /--
-The parent of entries `2 * index` and `2 * index + 1` of a level whose subtrees have a height.
+The Merkle node one level above a level whose subtrees have a height, at an index.
 
-An entry past the level is the zero subtree of that height.
+The level stands in as the leaves, and an entry past it is the zero subtree of that height.
 -/
 def parentAt (height : Nat) (level : Array Bytes) (index : Nat) : Bytes :=
-  combine (level[2 * index]?.getD (zeroSubtree height))
-    (level[2 * index + 1]?.getD (zeroSubtree height))
+  (Cryptography.Merkle.node (m := Id) (fun _ => combine)
+    (fun position => level[position]?.getD (zeroSubtree height)) ⟨1, index⟩).run
+
+/-- The node above two entries hashes them, the left one first. -/
+theorem parentAt_eq (height : Nat) (level : Array Bytes) (index : Nat) :
+    parentAt height level index
+      = combine (level[2 * index]?.getD (zeroSubtree height))
+          (level[2 * index + 1]?.getD (zeroSubtree height)) :=
+  rfl
 
 /-- The level above a level whose subtrees have a height: each pair of entries hashed together. -/
 def pairUp (height : Nat) (level : Array Bytes) : Array Bytes :=
@@ -157,7 +166,7 @@ theorem pairUp_writeEntry (height : Nat) (level : Array Bytes) {position : Nat}
   · -- The two entries under another parent are not the one written.
     have unchanged : parentAt height (writeEntry level position node) index
         = parentAt height level index := by
-      simp only [parentAt, getElem?_writeEntry within]
+      simp only [parentAt_eq, getElem?_writeEntry within]
       rw [ite_eq_right (by omega), ite_eq_right (by omega)]
     rw [unchanged, ite_eq_right same]
     by_cases inside : index < (level.size + 1) / 2
@@ -190,39 +199,29 @@ theorem updateLevels_buildLevels :
     simp only [updateLevels]
 
 /--
-The levels with a count of levels added on top, each pairing up the one below it.
+The levels with a count of levels built on top, from the top level given.
 
 The height is that of the subtrees in the top level given.
 -/
-def raiseLevels (height : Nat) (levels : List (Array Bytes)) : Nat → List (Array Bytes)
-  | 0 => levels
-  | count + 1 =>
-    raiseLevels (height + 1) (levels ++ [pairUp height (levels.getLast?.getD #[])]) count
+def raiseLevels (height : Nat) (levels : List (Array Bytes)) (count : Nat) : List (Array Bytes) :=
+  levels ++ (buildLevels height (levels.getLast?.getD #[]) count).tail
 
-/-- One more level on top of a tree pairs up its top level. -/
-theorem buildLevels_succ :
-    ∀ (above height : Nat) (level : Array Bytes),
-      buildLevels height level (above + 1) = buildLevels height level above
-        ++ [pairUp (height + above) ((buildLevels height level above).getLast?.getD #[])]
-  | 0, height, level => by simp [buildLevels]
-  | above + 1, height, level => by
-    rw [buildLevels, buildLevels_succ above (height + 1), buildLevels]
+/-- Raising the levels of a tree gives the levels of the same leaves up to a greater height. -/
+theorem raiseLevels_buildLevels (height : Nat) (level : Array Bytes) (count above : Nat) :
+    raiseLevels (height + above) (buildLevels height level above) count
+      = buildLevels height level (above + count) := by
+  induction above generalizing height level with
+  | zero => cases count <;> simp [raiseLevels, buildLevels]
+  | succ above ih =>
     -- The levels above the first are never empty, so the top is theirs.
     obtain ⟨first, rest, nonempty⟩ :
         ∃ first rest, buildLevels (height + 1) (pairUp height level) above = first :: rest := by
       cases above <;> exact ⟨_, _, rfl⟩
-    rw [nonempty, show height + 1 + above = height + (above + 1) by omega]
+    have below := ih (height + 1) (pairUp height level)
+    rw [show height + 1 + above = height + (above + 1) by omega, raiseLevels, nonempty] at below
+    rw [raiseLevels, buildLevels, nonempty, show above + 1 + count = above + count + 1 by omega,
+      buildLevels, ← below]
     simp
-
-/-- Raising the levels of a tree gives the levels of the same leaves up to a greater height. -/
-theorem raiseLevels_buildLevels (height : Nat) (level : Array Bytes) :
-    ∀ (count above : Nat), raiseLevels (height + above) (buildLevels height level above) count
-      = buildLevels height level (above + count)
-  | 0, above => rfl
-  | count + 1, above => by
-    rw [raiseLevels, ← buildLevels_succ, show height + above + 1 = height + (above + 1) by omega,
-      raiseLevels_buildLevels height level count (above + 1),
-      show above + 1 + count = above + (count + 1) by omega]
 
 /-- Raising the levels over the leaves gives their levels up to a greater height. -/
 theorem raiseLevels_buildLevels_leaves (level : Array Bytes) (above count : Nat) :
@@ -489,22 +488,6 @@ theorem leaves_eq (v : RootedVector α length) :
 def shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
     (le : count ≤ length) : Vector α length :=
   ⟨v.elements.toArray.extract count length ++ fresh.toArray, by simp; omega⟩
-
-/-- Each element after a shift is the one `count` places later, or else a fresh one. -/
-theorem getElem_shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
-    (le : count ≤ length) (index : Nat) (inside : index < length) :
-    (v.shiftElements fresh le)[index] =
-      if kept : index + count < length then v.elements[index + count]
-      else fresh[index + count - length]'(by omega) := by
-  have size : (v.elements.toArray.extract count length).size = length - count := by simp
-  simp only [shiftElements, Vector.getElem_mk, Array.getElem_append, size]
-  split <;> split
-  · simp [Array.getElem_extract, Nat.add_comm count index]
-  · omega
-  · omega
-  · simp only [Vector.getElem_toArray]
-    congr 1
-    omega
 
 /--
 The vector with its first `count` elements dropped and the fresh elements appended.

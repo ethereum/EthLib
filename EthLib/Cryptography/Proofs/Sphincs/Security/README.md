@@ -37,8 +37,11 @@ The files in `SphincsSecurity/Seed/` prepare the step that removes the hidden ke
 `Seed/Coupling.lean` proves that sampling these outputs and programming them into the cache before a computation leaves its distribution unchanged.
 
 The other directories hold the game hops and the bounds.
-`Classification/` describes what an accepted forgery must contain.
-`ScanSigner/`, `GraphView/` and `LazyRun/` analyse the signer's hash calls, their cost, and a run whose hidden values are sampled only when read.
+`Classification/` gives the structural facts about signatures that the graph and the forgery classification share.
+`Forgery/` describes what an accepted forgery must contain, and `RefinedForgery/` gives the extra events used for small budgets.
+`HiddenOracle/` defines the hidden rows, their reveals and their hash costs.
+`GraphView/`, `LazyRun/` and `ScanSigner/` analyse the signer's hash calls and the run that samples hidden values only when read.
+`PreparedRun/` connects that run to the stopped experiment and the potentials that bound its win.
 `Reduction/` moves the oracle and the seeds out of the game.
 `Reduction/SeedElimination.lean` bounds the advantage by any bound on the win probability of a game without seeds, plus `3 q / 2^256`.
 The extra term covers a hash call that names a hidden key value: the secret seed, or the PRF key `SK.prf` in a randomizer derivation.
@@ -72,7 +75,7 @@ leanVM ships them under MIT or Apache-2.0, and their copyright holder, leanEther
 ## What changed here
 
 leanVM builds the proof with Lean v4.31.0, Mathlib `fabf563a` and VCVio `cbd4144b`.
-EthLib builds with Lean v4.35.0, VCVio `bbf05eee` and the Mathlib that this VCVio uses.
+EthLib builds with Lean v4.36.0, VCVio `v4.36.0` and the Mathlib that this VCVio uses.
 The changes that follow from this are:
 
 - VCVio now gives the distribution of a computation as a Mathlib measure, not as a sub-probability mass function.
@@ -88,7 +91,7 @@ The changes that follow from this are:
   `Scheme/Bytes.lean` gains lemmas for the lengths of the byte widths that the model uses.
   So five files set the option that lets definitional unfolding cross reducibility boundaries, where leanVM does not, and each says why in a comment.
   Seventeen other files keep that option from leanVM.
-  Two of them, `LazyRun/GraphRows.lean` and `Seed/Coupling.lean`, say why in a comment, and the other fifteen do not.
+  Two of them, `GraphView/Coordinates.lean` and `Seed/Coupling.lean`, say why in a comment, and the other fifteen do not.
 - `Scheme/Uniform.lean` gains a lemma: the first coordinate of a uniform pair is uniform.
 - The Mathlib that EthLib uses has no uniform probability mass function of a finite type.
   So `Base/Prelude.lean` and `LazyRun/Resample.lean` state their lemmas about uniform products, pairs and tables for uniform samples, as equalities in distribution.
@@ -102,8 +105,8 @@ The changes that follow from this are:
 - `Base/Prelude.lean` gains a lemma: two independent draws have the same joint distribution in either order.
 - `Base/Domination.lean` and `Base/Virtual.lean` import the parts of Mathlib that they use instead of all of Mathlib.
   A file that imports all of Mathlib needs more memory than EthLib's limit per file.
-- `LazyRun/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.
-- `lake exe check-decls` rejects `opaque` declarations, so the sampling instances of `Seed/Model.lean`, `GraphView/Sampling.lean` and `LazyRun/GraphSampling.lean` are irreducible definitions instead.
+- `HiddenOracle/Reveal.lean` states that revealing a coordinate commutes with sampling the rest of a uniform table as an equality in distribution.
+- `lake exe check-decls` rejects `opaque` declarations, so the sampling instances of `Seed/Model.lean`, `GraphView/Sampling.lean` and `GraphView/HiddenSampling.lean` are irreducible definitions instead.
 - leanXMSS uses the same random oracle, and neither scheme imports the other.
   So the oracle, its inputs and answers and the truncation of an answer come from `Proofs/HashSig/Oracle.lean`.
   `Scheme.lean` exports them under their old names, so the proof keeps them.

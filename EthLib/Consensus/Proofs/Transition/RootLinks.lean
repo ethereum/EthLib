@@ -96,7 +96,7 @@ private theorem latestBlockHeader_upgradeNext {pre : ForkedBeaconState preset}
   obtain ⟨fork, before⟩ := pre
   cases fork <;> simp only [upgradeNext] at computed
   all_goals try solve | cases computed; rfl | cases computed
-  all_goals try simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  all_goals simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
   case phase0 =>
     obtain ⟨after, upgraded, rfl⟩ := computed
     obtain ⟨middle, folded, committee, rfl⟩ := upgradeToAltair_ok upgraded
@@ -140,92 +140,6 @@ section Transition
 
 variable {fork : Fork} {engine : ExecutionEngine preset fork}
   {state after : BeaconState preset fork}
-
-/-- A header with a state root other than zero stays the same through any number of slots. -/
-private theorem advanceSlots_latestBlockHeader_of_ne :
-    ∀ (count : Nat) {state after : BeaconState preset fork},
-      advanceSlots config checks count state = .ok after →
-      state.latestBlockHeader.stateRoot ≠ Vector.replicate 32 0 →
-      after.latestBlockHeader = state.latestBlockHeader
-  | 0, state, after, computed, _ => by
-    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
-    rw [← computed]
-  | count + 1, state, after, computed, filled => by
-    simp only [advanceSlots, bind_ok_iff] at computed
-    obtain ⟨next, nextOk, rest⟩ := computed
-    obtain ⟨_, -, header⟩ := advanceSlot_latestBlockHeader nextOk
-    simp only [filled, ↓reduceIte] at header
-    rw [advanceSlots_latestBlockHeader_of_ne count rest (header ▸ filled), header]
-
-/-- A header that the filling leaves with a zero state root was filled with the zero root.
-
-So the filling changed nothing. -/
-theorem header_unfilled_of_filled {header filled : BeaconBlockHeader} {stateRoot : Root}
-    (equation : filled = if header.stateRoot = Vector.replicate 32 0 then
-      { header with stateRoot := stateRoot } else header)
-    (unfilled : filled.stateRoot = Vector.replicate 32 0) :
-    stateRoot = Vector.replicate 32 0 ∧ filled = header := by
-  by_cases empty : header.stateRoot = Vector.replicate 32 0
-  · simp only [empty, ↓reduceIte] at equation
-    have zero : stateRoot = Vector.replicate 32 0 := by rw [equation] at unfilled; exact unfilled
-    refine ⟨zero, ?_⟩
-    rw [equation, zero, ← empty]
-  · simp only [empty, ↓reduceIte] at equation
-    exact absurd (equation ▸ unfilled) empty
-
-/-- The root of the header after a slot is that of the header at the end, or of the header before.
-
-The header before counts only when the slot leaves it unfilled.
-
-Then the state before hashes to zero. -/
-theorem hashTreeRoot_latestBlockHeader_advanceSlots {count : Nat}
-    {next last : BeaconState preset fork}
-    (step : advanceSlot config checks state = .ok next)
-    (rest : advanceSlots config checks count next = .ok last) {root : Root}
-    (rooted : hashTreeRoot next.latestBlockHeader = .ok root) :
-    hashTreeRoot last.latestBlockHeader = .ok root ∨
-      (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
-        hashTreeRoot state.latestBlockHeader = .ok root) := by
-  obtain ⟨stateRoot, hashed, header⟩ := advanceSlot_latestBlockHeader step
-  by_cases filled : next.latestBlockHeader.stateRoot = Vector.replicate 32 0
-  · obtain ⟨zero, same⟩ := header_unfilled_of_filled header filled
-    rw [same] at rooted
-    exact .inr ⟨zero ▸ hashed, rooted⟩
-  · exact .inl (by rw [advanceSlots_latestBlockHeader_of_ne count rest filled]; exact rooted)
-
-/-- A root that some slots make readable was readable before them, or comes from the header.
-
-It is the root of the header at the end.
-
-Or the state before hashes to zero, and it is the root of the header before. -/
-private theorem getBlockRootAtSlot_advanceSlots :
-    ∀ (count : Nat) {state after : BeaconState preset fork},
-      advanceSlots config checks count state = .ok after → ∀ {slot : Slot} {root : Root},
-      getBlockRootAtSlot after slot = .ok root →
-      (slot < state.slot ∧ getBlockRootAtSlot state slot = .ok root) ∨
-        (state.slot ≤ slot ∧ (hashTreeRoot after.latestBlockHeader = .ok root ∨
-          (hashTreeRoot state = .ok (Vector.replicate 32 0) ∧
-            hashTreeRoot state.latestBlockHeader = .ok root)))
-  | 0, state, after, computed, slot, root, read => by
-    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact .inl ⟨(getBlockRootAtSlot_read read).1, read⟩
-  | count + 1, state, after, computed, slot, root, read => by
-    simp only [advanceSlots, bind_ok_iff] at computed
-    obtain ⟨next, nextOk, rest⟩ := computed
-    have succ := advanceSlot_slot nextOk
-    rcases getBlockRootAtSlot_advanceSlots count rest read with ⟨_, nextRead⟩ | ⟨later, rooted⟩
-    · rcases getBlockRootAtSlot_advanceSlot_cases nextOk nextRead with
-        ⟨before, read⟩ | ⟨same, rooted⟩
-      · exact .inl ⟨before, read⟩
-      · exact .inr ⟨same.symm ▸ UInt64.le_refl _,
-          hashTreeRoot_latestBlockHeader_advanceSlots nextOk rest rooted⟩
-    · refine .inr ⟨UInt64.le_iff_toNat_le.mpr ?_, ?_⟩
-      · have := UInt64.le_iff_toNat_le.mp later
-        omega
-      · rcases rooted with rooted | ⟨-, rooted⟩
-        · exact .inl rooted
-        · exact hashTreeRoot_latestBlockHeader_advanceSlots nextOk rest rooted
 
 /-- A block that the state transition accepts leaves the roots of the slots before it as follows.
 

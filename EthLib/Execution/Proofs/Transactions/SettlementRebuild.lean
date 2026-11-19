@@ -51,6 +51,7 @@ theorem buyGas_rebuildState {block : BlockState} {state state' : TransactionStat
       1 ≤ (state'.getAccount sender).nonce := by
   have raised := (buyGas_sender rfl h).2.2
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨bumped, nonce, debit⟩ := bind_ok_iff.mp h
   obtain ⟨bumpedValid, bumpedKeeps, senderNonce⟩ := valid.incrementNonce nonce
   obtain ⟨account, computed, after⟩ := TransactionState.modifyState_eq_ok_iff.mp debit
@@ -72,6 +73,7 @@ theorem settleGas_rebuildState (paris : .paris ≤ fork) {block : BlockState}
     (h : settleGas env state sender tx gasLeft refundCounter = .ok (state', used)) :
     RebuildState block state' ∧ KeepsNonceOrCode state state' := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨refunded, refund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, pay, h⟩ := bind_ok_iff.mp h
   cases h

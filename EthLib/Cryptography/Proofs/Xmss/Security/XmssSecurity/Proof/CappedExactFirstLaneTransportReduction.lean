@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Capped
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CappedChain.DirectQueryAccounting
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.StateLens
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.EagerTraceInvariant
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 
@@ -1036,8 +1036,10 @@ theorem globalFirstLaneOracleTraceSublist_holds
       exact globalFirstLaneUniformQuery_trace_sublist keyView n state
         encodingTrace result
   | inr hashInput =>
+      -- Compare the sets: the kernel reduces a membership in `support` by running it.
       exact globalFirstLaneHashQuery_trace_sublist table keyView edgeHigh
-        hashInput state encodingTrace result hresult
+        hashInput state encodingTrace result
+        (Set.mem_of_subset_of_mem (by exact subset_rfl) hresult)
 
 abbrev GlobalFirstLaneExactTracedOracleTraceSublist
     (table : GlobalChainValueIndex → Digest)
@@ -1193,7 +1195,8 @@ theorem globalFirstLaneVerifierHashExecution_cache_le
         (globalFirstLaneVerifierHashExecution keyView edgeHigh hashInput
           state)).run)) :
     state.cache ≤ result.1.2.cache := by
-  unfold globalFirstLaneVerifierHashExecution at hresult
+  -- Rewrite, not unfold: unfolding makes the kernel run the computation to compare supports.
+  rw [globalFirstLaneVerifierHashExecution] at hresult
   exact globalFirstLaneHashQuery_cache_le table keyView edgeHigh hashInput state
     result hresult
 
@@ -1242,10 +1245,13 @@ theorem globalFirstLaneVerifierHashExecution_simulateQ_cache_le
           (globalFirstLaneVerifierHashExecution keyView edgeHigh hashInput))
             computation).run initialState)).run)) :
     initialState.cache ≤ result.1.2.cache := by
+  -- Compare the sets: the kernel reduces a membership in `support` by running the computation.
   exact simulateQ_eagerTrace_state_cache_le table
     (globalFirstLaneVerifierHashExecution keyView edgeHigh)
       (fun state : GlobalCausalHashState => state.cache)
-      (globalFirstLaneVerifierHashExecution_cache_le table keyView edgeHigh)
+      (fun hashInput state result hstep =>
+        globalFirstLaneVerifierHashExecution_cache_le table keyView edgeHigh hashInput state
+          result (Set.mem_of_subset_of_mem (by exact subset_rfl) hstep))
       computation initialState result hresult
 
 @[irreducible]
@@ -1371,11 +1377,13 @@ theorem globalFirstLaneEncodingHash_support_decompose
               (Concrete.encodingPayload message randomness)) initialState)).run) ∧
       result = ((truncateHash queryHead.1.1, queryHead.1.2), queryHead.2) := by
   rw [concreteEncodingHash_eq_query] at hresult
-  exact simulateQ_eagerTrace_query_pure_support_decompose table
+  -- Compare the sets: the kernel reduces a membership in `support` by running the computation.
+  obtain ⟨queryHead, hhead, rfl⟩ := simulateQ_eagerTrace_query_pure_support_decompose table
     (globalFirstLaneVerifierHashExecution keyView edgeHigh)
       (tweakableHashInput keyView.publicKey.parameter (.encoding leafIndex)
         (Concrete.encodingPayload message randomness)) truncateHash
-      initialState result hresult
+      initialState result (Set.mem_of_subset_of_mem (by exact subset_rfl) hresult)
+  exact ⟨queryHead, Set.mem_of_subset_of_mem (by exact subset_rfl) hhead, rfl⟩
 
 theorem globalFirstLaneVerifier_support_decompose_raw
     (table : GlobalChainValueIndex → Digest)
@@ -1411,15 +1419,16 @@ theorem globalFirstLaneVerifier_support_decompose_raw
   rw [globalFirstLaneVerifier_eq_hashExecution keyView edgeHigh forgery]
     at hresult
   rw [concreteVerify_eq_encodingHash_bind_afterDigest] at hresult
-  rw [simulateQ_bind, StateT.run_bind, simulateQ_bind,
-    WriterT.run_bind', mem_support_bind_iff] at hresult
-  obtain ⟨head, hhead, htail⟩ := hresult
+  -- Rewrite the set: the kernel reduces a membership in `support` by running the computation.
+  obtain ⟨head, hhead, htail⟩ := Set.mem_iUnion₂.1 (Set.mem_of_subset_of_mem (by
+    rw [simulateQ_bind, StateT.run_bind, simulateQ_bind, WriterT.run_bind', support_bind])
+    hresult)
   rw [support_map] at htail
   obtain ⟨tail, htail, rfl⟩ := htail
   obtain ⟨queryHead, hquery, rfl⟩ :=
     globalFirstLaneEncodingHash_support_decompose table keyView edgeHigh
       forgery.leafIndex forgery.message forgery.signature.randomness initialState
-        head hhead
+        head (Set.mem_of_subset_of_mem (by exact subset_rfl) hhead)
   refine ⟨queryHead, tail, hquery, ?_, ?_⟩
   · simpa using htail
   · cases tail
@@ -1469,8 +1478,8 @@ theorem globalFirstLaneVerifier_support_decompose
           (Concrete.encodingPayload forgery.message
             forgery.signature.randomness) = targetInput := by
     simp [targetInput, Concrete.CacheView.encodingInput, hparameter]
-  rw [hqueryInput] at hquery
-  unfold globalFirstLaneVerifierHashExecution at hquery
+  -- Rewrite, not unfold: unfolding makes the kernel run the computation to compare supports.
+  rw [hqueryInput, globalFirstLaneVerifierHashExecution] at hquery
   have hleafIndex : encodingInputLeafIndex? keyView.secretKey.parameter targetInput =
       some forgery.leafIndex := by
     simp [targetInput]

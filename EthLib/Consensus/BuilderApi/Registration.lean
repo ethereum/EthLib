@@ -21,12 +21,17 @@ The time must not be earlier than the registration that the builder keeps for th
 
 The signature must verify.
 
+The source keeps only the message of a registration, and EthLib keeps it with its signature.
+
+The [Relay API] serves the signed registration of each upcoming proposer, so a relay needs both.
+
 The [builder specification] gives the rules, and [`validators.yaml`] the 200 and 400 responses.
 
 The rules hold at any fork, and the exports take them from Bellatrix to Fulu only.
 
 [builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#process_registration
 [`validators.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/validators.yaml
+[Relay API]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
 -/
 
 @[expose] public section
@@ -53,36 +58,46 @@ def isEligibleForRegistration (state : BeaconState preset fork) (validator : Val
 
 /-- Why a builder refuses a registration. -/
 inductive RegistrationError where
-  /-- No validator of the state has the key. -/
-  | unknownValidator
-  /-- The validator is neither active nor pending in the current epoch. -/
-  | notEligible
-  /-- The builder's clock plus the lookahead does not fit in 64 bits. -/
-  | clockOverflow
-  /-- The time of the registration is too far ahead of the builder's clock. -/
-  | tooFarInFuture
-  /-- The time of the registration is earlier than that of the one the builder keeps. -/
-  | olderThanPrevious
-  /-- The signature does not verify. -/
-  | badSignature
+  /-- No validator of the state has the key that the error gives. -/
+  | unknownValidator (pubkey : BLSPubkey)
+  /-- The validator is neither active nor pending in the current epoch.
+
+  The error gives the key of the validator and the current epoch. -/
+  | notEligible (pubkey : BLSPubkey) (epoch : Epoch)
+  /-- The builder's clock plus the lookahead does not fit in 64 bits.
+
+  The error gives the time of the clock and the lookahead, in seconds. -/
+  | clockOverflow (now lookahead : UInt64)
+  /-- The time of the registration is too far ahead of the builder's clock.
+
+  The error gives the time of the registration, the time of the clock and the lookahead. -/
+  | tooFarInFuture (timestamp now lookahead : UInt64)
+  /-- The time of the registration is earlier than that of the one the builder keeps.
+
+  The error gives the time of the registration, then the time of the kept one. -/
+  | olderThanPrevious (timestamp previous : UInt64)
+  /-- The signature does not verify against the validator key that the error gives. -/
+  | badSignature (pubkey : BLSPubkey)
   /-- The signing root cannot be computed. -/
   | root (fault : Err)
   deriving DecidableEq, Repr
 
-/-- The registrations that a builder keeps, one for each key. -/
+/-- The signed registrations that a builder keeps, one for each key.
+
+The source keeps only the message, and the registry keeps the signature with it. -/
 structure Registry where
-  /-- The registrations; the first one for a key is the one the builder keeps. -/
-  entries : List ValidatorRegistrationV1 := []
+  /-- The signed registrations; the first one for a key is the one the builder keeps. -/
+  entries : List SignedValidatorRegistrationV1 := []
 
 namespace Registry
 
-/-- The registration that the builder keeps for a key, if any. -/
-def find? (registry : Registry) (pubkey : BLSPubkey) : Option ValidatorRegistrationV1 :=
-  registry.entries.find? (·.pubkey = pubkey)
+/-- The signed registration that the builder keeps for a key, if any. -/
+def find? (registry : Registry) (pubkey : BLSPubkey) : Option SignedValidatorRegistrationV1 :=
+  registry.entries.find? (·.message.pubkey = pubkey)
 
-/-- The registry that keeps a registration in place of the one for the same key. -/
-def insert (registry : Registry) (registration : ValidatorRegistrationV1) : Registry :=
-  ⟨registration :: registry.entries.filter (·.pubkey ≠ registration.pubkey)⟩
+/-- The registry that keeps a signed registration in place of the one for the same key. -/
+def insert (registry : Registry) (signed : SignedValidatorRegistrationV1) : Registry :=
+  ⟨signed :: registry.entries.filter (·.message.pubkey ≠ signed.message.pubkey)⟩
 
 end Registry
 
@@ -100,16 +115,19 @@ def processRegistration (config : Config) (checks : SignatureChecks)
     (signed : SignedValidatorRegistrationV1) (now : UInt64) : Except RegistrationError Unit := do
   let registration := signed.message
   let some validator := validatorOfPubkey? state registration.pubkey
-    | throw .unknownValidator
-  unless isEligibleForRegistration state validator do throw .notEligible
-  unless now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 do throw .clockOverflow
+    | throw (.unknownValidator registration.pubkey)
+  unless isEligibleForRegistration state validator do
+    throw (.notEligible registration.pubkey (getCurrentEpoch state))
+  unless now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat < 2 ^ 64 do
+    throw (.clockOverflow now MAX_REGISTRATION_LOOKAHEAD)
   unless registration.timestamp.toNat ≤ now.toNat + MAX_REGISTRATION_LOOKAHEAD.toNat do
-    throw .tooFarInFuture
+    throw (.tooFarInFuture registration.timestamp now MAX_REGISTRATION_LOOKAHEAD)
   if let some previous := registry.find? registration.pubkey then
-    unless previous.timestamp ≤ registration.timestamp do throw .olderThanPrevious
+    unless previous.message.timestamp ≤ registration.timestamp do
+      throw (.olderThanPrevious registration.timestamp previous.message.timestamp)
   match verifyRegistrationSignature config checks signed with
   | .error fault => throw (.root fault)
-  | .ok false => throw .badSignature
+  | .ok false => throw (.badSignature registration.pubkey)
   | .ok true => pure ()
 
 /-- The status of a request that registers one validator: 200 when kept, 400 otherwise. -/

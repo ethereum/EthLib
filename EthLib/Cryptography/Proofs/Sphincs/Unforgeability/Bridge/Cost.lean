@@ -71,34 +71,36 @@ theorem hashCalls_ofFnInOrder_const {α : Type} (n c : Nat) (g : Fin n → Oracl
 /-- A node of height `level` makes `(c + 1) * 2^level - 1` calls if each leaf makes `c`.
 
 That is `c` calls for each of its `2^level` leaves and one for each of its `2^level - 1` hashes. -/
-theorem hashCalls_node {α : Type} (hash : Nat → Nat → α → α → OracleComp HashSpec α)
+theorem hashCalls_node {α : Type} (hash : Merkle.Position → α → α → OracleComp HashSpec α)
     (leaves : Nat → OracleComp HashSpec α) (c : Nat)
-    (hhash : ∀ level j left right, hashCalls f (hash level j left right) = 1)
+    (hhash : ∀ q left right, hashCalls f (hash q left right) = 1)
     (hleaf : ∀ j, hashCalls f (leaves j) = c) :
-    ∀ level j, hashCalls f (Merkle.node hash leaves level j) = (c + 1) * 2 ^ level - 1
+    ∀ level j, hashCalls f (Merkle.node hash leaves ⟨level, j⟩) = (c + 1) * 2 ^ level - 1
   | 0, j => by
-    rw [Merkle.node, hleaf, Nat.pow_zero, Nat.mul_one, Nat.add_sub_cancel]
+    rw [Merkle.node_zero, hleaf, Nat.pow_zero, Nat.mul_one, Nat.add_sub_cancel]
   | level + 1, j => by
-    rw [Merkle.node, hashCalls_bind, hashCalls_bind, hhash,
+    rw [Merkle.node_succ, hashCalls_bind, hashCalls_bind, hhash,
       hashCalls_node hash leaves c hhash hleaf level,
       hashCalls_node hash leaves c hhash hleaf level,
       Nat.pow_succ, ← Nat.mul_assoc]
     have hpos : 1 ≤ (c + 1) * 2 ^ level := Nat.one_le_iff_ne_zero.2 (by positivity)
     omega
 
-/-- The siblings of `n` nodes from `(level, j)` up make one whole node each. -/
-theorem hashCalls_siblings {α : Type} (hash : Nat → Nat → α → α → OracleComp HashSpec α)
+/-- The siblings of `n` nodes from a position up make one whole node each. -/
+theorem hashCalls_siblings {α : Type} (hash : Merkle.Position → α → α → OracleComp HashSpec α)
     (leaves : Nat → OracleComp HashSpec α) (c : Nat)
-    (hhash : ∀ level j left right, hashCalls f (hash level j left right) = 1)
+    (hhash : ∀ q left right, hashCalls f (hash q left right) = 1)
     (hleaf : ∀ j, hashCalls f (leaves j) = c) :
-    ∀ level j n, hashCalls f (Merkle.siblings hash leaves level j n) =
-      ∑ i : Fin n, ((c + 1) * 2 ^ (level + i.val) - 1)
-  | _, _, 0 => rfl
-  | level, j, n + 1 => by
-    rw [Merkle.siblings, hashCalls_bind, hashCalls_bind, hashCalls_pure, Nat.add_zero,
-      hashCalls_node f hash leaves c hhash hleaf,
-      hashCalls_siblings hash leaves c hhash hleaf (level + 1) (j / 2) n, Fin.sum_univ_succ]
-    simp only [Fin.val_zero, Nat.add_zero, Fin.val_succ, Nat.add_assoc, Nat.add_comm 1]
+    ∀ (p : Merkle.Position) n, hashCalls f (Merkle.siblings hash leaves p n) =
+      ∑ i : Fin n, ((c + 1) * 2 ^ (p.level + i.val) - 1)
+  | _, 0 => rfl
+  | p, n + 1 => by
+    have hnode : hashCalls f (Merkle.node hash leaves p.sibling) = (c + 1) * 2 ^ p.level - 1 :=
+      hashCalls_node f hash leaves c hhash hleaf p.level p.sibling.index
+    rw [Merkle.siblings, hashCalls_bind, hashCalls_bind, hashCalls_pure, Nat.add_zero, hnode,
+      hashCalls_siblings hash leaves c hhash hleaf p.parent n, Fin.sum_univ_succ]
+    simp only [Fin.val_zero, Nat.add_zero, Fin.val_succ, Merkle.Position.parent_level,
+      Nat.add_assoc, Nat.add_comm 1]
 
 /-- The calls of a path of height `h` in a tree whose leaves make `c` calls each.
 
@@ -123,9 +125,9 @@ theorem pathCalls_add (c h : Nat) : pathCalls c h + h = (c + 1) * (2 ^ h - 1) :=
     omega
 
 /-- The path of leaf `j` in a tree of height `h` makes the calls of one whole node per height. -/
-theorem hashCalls_path {α : Type} (hash : Nat → Nat → α → α → OracleComp HashSpec α)
+theorem hashCalls_path {α : Type} (hash : Merkle.Position → α → α → OracleComp HashSpec α)
     (leaves : Nat → OracleComp HashSpec α) (c : Nat)
-    (hhash : ∀ level j left right, hashCalls f (hash level j left right) = 1)
+    (hhash : ∀ q left right, hashCalls f (hash q left right) = 1)
     (hleaf : ∀ j, hashCalls f (leaves j) = c) (h j : Nat) :
     hashCalls f (Merkle.path hash leaves h j) = pathCalls c h := by
   rw [Merkle.path, hashCalls_siblings f hash leaves c hhash hleaf, pathCalls]
@@ -421,8 +423,9 @@ theorem hashCalls_leaves (pkSeed : PkSeed) (layer : Layer) (tree e : Nat) :
 
 omit hsecrets in
 /-- A node hash of a layer tree is one call. -/
-theorem hashCalls_nodeHash (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat)
-    (left right : Digest) : hashCalls f (nodeHash H pkSeed layer tree z j left right) = 1 :=
+theorem hashCalls_nodeHash (pkSeed : PkSeed) (layer : Layer) (tree : Nat)
+    (q : Merkle.Position) (left right : Digest) :
+    hashCalls f (nodeHash H pkSeed layer tree q left right) = 1 :=
   hashCalls_th f H hH _ _ _
 
 /-- A node of height `z` of a layer tree makes `258 * 2^z - 1` calls. -/
@@ -472,8 +475,8 @@ theorem hashCalls_forsLeaves (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TRE
 omit hsecrets in
 /-- A FORS node hash is one call. -/
 theorem hashCalls_forsNodeHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
-    (z j : Nat) (left right : Digest) :
-    hashCalls f (forsNodeHash H pkSeed idx kappa z j left right) = 1 :=
+    (q : Merkle.Position) (left right : Digest) :
+    hashCalls f (forsNodeHash H pkSeed idx kappa q left right) = 1 :=
   hashCalls_th f H hH _ _ _
 
 /-- A FORS node of height `z` makes `3 * 2^z - 1` calls. -/

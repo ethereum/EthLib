@@ -11,10 +11,12 @@ public import EthLib.Cryptography.Sphincs
 public import EthLib.Cryptography.Vrf
 public import EthLib.Cryptography.Secp256k1
 public import EthLib.Cryptography.Secp256r1
+public import EthLib.Cryptography.Rfc6979
 public import EthLib.Cryptography.AltBn128
 public import EthLib.Cryptography.Aes
 public import EthLib.Cryptography.Ethash
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.Montgomery.Fin
 public import EthLib.Cryptography.BaseField
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305

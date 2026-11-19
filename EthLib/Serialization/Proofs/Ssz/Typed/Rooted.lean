@@ -11,7 +11,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.BindingPacking
 /-!
 # Proofs: rooted vectors are lawful
 
-Each level of a rooted vector holds the subtrees of one height over the leaves.
+Each level of a rooted vector holds the generic Merkle nodes of one height over the leaves.
 
 So the top level holds the root of the whole tree, which is the root of the vector.
 -/
@@ -28,50 +28,78 @@ theorem zeroSubtree_succ (height : Nat) :
   rw [zeroSubtree_eq, zeroSubtree_eq]
   rfl
 
-/--
-Entry `index` of the level at a height is the subtree of that height at leaf `index * 2 ^ height`.
+/-- The generic Merkle node over padded nodes, at a position, is the subtree under it. -/
+theorem node_padded_eq_subtreeAt (chunks : Array Bytes) (height index : Nat) :
+    (Cryptography.Merkle.node (m := Id) (fun _ => combine) (padded zeroChunk chunks)
+        ⟨height, index⟩).run
+      = subtreeAt chunks height (index * 2 ^ height) := by
+  rw [Cryptography.Merkle.node_const_shift, subtreeAt_eq_subtreeRoot]
+  rfl
 
-An entry past the level reads as the zero subtree, as the subtree past the leaves does.
+/--
+Entry `index` of the level at a height is the generic Merkle node at that height and index.
+
+The leaves are the nodes padded with zero, and an entry past the level reads as the zero subtree.
 -/
 def LevelOf (chunks : Array Bytes) (height : Nat) (level : Array Bytes) : Prop :=
-  ∀ index, level[index]?.getD (zeroSubtree height) = subtreeAt chunks height (index * 2 ^ height)
+  ∀ index, level[index]?.getD (zeroSubtree height)
+    = (Cryptography.Merkle.node (m := Id) (fun _ => combine) (padded zeroChunk chunks)
+        ⟨height, index⟩).run
+
+/-- Entry `index` of the level at a height is the subtree of that height at its first leaf. -/
+theorem LevelOf.getD_eq {chunks level : Array Bytes} {height : Nat}
+    (holds : LevelOf chunks height level) (index : Nat) :
+    level[index]?.getD (zeroSubtree height) = subtreeAt chunks height (index * 2 ^ height) := by
+  rw [holds, node_padded_eq_subtreeAt]
 
 /-- The leaves are the level of height zero. -/
 theorem levelOf_leaves (chunks : Array Bytes) : LevelOf chunks 0 chunks := by
   intro index
-  rw [subtreeAt_leaf, zeroSubtree_eq]
-  simp [zeroRoot]
+  rw [zeroSubtree_eq]
+  rfl
+
+/-- An entry of a paired-up level, or the zero subtree past it, is the parent of two entries. -/
+theorem getD_pairUp (height : Nat) (level : Array Bytes) (index : Nat) :
+    (pairUp height level)[index]?.getD (zeroSubtree (height + 1))
+      = parentAt height level index := by
+  rw [getElem?_pairUp]
+  split
+  · rfl
+  · -- Past the level, both children are past it too, so both are zero subtrees.
+    rw [parentAt_eq, Array.getElem?_eq_none (by omega), Array.getElem?_eq_none (by omega)]
+    exact zeroSubtree_succ height
 
 /-- Pairing up the level at a height gives the level one higher. -/
 theorem LevelOf.pairUp {chunks level : Array Bytes} {height : Nat}
     (holds : LevelOf chunks height level) : LevelOf chunks (height + 1) (pairUp height level) := by
   intro index
-  have left := holds (2 * index)
-  have right := holds (2 * index + 1)
-  -- Child `2 * index` starts where the parent does, and its sibling one subtree further on.
-  rw [show 2 * index * 2 ^ height = index * 2 ^ (height + 1) by
-    rw [Nat.pow_succ, Nat.mul_comm (2 ^ height) 2, ← Nat.mul_assoc, Nat.mul_comm index 2]] at left
-  rw [show (2 * index + 1) * 2 ^ height = index * 2 ^ (height + 1) + 2 ^ height by
-    rw [Nat.add_mul, Nat.one_mul, Nat.pow_succ, Nat.mul_comm (2 ^ height) 2, ← Nat.mul_assoc,
-      Nat.mul_comm index 2]] at right
-  rw [subtreeAt_split, ← left, ← right]
-  by_cases inside : index < (level.size + 1) / 2
-  · simp [Ssz.pairUp, inside, parentAt]
-  · -- Past the level, both children are past it too, so both are zero subtrees.
-    have parent : (Ssz.pairUp height level)[index]? = none :=
-      Array.getElem?_eq_none (by simp only [Ssz.pairUp, Array.size_ofFn]; omega)
-    have first : level[2 * index]? = none := Array.getElem?_eq_none (by omega)
-    have second : level[2 * index + 1]? = none := Array.getElem?_eq_none (by omega)
-    simp only [parent, first, second, Option.getD_none]
-    exact zeroSubtree_succ height
+  rw [getD_pairUp, parentAt_eq, holds, holds]
+  rfl
 
-/-- The top node of the levels over a level at a height is the subtree over the leaves. -/
+/-- Each level built over one that holds the generic nodes holds those of its own height. -/
+theorem LevelOf.buildLevels {chunks level : Array Bytes} {height : Nat}
+    (holds : LevelOf chunks height level) (above k : Nat) {upper : Array Bytes}
+    (kept : (buildLevels height level above)[k]? = some upper) :
+    LevelOf chunks (height + k) upper := by
+  induction above generalizing height level k with
+  | zero =>
+    cases k with
+    | zero => simp_all [Ssz.buildLevels]
+    | succ k => simp [Ssz.buildLevels] at kept
+  | succ above ih =>
+    cases k with
+    | zero => simp_all [Ssz.buildLevels]
+    | succ k =>
+      rw [show height + (k + 1) = height + 1 + k by omega]
+      exact ih holds.pairUp k (by simpa [Ssz.buildLevels] using kept)
+
+/-- The top node of the levels over a level at a height is the generic root over the leaves. -/
 theorem topOfLevels_buildLevels {chunks : Array Bytes} :
     ∀ (above height : Nat) {level : Array Bytes}, LevelOf chunks height level →
       topOfLevels (height + above) (buildLevels height level above)
-        = subtreeAt chunks (height + above) 0
+        = subtreeRoot combine (height + above) (padded zeroChunk chunks)
   | 0, height, level, holds => by
-    simpa [topOfLevels, buildLevels] using holds 0
+    simpa [topOfLevels, buildLevels, subtreeRoot, Cryptography.Merkle.root] using holds 0
   | above + 1, height, level, holds => by
     have := topOfLevels_buildLevels above (height + 1) holds.pairUp
     rw [show height + (above + 1) = height + 1 + above by omega, ← this]
@@ -84,11 +112,35 @@ theorem topOfLevels_buildLevels {chunks : Array Bytes} :
 /-- The top node of a tree from its levels is the bounded root of its leaves. -/
 theorem topOfLevels_eq (chunks : Array Bytes) (depth : Nat) :
     topOfLevels depth (buildLevels 0 chunks depth) = subtreeAt chunks depth 0 := by
+  rw [subtreeAt_zero_eq]
   simpa using topOfLevels_buildLevels depth 0 (levelOf_leaves chunks)
 
 namespace RootedVector
 
 variable {α : Type} [SszType α] {length : Nat}
+
+/-- Each element after a shift is the one `count` places later, or else a fresh one. -/
+theorem getElem_shiftElements (v : RootedVector α length) {count : Nat} (fresh : Vector α count)
+    (le : count ≤ length) (index : Nat) (inside : index < length) :
+    (v.shiftElements fresh le)[index] =
+      if kept : index + count < length then v.elements[index + count]
+      else fresh[index + count - length]'(by omega) := by
+  have size : (v.elements.toArray.extract count length).size = length - count := by simp
+  simp only [shiftElements, Vector.getElem_mk, Array.getElem_append, size]
+  split <;> split
+  · simp [Array.getElem_extract, Nat.add_comm count index]
+  · omega
+  · omega
+  · simp only [Vector.getElem_toArray]
+    congr 1
+    omega
+
+/-- Each kept level of a rooted vector holds the generic Merkle nodes of its height. -/
+theorem levelOf_levels (v : RootedVector α length) {k : Nat} {upper : Array Bytes}
+    (kept : v.levels.get[k]? = some upper) :
+    LevelOf (sequenceLeaves v.elements.toArray) k upper := by
+  rw [v.built] at kept
+  simpa using (levelOf_leaves _).buildLevels _ k kept
 
 /-- The elements of the vector built from a vector are that vector. -/
 @[simp] theorem elements_ofVector (elements : Vector α length) :

@@ -308,7 +308,8 @@ Or the stack has at least `n` items but is full, so the push overflows it. -/
 theorem dupnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
     (hc : GasMeter.charge evm.gas OPCODE_DUPN = .ok g) :
     dupnStep evm = .error e ↔
-      (decodeSingle (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      (decodeSingle (immediateByte evm.code evm.pc) = none ∧
+        e = .invalidParameter (immediateByte evm.code evm.pc)) ∨
       ∃ n, decodeSingle (immediateByte evm.code evm.pc) = some n ∧
         ((evm.stack.val.length < n ∧ e = .stackUnderflow) ∨
           (n ≤ evm.stack.val.length ∧ evm.stack.val.length = STACK_LIMIT ∧
@@ -341,7 +342,8 @@ Or the byte encodes a depth `n`, and the stack has at most `n` items, so it unde
 theorem swapnStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
     (hc : GasMeter.charge evm.gas OPCODE_SWAPN = .ok g) :
     swapnStep evm = .error e ↔
-      (decodeSingle (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      (decodeSingle (immediateByte evm.code evm.pc) = none ∧
+        e = .invalidParameter (immediateByte evm.code evm.pc)) ∨
       ∃ n, decodeSingle (immediateByte evm.code evm.pc) = some n ∧
         evm.stack.val.length ≤ n ∧ e = .stackUnderflow := by
   simp only [swapnStep, chargeGas, hc, bind, Except.bind, pure, Except.pure]
@@ -368,7 +370,8 @@ Or the byte encodes a pair `n < m`, and the stack has at most `m` items, so it u
 theorem exchangeStep_eq_error_iff {evm : Evm fork Meter} {g : Meter} {e : EvmError}
     (hc : GasMeter.charge evm.gas OPCODE_EXCHANGE = .ok g) :
     exchangeStep evm = .error e ↔
-      (decodePair (immediateByte evm.code evm.pc) = none ∧ e = .invalidParameter) ∨
+      (decodePair (immediateByte evm.code evm.pc) = none ∧
+        e = .invalidParameter (immediateByte evm.code evm.pc)) ∨
       ∃ n m, decodePair (immediateByte evm.code evm.pc) = some (n, m) ∧
         evm.stack.val.length ≤ m ∧ e = .stackUnderflow := by
   simp only [exchangeStep, chargeGas, hc, bind, Except.bind, pure, Except.pure]

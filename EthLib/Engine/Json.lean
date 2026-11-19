@@ -23,6 +23,8 @@ The base types state the patterns in [`base-types.yaml`][types].
 
 So the extra data of a payload has at most 32 bytes, as its type `bytesMax32` says.
 
+That is also the bound of the extra data of a block header.
+
 Step 1 of [`engine_newPayloadV3`][v3] asks for exactly the expected fields, with `null` as absent.
 
 Version 4 of the payload holds the fields of version 3, the block access list and the slot number.
@@ -44,7 +46,7 @@ open Lean (Json)
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
 open EthLib.Execution.Rpc (withdrawal withdrawalJson)
-open EthLib.Execution.Blocks (Withdrawal)
+open EthLib.Execution.Blocks (Withdrawal MAX_EXTRA_DATA_BYTES)
 
 /-- A decoding that fails with an invalid parameter. -/
 abbrev Decode := Except EngineError
@@ -105,7 +107,7 @@ def anyPayload (j : Json) : Decode AnyPayload := do
     gasLimit := ← uint64 "gasLimit" (← get "gasLimit")
     gasUsed := ← uint64 "gasUsed" (← get "gasUsed")
     timestamp := ← uint64 "timestamp" (← get "timestamp")
-    extraData := ← bytesMax "extraData" 32 (← get "extraData")
+    extraData := ← bytesMax "extraData" MAX_EXTRA_DATA_BYTES (← get "extraData")
     baseFeePerGas := BitVec.ofNat 256 (← quantity "baseFeePerGas" 256 (← get "baseFeePerGas"))
     blockHash := ← fixed "blockHash" 32 (← get "blockHash")
     transactions := ← array "transactions" (bytes "transaction") (← get "transactions")
@@ -253,7 +255,7 @@ def sinceValue {fork : Fork} {α : Type} {f : Fork} (x : Since f fork α) : Opti
 
 /-- A request for more items than the node takes at once is too large. -/
 def checkRequestSize (maxRequest count : Nat) : Except EngineError Unit :=
-  if maxRequest < count then throw .tooLargeRequest else pure ()
+  if maxRequest < count then throw (.tooLargeRequest count maxRequest) else pure ()
 
 /-! ## Errors -/
 
@@ -264,11 +266,11 @@ The execution API gives `-32000` another message, so each API keeps its own tabl
 [errors]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/common.md#errors -/
 def EngineError.message : EngineError → String
   | .invalidParams _ => "Invalid params"
-  | .unsupportedFork => "Unsupported fork"
-  | .invalidForkchoiceState => "Invalid forkchoice state"
-  | .tooLargeRequest => "Too large request"
+  | .unsupportedFork _ => "Unsupported fork"
+  | .invalidForkchoiceState .. => "Invalid forkchoice state"
+  | .tooLargeRequest .. => "Too large request"
   | .invalidPayloadAttributes => "Invalid payload attributes"
-  | .unknownPayload => "Unknown payload"
+  | .unknownPayload _ => "Unknown payload"
 
 /-- The error object of an error: the negative of its code, its message, and `null` data.
 

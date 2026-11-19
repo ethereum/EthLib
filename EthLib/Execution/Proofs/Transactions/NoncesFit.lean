@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.NoncesFit
 public import EthLib.Execution.Proofs.Transactions.Replay
 
@@ -116,7 +117,7 @@ private theorem noncesFit_foldlM_applyAuthorization {chainId : Nat} :
     exact noncesFit_foldlM_applyAuthorization h (noncesFit_applyAuthorization hnext hfit)
 
 /-- The first frame of a transaction keeps every nonce within the bound. -/
-private theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message fork}
+theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
@@ -132,7 +133,7 @@ private theorem noncesFit_prepareFirstFrame {chainId : Nat} {message : Message f
       (noncesFit_foldlM_applyAuthorization hdone hfit)
 
 /-- The first frame of a creation runs at an address with nonce 0. -/
-private theorem prepareFirstFrame_create_nonce {chainId : Nat} {message : Message fork}
+theorem prepareFirstFrame_create_nonce {chainId : Nat} {message : Message fork}
     {state : TransactionState} {substate : Substate} {auths : List Authorization}
     {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
     (h : prepareFirstFrame (Meter := Meter) chainId message state substate auths paid =
@@ -167,7 +168,7 @@ theorem noncesFit_processMessageCall {Meter : Type} [GasMeter Meter] [LawfulGasM
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     output.state.NoncesFit := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -252,7 +253,7 @@ private theorem noncesFit_runTransaction {Meter : Type} [GasMeter Meter] [Lawful
     {out : TransactionOutput} (hfit : (TransactionState.ofBlock block).NoncesFit)
     (hsender : ((TransactionState.ofBlock block).getAccount included.sender).nonce < MAX_NONCE)
     (h : runTransaction Meter env block included tx = .ok out) : out.state.NoncesFit := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   have hbought := mapError_ok_iff.mp hbought
@@ -301,7 +302,7 @@ theorem noncesFit_processTransaction {env : BlockEnvironment fork} {block : Stat
   by_cases hhegota : .hegota ≤ fork
   · rw [processTransaction_of_hegota_le hhegota] at h
     cases h
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   simp only [hhegota, ↓reduceIte] at h
   split at h
   · exact noncesFit_runTransaction hfit hsender h

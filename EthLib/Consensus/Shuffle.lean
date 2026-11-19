@@ -30,10 +30,14 @@ open Base
 inductive ShuffleError where
   /-- The index is not below the number of indices. -/
   | indexOutOfRange (index count : UInt64)
-  /-- There are no committees to cut the indices into. -/
-  | noCommittee
-  /-- A bound of the committee is `2^64` or more. -/
-  | overflow
+  /-- There are no committees to cut the indices into.
+
+  It holds the index of the committee asked for. -/
+  | noCommittee (index : UInt64)
+  /-- A bound of the committee is `2^64` or more.
+
+  It holds the number of indices and the index of the committee. -/
+  | overflow (size : Nat) (index : UInt64)
   /-- The count is above `2^40`, so a position has a bucket number of more than 4 bytes. -/
   | countTooLarge (count : UInt64)
   deriving DecidableEq, Repr
@@ -49,8 +53,8 @@ The custody errors take the codes from 1, and the subnet errors from 101, in the
 So the shuffle errors take the codes from 201. -/
 def ShuffleError.code : ShuffleError → UInt32
   | .indexOutOfRange _ _ => 201
-  | .noCommittee => 202
-  | .overflow => 203
+  | .noCommittee _ => 202
+  | .overflow .. => 203
   | .countTooLarge _ => 204
 
 namespace Shuffle
@@ -68,13 +72,15 @@ def bucketInput (seed : Bytes32) (round bucket : Nat) : ByteArray :=
   ⟨(roundInput seed round).data ++ (uintToBytes 4 bucket).toArray⟩
 
 /-- The 256 bits of a round that decide the positions of one bucket of 256 positions. -/
-def bucketBits (seed : Bytes32) (round bucket : Nat) : ByteArray :=
-  Cryptography.Hash.Sha256.hash (bucketInput seed round bucket)
+def bucketBits (seed : Bytes32) (round bucket : Nat) : Bytes32 :=
+  Cryptography.Hash.Sha256.hash32 (bucketInput seed round bucket)
 
 /-- The bit of a position in the bits of its bucket, least significant first in each byte. -/
-def bitAt (bits : ByteArray) (position : Nat) : Bool :=
-  -- The byte is read in place: the array of the bytes would be a copy of all of them.
-  (bits[position % 256 / 8]?.getD 0) >>> (position % 8).toUInt8 &&& 1 == 1
+def bitAt (bits : Bytes32) (position : Nat) : Bool :=
+  have h : position % 256 / 8 < 32 := by
+    have := Nat.mod_lt position (by decide : 0 < 256)
+    omega
+  bits[position % 256 / 8] >>> (position % 8).toUInt8 &&& 1 == 1
 
 /-- One round of swap-or-not on one index.
 
@@ -91,7 +97,7 @@ Each bucket of 256 positions is hashed once for the round. -/
 def round (seed : Bytes32) (count roundNumber : Nat) (indices : Array Nat) : Array Nat :=
   let buckets := Array.ofFn (n := count / 256 + 1) fun bucket =>
     bucketBits seed roundNumber bucket.val
-  let bit position := bitAt (buckets.getD (position / 256) .empty) position
+  let bit position := bitAt (buckets.getD (position / 256) (Vector.replicate 32 0)) position
   indices.map (swapOrNot count (pivot seed roundNumber count) bit)
 
 /-- One round of swap-or-not on one index, hashing the bucket of its position directly. -/
@@ -172,9 +178,9 @@ It takes the shuffled positions as an argument, so the committees of an epoch ca
 It gives the committee of the rule when those positions are the shuffle of the list. -/
 def shuffledCommittee (indices : Array ValidatorIndex) (shuffled : Array UInt64)
     (index count : UInt64) : Except ShuffleError (Array ValidatorIndex) := do
-  if count = 0 then throw .noCommittee
+  if count = 0 then throw (.noCommittee index)
   unless index.toNat + 1 < 2 ^ 64 ∧ indices.size * (index.toNat + 1) < 2 ^ 64 do
-    throw .overflow
+    throw (.overflow indices.size index)
   let start := indices.size * index.toNat / count.toNat
   let stop := indices.size * (index.toNat + 1) / count.toNat
   -- The first position to shuffle at or past the length is the larger of the two.

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Execution.Evm.Machine.Errors
+public import EthLib.Execution.Evm.Errors
 
 /-!
 # `Evm.Gas.StateGas`

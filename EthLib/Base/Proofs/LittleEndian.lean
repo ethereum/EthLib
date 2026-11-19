@@ -16,10 +16,15 @@ A vector of `k` bytes survives the trip through its value.
 
 namespace EthLib.Base
 
+/-- Byte `i` of a number is its quotient by `256 ^ i`, truncated to a byte. -/
+theorem uintToBytes_eq_div (k n : Nat) :
+    uintToBytes k n = Vector.ofFn fun i => UInt8.ofNat (n / 256 ^ i.val) := by
+  simp only [uintToBytes, Nat.shiftRight_eq_div_pow, Nat.pow_mul]
+
 /-- The first byte is the low byte, and the rest encode the quotient by 256. -/
 theorem uintToBytes_toList_succ (k n : Nat) :
     (uintToBytes (k + 1) n).toList = UInt8.ofNat n :: (uintToBytes k (n / 256)).toList := by
-  simp only [uintToBytes, Vector.toList_ofFn, List.ofFn_succ, Fin.val_zero, Nat.pow_zero,
+  simp only [uintToBytes_eq_div, Vector.toList_ofFn, List.ofFn_succ, Fin.val_zero, Nat.pow_zero,
     Nat.div_one, Fin.val_succ, Nat.pow_succ, Nat.div_div_eq_div_mul, List.cons.injEq, true_and]
   -- Byte `i + 1` of `n` is byte `i` of `n / 256`.
   congr 1
@@ -39,7 +44,7 @@ theorem bytesToUint_eq_foldr {k : Nat} (v : Vector UInt8 k) :
     bytesToUint (uintToBytes k n) = n % 256 ^ k := by
   rw [bytesToUint_eq_foldr]
   induction k generalizing n with
-  | zero => simp [uintToBytes, Nat.mod_one, Vector.toList_ofFn]
+  | zero => simp [uintToBytes_eq_div, Nat.mod_one, Vector.toList_ofFn]
   | succ k ih =>
     -- The low byte plus 256 times the higher bytes is the remainder by `256^(k+1)`.
     rw [uintToBytes_toList_succ, List.foldr_cons, ih, Nat.pow_succ, Nat.mul_comm _ 256,
@@ -64,7 +69,7 @@ theorem bytesToUint_lt {k : Nat} (v : Vector UInt8 k) : bytesToUint v < 256 ^ k 
 private theorem uintToBytes_foldr (l : List UInt8) :
     (uintToBytes l.length (l.foldr (fun byte acc => byte.toNat + 256 * acc) 0)).toList = l := by
   induction l with
-  | nil => simp [uintToBytes, Vector.toList_ofFn]
+  | nil => simp [uintToBytes_eq_div, Vector.toList_ofFn]
   | cons b t ih =>
     rw [List.length_cons, uintToBytes_toList_succ, List.foldr_cons]
     have hb := b.toNat_lt

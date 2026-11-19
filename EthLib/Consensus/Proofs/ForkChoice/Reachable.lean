@@ -279,16 +279,6 @@ inductive Reachable (config : Config) (anchorState : BeaconState preset fork)
 variable {config : Config} {anchorState : BeaconState preset fork}
   {anchorBlock : BeaconBlock preset fork}
 
-/-- A block with the votes that it carries leads from a reachable store to a reachable store. -/
-theorem Reachable.onBlockWithVotes {checks : SignatureChecks} {sources : BlockSources preset fork}
-    {signed : SignedBeaconBlock preset fork}
-    (reachable : Reachable config anchorState anchorBlock store)
-    (added : store.onBlockWithVotes config checks sources signed = .ok after) :
-    Reachable config anchorState anchorBlock after :=
-  onBlockWithVotes_preserves (fun reached step => reached.block step)
-    (fun _ reached step => reached.attestation step)
-    (fun _ reached step => reached.attesterSlashing step) reachable added
-
 /-- Each known block of a reachable store has its own root as its key. -/
 theorem Reachable.root (reachable : Reachable config anchorState anchorBlock store)
     {root : Root} {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
@@ -708,6 +698,25 @@ theorem Reachable.orphans_le (reachable : Reachable config anchorState anchorBlo
     (found : store.blocks[root]? = some block) (orphan : store.blocks[block.parentRoot]? = none)
     (otherFound : store.blocks[other]? = some otherBlock) : block.slot ≤ otherBlock.slot :=
   (reachable.orphansLow anchorSlot).orphansLe root other block otherBlock found orphan otherFound
+
+/-- The descent check from a known block to a known block can be computed.
+
+Each known parent must sit below its child.
+
+Each known block whose parent is unknown must sit at or below the target block. -/
+theorem isAncestor_ok_of_orphans_le (lower : store.ParentsBelow) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block)
+    (orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
+      store.blocks[root]? = some orphan → store.blocks[orphan.parentRoot]? = none →
+      orphan.slot ≤ block.slot)
+    {start : ForkChoiceNode} {startBlock : BeaconBlock preset fork}
+    (startFound : store.blocks[start.root]? = some startBlock) :
+    ∃ descends, store.isAncestor start node = .ok descends := by
+  obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_orphans_le lower orphansLe startFound
+  have known : store.block node.root = .ok block := by simp [Store.block, found]; rfl
+  unfold isAncestor
+  simp only [known, walk, bind, Except.bind]
+  split <;> exact ⟨_, rfl⟩
 
 /-- Before Gloas and without a boost, the head of a reachable store is the head of LMD-GHOST.
 

@@ -117,8 +117,10 @@ inductive ReqRespError where
   | lengthMismatch (declared : UInt64) (size : Nat)
   /-- A response chunk has no response code. -/
   | missingCode
-  /-- A response chunk ends inside its context bytes. -/
-  | contextTruncated
+  /-- A response chunk ends inside its context bytes.
+
+  The method needs `needed` context bytes, and only `available` follow the response code. -/
+  | contextTruncated (needed available : Nat)
   /-- Bytes follow the chunk that completes the declared length, with their count. -/
   | trailingBytes (count : Nat)
   deriving Repr, DecidableEq
@@ -136,7 +138,7 @@ def ReqRespError.code : ReqRespError → UInt32
   | .frame _ => 5
   | .lengthMismatch .. => 6
   | .missingCode => 7
-  | .contextTruncated => 8
+  | .contextTruncated .. => 8
   | .lengthBelowMinimum .. => 9
   | .trailingBytes _ => 10
 
@@ -210,7 +212,7 @@ def decodeResponseChunk (contextBytes : Nat) (typeMin typeBound : UInt64)
   | b :: rest =>
     match ResponseCode.ofByte b with
     | .success => do
-      if rest.length < contextBytes then throw .contextTruncated
+      if rest.length < contextBytes then throw (.contextTruncated contextBytes rest.length)
       let payload ← decodePayload typeMin typeBound ⟨(rest.drop contextBytes).toArray⟩
       return ⟨.success, ⟨(rest.take contextBytes).toArray⟩, payload⟩
     | code => do

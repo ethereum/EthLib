@@ -9,30 +9,6 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
 
 namespace EthLib.Serialization.Ssz
 
-/--
-Every bit reads back where it was put, and no other bit of the byte disturbs it.
-
-One byte holds eight bits and an offset names one of them, so what is left once the offset is fixed is a finite check.
--/
-theorem packByte_bit (bits : Array Bool) (byteIndex offset : Nat) (small : offset < 8) :
-    ((packByte bits byteIndex >>> UInt8.ofNat offset) &&& 1 == 1)
-      = bits[byteIndex * 8 + offset]?.getD false := by
-  -- The offset is one of eight, so it is made concrete before anything is named.
-  match offset, small with
-  | 0, _ | 1, _ | 2, _ | 3, _ | 4, _ | 5, _ | 6, _ | 7, _ =>
-    simp only [packByte]
-    -- The eight bits of this byte are arbitrary, so they are named and the rest decided.
-    generalize bits[byteIndex * 8 + 0]?.getD false = b0
-    generalize bits[byteIndex * 8 + 1]?.getD false = b1
-    generalize bits[byteIndex * 8 + 2]?.getD false = b2
-    generalize bits[byteIndex * 8 + 3]?.getD false = b3
-    generalize bits[byteIndex * 8 + 4]?.getD false = b4
-    generalize bits[byteIndex * 8 + 5]?.getD false = b5
-    generalize bits[byteIndex * 8 + 6]?.getD false = b6
-    generalize bits[byteIndex * 8 + 7]?.getD false = b7
-    revert b0 b1 b2 b3 b4 b5 b6 b7
-    decide
-
 private theorem byte_testBit (byte : UInt8) (offset : Nat) (small : offset < 8) :
     ((byte >>> UInt8.ofNat offset) &&& 1 == 1) = byte.toNat.testBit offset := by
   -- A one-bit mask reads the same bit as the natural-number bit test.
@@ -98,7 +74,7 @@ theorem roundTrip_uint {width value : Nat} (bound : value < 2 ^ (8 * width)) :
     serialize (.uint width) (.uint value) >>= deserialize (.uint width)
       = .ok (.uint value) := by
   -- The value fits its width, so the encoder writes rather than refusing.
-  simp only [serialize, ite_eq_left bound]
+  simp only [serialize, ite_eq_left ((uintFits_iff width value).mpr bound)]
   show deserialize (.uint width) (uintBytes width value) = _
   -- The decoder's width check passes because the encoding is exactly that wide.
   simp [deserialize, uintBytes_size, readUint_uintBytes width value bound, Pure.pure, Except.pure]

@@ -1,15 +1,15 @@
 module
 
 public import EthLib.Serialization.Ssz
-public import EthLib.Serialization.Proofs.Ssz.Type.Bounds
+public import EthLib.Serialization.Proofs.Ssz.Codec.Bounds
 public import EthLib.Serialization.Proofs.Ssz.Type.Compatibility
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityIndices
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilitySymmetry
 public import EthLib.Serialization.Proofs.Ssz.Type.CompatibilityBudget
-public import EthLib.Serialization.Proofs.Ssz.Type.DefaultLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.DefaultLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 public import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
-public import EthLib.Serialization.Proofs.Ssz.Type.FitsLaws
+public import EthLib.Serialization.Proofs.Ssz.Codec.FitsLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.Legality
 public import EthLib.Serialization.Proofs.Ssz.Type.PathLaws
 public import EthLib.Serialization.Proofs.Ssz.Type.PathSteps
@@ -33,7 +33,8 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalBits
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalComposite
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalStruct
 public import EthLib.Serialization.Proofs.Ssz.Codec.CanonicalTable
-public import EthLib.Serialization.Proofs.Ssz.Codec.Error
+public import EthLib.Serialization.Proofs.Ssz.Error
+public import EthLib.Serialization.Proofs.Ssz.Packing
 public import EthLib.Serialization.Proofs.Ssz.Codec.Canonicality
 public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
@@ -94,9 +95,8 @@ public import EthLib.Serialization.Proofs.Ssz.Merkle.Multiproof
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofAcceptance
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofBinding
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofClaims
+public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofPositions
 public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofSize
-public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTrace
-public import EthLib.Serialization.Proofs.Ssz.Merkle.MultiproofTree
 public import EthLib.Serialization.Proofs.Ssz.Merkle.ProgressiveLevels
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Singleton
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Tree
@@ -114,7 +114,10 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
+public import EthLib.Serialization.Proofs.Ssz.Typed.Text
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
+public import EthLib.Serialization.Proofs.Ssz.LayoutRandomOracle
+public import EthLib.Serialization.Proofs.Ssz.BranchRandomOracle
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedList
 public import EthLib.Serialization.Proofs.Ssz.Typed.RootedValue

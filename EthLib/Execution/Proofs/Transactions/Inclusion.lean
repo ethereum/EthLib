@@ -66,7 +66,7 @@ theorem executionCapacity_of_lt {fork : Fork} (hFork : fork < .glamsterdam) (tx 
 /-- From Glamsterdam, the gas that must fit in the execution gas left is at most `2^24`. -/
 theorem executionCapacity_le {fork : Fork} (hFork : fork ≥ .glamsterdam) (tx : Transaction) :
     executionCapacity fork tx ≤ Evm.GasCosts.TX_MAX_GAS_LIMIT := by
-  simp only [executionCapacity, hFork, ↓reduceIte]
+  simp only [executionCapacity, hFork, Bool.false_eq_true, ↓reduceIte]
   exact Nat.min_le_left _ _
 
 /-! ## Steps of a passing check -/
@@ -98,8 +98,8 @@ theorem checkSender_ok_iff {fork : Fork} {state : TransactionState} {sender : Ad
         ∃ code, state.getCode (state.getAccount sender).codeHash = .ok code ∧
           ((state.getAccount sender).codeHash = State.EMPTY_CODE_HASH ∨
             (fork ≥ .pectra ∧ Evm.isValidDelegation code = true)) := by
-  simp only [checkSender, bind_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt,
-    exists_const]
+  simp only [checkSender, Bool.false_eq_true, ↓reduceIte, bind_ok_iff, failIf_ok_iff,
+    decide_eq_false_iff_not, Nat.not_lt, exists_const]
   constructor
   · rintro ⟨hLow, hHigh, hBal, code, hCode, hEoa⟩
     refine ⟨by omega, hBal, code, ?_, ?_⟩
@@ -158,6 +158,8 @@ theorem checkInclusion_eq_ok_iff {fork : Fork} {chainId : UInt64}
   obtain ⟨sender, intrinsic, gasPrice, blobGas⟩ := inc
   dsimp only
   unfold checkInclusion
+  simp only [Option.isNone_none, Option.isSome_none, Bool.false_and, Bool.false_eq_true,
+    ↓reduceIte]
   by_cases hg : fork ≥ .glamsterdam
   · simp only [hg, ↓reduceIte, bind_ok_iff, mapError_ok_iff, checkBlockGas_ok_iff,
       checkSender_ok_iff, failIf_ok_iff, decide_eq_false_iff_not, Nat.not_lt, not_and,

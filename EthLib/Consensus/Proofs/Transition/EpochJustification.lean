@@ -165,33 +165,33 @@ theorem finalizes_eq_true {justified : Bool} {source gap currentEpoch : Epoch}
     obtain ⟨sum, sumOk, rfl⟩ := computed
     exact ⟨rfl, ((addChecked_ok_iff.mp sumOk).2).symm⟩
 
-/-- The four rules by which weighing the votes finalizes a checkpoint, with every bit they read.
+/-- The four rules by which one justification step finalizes a checkpoint, read from its bits.
 
-The new finalized checkpoint is the old one, or an old justified one by one of the rules.
+The bits are those of the state after the step.
 
-The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three back.
+The epoch and the justified checkpoints are those of the state before the step.
 
-The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two back.
+The old previous justified checkpoint needs bits 1 and 2, and also bit 3 when three epochs back.
 
-The bits are those after the step.
+The old current justified checkpoint needs bits 0 and 1, and also bit 2 when two epochs back. -/
+def FinalizationStepRule (state after : BeaconState preset fork) (checkpoint : Checkpoint) :
+    Prop :=
+  let bits := after.justificationBits.bits
+  let e := (getCurrentEpoch state).toNat
+  (checkpoint = state.previousJustifiedCheckpoint ∧
+    ((bits[1] = true ∧ bits[2] = true ∧ bits[3] = true ∧ checkpoint.epoch.toNat + 3 = e) ∨
+      (bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e))) ∨
+  (checkpoint = state.currentJustifiedCheckpoint ∧
+    ((bits[0] = true ∧ bits[1] = true ∧ bits[2] = true ∧ checkpoint.epoch.toNat + 2 = e) ∨
+      (bits[0] = true ∧ bits[1] = true ∧ checkpoint.epoch.toNat + 1 = e)))
 
-A checkpoint is two or three back when its epoch is two or three before the current epoch. -/
+/-- Weighing the votes keeps the finalized checkpoint, or finalizes an old justified one by a rule. -/
 theorem weighJustificationAndFinalization_finalized {total previousBalance currentBalance : Gwei}
     (computed : weighJustificationAndFinalization state total previousBalance currentBalance =
       .ok after) :
     after.finalizedCheckpoint = state.finalizedCheckpoint ∨
-      (after.finalizedCheckpoint = state.previousJustifiedCheckpoint ∧
-        ((after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
-            after.justificationBits.bits[3] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 3 = (getCurrentEpoch state).toNat) ∨
-          (after.justificationBits.bits[1] = true ∧ after.justificationBits.bits[2] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat))) ∨
-      (after.finalizedCheckpoint = state.currentJustifiedCheckpoint ∧
-        ((after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
-            after.justificationBits.bits[2] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 2 = (getCurrentEpoch state).toNat) ∨
-          (after.justificationBits.bits[0] = true ∧ after.justificationBits.bits[1] = true ∧
-            after.finalizedCheckpoint.epoch.toNat + 1 = (getCurrentEpoch state).toNat))) := by
+      FinalizationStepRule state after after.finalizedCheckpoint := by
+  unfold FinalizationStepRule
   simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, pure,
     Except.pure, Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, b₃, h₃, b₂, h₂, c₂, hc₂, c₁, hc₁, eq⟩ := computed
@@ -444,6 +444,19 @@ theorem processJustificationAndFinalization_ok
   · exact .inl same
   · exact .inr ⟨total, previous, current, weighed⟩
 
+/-- Justification and finalization change only the checkpoints and their bits. -/
+theorem processJustificationAndFinalization_eq
+    (computed : processJustificationAndFinalization state = .ok after) :
+    after = { state with
+      previousJustifiedCheckpoint := after.previousJustifiedCheckpoint
+      currentJustifiedCheckpoint := after.currentJustifiedCheckpoint
+      justificationBits := after.justificationBits
+      finalizedCheckpoint := after.finalizedCheckpoint } := by
+  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
+  · rfl
+  · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
+    rw [← rest]
+
 /-- Justification and finalization keep the slot. -/
 theorem processJustificationAndFinalization_slot
     (computed : processJustificationAndFinalization state = .ok after) :
@@ -516,5 +529,52 @@ theorem sameSizes_processJustificationAndFinalization
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     rw [← rest]
     exact SameSizes.refl _
+
+/-- A weighing whose test passes for the current or previous epoch justifies at least that epoch. -/
+theorem weighJustificationAndFinalization_justifies {state after : BeaconState preset fork}
+    {total previous current : Gwei}
+    (weighed : weighJustificationAndFinalization state total previous current = .ok after)
+    (recent : Bool)
+    (quorum : 2 * total.toNat ≤ 3 * (if recent then current else previous).toNat) :
+    (if recent then getCurrentEpoch state else getPreviousEpoch state) ≤
+      after.currentJustifiedCheckpoint.epoch := by
+  simp only [weighJustificationAndFinalization, bind_ok_iff, liftAccessor_ok, liftArith,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at weighed
+  obtain ⟨previousWeight, previousOk, threshold, thresholdOk, first, firstOk, currentWeight,
+    currentOk, second, secondOk, _, _, _, _, _, _, _, _, rfl⟩ := weighed
+  have thresholdEq := (mulChecked_ok_iff.mp thresholdOk).2
+  have previousEq := (mulChecked_ok_iff.mp previousOk).2
+  have currentEq := (mulChecked_ok_iff.mp currentOk).2
+  have epochs := getPreviousEpoch_le state
+  cases recent
+  · have passed : threshold ≤ previousWeight := by
+      simp only [UInt64.le_iff_toNat_le]
+      simp only [Bool.false_eq_true, ↓reduceIte] at quorum
+      simp only [UInt64.toNat_ofNat] at thresholdEq previousEq
+      omega
+    have firstEpoch := (justifyCheckpoint_ok firstOk).resolve_right
+      (by simp [decide_eq_true passed])
+    rcases justifyCheckpoint_ok secondOk with ⟨-, epoch, -⟩ | ⟨-, same⟩
+    · simpa [epoch] using epochs
+    · simp [same, firstEpoch.2.1]
+  · have passed : threshold ≤ currentWeight := by
+      simp only [UInt64.le_iff_toNat_le]
+      simp only [↓reduceIte] at quorum
+      simp only [UInt64.toNat_ofNat] at thresholdEq currentEq
+      omega
+    have secondEpoch := (justifyCheckpoint_ok secondOk).resolve_right
+      (by simp [decide_eq_true passed])
+    simp [secondEpoch.2.1]
+
+/-- A weighing past the first two epochs reads the total active balance. -/
+theorem processJustificationAndFinalization_totalActiveBalance {state after : BeaconState preset
+    fork}
+    (computed : processJustificationAndFinalization state = .ok after)
+    (counted : GENESIS_EPOCH + 1 < getCurrentEpoch state) :
+    ∃ total, getTotalActiveBalance state = .ok total := by
+  rcases processJustificationAndFinalization_reads computed with ⟨early, -⟩ |
+    ⟨-, _, _, total, _, _, _, _, totalOk, -⟩
+  · exact absurd early (UInt64.not_le.mpr counted)
+  · exact ⟨total, totalOk⟩
 
 end EthLib.Consensus

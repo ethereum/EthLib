@@ -29,21 +29,12 @@ def byteHexDigits (byte : UInt8) : List Char :=
 def hexString (bytes : List UInt8) : String :=
   bytes.foldl (init := "0x") fun text byte => (byteHexDigits byte).foldl String.push text
 
-/-- The characters of a hex string: `0x`, then the two digits of each byte in turn. -/
-theorem toList_hexString (bytes : List UInt8) :
-    (hexString bytes).toList = '0' :: 'x' :: bytes.flatMap byteHexDigits := by
-  -- The fold starts from the marker and pushes two characters per byte.
-  have general : ∀ (bytes : List UInt8) (text : String),
-      (bytes.foldl (fun text byte => (byteHexDigits byte).foldl String.push text)
-        text).toList = text.toList ++ bytes.flatMap byteHexDigits := by
-    intro bytes
-    induction bytes with
-    | nil => simp
-    | cons byte rest ih =>
-      intro text
-      rw [List.foldl_cons, ih]
-      simp [byteHexDigits]
-  simpa [hexString] using general bytes "0x"
+/-- A number as lowercase hex digits behind `0x`, padded with zeros to at least `width` digits.
+
+A number with more digits than the width keeps all of them. -/
+def hexNat (width value : Nat) : String :=
+  let digits := Nat.toDigits 16 value
+  "0x" ++ String.ofList (List.replicate (width - digits.length) '0' ++ digits)
 
 /-- The value of one hex digit, in either letter case. -/
 def hexValue? (c : Char) : Option UInt8 :=

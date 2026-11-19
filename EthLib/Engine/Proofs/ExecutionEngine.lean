@@ -73,7 +73,8 @@ theorem decodeTransactions_of_toBlock {f : Fork}
   cases result
   exact decoded
 
-private theorem toOption_eq_some {ε α : Type} {x : Except ε α} {a : α}
+/-- A computation whose option holds a value has succeeded with that value. -/
+theorem toOption_eq_some {ε α : Type} {x : Except ε α} {a : α}
     (h : x.toOption = some a) : x = .ok a := by
   cases x <;> simp_all [Except.toOption]
 
@@ -369,6 +370,32 @@ theorem sinceValue_of_atFork {p : Json.AnyPayload} {q : ExecutionPayload fork}
   obtain ⟨w, hw, b, hb, e, he, h⟩ := h
   cases h
   exact ⟨Json.sinceValue_of_since hw, Json.sinceValue_of_since hb, Json.sinceValue_of_since he⟩
+
+/-- Two structures that give one payload at some fork give the same result at every fork.
+
+The payload at a fork reads only the common fields and the optional fields, never the version. -/
+theorem atFork_eq_of_atFork {p₁ p₂ : Json.AnyPayload} {f : Fork} {q : ExecutionPayload f}
+    (h₁ : p₁.atFork f = .ok q) (h₂ : p₂.atFork f = .ok q) (g : Fork) :
+    p₁.atFork g = p₂.atFork g := by
+  obtain ⟨w₁, b₁, e₁⟩ := sinceValue_of_atFork h₁
+  obtain ⟨w₂, b₂, e₂⟩ := sinceValue_of_atFork h₂
+  -- The common fields are those of the payload at the fork, on both sides.
+  have common : p₁.common = p₂.common := by
+    obtain ⟨_, c₁, _, _, _⟩ := p₁
+    obtain ⟨_, c₂, _, _, _⟩ := p₂
+    simp only [Json.AnyPayload.atFork, bind_ok_iff] at h₁ h₂
+    obtain ⟨_, _, _, _, _, _, r₁⟩ := h₁
+    obtain ⟨_, _, _, _, _, _, r₂⟩ := h₂
+    cases r₁
+    simp only [pure, Except.pure, Except.ok.injEq, ExecutionPayload.mk.injEq] at r₂
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, -⟩ := r₂
+    cases c₁
+    cases c₂
+    simp_all only
+    -- The fields from later forks are absent at Paris on both sides.
+    congr <;> funext h <;> exact absurd h (by decide)
+  unfold Json.AnyPayload.atFork
+  rw [common, ← w₁.symm.trans w₂, ← b₁.symm.trans b₂, ← e₁.symm.trans e₂]
 
 /-- A decoded payload takes a fork exactly when its version is the version of that fork.
 

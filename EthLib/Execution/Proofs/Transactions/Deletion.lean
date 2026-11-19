@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Touched
 public import EthLib.Execution.Proofs.Evm.Logic.Marks
 public import EthLib.Execution.Proofs.Transactions.Failed
@@ -125,7 +126,7 @@ theorem accountsToDelete_processMessageCall [LawfulGasMeter Meter] (hfork : .den
     (empty : ∀ address, address ∉ substate.accountsToDelete) :
     ∀ address ∈ output.accountsToDelete, address ∈ output.state.createdAccounts := by
   intro address mem
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -158,7 +159,7 @@ theorem touchedAccounts_processMessageCall [LawfulGasMeter Meter] (hfork : .pari
       .ok output) :
     TouchedSubset output.touchedAccounts substate.touchedAccounts := by
   intro address mem
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -203,7 +204,7 @@ theorem processMessageCall_of_error_eq_none [LawfulGasMeter Meter] {chainId : Na
           first.held) = .ok ended ∧
       ended.val.error = none ∧ output.accountsToDelete = ended.val.substate.accountsToDelete := by
   have htarget := (substate_prepareFirstFrame hfirst).2.2.1
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -383,7 +384,7 @@ theorem runTransaction_deletes_created {Meter : Type} [GasMeter Meter] [LawfulGa
           output.refund = .ok (settled, out.gasUsed) ∧
       deleteAccounts fork settled output = .ok out.state ∧
       SameOutside settled.createdAccounts.toList settled out.state := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, htarget, h⟩ := bind_ok_iff.mp h
   obtain ⟨bought, hbought, h⟩ := bind_ok_iff.mp h
   obtain ⟨message, hmessage, h⟩ := bind_ok_iff.mp h
@@ -467,7 +468,7 @@ theorem runTransaction_removes_marked {Meter : Type} [GasMeter Meter] [LawfulGas
     (starts : CodeStarts fork first.message first.state first.substate first.meter start)
     (visits : Visits fork first.message.gas start inner) :
     ∀ address ∈ inner.substate.accountsToDelete, out.state.accountExists address = false := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target', htarget', h⟩ := bind_ok_iff.mp h
   rw [htarget] at htarget'
   cases htarget'

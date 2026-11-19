@@ -50,7 +50,7 @@ namespace EthLib.Cryptography.Hash.Sha256
 /-! ## Constants -/
 
 /--
-The round constants K₀ to K₆₃, FIPS 180-4 §4.2.2.
+The round constants K_0 to K_63, FIPS 180-4 §4.2.2.
 
 Each is the first 32 bits of the fractional part of the cube root of one of the first 64 primes.
 -/
@@ -65,7 +65,7 @@ def K : Vector UInt32 64 := #v[
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2 ]
 
 /--
-The initial hash value H⁽⁰⁾, FIPS 180-4 §5.3.3.
+The initial hash value H^(0), FIPS 180-4 §5.3.3.
 
 Each is the first 32 bits of the fractional part of the square root of one of the first 8 primes.
 -/
@@ -80,7 +80,7 @@ def paddingZeros (size : Nat) : Nat := (64 - (size + 9) % 64) % 64
 /--
 The length of a message in bits, as eight big-endian bytes.
 
-FIPS 180-4 §5.1.1 admits fewer than 2⁶⁴ bits, so the length of an admitted message fits.
+FIPS 180-4 §5.1.1 admits fewer than 2^64 bits, so the length of an admitted message fits.
 -/
 def lengthBytes (size : Nat) : ByteArray :=
   let bits : UInt64 := UInt64.ofNat size * 8

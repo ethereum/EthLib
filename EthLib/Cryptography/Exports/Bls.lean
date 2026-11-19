@@ -23,7 +23,7 @@ public section
 namespace EthLib.Cryptography.Bls.Exports
 
 open EthLib.Exports (Result)
-open EthLib.Base (packBytes)
+open EthLib.Base (packBytes exactBytes?)
 
 open EthLib.Cryptography.Bls.Constants
 open EthLib.Cryptography.Bls
@@ -51,10 +51,6 @@ def constBytesPerSignature (_ : Unit) : UInt64 :=
 
 /-- A Lean `Bool` as the `UInt8` that the C extension reads. -/
 def ofBool (b : Bool) : UInt8 := if b then 1 else 0
-
-/-- Bytes of an exact size, as a vector of that size. -/
-def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
-  if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
 
 /-- A public key of 48 bytes.
 
@@ -165,16 +161,20 @@ The point at infinity is accepted in its one canonical encoding. -/
 /-- A compressed `G1` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g1]
 def decodeG1Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← runBls (G1.uncompress bytes)
+  let p ← runBls (match exactBytes? 48 bytes with
+    | some bytes => G1.uncompress bytes
+    | none => .error .invalidG1Point)
   if !G1.inSubgroup p then runBls (.error .notInSubgroup)
-  return G1.compress p
+  return packBytes (G1.compress p)
 
 /-- A compressed `G2` point, decoded, checked in the subgroup, and compressed again. -/
 @[export eth_bls_decode_g2]
 def decodeG2Export (bytes : ByteArray) : Result ByteArray := do
-  let p ← runBls (G2.uncompress bytes)
+  let p ← runBls (match exactBytes? 96 bytes with
+    | some bytes => G2.uncompress bytes
+    | none => .error .invalidG2Point)
   if !G2.inSubgroup p then runBls (.error .notInSubgroup)
-  return G2.compress p
+  return packBytes (G2.compress p)
 
 /-! ## Hash to curve
 
@@ -213,8 +213,12 @@ Both points must lie in their subgroups of order `r`.
 A point at infinity gives the identity, as in the pairing check. -/
 @[export eth_bls_pairing]
 def pairingExport (p q : ByteArray) : Result ByteArray := do
-  let P ← runBls (G1.uncompress p)
-  let Q ← runBls (G2.uncompress q)
+  let P ← runBls (match exactBytes? 48 p with
+    | some p => G1.uncompress p
+    | none => .error .invalidG1Point)
+  let Q ← runBls (match exactBytes? 96 q with
+    | some q => G2.uncompress q
+    | none => .error .invalidG2Point)
   if !G1.inSubgroup P || !G2.inSubgroup Q then runBls (.error .notInSubgroup)
   return fp12Bytes (pairing P Q)
 

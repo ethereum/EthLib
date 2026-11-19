@@ -36,7 +36,7 @@ def G2_BYTES : Nat := 256
 /-- The 48 bytes of a padded field element, once its 16 leading bytes are checked to be zero. -/
 def unpadFp (padded : List UInt8) : Except Bls12381Error (List UInt8) :=
   if padded.take PAD_BYTES = List.replicate PAD_BYTES 0 then .ok (padded.drop PAD_BYTES)
-  else .error .invalidPadding
+  else .error (.invalidPadding ⟨(padded.take PAD_BYTES).toArray⟩)
 
 /-- The 96 raw bytes of a padded G1 point. -/
 def unpadG1 (padded : List UInt8) : Except Bls12381Error (List UInt8) := do
@@ -67,7 +67,7 @@ def padG2 (raw : List UInt8) : List UInt8 :=
 /-- The big-endian integer of the bytes, if it is below the field modulus. -/
 def bytesToFieldElement (raw : List UInt8) : Except Bls12381Error Fp :=
   let value := bytesToNat raw
-  if value < Fp.modulus then .ok (Fp.ofNat value) else .error .invalidFieldElement
+  if value < Fp.modulus then .ok (Fp.ofNat value) else .error (.invalidFieldElement value)
 
 /-- An element of `Fp2`: `c0` from the first 48 bytes, then `c1` from the next 48. -/
 def bytesToFq2 (raw : List UInt8) : Except Bls12381Error Fp2 := do
@@ -94,10 +94,10 @@ def bytesToG1 (raw : List UInt8) (subgroupCheck : Bool) : Except Bls12381Error G
   if x.val = 0 ∧ y.val = 0 then
     return G1.zero
   if !onCurveG1 x y then
-    throw .notOnCurve
+    throw (.notOnCurve ⟨raw.toArray⟩)
   let point : G1 := ⟨x, y, Fp.one⟩
   if subgroupCheck && !G1.inSubgroup point then
-    throw .notInSubgroup
+    throw (.notInSubgroup ⟨raw.toArray⟩)
   return point
 
 /-- A G2 point from its 192 raw bytes, under the same rules as G1. -/
@@ -107,10 +107,10 @@ def bytesToG2 (raw : List UInt8) (subgroupCheck : Bool) : Except Bls12381Error G
   if x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0 then
     return G2.zero
   if !onCurveG2 x y then
-    throw .notOnCurve
+    throw (.notOnCurve ⟨raw.toArray⟩)
   let point : G2 := ⟨x, y, Fp2.one⟩
   if subgroupCheck && !G2.inSubgroup point then
-    throw .notInSubgroup
+    throw (.notInSubgroup ⟨raw.toArray⟩)
   return point
 
 /-- The 96 raw bytes of the affine coordinates, and all zeros for the point at infinity. -/

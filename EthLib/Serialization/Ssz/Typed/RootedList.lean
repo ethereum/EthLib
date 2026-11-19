@@ -56,15 +56,39 @@ def forkListLevels (switch fork : Fork) (leaves : Array Bytes) : List (Array Byt
 /--
 The levels of the trees on a progressive spine, from the tree that starts at a given leaf.
 
-That tree holds `4 ^ level` leaves, so `2 * level` levels lie above them.
-
-Each next tree holds four times as many leaves, and the trees go on while leaves remain.
+Each tree stands over one run of the progressive spine, so a run at `level` has `2 * level` levels.
 -/
 def spineLevels (leaves : Array Bytes) (start level : Nat) : List (List (Array Bytes)) :=
-  if start < leaves.size then
-    buildLevels 0 (leaves.extract start (start + 4 ^ level)) (2 * level)
-      :: spineLevels leaves (start + 4 ^ level) (level + 1)
-  else []
+  (progressiveWindows (leaves.toList.drop start) level).map fun (window, windowLevel) =>
+    buildLevels 0 window.toArray (2 * windowLevel)
+
+/-- The spine trees from a leaf: none past the leaves, else the tree over the next `4 ^ level`. -/
+theorem spineLevels_unfold (leaves : Array Bytes) (start level : Nat) :
+    spineLevels leaves start level
+      = if start < leaves.size then
+          buildLevels 0 (leaves.extract start (start + 4 ^ level)) (2 * level)
+            :: spineLevels leaves (start + 4 ^ level) (level + 1)
+        else [] := by
+  rw [spineLevels, progressiveWindows]
+  by_cases inside : start < leaves.size
+  · rw [ite_eq_right (by simp; omega), ite_eq_left inside, List.map_cons, spineLevels,
+      List.drop_drop]
+    -- The first run, taken from the list, is the slice of the array.
+    show buildLevels 0 _ _ :: _ = _
+    congr 2
+    apply Array.toList_inj.mp
+    simp
+  · rw [ite_eq_left (by simp; omega), ite_eq_right inside, List.map_nil]
+
+/-- Induction along the spine trees: a property of the trees from a leaf, from those after it. -/
+theorem spineLevels_induct (leaves : Array Bytes) {motive : Nat → Nat → Prop}
+    (case1 : ∀ start level, start < leaves.size → motive (start + 4 ^ level) (level + 1) →
+      motive start level)
+    (case2 : ∀ start level, ¬start < leaves.size → motive start level) (start level : Nat) :
+    motive start level := by
+  by_cases inside : start < leaves.size
+  · exact case1 start level inside (spineLevels_induct leaves case1 case2 _ _)
+  · exact case2 start level inside
 termination_by leaves.size - start
 decreasing_by
   have : 0 < 4 ^ level := Nat.pos_of_neZero _
@@ -86,10 +110,13 @@ def spineWrite (level position : Nat) (node : Bytes) :
     if position < 4 ^ level then updateLevels 0 position node levels :: rest
     else levels :: spineWrite (level + 1) (position - 4 ^ level) node rest
 
-/-- The root of a progressive spine from the levels of its trees, closed by a zero node. -/
-def spineRoot (level : Nat) : List (List (Array Bytes)) → Bytes
-  | [] => zeroChunk
-  | levels :: rest => combine (topOfLevels (2 * level) levels) (spineRoot (level + 1) rest)
+/--
+The root of a progressive spine from the levels of its trees, closed by a zero node.
+
+It is the progressive spine over the top of each tree, the first one at the given level.
+-/
+def spineRoot (level : Nat) (trees : List (List (Array Bytes))) : Bytes :=
+  spine combine zeroChunk <| (trees.zipIdx level).map fun (levels, k) => topOfLevels (2 * k) levels
 
 /-- The levels of the spine trees of a fork-chosen list: none before the switch. -/
 def forkListSpine (switch fork : Fork) (leaves : Array Bytes) : List (List (Array Bytes)) :=
@@ -112,7 +139,7 @@ theorem spineLevels_congr {leaves other : Array Bytes} :
     ∀ {start : Nat} (level : Nat), (∀ index, start ≤ index → leaves[index]? = other[index]?) →
       spineLevels leaves start level = spineLevels other start level := by
   intro start level same
-  induction start, level using spineLevels.induct leaves with
+  induction start, level using spineLevels_induct leaves with
   | case1 start level inside ih =>
     -- The first leaf of the tree is present in both, so both have the tree.
     have there : start < other.size := by
@@ -124,7 +151,7 @@ theorem spineLevels_congr {leaves other : Array Bytes} :
       apply Array.ext_getElem?
       intro index
       rw [getElem?_extract_of, getElem?_extract_of, same (start + index) (Nat.le_add_right _ _)]
-    rw [spineLevels.eq_1 leaves, spineLevels.eq_1 other, ite_eq_left inside, ite_eq_left there,
+    rw [spineLevels_unfold leaves, spineLevels_unfold other, ite_eq_left inside, ite_eq_left there,
       slice, ih fun index past => same index (Nat.le_trans (Nat.le_add_right _ _) past)]
   | case2 start level outside =>
     have gone : ¬start < other.size := by
@@ -132,7 +159,8 @@ theorem spineLevels_congr {leaves other : Array Bytes} :
       have here := same start (Nat.le_refl _)
       rw [Array.getElem?_eq_none (Nat.not_lt.mp outside), Array.getElem?_eq_getElem there] at here
       cases here
-    rw [spineLevels.eq_1 leaves, spineLevels.eq_1 other, ite_eq_right outside, ite_eq_right gone]
+    rw [spineLevels_unfold leaves, spineLevels_unfold other, ite_eq_right outside,
+      ite_eq_right gone]
 
 /-- Writing a leaf inside a slice, or just past the leaves, writes the slice at its offset. -/
 theorem extract_writeEntry {leaves : Array Bytes} {start stop position : Nat} (node : Bytes)
@@ -165,12 +193,12 @@ theorem spineWrite_spineLevels (leaves : Array Bytes) (node : Bytes) :
   intro start level position after within
   have written : ∀ index, (writeEntry leaves position node)[index]?
       = if position = index then some node else leaves[index]? := getElem?_writeEntry within node
-  induction start, level using spineLevels.induct leaves with
+  induction start, level using spineLevels_induct leaves with
   | case1 start level inside ih =>
     have grown : start < (writeEntry leaves position node).size := by
       unfold writeEntry
       split <;> simp <;> omega
-    rw [spineLevels.eq_1 leaves, ite_eq_left inside, spineLevels.eq_1 (writeEntry _ _ _),
+    rw [spineLevels_unfold leaves, ite_eq_left inside, spineLevels_unfold (writeEntry _ _ _),
       ite_eq_left grown, spineWrite]
     by_cases here : position - start < 4 ^ level
     · -- The tree that holds the leaf takes the write, and the trees after it read none of it.
@@ -209,9 +237,9 @@ theorem spineWrite_spineLevels (leaves : Array Bytes) (node : Bytes) :
             simp; omega),
           Array.getElem?_eq_none (show (#[node] : Array Bytes).size ≤ index by simp; omega)]
         split <;> rfl
-    rw [spineLevels.eq_1 leaves, ite_eq_right outside, Nat.sub_self, spineWrite, pushed,
-      spineLevels.eq_1 (leaves.push node), ite_eq_left (by simp; omega), slice,
-      spineLevels.eq_1 (leaves.push node), ite_eq_right (by simp; omega)]
+    rw [spineLevels_unfold leaves, ite_eq_right outside, Nat.sub_self, spineWrite, pushed,
+      spineLevels_unfold (leaves.push node), ite_eq_left (by simp; omega), slice,
+      spineLevels_unfold (leaves.push node), ite_eq_right (by simp; omega)]
 
 /-- A list with a limit before the switch fork and a progressive list from it on, with its tree. -/
 structure RootedForkList (switch fork : Fork) (α : Type) [SszType α] (limit : Nat) where

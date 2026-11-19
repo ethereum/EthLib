@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.AdversaryCalls
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Main
 
 /-!
@@ -26,6 +26,14 @@ The bridge in `Unforgeability/Bridge/` compares EthLib with it:
 - Each hashing routine of EthLib is the model's, call for call or under every answer function.
 - An EthLib forgery is a model forgery of a translated adversary.
 - A signing request costs the model at most what it costs EthLib, so the budget `q` carries over.
+
+A second theorem charges only the adversary's own hash calls, and takes a bound on its requests.
+
+The scheme's calls then add a constant: 264193 for key generation and 491 for verification.
+
+Each signing request adds at most `939499 + 3 * 2^32`, when every counter search runs to its end.
+
+At the model's cap of 1,182,000,000 requests, the constant is about `2^63.7`.
 -/
 
 @[expose] public section
@@ -44,6 +52,17 @@ theorem unforgeable : HasClassicalSecurityBits 127 := fun q hq adversary hbound 
     (SphincsSecurity.h26_layered q hq (translate adversary)
       (hasHashQueryBound_translate_self adversary q hbound))
 
+/-- leanSPHINCS as EthLib computes it is strongly unforgeable, with the adversary's calls as budget.
+
+Take an adversary with at most `q` hash calls of its own and `r` signing requests in every run.
+
+It forges with probability at most `(q + C) / 2^127`, where `C` bounds the scheme's calls.
+
+At 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`. -/
+theorem unforgeable_adversary : HasAdversarySecurityBits 127 := fun q r adversary hbound =>
+  unforgeable (q + schemeCalls r) (by unfold schemeCalls keyGenCalls; omega) adversary
+    (hasHashQueryBound_of_adversary adversary q r hbound)
+
 end EthLib.Cryptography.Sphincs.Unforgeability.Bridge
 
 /-! The build fails if the theorem ever depends on more than Lean's three standard axioms. -/
@@ -55,3 +74,11 @@ info: 'EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable' depends on
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable
+
+/--
+info: 'EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_adversary' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Sphincs.Unforgeability.Bridge.unforgeable_adversary

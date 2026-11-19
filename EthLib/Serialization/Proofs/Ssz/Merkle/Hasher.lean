@@ -74,6 +74,25 @@ theorem merkleizeBoundedUncheckedM_id_eq (hasher : Hasher Id) (chunks : Array By
     · simp only [over, ↓reduceIte]
       rfl
 
+/-- The progressive root, in any lawful monad, closes an empty suffix with a zero node.
+
+Otherwise it roots one level, then the rest, then hashes the two. -/
+theorem merkleizeProgressiveUncheckedM_unfold {m : Type → Type} [Monad m] [LawfulMonad m]
+    (hasher : Hasher m) (chunks : List Bytes) (level : Nat) :
+    merkleizeProgressiveUncheckedM hasher chunks level =
+      if chunks.isEmpty then pure zeroChunk
+      else
+        subtreeAtM hasher (chunks.take (4 ^ level)).toArray (depthFor (4 ^ level)) 0
+          >>= fun here =>
+            merkleizeProgressiveUncheckedM hasher (chunks.drop (4 ^ level)) (level + 1)
+              >>= fun rest => combineM hasher.hash here rest := by
+  unfold merkleizeProgressiveUncheckedM
+  rw [progressiveWindows]
+  split
+  · simp [spineM]
+  · -- The first run is rooted before the others, and its root is hashed last.
+    simp [List.mapM_cons, spineM, List.foldrM_cons]
+
 /-- The progressive root closes an empty suffix with a zero node.
 
 Otherwise it hashes the root of one level against the root of the rest. -/
@@ -84,7 +103,7 @@ theorem merkleizeProgressiveUnchecked_unfold (chunks : List Bytes) (level : Nat)
         combine (subtreeAt (chunks.take (4 ^ level)).toArray (depthFor (4 ^ level)) 0)
           (merkleizeProgressiveUnchecked (chunks.drop (4 ^ level)) (level + 1)) := by
   unfold merkleizeProgressiveUnchecked
-  rw [merkleizeProgressiveUncheckedM.eq_def]
+  rw [merkleizeProgressiveUncheckedM_unfold]
   split <;> rfl
 
 /-- Mixing a word in folds it in as the right child, with SHA-256. -/

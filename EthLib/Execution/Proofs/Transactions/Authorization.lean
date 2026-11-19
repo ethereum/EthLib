@@ -778,6 +778,16 @@ theorem hasPreCodes_delegate {state state' : TransactionState} {refund : Nat}
   cases h
   exact hasPreCodes_modifyState hnonce (hasPreCodes_setCode hset hpre)
 
+/-- An authorization keeps the code of every current account available. -/
+theorem hasCodes_applyAuthorization (h : applyAuthorization fork chainId done auth = .ok done')
+    (hcodes : HasCodes done.state) : HasCodes done'.state := by
+  rcases applyAuthorization_cases h with rfl | ⟨authority, -, -, ⟨-, rfl⟩ |
+    ⟨-, paid, state, refund, hpay, hdelegate, rfl⟩⟩
+  · exact hcodes
+  · exact hcodes
+  · obtain ⟨hstate, -, -⟩ := state_payAuthorization hpay
+    exact hasCodes_delegate hdelegate (by rw [hstate]; exact hcodes)
+
 /-- An authorization keeps the code of every account before the transaction in the state. -/
 theorem hasPreCodes_applyAuthorization (h : applyAuthorization fork chainId done auth = .ok done')
     (hpre : HasPreCodes done.state) : HasPreCodes done'.state := by

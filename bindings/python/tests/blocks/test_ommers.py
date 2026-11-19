@@ -46,6 +46,11 @@ RECENT = [rlp.encode(b) for b in BLOCKS[:3]]
 OMMER = _with_coinbase(BLOCKS[2][0], 0x11)
 
 
+def _hash(header: list) -> str:
+    """The hash of a header, as an error message writes it."""
+    return "0x" + keccak256(rlp.encode(header)).hex()
+
+
 def _code(recent: list[bytes], block: bytes, error: str) -> int:
     with raises(
         BlockError, f"ommers invalid: EthLib.Execution.Blocks.OmmerError.{error}"
@@ -73,45 +78,55 @@ def test_two_ommers_pass() -> None:
 
 
 def test_wrong_ommers_hash() -> None:
-    assert _code(RECENT, _block([OMMER], ommers_hash=BLOCKS[3][0][1]), "wrongOmmersHash") == 231
+    # The header keeps the hash of no ommer, and the block holds one.
+    expected, actual = BLOCKS[3][0][1].hex(), keccak256(rlp.encode([OMMER])).hex()
+    error = f"wrongOmmersHash (expected := 0x{expected}) (actual := 0x{actual})"
+    assert _code(RECENT, _block([OMMER], ommers_hash=BLOCKS[3][0][1]), error) == 231
 
 
 def test_ommer_as_old_as_the_block() -> None:
     # An ommer at the block's own height is out of range.
-    assert _code(RECENT, _block([_with_coinbase(BLOCKS[3][0], 0x11)]), "numberOutOfRange") == 232
+    error = "numberOutOfRange (number := 3) (blockNumber := 3)"
+    assert _code(RECENT, _block([_with_coinbase(BLOCKS[3][0], 0x11)]), error) == 232
 
 
 def test_ommer_without_its_parent_in_the_recent_chain() -> None:
     # The recent chain skips block 1, the parent of the ommer.
-    assert _code([RECENT[0], RECENT[2]], _block([OMMER]), "parentMissing") == 233
+    assert _code([RECENT[0], RECENT[2]], _block([OMMER]), "parentMissing (number := 2)") == 233
 
 
 def test_ommer_that_is_not_a_valid_header() -> None:
     # A difficulty raised by one breaks the difficulty rule.
     ommer = list(OMMER)
     ommer[7] = (int.from_bytes(ommer[7], "big") + 1).to_bytes(3, "big")
-    error = "invalidHeader (EthLib.Execution.Blocks.BlockError.wrongDifficulty 131200 131201)"
+    error = (
+        "invalidHeader (EthLib.Execution.Blocks.BlockError.wrongDifficulty "
+        "(expected := 131200) (actual := 131201))"
+    )
     assert _code(RECENT, _block([ommer]), error) == 234
 
 
 def test_three_ommers() -> None:
     ommers = [_with_coinbase(BLOCKS[2][0], b) for b in (0x11, 0x22, 0x33)]
-    assert _code(RECENT, _block(ommers), "tooManyOmmers") == 235
+    assert _code(RECENT, _block(ommers), "tooManyOmmers (count := 3)") == 235
 
 
 def test_one_ommer_twice() -> None:
-    assert _code(RECENT, _block([OMMER, OMMER]), "duplicateOmmer") == 236
+    error = f"duplicateOmmer (hash := {_hash(OMMER)})"
+    assert _code(RECENT, _block([OMMER, OMMER]), error) == 236
 
 
 def test_ommer_that_is_a_block_of_the_chain() -> None:
-    assert _code(RECENT, _block([BLOCKS[2][0]]), "ommerInChain") == 237
+    error = f"ommerInChain (hash := {_hash(BLOCKS[2][0])})"
+    assert _code(RECENT, _block([BLOCKS[2][0]]), error) == 237
 
 
 def test_ommer_already_included_by_a_recent_block() -> None:
     parent = list(BLOCKS[2])
     parent[2] = [OMMER]
     recent = RECENT[:2] + [rlp.encode(parent)]
-    assert _code(recent, _block([OMMER]), "ommerAlreadyIncluded") == 238
+    error = f"ommerAlreadyIncluded (hash := {_hash(OMMER)})"
+    assert _code(recent, _block([OMMER]), error) == 238
 
 
 def test_forks_given_with_their_first_blocks() -> None:

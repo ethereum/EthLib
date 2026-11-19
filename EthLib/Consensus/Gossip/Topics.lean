@@ -173,8 +173,9 @@ def computeSubnetForAttestation (preset : Preset) (config : Config)
   if config.ATTESTATION_SUBNET_COUNT = 0 then throw .zeroSubnetCount
   let slotsSinceEpochStart := slot % preset.SLOTS_PER_EPOCH
   let committees ← (Uint64.mulChecked committeesPerSlot slotsSinceEpochStart).mapError
-    fun _ => .subnetOverflow
-  let position ← (Uint64.addChecked committees committeeIndex).mapError fun _ => .subnetOverflow
+    fun _ => .subnetOverflow committeesPerSlot slotsSinceEpochStart
+  let position ← (Uint64.addChecked committees committeeIndex).mapError
+    fun _ => .subnetOverflow committees committeeIndex
   return position % config.ATTESTATION_SUBNET_COUNT
 
 /--

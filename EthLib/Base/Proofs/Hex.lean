@@ -12,6 +12,22 @@ Decoding the two digits of each byte gives the bytes back.
 
 namespace EthLib.Base
 
+/-- The characters of a hex string: `0x`, then the two digits of each byte in turn. -/
+theorem toList_hexString (bytes : List UInt8) :
+    (hexString bytes).toList = '0' :: 'x' :: bytes.flatMap byteHexDigits := by
+  -- The fold starts from the marker and pushes two characters per byte.
+  have general : ∀ (bytes : List UInt8) (text : String),
+      (bytes.foldl (fun text byte => (byteHexDigits byte).foldl String.push text)
+        text).toList = text.toList ++ bytes.flatMap byteHexDigits := by
+    intro bytes
+    induction bytes with
+    | nil => simp
+    | cons byte rest ih =>
+      intro text
+      rw [List.foldl_cons, ih]
+      simp [byteHexDigits]
+  simpa [hexString] using general bytes "0x"
+
 /-- Each lowercase digit decodes to its value. -/
 theorem hexValue?_hexDigitChar (n : Fin 16) : hexValue? (hexDigitChar n) = some n.val.toUInt8 := by
   revert n

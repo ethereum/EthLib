@@ -11,10 +11,12 @@ from ethlib.errors import GossipError as GossipError
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SubOpts:
-    """A subscription change: subscribe to a topic, or unsubscribe from it."""
+    """A subscription change, with the partial message flags that count only in a subscription."""
 
     subscribe: bool = False
     topic_id: str = ""
+    requests_partial: bool = False
+    supports_sending_partial: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -72,6 +74,13 @@ class IDontWant:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ControlExtensions:
+    """The extensions that the sender supports, from gossipsub v1.3."""
+
+    partial_messages: bool = False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Control:
     """The control messages of one RPC."""
 
@@ -80,15 +89,38 @@ class Control:
     graft: tuple[Graft, ...] = ()
     prune: tuple[Prune, ...] = ()
     idontwant: tuple[IDontWant, ...] = ()
+    extensions: ControlExtensions | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PartialMessagesExtension:
+    """A partial message: a part of a full message, or the parts the sender has and wants."""
+
+    topic_id: bytes = b""
+    group_id: bytes = b""
+    partial_message: bytes | None = None
+    parts_metadata: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Rpc:
-    """One RPC: subscription changes, published messages and control messages."""
+    """One RPC: subscription changes, published, control and partial messages."""
 
     subscriptions: tuple[SubOpts, ...] = ()
     publish: tuple[Message, ...] = ()
     control: Control = field(default_factory=Control)
+    # The field `partial` of the schema, named as in Lean, where `partial` is a keyword.
+    partial_message: PartialMessagesExtension | None = None
+
+
+def _message(value: dict[str, Any]) -> Message:
+    return Message(data=value["data"], topic=value["topic"])
+
+
+def _extensions(value: dict[str, Any] | None) -> ControlExtensions | None:
+    if value is None:
+        return None
+    return ControlExtensions(partial_messages=value["partial_messages"])
 
 
 def _control(value: dict[str, Any]) -> Control:
@@ -111,6 +143,18 @@ def _control(value: dict[str, Any]) -> Control:
             for m in value["prune"]
         ),
         idontwant=tuple(IDontWant(message_ids=tuple(m["message_ids"])) for m in value["idontwant"]),
+        extensions=_extensions(value["extensions"]),
+    )
+
+
+def _partial(value: dict[str, Any] | None) -> PartialMessagesExtension | None:
+    if value is None:
+        return None
+    return PartialMessagesExtension(
+        topic_id=value["topic_id"],
+        group_id=value["group_id"],
+        partial_message=value["partial_message"],
+        parts_metadata=value["parts_metadata"],
     )
 
 
@@ -120,11 +164,17 @@ def decode(data: bytes) -> Rpc:
     value = _native.gossip_rpc_decode(data)
     return Rpc(
         subscriptions=tuple(
-            SubOpts(subscribe=s["subscribe"], topic_id=s["topic_id"])
+            SubOpts(
+                subscribe=s["subscribe"],
+                topic_id=s["topic_id"],
+                requests_partial=s["requests_partial"],
+                supports_sending_partial=s["supports_sending_partial"],
+            )
             for s in value["subscriptions"]
         ),
-        publish=tuple(Message(data=m["data"], topic=m["topic"]) for m in value["publish"]),
+        publish=tuple(_message(m) for m in value["publish"]),
         control=_control(value["control"]),
+        partial_message=_partial(value["partial_message"]),
     )
 
 
@@ -136,12 +186,14 @@ def encode(rpc: Rpc) -> bytes:
 
 __all__ = [
     "Control",
+    "ControlExtensions",
     "GossipError",
     "Graft",
     "IDontWant",
     "IHave",
     "IWant",
     "Message",
+    "PartialMessagesExtension",
     "PeerInfo",
     "Prune",
     "Rpc",

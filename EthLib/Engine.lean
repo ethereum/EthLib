@@ -1,7 +1,9 @@
 module
 
+public import EthLib.Engine.BeaconApiEvents
 public import EthLib.Engine.Block
 public import EthLib.Engine.BuildPayload
+public import EthLib.Engine.Capabilities
 public import EthLib.Engine.ExecutionEngine
 public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Engine.GetBlobs

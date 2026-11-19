@@ -1,8 +1,10 @@
 module
 
 public import EthLib.Consensus.Proofs.Containers.State
+public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.Models.Network.Model
+import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 
 /-!
 # Proofs: honest validators that run the fork choice over the network
@@ -13,9 +15,11 @@ At each move it ticks its store to the current time, or processes a message of i
 
 The messages are those of the fork choice handlers.
 
-A block is processed with the votes and slashings that it carries.
+A received block and its carried votes and slashings are processed separately.
 
-The block is rejected with them when one of them is rejected.
+A carried vote or slashing is processed only once the store holds its block.
+
+A rejected carried operation leaves the block and earlier updates in the store.
 
 A message that the handler rejects leaves the store as it was, and may be processed later.
 
@@ -26,6 +30,8 @@ The store of each honest validator stays reachable from the anchor along every e
 Along an execution of the network model, an honest store that starts with a forward clock keeps one.
 
 An honest store built with the signature checks of the model stays built that way.
+
+Along an execution, the unrealized justified epoch of each store never decreases.
 -/
 
 @[expose] public section
@@ -57,9 +63,11 @@ A tick sets the store to the time, which must fit in 64 bits.
 
 That time must not lie before the clock of the store.
 
-Every other move processes a message of the view, as one from the network.
+Every other move processes a message of the view, or one operation of a block in the view.
 
-The votes inside a block are processed with it, and a rejected vote rejects the block.
+An operation of a block is processed only when the store holds that block.
+
+Carried operations can be retried and interleaved with other moves, without an ordered queue.
 
 Blocks and envelopes are judged with the given sources outside the beacon chain. -/
 inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockSources preset fork)
@@ -69,9 +77,27 @@ inductive Handles (config : Config) (checks : SignatureChecks) (sources : BlockS
   | tick {after : Store preset fork} :
     store.timeMs.toNat ≤ time → time < 2 ^ 64 → store.onTick config time.toUInt64 = .ok after →
       Handles config checks sources time view store after
-  /-- The store after a block of the view, with its votes. -/
+  /-- The store after admitting a block of the view. -/
   | block {after : Store preset fork} {signed : SignedBeaconBlock preset fork} :
-    .block signed ∈ view → store.onBlockWithVotes config checks sources signed = .ok after →
+    .block signed ∈ view → store.onBlock config checks sources signed = .ok after →
+      Handles config checks sources time view store after
+  /-- The store after an attestation carried by a block of the view that the store holds. -/
+  | blockAttestation {after : Store preset fork}
+      {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
+      {attestation : Attestation preset fork} :
+    .block signed ∈ view →
+      SszType.hashTreeRoot signed.message = .ok blockRoot → store.blocks.contains blockRoot →
+      attestation ∈ signed.message.body.attestations.data →
+      store.onAttestation config checks attestation true = .ok after →
+      Handles config checks sources time view store after
+  /-- The store after a slashing carried by a block of the view that the store holds. -/
+  | blockAttesterSlashing {after : Store preset fork}
+      {signed : SignedBeaconBlock preset fork} {blockRoot : Root}
+      {slashing : AttesterSlashing preset fork} :
+    .block signed ∈ view →
+      SszType.hashTreeRoot signed.message = .ok blockRoot → store.blocks.contains blockRoot →
+      slashing ∈ signed.message.body.attesterSlashings.data →
+      store.onAttesterSlashing config checks slashing = .ok after →
       Handles config checks sources time view store after
   /-- The store after an attestation of the view. -/
   | attestation {after : Store preset fork} {attestation : Attestation preset fork} :
@@ -126,12 +152,313 @@ theorem Handles.reachable {checks : SignatureChecks} {sources : BlockSources pre
     Store.Reachable config anchorState anchorBlock after := by
   cases handles with
   | tick _ _ ticked => exact reachable.tick ticked
-  | block _ added => exact reachable.onBlockWithVotes added
+  | block _ added => exact reachable.block added
+  | blockAttestation _ _ _ _ attested => exact reachable.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact reachable.attesterSlashing slashed
   | attestation _ attested => exact reachable.attestation attested
   | attesterSlashing _ slashed => exact reachable.attesterSlashing slashed
   | payloadAttestation _ voted => exact reachable.payloadAttestation voted
   | envelope _ accepted => exact reachable.envelope accepted
   | inclusionList _ accepted => exact reachable.inclusionList accepted
+
+/-- A move of the store keeps the state of each checkpoint, at every fork.
+
+Only an attestation adds a state, and no move removes one. -/
+theorem Handles.checkpointStates_of_found {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after)
+    {checkpoint : Checkpoint} {state : BeaconState preset fork}
+    (found : store.checkpointStates[checkpoint]? = some state) :
+    after.checkpointStates[checkpoint]? = some state := by
+  cases handles with
+  | tick _ _ step => exact (Store.onTick_checkpointStates_latestMessages step).1 ▸ found
+  | block _ step => exact (Store.onBlock_checkpointStates_latestMessages step).1 ▸ found
+  | blockAttestation _ _ _ _ step => exact Store.onAttestation_checkpointStates_of_found step found
+  | blockAttesterSlashing _ _ _ _ step =>
+    exact (Store.onAttesterSlashing_checkpointStates_latestMessages step).1 ▸ found
+  | attestation _ step => exact Store.onAttestation_checkpointStates_of_found step found
+  | attesterSlashing _ step =>
+    exact (Store.onAttesterSlashing_checkpointStates_latestMessages step).1 ▸ found
+  | payloadAttestation _ step =>
+    obtain ⟨_, _, same⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes step
+    rw [same]
+    exact found
+  | envelope _ step =>
+    obtain ⟨_, _, _, _, _, record, same⟩ := Store.onExecutionPayloadEnvelope_ok step
+    rw [same]
+    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    exact found
+  | inclusionList _ step =>
+    obtain ⟨_, _, same⟩ := Store.onInclusionList_ok ‹_› step
+    rw [same]
+    exact found
+
+/-- Once a store admits a block, every later event retains it. -/
+theorem Execution.blocks_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {u : ν} {n k : ℕ} (later : n ≤ k) {root : Root} {block : BeaconBlock preset fork}
+    (found : ((e.world n).state u).blocks[root]? = some block) :
+    ((e.world k).state u).blocks[root]? = some block := by
+  induction k, later using Nat.le_induction with
+  | base => exact found
+  | succ k _ ih =>
+    rcases e.state_succ k u with same | ⟨_, moved⟩
+    · exact same ▸ ih
+    · cases moved with
+      | tick _ _ step => exact (Store.onTick_frame step).2.2.1 ▸ ih
+      | block _ step => exact Store.onBlock_blocks_of_found step ih
+      | blockAttestation _ _ _ _ step => exact (Store.onAttestation_frame step).2.1 ▸ ih
+      | blockAttesterSlashing _ _ _ _ step => exact (Store.onAttesterSlashing_frame step).2.1 ▸ ih
+      | attestation _ step => exact (Store.onAttestation_frame step).2.1 ▸ ih
+      | attesterSlashing _ step => exact (Store.onAttesterSlashing_frame step).2.1 ▸ ih
+      | payloadAttestation _ step =>
+        exact (Store.onPayloadAttestationMessage_onlyPtcVotes step).frame.2.1 ▸ ih
+      | envelope _ step => exact (Store.onExecutionPayloadEnvelope_frame step).2.1 ▸ ih
+      | inclusionList _ step => exact (Store.onInclusionList_frame step).2.1 ▸ ih
+
+/-- A held block's epoch is the same at a later event. -/
+theorem Execution.getBlockEpoch_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {u : ν} {n k : ℕ} (later : n ≤ k)
+    {root : Root} {epoch : Epoch}
+    (read : ((e.world n).state u).getBlockEpoch root = .ok epoch) :
+    ((e.world k).state u).getBlockEpoch root = .ok epoch := by
+  unfold Store.getBlockEpoch at read ⊢
+  simp only [bind_ok_iff] at read
+  obtain ⟨block, found, rest⟩ := read
+  rw [Store.block_ok_iff.mpr (e.blocks_of_le later (Store.block_ok_iff.mp found))]
+  exact rest
+
+/-- An ancestor test of a store holds at every later event. -/
+theorem Execution.isAncestor_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {u : ν} {n k : ℕ} (later : n ≤ k) {node ancestor : ForkChoiceNode}
+    (descends : ((e.world n).state u).isAncestor node ancestor = .ok true) :
+    ((e.world k).state u).isAncestor node ancestor = .ok true := by
+  have blocks {root : Root} {block : BeaconBlock preset fork}
+      (found : ((e.world n).state u).blocks[root]? = some block) :
+      ((e.world k).state u).blocks[root]? = some block :=
+    e.blocks_of_le later found
+  unfold Store.isAncestor at descends ⊢
+  simp only [bind_ok_iff] at descends
+  obtain ⟨block, found, reached, walk, rest⟩ := descends
+  have held := blocks (Store.block_ok_iff.mp found)
+  simp only [Store.block_ok_iff.mpr held, Store.getAncestor_of_blocks blocks walk, bind,
+    Except.bind]
+  exact rest
+
+/-- A move of the store keeps each checkpoint, or moves it to one at a greater epoch. -/
+theorem Handles.checkpointsAdvance {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after) :
+    store.CheckpointsAdvance after := by
+  cases handles with
+  | tick _ _ ticked => exact (Store.onTick_frame ticked).2.1
+  | block _ added => exact Store.onBlock_checkpointsAdvance added
+  | blockAttestation _ _ _ _ attested => exact (Store.onAttestation_frame attested).1
+  | blockAttesterSlashing _ _ _ _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
+  | attestation _ attested => exact (Store.onAttestation_frame attested).1
+  | attesterSlashing _ slashed => exact (Store.onAttesterSlashing_frame slashed).1
+  | payloadAttestation _ voted =>
+    exact (Store.onPayloadAttestationMessage_onlyPtcVotes voted).frame.1
+  | envelope _ accepted => exact (Store.onExecutionPayloadEnvelope_frame accepted).1
+  | inclusionList _ accepted => exact (Store.onInclusionList_frame accepted).1
+
+/-- Realized checkpoint epochs never decrease along an execution. -/
+theorem Execution.checkpointsAdvance_of_le {ν κ : Type*} [DecidableEq ν]
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    (u : ν) {n k : ℕ} (later : n ≤ k) :
+    ((e.world n).state u).CheckpointsAdvance ((e.world k).state u) := by
+  induction k, later using Nat.le_induction with
+  | base => exact Store.CheckpointsAdvance.refl _
+  | succ k _ ih =>
+    rcases e.state_succ k u with same | ⟨_, moved⟩
+    · exact same ▸ ih
+    · exact ih.trans moved.checkpointsAdvance
+
+/-- A move of the store never lowers the unrealized justified epoch. -/
+private theorem Handles.unrealizedJustified_epoch_le {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after) :
+    store.unrealizedJustifiedCheckpoint.epoch ≤ after.unrealizedJustifiedCheckpoint.epoch := by
+  have same {moved : Store preset fork} (frame : Store.SameCheckpoints store moved) :
+      store.unrealizedJustifiedCheckpoint.epoch ≤ moved.unrealizedJustifiedCheckpoint.epoch := by
+    rw [frame.unrealizedJustified]
+    exact UInt64.le_refl _
+  cases handles with
+  | tick _ _ ticked =>
+    rw [(Store.onTick_unrealizedJustifiedCheckpoint ticked).1]
+    exact UInt64.le_refl _
+  | block _ added => exact (Store.onBlock_unrealized_epoch_le added).1
+  | blockAttestation _ _ _ _ attested => exact same (Store.onAttestation_frame attested).2.2.2.1
+  | blockAttesterSlashing _ _ _ _ slashed =>
+    exact same (Store.onAttesterSlashing_frame slashed).2.2.2.1
+  | attestation _ attested => exact same (Store.onAttestation_frame attested).2.2.2.1
+  | attesterSlashing _ slashed => exact same (Store.onAttesterSlashing_frame slashed).2.2.2.1
+  | payloadAttestation _ voted =>
+    obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
+    exact UInt64.le_refl _
+  | envelope _ accepted =>
+    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
+    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    exact UInt64.le_refl _
+  | inclusionList _ accepted =>
+    obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
+    exact UInt64.le_refl _
+
+/-- Unrealized justified epochs never decrease along an execution. -/
+theorem Execution.unrealizedJustified_epoch_le_of_le {ν κ : Type*} [DecidableEq ν]
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    (u : ν) {n k : ℕ} (later : n ≤ k) :
+    ((e.world n).state u).unrealizedJustifiedCheckpoint.epoch ≤
+      ((e.world k).state u).unrealizedJustifiedCheckpoint.epoch := by
+  induction k, later using Nat.le_induction with
+  | base => exact UInt64.le_refl _
+  | succ k _ ih =>
+    rcases e.state_succ k u with same | ⟨_, moved⟩
+    · exact same ▸ ih
+    · exact UInt64.le_trans ih moved.unrealizedJustified_epoch_le
+
+/-- An honest store's unrealized justified epoch is at least the anchor store's. -/
+theorem Execution.anchor_unrealized_le {ν κ : Type*} [DecidableEq ν]
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchor : Store preset fork} (start : ∀ w ∈ J, e.start w = anchor) {u : ν} (honest : u ∈ J)
+    (k : ℕ) :
+    anchor.unrealizedJustifiedCheckpoint.epoch ≤
+      ((e.world k).state u).unrealizedJustifiedCheckpoint.epoch := by
+  have later := e.unrealizedJustified_epoch_le_of_le u (Nat.zero_le k)
+  simpa [Execution.world_zero, World.initial, start u honest] using later
+
+/-- Store clocks stay between the initial clock and the maximum of it and network time.
+
+Non-honest local states are frozen by this network model. -/
+theorem Execution.clock_bounds {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    (v : ν) (i : ℕ) :
+    ((e.world i).state v).genesisTimeMs = (e.start v).genesisTimeMs ∧
+      (e.start v).timeMs ≤ ((e.world i).state v).timeMs ∧
+      ((e.world i).state v).timeMs.toNat ≤ max (e.start v).timeMs.toNat (e.world i).time := by
+  have bounds {time : ℕ} {view} {s t : Store preset fork}
+      (h : Handles config checks sources time view s t) :
+      t.genesisTimeMs = s.genesisTimeMs ∧ s.timeMs ≤ t.timeMs ∧
+        t.timeMs.toNat ≤ max s.timeMs.toNat time := by
+    have same (h : Store.SameClock s t) :
+        t.genesisTimeMs = s.genesisTimeMs ∧ s.timeMs ≤ t.timeMs ∧
+          t.timeMs.toNat ≤ max s.timeMs.toNat time := by
+      rw [h.1, h.2]
+      exact ⟨rfl, UInt64.le_refl _, Nat.le_max_left _ _⟩
+    cases h with
+    | tick le fits tick =>
+      have g : t.genesisTimeMs = s.genesisTimeMs := by
+        unfold Store.onTick at tick
+        simp only [bind_ok_iff] at tick
+        obtain ⟨_, _, _, catchup, perSlot⟩ := tick
+        exact (Store.onTickPerSlot_frame perSlot).2.1.trans (Store.catchUp_frame catchup).1
+      have tm : t.timeMs.toNat = time := by
+        rw [(Store.onTick_frame tick).1]
+        exact UInt64.toNat_ofNat_of_lt' fits
+      exact ⟨g, UInt64.le_iff_toNat_le.mpr (tm ▸ le), by rw [tm]; omega⟩
+    | block _ h => exact same (Store.onBlock_sameClock h)
+    | blockAttestation _ _ _ _ h => exact same (Store.onAttestation_sameClock h)
+    | blockAttesterSlashing _ _ _ _ h => exact same (Store.onAttesterSlashing_sameClock h)
+    | attestation _ h => exact same (Store.onAttestation_sameClock h)
+    | attesterSlashing _ h => exact same (Store.onAttesterSlashing_sameClock h)
+    | payloadAttestation _ h => exact same (Store.onPayloadAttestationMessage_sameClock h)
+    | envelope _ h => exact same (Store.onExecutionPayloadEnvelope_sameClock h)
+    | inclusionList _ h => exact same (Store.onInclusionList_sameClock h)
+  induction i with
+  | zero => exact ⟨rfl, UInt64.le_refl _, Nat.le_max_left _ _⟩
+  | succ i ih =>
+    have time := e.monotone_time (Nat.le_succ i)
+    change (e.world i).time ≤ (e.world (i+1)).time at time
+    rcases e.state_succ i v with eq | ⟨_, move⟩
+    · rw [eq]
+      exact ⟨ih.1, ih.2.1, by omega⟩
+    · have h := bounds move
+      exact ⟨h.1.trans ih.1, UInt64.le_trans ih.2.1 h.2.1, by omega⟩
+
+/-- A newly held block passed validation at an earlier event of the execution. -/
+theorem Execution.exists_validated_of_blocks {ν κ : Type*} [DecidableEq ν]
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {v : ν} {n : ℕ} {r : Root} {b : BeaconBlock preset fork}
+    (found : ((e.world n).state v).blocks[r]? = some b) :
+    (e.start v).blocks[r]? = some b ∨
+      ∃ i, i < n ∧ ∃ sb post,
+        .block sb ∈ (e.world i).view v ∧ sb.message = b ∧
+        SszType.hashTreeRoot sb.message = .ok r ∧
+        ((e.world i).state v).validateOnBlock config checks sources sb r = .ok post := by
+  induction n with
+  | zero => exact .inl found
+  | succ n ih =>
+    by_cases held : ((e.world n).state v).blocks[r]? = some b
+    · rcases ih held with old | ⟨i, lt, rest⟩
+      · exact .inl old
+      · exact .inr ⟨i, Nat.lt_trans lt (Nat.lt_succ_self n), rest⟩
+    have frames {s t : Store preset fork} (h : t.blocks = s.blocks)
+        (old : s = (e.world n).state v) (new : t = (e.world (n+1)).state v) : False := by
+      subst s
+      subst t
+      exact held (h ▸ found)
+    rcases e.state_succ n v with same | ⟨_, moved⟩
+    · exact False.elim (held (same ▸ found))
+    cases moved with
+    | tick _ _ h => exact False.elim (frames (Store.onTick_frame h).2.2.1 rfl rfl)
+    | blockAttestation _ _ _ _ h =>
+      exact False.elim (frames (Store.onAttestation_frame h).2.1 rfl rfl)
+    | blockAttesterSlashing _ _ _ _ h =>
+      exact False.elim (frames (Store.onAttesterSlashing_frame h).2.1 rfl rfl)
+    | attestation _ h => exact False.elim (frames (Store.onAttestation_frame h).2.1 rfl rfl)
+    | attesterSlashing _ h =>
+      exact False.elim (frames (Store.onAttesterSlashing_frame h).2.1 rfl rfl)
+    | payloadAttestation _ h =>
+      exact False.elim (frames (Store.onPayloadAttestationMessage_onlyPtcVotes h).frame.2.1 rfl rfl)
+    | envelope _ h =>
+      exact False.elim (frames (Store.onExecutionPayloadEnvelope_frame h).2.1 rfl rfl)
+    | inclusionList _ h =>
+      exact False.elim (frames (Store.onInclusionList_frame h).2.1 rfl rfl)
+    | @block sb mem blockOk =>
+      have bf := found
+      rcases Store.onBlock_same_or_insert blockOk with same | ⟨q, hash, fresh, maps, rest⟩
+      · exact False.elim (held (same ▸ bf))
+      rw [maps, getElem?_insert_root] at bf
+      by_cases eq : q = r
+      · subst q
+        simp only [↓reduceIte, Option.some.injEq] at bf
+        right
+        refine ⟨n, Nat.lt_succ_self n, sb, ?_⟩
+        unfold Store.onBlock at blockOk
+        simp only [hash, Except.mapError, bind, Except.bind,
+          Std.TreeMap.contains_eq_isSome_getElem?, fresh, Option.isSome_none,
+          Bool.false_eq_true, ↓reduceIte] at blockOk
+        unfold Store.addBlock at blockOk
+        simp only [bind_ok_iff] at blockOk
+        obtain ⟨post, valid, _⟩ := blockOk
+        exact ⟨post, mem, bf, hash, valid⟩
+      · simp only [eq, ↓reduceIte] at bf
+        exact False.elim (held bf)
 
 /-- Along an execution, the store of each honest validator stays reachable from the anchor.
 
@@ -155,7 +482,9 @@ theorem Handles.forwardReachable {checks : SignatureChecks} {sources : BlockSour
     refine forward.tick ?_ ticked
     rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
     exact le
-  | block _ added => exact forward.onBlockWithVotes added
+  | block _ added => exact forward.block added
+  | blockAttestation _ _ _ _ attested => exact forward.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact forward.attesterSlashing slashed
   | attestation _ attested => exact forward.attestation attested
   | attesterSlashing _ slashed => exact forward.attesterSlashing slashed
   | payloadAttestation _ voted => exact forward.payloadAttestation voted
@@ -187,7 +516,9 @@ theorem Handles.forwardReachableWith {checks : SignatureChecks}
     refine reached.tick ?_ ticked
     rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' lt]
     exact le
-  | block _ added => exact reached.onBlockWithVotes added
+  | block _ added => exact reached.block added
+  | blockAttestation _ _ _ _ attested => exact reached.attestation attested
+  | blockAttesterSlashing _ _ _ _ slashed => exact reached.attesterSlashing slashed
   | attestation _ attested => exact reached.attestation attested
   | attesterSlashing _ slashed => exact reached.attesterSlashing slashed
   | payloadAttestation _ voted => exact reached.payloadAttestation voted

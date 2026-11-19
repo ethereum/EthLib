@@ -248,6 +248,7 @@ theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : La
 /-- A trial and its randomizer fix the base. -/
 theorem trialRandomizer_inj_base {base base' : Randomizer} {j : ℕ}
     (h : trialRandomizer base j = trialRandomizer base' j) : base = base' := by
+  rw [trialRandomizer_eq, trialRandomizer_eq] at h
   have hb : bytesToUint base < 2 ^ 128 :=
     lt_of_lt_of_eq (Base.bytesToUint_lt base) (by simp [RANDOMIZER_LEN])
   have hb' : bytesToUint base' < 2 ^ 128 :=
@@ -458,13 +459,13 @@ theorem isQueryBoundP_otsPublicLeaf (pp : PublicParam) (layer : Layer) (e : UInt
 theorem isQueryBoundP_node (pp : PublicParam) (layer : Layer) (level j : ℕ) :
     IsQueryBoundP (node hashD pp prfD layer level j) IsRndQuery 0 :=
   merkleNode_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
-    (fun _ _ _ _ => isQueryBoundP_th _ _ _) level j
+    (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
 /-- The path of a key draws no base. -/
 theorem isQueryBoundP_path (pp : PublicParam) (layer : Layer) (e : ℕ) :
     IsQueryBoundP (path hashD pp prfD layer e) IsRndQuery 0 :=
   merkleSiblings_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
-    (fun _ _ _ _ => isQueryBoundP_th _ _ _) _ _ _
+    (fun _ _ _ => isQueryBoundP_th _ _ _) _ _
 
 /-- The public parameter draws no base. -/
 theorem isQueryBoundP_publicParamOf : IsQueryBoundP (publicParamOf prfD) IsRndQuery 0 :=

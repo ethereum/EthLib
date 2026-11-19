@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleVerificationQueryPresence
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.ChainOraclePresampling
 
 /-!
@@ -39,8 +39,8 @@ theorem verify_true_verifyTop_run
     ∃ topCache, (true, resultCache) ∈ support
       ((simulateQ randomOracle
         (Concrete.verifyTop publicKey (topKeyOf leafIndex)
-          (Merkle.climb (Concrete.CacheView.nodeAt largerCache publicKey.parameter .bottom) 0
-            leafIndex.val
+          (Merkle.climb (Concrete.CacheView.nodeAt largerCache publicKey.parameter .bottom)
+            ⟨0, leafIndex.val⟩
             (Concrete.CacheView.leafHash largerCache publicKey.parameter leafIndex
               (recoveredEndpoints
                 (fun chain => Concrete.CacheView.chainStep largerCache publicKey.parameter

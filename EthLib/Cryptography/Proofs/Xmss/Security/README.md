@@ -30,7 +30,7 @@ The directories follow that route:
 | --- | --- |
 | `Bridge/` | EthLib's real game, step by step, to the model's game |
 | `Proof/` | the model's game, two units of `2^-128` per hash call |
-| `Scan/` | the digest term of the second lane |
+| `Proof/Scan/` | the digest term of the second lane |
 | `Scheme.lean` | the model: leanXMSS with precomputed keys |
 
 The model is a device of the proof, not a second statement.
@@ -38,7 +38,7 @@ It holds every chain value and node in a table, so its signer makes only the cal
 Its hashes and its verifier are EthLib's, run with the oracle on the bytes of the model's values, so each hash and the verification have exactly one definition.
 The hashes are EthLib's `messageDigest`, `chainStep`, `otsLeafHash` and `nodeHash`, and the verifier is EthLib's `verifyWith`.
 
-`Unforgeability/Translate.lean` names the oracle input each hash makes (`Concrete.encodingHash_eq` and the others), and the proof reasons about those inputs.
+`XmssSecurity/Translate.lean` names the oracle input each hash makes (`Concrete.encodingHash_eq` and the others), and the proof reasons about those inputs.
 The same file proves that EthLib's chain walks and path climbs make the model's calls, call for call.
 The `Bridge/` files then apply it to EthLib's algorithms directly, one step per file:
 
@@ -71,13 +71,13 @@ The changes that follow from this are:
 - The model's hashes and verifier are EthLib's.
   The eight hashes of `Scheme.lean`, from `encodingHash` to `topNodeHash`, are EthLib's `messageDigest`, `chainStep`, `otsLeafHash` and `nodeHash` of either layer.
   `Concrete.verify`, `Concrete.verifyAfterLeaf` and `Concrete.verifyTop` are EthLib's `verifyWith`, `fold` and top-layer `layerRoot`.
-  Both read the model's values through the byte conversions (`Unforgeability/Convert.lean`).
-  leanerVM's bodies of these definitions are theorems here (`Concrete.encodingHash_eq`, `Concrete.verify_eq` and the others, in `Unforgeability/Translate.lean`), and the proof rewrites with them where leanerVM unfolds the definitions, often through the `tweakable_hashes` tactic.
+  Both read the model's values through the byte conversions (`XmssSecurity/Convert.lean`).
+  leanerVM's bodies of these definitions are theorems here (`Concrete.encodingHash_eq`, `Concrete.verify_eq` and the others, in `XmssSecurity/Translate.lean`), and the proof rewrites with them where leanerVM unfolds the definitions, often through the `tweakable_hashes` tactic.
   The model's types and hash inputs move to `XmssSecurity/Types.lean`, so the conversions can come before the model.
 - `Bridge/Real.lean`, `Bridge/Signer.lean` and `Bridge/Game.lean` are rewritten to reason about EthLib's `publicKeyOf`, `signDerived` and `verifyWith`.
 - `Bridge/Derivation.lean` names its inputs by the model's byte layout.
 - `Bridge/SchemeSeed.lean`, `Reduction.lean`, `Seed.lean`, `Model.lean` and `Security.lean` take EthLib's adversary and state the real game (`realGame`) directly.
-- The codeword count of `LeanXmss/Code.lean`, which `Scan/Card.lean` needs, is not copied.
+- The codeword count of `LeanXmss/Code.lean`, which `Proof/Scan/Card.lean` needs, is not copied.
   `XmssSecurity/Code.lean` reads it from the size of the code that `Proofs/Xmss/CodeSize.lean` proves.
 - The Lean documentation follows EthLib's rules for doc comments: one sentence per line, at most 100 characters, and ASCII math.
 
@@ -87,7 +87,7 @@ Declarations the theorem does not use are removed too, about 1,600 lines, among 
 
 The remaining changes adapt the proof to the versions of Lean, VCVio and EthLib used here:
 
-- leanerVM builds with Lean v4.34.1 and VCVio `afa6593f`, while EthLib builds with Lean v4.35.0 and VCVio `bbf05eee`, on the same Mathlib as EthLib.
+- leanerVM builds with Lean v4.34.1 and VCVio `afa6593f`, while EthLib builds with Lean v4.36.0 and VCVio `v4.36.0`, on the same Mathlib as EthLib.
 - On Lean v4.35.0, unfolding `RevealProbeOracleSimulation.tableHits` at a concrete index type makes Lean evaluate its decision procedure over every index, past 30 GB of memory.
   So `XmssSecurity/Proof/RevealProbeOracleSimulation.lean` gains `tableHits_eq_true_iff` and `tableHits_eq_false_iff`, proved at a generic index type, and `CappedGlobalChainHighLocalCoupling.lean`, `CappedGlobalChainHighCoverage.lean` and `CappedGlobalChainHighReplay.lean` rewrite with them instead of unfolding.
 - `lake exe check-decls` rejects `opaque` declarations, which the kernel cannot unfold.

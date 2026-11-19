@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.Hash.Sha256
-public import EthLib.Execution.Blocks.Log
+public import EthLib.Execution.Evm.Log
 
 /-!
 # `Blocks.Requests`

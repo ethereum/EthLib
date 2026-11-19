@@ -120,10 +120,10 @@ theorem simulateQ_gameOf {ι' : Type} {spec' : OracleSpec ι'}
   have hleaf : ∀ j, simulateQ so (leafOf (fun x => pass (.inr x)) sec j) =
       leafOf (fun x => (so ∘ₛ pass) (.inr x)) (fun i => simulateQ so (sec i)) j := fun j => by
     simp [leafOf, QueryImpl.apply_compose]
-  have hnode : ∀ (l j : Nat) (a b : Digest),
-      simulateQ so (nodeWith (fun x => pass (.inr x)) l j a b) =
-        nodeWith (fun x => (so ∘ₛ pass) (.inr x)) l j a b :=
-    fun _ _ _ _ => by simp [nodeWith, QueryImpl.apply_compose]
+  have hnode : ∀ (q : Merkle.Position) (a b : Digest),
+      simulateQ so (nodeWith (fun x => pass (.inr x)) q a b) =
+        nodeWith (fun x => (so ∘ₛ pass) (.inr x)) q a b :=
+    fun _ _ _ => by simp [nodeWith, QueryImpl.apply_compose]
   have hroot : simulateQ so (rootOf (fun x => pass (.inr x)) sec) =
       rootOf (fun x => (so ∘ₛ pass) (.inr x)) (fun i => simulateQ so (sec i)) := by
     rw [rootOf, Merkle.root, Merkle.node_map _ _ hbind]
@@ -221,8 +221,8 @@ theorem isQueryBoundP_leafOf (j : Nat) : IsQueryBoundP (leafOf hashS secretS j) 
     simp [IsHashS, OracleSpec.withDerivationsLift]).mono (by omega)
 
 /-- A node hash is one hash query. -/
-theorem isQueryBoundP_nodeWith (l j : Nat) (a b : Digest) :
-    IsQueryBoundP (nodeWith hashS l j a b) IsHashS 1 := by
+theorem isQueryBoundP_nodeWith (q : Merkle.Position) (a b : Digest) :
+    IsQueryBoundP (nodeWith hashS q a b) IsHashS 1 := by
   simp [nodeWith, IsHashS, OracleSpec.withDerivationsLift]
 
 /-- Answering an adversary of `qh` hash queries and `qo` requests costs `qh + qo 2^33` queries. -/
@@ -254,7 +254,7 @@ theorem isQueryBoundP_run_logKeys_holderOf {α : Type} (oa : OracleComp Adversar
         rw [isQueryBoundP_map_iff]
         have hpath := isQueryBoundP_siblings (hash := nodeWith hashS)
           (leaves := leafOf hashS secretS)
-          isQueryBoundP_leafOf isQueryBoundP_nodeWith 0 i.toNat VRF_TREE_HEIGHT
+          isQueryBoundP_leafOf isQueryBoundP_nodeWith ⟨0, i.toNat⟩ VRF_TREE_HEIGHT
         exact (isQueryBoundP_bind hpath fun _ _ => isQueryBoundP_bind (n := 0)
           (by simp [IsHashS]) fun _ _ => isQueryBoundP_pure _ _ 0).mono
           (by simp [VRF_TREE_HEIGHT])
@@ -268,7 +268,7 @@ theorem isQueryBoundP_seedGameD (adversary : AdaptiveAdversary) {qh qo : ℕ}
     (ho : ∀ r, IsQueryBoundP (adversary r) IsOpenQuery qo) :
     IsQueryBoundP (seedGameD adversary) IsHashS (qh + (qo + 1) * 2 ^ 33) := by
   have hroot := isQueryBoundP_node (hash := nodeWith hashS) (leaves := leafOf hashS secretS)
-    isQueryBoundP_leafOf isQueryBoundP_nodeWith VRF_TREE_HEIGHT 0
+    isQueryBoundP_leafOf isQueryBoundP_nodeWith ⟨VRF_TREE_HEIGHT, 0⟩
   rw [seedGameD, gameOf, rootOf, Merkle.root]
   refine (isQueryBoundP_bind hroot fun r _ =>
     isQueryBoundP_bind (isQueryBoundP_run_logKeys_holderOf (adversary r) ∅ (hh r) (ho r))

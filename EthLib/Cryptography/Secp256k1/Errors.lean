@@ -1,6 +1,6 @@
 module
 
-
+public import EthLib.Base.Hex
 
 /-!
 # `Secp256k1.Errors`
@@ -20,16 +20,20 @@ inductive Secp256k1Error where
   | invalidEncodingLength (size : Nat)
   /-- The first byte of an encoded point was not `02`, `03` or `04`, or did not match its length. -/
   | invalidPrefix (byte : UInt8)
-  /-- A coordinate was `p` or more. -/
-  | coordinateTooLarge
+  /-- A coordinate, `value`, was `p` or more.
+
+  An uncompressed point reads `x` first, so `value` is `x` when both coordinates are too large. -/
+  | coordinateTooLarge (value : Nat)
   /-- An uncompressed point did not satisfy `y^2 = x^3 + 7`. -/
   | notOnCurve
   /-- A compressed `x` had no `y` on the curve: `x^3 + 7` is not a square. -/
   | noPointWithX
   /-- The input was the point at infinity, which is not a public key. -/
   | pointAtInfinity
-  /-- An integer `r` or `s` of a signature was not in `[1, n - 1]`. -/
-  | scalarOutOfRange
+  /-- An integer `r` or `s` of a signature, `value`, was not in `[1, n - 1]`.
+
+  Recovery checks `r` first, so `value` is `r` when both are out of range. -/
+  | scalarOutOfRange (value : Nat)
   /-- A private key was zero, which is not in `[1, n - 1]`. -/
   | zeroPrivateKey
   /-- The point `R` of a signature had `x >= n`, which the recovery ids 0 and 1 cannot name. -/
@@ -52,11 +56,13 @@ deriving DecidableEq, Repr
 def Secp256k1Error.message : Secp256k1Error → String
   | .invalidEncodingLength size => s!"bad point encoding size: {size}, expected 33 or 65"
   | .invalidPrefix byte => s!"bad point encoding prefix: {byte}"
-  | .coordinateTooLarge => "point coordinate is not below p"
+  | .coordinateTooLarge value =>
+    s!"point coordinate is not below p: {Base.hexNat 64 value}"
   | .notOnCurve => "point is not on the curve"
   | .noPointWithX => "no point of the curve has this x"
   | .pointAtInfinity => "the point at infinity is not a public key"
-  | .scalarOutOfRange => "signature integer is not in [1, n - 1]"
+  | .scalarOutOfRange value =>
+    s!"signature integer is not in [1, n - 1]: {Base.hexNat 64 value}"
   | .zeroPrivateKey => "private key is zero"
   | .unrecoverableNonce => "nonce point has x >= n, so no recovery id 0 or 1 names it"
   | .noNonce => "no usable nonce within the bound on attempts"
@@ -74,11 +80,11 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def Secp256k1Error.code : Secp256k1Error → UInt32
   | .invalidEncodingLength _ => 1
   | .invalidPrefix _ => 2
-  | .coordinateTooLarge => 3
+  | .coordinateTooLarge _ => 3
   | .notOnCurve => 4
   | .noPointWithX => 5
   | .pointAtInfinity => 6
-  | .scalarOutOfRange => 7
+  | .scalarOutOfRange _ => 7
   | .zeroPrivateKey => 8
   | .unrecoverableNonce => 9
   | .noNonce => 10

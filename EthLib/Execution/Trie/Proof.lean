@@ -39,10 +39,12 @@ open EthLib.Serialization.Rlp
 
 /-- Why a Merkle proof is rejected. -/
 inductive ProofError where
-  /-- The path needs a node that the proof does not hold. -/
-  | missingNode
-  /-- A node of the proof does not hash to the reference that points to it. -/
-  | hashMismatch
+  /-- The path needs the node of the hash `hash`, which the proof does not hold.
+
+  The hash is none only when a walk runs out of its budget, which no walk does. -/
+  | missingNode (hash : Option ByteArray)
+  /-- A node of the proof hashes to `actual`, not to the reference `expected` that points to it. -/
+  | hashMismatch (expected : ByteArray) (actual : Hash32)
   /-- A node of the proof is not the RLP encoding of an item. -/
   | rlp (error : RlpError)
   /-- The path of a leaf or an extension is not a hex-prefix encoding. -/
@@ -51,13 +53,31 @@ inductive ProofError where
 
   A node is a list of two items with a path first, or a list of 17 items with a value last. -/
   | invalidNode
-  /-- A reference is a byte string of neither 0 nor 32 bytes. -/
-  | invalidReference
+  /-- A reference is a byte string of `size` bytes, neither 0 nor 32. -/
+  | invalidReference (size : Nat)
   /-- An extension consumes no nibble, which `patricialize` never builds. -/
   | emptyExtension
-  /-- The proof holds nodes that the path does not reach. -/
-  | unusedNodes
-  deriving Repr, DecidableEq
+  /-- The proof holds `count` nodes that the path does not reach. -/
+  | unusedNodes (count : Nat)
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def proofErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Trie.ProofError." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each hash in hex. -/
+def ProofError.reprPrec : ProofError → Nat → Std.Format
+  | .missingNode hash, p => proofErrorFormat "missingNode" [namedArg "hash" hash] p
+  | .hashMismatch expected actual, p =>
+    proofErrorFormat "hashMismatch" [namedArg "expected" expected, namedArg "actual" actual] p
+  | .rlp error, p => proofErrorFormat "rlp" [reprArg error] p
+  | .hexPrefix error, p => proofErrorFormat "hexPrefix" [reprArg error] p
+  | .invalidNode, p => proofErrorFormat "invalidNode" [] p
+  | .invalidReference size, p => proofErrorFormat "invalidReference" [namedArg "size" size] p
+  | .emptyExtension, p => proofErrorFormat "emptyExtension" [] p
+  | .unusedNodes count, p => proofErrorFormat "unusedNodes" [namedArg "count" count] p
+
+instance : Repr ProofError := ⟨ProofError.reprPrec⟩
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
@@ -67,14 +87,14 @@ The codes start at 101, above every code of a trie error, so that the two never 
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def ProofError.code : ProofError → UInt32
-  | .missingNode => 101
-  | .hashMismatch => 102
+  | .missingNode _ => 101
+  | .hashMismatch .. => 102
   | .rlp _ => 103
   | .hexPrefix _ => 104
   | .invalidNode => 105
-  | .invalidReference => 106
+  | .invalidReference _ => 106
   | .emptyExtension => 107
-  | .unusedNodes => 108
+  | .unusedNodes _ => 108
 
 /-- The node that an item writes: the inverse of `unencoded` on a node. -/
 def decodeNode : Item → Except ProofError InternalNode
@@ -110,15 +130,15 @@ def resolve (hash : ByteArray → Hash32) (reference : Item) (proof : List ByteA
       .ok (reference, proof)
     else if digest.size = 32 then
       match proof with
-      | [] => .error .missingNode
+      | [] => .error (.missingNode (some digest))
       | encoded :: rest =>
         if (hash encoded).toList = digest.data.toList then do
           let item ← (decode encoded).mapError .rlp
           return (item, rest)
         else
-          .error .hashMismatch
+          .error (.hashMismatch digest (hash encoded))
     else
-      .error .invalidReference
+      .error (.invalidReference digest.size)
 
 /-- The value that the item `node` gives to the rest `path` of a key, and the proof nodes left.
 
@@ -131,7 +151,7 @@ Each call either returns or consumes at least one nibble of `path`.
 So a budget of one more than the length of `path` never runs out. -/
 def walk (hash : ByteArray → Hash32) :
     Nat → Item → List Nibble → List ByteArray → Except ProofError (Option ByteArray × List ByteArray)
-  | 0, _, _, _ => .error .missingNode
+  | 0, _, _, _ => .error (.missingNode none)
   | fuel + 1, node, path, proof =>
     match node with
     -- The empty byte string is no node: the key is not set.
@@ -166,7 +186,7 @@ def verifyProof (hash : ByteArray → Hash32) (root : Hash32) (secured : Bool) (
   if unused.isEmpty then
     return value
   else
-    .error .unusedNodes
+    .error (.unusedNodes unused.length)
 
 /-- The proof below the node of `obj` at `level`, for the rest `path` of a key.
 

@@ -18,7 +18,7 @@ noncomputable def SameLeafIndexBadEventOccurs {EncodingInput : Type}
     (encodingHash : EncodingInput → Digest)
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (signedInput forgedInput : EncodingInput)
     (signedEncoding forgedEncoding : Encoding)
     (signedValue forgedValue : ChainIndex → Digest)
@@ -43,17 +43,17 @@ theorem classify_sameLeafIndex_forgery {EncodingInput : Type}
     (encodingHash : EncodingInput → Digest)
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (signedInput forgedInput : EncodingInput)
     (signedEncoding forgedEncoding : Encoding)
     (signedValue forgedValue : ChainIndex → Digest)
     (signedPath forgedPath : Fin treeHeight → Digest)
     (hsignedEncoding : TargetSum.decodeDigest (encodingHash signedInput) = some signedEncoding)
     (hforgedEncoding : TargetSum.decodeDigest (encodingHash forgedInput) = some forgedEncoding)
-    (hroot : (Merkle.climb nodeHash 0 leafIndex
+    (hroot : (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step forgedEncoding forgedValue))
         (List.ofFn forgedPath)).run =
-      (Merkle.climb nodeHash 0 leafIndex
+      (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step signedEncoding signedValue))
         (List.ofFn signedPath)).run)
     (hstrong : signedInput ≠ forgedInput ∨ signedValue ≠ forgedValue ∨
@@ -110,17 +110,17 @@ theorem sameLeafIndex_forgery_has_badEvent {EncodingInput : Type}
     (encodingHash : EncodingInput → Digest)
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (signedInput forgedInput : EncodingInput)
     (signedEncoding forgedEncoding : Encoding)
     (signedValue forgedValue : ChainIndex → Digest)
     (signedPath forgedPath : Fin treeHeight → Digest)
     (hsignedEncoding : TargetSum.decodeDigest (encodingHash signedInput) = some signedEncoding)
     (hforgedEncoding : TargetSum.decodeDigest (encodingHash forgedInput) = some forgedEncoding)
-    (hroot : (Merkle.climb nodeHash 0 leafIndex
+    (hroot : (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step forgedEncoding forgedValue))
         (List.ofFn forgedPath)).run =
-      (Merkle.climb nodeHash 0 leafIndex
+      (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step signedEncoding signedValue))
         (List.ofFn signedPath)).run)
     (hstrong : signedInput ≠ forgedInput ∨ signedValue ≠ forgedValue ∨
@@ -146,7 +146,7 @@ theorem sameLeafIndex_forgery_has_badEvent {EncodingInput : Type}
 noncomputable def FreshLeafIndexBadEventOccurs
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (forgedEncoding : Encoding)
     (forgedValue secret : ChainIndex → Digest)
     (forgedPath honestPath : Fin treeHeight → Digest)
@@ -169,14 +169,14 @@ noncomputable def FreshLeafIndexBadEventOccurs
 theorem classify_freshLeafIndex_forgery
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (forgedEncoding : Encoding)
     (forgedValue secret : ChainIndex → Digest)
     (forgedPath honestPath : Fin treeHeight → Digest)
-    (hroot : (Merkle.climb nodeHash 0 leafIndex
+    (hroot : (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step forgedEncoding forgedValue))
         (List.ofFn forgedPath)).run =
-      (Merkle.climb nodeHash 0 leafIndex
+      (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (fun i => Wots.publicChain (step i) (secret i)))
         (List.ofFn honestPath)).run) :
     Wots.HasFreshChainValue step forgedEncoding forgedValue secret ∨
@@ -212,15 +212,15 @@ theorem classify_freshLeafIndex_forgery
 theorem freshLeafIndex_forgery_has_badEvent
     (step : ChainIndex → Nat → Digest → Digest)
     (leafHash : (ChainIndex → Digest) → Digest)
-    (nodeHash : Nat → Nat → Digest → Digest → Id Digest) (leafIndex : Nat)
+    (nodeHash : Merkle.Position → Digest → Digest → Id Digest) (leafIndex : Nat)
     (forgedEncoding : Encoding)
     (forgedValue secret : ChainIndex → Digest)
     (forgedPath honestPath : Fin treeHeight → Digest)
     (hforgedValid : TargetSum.Valid forgedEncoding)
-    (hroot : (Merkle.climb nodeHash 0 leafIndex
+    (hroot : (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (recoveredEndpoints step forgedEncoding forgedValue))
         (List.ofFn forgedPath)).run =
-      (Merkle.climb nodeHash 0 leafIndex
+      (Merkle.climb nodeHash ⟨0, leafIndex⟩
         (leafHash (fun i => Wots.publicChain (step i) (secret i)))
         (List.ofFn honestPath)).run) :
     ∃ event, FreshLeafIndexBadEventOccurs step leafHash nodeHash leafIndex forgedEncoding

@@ -64,12 +64,14 @@ theorem processMessage_map_val {Meter : Type} [GasMeter Meter] [LawfulGasMeter M
         (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value } else substate)
+              message.value
+            simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+              message.currentTarget message.value } else substate)
         meter) within = result := by
     intro within
     simp only [noValue, ite_false]
     exact ran
-  rw [processMessage]
+  rw [processMessage_unfold]
   simp only [Except.map, noPrecompile, noValue, ite_false, bind, pure, Except.bind, Except.pure]
   split <;> rename_i heq
   · split at heq <;> rename_i heq'
@@ -108,7 +110,9 @@ theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasM
       (startFrame message movedState
         { substate with
           logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-            message.value }
+            message.value
+          simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+            message.currentTarget message.value }
         meter) held = result) :
     (processMessage fork message state substate meter held).map Subtype.val =
       result.map (rollbackOnError state) := by
@@ -118,12 +122,14 @@ theorem processMessage_map_val_value {Meter : Type} [GasMeter Meter] [LawfulGasM
         (if message.shouldTransferValue = true ∧ message.value ≠ 0 then
           { substate with
             logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-              message.value } else substate)
+              message.value
+            simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+              message.currentTarget message.value } else substate)
         meter) within = result := by
     intro within
     simp only [transfers, ne_eq, not_false_eq_true, and_self, ite_true]
     exact ran
-  rw [processMessage]
+  rw [processMessage_unfold]
   simp only [Except.map, noPrecompile, transfers, ne_eq, not_false_eq_true, and_self, ite_true,
     bind, pure, Except.bind, Except.pure, Except.mapError, moved]
   split <;> rename_i heq
@@ -158,7 +164,7 @@ theorem moveEther_of_processMessage_eq_ok {message : Message fork} {state : Tran
   | ok movedState => exact ⟨movedState, rfl⟩
   | error e =>
     have hv : ¬message.value = 0#256 := transfers.2
-    rw [processMessage] at h
+    rw [processMessage_unfold] at h
     simp [Except.map, transfers, hv, bind, Except.bind, Except.mapError, hmove] at h
 
 /-- A message with no value and no precompile runs its code to a stopped frame of a specification.
@@ -222,7 +228,9 @@ theorem processMessage_empty_value {message : Message fork} {state movedState : 
   obtain ⟨stopped, ran, herr, hst⟩ := runFrame_startFrame_empty (fork := fork) (state := movedState)
     (substate := { substate with
       logs := pushTransferLog fork substate.logs message.caller message.currentTarget
-        message.value })
+        message.value
+      simulatedLogs := pushSimulatedTransferLog fork substate.simulatedLogs message.caller
+        message.currentTarget message.value })
     (runChild := processRunner fork message.gas) (within := Nat.le_refl _) hcode
   have hmap := processMessage_map_val_value transfers moved noPrecompile ran
   rw [h] at hmap

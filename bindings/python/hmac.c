@@ -1,4 +1,4 @@
-/* Python wrappers of the HMAC-SHA-256, HKDF and Concatenation KDF exports. */
+/* Python wrappers of the HMAC-SHA-256, HKDF, TLS 1.3 label and Concatenation KDF exports. */
 #include "wrappers.h"
 
 /* ---- Lean externs ----------------------------------------------------- */
@@ -25,6 +25,10 @@ eth_concat_kdf_sha256(
   lean_object* fixed_info,
   uint64_t length
 );
+
+extern lean_object* eth_tls13_hkdf_label(lean_object* args);
+
+extern lean_object* eth_tls13_expand_label(lean_object* args);
 
 /* ---- Helpers ---------------------------------------------------------- */
 
@@ -99,4 +103,20 @@ py_concat_kdf_sha256(
   if (parse_bytes(info_obj, "fixed_info", &info)) { lean_dec(z); return NULL; }
   return except_into_pybytes(
     eth_concat_kdf_sha256(z, info, (uint64_t) length), CONCAT_KDF_ERROR);
+}
+
+PyObject*
+py_tls13_hkdf_label(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls13_hkdf_label, args, 3, TLS13_ERROR);
+}
+
+PyObject*
+py_tls13_expand_label(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_tls13_expand_label, args, 4, TLS13_ERROR);
 }

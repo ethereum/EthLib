@@ -41,7 +41,7 @@ theorem inSubgroup_iff_exists_represents {P : G1} (hP : Valid P) :
     exact modulus_smul_toPoint_mul_generator a
 
 /-- Key validation accepts exactly the decodable points that are nonzero and of order `r`. -/
-theorem keyValidatePoint_eq_ok_iff {bytes : ByteArray} {P : G1} :
+theorem keyValidatePoint_eq_ok_iff {bytes : Vector UInt8 48} {P : G1} :
     keyValidatePoint bytes = .ok P ↔
       uncompress bytes = .ok P ∧ Valid P ∧ toPoint P ≠ 0 ∧ Fr.modulus • toPoint P = 0 := by
   unfold keyValidatePoint
@@ -71,7 +71,8 @@ theorem keyValidatePoint_eq_ok_iff {bytes : ByteArray} {P : G1} :
         exact hsub ((inSubgroup_iff_modulus_smul_eq_zero hp).mpr hr)
 
 /-- Key validation that accepts the bytes returns a point. -/
-theorem exists_keyValidatePoint_of_isOk {bytes : ByteArray} (h : (keyValidate bytes).isOk = true) :
+theorem exists_keyValidatePoint_of_isOk {bytes : Vector UInt8 48}
+    (h : (keyValidate bytes).isOk = true) :
     ∃ P, keyValidatePoint bytes = .ok P := by
   unfold keyValidate at h
   cases hp : keyValidatePoint bytes with
@@ -126,7 +127,7 @@ theorem inSubgroup_iff_exists_represents {Q : G2} (hQ : Valid Q) :
     exact modulus_smul_toPoint_mul_generator b
 
 /-- A decoded point is valid. -/
-theorem valid_of_uncompress {bytes : ByteArray} {Q : G2} (h : uncompress bytes = .ok Q) :
+theorem valid_of_uncompress {bytes : Vector UInt8 96} {Q : G2} (h : uncompress bytes = .ok Q) :
     Valid Q := by
   rcases uncompress_valid h with rfl | ⟨hz, ht⟩
   · exact valid_zero

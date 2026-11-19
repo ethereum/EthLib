@@ -1025,12 +1025,8 @@ theorem validateLightClientUpdate_attestedHeader_valid {config : Config}
     {update : LightClientUpdate preset fork} {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (accepted : validateLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok ()) :
-    isValidLightClientHeader config update.attestedHeader = .ok true := by
-  unfold validateLightClientUpdate at accepted
-  simp only [Base.bind_ok_iff, LightClientError.require_ok] at accepted
-  obtain ⟨_, -, _, -, verdict, valid, _, checked, -⟩ := accepted
-  subst checked
-  exact valid
+    isValidLightClientHeader config update.attestedHeader = .ok true :=
+  (validateLightClientUpdate_eq_ok_iff.mp accepted).2.2.1
 
 omit [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]

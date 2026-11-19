@@ -30,6 +30,8 @@ size_t XMSS_RANDOMIZER_LEN;
 size_t XMSS_CHAINS;
 size_t XMSS_LAYER_HEIGHT;
 size_t XMSS_LEAF_INDEX_SIZE;
+size_t XMSS_CHAIN_LENGTH;
+size_t XMSS_TARGET_SUM;
 
 size_t SPHINCS_MESSAGE_LEN;
 size_t SPHINCS_SEED_LEN;
@@ -78,6 +80,10 @@ PyObject* ETHASH_ERROR;
 PyObject* REQRESP_ERROR;
 PyObject* CONSENSUS_ERROR;
 PyObject* HKDF_ERROR;
+PyObject* TLS13_ERROR;
+PyObject* TLS_HANDSHAKE_ERROR;
+PyObject* TLS_STEP_ERROR;
+PyObject* QUIC_PROTECTION_ERROR;
 PyObject* PBKDF2_ERROR;
 PyObject* SCRYPT_ERROR;
 PyObject* X25519_ERROR;
@@ -95,10 +101,12 @@ PyObject* SNAPPY_ERROR;
 PyObject* VARINT_ERROR;
 PyObject* UVARINT_ERROR;
 PyObject* QUIC_VARINT_ERROR;
+PyObject* QUIC_ERROR;
 PyObject* MULTISTREAM_ERROR;
 PyObject* MPLEX_ERROR;
 PyObject* YAMUX_ERROR;
 PyObject* LIBP2P_IDENTITY_ERROR;
+PyObject* TLS_CERTIFICATE_ERROR;
 PyObject* GOSSIP_ERROR;
 PyObject* DISCV5_ERROR;
 PyObject* RLPX_ERROR;
@@ -257,6 +265,16 @@ eth_xmss_const_leaf_index_size(
 );
 
 extern uint64_t
+eth_xmss_const_chain_length(
+  lean_object* unit
+);
+
+extern uint64_t
+eth_xmss_const_target_sum(
+  lean_object* unit
+);
+
+extern uint64_t
 eth_sphincs_const_n(
   lean_object* unit
 );
@@ -346,65 +364,15 @@ eth_reqresp_const_max_error_message_size(
 extern void
 lean_initialize_runtime_module(void);
 
-/* We boot the export root of each domain, not the library root `EthLib.Exports`.
+/* Lean 4.35 splits module initialization into runtime and compile-time phases.
  *
- * Lake writes a `.c` file for the library root but never compiles it.
+ * The export root initializes every runtime dependency, including the specification.
  *
- * So the init symbol of the library root is never linked in.
- *
- * The init of a module runs the init of everything it imports.
- *
- * So booting the export roots boots the specification too. */
+ * Conversion-law proofs enter only at compile time and need no native object here. */
 extern lean_object*
-initialize_EthLib_EthLib_Cryptography_Exports(
+runtime_initialize_EthLib_EthLib_Exports(
   uint8_t builtin
 );
-
-extern lean_object*
-initialize_EthLib_EthLib_Networking_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Execution_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Consensus_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Serialization_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Base_Exports_ChainConfig(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Engine_Exports(
-  uint8_t builtin
-);
-
-extern lean_object*
-initialize_EthLib_EthLib_Base_Exports_Echo(
-  uint8_t builtin
-);
-
-/*
- * Note on linker hygiene:
- *   `lean_initialize()` and `initialize_Lean` live in libleancpp.a's
- *   `init.cpp.o`, which references most of the Lean *compiler* and
- *   would drag in the 224MB `libLean.a`. We avoid them by calling only
- *   `lean_initialize_runtime_module()` (from libleanrt.a, which is the
- *   minimal runtime: GC, allocator, IO primitives) plus our package's
- *   per-module init `initialize_EthLib_*`. Together that's
- *   enough to run any code we'd actually call from Python.
- */
 
 /* ---- Lean ↔ C marshalling helpers ------------------------------------ */
 
@@ -714,6 +682,8 @@ static PyMethodDef methods[] = {
   {"aes_gcm_decrypt", py_aes_gcm_decrypt, METH_VARARGS, DOC_aes_gcm_decrypt},
   {"hmac_sha256", py_hmac_sha256, METH_VARARGS, DOC_hmac_sha256},
   {"hkdf_sha256", py_hkdf_sha256, METH_VARARGS, DOC_hkdf_sha256},
+  {"tls13_hkdf_label", py_tls13_hkdf_label, METH_VARARGS, DOC_tls13_hkdf_label},
+  {"tls13_expand_label", py_tls13_expand_label, METH_VARARGS, DOC_tls13_expand_label},
   {"concat_kdf_sha256", py_concat_kdf_sha256, METH_VARARGS, DOC_concat_kdf_sha256},
   {"pbkdf2_sha256", py_pbkdf2_sha256, METH_VARARGS, DOC_pbkdf2_sha256},
   {"salsa208", py_salsa208, METH_VARARGS, DOC_salsa208},
@@ -793,6 +763,100 @@ static PyMethodDef methods[] = {
    DOC_consensus_builder_api_json},
   {"consensus_builder_api_ssz", py_consensus_builder_api_ssz, METH_VARARGS,
    DOC_consensus_builder_api_ssz},
+  {"consensus_api_spec", py_consensus_api_spec, METH_VARARGS, DOC_consensus_api_spec},
+  {"consensus_api_fork_schedule", py_consensus_api_fork_schedule,
+   METH_VARARGS, DOC_consensus_api_fork_schedule},
+  {"consensus_api_deposit_contract", py_consensus_api_deposit_contract,
+   METH_VARARGS, DOC_consensus_api_deposit_contract},
+  {"consensus_api_genesis", py_consensus_api_genesis, METH_VARARGS, DOC_consensus_api_genesis},
+  {"consensus_api_state_query", py_consensus_api_state_query, METH_VARARGS,
+   DOC_consensus_api_state_query},
+  {"consensus_api_state_query_ssz", py_consensus_api_state_query_ssz, METH_VARARGS,
+   DOC_consensus_api_state_query_ssz},
+  {"consensus_api_validator_status", py_consensus_api_validator_status, METH_VARARGS,
+   DOC_consensus_api_validator_status},
+  {"consensus_api_builder_status", py_consensus_api_builder_status, METH_VARARGS,
+   DOC_consensus_api_builder_status},
+  {"consensus_api_registry_query", py_consensus_api_registry_query, METH_VARARGS,
+   DOC_consensus_api_registry_query},
+  {"consensus_api_validator_balances_ssz", py_consensus_api_validator_balances_ssz,
+   METH_VARARGS, DOC_consensus_api_validator_balances_ssz},
+  {"consensus_api_block_query", py_consensus_api_block_query, METH_VARARGS,
+   DOC_consensus_api_block_query},
+  {"consensus_api_blobs", py_consensus_api_blobs, METH_VARARGS,
+   DOC_consensus_api_blobs},
+  {"consensus_api_blobs_ssz", py_consensus_api_blobs_ssz, METH_VARARGS,
+   DOC_consensus_api_blobs_ssz},
+  {"consensus_api_block_query_ssz", py_consensus_api_block_query_ssz, METH_VARARGS,
+   DOC_consensus_api_block_query_ssz},
+  {"consensus_api_header", py_consensus_api_header, METH_VARARGS,
+   DOC_consensus_api_header},
+  {"consensus_api_headers", py_consensus_api_headers, METH_VARARGS,
+   DOC_consensus_api_headers},
+  {"consensus_api_columns", py_consensus_api_columns, METH_VARARGS,
+   DOC_consensus_api_columns},
+  {"consensus_api_columns_ssz", py_consensus_api_columns_ssz, METH_VARARGS,
+   DOC_consensus_api_columns_ssz},
+  {"consensus_api_payload_envelope", py_consensus_api_payload_envelope, METH_VARARGS,
+   DOC_consensus_api_payload_envelope},
+  {"consensus_api_payload_envelope_ssz", py_consensus_api_payload_envelope_ssz, METH_VARARGS,
+   DOC_consensus_api_payload_envelope_ssz},
+  {"consensus_api_light_client_bootstrap", py_consensus_api_light_client_bootstrap, METH_VARARGS,
+   DOC_consensus_api_light_client_bootstrap},
+  {"consensus_api_light_client_bootstrap_ssz", py_consensus_api_light_client_bootstrap_ssz, METH_VARARGS,
+   DOC_consensus_api_light_client_bootstrap_ssz},
+  {"consensus_api_light_client_updates", py_consensus_api_light_client_updates, METH_VARARGS,
+   DOC_consensus_api_light_client_updates},
+  {"consensus_api_light_client_updates_ssz", py_consensus_api_light_client_updates_ssz, METH_VARARGS,
+   DOC_consensus_api_light_client_updates_ssz},
+  {"consensus_api_light_client_decode_updates", py_consensus_api_light_client_decode_updates, METH_VARARGS,
+   DOC_consensus_api_light_client_decode_updates},
+  {"consensus_api_light_client_latest", py_consensus_api_light_client_latest, METH_VARARGS,
+   DOC_consensus_api_light_client_latest},
+  {"consensus_api_attestation_data", py_consensus_api_attestation_data, METH_VARARGS,
+   DOC_consensus_api_attestation_data},
+  {"consensus_api_payload_attestation_data", py_consensus_api_payload_attestation_data, METH_VARARGS,
+   DOC_consensus_api_payload_attestation_data},
+  {"consensus_api_fork_choice", py_consensus_api_fork_choice, METH_VARARGS,
+   DOC_consensus_api_fork_choice},
+  {"consensus_api_chain_heads", py_consensus_api_chain_heads, METH_VARARGS,
+   DOC_consensus_api_chain_heads},
+  {"consensus_api_chain_events", py_consensus_api_chain_events, METH_VARARGS,
+   DOC_consensus_api_chain_events},
+  {"consensus_api_fast_confirmation_event", py_consensus_api_fast_confirmation_event,
+   METH_VARARGS, DOC_consensus_api_fast_confirmation_event},
+  {"consensus_api_aggregate_attestation", py_consensus_api_aggregate_attestation, METH_VARARGS,
+   DOC_consensus_api_aggregate_attestation},
+  {"consensus_api_sync_committee_contribution", py_consensus_api_sync_committee_contribution, METH_VARARGS,
+   DOC_consensus_api_sync_committee_contribution},
+  {"consensus_api_attestation_rewards", py_consensus_api_attestation_rewards, METH_VARARGS,
+   DOC_consensus_api_attestation_rewards},
+  {"consensus_api_sync_committee_rewards", py_consensus_api_sync_committee_rewards, METH_VARARGS,
+   DOC_consensus_api_sync_committee_rewards},
+  {"consensus_api_block_rewards", py_consensus_api_block_rewards, METH_VARARGS,
+   DOC_consensus_api_block_rewards},
+  {"consensus_api_consensus_block_value", py_consensus_api_consensus_block_value,
+   METH_VARARGS, DOC_consensus_api_consensus_block_value},
+  {"consensus_api_prefer_local_v3", py_consensus_api_prefer_local_v3, METH_VARARGS,
+   DOC_consensus_api_prefer_local_v3},
+  {"consensus_api_capped_bid_value", py_consensus_api_capped_bid_value, METH_VARARGS,
+   DOC_consensus_api_capped_bid_value},
+  {"consensus_api_bid_accepted", py_consensus_api_bid_accepted, METH_VARARGS,
+   DOC_consensus_api_bid_accepted},
+  {"consensus_api_select_payload", py_consensus_api_select_payload, METH_VARARGS,
+   DOC_consensus_api_select_payload},
+  {"consensus_api_builder_config_terms", py_consensus_api_builder_config_terms, METH_VARARGS,
+   DOC_consensus_api_builder_config_terms},
+  {"consensus_api_duties", py_consensus_api_duties, METH_VARARGS,
+   DOC_consensus_api_duties},
+  {"consensus_api_committees", py_consensus_api_committees, METH_VARARGS,
+   DOC_consensus_api_committees},
+  {"consensus_api_sync_committees", py_consensus_api_sync_committees, METH_VARARGS,
+   DOC_consensus_api_sync_committees},
+  {"consensus_api_ptc", py_consensus_api_ptc, METH_VARARGS,
+   DOC_consensus_api_ptc},
+  {"consensus_api_ptc_ssz", py_consensus_api_ptc_ssz, METH_VARARGS,
+   DOC_consensus_api_ptc_ssz},
   {"consensus_is_valid_builder_signature", py_consensus_is_valid_builder_signature,
    METH_VARARGS, DOC_consensus_is_valid_builder_signature},
   {"consensus_process_registration", py_consensus_process_registration,
@@ -810,6 +874,26 @@ static PyMethodDef methods[] = {
   {"consensus_verify_builder_request_auth_signature",
    py_consensus_verify_builder_request_auth_signature,
    METH_VARARGS, DOC_consensus_verify_builder_request_auth_signature},
+  {"consensus_builder_request_auth_failures", py_consensus_builder_request_auth_failures,
+   METH_VARARGS, DOC_consensus_builder_request_auth_failures},
+  {"consensus_builder_preferences_failures", py_consensus_builder_preferences_failures,
+   METH_VARARGS, DOC_consensus_builder_preferences_failures},
+  {"consensus_default_auth_data", py_consensus_default_auth_data,
+   METH_VARARGS, DOC_consensus_default_auth_data},
+  {"consensus_relay_submission_bid", py_consensus_relay_submission_bid,
+   METH_VARARGS, DOC_consensus_relay_submission_bid},
+  {"consensus_relay_validators", py_consensus_relay_validators,
+   METH_VARARGS, DOC_consensus_relay_validators},
+  {"consensus_relay_delivered_payload", py_consensus_relay_delivered_payload,
+   METH_VARARGS, DOC_consensus_relay_delivered_payload},
+  {"consensus_relay_received_bid", py_consensus_relay_received_bid,
+   METH_VARARGS, DOC_consensus_relay_received_bid},
+  {"consensus_relay_delivered_keeps", py_consensus_relay_delivered_keeps,
+   METH_VARARGS, DOC_consensus_relay_delivered_keeps},
+  {"consensus_relay_received_keeps", py_consensus_relay_received_keeps,
+   METH_VARARGS, DOC_consensus_relay_received_keeps},
+  {"consensus_relay_sort_delivered", py_consensus_relay_sort_delivered,
+   METH_VARARGS, DOC_consensus_relay_sort_delivered},
   {"consensus_builder_bid_value", py_consensus_builder_bid_value,
    METH_VARARGS, DOC_consensus_builder_bid_value},
   {"consensus_consensus_version", py_consensus_consensus_version,
@@ -872,6 +956,10 @@ static PyMethodDef methods[] = {
   {"consensus_fork_choice", py_consensus_fork_choice, METH_VARARGS, DOC_consensus_fork_choice},
   {"consensus_gossip_validation", py_consensus_gossip_validation, METH_VARARGS,
     DOC_consensus_gossip_validation},
+  {"consensus_api_post", py_consensus_api_post, METH_VARARGS,
+   DOC_consensus_api_post},
+  {"consensus_api_gossip_event", py_consensus_api_gossip_event, METH_VARARGS,
+   DOC_consensus_api_gossip_event},
   {"consensus_initialize_genesis", py_consensus_initialize_genesis, METH_VARARGS,
    DOC_consensus_initialize_genesis},
   {"consensus_is_valid_genesis_state", py_consensus_is_valid_genesis_state, METH_VARARGS,
@@ -982,11 +1070,6 @@ static PyMethodDef methods[] = {
   {"consensus_get_validators_custody_requirement",
    py_consensus_get_validators_custody_requirement, METH_VARARGS,
    DOC_consensus_get_validators_custody_requirement},
-  {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
-  {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
-   DOC_pq_keys_possession_signing_root},
-  {"pq_keys_is_valid_possession_proof", py_pq_keys_is_valid_possession_proof, METH_VARARGS,
-   DOC_pq_keys_is_valid_possession_proof},
   {"consensus_verify_data_column_sidecar", py_consensus_verify_data_column_sidecar, METH_VARARGS,
    DOC_consensus_verify_data_column_sidecar},
   {"consensus_verify_data_column_sidecar_inclusion_proof",
@@ -1080,6 +1163,9 @@ static PyMethodDef methods[] = {
   {"ssz_serialize", py_ssz_serialize, METH_VARARGS, DOC_ssz_serialize},
   {"ssz_deserialize", py_ssz_deserialize, METH_VARARGS, DOC_ssz_deserialize},
   {"ssz_hash_tree_root", py_ssz_hash_tree_root, METH_VARARGS, DOC_ssz_hash_tree_root},
+  {"ssz_generalized_index", py_ssz_generalized_index, METH_VARARGS, DOC_ssz_generalized_index},
+  {"ssz_merkle_proof", py_ssz_merkle_proof, METH_VARARGS, DOC_ssz_merkle_proof},
+  {"ssz_merkleize_chunks", py_ssz_merkleize_chunks, METH_VARARGS, DOC_ssz_merkleize_chunks},
   {"rlpx_ecies_encrypt", py_rlpx_ecies_encrypt, METH_VARARGS, DOC_rlpx_ecies_encrypt},
   {"rlpx_ecies_decrypt", py_rlpx_ecies_decrypt, METH_VARARGS, DOC_rlpx_ecies_decrypt},
   {"devp2p_decode_message", py_devp2p_decode_message, METH_VARARGS, DOC_devp2p_decode_message},
@@ -1107,6 +1193,7 @@ static PyMethodDef methods[] = {
   {"snap_message_decode", py_snap_message_decode, METH_VARARGS, DOC_snap_message_decode},
   {"snap_codes_answer", py_snap_codes_answer, METH_VARARGS, DOC_snap_codes_answer},
   {"snap_access_lists_answer", py_snap_access_lists_answer, METH_VARARGS, DOC_snap_access_lists_answer},
+  {"snap_trie_nodes_answer", py_snap_trie_nodes_answer, METH_VARARGS, DOC_snap_trie_nodes_answer},
   {"snap_full_account", py_snap_full_account, METH_VARARGS, DOC_snap_full_account},
   {"snap_verify_account_range", py_snap_verify_account_range, METH_VARARGS, DOC_snap_verify_account_range},
   {"snap_verify_storage_ranges", py_snap_verify_storage_ranges, METH_VARARGS, DOC_snap_verify_storage_ranges},
@@ -1122,8 +1209,33 @@ static PyMethodDef methods[] = {
   {"varint_decode", py_varint_decode, METH_VARARGS, DOC_varint_decode},
   {"uvarint_encode", py_uvarint_encode, METH_VARARGS, DOC_uvarint_encode},
   {"uvarint_decode", py_uvarint_decode, METH_VARARGS, DOC_uvarint_decode},
+  {"quic_initial_secrets", py_quic_initial_secrets, METH_VARARGS, DOC_quic_initial_secrets},
+  {"quic_packet_keys", py_quic_packet_keys, METH_VARARGS, DOC_quic_packet_keys},
+  {"quic_tls_client_start", py_quic_tls_client_start, METH_VARARGS, DOC_quic_tls_client_start},
+  {"quic_tls_server_start", py_quic_tls_server_start, METH_VARARGS, DOC_quic_tls_server_start},
+  {"quic_tls_client_step", py_quic_tls_client_step, METH_VARARGS, DOC_quic_tls_client_step},
+  {"quic_tls_server_step", py_quic_tls_server_step, METH_VARARGS, DOC_quic_tls_server_step},
+  {"quic_tls_key_schedule", py_quic_tls_key_schedule, METH_VARARGS, DOC_quic_tls_key_schedule},
+  {"quic_tls_derive_secret", py_quic_tls_derive_secret, METH_VARARGS, DOC_quic_tls_derive_secret},
+  {"quic_tls_finished", py_quic_tls_finished, METH_VARARGS, DOC_quic_tls_finished},
+  {"quic_tls_message_encode", py_quic_tls_message_encode, METH_VARARGS, DOC_quic_tls_message_encode},
+  {"quic_tls_message_decode", py_quic_tls_message_decode, METH_VARARGS, DOC_quic_tls_message_decode},
+  {"quic_tls_payload_encode", py_quic_tls_payload_encode, METH_VARARGS, DOC_quic_tls_payload_encode},
+  {"quic_tls_payload_decode", py_quic_tls_payload_decode, METH_VARARGS, DOC_quic_tls_payload_decode},
+  {"quic_tls_transcript", py_quic_tls_transcript, METH_VARARGS, DOC_quic_tls_transcript},
+  {"quic_tls_certificate_verify_input", py_quic_tls_certificate_verify_input, METH_VARARGS, DOC_quic_tls_certificate_verify_input},
+  {"quic_protect", py_quic_protect, METH_VARARGS, DOC_quic_protect},
+  {"quic_unprotect", py_quic_unprotect, METH_VARARGS, DOC_quic_unprotect},
+  {"quic_retry_tag", py_quic_retry_tag, METH_VARARGS, DOC_quic_retry_tag},
   {"quic_varint_encode", py_quic_varint_encode, METH_VARARGS, DOC_quic_varint_encode},
   {"quic_varint_decode", py_quic_varint_decode, METH_VARARGS, DOC_quic_varint_decode},
+  {"quic_header_encode", py_quic_header_encode, METH_VARARGS, DOC_quic_header_encode},
+  {"quic_header_decode", py_quic_header_decode, METH_VARARGS, DOC_quic_header_decode},
+  {"quic_frame_encode", py_quic_frame_encode, METH_VARARGS, DOC_quic_frame_encode},
+  {"quic_frame_decode", py_quic_frame_decode, METH_VARARGS, DOC_quic_frame_decode},
+  {"quic_packet_number_width", py_quic_packet_number_width, METH_VARARGS, DOC_quic_packet_number_width},
+  {"quic_packet_number_encode", py_quic_packet_number_encode, METH_VARARGS, DOC_quic_packet_number_encode},
+  {"quic_packet_number_decode", py_quic_packet_number_decode, METH_VARARGS, DOC_quic_packet_number_decode},
   {"multistream_encode", py_multistream_encode, METH_VARARGS, DOC_multistream_encode},
   {"multistream_decode", py_multistream_decode, METH_VARARGS, DOC_multistream_decode},
   {"multistream_listen", py_multistream_listen, METH_VARARGS, DOC_multistream_listen},
@@ -1136,12 +1248,22 @@ static PyMethodDef methods[] = {
   {"yamux_decode", py_yamux_decode, METH_VARARGS, DOC_yamux_decode},
   {"yamux_session", py_yamux_session, METH_VARARGS, DOC_yamux_session},
   {"libp2p_public_key", py_libp2p_public_key, METH_VARARGS, DOC_libp2p_public_key},
+  {"tls_certificate_read", py_tls_certificate_read, METH_VARARGS, DOC_tls_certificate_read},
+  {"tls_certificate_authenticate", py_tls_certificate_authenticate, METH_VARARGS, DOC_tls_certificate_authenticate},
+  {"tls_certificate_authenticate_peer", py_tls_certificate_authenticate_peer, METH_VARARGS, DOC_tls_certificate_authenticate_peer},
+  {"tls_certificate_verify_p256", py_tls_certificate_verify_p256, METH_VARARGS, DOC_tls_certificate_verify_p256},
   {"libp2p_peer_id", py_libp2p_peer_id, METH_VARARGS, DOC_libp2p_peer_id},
   {"libp2p_decode_peer_id", py_libp2p_decode_peer_id, METH_VARARGS, DOC_libp2p_decode_peer_id},
   {"gossip_message_id", py_gossip_message_id, METH_VARARGS, DOC_gossip_message_id},
   {"gossip_decode_payload", py_gossip_decode_payload, METH_VARARGS, DOC_gossip_decode_payload},
   {"gossip_rpc_decode", py_gossip_rpc_decode, METH_VARARGS, DOC_gossip_rpc_decode},
   {"gossip_rpc_encode", py_gossip_rpc_encode, METH_VARARGS, DOC_gossip_rpc_encode},
+  {"gossip_parameters", py_gossip_parameters, METH_VARARGS, DOC_gossip_parameters},
+  {"gossip_receive_rpc", py_gossip_receive_rpc, METH_VARARGS, DOC_gossip_receive_rpc},
+  {"gossip_join", py_gossip_join, METH_VARARGS, DOC_gossip_join},
+  {"gossip_leave", py_gossip_leave, METH_VARARGS, DOC_gossip_leave},
+  {"gossip_publish", py_gossip_publish, METH_VARARGS, DOC_gossip_publish},
+  {"gossip_heartbeat", py_gossip_heartbeat, METH_VARARGS, DOC_gossip_heartbeat},
   {"receipt_reencode", py_receipt_reencode, METH_VARARGS, DOC_receipt_reencode},
   {"receipt_logs_bloom", py_receipt_logs_bloom, METH_VARARGS, DOC_receipt_logs_bloom},
   {"block_make_receipts", py_block_make_receipts, METH_VARARGS, DOC_block_make_receipts},
@@ -1188,6 +1310,8 @@ static PyMethodDef methods[] = {
   {"engine_get_payload", py_engine_get_payload, METH_VARARGS, DOC_engine_get_payload},
   {"engine_get_payload_bodies", py_engine_get_payload_bodies, METH_VARARGS,
    DOC_engine_get_payload_bodies},
+  {"engine_new_payload_routes", py_engine_new_payload_routes, METH_VARARGS,
+   DOC_engine_new_payload_routes},
   {"engine_read_payload_status", py_engine_read_payload_status, METH_VARARGS,
    DOC_engine_read_payload_status},
   {"engine_read_forkchoice_response", py_engine_read_forkchoice_response, METH_VARARGS,
@@ -1200,12 +1324,20 @@ static PyMethodDef methods[] = {
    DOC_engine_read_get_blobs_result},
   {"engine_exchange_transition_configuration", py_engine_exchange_transition_configuration,
    METH_VARARGS, DOC_engine_exchange_transition_configuration},
+  {"engine_exchange_capabilities", py_engine_exchange_capabilities, METH_VARARGS,
+   DOC_engine_exchange_capabilities},
+  {"engine_get_client_version", py_engine_get_client_version, METH_VARARGS,
+   DOC_engine_get_client_version},
   {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
    DOC_engine_rewrite_params},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,
    DOC_engine_prepare_execution_payload},
   {"engine_prepare_execution_payload_gloas", py_engine_prepare_execution_payload_gloas,
    METH_VARARGS, DOC_engine_prepare_execution_payload_gloas},
+  {"engine_payload_attributes_event", py_engine_payload_attributes_event, METH_VARARGS,
+   DOC_engine_payload_attributes_event},
+  {"engine_payload_attributes_event_gloas", py_engine_payload_attributes_event_gloas,
+   METH_VARARGS, DOC_engine_payload_attributes_event_gloas},
   {"engine_finalized_execution_block_hash", py_engine_finalized_execution_block_hash,
    METH_VARARGS, DOC_engine_finalized_execution_block_hash},
   {"rpc_read_param", py_rpc_read_param, METH_VARARGS, DOC_rpc_read_param},
@@ -1213,6 +1345,10 @@ static PyMethodDef methods[] = {
   {"rpc_pruned_history_unavailable", py_rpc_pruned_history_unavailable, METH_VARARGS,
    DOC_rpc_pruned_history_unavailable},
   {"rpc_serve", py_rpc_serve, METH_VARARGS, DOC_rpc_serve},
+  {"rpc_encode_block_access_list", py_rpc_encode_block_access_list, METH_VARARGS,
+   DOC_rpc_encode_block_access_list},
+  {"rpc_apply_overrides", py_rpc_apply_overrides, METH_VARARGS,
+   DOC_rpc_apply_overrides},
   {"pyvalue_echo", py_pyvalue_echo, METH_VARARGS, DOC_pyvalue_echo},
   {NULL, NULL, 0, NULL},
 };
@@ -1252,6 +1388,10 @@ PyInit__native(void) {
     REQRESP_ERROR = PyObject_GetAttrString(errors, "ReqRespError");
     CONSENSUS_ERROR = PyObject_GetAttrString(errors, "ConsensusError");
     HKDF_ERROR = PyObject_GetAttrString(errors, "HkdfError");
+    QUIC_PROTECTION_ERROR = PyObject_GetAttrString(errors, "QuicProtectionError");
+    TLS13_ERROR = PyObject_GetAttrString(errors, "Tls13Error");
+    TLS_HANDSHAKE_ERROR = PyObject_GetAttrString(errors, "TlsHandshakeError");
+    TLS_STEP_ERROR = PyObject_GetAttrString(errors, "TlsStepError");
     PBKDF2_ERROR = PyObject_GetAttrString(errors, "Pbkdf2Error");
     SCRYPT_ERROR = PyObject_GetAttrString(errors, "ScryptError");
     X25519_ERROR = PyObject_GetAttrString(errors, "X25519Error");
@@ -1266,9 +1406,11 @@ PyInit__native(void) {
     VARINT_ERROR = PyObject_GetAttrString(errors, "VarintError");
     UVARINT_ERROR = PyObject_GetAttrString(errors, "UvarintError");
     QUIC_VARINT_ERROR = PyObject_GetAttrString(errors, "QuicVarintError");
+    QUIC_ERROR = PyObject_GetAttrString(errors, "QuicError");
     MULTISTREAM_ERROR = PyObject_GetAttrString(errors, "MultistreamError");
     MPLEX_ERROR = PyObject_GetAttrString(errors, "MplexError");
     YAMUX_ERROR = PyObject_GetAttrString(errors, "YamuxError");
+    TLS_CERTIFICATE_ERROR = PyObject_GetAttrString(errors, "TlsCertificateError");
     LIBP2P_IDENTITY_ERROR = PyObject_GetAttrString(errors, "Libp2pIdentityError");
     GOSSIP_ERROR = PyObject_GetAttrString(errors, "GossipError");
     DISCV5_ERROR = PyObject_GetAttrString(errors, "Discv5Error");
@@ -1302,35 +1444,7 @@ PyInit__native(void) {
     if (PyErr_Occurred()) return NULL;
 
     lean_initialize_runtime_module();
-    lean_object* res = initialize_EthLib_EthLib_Cryptography_Exports(1);
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Networking_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Execution_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Consensus_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Serialization_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Base_Exports_ChainConfig(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Engine_Exports(1);
-    }
-    if (lean_io_result_is_ok(res)) {
-      lean_dec_ref(res);
-      res = initialize_EthLib_EthLib_Base_Exports_Echo(1);
-    }
+    lean_object* res = runtime_initialize_EthLib_EthLib_Exports(1);
     if (lean_io_result_is_ok(res)) {
       lean_dec_ref(res);
     } else {
@@ -1371,6 +1485,8 @@ PyInit__native(void) {
     XMSS_CHAINS = (size_t) eth_xmss_const_chains(lean_box(0));
     XMSS_LAYER_HEIGHT = (size_t) eth_xmss_const_layer_height(lean_box(0));
     XMSS_LEAF_INDEX_SIZE = (size_t) eth_xmss_const_leaf_index_size(lean_box(0));
+    XMSS_CHAIN_LENGTH = (size_t) eth_xmss_const_chain_length(lean_box(0));
+    XMSS_TARGET_SUM = (size_t) eth_xmss_const_target_sum(lean_box(0));
     SPHINCS_N = (size_t) eth_sphincs_const_n(lean_box(0));
     SPHINCS_RANDOMIZER_LEN = (size_t) eth_sphincs_const_randomizer_len(lean_box(0));
     SPHINCS_CHAINS = (size_t) eth_sphincs_const_chains(lean_box(0));
@@ -1405,6 +1521,8 @@ PyInit__native(void) {
    * Each call builds its own Lean objects, and no two threads share one.
    * The objects that the Lean modules build when they load are persistent, so no count of theirs
    * changes after the load.
+   * The decoded KZG setup is a closed term evaluated on its first use.
+   * It is marked persistent before any thread can read it, so the same holds for it.
    * The exception classes and the sizes are written once, before the module is returned.
    * The wrappers read lists through a snapshot, so a list that another thread changes is safe. */
   PyUnstable_Module_SetGIL(m, Py_MOD_GIL_NOT_USED);
@@ -1435,6 +1553,8 @@ PyInit__native(void) {
   PyModule_AddIntConstant(m, "XMSS_CHAINS", XMSS_CHAINS);
   PyModule_AddIntConstant(m, "XMSS_LAYER_HEIGHT", XMSS_LAYER_HEIGHT);
   PyModule_AddIntConstant(m, "XMSS_LEAF_INDEX_SIZE", XMSS_LEAF_INDEX_SIZE);
+  PyModule_AddIntConstant(m, "XMSS_CHAIN_LENGTH", XMSS_CHAIN_LENGTH);
+  PyModule_AddIntConstant(m, "XMSS_TARGET_SUM", XMSS_TARGET_SUM);
   PyModule_AddIntConstant(m, "SPHINCS_N", SPHINCS_N);
   PyModule_AddIntConstant(m, "SPHINCS_RANDOMIZER_LEN", SPHINCS_RANDOMIZER_LEN);
   PyModule_AddIntConstant(m, "SPHINCS_CHAINS", SPHINCS_CHAINS);

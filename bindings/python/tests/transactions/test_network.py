@@ -118,7 +118,10 @@ def test_before_dencun() -> None:
     blobs, commitments = _blobs()
     body = _body([_versioned_hash(c) for c in commitments])
     _check_raises(
-        "shapella", _dencun(body, blobs, commitments, _blob_proofs()), 2, "unsupportedType 3"
+        "shapella",
+        _dencun(body, blobs, commitments, _blob_proofs()),
+        2,
+        "unsupportedType (type := 3)",
     )
 
 
@@ -163,7 +166,8 @@ def test_versioned_hash_mismatch() -> None:
         "dencun",
         _dencun(body, blobs, commitments, _blob_proofs()),
         103,
-        "a commitment does not hash to its versioned hash",
+        f"commitment 0 hashes to 0x{_versioned_hash(commitments[0]).hex()}, "
+        f"not to 0x{_versioned_hash(commitments[-1]).hex()}",
     )
 
 

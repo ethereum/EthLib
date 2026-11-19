@@ -51,6 +51,10 @@ directories = ["tests/consensus/beacon_api"]
 commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"
 directories = ["tests/consensus/builder_api"]
 
+[repositories."flashbots/relay-specs"]
+commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
+directories = ["tests/consensus/relay_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]
@@ -124,7 +128,7 @@ directories = ["bindings/python/tests/ethash/spec"]
 
 [repositories."ethereum/execution-apis"]
 commit = "3284ee80c3da3e516c53782dde75157cccf1ebdc"
-directories = ["bindings/python/tests/rpc/fixtures", "bindings/python/tests/trie/getproof", "tests/engine"]
+directories = ["bindings/python/tests/rpc/fixtures", "tests/engine"]
 
 [repositories."ethereum/yellowpaper"]
 commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
@@ -158,7 +162,7 @@ release = "v5.3.0"
 
 # The leanSPHINCS tests read the known answer of an independent implementation at this commit.
 [repositories."leanEthereum/leanVM"]
-commit = "5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+commit = "fa4b43935667234e8e29c6cc19ffcfb3ab5164d5"
 
 # The libp2p tests read the hex examples and the key vector of these documents.
 # The mplex and yamux tests also read their frame layouts.
@@ -263,7 +267,6 @@ sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
 "tests/cryptography/vrf" = "An independent implementation for the known answers, and EthLib"
 "tests/cryptography/sphincs" = "EthLib, and an independent implementation for the known answers"
 "tests/cryptography/xmss" = "EthLib, and an independent implementation for the known answers"
-"tests/consensus/pq_keys" = "Derived with the Python SSZ of ethereum/ssz-specs release v0.1.0, and EthLib for the proofs"
 "tests/serialization/ssz_limits" = "Derived with the Python SSZ of ethereum/ssz-specs release v0.1.0"
 "bindings/python/tests/aes/cavp" = "KAT_AES.zip, aesmct.zip and gcmtestvectors.zip of NIST CAVP"
 "bindings/python/tests/keccak/kat" = "KeccakKAT-3.zip of the Keccak team"

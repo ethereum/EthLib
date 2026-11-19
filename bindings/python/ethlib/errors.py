@@ -1,5 +1,7 @@
 """The exceptions that the specification raises through the bindings."""
 
+from collections.abc import Callable
+
 
 # Each primitive has one exception class.
 # `KeyDerivationError` alone subclasses another, `BlsError`, so a BLS handler also catches it.
@@ -33,6 +35,20 @@ class EthLibError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+    def __reduce__(
+        self,
+    ) -> tuple[
+        Callable[..., object], tuple[type["EthLibError"], tuple[object, ...]], dict[str, object]
+    ]:
+        """Rebuild the error from its class, arguments and attributes, without `__init__`."""
+        # As for `BaseException`, a subclass with another constructor signature still copies.
+        return _rebuild, (type(self), self.args), self.__dict__
+
+
+def _rebuild(cls: type[EthLibError], args: tuple[object, ...]) -> EthLibError:
+    """Create an error of the class with these arguments, as `BaseException` does when unpickled."""
+    return cls.__new__(cls, *args)
 
 
 class KzgError(EthLibError, RuntimeError):
@@ -125,6 +141,18 @@ class HkdfError(EthLibError, ValueError):
     """HKDF rejected its input."""
 
 
+class TlsHandshakeError(EthLibError, ValueError):
+    """A TLS handshake codec or transcript rejected its input."""
+
+
+class TlsStepError(EthLibError, ValueError):
+    """A TLS handshake step failed, with its QUIC error code, or 0 for a malformed argument."""
+
+
+class Tls13Error(EthLibError, ValueError):
+    """A TLS 1.3 key derivation rejected its input."""
+
+
 class Pbkdf2Error(EthLibError, ValueError):
     """PBKDF2 rejected its input."""
 
@@ -185,6 +213,14 @@ class UvarintError(EthLibError, ValueError):
     """The bytes do not start with a multiformats unsigned varint, or a value is out of range."""
 
 
+class QuicError(EthLibError, ValueError):
+    """A QUIC header, packet number or frame is malformed, out of range, or not allowed there."""
+
+
+class QuicProtectionError(EthLibError, ValueError):
+    """A QUIC packet or Retry fails a check; code 8 is a reserved bit in an authenticated packet."""
+
+
 class QuicVarintError(EthLibError, ValueError):
     """The bytes end before the QUIC integer they start, or a value is not below 2^62."""
 
@@ -207,6 +243,10 @@ class YamuxError(EthLibError, ValueError):
 
     Stream errors have codes from 101.
     """
+
+
+class TlsCertificateError(EthLibError, ValueError):
+    """A libp2p TLS certificate or its peer authentication was rejected."""
 
 
 class Libp2pIdentityError(EthLibError, ValueError):
@@ -350,6 +390,9 @@ __all__ = [
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",
+    "Tls13Error",
+    "TlsHandshakeError",
+    "TlsStepError",
     "Pbkdf2Error",
     "ScryptError",
     "X25519Error",
@@ -365,10 +408,13 @@ __all__ = [
     "VarintError",
     "UvarintError",
     "QuicVarintError",
+    "QuicProtectionError",
+    "QuicError",
     "MultistreamError",
     "MplexError",
     "YamuxError",
     "Libp2pIdentityError",
+    "TlsCertificateError",
     "GossipError",
     "Discv5Error",
     "RlpxError",

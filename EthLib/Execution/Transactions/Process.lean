@@ -192,6 +192,8 @@ structure CallOutput where
   refund : Nat
   /-- The logs, oldest first. -/
   logs : Array Log
+  /-- The logs that a simulation reports, oldest first. -/
+  simulatedLogs : Array Log
   /-- The accounts to delete. -/
   accountsToDelete : Std.ExtTreeSet Address
   /-- The touched accounts, whose empty ones EIP-161 deletes. -/
@@ -215,10 +217,10 @@ def CallOutput.ofFrame {fork : Fork} (evm : Evm fork Meter) (refund : Nat)
   let reservoir := GasMeter.reservoir evm.gas
   let used := GasMeter.stateGasUsed evm.gas
   if evm.error.isSome then
-    ⟨evm.state, gasLeft, reservoir, refund, #[], ∅, ∅, evm.error, evm.output, used⟩
+    ⟨evm.state, gasLeft, reservoir, refund, #[], #[], ∅, ∅, evm.error, evm.output, used⟩
   else
     ⟨evm.state, gasLeft, reservoir, refund + evm.substate.refundCounter.toNat, evm.substate.logs,
-      evm.substate.accountsToDelete, touched, none, evm.output, used⟩
+      evm.substate.simulatedLogs, evm.substate.accountsToDelete, touched, none, evm.output, used⟩
 
 /-- The output of a message whose first frame never runs, because of `error`.
 
@@ -227,7 +229,7 @@ The state stays `state`, from before the message.
 No execution gas is left, the reservoir `reservoir` comes back whole, and no state gas is used. -/
 def CallOutput.ofHalt (state : TransactionState) (reservoir : Nat) (error : EvmError) :
     CallOutput :=
-  ⟨state, 0, reservoir, 0, #[], ∅, ∅, some error, .empty, 0⟩
+  ⟨state, 0, reservoir, 0, #[], #[], ∅, ∅, some error, .empty, 0⟩
 
 /-- The first frame of a transaction, ready to run, with a gas meter of type `Meter`. -/
 structure FirstFrame (fork : Fork) (Meter : Type) [GasMeter Meter] where
@@ -285,7 +287,7 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
   | none =>
     let address := message.currentTarget
     let state := state.recordAccountRead address
-    unless state.accountDeployable address do throw (.addressCollision, state)
+    unless state.accountDeployable address do throw (.addressCollision address, state)
     let meter ← if fork ≥ .glamsterdam ∧ state.getPreStateAccount address = EMPTY_ACCOUNT then
         (GasMeter.chargeState meter NEW_ACCOUNT_STATE_GAS).mapError (·, state)
       else pure meter
@@ -315,7 +317,9 @@ def prepareFirstFrame {fork : Fork} (chainId : Nat) (message : Message fork)
       return .ofMeter message state substate done.refund meter
     | none => return .ofMeter { message with code } state substate done.refund meter
 
-/-- The message of a transaction at `fork`, on the chain `chainId`.
+/-- The message of a transaction at `fork`, on the chain `chainId`, in the monad `M`.
+
+The observer sees each step of its frames.
 
 It first prepares the first frame, which applies the authorizations `auths` of a call.
 
@@ -324,26 +328,38 @@ A failure there halts the message before its frame runs, and undoes the authoriz
 That halt keeps what the preparation read.
 
 From Spurious Dragon to Paris, a recipient left empty is touched. -/
-def processMessageCall {fork : Fork} [LawfulGasMeter Meter] (chainId : Nat)
+@[specialize]
+def processMessageCallWith {fork : Fork} [LawfulGasMeter Meter] {M : Type → Type} [Monad M]
+    [MonadExceptOf EvmError M] (observe : StepObserver M fork Meter) (chainId : Nat)
     (message : Message fork) (state : TransactionState) (substate : Substate)
     (auths : List Authorization := []) (paidWrites : Std.ExtTreeSet Address := ∅) :
-    Except EvmError CallOutput :=
+    M CallOutput :=
   match prepareFirstFrame (Meter := Meter) chainId message state substate auths paidWrites with
   | .error (e, read) =>
-    if e.aborts then .error e else .ok (.ofHalt (state.withReadsOf read) message.reservoir e)
+    if e.aborts then throw e else pure (.ofHalt (state.withReadsOf read) message.reservoir e)
   | .ok first =>
     match message.target with
     | none => do
-      let ⟨evm, _⟩ ← processCreateMessage fork first.message first.state first.substate
-        first.meter first.held
+      let ⟨evm, _⟩ ← processCreateMessageWith fork observe first.message first.state
+        first.substate first.meter first.held
       return .ofFrame evm 0 evm.substate.touchedAccounts
     | some target => do
-      let ⟨evm, _⟩ ← processMessage fork first.message first.state first.substate first.meter
-        first.held
+      let ⟨evm, _⟩ ← processMessageWith fork observe first.message first.state first.substate
+        first.meter first.held
       let touched := evm.substate.touchedAccounts
       let touched := if fork ≥ .spuriousDragon ∧ fork < .paris ∧
         evm.state.accountExistsAndIsEmpty target then touched.insert target else touched
       return .ofFrame evm first.refund touched
+
+/-- The message of a transaction at `fork`, on the chain `chainId`.
+
+It is the run with no observer, in the monad of errors. -/
+def processMessageCall {fork : Fork} [LawfulGasMeter Meter] (chainId : Nat)
+    (message : Message fork) (state : TransactionState) (substate : Substate)
+    (auths : List Authorization := []) (paidWrites : Std.ExtTreeSet Address := ∅) :
+    Except EvmError CallOutput :=
+  processMessageCallWith (Meter := Meter) (fun _ _ => pure ()) chainId message state substate
+    auths paidWrites
 
 /-! ## The transaction -/
 
@@ -359,8 +375,20 @@ structure TransactionOutput where
   blockGas : BlockGas
   /-- The logs of the transaction, oldest first. -/
   logs : Array Log
+  /-- The logs that a simulation reports for the transaction, oldest first. -/
+  simulatedLogs : Array Log
   /-- The error that stopped its message, or none when the message succeeded. -/
   error : Option EvmError
+  /-- The output of its message: the data that it returned, or the data of its revert.
+
+  It is empty after any other error, from Byzantium.
+
+  Before Byzantium, a creation whose code deposit fails keeps the code that it returned. -/
+  messageOutput : ByteArray
+  /-- The gas that it used before its refund.
+
+  It is the gas used with no refund: from Pectra it is at least the call data floor. -/
+  gasBeforeRefund : Nat
 
 /-- The block state, with the writes of the transaction. -/
 def TransactionOutput.block (output : TransactionOutput) : BlockState :=
@@ -393,35 +421,61 @@ def paidWrites (sender target : Address) (tx : Transaction) : Std.ExtTreeSet Add
 
 /-- Run a transaction with a gas meter of type `Meter`, on the block state `block` at `fork`.
 
+It runs in the monad `M`, and the observer sees each step of its frames.
+
 The checks of the transaction gave `included`.
 
 The gas past the intrinsic gas splits into the execution gas and the reservoir of the message.
 
-The sender gets back the gas left and the reservoir left, with its refund. -/
-def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
-    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction) :
-    Except EvmError TransactionOutput := do
+The sender gets back the gas left and the reservoir left, with its refund.
+
+Each call runs the precompile that the given map assigns to its code address.
+
+A simulation can lift the cap on the execution gas, and charge a fee cap of 0 at a base fee of 0. -/
+@[specialize]
+def runTransactionWith {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    {M : Type → Type} [Monad M] [MonadExceptOf EvmError M] (observe : StepObserver M fork Meter)
+    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
+    (precompiles : Address → Option Address := some) (lifted : LiftedRules := {}) :
+    M TransactionOutput := do
   let state := TransactionState.ofBlock block
   let sender := included.sender
-  let target ← messageTarget sender (state.getAccount sender).nonce tx
-  let state ← (buyGas env state sender tx).mapError .state
+  let target ← liftExcept (messageTarget sender (state.getAccount sender).nonce tx)
+  let state ← liftExcept ((buyGas env state sender tx lifted).mapError EvmError.state)
   let txEnv : TransactionEnvironment fork :=
     { origin := sender, gasPrice := included.gasPrice,
-      blobVersionedHashes := fun _ => tx.blobHashes }
-  let gas := allocateGas fork tx included.intrinsicGas
-  let message ← transactionMessage env txEnv state sender target gas.execution tx
-  let output ← processMessageCall (Meter := Meter) env.chainId.toNat
+      blobVersionedHashes := fun _ => tx.blobHashes, precompiles }
+  let gas := allocateGas fork tx included.intrinsicGas lifted
+  let message ← liftExcept (transactionMessage env txEnv state sender target gas.execution tx)
+  let output ← processMessageCallWith (Meter := Meter) observe env.chainId.toNat
     { message with reservoir := gas.reservoir } state
     (startSubstate fork env.coinbase sender target tx) tx.authorizations
     (paidWrites sender target tx)
   let gasLeft := output.gasLeft + output.reservoir
   let blockGas := transactionBlockGas fork sender tx gasLeft output.refund output.stateGasUsed
-  let (state, gasUsed) ← (settleGas env output.state sender tx gasLeft output.refund).mapError
-    .state
-  let state ← (deleteAccounts fork state output).mapError .state
-  return ⟨state, gasUsed, blockGas, output.logs, output.error⟩
+  let gasBeforeRefund := gasUsed fork sender tx gasLeft 0
+  let (state, gasUsed) ← liftExcept
+    ((settleGas env output.state sender tx gasLeft output.refund lifted).mapError EvmError.state)
+  let state ← liftExcept ((deleteAccounts fork state output).mapError EvmError.state)
+  return ⟨state, gasUsed, blockGas, output.logs, output.simulatedLogs, output.error, output.output,
+    gasBeforeRefund⟩
+
+/-- Run a transaction with a gas meter of type `Meter`, on the block state `block` at `fork`.
+
+It is the run with no observer, in the monad of errors. -/
+def runTransaction {fork : Fork} (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
+    (env : BlockEnvironment fork) (block : BlockState) (included : Included) (tx : Transaction)
+    (precompiles : Address → Option Address := some) (lifted : LiftedRules := {}) :
+    Except EvmError TransactionOutput :=
+  runTransactionWith Meter (fun _ _ => pure ()) env block included tx precompiles lifted
+
+/-- An observer of the steps in the monad `M`, for any gas meter. -/
+abbrev TransactionObserver (M : Type → Type) (fork : Fork) : Type 1 :=
+  {Meter : Type} → [GasMeter Meter] → StepObserver M fork Meter
 
 /-- Run a transaction that may enter its block, on the block state `block` at `fork`.
+
+It runs in the monad `M`, and the observer sees each step of its frames.
 
 The checks of the transaction gave `included`.
 
@@ -429,17 +483,43 @@ It returns the state of the transaction, whose writes then join the block.
 
 It also returns the gas used, the gas it adds to its block, the logs, and the error of the message.
 
-It fails only with an error that aborts the whole execution, such as missing code.
+It also returns the output of the message and the gas used before the refund.
+
+It also returns the logs that a simulation reports.
+
+No rule reads these three.
+
+If the observer never fails, the run fails only with an error that aborts the whole execution.
+
+Missing code is such an error.
+
+By default a call runs the precompile at its own address.
+
+A simulation can move a precompile to another address, and lift the cap on the execution gas.
 
 Up to BPO5, the gas meter is one counter of the gas left.
 
 From Glamsterdam, the meter of EIP-8037 also meters state gas.
 
 From Hegotá it fails, since the rules of that fork are not yet specified here. -/
+@[specialize]
+def processTransactionWith {fork : Fork} {M : Type → Type} [Monad M] [MonadExceptOf EvmError M]
+    (observe : TransactionObserver M fork) (env : BlockEnvironment fork) (block : BlockState)
+    (included : Included) (tx : Transaction) (precompiles : Address → Option Address := some)
+    (lifted : LiftedRules := {}) : M TransactionOutput :=
+  if .hegota ≤ fork then throw (.forkNotYetSpecified fork)
+  else if fork ≥ .glamsterdam then
+    runTransactionWith StateGasMeter observe env block included tx precompiles lifted
+  else runTransactionWith Nat observe env block included tx precompiles lifted
+
+/-- Run a transaction that may enter its block, on the block state `block` at `fork`.
+
+It is the run with no observer, in the monad of errors.
+
+From Hegotá it fails, since the rules of that fork are not yet specified here. -/
 def processTransaction {fork : Fork} (env : BlockEnvironment fork) (block : BlockState)
-    (included : Included) (tx : Transaction) : Except EvmError TransactionOutput :=
-  if .hegota ≤ fork then .error (.forkNotYetSpecified fork)
-  else if fork ≥ .glamsterdam then runTransaction StateGasMeter env block included tx
-  else runTransaction Nat env block included tx
+    (included : Included) (tx : Transaction) (precompiles : Address → Option Address := some)
+    (lifted : LiftedRules := {}) : Except EvmError TransactionOutput :=
+  processTransactionWith (fun _ _ => pure ()) env block included tx precompiles lifted
 
 end EthLib.Execution.Transactions

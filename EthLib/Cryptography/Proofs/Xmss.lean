@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Cryptography.Proofs.Xmss.Types
 public import EthLib.Cryptography.Proofs.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
@@ -12,6 +13,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.MapMonad
 public import EthLib.Cryptography.Proofs.Xmss.QueryBound
+public import EthLib.Cryptography.Proofs.Xmss.Cost
 public import EthLib.Cryptography.Proofs.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Sign

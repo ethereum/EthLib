@@ -161,6 +161,17 @@ def earliestInclusions (size : Nat)
           best.setIfInBounds index.toNat (some attestation) else best
       | none => best.setIfInBounds index.toNat (some attestation)
 
+/-- The part of an inclusion reward that goes to the attester, for some base reward and delay.
+
+It is the base reward less the proposer share, divided by the inclusion delay.
+
+A zero delay is an error. -/
+def inclusionAttesterReward (preset : Preset) (base : Gwei) (inclusionDelay : Slot) :
+    Except TransitionError Gwei := do
+  let maxAttesterReward ← liftAccessor (liftArith (subChecked base (proposerReward preset base)))
+  ensure (inclusionDelay ≠ 0) .zeroInclusionDelay
+  return maxAttesterReward / inclusionDelay
+
 /-- The inclusion rewards of one attester, under the attestation that first included its vote.
 
 The proposer of that block earns the proposer share of the base reward of the attester.
@@ -175,9 +186,7 @@ def addInclusionReward (state : BeaconState preset fork) (totalActiveBalance : G
     | throw (.accessor (.indexOutOfRange index))
   let base ← liftAccessor (getBaseReward state totalActiveBalance index)
   let rewards ← addDelta rewards attestation.proposerIndex (proposerReward preset base)
-  let maxAttesterReward ← liftAccessor (liftArith (subChecked base (proposerReward preset base)))
-  ensure (attestation.inclusionDelay ≠ 0) .zeroInclusionDelay
-  addDelta rewards index (maxAttesterReward / attestation.inclusionDelay)
+  addDelta rewards index (← inclusionAttesterReward preset base attestation.inclusionDelay)
 
 /-- Before Altair: the rewards of each validator for the inclusion of the previous epoch's votes.
 

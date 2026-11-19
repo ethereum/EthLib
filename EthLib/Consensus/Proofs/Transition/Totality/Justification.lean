@@ -129,9 +129,7 @@ theorem getUnslashedParticipatingIndices_exists_ok (within : state.RegistryWithi
       ∀ index ∈ result, index.toNat < state.validators.data.size := by
   have active : ∀ index ∈ getActiveValidatorIndices state epoch,
       index.toNat < state.validators.data.size := by
-    intro index member
-    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
+    exact fun index member => lt_size_of_mem_getActiveValidatorIndices member
   suffices ∃ result, getUnslashedParticipatingIndices state altair flagIndex epoch = .ok result by
     obtain ⟨result, computed⟩ := this
     exact ⟨result, computed, fun index member =>
@@ -217,7 +215,7 @@ private theorem weighJustificationAndFinalization_exists_ok {total previous curr
 /-- The signers of a pending attestation are validators of the registry.
 
 They come from a committee, whose members are active, and the active indices are in range. -/
-private theorem pendingSigners_lt (within : state.RegistryWithinLimit)
+private theorem pendingSigners_lt (_within : state.RegistryWithinLimit)
     {attestation : PendingAttestation preset} {signers : List ValidatorIndex}
     (computed : getPendingAttestingIndices state attestation = .ok signers) :
     ∀ index ∈ signers, index.toNat < state.validators.data.size := by
@@ -226,8 +224,7 @@ private theorem pendingSigners_lt (within : state.RegistryWithinLimit)
   obtain ⟨committee, committeeOk, signersOk⟩ := computed
   have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk
     (mem_of_committeeAttesters signersOk member)
-  obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp active
-  exact (Array.getElem?_eq_some_iff.mp found).1
+  exact lt_size_of_mem_getActiveValidatorIndices active
 
 /-- The unslashed signers of some pending attestations succeed.
 

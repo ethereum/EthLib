@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
 public import EthLib.Consensus.Transition.EpochUpdates
 
@@ -41,6 +42,24 @@ The slashings reset clears the slashed balance of the next epoch.
 The RANDAO reset copies the mix of the current epoch to the next.
 
 The rotation of the pending attestations moves those of the current epoch to the previous one.
+
+The slashings change only the balances.
+
+The update of the effective balances changes only the registry.
+
+Before Heze, the reset of the deposit votes changes only those votes.
+
+A root joins the historical roots exactly when their list has room, and it joins at the end.
+
+Before Capella, a successful update at the start of a span adds the root of the batch of roots.
+
+From Capella, it adds one summary: the root of the block roots, then the root of the state roots.
+
+Away from the start of a span, a successful update leaves the state unchanged.
+
+In its own forks, with a next epoch, each update fails exactly at a span start with a full list.
+
+Right after the update of the effective balances, each lies within the bands of its balance.
 -/
 
 @[expose] public section
@@ -125,7 +144,7 @@ theorem updatedEffectiveBalance_split {largest balance effectiveBalance result :
       exact .inl ⟨computed.symm, by omega, by omega⟩
 
 /-- The balance rounded down to an increment is that balance less the remainder. -/
-private theorem toNat_rounded {balance : Gwei} :
+theorem toNat_rounded {balance : Gwei} :
     (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT).toNat =
       balance.toNat - balance.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have le : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
@@ -1313,5 +1332,437 @@ theorem processParticipationRecordUpdates_eq (before : fork < .altair) :
     currentEpochAttestations := fun _ => ⟨#[], by simp⟩ }, ?_, rfl, rfl, rfl⟩
   simp only [processParticipationRecordUpdates, notAltair, ↓reduceIte]
   try rfl
+
+/-! ## Fields kept by three steps -/
+
+/-- The slashing penalties change only the balances. -/
+theorem processSlashings_frame {after : BeaconState preset fork}
+    (computed : processSlashings state = .ok after) :
+    after = { state with balances := after.balances } := by
+  -- Each penalty writes one balance, or leaves the state as it is.
+  have chain : ∀ {middle next : BeaconState preset fork},
+      middle = { state with balances := middle.balances } →
+      next = { middle with balances := next.balances } →
+      next = { state with balances := next.balances } := by
+    intro middle next kept step
+    have swap : ∀ balances, { middle with balances } = { state with balances } :=
+      fun balances => by rw [kept]
+    exact step.trans (swap _)
+  have lowered : ∀ {middle next : BeaconState preset fork} {index : ValidatorIndex} {delta : Gwei},
+      decreaseBalance middle index delta = .ok next →
+      next = { middle with balances := next.balances } := by
+    intro middle next index delta computed
+    obtain ⟨_, set⟩ := decreaseBalance_ok computed
+    obtain ⟨_, rfl⟩ := setBalance_ok set
+    rfl
+  unfold processSlashings at computed
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, applied⟩ := computed
+    refine foldlM_ok_invariant
+      (fun current : BeaconState preset fork =>
+        current = { state with balances := current.balances })
+      (fun middle _ next kept step => chain kept ?_) rfl applied
+    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at step
+    obtain ⟨_, _, step⟩ := step
+    split at step
+    · simp only [bind_ok_iff] at step
+      obtain ⟨_, _, step⟩ := step
+      split at step
+      · simp only [bind_ok_iff, liftAccessor_ok] at step
+        obtain ⟨_, _, _, _, lower⟩ := step
+        exact lowered lower
+      · simp only [pure, Except.pure, Except.ok.injEq] at step
+        subst step
+        rfl
+    · simp only [pure, Except.pure, Except.ok.injEq] at step
+      subst step
+      rfl
+  · refine foldlM_ok_invariant
+      (fun current : BeaconState preset fork =>
+        current = { state with balances := current.balances })
+      (fun middle _ next kept step => chain kept ?_) rfl computed
+    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at step
+    obtain ⟨_, _, step⟩ := step
+    split at step
+    · simp only [bind_ok_iff] at step
+      obtain ⟨_, _, step⟩ := step
+      split at step
+      · simp only [bind_ok_iff, liftAccessor_ok] at step
+        obtain ⟨_, _, _, _, _, _, lower⟩ := step
+        exact lowered lower
+      · simp only [pure, Except.pure, Except.ok.injEq] at step
+        subst step
+        rfl
+    · simp only [pure, Except.pure, Except.ok.injEq] at step
+      subst step
+      rfl
+
+/-- The update of the effective balances changes only the registry. -/
+theorem processEffectiveBalanceUpdates_frame {after : BeaconState preset fork}
+    (computed : processEffectiveBalanceUpdates state = .ok after) :
+    after = { state with validators := after.validators } := by
+  unfold processEffectiveBalanceUpdates at computed
+  refine foldlM_ok_invariant
+    (fun current : BeaconState preset fork =>
+      current = { state with validators := current.validators })
+    (fun current _ next kept step => ?_) rfl computed
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
+  obtain ⟨_, _, _, _, _, _, set⟩ := step
+  obtain ⟨_, rfl⟩ := setValidatorAt_ok set
+  have swap : ∀ validators, { current with validators } = { state with validators } :=
+    fun validators => by rw [kept]
+  exact swap _
+
+/-- Before Heze, the reset of the deposit votes changes only those votes. -/
+theorem processEth1DataReset_frame {hegota : fork < .hegota}
+    {after : BeaconState preset fork} (computed : processEth1DataReset hegota state = .ok after) :
+    after = { state with eth1DataVotes := after.eth1DataVotes } := by
+  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+
+/-! ## Historical roots and summaries -/
+
+/-- A root joins the historical roots exactly when the list has room.
+
+The result is the list with that root pushed at its end. -/
+theorem appendHistoricalRoot_ok_iff
+    {roots result : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat} {root : Root} :
+    appendHistoricalRoot roots root = .ok result ↔
+      roots.data.size < preset.HISTORICAL_ROOTS_LIMIT.toNat ∧
+        result.data = roots.data.push root := by
+  unfold appendHistoricalRoot
+  split
+  · rename_i fits
+    simp only [Except.ok.injEq, fits, true_and]
+    constructor
+    · rintro rfl
+      rfl
+    · intro pushed
+      cases result
+      simp_all
+  · rename_i full
+    simp [full]
+
+/-- A root fails to join the historical roots exactly when the list is full.
+
+It then fails with the error of a full list. -/
+theorem appendHistoricalRoot_eq_error_iff
+    {roots : SszList Root preset.HISTORICAL_ROOTS_LIMIT.toNat} {root : Root}
+    {error : TransitionError} :
+    appendHistoricalRoot roots root = .error error ↔
+      preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ roots.data.size ∧
+        error = .historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
+  unfold appendHistoricalRoot
+  split
+  · rename_i fits
+    simp only [reduceCtorEq, false_iff, not_and]
+    omega
+  · rename_i full
+    simp only [Except.error.injEq]
+    constructor
+    · rintro rfl
+      exact ⟨by omega, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+
+/-- The next epoch starts a span of slots exactly when the current epoch plus one does. -/
+private theorem nextEpoch_span_iff {current next : Epoch}
+    (sum : next.toNat = current.toNat + 1) :
+    next % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0 ↔
+      (current.toNat + 1) % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat =
+        0 := by
+  rw [← UInt64.toNat_inj, UInt64.toNat_mod, sum]
+  simp
+
+/-- The next epoch exists when its number fits in 64 bits. -/
+private theorem addChecked_getCurrentEpoch_one_ok
+    (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64) :
+    ∃ next : Epoch, addChecked (getCurrentEpoch state) 1 = .ok next ∧
+      next.toNat = (getCurrentEpoch state).toNat + 1 :=
+  ⟨getCurrentEpoch state + 1, addChecked_ok_iff.mpr ⟨by simpa using fits, by simp; omega⟩,
+    by simp; omega⟩
+
+/-- When a next epoch starts a span of slots, a span holds at least one slot. -/
+private theorem spanLength_pos {current next : Epoch} (sum : next.toNat = current.toNat + 1)
+    (span : next % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0) :
+    NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+  refine ⟨fun zero => ?_⟩
+  have empty : preset.SLOTS_PER_HISTORICAL_ROOT = 0 := UInt64.toNat_inj.mp (by simpa using zero)
+  rw [(nextEpoch_span_iff sum), empty] at span
+  simp at span
+
+/-- Before Capella, a successful update of the historical roots changes only them.
+
+The next epoch fits in 64 bits.
+
+When it starts a span of slots, the root of the block roots and state roots joins the list.
+
+Otherwise the state is unchanged. -/
+theorem processHistoricalRootsUpdate_eq (before : fork < .shapella)
+    (computed : processHistoricalRootsUpdate state = .ok after) :
+    (getCurrentEpoch state).toNat + 1 < 2 ^ 64 ∧
+      if ((getCurrentEpoch state).toNat + 1) %
+          (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 then
+        ∃ root, SszType.hashTreeRoot (HistoricalBatch.mk state.blockRoots state.stateRoots) =
+            .ok root ∧
+          after.historicalRoots.data = state.historicalRoots.data.push root ∧
+          { after with historicalRoots := state.historicalRoots } = state
+      else after = state := by
+  have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
+  cases next : addChecked (getCurrentEpoch state) 1 with
+  | error fault =>
+    simp [processHistoricalRootsUpdate, notCapella, next, liftAccessor, liftArith,
+      Except.mapError, bind, Except.bind] at computed
+  | ok nextEpoch =>
+    obtain ⟨fits, sum⟩ := addChecked_ok_iff.mp next
+    have boundary := nextEpoch_span_iff (preset := preset) (by simpa using sum)
+    refine ⟨by simpa using fits, ?_⟩
+    simp only [processHistoricalRootsUpdate, notCapella, ite_false, next, liftAccessor, liftArith,
+      Except.mapError, bind, Except.bind] at computed
+    split at computed
+    · rename_i span
+      simp only [boundary.mp span, ↓reduceIte]
+      cases rooted :
+          SszType.hashTreeRoot (HistoricalBatch.mk state.blockRoots state.stateRoots) with
+      | error fault => simp [liftSsz, rooted, Except.mapError] at computed
+      | ok root =>
+        cases appended : appendHistoricalRoot state.historicalRoots root with
+        | error fault => simp [liftSsz, rooted, appended, Except.mapError] at computed
+        | ok roots =>
+          simp only [liftSsz, rooted, appended, Except.mapError, pure, Except.pure,
+            Except.ok.injEq] at computed
+          subst computed
+          exact ⟨root, rfl, (appendHistoricalRoot_ok_iff.mp appended).2, rfl⟩
+    · rename_i span
+      simp only [mt boundary.mpr span, ↓reduceIte]
+      simpa [pure, Except.pure] using computed.symm
+
+/-- Before Capella, with a next epoch, the update of the historical roots fails only on a full list.
+
+It fails exactly when the next epoch starts a span of slots and the list is full.
+
+It then fails with the error of a full list. -/
+theorem processHistoricalRootsUpdate_eq_error_iff (before : fork < .shapella)
+    (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64) {error : TransitionError} :
+    processHistoricalRootsUpdate state = .error error ↔
+      ((getCurrentEpoch state).toNat + 1) %
+          (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 ∧
+        preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ state.historicalRoots.data.size ∧
+        error = .historicalRootsFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
+  have notCapella : ¬ Fork.shapella ≤ fork := Nat.not_le.mpr before
+  obtain ⟨nextEpoch, next, sum⟩ := addChecked_getCurrentEpoch_one_ok fits
+  have boundary := nextEpoch_span_iff (preset := preset) sum
+  simp only [processHistoricalRootsUpdate, notCapella, ite_false, next, liftAccessor, liftArith,
+    Except.mapError, bind, Except.bind]
+  by_cases span : nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0
+  · haveI := spanLength_pos sum span
+    obtain ⟨root, rooted⟩ :=
+      SszType.hashTreeRoot_total (HistoricalBatch.mk state.blockRoots state.stateRoots)
+    simp only [span, ↓reduceIte, boundary.mp span, true_and, liftSsz, rooted, Except.mapError]
+    cases appended : appendHistoricalRoot state.historicalRoots root with
+    | error fault =>
+      obtain ⟨full, rfl⟩ := appendHistoricalRoot_eq_error_iff.mp appended
+      simp [full, eq_comm]
+    | ok roots =>
+      have room := (appendHistoricalRoot_ok_iff.mp appended).1
+      simp [pure, Except.pure]
+      omega
+  · simp only [span, ↓reduceIte, pure, Except.pure, reduceCtorEq, false_iff, not_and]
+    exact fun inSpan => absurd (boundary.mpr inSpan) span
+
+/-- From Capella, a successful update of the historical summaries changes only them.
+
+The next epoch fits in 64 bits.
+
+When it starts a span of slots, one summary joins the list.
+
+It holds the root of the block roots, then the root of the state roots.
+
+Otherwise the state is unchanged. -/
+theorem processHistoricalSummariesUpdate_eq {capella : .shapella ≤ fork}
+    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
+    (getCurrentEpoch state).toNat + 1 < 2 ^ 64 ∧
+      if ((getCurrentEpoch state).toNat + 1) %
+          (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 then
+        ∃ blocks states, SszType.hashTreeRoot state.blockRoots = .ok blocks ∧
+          SszType.hashTreeRoot state.stateRoots = .ok states ∧
+          (after.historicalSummaries capella).data =
+            (state.historicalSummaries capella).data.push
+              { blockSummaryRoot := blocks, stateSummaryRoot := states } ∧
+          { after with historicalSummaries := state.historicalSummaries } = state
+      else after = state := by
+  cases next : addChecked (getCurrentEpoch state) 1 with
+  | error fault =>
+    simp [processHistoricalSummariesUpdate, next, liftAccessor, liftArith, Except.mapError, bind,
+      Except.bind] at computed
+  | ok nextEpoch =>
+    obtain ⟨fits, sum⟩ := addChecked_ok_iff.mp next
+    have boundary := nextEpoch_span_iff (preset := preset) (by simpa using sum)
+    refine ⟨by simpa using fits, ?_⟩
+    simp only [processHistoricalSummariesUpdate, next, liftAccessor, liftArith, Except.mapError,
+      bind, Except.bind] at computed
+    split at computed
+    · rename_i span
+      simp only [boundary.mp span, ↓reduceIte]
+      cases blocksRooted : SszType.hashTreeRoot state.blockRoots with
+      | error fault => simp [liftSsz, blocksRooted, Except.mapError] at computed
+      | ok blocks =>
+        cases statesRooted : SszType.hashTreeRoot state.stateRoots with
+        | error fault => simp [liftSsz, blocksRooted, statesRooted, Except.mapError] at computed
+        | ok states =>
+          simp only [liftSsz, blocksRooted, statesRooted, Except.mapError] at computed
+          split at computed
+          · simp only [pure, Except.pure, Except.ok.injEq] at computed
+            subst computed
+            exact ⟨blocks, states, rfl, rfl, rfl, rfl⟩
+          · simp [throw, throwThe, MonadExceptOf.throw] at computed
+    · rename_i span
+      simp only [mt boundary.mpr span, ↓reduceIte]
+      simpa [pure, Except.pure] using computed.symm
+
+/-- From Capella, with a next epoch, the update of the summaries fails only on a full list.
+
+It fails exactly when the next epoch starts a span of slots and the list is full.
+
+It then fails with the error of a full list of summaries. -/
+theorem processHistoricalSummariesUpdate_eq_error_iff {capella : .shapella ≤ fork}
+    (fits : (getCurrentEpoch state).toNat + 1 < 2 ^ 64) {error : TransitionError} :
+    processHistoricalSummariesUpdate state capella = .error error ↔
+      ((getCurrentEpoch state).toNat + 1) %
+          (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH).toNat = 0 ∧
+        preset.HISTORICAL_ROOTS_LIMIT.toNat ≤ (state.historicalSummaries capella).data.size ∧
+        error = .historicalSummariesFull preset.HISTORICAL_ROOTS_LIMIT.toNat := by
+  obtain ⟨nextEpoch, next, sum⟩ := addChecked_getCurrentEpoch_one_ok fits
+  have boundary := nextEpoch_span_iff (preset := preset) sum
+  simp only [processHistoricalSummariesUpdate, next, liftAccessor, liftArith, Except.mapError,
+    bind, Except.bind]
+  by_cases span : nextEpoch % (preset.SLOTS_PER_HISTORICAL_ROOT / preset.SLOTS_PER_EPOCH) = 0
+  · haveI := spanLength_pos sum span
+    obtain ⟨blocks, blocksRooted⟩ := SszType.hashTreeRoot_total state.blockRoots
+    obtain ⟨states, statesRooted⟩ := SszType.hashTreeRoot_total state.stateRoots
+    simp only [span, ↓reduceIte, boundary.mp span, true_and, liftSsz, blocksRooted,
+      statesRooted, Except.mapError]
+    split
+    · rename_i room
+      simp [pure, Except.pure]
+      omega
+    · rename_i full
+      simp [throw, throwThe, MonadExceptOf.throw, eq_comm]
+      omega
+  · simp only [span, ↓reduceIte, pure, Except.pure, reduceCtorEq, false_iff, not_and]
+    exact fun inSpan => absurd (boundary.mpr inSpan) span
+
+/-! ## Hysteresis after the update of the effective balances -/
+
+/-- The effective balances lie within the bands of hysteresis around the balances.
+
+Below its largest value, an effective balance has a balance at most the upward band above it.
+
+Every effective balance is at most the downward band above its balance.
+
+Both hold right after an epoch transition, before any block. -/
+structure Hysteresis (state : BeaconState preset fork) : Prop where
+  up : ∀ (position : Nat) (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    validator.effectiveBalance < withdrawalMaxEffectiveBalance preset fork validator →
+    balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand
+  down : ∀ (position : Nat) (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    validator.effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand
+
+/-- The hysteresis carries over to a state with the same validators and the same balances.
+
+The largest effective balance of each validator must be the same at both forks. -/
+theorem Hysteresis.of_data {other : Fork} {next : BeaconState preset other}
+    (holds : Hysteresis state) (validators : next.validators.data = state.validators.data)
+    (balances : next.balances.data = state.balances.data)
+    (largest : ∀ validator, withdrawalMaxEffectiveBalance preset other validator =
+      withdrawalMaxEffectiveBalance preset fork validator) :
+    Hysteresis next where
+  up position validator balance found read below := by
+    rw [validators] at found
+    rw [balances] at read
+    rw [largest] at below
+    exact holds.up position validator balance found read below
+  down position validator balance found read := by
+    rw [validators] at found
+    rw [balances] at read
+    exact holds.down position validator balance found read
+
+/-- Both bands of hysteresis at one position. -/
+private def HysteresisAt (state : BeaconState preset fork) (position : Nat) : Prop :=
+  ∀ (validator : Validator) (balance : Gwei),
+    state.validators.data[position]? = some validator →
+    state.balances.data[position]? = some balance →
+    (validator.effectiveBalance < withdrawalMaxEffectiveBalance preset fork validator →
+      balance.toNat ≤ validator.effectiveBalance.toNat + preset.upwardBand) ∧
+    validator.effectiveBalance.toNat ≤ balance.toNat + preset.downwardBand
+
+/-- The update of one effective balance puts it within the bands of its balance.
+
+It keeps the bands at every other position, since it changes no balance and no other validator.
+-/
+private theorem updateEffectiveBalance_hysteresisAt (bands : preset.IncrementWithinUpwardBand)
+    {index : Nat} (computed : updateEffectiveBalance state index = .ok after) :
+    HysteresisAt after index ∧
+      ∀ position, HysteresisAt state position → HysteresisAt after position := by
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨validator, found, balance, read, effectiveBalance, updated, set⟩ := computed
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have read := getBalanceAt_eq_ok_iff.mp read
+  -- The updated position holds the new effective balance and the balance it was computed from.
+  have fresh : HysteresisAt (state.putValidator index inside
+      { validator with effectiveBalance := effectiveBalance }) index := by
+    intro written current seen kept
+    simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set_self,
+      Option.some.injEq] at seen kept
+    rw [read, Option.some.injEq] at kept
+    subst seen kept
+    refine ⟨fun below => ?_, updatedEffectiveBalance_le_add updated⟩
+    rcases updatedEffectiveBalance_band bands updated with within | capped
+    · exact within
+    · exact absurd capped (UInt64.not_le.mpr below)
+  refine ⟨fresh, fun position holds => ?_⟩
+  by_cases same : index = position
+  · subst same
+    exact fresh
+  · intro written current seen kept
+    simp only [BeaconState.putValidator, RootedForkList.data_set, Array.getElem?_set, same,
+      ↓reduceIte] at seen kept
+    exact holds written current seen kept
+
+/-- After the update of the effective balances, each lies within the bands of its balance. -/
+theorem processEffectiveBalanceUpdates_hysteresis (bands : preset.IncrementWithinUpwardBand)
+    (computed : processEffectiveBalanceUpdates state = .ok after) : Hysteresis after := by
+  have sizes := sameSizes_processEffectiveBalanceUpdates computed
+  unfold processEffectiveBalanceUpdates at computed
+  obtain ⟨-, steps⟩ := foldlM_ok_steps
+    (fun first second => ∀ position, HysteresisAt first position → HysteresisAt second position)
+    (fun _ _ => id) (fun one two position holds => two position (one position holds))
+    (fun _ _ _ step => (updateEffectiveBalance_hysteresisAt bands step).2) computed
+  have within (position : Nat) : HysteresisAt after position := by
+    intro validator balance found read
+    have inside : position < state.validators.data.size := by
+      rw [← sizes.1]
+      exact (Array.getElem?_eq_some_iff.mp found).1
+    obtain ⟨_, next, _, step, kept⟩ := steps position (by simpa using inside)
+    rw [List.getElem_range] at step
+    exact kept position (updateEffectiveBalance_hysteresisAt bands step).1 validator balance
+      found read
+  exact ⟨fun position validator balance found read =>
+      (within position validator balance found read).1,
+    fun position validator balance found read => (within position validator balance found read).2⟩
 
 end EthLib.Consensus

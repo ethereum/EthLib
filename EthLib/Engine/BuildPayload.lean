@@ -117,20 +117,6 @@ def buildHeader (config : ChainConfig) (parent : RecentBlock) (parentHash : Hash
     blockAccessListHash := fun _ => 0
     slotNumber := attributes.slotNumber }
 
-/-- The header of a built block, with the fields that its body gives. -/
-def fillHeader (header : Header fork) (output : BlockOutput fork) (roots : OutputRoots) :
-    Header fork :=
-  { header with
-    stateRoot := roots.state
-    transactionsRoot := roots.transactions
-    receiptRoot := roots.receipts
-    bloom := logsBloom output.logs
-    gasUsed := output.gas.gasUsed
-    withdrawalsRoot := fun _ => roots.withdrawals.getD 0
-    blobGasUsed := fun _ => output.gas.blob.toUInt64
-    requestsHash := fun _ => requestsHash output.requests
-    blockAccessListHash := fun _ => output.accessListHash.getD 0 }
-
 /-- The priority fees that transactions pay to the fee recipient of their block, in wei.
 
 Each transaction pays its gas used times its gas price above the base fee.
@@ -180,8 +166,8 @@ def buildPayload (chain : BlockChain) (attributes : PayloadAttributes fork)
   if .hegota ≤ fork then throw (.aborted (.forkNotYetSpecified fork))
   let some parent := chain.recent.getLast? | throw .noParent
   let number := parent.header.number + 1
-  unless chain.config.activeFork number attributes.timestamp.toNat = some fork do
-    throw .wrongFork
+  let active := chain.config.activeFork number attributes.timestamp.toNat
+  unless active = some fork do throw (.wrongFork active fork)
   let parentHash ← parent.header.hash.mapError .encoding
   let header := buildHeader chain.config parent parentHash attributes choices
   let result ← runBody chain ⟨header, transactions, [], attributes.withdrawals⟩
@@ -225,8 +211,9 @@ def buildPayloadOnChain (chain : BlockChain) (version : Nat) (attributes : Σ f,
     (choices : BuildChoices) (transactions : List ByteArray) :
     Except BuildError (Σ fork, BuiltPayload fork) := do
   let some parent := chain.recent.getLast? | throw (.block .noParent)
+  -- The checks of the attributes read only the number and the time of the head.
   let head : KnownPayload := ⟨parent.header.parentHash, true,
-    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat⟩
+    UInt64.ofNat parent.header.number, UInt64.ofNat parent.header.timestamp.toNat, none⟩
   let ⟨fork, attributes⟩ ←
     (checkAttributes chain.config version head attributes).mapError .attributes
   let transactions ← (decodeTransactions fork 0 transactions).mapError .transaction

@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Bytes
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Evm.Call.ContractAddress
 public import EthLib.Execution.Evm.Gas.Memory
 public import EthLib.Execution.Evm.Op
@@ -41,10 +41,10 @@ open EthLib.Exports (Result PyValue pyExport)
 
 /-- Why an export rejects an argument: the argument has the wrong length. -/
 inductive ArgumentError where
-  /-- A sender is not an address of 20 bytes. -/
-  | senderLength
-  /-- A salt of CREATE2 is not a word of 32 bytes. -/
-  | saltLength
+  /-- A sender has `size` bytes, not the 20 bytes of an address. -/
+  | senderLength (size : Nat)
+  /-- A salt of CREATE2 has `size` bytes, not the 32 bytes of a word. -/
+  | saltLength (size : Nat)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -55,13 +55,13 @@ A new constructor takes a new code, so that each code keeps its meaning.
 
 Codes 101 and 102 stay unused, so that no code takes a second meaning. -/
 def ArgumentError.code : ArgumentError → UInt32
-  | .senderLength => 103
-  | .saltLength => 104
+  | .senderLength _ => 103
+  | .saltLength _ => 104
 
 /-- The message of an error, as the bindings raise it. -/
 def ArgumentError.message : ArgumentError → String
-  | .senderLength => "the sender must be 20 bytes"
-  | .saltLength => "the salt must be 32 bytes"
+  | .senderLength size => s!"the sender must be 20 bytes, not {size}"
+  | .saltLength size => s!"the salt must be 32 bytes, not {size}"
 
 /-- The code and the message of an error, as an export returns them. -/
 def ArgumentError.toResult (e : ArgumentError) : UInt32 × String :=
@@ -72,8 +72,8 @@ def wordOf (bytes : ByteArray) : U256 :=
   BitVec.ofNat 256 (bytesToNat bytes.toList)
 
 /-- The word of exactly 32 big-endian bytes, or the given error for any other length. -/
-def readWord (error : ArgumentError) (bytes : ByteArray) : Result U256 :=
-  if bytes.size = 32 then .ok (wordOf bytes) else .error error.toResult
+def readWord (error : Nat → ArgumentError) (bytes : ByteArray) : Result U256 :=
+  if bytes.size = 32 then .ok (wordOf bytes) else .error (error bytes.size).toResult
 
 /-- The word that the instruction of an opcode pushes, for operands from the top of the stack.
 
@@ -173,7 +173,7 @@ def extendMemoryExport (args : PyValue) : Result PyValue :=
 /-- The address of exactly 20 bytes, or the error for any other length. -/
 def readAddress (bytes : ByteArray) : Result Address :=
   if h : bytes.size = 20 then .ok (readBytes bytes 0 20 (by omega))
-  else .error ArgumentError.senderLength.toResult
+  else .error (ArgumentError.senderLength bytes.size).toResult
 
 /-- The address of the contract that a sender makes with CREATE at a nonce.
 

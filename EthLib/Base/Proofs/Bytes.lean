@@ -7,6 +7,8 @@ public import EthLib.Base.Bytes
 
 The bytes of a fixed-size object have its length.
 
+A read of a buffer gives the entries of its array of bytes.
+
 A read of those bytes returns the object.
 
 So two objects with the same bytes are the same object.
@@ -48,12 +50,20 @@ theorem byteArray_set_eq_set! (bytes : ByteArray) (index : Nat) (value : UInt8)
 @[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :
     (packBytes v).size = n := v.size_toArray
 
+/-- A read of a buffer gives the entries of its array of bytes, from the offset on.
+
+Proofs rewrite with it to reason about the array of bytes. -/
+theorem readBytes_eq_ofFn_data (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
+    readBytes b offset n h =
+      Vector.ofFn fun i => b.data[offset + i.val]'(by simp only [ByteArray.size] at h; omega) :=
+  rfl
+
 /-- Reading the bytes of an object returns that object. -/
 @[simp] theorem readBytes_packBytes {n : Nat} (v : Vector UInt8 n) (h) :
     readBytes (packBytes v) 0 n h = v := by
   apply Vector.ext
   intro i hi
-  simp [readBytes, packBytes]
+  simp [readBytes_eq_ofFn_data, packBytes]
 
 /-- Two objects with the same bytes are the same object. -/
 theorem packBytes_injective {n : Nat} :
@@ -61,6 +71,38 @@ theorem packBytes_injective {n : Nat} :
   -- The bytes are the object's array, and the array determines the vector.
   intro v w h
   exact Vector.toArray_inj.mp (congrArg ByteArray.data h)
+
+/-- A buffer read as an object of its own size has the same bytes. -/
+@[simp] theorem packBytes_mk_data {n : Nat} (b : ByteArray) (h : b.data.size = n) :
+    packBytes (⟨b.data, h⟩ : Vector UInt8 n) = b := rfl
+
+/-- The bytes of an object, read back at its size, give the object. -/
+@[simp] theorem exactBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
+    exactBytes? n (packBytes v) = some v := by
+  rw [exactBytes?, dite_eq_left (size_packBytes v)]
+  rfl
+
+/-- An object read from a buffer has the bytes of that buffer. -/
+theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
+    (h : exactBytes? n b = some v) : packBytes v = b := by
+  unfold exactBytes? at h
+  split at h
+  · cases h
+    rfl
+  · cases h
+
+/-- A byte of an object is the byte at the same index of its bytes. -/
+theorem getElem_eq_get!_packBytes {n : Nat} (v : Vector UInt8 n) (i : Nat) (h : i < n) :
+    v[i] = (packBytes v).get! i := by
+  change v.toArray[i]'(by simpa using h) = v.toArray[i]!
+  exact (getElem!_pos v.toArray i (by simpa using h)).symm
+
+/-- Writing a byte of an object writes the same byte of its bytes. -/
+theorem packBytes_set {n : Nat} (v : Vector UInt8 n) (i : Nat) (x : UInt8) (h : i < n) :
+    packBytes (v.set i x h) = (packBytes v).set! i x := by
+  change ByteArray.mk (v.toArray.set i x (by simpa using h)) =
+    ByteArray.mk (v.toArray.setIfInBounds i x)
+  rw [Array.setIfInBounds_def, dite_eq_left (by simpa using h)]
 
 /-- The exclusive or of two byte strings does not depend on their order. -/
 theorem xorBytes_comm {n : Nat} (a b : Vector UInt8 n) : xorBytes a b = xorBytes b a := by
@@ -237,5 +279,15 @@ theorem forIn_eq_forIn_toList {β : Type} {m : Type → Type} [Monad m] [LawfulM
     forIn as b f = forIn as.data.toList b f := by
   show ByteArray.forIn.loop as f as.size (Nat.le_refl _) b = _
   rw [forIn_loop_eq_forIn_drop, Nat.sub_self, List.drop_zero]
+
+end EthLib.Base
+
+namespace EthLib.Base
+
+/-- Packing the list view of a byte array recovers that array. -/
+@[simp] theorem toByteArray_data_toList (bytes : ByteArray) :
+    bytes.data.toList.toByteArray = bytes := by
+  apply ByteArray.ext
+  simp
 
 end EthLib.Base

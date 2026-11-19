@@ -59,8 +59,8 @@ inductive MultistreamError where
   | empty
   /-- The input ends before the bytes that the length counts. -/
   | truncated (length available : Nat)
-  /-- The last byte that the length counts is not a newline. -/
-  | missingNewline
+  /-- The last byte that the length counts is `last`, not a newline. -/
+  | missingNewline (last : UInt8)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor. -/
@@ -68,7 +68,7 @@ def MultistreamError.code : MultistreamError → UInt32
   | .length _ => 1
   | .empty => 2
   | .truncated _ _ => 3
-  | .missingNewline => 4
+  | .missingNewline _ => 4
 
 /-- The bytes of one message: its length, its bytes, then the newline.
 
@@ -82,7 +82,7 @@ def decode (bytes : List UInt8) : Except MultistreamError (ByteArray × List UIn
   if length = 0 then throw .empty
   let body := rest.take length
   if body.length < length then throw (.truncated length body.length)
-  if body[length - 1]? ≠ some newline then throw .missingNewline
+  if body[length - 1]? ≠ some newline then throw (.missingNewline (body[length - 1]?.getD 0))
   return (⟨(body.take (length - 1)).toArray⟩, rest.drop length)
 
 /-- The answer to a proposed protocol: the protocol itself if supported, else `na`. -/

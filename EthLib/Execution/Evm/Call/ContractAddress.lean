@@ -41,7 +41,7 @@ def addressOfHash (hash : Vector UInt8 32) : Address :=
 
 /-- The preimage of the address of CREATE: the RLP list of the sender and its nonce.
 
-The encoding fails only for a nonce of `2^(8 * 2^64)` or more. -/
+The encoding succeeds for every nonce below `2^256`. -/
 def createPreimage (sender : Address) (nonce : Nat) : Except RlpError ByteArray :=
   encode (.list [Codec.toItem sender, Codec.toItem nonce])
 

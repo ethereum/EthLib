@@ -1,10 +1,12 @@
 module
 
 public import EthLib.Consensus.BuilderApi
+public import EthLib.Consensus.BuilderApi.AuthData
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.BuilderApi.Encoding
 public import EthLib.Consensus.BuilderApi.GloasBid
 public import EthLib.Consensus.BuilderApi.Registration
+public import EthLib.Consensus.BuilderApi.RequestAuth
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Serialization.Exports.Ssz
@@ -15,6 +17,8 @@ public import EthLib.Serialization.Exports.Ssz
 C-ABI exports for Builder API signature checks, registrations, bids, unblinding and bid valuation.
 
 Two more exports write and read the JSON body of a response, which carries its version.
+
+One more gives the default data of a Gloas request, from the builder's URL.
 
 The value of a bid is capped by the proposer's cap on the execution payment.
 
@@ -83,7 +87,7 @@ def unblindOf (args : String × String × ByteArray × ByteArray) :
     let payload ← (·.executionPayload) <$> runSsz "payload rejected"
       (SszType.deserialize (RevealedPayload preset fork) revealed)
     match signed.unblind range payload with
-    | .error .headerMismatch => return none
+    | .error (.headerMismatch ..) => return none
     | .error (.header fault) => runSsz "header rejected" (.error fault)
     | .ok full =>
       let root ← runSsz "root rejected" (SszType.hashTreeRoot full)
@@ -103,12 +107,12 @@ def unblindExport (args : PyValue) : Result PyValue := pyExport unblindOf args
 
 /-- The name of the rule that refuses a registration. -/
 def RegistrationError.reason : BuilderApi.RegistrationError → String
-  | .unknownValidator => "unknown_validator"
-  | .notEligible => "not_eligible"
-  | .clockOverflow => "clock_overflow"
-  | .tooFarInFuture => "too_far_in_future"
-  | .olderThanPrevious => "older_than_previous"
-  | .badSignature => "bad_signature"
+  | .unknownValidator _ => "unknown_validator"
+  | .notEligible .. => "not_eligible"
+  | .clockOverflow .. => "clock_overflow"
+  | .tooFarInFuture .. => "too_far_in_future"
+  | .olderThanPrevious .. => "older_than_previous"
+  | .badSignature _ => "bad_signature"
   | .root _ => "root"
 
 /-- None when a builder keeps a signed registration, or the rule that refuses it. -/
@@ -123,7 +127,7 @@ def processRegistrationOf
   let config ← configWithValue name replacements
   let state ← runSsz "state rejected" (SszType.deserialize (BeaconState preset fork) state)
   let entries ← kept.mapM fun bytes =>
-    runSsz "registry rejected" (SszType.deserialize ValidatorRegistrationV1 bytes)
+    runSsz "registry rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
   let signed ← runSsz "input rejected" (SszType.deserialize SignedValidatorRegistrationV1 data)
   match BuilderApi.processRegistration config .bls state ⟨entries⟩ signed now with
   | .ok () => return none
@@ -134,7 +138,7 @@ def processRegistrationOf
 
 The arguments are the name of the preset and of the configuration, the fork and replacements.
 
-Then come the state, the registrations the builder keeps, the signed registration and the time.
+Then come the state, the signed registrations the builder keeps, the one to check and the time.
 
 The time is that of the builder's clock, in seconds. -/
 @[export eth_consensus_process_registration]
@@ -154,14 +158,14 @@ def isEligibleForBidOf
   let fork ← forkOf fork.toUTF8
   if range : HasBuilderApi fork then
     let state ← decodeRejected (BeaconState preset fork) "state" state
-    let entries ← kept.mapM (decodeRejected ValidatorRegistrationV1 "registry")
+    let entries ← kept.mapM (decodeRejected SignedValidatorRegistrationV1 "registry")
     (liftAccessor (BuilderApi.isEligibleForBid state range ⟨entries⟩ slot parentHash
       pubkey)).mapError fun e => (e.code, reprStr e)
   else throw (0, s!"no Builder API messages at {fork.name}")
 
 /-- Whether a builder serves a request for a bid.
 
-The arguments are the name of the preset, the fork, the state and the registrations kept.
+The arguments are the name of the preset, the fork, the state and the signed registrations kept.
 
 Then come the slot, the parent hash and the key of the request.
 
@@ -174,9 +178,9 @@ def isEligibleForBidExport (args : PyValue) : Result PyValue :=
 
 /-- The name of the rule that refuses a bid. -/
 def BidError.reason : BuilderApi.BidError → String
-  | .wrongParentHash => "wrong_parent_hash"
-  | .wrongFeeRecipient => "wrong_fee_recipient"
-  | .badSignature => "bad_signature"
+  | .wrongParentHash .. => "wrong_parent_hash"
+  | .wrongFeeRecipient .. => "wrong_fee_recipient"
+  | .badSignature _ => "bad_signature"
   | .root _ => "root"
 
 /-- None when a proposer accepts a signed bid, or the rule that refuses it. -/
@@ -236,14 +240,14 @@ def isEligibleForBidGloasExport (args : PyValue) : Result PyValue :=
 
 /-- The name of the rule that refuses a fetched bid. -/
 def ValidateBidError.reason : BuilderApi.ValidateBidError → String
-  | .inactiveBuilder => "inactive_builder"
-  | .wrongSlot => "wrong_slot"
-  | .wrongFeeRecipient => "wrong_fee_recipient"
-  | .wrongParentHash => "wrong_parent_hash"
-  | .wrongParentRoot => "wrong_parent_root"
-  | .wrongPrevRandao => "wrong_prev_randao"
-  | .incompatibleGasLimit => "incompatible_gas_limit"
-  | .cannotCoverBid => "cannot_cover_bid"
+  | .inactiveBuilder _ => "inactive_builder"
+  | .wrongSlot .. => "wrong_slot"
+  | .wrongFeeRecipient .. => "wrong_fee_recipient"
+  | .wrongParentHash .. => "wrong_parent_hash"
+  | .wrongParentRoot .. => "wrong_parent_root"
+  | .wrongPrevRandao .. => "wrong_prev_randao"
+  | .incompatibleGasLimit .. => "incompatible_gas_limit"
+  | .cannotCoverBid .. => "cannot_cover_bid"
   | .fault _ => "fault"
 
 /-- From Gloas: None when a proposer accepts a fetched bid, or the rule that refuses it. -/
@@ -297,6 +301,71 @@ def verifyBuilderRequestAuthSignatureOf
 @[export eth_consensus_verify_builder_request_auth_signature]
 def verifyBuilderRequestAuthSignatureExport (args : PyValue) : Result PyValue :=
   pyExport verifyBuilderRequestAuthSignatureOf args
+
+/-- The name of a failed check of a request to a builder. -/
+def AuthFailure.reason : BuilderApi.AuthFailure → String
+  | .badVersion => "bad_version"
+  | .emptyData => "empty_data"
+  | .dataMismatch => "data_mismatch"
+  | .slotMismatch => "slot_mismatch"
+  | .slotPassed => "slot_passed"
+  | .badSignature => "bad_signature"
+
+/-- From Gloas: the failed checks of a request for a bid, by name. -/
+def builderRequestAuthFailuresOf
+    (args : String × String × Option PyValue × ByteArray × UInt64 × Cryptography.Bls.BLSPubkey ×
+      Option String × ByteArray) : Result (List String) := do
+  let (name, fork, replacements, agreed, pathSlot, pubkey, header, data) := args
+  let fork ← forkOf fork.toUTF8
+  unless .glamsterdam ≤ fork do
+    throw (0, s!"no builder request authentication at {fork.name}")
+  let config ← configWithValue name replacements
+  let signed ← runSsz "input rejected" (SszType.deserialize SignedBuilderRequestAuth data)
+  let failures ← runSsz "root rejected"
+    (BuilderApi.authFailures config .bls agreed pathSlot pubkey header signed)
+  return failures.map AuthFailure.reason
+
+/-- From Gloas: the failed checks of a request for a bid, by name, in order.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the agreed data, the slot of the path, the key of the path and the version header.
+
+Then come the SSZ bytes of the signed authentication. -/
+@[export eth_consensus_builder_request_auth_failures]
+def builderRequestAuthFailuresExport (args : PyValue) : Result PyValue :=
+  pyExport builderRequestAuthFailuresOf args
+
+/-- From Gloas: the failed checks of a request that submits preferences, by name. -/
+def builderPreferencesFailuresOf
+    (args : String × String × Option PyValue × ByteArray × UInt64 × Cryptography.Bls.BLSPubkey ×
+      Option String × ByteArray) : Result (List String) := do
+  let (name, fork, replacements, agreed, currentSlot, pubkey, header, data) := args
+  let fork ← forkOf fork.toUTF8
+  unless .glamsterdam ≤ fork do
+    throw (0, s!"no builder request authentication at {fork.name}")
+  let config ← configWithValue name replacements
+  let request ← runSsz "input rejected" (SszType.deserialize BuilderPreferencesRequest data)
+  let failures ← runSsz "root rejected"
+    (BuilderApi.preferencesFailures config .bls agreed currentSlot pubkey header request)
+  return failures.map AuthFailure.reason
+
+/-- From Gloas: the failed checks of a request that submits preferences, by name, in order.
+
+The arguments are the name of the preset and of the configuration, the fork and replacements.
+
+Then come the agreed data, the builder's current slot, the key of the path and the version header.
+
+Then come the SSZ bytes of the request. -/
+@[export eth_consensus_builder_preferences_failures]
+def builderPreferencesFailuresExport (args : PyValue) : Result PyValue :=
+  pyExport builderPreferencesFailuresOf args
+
+/-- From Gloas: the default data of a request to a builder, from the builder's URL. -/
+@[export eth_consensus_default_auth_data]
+def defaultAuthDataExport (args : PyValue) : Result PyValue :=
+  pyExport (fun url => (BuilderApi.defaultAuthData url).mapError fun e => (e.code, reprStr e) :
+    String → Result ByteArray) args
 
 /-- The value of a builder's bid from its two payments and the proposer's execution payment cap. -/
 @[export eth_consensus_builder_bid_value]

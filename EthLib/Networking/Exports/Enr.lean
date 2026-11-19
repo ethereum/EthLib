@@ -1,6 +1,7 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
+public import EthLib.Base.Hex
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.V4
@@ -35,22 +36,27 @@ open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Serialization.Ssz (SszType)
 
+open EthLib.Base (hexString)
+
 /-- A message for a rejection, phrased for someone reading a Python traceback. -/
 def message : EnrError → String
   | .tooLarge size => s!"record has {size} bytes, more than {MAX_RECORD_SIZE}"
   | .rlp _ => "record is not one RLP item"
   | .notAList => "record is not an RLP list"
-  | .tooFewItems => "record has no signature or no sequence number"
+  | .tooFewItems count =>
+    s!"record has {count} items, too few for a signature and a sequence number"
   | .signatureNotBytes => "signature is not a byte string"
   | .invalidSeq _ => "sequence number is not an RLP scalar below 2^64"
   | .keyNotBytes => "a key is not a byte string"
   | .missingValue => "the last key has no value"
-  | .repeatedKey _ => "a key is repeated"
-  | .unsortedKeys _ _ => "the keys are not sorted"
+  | .repeatedKey key => s!"the key {hexString key.data.toList} is repeated"
+  | .unsortedKeys key next =>
+    s!"the keys are not sorted: {hexString next.data.toList} follows {hexString key.data.toList}"
   | .missingPrefix => "text does not start with enr:"
   | .base64 _ => "text is not unpadded URL-safe base64"
   | .missingId => "record has no id"
-  | .unknownScheme => "identity scheme is not v4"
+  | .unknownScheme (.bytes scheme) => s!"identity scheme {hexString scheme.data.toList} is not v4"
+  | .unknownScheme (.list _) => "identity scheme is a list, not v4"
   | .invalidPublicKey => "secp256k1 value is not a valid compressed public key"
   | .signing => "the record could not be signed"
 

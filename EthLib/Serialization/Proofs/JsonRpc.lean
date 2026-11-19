@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Hex
 public import EthLib.Serialization.JsonRpc
 public import EthLib.Base.Hex
 public import EthLib.Base.Except
@@ -7,10 +8,8 @@ public import EthLib.Base.Proofs.MapM
 public import EthLib.Base.Proofs.Bytes
 public import Std.Data.TreeMap.Raw.WF
 public import Std.Data.TreeMap.Raw.Lemmas
--- The fields of an encoded object unfold Lean's `Json.mkObj`.
-import all Lean.Data.Json.Basic
--- The digits of `Nat.toDigits` must unfold for `decide` to read them.
-import all Init.Data.Repr
+import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Base.Proofs.Nat
 
 /-!
 # Proofs: the JSON form of the base types
@@ -55,6 +54,10 @@ The encoder of lists writes what the list reader reads back, item by item.
 
 A byte string without uppercase digits decodes exactly from `0x` and two lowercase digits per byte.
 
+So does a list of such byte strings of one size, from the array of their encodings.
+
+In general, a list decodes exactly from the array of its items when each item does.
+
 An address, whose digits may be uppercase, decodes exactly from `0x` and two digits per byte.
 
 Each of those digits is in either case, and their lowercase forms are the hex encoding.
@@ -64,6 +67,12 @@ The 64-bit reader returns a number exactly when the reader with the bound `2^64`
 The bounded byte reader succeeds exactly when the byte reader succeeds within the limit.
 
 An object built from pairs with distinct names holds exactly those pairs.
+
+A number reads as an integer exactly when its value is a whole number.
+
+A value reads as an error object exactly when its only members are a code, a message and data.
+
+The data may be missing.
 -/
 
 public section
@@ -346,6 +355,11 @@ theorem field_eq_ok_iff {what name : String} {fs : List (String × Lean.Json)} {
   cases h : fs.lookup name <;>
     simp [pure, Except.pure]
 
+/-- A string decodes exactly from its JSON string. -/
+theorem string_eq_ok_iff {what : String} {j : Lean.Json} {s : String} :
+    string what j = .ok s ↔ j = .str s := by
+  cases j <;> simp [string, pure, Except.pure]
+
 /-- A list decodes exactly when the value is an array whose items each decode, in order.
 
 Item `i` of the list is the decoded item `i` of the array. -/
@@ -388,15 +402,16 @@ theorem address_eq_ok_iff {what : String} {j : Lean.Json} {a : Address} :
 /-! ## A number written in hex -/
 
 /-- The value of the code of a hex digit, or zero for any other code. -/
-private def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
+@[expose] def digitValue (c : UInt8) : Nat := ((hexValue false c).getD 0).toNat
 
 /-- The digit that Lean core writes for a value below sixteen is the lowercase hex digit. -/
 private theorem digitChar_eq_hexDigitChar : ∀ n (h : n < 16),
     Nat.digitChar n = hexDigitChar ⟨n, h⟩ := by
+  simp only [Base.digitChar_eq]
   decide
 
 /-- Each digit that `Nat.toDigits 16` writes is a lowercase hex digit, read back as its value. -/
-private theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
+theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
     hexValue false (Nat.digitChar n).val.toUInt8 = some n.toUInt8 ∧
       (Nat.digitChar n).val ≤ 0x7F := by
   rw [digitChar_eq_hexDigitChar n hn]
@@ -404,12 +419,13 @@ private theorem hexValue_digitChar (n : Nat) (hn : n < 16) :
 
 /-- No digit of a positive value below sixteen is the digit `0`. -/
 private theorem digitChar_ne_zero : ∀ n, n < 16 → 0 < n → ¬ Nat.digitChar n = '0' := by
+  simp only [Base.digitChar_eq]
   decide
 
 /-- The hex digits of a number are ASCII digits whose values, read from the first, give the number.
 
 A positive number does not start with the digit `0`. -/
-private theorem toDigits_hex (n : Nat) :
+theorem toDigits_hex (n : Nat) :
     (∀ c ∈ Nat.toDigits 16 n, ∃ d, d < 16 ∧ c = Nat.digitChar d) ∧
       ((Nat.toDigits 16 n).map fun c => c.val.toUInt8).foldl
         (fun acc c => 16 * acc + digitValue c) 0 = n ∧
@@ -451,6 +467,7 @@ private theorem toDigits_hex (n : Nat) :
 /-- A digit whose code is that of `0` is the digit `0`. -/
 private theorem digitChar_code_zero : ∀ n, n < 16 →
     (Nat.digitChar n).val.toUInt8 = 48 → Nat.digitChar n = '0' := by
+  simp only [Base.digitChar_eq]
   decide
 
 /-- A loop whose step multiplies by sixteen and adds the value of a digit computes the fold. -/
@@ -531,6 +548,7 @@ private theorem digitChar_digitValue_lt : ∀ n, n < 256 →
     (hexValue false n.toUInt8).isSome = true →
     digitValue n.toUInt8 < 16 ∧ (Nat.digitChar (digitValue n.toUInt8)).val.toUInt8 = n.toUInt8 ∧
       (n.toUInt8 ≠ 48 → 0 < digitValue n.toUInt8) := by
+  simp only [Base.digitChar_eq]
   decide +kernel
 
 /-- A code that the decoder reads as a hex digit is the code of the digit of its value.
@@ -724,6 +742,14 @@ theorem quantity_eq_ok_iff {what : String} {bits : Nat} {j : Lean.Json} {v : Nat
     · cases h
   · rintro ⟨hv, rfl⟩
     exact quantity_toDigits what hv
+
+/-- A 64-bit number decodes exactly from its quantity, `0x` and its hex digits.
+
+Those digits are lowercase, without leading zeros. -/
+theorem uint64_eq_ok_iff_quantityJson {what : String} {j : Lean.Json} {x : UInt64} :
+    uint64 what j = .ok x ↔ j = quantityJson x.toNat := by
+  rw [uint64_eq_ok_iff, quantity_eq_ok_iff]
+  exact and_iff_right x.toNat_lt
 
 /-! ## Only the canonical text decodes to bytes -/
 
@@ -932,6 +958,37 @@ theorem fixed_false_eq_ok_iff {what : String} {n : Nat} {j : Lean.Json} {v : Vec
   rw [fixed_eq_ok_iff, bytesOf_false_eq_ok_iff]
   exact Iff.rfl
 
+/-- A list decodes exactly from the array of the JSON of its items, in order.
+
+This holds for every reader of items that decodes a value exactly from one JSON form of it. -/
+theorem array_eq_ok_iff_of {α : Type} {what : String} {f : Lean.Json → Read α}
+    {g : α → Lean.Json} (hf : ∀ j a, f j = .ok a ↔ j = g a) {j : Lean.Json} {l : List α} :
+    array what f j = .ok l ↔ j = .arr (l.map g).toArray := by
+  cases j with
+  | arr items =>
+    simp only [array, Lean.Json.arr.injEq]
+    rw [← Array.toList_inj, List.toList_toArray]
+    generalize items.toList = xs
+    induction xs generalizing l with
+    | nil => cases l <;> simp [pure, Except.pure]
+    | cons x xs ih =>
+      cases l with
+      | nil => rw [mapM_cons_ok]; simp
+      | cons v l => rw [mapM_cons_ok]; simp [hf, ih]
+  -- Any other JSON value is not an array, so the read fails at once.
+  | _ => simp [array]
+
+/-- A list of fixed-size byte strings without uppercase digits decodes exactly from its array.
+
+The array has one item per item of the list, in order.
+
+Each is `0x` and two lowercase hex digits per byte of its item. -/
+theorem array_fixed_false_eq_ok_iff {what w : String} {n : Nat} {j : Lean.Json}
+    {l : List (Vector UInt8 n)} :
+    array what (fixed w n · false) j = .ok l ↔
+      j = .arr (l.map fun v => .str (hexString v.toList)).toArray :=
+  array_eq_ok_iff_of fun _ _ => fixed_false_eq_ok_iff
+
 /-! ## Uppercase digits -/
 
 /-- The fact below, checked by the kernel on each of the 128 ASCII codes and the 16 digits. -/
@@ -1113,7 +1170,7 @@ theorem toList_mkObj {pairs : List (String × Lean.Json)}
   have keys : pairs.Pairwise (fun a b => ¬ compare a.1 b.1 = .eq) :=
     distinct.imp fun different equal => different (compare_eq_iff_eq.mp equal)
   have wf : (Std.TreeMap.Raw.ofList pairs (cmp := compare)).WF := Std.TreeMap.Raw.WF.ofList
-  refine ⟨_, rfl, ?_, ?_, ?_⟩
+  refine ⟨_, Base.Toolchain.Json.mkObj_eq pairs, ?_, ?_, ?_⟩
   · rw [Std.TreeMap.Raw.length_toList wf, Std.TreeMap.Raw.size_ofList keys]
   · rintro ⟨k, v⟩
     rw [Std.TreeMap.Raw.mem_toList_iff_getElem?_eq_some wf]
@@ -1198,12 +1255,6 @@ theorem field_of_perm {what k : String} {v : Lean.Json} {fs pairs : List (String
     (h.pairwise_iff fun hab => Ne.symm hab).mpr distinct
   simp only [field, lookup_of_mem hd (h.mem_iff.mpr hm)]
   rfl
-
-/-- The JSON of a string is not `null`. -/
-theorem isNull_str (s : String) : (Lean.Json.str s).isNull = false := by rfl
-
-/-- The JSON of an array is not `null`. -/
-theorem isNull_arr (a : Array Lean.Json) : (Lean.Json.arr a).isNull = false := by rfl
 
 /-- The decoder of byte strings of a size reads back a vector written as data. -/
 theorem fixed_dataJson {n : Nat} (what : String) (v : Vector UInt8 n) (upper : Bool) :
@@ -1301,7 +1352,7 @@ theorem nullable_optionJson {α : Type} {f : Lean.Json → Read α} {g : α → 
     have hx := present x
     have hn : nullable f (g x) = some <$> f (g x) := by
       cases hg : g x with
-      | null => rw [hg] at hx; cases hx
+      | null => rw [hg, Base.Toolchain.Json.isNull_null] at hx; cases hx
       | _ => rfl
     simp only [optionJson, hn, h]
     rfl
@@ -1371,5 +1422,74 @@ theorem rpcErrorOfJson_json (e : RpcError) : rpcErrorOfJson (rpcErrorJson e) = .
     rw [hobj']
     simp only [rpcErrorOfJson, hall, field, hc, hm, hdata, ite_true, pure_bind, integer_fromInt]
     rfl
+
+/-- A JSON value reads as an integer exactly when it is a number that equals an integer.
+
+A JSON number in Lean is a mantissa `m` over `10` to the power of an exponent `e`.
+
+It reads as `m / 10 ^ e` when `10 ^ e` divides `m`. -/
+theorem integer_eq_ok_iff {what : String} {j : Lean.Json} {i : Int} :
+    integer what j = .ok i ↔ ∃ m e, j = .num ⟨m, e⟩ ∧ m % 10 ^ e = 0 ∧ i = m / 10 ^ e := by
+  cases j with
+  | num n =>
+    obtain ⟨m, e⟩ := n
+    constructor
+    · intro hi
+      by_cases h : m % 10 ^ e = 0
+      · simp only [integer, h, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at hi
+        exact ⟨m, e, rfl, h, hi.symm⟩
+      · simp [integer, h, reject, throw, throwThe, MonadExceptOf.throw] at hi
+    · rintro ⟨m', e', heq, h, rfl⟩
+      simp only [Lean.Json.num.injEq, Lean.JsonNumber.mk.injEq] at heq
+      obtain ⟨rfl, rfl⟩ := heq
+      simp [integer, h, pure, Except.pure]
+  | _ => simp [integer, reject, throw, throwThe, MonadExceptOf.throw]
+
+/-- A JSON value reads as an error object exactly when it is an object with no unknown member.
+
+The known members are `code`, `message` and `data`.
+
+The code is the integer under `code`, and the message the string under `message`.
+
+The data is the value under `data`, `null` included, or none when it is missing. -/
+theorem rpcErrorOfJson_eq_ok_iff {j : Lean.Json} {e : RpcError} :
+    rpcErrorOfJson j = .ok e ↔ ∃ kvs, j = .obj kvs ∧
+      (∀ member ∈ kvs.toList, member.1 = "code" ∨ member.1 = "message" ∨
+        member.1 = "data") ∧
+      (∃ c, kvs.toList.lookup "code" = some c ∧ integer "code" c = .ok e.code) ∧
+      kvs.toList.lookup "message" = some (.str e.message) ∧
+      kvs.toList.lookup "data" = e.data := by
+  obtain ⟨code, message, data⟩ := e
+  cases j with
+  | obj kvs =>
+    have allIff : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true ↔
+        ∀ member ∈ kvs.toList, member.1 = "code" ∨ member.1 = "message" ∨
+          member.1 = "data" := by
+      simp [List.all_eq_true, or_assoc]
+    simp only [rpcErrorOfJson, Lean.Json.obj.injEq, exists_eq_left']
+    by_cases hall : (kvs.toList.all fun (name, _) =>
+        name == "code" || name == "message" || name == "data") = true
+    · rw [and_iff_right (allIff.mp hall)]
+      cases hc : kvs.toList.lookup "code" with
+      | none =>
+        simp [hall, hc, field, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+      | some cj =>
+        cases hi : integer "code" cj with
+        | error _ => simp [hall, hc, hi, field, bind, Except.bind, pure, Except.pure]
+        | ok c =>
+          cases hm : kvs.toList.lookup "message" with
+          | none =>
+            simp [hall, hc, hi, hm, field, reject, throw, throwThe, MonadExceptOf.throw, bind,
+              Except.bind, pure, Except.pure]
+          | some mj =>
+            cases mj <;> simp [hall, hc, hi, hm, field, string, reject, throw, throwThe,
+              MonadExceptOf.throw, bind, Except.bind, pure, Except.pure]
+    · constructor
+      · intro h
+        simp [hall, reject, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at h
+      · rintro ⟨members, -⟩
+        exact absurd (allIff.mpr members) hall
+  | _ => simp [rpcErrorOfJson, reject, throw, throwThe, MonadExceptOf.throw]
 
 end EthLib.Serialization.JsonRpc

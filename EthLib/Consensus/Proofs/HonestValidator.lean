@@ -13,6 +13,7 @@ public import EthLib.Consensus.Proofs.InclusionListCommittee
 public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Transition.Block
 public import EthLib.Cryptography.Proofs.Bls.SignaturesCorrect
+import EthLib.Consensus.Proofs.PayloadTimeliness
 
 /-!
 # Proofs: the duties of an honest validator
@@ -31,6 +32,12 @@ The search for an assignment shares the shuffle of the epoch among its committee
 
 It gives the same result as computing each committee alone, errors included.
 
+A committee assignment fails for an overflow, or for a shuffle or a committee without a value.
+
+Its only other error is that of an epoch after the next one.
+
+It succeeds for an epoch at most the next one, under bounds on the epoch and the registry.
+
 The proposer check and the sync committee seat check have their outcomes characterized.
 
 The sync committee subnets of a validator come once each, in increasing order.
@@ -38,6 +45,12 @@ The sync committee subnets of a validator come once each, in increasing order.
 From Gloas, a payload timeliness assignment is the first slot of the epoch that has the validator.
 
 A validator without one is in no committee of the epoch, when an epoch has a slot.
+
+A payload timeliness assignment fails for an overflow, or for a committee without a value.
+
+Its only other error is that of an epoch past the seed lookahead, which it always gives there.
+
+It succeeds for an epoch of the window, under bounds on the lookahead, the window and the epoch.
 
 The upcoming proposal slots are the later slots of the lookahead that the validator proposes.
 
@@ -141,7 +154,9 @@ theorem processRandao_ne_invalidRandaoReveal {config : Config}
     (owned : proposer.pubkey = Signatures.skToPk key)
     (current : computeEpochAtSlot preset block.slot = getCurrentEpoch state)
     (signedBy : getEpochSignature config state block key = .ok block.body.randaoReveal) :
-    processRandao config .bls state block.body ≠ .error .invalidRandaoReveal := by
+    ∀ index epoch,
+      processRandao config .bls state block.body ≠ .error (.invalidRandaoReveal index epoch) := by
+  intro index epoch
   unfold getEpochSignature at signedBy
   simp only [current] at signedBy
   obtain ⟨domain, root, domained, rooted, verifies⟩ := signAtEpoch_verifies signedBy
@@ -531,6 +546,138 @@ theorem getCommitteeAssignment_ne_none {state : BeaconState preset fork} {epoch 
     simp [computed, mem, Except.mapError, bind, Except.bind, pure, Except.pure] at step
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
+/-- A search over committees fails only with the error of a committee that has no value. -/
+private theorem findCommitteeOf_error {validatorIndex : ValidatorIndex} {perSlot : UInt64}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64} {fault : ValidatorDutyError} :
+    ∀ {positions : List (Slot × CommitteeIndex)},
+      findCommitteeOf preset validatorIndex perSlot active shuffled positions = .error fault →
+      ∃ error, fault = .accessor error
+  | [], failed => by simp [findCommitteeOf, pure, Except.pure] at failed
+  | (slot, index) :: rest, failed => by
+    rw [findCommitteeOf] at failed
+    rcases bind_eq_error failed with refused | ⟨committee, -, failed⟩
+    · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+      exact ⟨error, rfl⟩
+    split at failed
+    · cases failed
+    · exact findCommitteeOf_error failed
+
+/-- A search over committees succeeds when each committee that it may read has a value. -/
+private theorem findCommitteeOf_exists {validatorIndex : ValidatorIndex} {perSlot : UInt64}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64} :
+    ∀ {positions : List (Slot × CommitteeIndex)},
+      (∀ slot index, (slot, index) ∈ positions → ∃ committee,
+        beaconCommitteeOf preset slot index perSlot active shuffled = .ok committee) →
+      ∃ found, findCommitteeOf preset validatorIndex perSlot active shuffled positions = .ok found
+  | [], _ => ⟨none, rfl⟩
+  | (slot, index) :: rest, cut => by
+    obtain ⟨committee, committeeOk⟩ := cut slot index List.mem_cons_self
+    rw [findCommitteeOf]
+    simp only [committeeOk, Except.mapError, bind, Except.bind]
+    split
+    · exact ⟨_, rfl⟩
+    · exact findCommitteeOf_exists fun slot index mem =>
+        cut slot index (List.mem_cons_of_mem _ mem)
+
+/-- A committee assignment fails only in three ways.
+
+The next epoch, the first slot or that slot plus an epoch overflows, with an arithmetic error.
+
+The shuffle or a committee has no value, which gives the error of an accessor.
+
+The epoch is after the next one, which gives the error that names both epochs. -/
+theorem getCommitteeAssignment_error {state : BeaconState preset fork} {epoch : Epoch}
+    {validatorIndex : ValidatorIndex} {fault : ValidatorDutyError}
+    (failed : getCommitteeAssignment state epoch validatorIndex = .error fault) :
+    (∃ error, fault = .arith error) ∨ (∃ error, fault = .accessor error) ∨
+      (getCurrentEpoch state).toNat + 1 < epoch.toNat ∧
+        fault = .epochTooFar epoch (getCurrentEpoch state + 1) := by
+  unfold getCommitteeAssignment at failed
+  rcases bind_eq_error failed with refused | ⟨nextEpoch, nextOk, failed⟩
+  · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+    exact .inl ⟨error, rfl⟩
+  rw [mapError_ok_iff] at nextOk
+  split at failed
+  · rcases bind_eq_error failed with refused | ⟨positions, -, failed⟩
+    · unfold committeePositions at refused
+      rcases bind_eq_error refused with refused | ⟨_, -, refused⟩
+      · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+        exact .inl ⟨error, rfl⟩
+      · cases refused
+    split at failed
+    · cases failed
+    rcases bind_eq_error failed with refused | ⟨⟨active, shuffled⟩, -, failed⟩
+    · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+      exact .inr (.inl ⟨error, rfl⟩)
+    · exact .inr (.inl (findCommitteeOf_error failed))
+  · rename_i far
+    cases failed
+    obtain ⟨fits, sum⟩ := addChecked_ok_iff.mp nextOk
+    have next : nextEpoch = getCurrentEpoch state + 1 := by
+      rw [addChecked_of_lt fits] at nextOk
+      exact (Except.ok.inj nextOk).symm
+    refine .inr (.inr ⟨?_, by rw [next]⟩)
+    have farNat : ¬epoch.toNat ≤ nextEpoch.toNat := fun le => far (UInt64.le_iff_toNat_le.mpr le)
+    simp at sum
+    omega
+
+/-- A committee assignment succeeds for an epoch at most the next one, under bounds.
+
+It needs the next epoch, and the first slot after the epoch, to fit in 64 bits.
+
+It needs the epoch plus the length of the history of mixes to fit as well.
+
+It needs a seed lookahead shorter than that history, and at most `2^40` validators in the registry.
+
+It needs their number times a bound on the committees of an epoch to be below `2^64`.
+
+The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+theorem getCommitteeAssignment_exists {state : BeaconState preset fork} {epoch : Epoch}
+    {validatorIndex : ValidatorIndex} (next : (getCurrentEpoch state).toNat + 1 < 2 ^ 64)
+    (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (few : state.validators.data.size ≤ 2 ^ 40)
+    (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
+    ∃ assignment, getCommitteeAssignment state epoch validatorIndex = .ok assignment := by
+  have nextFits : (getCurrentEpoch state).toNat + (1 : UInt64).toNat < 2 ^ 64 := by
+    simpa using next
+  have within : epoch ≤ getCurrentEpoch state + 1 := by
+    rw [UInt64.le_iff_toNat_le, toNat_add_of_lt nextFits]
+    simpa using near
+  have slotsEnd : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
+      2 ^ 64 := by
+    rw [Nat.succ_mul] at slotsFit
+    exact slotsFit
+  have slotsOk := epochSlots_eq_ok_iff.mpr ⟨slotsEnd, rfl⟩
+  obtain ⟨shuffled, shuffleOk⟩ := attesterShuffle_ok_of_le (state := state) (epoch := epoch)
+    seedRoom lookahead few
+  obtain ⟨countFits, activeFits⟩ := committeeCount_fits (state := state) epoch committeeRoom
+  cases positioned : committeePositions state epoch with
+  | error fault =>
+    simp [committeePositions, slotsOk, Except.mapError, bind, Except.bind, pure,
+      Except.pure] at positioned
+  | ok positions =>
+    unfold getCommitteeAssignment
+    rcases positions with _ | ⟨first, rest⟩ <;>
+      simp only [addChecked_of_lt nextFits, positioned, shuffleOk, within, Except.mapError, bind,
+        Except.bind, ↓reduceIte]
+    · exact ⟨none, rfl⟩
+    -- A listed position has a slot, so an epoch has at least one.
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by
+      refine Nat.pos_of_ne_zero fun zero => ?_
+      have empty : committeePositions state epoch = .ok [] := by
+        simp [committeePositions, slotsOk, zero, Except.mapError, bind, Except.bind, pure,
+          Except.pure]
+      rw [positioned] at empty
+      cases empty
+    refine findCommitteeOf_exists fun slot index mem => ?_
+    obtain ⟨-, indexLt⟩ := mem_committeePositions positioned mem
+    exact beaconCommitteeOf_ok_of_lt positive countFits
+      (by rw [List.size_toArray]; exact activeFits) indexLt
+
 /-! ## Proposer and sync committee duties -/
 
 /-- The check of a proposer succeeds exactly when the proposer index of the state exists.
@@ -824,6 +971,129 @@ theorem not_mem_of_getPtcAssignment_none {config : Config} {state : BeaconState 
   rw [mapError_ok_iff] at sloted
   exact not_mem_of_findPtcSlot_none found slot (mem_epochSlots_of_epoch positive sloted slotEpoch)
     committee computed
+
+/-- A search over payload timeliness committees fails only with the error of a committee. -/
+private theorem findPtcSlot_error {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} {fault : ValidatorDutyError} :
+    ∀ {slots : List Slot}, findPtcSlot config state gloas validatorIndex slots = .error fault →
+      ∃ error, fault = .accessor error
+  | [], failed => by simp [findPtcSlot, pure, Except.pure] at failed
+  | first :: rest, failed => by
+    unfold findPtcSlot at failed
+    rcases bind_eq_error failed with refused | ⟨committee, -, failed⟩
+    · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+      exact ⟨error, rfl⟩
+    split at failed
+    · cases failed
+    · exact findPtcSlot_error failed
+
+/-- A search over payload timeliness committees succeeds when each of them has a value. -/
+private theorem findPtcSlot_exists {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {validatorIndex : ValidatorIndex} :
+    ∀ {slots : List Slot},
+      (∀ slot ∈ slots, ∃ committee, getPtc config state gloas slot = .ok committee) →
+      ∃ found, findPtcSlot config state gloas validatorIndex slots = .ok found
+  | [], _ => ⟨none, rfl⟩
+  | first :: rest, read => by
+    obtain ⟨committee, committeeOk⟩ := read first List.mem_cons_self
+    rw [findPtcSlot]
+    simp only [committeeOk, Except.mapError, bind, Except.bind]
+    split
+    · exact ⟨_, rfl⟩
+    · exact findPtcSlot_exists fun slot mem => read slot (List.mem_cons_of_mem _ mem)
+
+/-- From Gloas, a payload timeliness assignment fails only in three ways.
+
+The last epoch, the first slot or that slot plus an epoch overflows, with an arithmetic error.
+
+The committee of a slot has no value, which gives the error of an accessor.
+
+The epoch is past the seed lookahead, which gives the error that names it with the last epoch. -/
+theorem getPtcAssignment_error {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    {fault : ValidatorDutyError}
+    (failed : getPtcAssignment config state gloas epoch validatorIndex = .error fault) :
+    (∃ error, fault = .arith error) ∨ (∃ error, fault = .accessor error) ∨
+      (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < epoch.toNat ∧
+        fault = .epochTooFar epoch (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD) := by
+  unfold getPtcAssignment at failed
+  rcases bind_eq_error failed with refused | ⟨maxEpoch, maxOk, failed⟩
+  · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+    exact .inl ⟨error, rfl⟩
+  rw [mapError_ok_iff] at maxOk
+  dsimp only at failed
+  split at failed
+  · rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
+    · obtain ⟨error, -, rfl⟩ := mapError_eq_error refused
+      exact .inl ⟨error, rfl⟩
+    · exact .inr (.inl (findPtcSlot_error failed))
+  · rename_i late
+    cases failed
+    obtain ⟨fits, sum⟩ := addChecked_ok_iff.mp maxOk
+    have last : maxEpoch = getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD := by
+      rw [addChecked_of_lt fits] at maxOk
+      exact (Except.ok.inj maxOk).symm
+    refine .inr (.inr ⟨?_, by rw [last]⟩)
+    have lateNat : ¬epoch.toNat ≤ maxEpoch.toNat := fun le => late (UInt64.le_iff_toNat_le.mpr le)
+    omega
+
+/-- From Gloas, a payload timeliness assignment for an epoch past the seed lookahead fails.
+
+The error names the epoch and the last epoch of the lookahead. -/
+theorem getPtcAssignment_too_far {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    (late : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < epoch.toNat) :
+    getPtcAssignment config state gloas epoch validatorIndex =
+      .error (.epochTooFar epoch (getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD)) := by
+  have fits := Nat.lt_trans late epoch.toNat_lt
+  have beyond : ¬epoch ≤ getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD := by
+    rw [UInt64.le_iff_toNat_le, toNat_add_of_lt fits]
+    omega
+  simp [getPtcAssignment, addChecked_of_lt fits, beyond, Except.mapError, bind, Except.bind,
+    throw, throwThe, MonadExceptOf.throw]
+
+/-- From Gloas, a payload timeliness assignment succeeds for an epoch that the window covers.
+
+It needs the epoch from the Gloas fork epoch on, and from the epoch before the state's on.
+
+It needs that epoch to be at most the last epoch of the seed lookahead.
+
+It needs that last epoch and the length of the window to fit in 64 bits.
+
+It needs the first slot after the epoch to fit as well. -/
+theorem getPtcAssignment_exists {config : Config} {state : BeaconState preset fork}
+    (gloas : .glamsterdam ≤ fork) {epoch : Epoch} {validatorIndex : ValidatorIndex}
+    (forkLe : config.GLOAS_FORK_EPOCH ≤ epoch)
+    (recent : (getCurrentEpoch state).toNat ≤ epoch.toNat + 1)
+    (lookahead : epoch.toNat ≤ (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat)
+    (fits : (getCurrentEpoch state).toNat + preset.MIN_SEED_LOOKAHEAD.toNat < 2 ^ 64)
+    (windowFits :
+      (preset.MIN_SEED_LOOKAHEAD.toNat + 2) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (slotsFit : (epoch.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
+    ∃ slot, getPtcAssignment config state gloas epoch validatorIndex = .ok slot := by
+  have within : epoch ≤ getCurrentEpoch state + preset.MIN_SEED_LOOKAHEAD := by
+    rw [UInt64.le_iff_toNat_le, toNat_add_of_lt fits]
+    exact lookahead
+  have slotsEnd : epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + preset.SLOTS_PER_EPOCH.toNat <
+      2 ^ 64 := by
+    rw [Nat.succ_mul] at slotsFit
+    exact slotsFit
+  obtain ⟨slots, slotsOk⟩ : ∃ slots, epochSlots preset epoch = .ok slots :=
+    ⟨_, epochSlots_eq_ok_iff.mpr ⟨slotsEnd, rfl⟩⟩
+  -- Each slot of the epoch is covered by the window, so its committee is read.
+  obtain ⟨found, foundOk⟩ := findPtcSlot_exists (config := config) (gloas := gloas)
+    (validatorIndex := validatorIndex) (slots := slots) fun slot mem => by
+      have slotEpoch := mem_epochSlots slotsOk mem
+      obtain ⟨-, listed⟩ := epochSlots_eq_ok_iff.mp slotsOk
+      rw [listed, List.mem_map] at mem
+      obtain ⟨offset, offsetLt, -⟩ := mem
+      have positive : 0 < preset.SLOTS_PER_EPOCH.toNat :=
+        Nat.lt_of_le_of_lt (Nat.zero_le _) (List.mem_range.mp offsetLt)
+      rw [← slotEpoch] at forkLe recent lookahead
+      exact getPtc_exists gloas positive fits windowFits forkLe recent lookahead
+  refine ⟨found, ?_⟩
+  simp only [getPtcAssignment, addChecked_of_lt fits, within, slotsOk, foundOk, Except.mapError,
+    bind, Except.bind, ↓reduceIte]
 
 /-- From Gloas: the upcoming proposal slots are the later slots that the validator proposes.
 

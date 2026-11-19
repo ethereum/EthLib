@@ -1,10 +1,12 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Wots
+public import EthLib.Cryptography.Proofs.HashSig.Calls
 
 /-!
 # Proofs: the hash calls of leanSPHINCS verification
@@ -40,62 +42,9 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
 open OracleSpec OracleComp
-
-/-! ## The inputs a computation queries
-
-This part holds for every oracle computation. -/
-
-section Queries
-
-variable {ι : Type} {spec : OracleSpec ι} {α : Type}
-
-/-- The inputs a computation queries when `f` answers every query, in the order of the queries. -/
-def queriesWith (f : QueryImpl spec Id) (oa : OracleComp spec α) : List spec.Domain :=
-  OracleComp.construct (C := fun _ => List spec.Domain) (fun _ => [])
-    (fun t _ rest => t :: rest (f t)) oa
-
-/-- A computation that returns at once queries nothing. -/
-@[simp] theorem queriesWith_pure (f : QueryImpl spec Id) (a : α) :
-    queriesWith f (pure a : OracleComp spec α) = [] :=
-  rfl
-
-/-- A computation that starts with a query queries that input, then what the rest queries. -/
-@[simp] theorem queriesWith_query_bind (f : QueryImpl spec Id) (t : spec.Domain)
-    (k : spec.Range t → OracleComp spec α) :
-    queriesWith f ((query t : OracleComp spec (spec.Range t)) >>= k)
-      = t :: queriesWith f (k (f t)) :=
-  rfl
-
-/-- A computation with at most `n` queries on every path queries at most `n` inputs. -/
-theorem length_queriesWith_le (f : QueryImpl spec Id) {oa : OracleComp spec α} {n : ℕ}
-    (h : IsTotalQueryBound oa n) : (queriesWith f oa).length ≤ n := by
-  induction oa using OracleComp.inductionOn generalizing n with
-  | pure a => simp
-  | query_bind t k ih =>
-    rw [isTotalQueryBound_query_bind_iff] at h
-    have := ih (f t) (h.2 (f t))
-    change (t :: queriesWith f (k (f t))).length ≤ n
-    rw [List.length_cons]
-    omega
-
-/-- Two answer functions that agree on the inputs queried under the first give the same result.
-
-The queries are then the same too. -/
-theorem evalWithAnswerFn_congr (f g : QueryImpl spec Id) {oa : OracleComp spec α}
-    (h : ∀ t ∈ queriesWith f oa, f t = g t) :
-    evalWithAnswerFn f oa = evalWithAnswerFn g oa ∧ queriesWith f oa = queriesWith g oa := by
-  induction oa using OracleComp.inductionOn with
-  | pure a => simp
-  | query_bind t k ih =>
-    change ∀ t' ∈ t :: queriesWith f (k (f t)), f t' = g t' at h
-    simp only [List.mem_cons, forall_eq_or_imp] at h
-    obtain ⟨hk₁, hk₂⟩ := ih (f t) h.2
-    change evalWithAnswerFn f (k (f t)) = evalWithAnswerFn g (k (g t)) ∧
-      t :: queriesWith f (k (f t)) = t :: queriesWith g (k (g t))
-    rw [← h.1]
-    exact ⟨hk₁, congrArg _ hk₂⟩
-
-end Queries
+open EthLib.Cryptography.HashSig (queriesWith queriesWith_pure queriesWith_query_bind
+  length_queriesWith_le evalWithAnswerFn_congr queriesWith_bind queriesWith_map
+  length_queriesWith_ofFnInOrder length_queriesWith_chain length_queriesWith_climb)
 
 /-! ## Verification under a map of monads
 
@@ -123,9 +72,9 @@ theorem th_map_monad (pkSeed : PkSeed) (adrs : Adrs) (payload : ByteArray) :
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A FORS node hash commutes with the map. -/
 theorem forsNodeHash_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
-    (z j : Nat) (left right : Digest) :
-    φ (forsNodeHash H pkSeed idx kappa z j left right)
-      = forsNodeHash (fun x => φ (H x)) pkSeed idx kappa z j left right :=
+    (p : Merkle.Position) (left right : Digest) :
+    φ (forsNodeHash H pkSeed idx kappa p left right)
+      = forsNodeHash (fun x => φ (H x)) pkSeed idx kappa p left right :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
@@ -137,10 +86,10 @@ theorem forsPkFromRoots_map_monad (pkSeed : PkSeed) (idx : Nat)
 
 omit [LawfulMonad m] [LawfulMonad n] in
 /-- A hypertree node hash commutes with the map. -/
-theorem nodeHash_map_monad (pkSeed : PkSeed) (layer : Layer) (tree z j : Nat)
+theorem nodeHash_map_monad (pkSeed : PkSeed) (layer : Layer) (tree : Nat) (p : Merkle.Position)
     (left right : Digest) :
-    φ (nodeHash H pkSeed layer tree z j left right)
-      = nodeHash (fun x => φ (H x)) pkSeed layer tree z j left right :=
+    φ (nodeHash H pkSeed layer tree p left right)
+      = nodeHash (fun x => φ (H x)) pkSeed layer tree p left right :=
   th_map_monad φ map_pure map_bind H _ _ _
 
 omit [LawfulMonad m] [LawfulMonad n] in
@@ -266,15 +215,15 @@ theorem chain_isTotalQueryBound {α : Type} {k : Nat} (step : Fin k → α → O
       fun _ => hstep _ _
 
 /-- A climb makes one call per sibling, when each node hash makes at most one. -/
-theorem climb_isTotalQueryBound {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ level j left right, IsTotalQueryBound (hash level j left right) 1) :
-    ∀ (siblings : List α) (level j : Nat) (current : α),
-      IsTotalQueryBound (Merkle.climb hash level j current siblings) siblings.length
-  | [], _, _, _ => isQueryBound_pure _ _ _ _
-  | _ :: rest, level, j, current => by
+theorem climb_isTotalQueryBound {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
+    (hhash : ∀ p left right, IsTotalQueryBound (hash p left right) 1) :
+    ∀ (siblings : List α) (p : Merkle.Position) (current : α),
+      IsTotalQueryBound (Merkle.climb hash p current siblings) siblings.length
+  | [], _, _ => isQueryBound_pure _ _ _ _
+  | _ :: rest, p, current => by
     rw [Merkle.climb, List.length_cons]
-    exact (isTotalQueryBound_bind (hhash _ _ _ _)
-      fun _ => climb_isTotalQueryBound hash hhash rest _ _ _).mono (by omega)
+    exact (isTotalQueryBound_bind (hhash _ _ _)
+      fun _ => climb_isTotalQueryBound hash hhash rest _ _).mono (by omega)
 
 /-- The chains of a codeword have `3 * 64 - 128 = 64` steps left above the revealed positions. -/
 theorem sum_steps_of_codeword {d : Digest} {x : Codeword} (h : codeword? d = some x) :
@@ -317,7 +266,7 @@ theorem treeRecover_isTotalQueryBound (pkSeed : PkSeed) (idx : Nat) (kappa : Fin
   rw [treeRecover]
   refine isTotalQueryBound_bind (th_isTotalQueryBound H hH _ _ _) fun leaf => ?_
   have := climb_isTotalQueryBound (forsNodeHash H pkSeed idx kappa)
-    (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList 0 s.val leaf
+    (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) opening.path.toList ⟨0, s.val⟩ leaf
   rwa [Vector.length_toList] at this
 
 /-- Recovering the FORS public key makes `24 * 11 + 1 = 265` calls: the trees, then `T_k`. -/
@@ -363,8 +312,8 @@ theorem layerRoot_isTotalQueryBound (pkSeed : PkSeed) (layer : Layer) (idx : Nat
     refine isTotalQueryBound_bind ?_ fun _ => isQueryBound_pure _ _ _ _
     rw [fold]
     have := climb_isTotalQueryBound (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
-      (fun _ _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList 0
-      (OtsKey.ofIndex layer idx).leaf leaf
+      (fun _ _ _ => th_isTotalQueryBound H hH _ _ _) sig.path.toList
+      ⟨0, (OtsKey.ofIndex layer idx).leaf⟩ leaf
     rwa [Vector.length_toList] at this
 
 /-- The most hash calls verification makes: the digest, FORS, three layers and their paths. -/
@@ -406,57 +355,7 @@ So verification makes exactly as many calls as its bound when it accepts. -/
 section Exact
 
 variable {ι : Type} {spec : OracleSpec ι} (F : QueryImpl spec Id)
-
-/-- A bind queries what its first part queries, then what the rest queries after that answer. -/
-theorem queriesWith_bind {α β : Type} (oa : OracleComp spec α) (k : α → OracleComp spec β) :
-    queriesWith F (oa >>= k)
-      = queriesWith F oa ++ queriesWith F (k (evalWithAnswerFn F oa)) := by
-  induction oa using OracleComp.inductionOn with
-  | pure a => simp
-  | query_bind t k' ih =>
-    rw [bind_assoc]
-    change t :: queriesWith F (k' (F t) >>= k) = (t :: queriesWith F (k' (F t))) ++ _
-    rw [ih, evalWithAnswerFn_bind, List.cons_append]
-    rfl
-
-/-- A map queries what the computation queries. -/
-theorem queriesWith_map {α β : Type} (g : α → β) (oa : OracleComp spec α) :
-    queriesWith F (g <$> oa) = queriesWith F oa := by
-  rw [map_eq_bind_pure_comp, queriesWith_bind]
-  simp
-
-/-- Computing a vector in order queries the inputs of its entries, entry 0 first. -/
-theorem length_queriesWith_ofFnInOrder {α : Type} :
-    ∀ (k : Nat) (f : Fin k → OracleComp spec α),
-      (queriesWith F (HashSig.ofFnInOrder k f)).length = ∑ i, (queriesWith F (f i)).length
-  | 0, _ => rfl
-  | k + 1, f => by
-    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ, queriesWith_bind, List.length_append,
-      queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder k]
-    simp
-
-/-- A walk of `steps` steps queries `steps` inputs, when each step queries one. -/
-theorem length_queriesWith_chain {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)
-    (hstep : ∀ i v, (queriesWith F (step i v)).length = 1) (start : Nat) :
-    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
-      (queriesWith F (Wots.chain step start steps h value)).length = steps
-  | 0, _, _ => rfl
-  | s + 1, h, value => by
-    rw [Wots.chain_succ, queriesWith_bind, List.length_append,
-      length_queriesWith_chain step hstep start s _ value, hstep]
-
-/-- A climb queries one input per sibling, when each node hash queries one. -/
-theorem length_queriesWith_climb {α : Type} (hash : Nat → Nat → α → α → OracleComp spec α)
-    (hhash : ∀ z j left right, (queriesWith F (hash z j left right)).length = 1) :
-    ∀ (siblings : List α) (z j : Nat) (current : α),
-      (queriesWith F (Merkle.climb hash z j current siblings)).length = siblings.length
-  | [], _, _, _ => rfl
-  | _ :: rest, z, j, current => by
-    rw [Merkle.climb, queriesWith_bind, List.length_append, hhash,
-      length_queriesWith_climb hash hhash rest, List.length_cons]
-    omega
-
-variable (H : ByteArray → OracleComp spec (Vector UInt8 32))
+  (H : ByteArray → OracleComp spec (Vector UInt8 32))
   (hH : ∀ x, (queriesWith F (H x)).length = 1)
 
 include hH
@@ -479,7 +378,7 @@ theorem length_queriesWith_treeRecover (pkSeed : PkSeed) (idx : Nat) (kappa : Fi
     (queriesWith F (treeRecover H pkSeed idx kappa s opening)).length = 1 + FORS_HEIGHT := by
   rw [treeRecover, queriesWith_bind, List.length_append, forsLeafHash,
     length_queriesWith_th F H hH, length_queriesWith_climb F (forsNodeHash H pkSeed idx kappa)
-      (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+      (fun _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
 
 /-- Recovering the FORS public key queries `24 * 11 + 1 = 265` inputs. -/
 theorem length_queriesWith_forsRecover (pkSeed : PkSeed) (idx : Nat)
@@ -533,7 +432,7 @@ theorem length_queriesWith_layerRoot (pkSeed : PkSeed) (layer : Layer) (idx : Na
     dsimp only
     rw [queriesWith_bind, List.length_append, fold,
       length_queriesWith_climb F (nodeHash H pkSeed layer (OtsKey.ofIndex layer idx).tree)
-        (fun _ _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
+        (fun _ _ _ => length_queriesWith_th F H hH _ _ _), Vector.length_toList]
     rfl
 
 /-- **A signature that verifies takes exactly as many calls as the bound.**

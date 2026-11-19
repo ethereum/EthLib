@@ -27,8 +27,8 @@ test = [
 [dependency-groups]
 lint = [
   "codespell==2.4.3",
-  "ruff==0.17.4",
-  "ty==0.0.99",
+  "ruff==0.17.5",
+  "ty==0.0.104",
 ]
 
 [tool.uv]
@@ -67,12 +67,12 @@ src = ["bindings/python", "bindings/python/tests", "scripts"]
 target-version = "py312"
 # `lake exe gen-bindings` writes the stub and the type aliases.
 # Its check compares them byte for byte.
-# tests/consensus/pq_keys/SHA256SUMS pins the key generator by its digest.
+# The relay-spec documents are vendored byte for byte and pinned by their digests.
 extend-exclude = [
   "bindings/python/ethlib/cryptography/_native.pyi",
   "bindings/python/ethlib/networking/noise/_types.py",
-  "tests/consensus/pq_keys/generate.py",
   "tests/consensus/large_amounts/generator/",
+  "tests/consensus/relay_api/specs/",
 ]
 
 [tool.ruff.per-file-target-version]
@@ -99,7 +99,7 @@ ban-relative-imports = "all"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-first-party = ["ethlib"]
-# The key generator imports ssz-specs, whose name a suite shares.
+# The SSZ limit generator imports ssz-specs, whose name a suite shares.
 known-third-party = ["ssz"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -113,8 +113,8 @@ known-third-party = ["ssz"]
 
 [tool.codespell]
 # Names in the code: a re-encoding, plural data, a serializer, a truncated status, a regex,
-# and "Caf" before the escaped byte of "Café".
-ignore-words-list = "caf,datas,ommit,reencode,ser,statu"
+# "Caf" before the escaped byte of "Café", and a two-letter client code of the Engine API.
+ignore-words-list = "bu,caf,datas,ommit,reencode,ser,statu"
 
 [tool.ty.environment]
 python-version = "3.12"
@@ -122,13 +122,12 @@ python-version = "3.12"
 root = ["bindings/python", "bindings/python/tests", "scripts"]
 
 [tool.ty.src]
-# The key and SSZ limit generators import ssz-specs as `ssz`, which resolves here to the tests.
-# Only their own environments install ssz-specs.
+# The SSZ limit generator imports ssz-specs as `ssz`, which resolves here to the tests.
+# Only its own environment installs ssz-specs.
 # The generator of the large-amount vectors runs inside the consensus specification.
 # The extractor of the OpenRPC examples runs in its own environment, with PyYAML.
 exclude = [
   ".claude/",
-  "tests/consensus/pq_keys/generate.py",
   "tests/serialization/ssz_limits/generate.py",
   "tests/consensus/large_amounts/generator",
   "tests/engine/extract_openrpc.py",

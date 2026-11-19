@@ -126,7 +126,7 @@ def test_listener_rejects_a_message_that_does_not_decode() -> None:
 
 
 def test_dialer_rejects_a_message_that_does_not_decode() -> None:
-    with raises(multistream.MultistreamError, PREFIX.format(0) + "missingNewline") as info:
+    with raises(multistream.MultistreamError, PREFIX.format(0) + "missingNewline 97") as info:
         multistream.dial([KAD], bytes.fromhex("036e6161"))
     assert info.value.code == 4
 

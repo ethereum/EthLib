@@ -37,7 +37,8 @@ theorem Fp.length_toBytes (x : Fp) : x.toBytes.length = 32 := Base.natToBytes_le
 
 /-- 32 bytes as a coordinate, by SEC 1 v2 §2.3.6: the integer must be below `p`. -/
 def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
-  if h : Base.bytesToNat bytes < Fp.modulus then .ok ⟨_, h⟩ else .error .coordinateTooLarge
+  if h : Base.bytesToNat bytes < Fp.modulus then .ok ⟨_, h⟩
+  else .error (.coordinateTooLarge (Base.bytesToNat bytes))
 
 namespace Point
 

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.CodewordSearch
@@ -120,9 +121,9 @@ theorem otsPublicLeaf_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) 
       th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _
 
 /-- A node hash of the layer queries no trial input of the other layer. -/
-theorem nodeHash_isQueryBoundP_otherLayer (pp : PublicParam) (level j : Nat)
+theorem nodeHash_isQueryBoundP_otherLayer (pp : PublicParam) (q : Merkle.Position)
     (left right : Digest) :
-    IsQueryBoundP (nodeHash Hq pp layer level j left right)
+    IsQueryBoundP (nodeHash Hq pp layer q left right)
       (IsTrialQuery (addrMsg layer' e') k) 0 :=
   th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _
 
@@ -132,14 +133,14 @@ theorem node_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (level j 
       (IsTrialQuery (addrMsg layer' e') k) 0 :=
   merkleNode_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
-    (fun _ _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _ _) _ _
+    (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _
 
 /-- A key's path queries no trial input of the other layer. -/
 theorem path_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : Nat) :
     IsQueryBoundP (path Hq pp (seedPrf Hq seed) layer e) (IsTrialQuery (addrMsg layer' e') k) 0 :=
   merkleSiblings_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
-    (fun _ _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _ _) _ _ _
+    (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _ _
 
 /-- A one-time signature on the layer queries no trial input of the other layer. -/
 theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : UInt32)

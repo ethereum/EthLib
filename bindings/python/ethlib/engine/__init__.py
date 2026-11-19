@@ -28,13 +28,35 @@ def new_payload(config: dict, method: str, params: list) -> dict:
 
 
 def new_payload_on_chain(
-    config: dict, state: bytes, recent: Sequence[RecentBlock], method: str, params: list
+    config: dict,
+    state: bytes,
+    recent: Sequence[RecentBlock],
+    method: str,
+    params: list,
+    *,
+    terminal_total_difficulty: int,
+    total_difficulty: int,
 ) -> tuple[dict, bytes | None, bytes | None]:
     """The payload status of an `engine_newPayload` call, on a chain that holds the parent."""
+    # `total_difficulty` is that of the last recent block.
+    # A last block before Paris must be terminal for `terminal_total_difficulty`.
     # A valid payload also gives the RLP encodings of its header and of the accounts after it.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     items = [(name, header, list(ommers)) for name, header, ommers in recent]
-    return _native.engine_new_payload_on_chain(config, state, items, request)
+    return _native.engine_new_payload_on_chain(
+        config, state, items, terminal_total_difficulty, total_difficulty, request
+    )
+
+
+def new_payload_routes(
+    config: dict[str, Any], preset: str, fork: str, request: bytes
+) -> tuple[list[Any] | None, str | None, int | None, bool]:
+    """Run a beacon payload request in SSZ through the JSON method and the beacon engine."""
+    # The result is the JSON parameters, then the status of the method or the code of its error.
+    # Last comes whether the beacon engine accepts, with the state transition taken as passed.
+    # Neither route holds the parent's state, so both stop before execution.
+    # The parameters are None only for a preset whose logs Bloom filter is not 256 bytes.
+    return _native.engine_new_payload_routes(config, preset, fork, request)
 
 
 def build_payload(
@@ -66,13 +88,23 @@ def build_payload(
 
 
 def forkchoice_updated(
-    config: dict, tree: list, method: str, params: list, finalized: str | None = None
+    config: dict,
+    tree: list,
+    method: str,
+    params: list,
+    finalized: str | None = None,
+    *,
+    terminal_total_difficulty: int,
 ) -> dict:
-    """The response to an `engine_forkchoiceUpdated` call, against a tree of known payloads."""
-    # Each payload of the tree has a block hash, a parent hash, a validity, a number and a time.
+    """The response to an `engine_forkchoiceUpdated` call, against a tree of known blocks."""
+    # Each block of the tree has a block hash, a parent hash, a validity, a number and a time.
+    # A block of proof of work also has `totalDifficulty` and `parentTotalDifficulty`.
+    # The most recent one on the chain of the head must be terminal for `terminal_total_difficulty`.
     # The execution layer may know a finalized block, the latest one an earlier update named.
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-    return _native.engine_forkchoice_updated(config, tree, finalized, request)
+    return _native.engine_forkchoice_updated(
+        config, tree, finalized, terminal_total_difficulty, request
+    )
 
 
 # One entry of a blob pool: the versioned hash, the blob, the blob proof, and the 128 cells.
@@ -209,6 +241,20 @@ def exchange_transition_configuration(
     )
 
 
+def exchange_capabilities(method: str, params: list[Any]) -> list[str]:
+    """The answer to an `engine_exchangeCapabilities` call: the methods that EthLib defines."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_exchange_capabilities(request)
+
+
+def get_client_version(
+    code: str, name: str, version: str, commit: bytes, method: str, params: list[Any]
+) -> list[dict[str, str]]:
+    """The answer to an `engine_getClientVersionV1` call at a node with a 4-byte commit."""
+    request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+    return _native.engine_get_client_version(code, name, version, commit, request)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -279,6 +325,72 @@ def prepare_execution_payload_gloas(
     )
 
 
+def payload_attributes_event(
+    name: str,
+    fork: str,
+    state: bytes,
+    safe_block_hash: bytes,
+    finalized_block_hash: bytes,
+    suggested_fee_recipient: bytes,
+    pow_chain: list[bytes] | None = None,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+    *,
+    terminal_number: int = 0,
+) -> tuple[str, str] | None:
+    """Bellatrix to Fulu: the Beacon API payload attributes event of a proposer, or None."""
+    # The event is the name of its topic and the text of its JSON data.
+    # It is None when the proposer asks for nothing, before the merge.
+    # The terminal number is that of the terminal PoW block, taken on trust before the merge.
+    return _native.engine_payload_attributes_event(
+        name,
+        fork,
+        state,
+        config,
+        safe_block_hash,
+        finalized_block_hash,
+        suggested_fee_recipient,
+        pow_chain or [],
+        terminal_number,
+    )
+
+
+def payload_attributes_event_gloas(
+    name: str,
+    fork: str,
+    anchor_state: bytes,
+    anchor_block: bytes,
+    steps: list[ForkChoiceStep],
+    head_root: bytes,
+    head_status: int,
+    state: bytes,
+    safe_block_hash: bytes,
+    suggested_fee_recipient: bytes,
+    target_gas_limit: int,
+    verify: bool = True,
+    # `Any`, because `dict` is invariant in its values.
+    config: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    """Gloas: the Beacon API payload attributes event of a proposer on a store."""
+    # The arguments are those of `prepare_execution_payload_gloas`, without custody columns.
+    # The event reads the state of the attributes, the one on which the proposer builds.
+    return _native.engine_payload_attributes_event_gloas(
+        name,
+        fork,
+        anchor_state,
+        anchor_block,
+        steps,
+        head_root,
+        head_status,
+        state,
+        safe_block_hash,
+        suggested_fee_recipient,
+        target_gas_limit,
+        verify,
+        config,
+    )
+
+
 def finalized_execution_block_hash(
     name: str,
     fork: str,
@@ -301,6 +413,7 @@ __all__ = [
     "jwt_check",
     "new_payload",
     "new_payload_on_chain",
+    "new_payload_routes",
     "forkchoice_updated",
     "get_blobs",
     "PoolEntry",
@@ -315,9 +428,13 @@ __all__ = [
     "read_payload_bodies_result",
     "read_get_blobs_result",
     "exchange_transition_configuration",
+    "exchange_capabilities",
+    "get_client_version",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",
+    "payload_attributes_event",
+    "payload_attributes_event_gloas",
     "finalized_execution_block_hash",
     "EngineError",
     "JwtError",

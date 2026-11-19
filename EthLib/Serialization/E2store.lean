@@ -58,35 +58,37 @@ def VERSION : UInt16 := 0x6532
 
 /-- Why bytes are not an e2store file, or records cannot be written. -/
 inductive E2storeError where
-  /-- The bytes end inside the header of a record. -/
-  | truncatedHeader
-  /-- The bytes end inside the data of a record. -/
-  | truncatedData
-  /-- A reserved byte of a header is not zero. -/
-  | reservedNotZero
-  /-- The data of a record has `2^32` bytes or more, which its length cannot write.
+  /-- The `available` bytes end before the end of the header at the position `offset`. -/
+  | truncatedHeader (offset available : Nat)
+  /-- The `available` bytes end inside the data of the record at the position `offset`.
+
+  Its header announces `length` bytes of data. -/
+  | truncatedData (offset length available : Nat)
+  /-- A reserved byte of a header is not zero: the two reserved bytes are `first` and `second`. -/
+  | reservedNotZero (first second : UInt8)
+  /-- The data of a record has `length` bytes, `2^32` or more, which its length cannot write.
 
   Only the encoder raises it. -/
-  | dataTooLong
-  /-- The first record is not a Version record. -/
-  | noVersion
-  /-- A Version record has data. -/
-  | versionData
-  /-- The data of an index record is not 16 bytes plus 8 bytes for each entry it counts. -/
-  | indexSize
+  | dataTooLong (length : Nat)
+  /-- The first record is not a Version record: it has the type `type`, or there is none. -/
+  | noVersion (type : Option UInt16)
+  /-- The first Version record with data is at `index` among the records, counted from 0. -/
+  | versionData (index : Nat)
+  /-- The data of an index record, of `size` bytes, is not 16 bytes plus 8 for each entry. -/
+  | indexSize (size : Nat)
   deriving Repr, DecidableEq
 
 /-- The stable code of an error, one per constructor.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def E2storeError.code : E2storeError → UInt32
-  | .truncatedHeader => 1
-  | .truncatedData => 2
-  | .reservedNotZero => 3
-  | .dataTooLong => 4
-  | .noVersion => 5
-  | .versionData => 6
-  | .indexSize => 7
+  | .truncatedHeader .. => 1
+  | .truncatedData .. => 2
+  | .reservedNotZero .. => 3
+  | .dataTooLong _ => 4
+  | .noVersion _ => 5
+  | .versionData _ => 6
+  | .indexSize _ => 7
 
 /-- The header of a record of the type `type` whose data has `length` bytes.
 
@@ -104,7 +106,7 @@ def encode (records : List Record) : Except E2storeError ByteArray :=
     if record.data.size < 2 ^ 32 then
       .ok (out ++ encodeHeader record.type record.data.size ++ record.data)
     else
-      .error .dataTooLong
+      .error (.dataTooLong record.data.size)
 
 /-- What a header says: the type of its record and the length of its data. -/
 structure Header where
@@ -119,11 +121,11 @@ structure Header where
 An index of an era1 or era file points at such a position. -/
 def readHeader (bytes : ByteArray) (offset : Nat) : Except E2storeError Header :=
   if bytes.size < offset + 8 then
-    .error .truncatedHeader
+    .error (.truncatedHeader offset bytes.size)
   else
     let byte (i : Nat) := byteAt bytes (offset + i)
     if byte 6 ≠ 0 ∨ byte 7 ≠ 0 then
-      .error .reservedNotZero
+      .error (.reservedNotZero (byte 6) (byte 7))
     else
       .ok ⟨UInt16.ofNat (bytesToNat [byte 0, byte 1]),
         bytesToUint #v[byte 2, byte 3, byte 4, byte 5]⟩
@@ -136,7 +138,7 @@ def decodeFrom (bytes : ByteArray) (offset : Nat) (acc : Array Record) :
     | .error e => .error e
     | .ok header =>
       if bytes.size < offset + 8 + header.length then
-        .error .truncatedData
+        .error (.truncatedData offset header.length bytes.size)
       else
         let data := bytes.extract (offset + 8) (offset + 8 + header.length)
         decodeFrom bytes (offset + 8 + header.length) (acc.push ⟨header.type, data⟩)
@@ -153,9 +155,11 @@ def decode (bytes : ByteArray) : Except E2storeError (List Record) :=
 Every Version record must have no data. -/
 def decodeFile (bytes : ByteArray) : Except E2storeError (List Record) := do
   let records ← decode bytes
-  unless (records.head?.map (·.type)) = some VERSION do throw .noVersion
+  let first := records.head?.map (·.type)
+  unless first = some VERSION do throw (.noVersion first)
   unless records.all (fun record => record.type != VERSION || record.data.size == 0) do
-    throw .versionData
+    let index := records.findIdx fun record => record.type == VERSION && record.data.size != 0
+    throw (.versionData index)
   return records
 
 /-- The position of each record in the bytes that encode the records, from the position `pos`. -/
@@ -195,11 +199,11 @@ So the data has 16 bytes plus 8 bytes for each entry it counts.
 -/
 def readIndex (data : ByteArray) : Except E2storeError Index :=
   if data.size < 16 then
-    .error .indexSize
+    .error (.indexSize data.size)
   else
     let count := Ssz.readUint data.data (data.size - 8) 8
     if data.size ≠ 16 + 8 * count then
-      .error .indexSize
+      .error (.indexSize data.size)
     else
       .ok ⟨Ssz.readUint data.data 0 8, (List.range count).map fun i => readInt64 data (8 + 8 * i)⟩
 

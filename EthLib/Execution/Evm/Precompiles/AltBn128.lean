@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Base.BigEndian
 public import EthLib.Base.Fork
 public import EthLib.Cryptography.AltBn128.Pairing
@@ -29,15 +30,35 @@ Every failure consumes all the gas, so the error only says why. -/
 inductive AltBn128Error where
   /-- The gas given was below the price. -/
   | outOfGas (cost gas : Nat)
-  /-- A coordinate is not below the field modulus `p`. -/
-  | invalidFieldElement
-  /-- A point is not on its curve. -/
-  | notOnCurve
-  /-- The call data of a pairing check is not a whole number of 192-byte pairs. -/
+  /-- A coordinate `value` is not below the field modulus `p`. -/
+  | invalidFieldElement (value : Nat)
+  /-- A point is not on its curve.
+
+  It holds the bytes `point` read from the call data, with zeros past its end. -/
+  | notOnCurve (point : ByteArray)
+  /-- The call data of a pairing check has `size` bytes, not a whole number of 192-byte pairs. -/
   | invalidInputLength (size : Nat)
-  /-- A point of the twist is not in the group of order `q`. -/
-  | notInSubgroup
-  deriving Repr, DecidableEq
+  /-- A point of the twist is not in the subgroup of order `q`.
+
+  It holds the bytes `point` read from the call data, with zeros past its end. -/
+  | notInSubgroup (point : ByteArray)
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def altBn128ErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named and each byte string in hex. -/
+def AltBn128Error.reprPrec : AltBn128Error → Nat → Std.Format
+  | .outOfGas cost gas, p =>
+    altBn128ErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+  | .invalidFieldElement value, p =>
+    altBn128ErrorFormat "invalidFieldElement" [namedArg "value" value] p
+  | .notOnCurve point, p => altBn128ErrorFormat "notOnCurve" [namedArg "point" point] p
+  | .invalidInputLength size, p => altBn128ErrorFormat "invalidInputLength" [namedArg "size" size] p
+  | .notInSubgroup point, p => altBn128ErrorFormat "notInSubgroup" [namedArg "point" point] p
+
+instance : Repr AltBn128Error := ⟨AltBn128Error.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 
@@ -46,10 +67,10 @@ The code ignores the arguments of the constructor.
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def AltBn128Error.code : AltBn128Error → UInt32
   | .outOfGas .. => 1
-  | .invalidFieldElement => 2
-  | .notOnCurve => 3
+  | .invalidFieldElement _ => 2
+  | .notOnCurve _ => 3
   | .invalidInputLength .. => 4
-  | .notInSubgroup => 5
+  | .notInSubgroup _ => 5
 
 /-- The price of an addition: 500 from EIP-196, and 150 from Istanbul by EIP-1108. -/
 def ecaddGas (fork : Fork) : Nat := if fork ≥ .istanbul then 150 else 500
@@ -74,9 +95,9 @@ def bytesToG1 (raw : List UInt8) : Except AltBn128Error Point := do
       if x = 0 ∧ y = 0 then
         return .infinity
       let point := Point.affine ⟨x, hx⟩ ⟨y, hy⟩
-      if point.isOnCurve then return point else throw .notOnCurve
-    else throw .invalidFieldElement
-  else throw .invalidFieldElement
+      if point.isOnCurve then return point else throw (.notOnCurve ⟨raw.toArray⟩)
+    else throw (.invalidFieldElement y)
+  else throw (.invalidFieldElement x)
 
 /-- The 64 bytes of a point: its two coordinates, and all zeros for the point at infinity. -/
 def g1ToBytes : Point → List UInt8
@@ -107,7 +128,7 @@ def ecmul (fork : Fork) (data : ByteArray) (gas : Nat) : Except AltBn128Error By
 /-- An element of `Fp` from 32 bytes. -/
 def bytesToFp (raw : List UInt8) : Except AltBn128Error Fp :=
   let value := bytesToNat raw
-  if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error .invalidFieldElement
+  if h : value < Fp.modulus then .ok ⟨value, h⟩ else .error (.invalidFieldElement value)
 
 /-- A point of the twist from 128 bytes, with zeros for the point at infinity.
 
@@ -122,7 +143,7 @@ def bytesToG2 (raw : List UInt8) : Except AltBn128Error Point2 := do
   if x = ⟨0, 0⟩ ∧ y = ⟨0, 0⟩ then
     return .infinity
   let point := Point2.affine x y
-  if point.isOnCurve then return point else throw .notOnCurve
+  if point.isOnCurve then return point else throw (.notOnCurve ⟨raw.toArray⟩)
 
 /-- The 128 bytes of a point of the twist, with the `i` part of each coordinate first.
 
@@ -150,7 +171,7 @@ def decodePair (data : ByteArray) (index : Nat) : Except AltBn128Error (Point ×
   let q ← bytesToG2 (bufferRead data (192 * index + 64) 128)
   -- The order has 254 bits, so 256 bits of the scalar cover it.
   if Point2.mulBits 256 Fr.modulus q ≠ .infinity then
-    throw .notInSubgroup
+    throw (.notInSubgroup ⟨(bufferRead data (192 * index + 64) 128).toArray⟩)
   return (p, q)
 
 /-- The 32-byte word of a boolean: 31 zero bytes, then `1` for true and `0` for false. -/

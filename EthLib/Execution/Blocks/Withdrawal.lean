@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Address
+public import EthLib.Base.Denominations
 public import EthLib.Execution.State.Tracker
 public import EthLib.Serialization.Rlp.Codec
 
@@ -60,9 +61,6 @@ end Withdrawal
 instance : Codec Withdrawal := ⟨Withdrawal.toItem, Withdrawal.ofItem⟩
 
 open EthLib.Execution.State
-
-/-- The wei in one Gwei. -/
-def GWEI_TO_WEI : Nat := 10 ^ 9
 
 /-- Add the amount of each withdrawal, in wei, to the balance of its account, in order.
 

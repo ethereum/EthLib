@@ -34,12 +34,17 @@ def Slashable {g a b : ForkedBeaconState preset} (left : Run config checks g a)
 
 /-- A key is accountable when the runs accepted two of its votes that a slashing would punish.
 
-It is also accountable when a block of either run applied a slashing that names it.
+The votes may come from the shared prefix or from either tail.
 
-That slashing may be a proposer slashing, and it may be in a shared prefix of the runs. -/
-def Accountable {g a b : ForkedBeaconState preset} (left : Run config checks g a)
-    (right : Run config checks g b) (key : BLSPubkey) : Prop :=
-  Slashable left right key ∨ left.SlashingEvidence key ∨ right.SlashingEvidence key
+It is also accountable when a block of either tail applied a slashing that names it.
+
+That slashing may be a proposer slashing.
+
+A slashing in the shared prefix does not make a key accountable by itself. -/
+def Accountable {g x a b : ForkedBeaconState preset} (shared : Run config checks g x)
+    (left : Run config checks x a) (right : Run config checks x b) (key : BLSPubkey) : Prop :=
+  Slashable (shared.append left) (shared.append right) key ∨
+    left.SlashingEvidence key ∨ right.SlashingEvidence key
 
 /-- A quorum call of either run.
 
@@ -71,8 +76,12 @@ def EitherCall.state {g a b : ForkedBeaconState preset} {left : Run config check
 
 /-- Two quorums with different targets at one epoch make their common voters slashable.
 
-Each common voter has a vote of the runs for each target, so it voted twice in that epoch. -/
-private theorem view_same_epoch {g a b : ForkedBeaconState preset}
+Each common voter has a vote of the runs for each target, so it voted twice in that epoch.
+
+Each quorum is a quorum call of its run, or the test of the step of its view.
+
+The runs start at one genesis built from deposits, and the preset meets the parameters. -/
+theorem view_same_epoch {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
     (parameters : Parameters preset) (genesis : Genesis config checks g)
     {va : TerminalView a} {vb : TerminalView b}
@@ -91,20 +100,6 @@ private theorem view_same_epoch {g a b : ForkedBeaconState preset}
     exact different (target₁.symm.trans ((congrArg AttestationData.target same).trans target₂))
   · rw [target₁, target₂]
     exact epoch
-
-/-- Two quorum calls with different targets at one epoch make their common voters slashable.
-
-Each common voter has a vote of the runs for each target, so it voted twice in that epoch.
-
-The runs start at one genesis built from deposits, and the preset meets the parameters. -/
-theorem same_epoch_histories {g a b : ForkedBeaconState preset}
-    (left : Run config checks g a) (right : Run config checks g b)
-    (parameters : Parameters preset) (genesis : Genesis config checks g)
-    (one : QuorumCall left) (two : QuorumCall right)
-    (epoch : one.target.epoch = two.target.epoch) (different : one.target ≠ two.target) :
-    ∀ key ∈ one.voters ∩ two.voters, Slashable left right key :=
-  view_same_epoch left right parameters genesis (va := .realized) (vb := .realized)
-    (.inl one) (.inl two) epoch different
 
 private theorem view_surround {g a b : ForkedBeaconState preset}
     (left : Run config checks g a) (right : Run config checks g b)
@@ -144,7 +139,8 @@ private theorem checkpointPath_zero {g a : ForkedBeaconState preset}
         omega
       simp only [Step.headers, blockHeader]
       cases root : (Serialization.Ssz.SszType.hashTreeRoot signed.message.body).toOption <;>
-        (simp [Option.toList]; try omega)
+        simp [Option.toList]
+      omega
 
 /-- A finalized field of the left view conflicts with a right field at its epoch or later.
 

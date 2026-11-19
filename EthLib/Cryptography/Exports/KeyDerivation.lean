@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Cryptography.Exports.Bls
 public import EthLib.Cryptography.Bls.KeyDerivation
 public import EthLib.Cryptography.Bls.KeyPath

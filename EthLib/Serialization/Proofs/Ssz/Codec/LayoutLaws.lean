@@ -2,18 +2,13 @@ module
 
 public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
 public import EthLib.Serialization.Proofs.Ssz.Codec.Admits
+public import EthLib.Serialization.Proofs.Ssz.Type.Equality
 
 /-! Nested leaves always carry types shallower than their enclosing type. -/
 
 @[expose] public section
 
 namespace EthLib.Serialization.Ssz
-
-/-- A type in a list is nested no deeper than the deepest type in that list. -/
-theorem nesting_le_deepest (shape : Desc) (fields : List Desc)
-    (member : shape ∈ fields) : shape.nesting ≤ Desc.deepestNesting fields := by
-  -- The maximum over fields bounds each individual field depth.
-  induction fields <;> grind [Desc.deepestNesting]
 
 private theorem sequenceLayout_depth (element : Desc) (values : List Value)
     (positions : Option Nat) (mixin : Option Bytes) (layout : MerkleLayout)

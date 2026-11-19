@@ -85,7 +85,7 @@ A member index outside the registry is an error. -/
 def isValidInclusionListSignature (config : Config) (state : BeaconState preset fork)
     (signed : SignedInclusionList) : Except AccessorError Bool := do
   let validator ← getValidator state signed.message.validatorIndex
-  let root ← (inclusionListSigningRoot config state signed.message).mapError fun _ => .ssz
+  let root ← (inclusionListSigningRoot config state signed.message).mapError .ssz
   return Signatures.verify validator.pubkey (packBytes root)
     signed.signature
 

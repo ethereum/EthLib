@@ -220,6 +220,26 @@ def processBlockExecution (config : Config) (checks : SignatureChecks)
       processExecutionPayload config engine state body execution
     else pure state
 
+/-- The state that the operations of a block read.
+
+From Gloas the payload of the parent block runs first, if the parent has one.
+
+The header runs next, then from Bellatrix the execution part of the block.
+
+The RANDAO reveal and, before Heze, the vote on the deposit contract follow. -/
+def stateBeforeOperations (config : Config) (checks : SignatureChecks)
+    (engine : ExecutionEngine preset fork) (state : BeaconState preset fork)
+    (block : BeaconBlock preset fork) : Except TransitionError (BeaconState preset fork) := do
+  let state ← (if gloas : .glamsterdam ≤ fork then
+      processParentExecutionPayload config checks state gloas block.body
+    else pure state)
+  let state ← processBlockHeader state block
+  let state ← (if bellatrix : .bellatrix ≤ fork then
+      processBlockExecution config checks engine state block.body bellatrix
+    else pure state)
+  let state ← processRandao config checks state block.body
+  if before : fork < .hegota then processEth1Data before state block.body else pure state
+
 /-- From Altair: the state after a block.
 
 From Gloas the payload of the parent block runs first, if the parent has one.
@@ -241,16 +261,7 @@ def processBlockAltair (config : Config) (checks : SignatureChecks)
     (block : BeaconBlock preset fork) (altair : .altair ≤ fork) :
     Except TransitionError (BeaconState preset fork) := do
   let parentSlot := state.latestBlockHeader.slot
-  let state ← (if gloas : .glamsterdam ≤ fork then
-      processParentExecutionPayload config checks state gloas block.body
-    else pure state)
-  let state ← processBlockHeader state block
-  let state ← (if bellatrix : .bellatrix ≤ fork then
-      processBlockExecution config checks engine state block.body bellatrix
-    else pure state)
-  let state ← processRandao config checks state block.body
-  let state ← (if before : fork < .hegota then processEth1Data before state block.body
-    else pure state)
+  let state ← stateBeforeOperations config checks engine state block
   let state ← processOperations config checks state block.body parentSlot
   processSyncAggregate config checks state altair (block.body.syncAggregate altair)
 
@@ -266,11 +277,8 @@ def processBlock (config : Config) (checks : SignatureChecks)
     (block : BeaconBlock preset fork) : Except TransitionError (BeaconState preset fork) :=
   if altair : .altair ≤ fork then processBlockAltair config checks engine state block altair
   else do
-    have before : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le altair) (by decide)
     let parentSlot := state.latestBlockHeader.slot
-    let state ← processBlockHeader state block
-    let state ← processRandao config checks state block.body
-    let state ← processEth1Data before state block.body
+    let state ← stateBeforeOperations config checks engine state block
     processOperations config checks state block.body parentSlot
 
 /-- The check, when the result is validated, that a block carries its proposer's signature. -/
@@ -278,14 +286,16 @@ def checkBlockSignature (validateResult : Bool) (config : Config) (checks : Sign
     (state : BeaconState preset fork) (signed : SignedBeaconBlock preset fork) :
     Except TransitionError Unit :=
   if validateResult then do
-    ensure ((← verifyBlockSignature config checks state signed) = true) .invalidBlockSignature
+    ensure ((← verifyBlockSignature config checks state signed) = true)
+      (.invalidBlockSignature signed.message.proposerIndex signed.message.slot)
   else pure ()
 
 /-- The check, when the result is validated, that a block commits to the root of a state. -/
 def checkStateRoot (validateResult : Bool) (state : BeaconState preset fork)
     (block : BeaconBlock preset fork) : Except TransitionError Unit :=
   if validateResult then do
-    ensure (block.stateRoot = (← liftSsz (hashTreeRoot state))) .wrongStateRoot
+    let root ← liftSsz (hashTreeRoot state)
+    ensure (block.stateRoot = root) (.wrongStateRoot block.stateRoot root)
   else pure ()
 
 /-- The state after a signed block, on a state already at the slot of the block.

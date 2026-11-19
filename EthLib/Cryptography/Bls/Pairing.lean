@@ -108,31 +108,31 @@ def millerLoop (s : Nat) (q : Fp2 F × Fp2 F) (p : F × F) : Fp12 F :=
 
 /-! ## Final exponentiation -/
 
-/-- The exponent `(p¹² − 1) / r`. -/
+/-- The exponent `(p^12 − 1) / r`. -/
 def finalExpExponent : Nat :=
   (Fp.modulus ^ 12 - 1) / Fr.modulus
 
-/-- Raise `f` to `(p¹² − 1) / r`.
+/-- Raise `f` to `(p^12 − 1) / r`.
 
-The exponent is the product of `p⁶ − 1`, `p² + 1` and the hard part `h = (p⁴ − p² + 1) / r`.
+The exponent is the product of `p^6 − 1`, `p^2 + 1` and the hard part `h = (p^4 − p^2 + 1) / r`.
 
-In this tower, `f^(p⁶)` is the conjugate of `f`.
+In this tower, `f^(p^6)` is the conjugate of `f`.
 
-So the first factor costs one inversion: `f^(p⁶ − 1) = conj(f) · f⁻¹`.
+So the first factor costs one inversion: `f^(p^6 − 1) = conj(f) · f⁻¹`.
 
 The second factor costs two Frobenius maps and one product.
 
-The result `m` satisfies `m^(p⁶) = m⁻¹`.
+The result `m` satisfies `m^(p^6) = m⁻¹`.
 
 So the power of `m` by `−n` is the conjugate of its power by `n`.
 
 The hard part uses the BLS parameter `x = −|x|`, since `p` and `r` are polynomials in `x`.
 
-Hayashida, Hayasaka and Teruya give `3 h = (x − 1)² (x + p) (x² + p² − 1) + 3`.
+Hayashida, Hayasaka and Teruya give `3 h = (x − 1)^2 (x + p) (x^2 + p^2 − 1) + 3`.
 
 See [eprint 2020/875](https://eprint.iacr.org/2020/875), §5, "BLS family with k = 12".
 
-With `x = −|x|`, this is `h = ((|x| + 1)² / 3) (p − |x|) (|x|² + p² − 1) + 1`.
+With `x = −|x|`, this is `h = ((|x| + 1)^2 / 3) (p − |x|) (|x|^2 + p^2 − 1) + 1`.
 
 So `m^h` needs only powers by `|x|` and `(|x| + 1) / 3`, Frobenius maps and conjugates.
 
@@ -142,15 +142,15 @@ For a nonzero input, the easy part outputs an element of the cyclotomic subgroup
 
 So the hard part squares with the cyclotomic formula, which also maps zero to zero.
 
-The steps compute exactly `f^((p¹² − 1) / r)`, and a theorem proves it. -/
+The steps compute exactly `f^((p^12 − 1) / r)`, and a theorem proves it. -/
 def finalExponentiation (f : Fp12 F) : Fp12 F :=
   let t := f.conjugate * f.inverse
   let m := t.frobenius.frobenius * t
-  -- `a = m^((|x| + 1)² / 3)`.
+  -- `a = m^((|x| + 1)^2 / 3)`.
   let a := (m.cyclotomicPow ((blsX + 1) / 3)).cyclotomicPow (blsX + 1)
   -- `b = a^(p − |x|)`.
   let b := a.frobenius * (a.cyclotomicPow blsX).conjugate
-  -- `c = b^(|x|² + p² − 1)`.
+  -- `c = b^(|x|^2 + p^2 − 1)`.
   let c := (b.cyclotomicPow blsX).cyclotomicPow blsX * b.frobenius.frobenius * b.conjugate
   c * m
 

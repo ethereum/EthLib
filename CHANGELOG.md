@@ -7,11 +7,958 @@ The version is the same in `pyproject.toml` and `lakefile.lean`.
 
 Not yet released.
 
+### Proof additions
+
+- `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  XMSS bounds key generation and signing on every path: at most `13434881` and `8630239231` calls.
+  Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
+  leanSPHINCS counts the calls under a fixed answer function.
+  Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
+  `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
+- `Unforgeability.Bridge.unforgeable_adversary` bounds a SPHINCS forgery by the adversary's own hash calls ([#3336](https://github.com/ethereum/EthLib/issues/3336)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + schemeCalls r) / 2^127`.
+  `schemeCalls r` bounds the calls of key generation, of `r` requests and of verification, about `2^63.7` at the model's cap of 1,182,000,000 requests.
+  `HasAdversaryQueryBound` reads both counts from `adversaryExperiment`, the game with a counter on the adversary's hash calls.
+  `mem_support_counted_iff` now holds for a game with any result type, not only a Boolean one.
+
+- `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
+  An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
+  `gameQueries qH r` adds upper bounds on the calls of key generation, of `r` requests and of the verification.
+  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+  `unforgeable` is unchanged.
+
+- `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
+  It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
+  `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.
+  The anchor state is reached by a run with BLS checks from a genesis built from deposits, and an epoch has at least one slot.
+  `Execution.rootViable_of_checked_call` takes the same genesis and run for any signature checks; this theorem fixes them to BLS.
+  The other premises are the anchor store and slot, and positive slot durations.
+  The preset keeps the bands of hysteresis, its seed lookahead covers at least one epoch, and the withdrawal delay is at least one epoch.
+  The preset meets `CapOrder` and the new `ActivationWithinMaxEffective`, which together make `MAX_EFFECTIVE_BALANCE` equal `MIN_ACTIVATION_BALANCE`.
+  `ActivationWithinMaxEffective.mainnet` and `ActivationWithinMaxEffective.minimal` show that it holds on both presets.
+  No separate headline discharges `QuorumDriftWithin`: a caller with BLS checks from Fulu to before Gloas composes `Execution.quorumDriftWithin` with `Execution.rootViable_of_checked_call` or `Execution.honestHeadsCover_of_checked_call`.
+  `Execution.heldStatesBeforeUpgrade_of_bounded` derives their premise `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
+  `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
+  `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
+
+- The quorum drift bound adds these facts of runs.
+  `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
+  `run_of_stateTransition` and `run_of_processSlots` give a run for one block or for the slots before it, when the slot is before the next fork.
+  `Run.split_next` splits a run that ends one epoch after it starts at the slot where its epoch changes.
+  `Run.induction_of_same_epoch` inducts over a run inside one epoch, and `advanceSlotAcross_of_same_epoch` shows such a slot only caches the slot.
+  Inside one epoch, `Run.fork_eq_of_same_epoch` keeps the fork, `Run.currentSyncCommittee_eq_of_same_epoch` the keys of the sync committee, and `Run.effectiveKept_of_same_epoch` each effective balance.
+  `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
+  `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
+
+- Its transition facts are in `Transition/BlockLedger.lean`, `Transition/BlockCredits.lean`, `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochReads.lean` and their neighbours.
+  The ledger of a block's balances is in `BlockLedger`, its proposer and deposit credits in `BlockCredits`, and the tally of an epoch's blocks in `BranchLedger`.
+  The helpers of the first two are public in the namespaces `BlockLedger` (such as `BlockLedger.Ledger` and `BlockLedger.Lives`) and `BlockCredits` (such as `BlockCredits.Kept` and `BlockCredits.lt_size_of_isActiveAt_recent`).
+  The generic pieces sit with their kind: `getBeaconProposerIndex_congr` and `proposerSearch_congr_validators` in `Accessors`, `WithdrawableKept` in `RegistryLifecycle`, and `withdrawableKept_processRegistryUpdates` in `PendingConsolidations` next to the registry-update lemma it reads.
+  `payloadInputs_addValidatorToRegistry` and `payloadInputs_processDeposit` are in `PayloadInputs`, and the `actualBalanceAt_*` step lemmas and the hysteresis lemmas are in `BalanceDrift`.
+  The growth of the queue of pending consolidations inside an epoch is in `PendingConsolidations`, as `ConsolidationQueueRise.QueueFrom`, `ConsolidationQueueRise.Grows`, `ConsolidationQueueRise.RiseStep` and `ConsolidationQueueRise.riseStep_processBlock`.
+  `Array.findIdx?_of_prefix` is in `Base/Proofs/List.lean`.
+  `Hysteresis` puts each effective balance within the bands of its balance.
+  `processEffectiveBalanceUpdates_hysteresis` establishes it, `Hysteresis.of_data` carries it to a state with the same validators and balances, and `Hysteresis.upgrade` keeps it across upgrades.
+  `EpochTrace.through_effectiveBalances` splits an epoch trace after the effective-balance updates.
+  `activeBalanceTotal` is the active effective balance as a natural number, and `getTotalActiveBalance_toNat` makes it the value of a successful read.
+  `syncRewardAt` is the participant reward of the sync committee as a natural number, and `syncParticipantReward_toNat` makes it the value of a successful read.
+  `syncSeats` counts the seats of a validator in the current sync committee, and `syncSeats_eq_length` equates it with the length of the beacon API's `BeaconApi.syncSeats`.
+  `activeFilter_eq` and `activeSum_eq` keep the active positions and their effective balances between two registries, and `seats_eq` keeps `syncSeats`.
+  `Store.Reachable.nonempty_run_of_blockState` gives a run from the anchor state to each held state, with the store's setting of the checks.
+  `getBaseReward_congr` reads the same base reward for two validators with the same effective balance, in one state or in two.
+  `processRewardsAndPenalties_balance_le_of_inactivityUpdates` bounds each balance after the rewards pass, given a bound on each base reward.
+  `processOperations_floor` bounds the balance of an unslashed validator through the operations of a block before Gloas.
+  The balance stays at least the smaller of its balance and its effective balance before them.
+  `actualBalanceAt_increaseBalance` and `actualBalanceAt_decreaseBalance` change the balance at one index and keep every other, and `actualBalanceAt_push` reads an appended balance.
+  `passPendingConsolidations_balanceNotLowered_of_waiting` keeps the balance of a source that cannot yet leave, and `queueConsolidation_queued` records the exit epoch and the queue entry of a consolidation.
+  `processBlock_currentSyncCommittee` keeps the current sync committee across a block.
+  `Transition/PartialWithdrawalQueue.lean` holds the step facts of the queue of pending partial withdrawals that the departure queue and the drift bound share.
+  `departureQueues` and its step lemmas move there from `DirectSafety/DepartureQueue.lean` and become public, with unchanged statements.
+  `PartialsSame` says that two states hold the same queue, and `PartialsSame.of_queues` reads it from equal departure queues.
+  `flagSumOf` states the flag sums of `SupplyBlock` for any base reward, and `recentFlagSum` adds both recent epochs; `flagRewardWeight` keeps its value.
+  `flagSumOf_le` bounds a flag sum by 54 base rewards per position, and `flagSumOf_foldlM_addAttesterFlags` raises it by at least the numerator its attesters gain.
+  `processAttestation_keepsFlag` keeps each flag an attestation finds, and `flags_exit` and `flags_processExecutionRequests` keep both lists of flags.
+  `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
+  `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
+  `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+
+- Some earlier private declarations are now public, with unchanged statements.
+  They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
+  They are also `flagValue`, `flagValue_le`, `isActiveAt_of_getAttestingIndices` and `withdrawnFrom_split`.
+  They are also `StepKeeps.refl`, `StepKeeps.trans`, `StepKeeps.of_validators` and fifteen `stepKeeps_*` step lemmas, of setValidator, decreaseBalance, initiateValidatorExit, slashValidator and the block operations.
+  They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
+  They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
+  `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
+
+- `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The churn call writes only the churn left and the earliest consolidation epoch.
+  The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
+
+- `Execution.confirmedRoot_covers` covers the last confirmed root of consecutive calls of the fast confirmation rule by one honest validator ([#1458](https://github.com/ethereum/EthLib/issues/1458), Theorem 1).
+  That root is on every up-to-date honest head from the next slot to a horizon.
+  The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence: historical, cross-store direct-safety, cross-store justified and held-state finality.
+  It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
+  Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
+  `CallObligations` does not include the caller's head read at each rollover: `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` from the theorem's other premises.
+  `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
+  The run assumes `JustifiedPinned`, `ByzantineCountedStake`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
+  It derives `HeldStatesBeforeUpgrade` through `Execution.heldStatesBeforeUpgrade_of_bounded`, from its horizon and `HonestStoreEpochsBounded`, so it does not take it.
+  It takes `CapOrder` and `ActivationWithinMaxEffective`, which it passes to `Execution.quorumDriftWithin`.
+  Its proof is a private step: one call keeps the call invariant, given the invariant at every earlier call.
+  `CallAt` names one call in a run of calls by one validator.
+  `FastConfirmation/ConfirmedCalls.lean` holds the walk of a call and the call invariant; the helpers that the step reads are public in its `ConfirmedCalls` namespace.
+  `FastConfirmation/ConfirmedCallStep.lean` holds the step and the theorem.
+  The step reads these new or newly public lemmas:
+  - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
+  - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
+  - `Store.Reachable.finalized_known` gives the block of a reachable store's finalized checkpoint; steps of `RootViability.lean` and `RootHeld.lean` read it too.
+  - `Execution.walk_covers` covers a walk of roots from its start and a step, and `honestHeadsCover_mono` shrinks the interval of a coverage.
+  - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
+    Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
+  - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
+  - `Execution.currentSlot_le_of_time_le` orders the current slots of honest stores at ordered times; `Execution.previousSlot_le_of_time_le` keeps its statement and reads it.
+    Both are in `ForkChoice/VoteDelivery.lean`; `Execution.previousSlot_le_of_time_le` moves there from `FastConfirmation/HistoricalTransport.lean`.
+  - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
+    `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
+  - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
+  - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
+    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are now public, with their statements unchanged.
+  - `Execution.crossStoreFinality_or_evidence` puts one honest store's finalized checkpoint on another's justified chain at that epoch or later, or gives `CrossStoreDirectSafetyEvidence`.
+    `Execution.finalized_read_or_accountable` is its step for one pair of stores.
+  - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.
+  - `Store.getCheckpointForBlock_eq_ok_iff` reads the checkpoint of an epoch in a chain as that epoch and its checkpoint block.
+  - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch` and `Store.getCheckpointBlock_self` read the clock and the checkpoint reads of a store.
+  - `Store.Reachable.anchor_le_finalized`, `Store.ForwardReachable.block_epoch_le_current`, `Store.ForwardReachable.justified_before_current`, `Store.ForwardReachable.unrealizedJustification_epoch_le` and `Store.ForwardReachable.votingSource_epoch_le` bound the epochs that a store holds.
+  - `Execution.isAncestor_of_le` keeps an ancestor test at every later event, and `Execution.anchor_unrealized_le` bounds an honest store's unrealized justified epoch below by the anchor store's.
+    `Execution.getBlockEpoch_of_le` keeps the epoch read of a held block at every later event.
+  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` in `ForkChoice/AncestorRoots.lean` read a walk of roots.
+    Each root has the root before it as parent, or the terminal block; the head descends from it, and it descends from the terminal block.
+    `Store.isAncestor_parentRoot_of_isAncestor` passes descent from a known block to its parent.
+  - `Store.voteCountsFor_eq_false_of_slot_eq_current` and `Store.not_isOneConfirmed_of_slot_eq_current` show that, in a forward store, no vote counts for a block at the current slot, so it is not one-confirmed.
+  - `Store.unrealizedJustification_found` reads an unrealized justification as its stored entry.
+  - `isStartSlotAtEpoch_eq`, `isStartSlotAtEpoch_next_eq_false` and `computeStartSlotAtEpoch_of_isStartSlotAtEpoch` read the start test of a slot as its remainder by the epoch length.
+
+- `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
+  At each up-to-date honest store, the root is in the filtered tree or below the justified block.
+  The alternatives are a collision of two honest stores and accountable-safety evidence.
+  `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
+  It replaces the consistency and the leaf of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
+  It derives the honest signer from `ByzantineCountedStake anchorEpoch 0 time`, a wider bound than the call-epoch one of `Execution.honestHeadsCover_of_byzantine_bound`, and adds the premise `JustifiedPinned`.
+  `Execution.rootInFilteredTree_of_checked` and `Execution.justified_comparable_of_checked` give the root's step at one time.
+  They and `justified_descends_of_duty` may instead give `HonestCollision`, two honest stores that collide on a block, and the first two may give `CrossStoreJustifiedEvidence`.
+  `Execution.blocksAgree_or_collision` splits that collision from the agreement of honest stores on the blocks they both hold, and `Execution.not_honestCollision_of_agree` rules it out under that agreement.
+  `Store.findBlockCollision_held` places a collision's two blocks in the two stores, and `Store.findBlockCollision_valid` now reads it.
+  `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
+  `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
+  `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
+  The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead` (derived by the headlines), `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  `DirectSafety.AccountableOrHashEvidence` is the direct-safety bound on two tails or hash evidence on their runs, and the statements that spelled it out now name it.
+  `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read.
+  `RootViableAt` is the viability of a root at one time.
+
+- The checked-call proofs add these general facts.
+  `SelectedCheckpointsAgree` says that honest justified checkpoints agree at each epoch, and `Execution.selectedCheckpointsAgree_or_evidence` derives it or returns evidence.
+  `Execution.justified_eq_or_accountable` and `Store.Reachable.justified_eq_or_accountable` give two equal justified checkpoints of one epoch, or evidence.
+  `Execution.held_finalized_read_or_accountable` reads an honest finality on a held state's justified chain, or gives evidence.
+  `HonestHoldsFrom` says that honest stores hold a root over an interval, and `ReservedTargetVotes` is a call's honest count with its pin reserve.
+  `quorumReserve_le_pinReserve` bounds the quorum reserve by the pin reserve.
+  `includedVotes_votingSource_ge` lifts the voting sources above a block that holds a target's counted votes to that target.
+  `boundary_le_of_duty` and `duty_after_call` place an honest duty in time.
+  `DirectSafety.view_justified_fields` shows that a justified field of a view is the genesis checkpoint, or a quorum targets it.
+
+- The store facts are `Store.getCheckpointBlock_walk`, the one walk of a checkpoint read, and `Store.held_of_isAncestor`.
+  `Store.comparable_of_ancestors` and `Store.eq_of_isAncestor_antisymm` order two ancestors of one head.
+  `Store.getCheckpointBlock_of_shared_origin` passes a checkpoint read to another store that agrees on its blocks.
+  `Store.exists_leaf_above_mem_filterNodeTree`, `Store.isViableLeaf_eq_true`, `Store.filterNodeTree_cases` and `Store.filterNodeTree_sub` read the filtered tree.
+  `Store.ForwardReachable.pulledUpHeadState_epoch`, `Store.ForwardReachable.votingSource_le_justified` and `Store.ForwardReachable.justified_le_of_pulledUp` bound the epochs that a store reads.
+  `Store.Reachable.blockState_induction`, `Store.Reachable.justified_le_of_blockState`, `Store.Reachable.finalizedState_of_blockState`, `Store.Reachable.finalized_lt_justified_or_anchor`, `Store.Reachable.realized_le_source` and `Store.Reachable.unrealizedJustification_origin` read the held states.
+  `DelayFits.start_add_lt_of_lt`, `slot_le_of_epoch_lt` and `exists_nextEpochStart_lt` are facts of the clock.
+
+- The transition facts are in `Transition/IncludedTargetVotes.lean`, `Transition/ParticipationFrames.lean` and their neighbours.
+  `processJustificationAndFinalization_justifies` and `advanceSlot_justifies` justify an epoch whose active, unslashed target voters (`UnslashedAt`) hold two thirds.
+  `weighJustificationAndFinalization_justifies`, `processJustificationAndFinalization_totalActiveBalance` and `advanceSlot_total_of_last` are their steps.
+  `advanceSlots_keepsVotes`, `processBlock_keepsVotes`, `keptVotes_trans` and `recentEpoch_eq` keep those votes inside an epoch.
+  `PendingAtOwnEpoch` and `pendingAtOwnEpoch_stateTransition` keep each pending attestation at its own epoch.
+  `advanceSlots_currentJustified_mono` and `stateTransition_currentJustified_mono` show that slots and blocks never lower the current justified epoch of an invariant state.
+  `TargetFlagAt.of_processBlock` keeps a target flag through a block, read from `processBlock_participationKept`.
+  `ParticipationKept`, `ParticipationKeptBelow`, `ParticipationKept.below` and `ParticipationKept.foldlM` are the participation-flag frames.
+  `RunKept.getPendingAttestingIndices_eq` and `recordPendingAttestation_lists` read pending attestations.
+
+- `advanceSlot_epochs` splits one slot into the end of an epoch or a step inside it, with the epochs on each side.
+  `recentPending_advanceSlot` adds the two lists of pending attestations, and `recentPending_pendingFrame` keeps them across a frame.
+  `TargetFlagsVoted.of_advanceSlot` and `PendingVoted.of_advanceSlot` read them, as does the proof of `Execution.rootViable_of_checked_call`.
+
+- `mem_getUnslashedParticipatingIndices_of_recent_flag` places an active, unslashed validator with a flag among the participants of the current or the previous epoch.
+  `mem_getUnslashedParticipatingIndices_of_flag` keeps its statement and is now its case of the previous epoch.
+
+- `Store.onTick_slot_induction` passes a fact of a store at its slot through a forward tick, from each tick within a slot.
+  `epoch_lt_of_offset_zero` places a slot at the start of its epoch in a later epoch than each earlier slot.
+  The proofs of the justified and finalized ages of a forward-reachable store read them.
+
+- `slotStart_le_of_slotAtTime` shows that each slot up to the slot at a time starts by that time.
+  `nextSlotStart_le_of_slotAtTime` shows it for the slot after an earlier one.
+  `slotStart_le_clock`, `DelayFits.deadline_add_le` and `duty_window_of_slot_le` read them.
+  `Store.isAncestor_of_getCheckpointBlock_above` places a checkpoint read above a block at or before the epoch's first slot.
+  `signerHead_of_duty` gives the head on which an honest duty's signer reads its target.
+
+- `Execution.honestTargetVotes_signed_of_checked` shows that an accepted current-target test has honest signers with two thirds of the active balance ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
+  Each signer votes for the target before the start of the next epoch, unless two honest stores collide on a block.
+  It assumes the honest count, honest heads above a block of the target's epoch until then, and the caller's head at that time.
+
+- `genesis_offset_of_slot_start` and `slot_at_start_of_genesis_offset` show that a genesis offset below one slot duration keeps the slot read at every slot start.
+
+- `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
+  Three times their stake is at least twice the total active balance plus the margin of the count.
+
+- `exitReserveNear` is the active source stake already scheduled to exit within three epochs of the source, the reach of a confirmation's near window.
+  `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
+  `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
+  `Preset.seedLookaheadAtLeastThree_mainnet` and `Preset.seedLookaheadAtLeastThree_minimal` show that both presets satisfy it.
+  Under it, no other source stake leaves by then, in any later state that keeps the source's fixed activity.
+  `exitReserve` keeps its value, and no theorem orders the two values.
+  `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
+  `SourceWindowReserve`, `WindowExitBound` and `ReceiverWindowExitsNear` are their instances at `exitReserve`, with their statements unchanged.
+  `Execution.isAncestor_getHead_of_historical_anchor_with` and `Execution.source_surplus_or_historical_evidence_with` take one reserve value for the window reserve and the exit bound.
+  The theorems without `_with` keep their statements and read them.
+
+- `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
+  The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
+  Each near receiver's head state keeps the source's activity three epochs ahead, so each full epoch of its window is bounded by `exitReserveNear`.
+
+- `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
+
+- `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
+  `HonestVoteData.target_read`, `Store.Reachable.getCheckpointBlock_anchor`, a step of `DutySupport.lean` and `Execution.honestTargetVotes_signed_of_checked` read it.
+
+- `DirectSafety.accountable_safety_apriori` bounds the drift of accountable safety from the reference state alone.
+  For two runs that finalize conflicting checkpoints, the unslashed stake at the shared state `x` is at most three times the accountable stake plus `2 * drift x high`, or the runs show `HashEvidence`.
+  `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.
+  It takes the premises of `source_safety`.
+  When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
+
+- `Execution.honestTargetVotes_of_byzantineStakeAtMost` derives the honest target-vote count, `HonestTargetVotes`, from a bound on Byzantine stake ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It assumes `TargetCountBounds`, which is stated for the pulled-up state of the head.
+  That state has at most the threshold share of Byzantine stake in the committees of the epoch so far.
+  The honest validators of the slots still to come hold the share that the rule counts for them.
+  They hold a third of the margin on top of it.
+  For a head whose block is two or more epochs before the current epoch it also assumes `StaleHeadVotersInWindow`.
+  `HonestTargetVotes` and `quorum_of_no_conflicting_checkpoint` keep their statements.
+  `le_activityFixedEpoch` is now public, for `TargetCount.lean`.
+
+- `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It no longer assumes the root's own earlier coverage.
+  It assumes the parent's coverage, the root's viability, the receivers' exits, and a late duty majority.
+  The root's viability rules out honest justified checkpoints that conflict with the root, so it assumes the checkpoint-consistency half of safety.
+  The alternatives are a block collision between honest stores and `HistoricalDirectSafetyEvidence`.
+  The latter holds with no accountable key once the churn since the anchor is large enough and a justified root fails to read an earlier finalized root.
+  `Config.ProposerScoreFits` bounds the proposer boost so that the score fits in 64 bits; mainnet and minimal satisfy it.
+
+- New lemmas derive the reads of the fast confirmation rule from a held head state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Store.checkpointState_justified_of_getHead` shows that, before Gloas, a head with a viable node besides the justified block has read the justified state.
+  `Store.getCommitteesBetweenSlots_exists` reads every committee window before the current slot, under `Config.CommitteeWindowsFit`.
+  `Store.getCommitteesBetweenSlots_ok_of_slots` reads a window whose slots read and whose end has a checked successor.
+  `getBeaconCommittee_exists` cuts a committee whose index is below the count of its slot, and `beaconCommitteeOf_ok_of_lt` does so for one shuffle.
+  `Config.committeeWindowsFit_mainnet` and `Config.committeeWindowsFit_minimal` show that mainnet and minimal satisfy those bounds.
+  `computeSlotAtTimeMs_le` bounds the slot at a time by the largest 64-bit integer divided by the slot duration.
+
+- `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` add accountable companions to the honest-duty results.
+  They use a proved historical finalized-prefix family instead of assumed compatibility, while preserving the original theorems.
+  They retain the network and duty conditions and require deposited genesis history, preset bounds, a fixed-fork horizon, stake floors and an absent anchor parent.
+  The alternative is the reference-stake inequality with derived drift, or `DirectSafety.HashEvidence`, not an a priori drift bound.
+
+- `Execution.honestHeadsCover_of_signed_justification` derives the late half of the root's viability inside the same induction ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  A justified checkpoint after the call's epoch descends from the root, because an honest validator signed a vote for it after the call.
+  It takes `EarlyJustifiedConsistent`, `RootKeepsViableLeaf` and `JustifiedHonestlySigned` instead of `RootViable`.
+  `Execution.honestHeadsCover_of_historical_anchor` keeps its statement.
+  `slotStart_le_clock` is now public.
+
+- `Execution.honestHeadsCover_of_byzantine_bound` derives the honest signer of the signed-justification headline ([#2656](https://github.com/ethereum/EthLib/issues/2656)).
+  It takes `ByzantineCountedStake`, Byzantine stake below two thirds in each state that counts later votes, instead of `JustifiedHonestlySigned`.
+  It also takes `Preset.InclusionDelayPositive` and two conditions on the anchor: its latest header is the anchor block's, with a zero state root.
+  `Execution.justifiedHonestlySigned` is the derivation; `Execution.honestHeadsCover_of_signed_justification` keeps its statement.
+  The votes behind a justified checkpoint are traced in `ForkChoice/JustifiedVotes.lean`: `Store.ForwardReachableWith.justified_counted`, `held_participation` and `counted_history`, and `Execution.exists_sent_of_votesBelow`.
+  `processJustificationAndFinalization_exists_voter` names a voter of a fresh justification, among `quorumVoters`.
+  `isValidIndexedAttestation_of_keys` and `processBlock_attestation_checked` carry a block's attestation check to the state of its target.
+  `Store.ForwardReachableWith.pubkeysDistinct_of_blockState`, `countedRun_enoughStake` and `stake_activeKeys_eq` bound the stake where a store counts votes.
+  `mapM_congr` is new and holds in any lawful monad, and `lt_size_of_mem_getActiveValidatorIndices` bounds active indices by the registry.
+  `RunKept.getAttestingIndices_eq` keeps attesters along a run.
+  `keys_advanceSlot`, `getAttestingIndices_eq_of_seed`, `Store.getAncestor_of_isAncestor` and `Store.exists_storeTargetCheckpointState` are now public.
+
+- `HonestVoteData.target_read` reads the target of an honest vote from its voter's head, without the reads of a duty vote.
+  It needs the target block held by some store reachable from the same anchor.
+  The anchor store does not tie the anchor state's latest header to the anchor block, so a read at the anchor needs that block.
+  `VoteAt.data_target` follows from it, and `Store.Reachable.lookahead_history_ancestor_of_held` is the walk it reads.
+
+- `Store.Reachable.isViableLeaf_finalized` shows that each viable leaf of a reachable store descends from the finalized block, also at a genesis finalized epoch ([#1423](https://github.com/ethereum/EthLib/issues/1423)).
+  Its checkpoint block at the finalized epoch is the finalized block.
+  It asks that the anchor block is not after the anchor state and that its parent root names no known block.
+  `Store.isViableLeaf_checkpointBlock` gives the checkpoint block that a viable leaf reads.
+
+- `epochIfLast_cases` splits the epoch step of a slot.
+  When the next slot starts an epoch it is the epoch transition, and at any other slot it keeps the state.
+
+- `getTotalActiveBalance_bounds` bounds a total active balance below by one increment.
+  It bounds it above by the larger of one increment and the sum of the effective balances.
+
+- `processEpoch_registryCut` splits an epoch at its registry updates: the three stages before them, the registry updates, then the rest of the epoch.
+
+- `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `VoteInHeadWindow` is the vote and the window that it reads.
+  `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
+  `Store.mem_getCommitteesBetweenSlots_of_active`, `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` and `Store.ForwardReachableWith.epoch_le_of_checkpointState` are the general steps.
+  `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
+  `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
+
+- Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
+  `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
+  The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
+  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store whose filtered tree reads has a head.
+  The alternatives are a collision of two honest stores and `HistoricalDirectSafetyEvidence`.
+  `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` with the same alternatives.
+  The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
+  `Store.getAttestationScore_eq_of_checked`, `Store.stake_supportersOf_eq_sum`, `Store.isAncestor_ok_of_orphans_le` and `Store.onAttestation_eq_of_reads` are the steps that existing proofs now share.
+  `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
+  `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
+
 ### Changes that break callers
 
+- The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
+  Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
+  The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.
+  The leanXMSS and VRF specifications are unchanged.
+
+- In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The index is the first with the key of the request.
+  The validator there has execution credentials from the address of the request, and it may make a request.
+  `isActiveValidator_of_canRequest` gives that a validator that may make a request is active.
+  A caller that matched the cases as `⟨index, exited⟩` and `⟨index, v, owed, withdrawn⟩` writes `⟨index, v, accepted, exited⟩` and `⟨index, v, owed, accepted, withdrawn⟩`.
+
+- In Lean, `queriesWith` and its lemmas move from `Sphincs.Unforgeability` to `HashSig`, so that XMSS can count its calls with them ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  A caller opens `EthLib.Cryptography.HashSig` or writes `HashSig.queriesWith`.
+
+- In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
+  A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.
+
+- EthLib builds with Lean v4.36.0, Mathlib `v4.36.0` and VCVio `v4.36.0`.
+  A Lean package that depends on EthLib moves to the same toolchain and Mathlib.
+
+- The JSON parser of Lean v4.36.0 rejects an object that names one member twice.
+  A JSON-RPC request with such an object now answers with the parse error `-32700`, where it read the last member before.
+  The same holds for a keystore read from JSON text.
+
+- In Lean, `Execution.rootViable_of_checked_call` concludes `RootViable root (e.world n).time time` again, in place of `RootViableAt root T` at each time `T` of the interval ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It and `Execution.honestHeadsCover_of_checked_call` no longer take `rollover : CallRolloverRead …`, which `Execution.callRolloverRead_or_evidence` derives from their other premises.
+  A caller drops the argument; a caller that read `RootViableAt` at a time `T` applies `RootViable` to the store at `T`.
+
+- In Lean, `HistoricalDirectSafetyEvidence` now records a conflict.
+  It requires that the earlier finalized epoch is at most the later justified epoch.
+  It also requires that the later justified root does not read the earlier finalized root at that epoch.
+  Before, one held state paired with itself satisfied it whenever the stake inequality or hash evidence on its run held.
+  With enough churn since the anchor, the inequality holds with no accountable key.
+  Every result that offers the evidence as an alternative was then true without a conflict.
+  `Execution.finalized_prefix_or_accountable`, `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` conclude the two new facts.
+  A caller that takes the evidence apart has two more components after the time bound; a caller that passes it on is unchanged.
+
+- In Lean, `Store.held_of_isAncestor` now takes any ancestor node.
+  A caller that names the implicit `root` passes the node `⟨root, .pending⟩` as `ancestor`.
+
+- In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
+  A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.
+
+- In Lean, `headState_epoch_le` moves from the fast-confirmation proofs to `Store.ForwardReachable.headState_epoch_le` in `ForkChoice/BlockStates.lean`, with the same statement.
+  A caller writes `forward.headState_epoch_le` for a forward-reachable store `forward`.
+
+- In Lean, the compressed encoding of a point of `G2` has its 96 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `G2.compress` and `G2.infinityBytes` are a `Vector UInt8 96`, and `G2.uncompress` takes one.
+  A caller that holds bytes of another length reads them with `exactBytes? 96` and rejects `none`, as decompression did.
+  `G2_POINT_AT_INFINITY` is a `BLSSignature`, and the precompile constant `KZG_SETUP_G2_MONOMIAL_1` is a `Vector UInt8 96`.
+  `G2.size_compress` and `G2.uncompress_size_ne` are removed, since the type states the length.
+  `packBytes_pointToSignature` becomes `pointToSignature_eq`, which states that a signature is the compressed point.
+  `TrustedSetup.decodeG2_eq_ok` is new, and relates the decoder of a setup point to decompression.
+  `G2.compress_uncompress`, `isOnTwist_of_uncompress`, `uncompress_injective`, `uncompress_valid`, `valid_of_uncompress` and `Security.decodeSignature_of_uncompress` take the encoding as a vector.
+  `G2.uncompress_uncompressed`, `uncompress_infinity_sign_set`, `uncompress_infinity_nonzero_tail`, `uncompress_noncanonical_c1` and `uncompress_noncanonical_c0` take a vector, read the flags in its first byte, and drop the premise on the length.
+  `G2.compress_congr`, `compress_eq_infinityBytes_iff`, `compress_inf`, `compress_zero`, `uncompress_infinityBytes`, `uncompress_compress` and `uncompress_compress_of_z_one` keep their meaning, and now take or equate vectors.
+  `coreVerify_iff` takes the signature as a vector.
+  `coreVerify_of_represents`, `pointToSignature_bytes` and `Security.encode_signature` state the signature as the bytes of the compressed point, `packBytes (G2.compress S)`.
+  `Security.verify_iff` and `verify_iff_isDh` decompress the signature itself, with no conversion to bytes.
+  `TrustedSetup.ofBytes_g2Monomial` states its fact through `TrustedSetup.decodeG2`.
+  In the security proofs, `G2Sub.encode` is the bytes of the compressed point.
+  No C export or Python function changes.
+
+- In Lean, `infinitySignature` is removed, since it named the same constant as `G2_POINT_AT_INFINITY`.
+  A caller writes `G2_POINT_AT_INFINITY`.
+  No C export or Python function changes.
+
+- In Lean, the historical-anchor theorems read the slot count of an epoch from `fit` ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop `positive : 0 < preset.SLOTS_PER_EPOCH.toNat`, which `fit.positive` gives; their conclusions are unchanged.
+  A caller drops the argument.
+
+- In Lean, `processDepositRequest_ok` also gives the state after the request.
+  It is the state before, with only the pending deposits and the start index of the requests changed.
+  A caller that took the balances as `.2.2` takes `.2.2.1`, and a pattern with three parts gets a fourth.
+  Nothing breaks in Python.
+
+- In Lean, `FlagsKeptOrZero` is stronger.
+  A zero byte of flags appears only at a position at or past the size of the registry before the step.
+  So a step keeps the flags of each existing validator, or zeroes the byte of a new one.
+  `FlagsKeptOrZero.trans` takes a new premise: the registry of the first state is no larger than that of the second.
+  A caller passes that fact, for example from `Frame.registryGrows`.
+  A match on the zero case, `old | rfl`, becomes `old | ⟨rfl, -⟩`.
+  Nothing breaks in Python.
+
+- In Lean, the historical-anchor theorems no longer assume the receivers' reads ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `fit : config.CommitteeWindowsFit preset` instead of `reads`; their conclusions are unchanged.
+  `Config.CommitteeWindowsFit` bounds the registry limit, the committees of an epoch, the clock and the seed lookahead, and requires an epoch to have a slot.
+  A caller on mainnet or minimal passes `Config.committeeWindowsFit_mainnet` or `Config.committeeWindowsFit_minimal`.
+  `HonestHeadReads` is removed.
+  The receiver's justified state comes from `Store.checkpointState_justified_of_getHead`, and its committee windows from `Store.getCommitteesBetweenSlots_exists`.
+  `Store.getCommitteesBetweenSlots_ok_of_slots` reads a window from its slots, `getBeaconCommittee_exists` cuts one committee, and `beaconCommitteeOf_ok_of_lt` bounds its position; all three are new.
+
+- In Lean, the historical-anchor theorems assume less about recent votes and receiver exits ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  Each new statement implies the old one.
+  `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` take `newVoters : NewlyActiveVotersInHeadWindow` in place of the common vote history, `history`, and `exits : ReceiverWindowExitsNear` in place of the exit bound for every receiver.
+  `Execution.isAncestor_getHead_of_historical_anchor` and `ancestor_head_of_window_margin` take `membership : VotersInHeadWindow` in place of `history`.
+  Both window premises name the parent of the tested block and hold only from the call's time.
+  `ancestor_head_of_window_margin` also drops `minLookahead`, `maxLookahead` and `ring`, which now only the derivation of the window membership reads.
+  A caller with the common vote history passes the window membership that it implies, or the corner premise.
+  A caller with the old exit bound passes its restriction to receivers within two epochs of the parent.
+  `VoteCommitteeCommonHistory` and `ReceiverWindowExits` are removed: no statement reads them any more.
+
+- In Lean, the historical-anchor theorems no longer assume finality across honest stores ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  `Execution.source_surplus_or_historical_evidence`, `Execution.isAncestor_getHead_of_historical_anchor`, `Execution.honestHeadsCover_of_historical_anchor`, `Execution.honestHeadsCover_of_signed_justification` and `Execution.honestHeadsCover_of_byzantine_bound` drop their `residual` argument; their conclusions are unchanged.
+  `receiver_fullMaximum_of_head_window` takes the receiver's own finalized checkpoint on its own justified chain, `finalizedRead`, instead of `compatible`, `bounded`, `slots` and `epochOk`, and loses its implicit `horizon` and `epoch`.
+  `SelectedCheckpoint`, `FinalizedCheckpointCompatibility`, `ResidualFinalizedCheckpointCompatibility` and `compatibility_of_residual` are removed: no proof read them any more.
+
+- The EVM errors `invalidJumpDest`, `outOfBoundsRead`, `invalidParameter`, `addressCollision` and `precompile` carry the values that their failed check compared.
+  Each halt keeps its behaviour, and each error fires on the same inputs as before.
+  The message of an EVM error names each value, as `(name := value)`, with the address of a collision in hex and a precompile by its number.
+  In Lean, `Evm.EvmError.invalidJumpDest destination`, `outOfBoundsRead offset size available`, `invalidParameter immediate`, `addressCollision address` and `precompile address` take arguments.
+  `stackUnderflow`, `stackOverflow`, `outOfGas`, `writeInStaticContext`, `invalidContractPrefix` and `revert` stay bare.
+
+- The eth body, session, snap range and era1 errors, and the argument errors of the EVM exports, carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages give the new values: `transactions do not have the transactions root of the header` becomes `transactions have the root 0x…, not the transactions root 0x…`, and `the sender must be 20 bytes` becomes `the sender must be 20 bytes, not 19`.
+  The era1 and snap range errors print each value named, `(name := value)`, with hashes in hex, on one line: `blockCount 3 2` becomes `blockCount (counted := 3) (held := 2)`.
+  In Lean, these constructors take arguments:
+  - `Network.BodyError.wrongTransactionsRoot`, `wrongWithdrawalsRoot` and `wrongOmmersHash`, each with the header's value `expected` and the body's value `actual`, and `untypedTransaction first`, the first byte, or `none` for an empty string;
+  - `Network.EthSessionError.beforeStatus id`, the ID of the message;
+  - `Network.SnapRangeError.slimAccount hash` and `tooManyRanges ranges accounts`;
+  - `History.Era1Error.blockNumber i expected actual`, `parentHash i expected actual`, `totalDifficulty i expected actual` and `accumulator expected actual`;
+  - `Evm.Exports.ArgumentError.senderLength size` and `saltLength size`, and `readWord` takes the error as a function of the size.
+  `ArgumentError.code_injective` concludes that the two errors come from one constructor, since errors with one code now differ in their size.
+  `receiveEth_beforeStatus` and the created-address lemmas of the EVM exports state the new values in their errors.
+
+- The trie, range, Merkle proof, account proof and state input errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  Their messages name each value, as `(name := value)`, with hashes and byte strings in hex and words in decimal, on one line.
+  In Lean, these constructors take arguments:
+  - `Trie.HexPrefixError.invalidFirstNibble nibble` and `nonZeroPadding nibble`;
+  - `Trie.ProofError.missingNode hash`, the hash of the node the path needs, an `Option` that is `none` only when a walk runs out of its budget, which no walk does, `hashMismatch expected actual`, the reference and the hash of the node, `invalidReference size` and `unusedNodes count`;
+  - `Trie.RangeError.unsorted index`, `beforeStart index` and `emptyValue index`, each the first entry, counted from 0, that breaks the rule;
+  - `State.StateInputError.repeatedAddress address`, and `State.AccountProofError.slotMismatch index expected actual`, the word that the proof shows and the word of the answer.
+  `Trie.TrieError.emptyValue` stays bare: the root does not depend on the order of the entries, and naming a key would make the error depend on it.
+  `compactToNibbleList_invalidFirstNibble`, `compactToNibbleList_nonZeroPadding`, `verifySlot_eq_slotMismatch` and `verifyRange_eq` state the values in their errors.
+  `ErrorArg` shows a `BitVec`, such as a `U256`, in decimal.
+
+- The state accessor, shuffle and deposit tree errors carry the values that their check compared, and their codes keep their meaning.
+  - `AccessorError.balanceOverflow` holds the total that reached 2^64, and `AccessorError.ssz` the error of the root.
+  - `AccessorError.invalidPubkeys` holds the number of keys and the position of the first key that is not valid, if any.
+  - `AccessorError.wrongSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  - `ShuffleError.noCommittee` holds the index of the committee, and `ShuffleError.overflow` the number of indices and that index.
+  - `DepositTreeError.treeFull` holds the number of deposits, `missingFinalized` the level that finds no root, and `extraFinalized` the number of roots left over.
+  - `DepositTreeError.rootMismatch` holds the deposit root, then the root that the finalized roots compute.
+  The message of a deposit tree error is on one line, with roots in hex, as in `EthLib.Consensus.DepositTreeError.rootMismatch 0x00… 0xd7…`.
+  `getPendingBalanceToWithdraw_eq_error_iff` names the total in the error, and `map_getRoot_pushLeaves` names the cap of the tree.
+
+- The errors of the execution payload, the Gloas bid, envelope, parent requests and payload attestations carry the values that their check compared.
+  `TransitionError.wrongPayloadParentHash`, `wrongPayloadRandao`, `wrongPayloadGasLimit`, `wrongPayloadBlockHash` and `wrongPayloadRequestsRoot` hold the value of the payload, then the value it must equal.
+  `bidWrongParentHash`, `bidWrongParentRoot` and `bidWrongRandao` hold the value of the bid, then the value of the state; `bidRepeatsParentHash` holds the repeated hash, and `selfBuildBidPaid` the value of the bid.
+  `envelopeWrongBlockRoot`, `envelopeWrongParentRoot` and `envelopeWrongBuilder` hold the value of the envelope, then the expected one; `invalidEnvelopeSignature` holds the builder and the block root.
+  `invalidBidSignature` holds the builder and the slot, and `invalidExecutionPayload` the block hash of the payload.
+  `tooManyBlobCommitments` holds the number of commitments and the limit.
+  `payloadAttestationNotForParent` holds the block root of the attestation and the parent root; `invalidPayloadAttestation` holds the slot and the number of attesters.
+  `parentRequestsNotEmpty` holds the number of requests, which the new `ExecutionRequests.count` gives, and `wrongParentRequestsRoot` the two roots.
+  The codes do not change.
+  `processParentExecutionPayload_of_empty_requests`, `processExecutionPayload_eq_error_of_prepareExecutionPayload` and `processBlockExecution_eq_error_of_prepareExecutionPayload` state these values.
+
+- The Engine API errors carry the values that their failed check compared.
+  Codes are unchanged, and the JSON-RPC error objects keep the messages and the `null` data that the Engine API fixes.
+  The bindings messages, which print the error in Lean form, now end with these values; hashes and payload IDs print in hex.
+  - `EngineError.unsupportedFork fork` carries the fork the method was asked to serve: that of the payload, of the attributes' block or of the stored build, or the node's fork for blobs; `none` when no fork is active.
+  - `EngineError.invalidForkchoiceState safe finalized` carries the safe and finalized hashes of the forkchoice state.
+  - `EngineError.tooLargeRequest count limit` carries the number of items asked for and the node's maximum.
+  - `EngineError.unknownPayload id` carries the payload ID.
+  - `PayloadError.wrongVersionedHashes expected actual` carries the expected hashes and those of the blob transactions.
+  - `PayloadError.invalidTerminalBlock parent` carries the hash of the parent.
+  - `GetPayloadError.wrongFork stored active` carries the stored fork and the configured one, and `blockValue value` the block value.
+  - `Jwt.JwtError.secretLength size` carries the size of the secret, `compact count` the number of parts of the token, and `algorithm name` the algorithm the header names, or `none`.
+  - The theorems on these errors state them with their fields: `forkchoiceUpdated_zero_after_transition`, `forkchoiceUpdated_eq_error_iff`, `checkAttributes_eq_error_of_unsupportedFork`, `checkRequestSize_eq_error_iff`, `bodiesByHash_eq_error_iff`, `bodiesByRange_eq_error_iff`, `getBlobsV1_of_fusaka`, `getPayload_eq_error_of_store_eq_none`, `getPayload_eq_error_of_activeFork_ne`, `getPayload_eq_error_of_acceptsGetPayloadFork_eq_false`, `getPayload_eq_error_of_blockValue_ge`, `newPayloadOnChain_of_not_terminal` and `issuedAt_eq_error_of_algorithm_ne`.
+
+- The precompile errors carry the values that their failed check compared, and their message names each value on one line.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The message of a failed call no longer wraps: `PrecompileError.sha256\n  (Sha256Error.outOfGas 72 71)` becomes `PrecompileError.sha256 (Sha256Error.outOfGas (cost := 72) (gas := 71))`, with each name in full.
+  A bare error inside another now prints in parentheses, as Lean's own printer does.
+  In Lean, these constructors take arguments:
+  - `AltBn128Error.invalidFieldElement value`, the coordinate at or above `p`, and `notOnCurve point` and `notInSubgroup point`, the bytes of the point read from the call data, with zeros past its end;
+  - `Bls12381Error.invalidPadding padding`, the 16 bytes in front of the field element, `invalidFieldElement value`, and `notOnCurve point` and `notInSubgroup point`, the unpadded bytes of the point;
+  - `PointEvaluationError.versionedHashMismatch expected actual`, the hash of the commitment and the hash of the call, `invalidCommitment commitment`, `invalidFieldElement value`, the value of `z` or `y`, and `invalidProof proof`.
+  `PointEvaluationError.invalidTrustedSetup`, `proofRejected` and `Bls12381Error.notASquare` stay bare: the first is a constant, the second a verdict of the pairing check, and the third excluded by RFC 9380.
+  `bytesToG1_invalidFieldElement` names the rejected coordinate in its error.
+
+- The AES-GCM, ChaCha20-Poly1305 and ERC-2334 path errors carry the lengths and values that their failed check compared.
+  Codes are unchanged; each message now ends with these values, and a failed tag comparison still carries nothing.
+  - `Aes.Gcm.Error.tagLength declared actual` carries the declared tag length and the length of the tag, in bytes.
+  - `Aes.Gcm.Error.shortTag`, `ivLength`, `textLength` and `aadLength` carry the length that failed, in bytes.
+  - `ChaCha20Poly1305Error.counterExhausted counter length` carries the first block counter and the text length in bytes; the AEAD starts at the counter 1.
+  - `ChaCha20Poly1305Error.aadTooLong length` carries the length of the additional data, in bytes.
+  - `KeyPath.KeyPathError.invalidRoot root` carries the text before the first `/`, and `tooShort count` the number of segments after `m`.
+  - `Gcm.checkLengths_shortTag`, `Gcm.encrypt_shortTag`, `Gcm.decrypt_shortTag` and `ChaCha20Poly1305.crypt_eq_error_of_counter_exhausted` state the error with its fields.
+  - `Aes.Gcm.Error.code_injective` now concludes that two errors with one code share a constructor, `e₁.ctorIdx = e₂.ctorIdx`, as the KZG and secp256k1 forms do.
+
+- The DER and e2store errors carry the values that their failed check compared.
+  Codes are unchanged, and each error fires on the same inputs as before.
+  - `Der.Error.truncated needed available` carries a lower bound on the bytes a value needs, exact once its length is read, and the bytes of the input.
+  - `Der.Error.tag expected actual` carries the tag read, and the tag the reader expects, or `none` when no single tag is expected.
+  - `Der.Error.length first` carries the first length octet, and `trailing count` the bytes left after the value.
+  - `Der.Error.value` keeps no field: the content belongs to the caller, and the reader tracks no position in it.
+  - `E2store.E2storeError.truncatedHeader offset available` and `truncatedData offset length available` carry the position of the record, the announced length of its data, and the size of the input.
+  - `reservedNotZero first second` carries the two reserved bytes, `dataTooLong length` the length of the data, `noVersion type` the type of the first record, `versionData index` the position of the first Version record with data, and `indexSize size` the size of the index data.
+  - `Der.validate_eq_error_tag` concludes `.tag none value.tag`.
+
+- The errors of attestations, deposits, exits, withdrawals, BLS changes, the sync aggregate and the historical lists carry the values that their check compared.
+  `TransitionError.wrongAttestationSource` holds the epoch and root of the source, then those of the justified checkpoint.
+  `invalidAttestation` holds the slot of the attestation and the number of validators its indexed form names.
+  `invalidDepositProof` holds the deposit index, the root of the deposit data and the deposit root.
+  `invalidExitSignature` and `invalidBlsChangeSignature` hold the validator index and the signing root.
+  `wrongWithdrawals` holds the first position at which the withdrawals differ, then the length of the payload's list and of the expected one.
+  `invalidSyncAggregate` holds the slot of the signed block root, the number of signers and the signing root.
+  `invalidSyncCommitteeKey` holds the key that fails to decode or fails key validation, and `unknownSyncCommitteeMember` the key that no validator holds.
+  `tooManyPendingAttestations` holds the count and the limit; `registryFull`, `historicalRootsFull` and `historicalSummariesFull` hold the limit.
+  The codes do not change.
+  `appendHistoricalRoot_eq_error_iff`, `processHistoricalRootsUpdate_eq_error_iff` and `processHistoricalSummariesUpdate_eq_error_iff` state the limit in the error.
+
+- `DirectSafety.same_epoch_histories` is removed, because nothing reads it.
+  `DirectSafety.view_same_epoch` replaces it: pass the two quorum calls as `.inl` quorums of the realized views.
+  `DirectSafety.accountable_justified_unique_terminal` covers its one use, in `accountable_justified_unique`.
+
+- The transaction, inclusion and network-form errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The messages of transaction and inclusion errors name each value, as `(name := value)`, with hashes and addresses in hex.
+  For example, `nonceTooLow 3 1` becomes `nonceTooLow (expected := 3) (nonce := 1)`, and `insufficientGas 21000 0` becomes `insufficientGas (needed := 21000) (gas := 0)`.
+  In Lean, these constructors take arguments:
+  - `Transactions.TransactionError.nonceOverflow nonce`, the nonce of the transaction, or of the sender when a simulation skips the nonce check;
+  - `Transactions.TransactionError.priorityFeeGreaterThanMaxFee priorityFee maxFee`;
+  - `Transactions.TransactionError.invalidBlobVersionedHash index hash`, the first versioned hash with the wrong version;
+  - `Transactions.InclusionError.senderNotEoa sender`;
+  - `Transactions.NetworkError.versionedHashMismatch index expected actual`, the first commitment whose hash `expected` is not the versioned hash `actual`.
+  `emptyTransaction`, `noBlobData` and `emptyAuthorizationList` stay bare, since each fires on an empty input.
+  `invalidSignature` stays bare: it fires on a bad `v`, a bad y parity, `r` or `s` out of range, or a signature that recovers no key, and the transaction holds each of these values.
+  `NetworkError.proofRejected` stays bare: the batch check of the proofs gives only a verdict.
+  `checkSender_of_skipNonce` states the nonce `2^64 - 1` in its error.
+
+- The TLS codec, TLS handshake, TLS crypto and libp2p TLS certificate errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Tls.Wire.Error.truncated` carries the bytes needed and available, `trailing` the count of bytes left, `duplicateExtension` the repeated extension type, and `messageType` the handshake type.
+  - `Quic.Tls.Handshake.Error.missingExtension` and `unsupportedExtension` carry the extension type.
+  - `Quic.Tls.Crypto.Error.group` carries the NamedGroup, and `signatureScheme` the SignatureScheme.
+  - `Libp2p.Tls.TlsCertError.validity` carries the time and the validity bounds, `chain` the certificate count, and `duplicateExtension` and `criticalExtension` the OID bytes.
+  - `Libp2p.Tls.authenticate_single`, `authenticate_empty`, `authenticateCertificate_validity`, `authenticate_validity` and `signedKey_critical`, and `Quic.Tls.encodeExtensions_duplicate`, state the fields of the error.
+  - The new `Quic.Tls.repeatedKind`, `Libp2p.Tls.firstRepeated` and `Libp2p.Tls.criticalOid` compute these fields, and `repeatedKind_spec`, `firstRepeated_some` and `criticalOid_spec` show that each names a real repeated type, repeated OID or critical OID when its check fails.
+
+- The QUIC integer, wire and packet protection errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Quic.Varint.VarintError.truncated` and `Quic.Wire.Error.truncated` carry the bytes needed and available.
+  - `Quic.Wire.Error.connectionIdLength` carries the length and the maximum, `fixedBit` and `reservedBits` the first byte, and `version` the version.
+  - `Quic.Wire.Error.packetNumber` carries the truncated number, its width in bytes and the expected number, and `protocolViolation` the frame type.
+  - `Quic.Protection.Error.sample` carries the packet number offset and the packet size, `tagLength` the tag size, and `connectionId` the length of the original destination connection ID.
+  - `Quic.Varint.decodeList_nil`, `decodeList_truncated`, `decode_empty`, `decode_truncated`, `decodeList_error_iff`, `decode_error_iff` and `Quic.Protection.sample_eq_error_of_short` state the fields of the error.
+
+- The ENR, discv4 and discv5 errors carry the values their failed check compared.
+  Each error fires on the same inputs as before, and codes are unchanged; each message now shows these values.
+  - `Enr.EnrError.tooFewItems` carries the item count, and `unknownScheme` the value of the `id` pair.
+  - The ENR messages of `repeatedKey`, `unsortedKeys` and `unknownScheme` show the keys and the scheme in hex.
+  - `Discv4.Discv4Error.hashMismatch` carries the stored hash and the Keccak-256 hash of the bytes after it.
+  - `Discv5.PacketError.protocolId` carries the first eight unmasked header bytes, `headerTruncated` the header bytes needed and available, `authdata` the flag and the authdata size, and `whoareyouMessage` the message size.
+  - `Discv5.MessageError.fields` also carries the field count, and `invalid` the message type.
+  - `Discv4.decode_hashMismatch` states both hashes of the error it returns.
+
+- In Lean, the errors of era files, protocol bounds, light client update chunks, validator duties and proposer steps carry the values that their check compared, and their codes keep their meaning.
+  - `EraError.noState` and `noStateIndex` take the type of the record that the check read, or `none` when the group ends; `stateIndex` takes the number of entries, the position the first one points at and the position of the state.
+  - `EraError.genesisBlocks` takes the number of block records and whether an index of blocks is present, `noBlockIndex` the era, and `blockIndexRange` the first slot and the entries of the index, then those the era expects.
+  - `BoundsError.notAtFork` and `topicNotAtFork` take the protocol or topic name and the fork, and `noRequest` the protocol; their messages do not change.
+  - `ChunkError.truncated` takes the offset of the chunk, the length it needs and the length left, and `digestMismatch` also takes the expected digest.
+  - `ValidatorDutyError.noMessages` takes the slot and the block root of the message to aggregate, and `pendingPayloadStatus` the slot of the vote and of the head block.
+  - `ProposerError.noCommittee` takes the data of the aggregate.
+
+  `attestationDataIndex_of_glamsterdam_of_ne` states the fields of `pendingPayloadStatus`.
+  New `ToString` instances of `ValidatorDutyError`, `ProposerError` and `BoundsError` write each error with its values.
+  The Python `ValidatorDutyError` and `ProposerError` carry that text in place of "validator duty failed with code N" and "proposer step failed with code N", such as "epoch 2 is after 1, the last epoch whose committees are known".
+
+- The block, ommer and proof-of-work errors carry the values that their failed check compared.
+  Each code keeps its meaning, and each error fires on the same inputs as before.
+  The message of each error names each value, as `(name := value)`, and writes each hash, address and byte string in hex.
+  It stays on one line, so `header invalid: EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit` becomes `header invalid: EthLib.Execution.Blocks.BlockError.gasUsedAboveLimit (gasUsed := 30000001) (gasLimit := 30000000)`.
+  The values that the errors already carried get names too: `wrongBaseFee 7 8` becomes `wrongBaseFee (expected := 7) (actual := 8)`.
+  In Lean, these constructors of `Blocks.BlockError` take arguments:
+  - `gasUsedAboveLimit gasUsed gasLimit`, `invalidGasLimit gasLimit parentGasLimit` and `timestampNotAfterParent timestamp parentTimestamp`;
+  - `wrongNumber expected actual`, `extraDataTooLong size`, `nonzeroDifficulty difficulty`, `nonzeroNonce nonce` and `wrongOmmersHash ommersHash`;
+  - `wrongParentHash expected actual`, whose expected hash is `none` only for a parent at a later fork than the header whose header has no RLP form;
+  - `parentBeforeLondon parentFork`, `wrongFork active fork`, `ommersAfterParis count` and `wrongDaoExtraData extraData`;
+  - `wrongTransactionsRoot`, `wrongStateRoot`, `wrongReceiptRoot`, `wrongBloom` and `wrongRequestsHash`, each with the header's value `expected` and the body's value `actual`;
+  - `wrongWithdrawalsRoot` and `wrongBlockAccessListHash`, whose body value is an `Option`.
+  `genesisNumber` and `noParent` stay bare: the number of the first is always 0, and the second fires on an empty recent chain.
+  These constructors of `Blocks.OmmerError` take arguments:
+  - `wrongOmmersHash expected actual`, `numberOutOfRange number blockNumber`, `parentMissing number` and `tooManyOmmers count`;
+  - `duplicateOmmer hash`, `ommerInChain hash`, `ommerAlreadyIncluded hash`, `wrongAge hash age`, `parentNotRecent hash parentHash` and `siblingOfBlock hash`, each with the hash of the ommer;
+  - `wrongDaoExtraData extraData`.
+  `Blocks.PowError.wrongMixDigest expected actual` holds the mix digest of Ethash and that of the header, and `Blocks.PowError.resultAboveTarget result target` holds the result and the target.
+  `buildPayload_eq_error_of_activeFork_ne` names the active fork and the fork of the build in its error.
+  `Blocks.constructorFormat` moves to `EthLib.Execution.constructorFormat`, and `Transactions.Exports.oneLine` to `Blocks.Exports.oneLine`.
+
+- In Lean, the errors of the fork choice, of weak subjectivity and of custody carry the values that their check compared, and their codes keep their meaning.
+  - `ForkChoiceError.anchorStateMismatch` takes the state root of the anchor block and the root of the anchor state.
+  - `futureBlock`, `attestationNotYetDue`, `ptcVoteNotCurrent`, `futureInclusionList` and `inclusionListTooOld` also take the current slot.
+  - `blockNotAfterFinalized` also takes the first slot of the finalized epoch, and `targetEpochNotRecent` the current epoch.
+  - `targetEpochMismatch` also takes the epoch of the slot, `targetNotCheckpointBlock` the root of the checkpoint block, and `terminalBlockHashNotActive` the activation epoch.
+  - `futureVote` also takes the slots of the attestation and of the block, `notPreviousSlot` and `dependentBlockTooLate` the two slots they compared.
+  - `invalidIndexedAttestation` takes the attestation data, and `notSlashable` the data of both attestations.
+  - `invalidPayloadAttestation` and `invalidInclusionListSignature` take the validator index and the slot.
+  - `invalidInclusionListSize` also takes the limit, and `emptyInclusionListTransaction` the position of the first empty transaction.
+  - `WeakSubjectivityError.blockRootMismatch` takes the checkpoint root and the root that the state holds.
+  - `CustodyError.outOfFuel` takes the number of groups found and the number asked for.
+
+  `getForkchoiceStore_mismatch` and `validateTargetEpochAgainstCurrentTime_eq` state the fields of the error.
+  New `ToString` instances of `ForkChoiceError` and `WeakSubjectivityError` write each error with its values.
+  The Python `ForkChoiceError` and `WeakSubjectivityError` carry that text in place of the Lean `Repr` of the error, such as "fork choice: block slot 9 is after the current slot 8".
+
+- The SSZ decoding errors carry the values that their failed check compared.
+  Codes and rejection reasons are unchanged; the message `EthLib.Serialization.Ssz.Err.<name>` now ends with these values, in constructor order.
+  - `Ssz.Err.offsetUnordered offset next` carries an offset and the smaller offset after it.
+  - `Ssz.Err.offsetPastScope offset scope` carries the offset and the bytes of the budget.
+  - `Ssz.Err.offsetUnaligned offset` and `offsetBelowTable offset` carry the first offset.
+  - `Ssz.Err.truncated needed available` carries the end of the first field of the fixed part that overruns the budget, and the bytes of the budget.
+  - `Ssz.Err.paddingBits byte` carries the last byte, whose bits above the last declared one are set.
+
+- In Lean, the errors of the Builder API carry the values that their check compared, and their codes and rule names keep their meaning.
+  - `ValidateBidError`: `inactiveBuilder` takes the builder index; `wrongSlot`, `wrongFeeRecipient`, `wrongParentRoot` and `wrongPrevRandao` take the expected value, then the value of the bid.
+    `wrongParentHash` takes the parent hash of the bid, then the two hashes it may equal; `incompatibleGasLimit` takes the parent's gas limit, the bid's and the target; `cannotCoverBid` takes the builder index and the value.
+  - `BidError`: `wrongParentHash` and `wrongFeeRecipient` take the expected value, then the header's; `badSignature` takes the builder key.
+  - `RegistrationError`: `unknownValidator` and `badSignature` take the validator key, and `notEligible` the key and the current epoch.
+    `clockOverflow` takes the clock and the lookahead, `tooFarInFuture` the timestamp, the clock and the lookahead, and `olderThanPrevious` the timestamp and the kept one.
+  - `UnblindError.headerMismatch` takes the block hash of the blinded header, then that of the payload.
+
+  `validateBid_zero_value` now states that no `cannotCoverBid` error, whatever its fields, comes from a bid of value zero.
+  `processRegistration_exited` and `BlindedBeaconBlockBody.unblind_eq_headerMismatch_iff` state the fields of the error.
+
+- The Noise, libp2p identity, multistream, gossip topic and subnet, and req/resp errors carry the values their failed check compared.
+  Codes are unchanged; each message now shows these values.
+  - `NoiseError.wrongPhase` carries the role and the number of messages handled, `truncated` the bytes needed and available, `messageTooLong` the size, and `frameLength` the declared and actual lengths.
+  - `Libp2p.IdentityError.peerId` carries the first two bytes of the peer ID, or fewer when it is shorter.
+  - `Multistream.MultistreamError.missingNewline` carries the last counted byte.
+  - `Gossip.TopicError.forkDigest` carries the nine characters after `/eth2/`, or fewer where the string ends, and `name` the name.
+  - `Gossip.SubnetError.epochOverflow` carries the epoch and the node offset, and `subnetOverflow` the two operands of the sum or product.
+  - `ReqResp.ReqRespError.contextTruncated` carries the context bytes needed and available.
+  - The req/resp messages of a varint or a framing error now end with the inner error.
+
+- The secp256k1, secp256r1 and KZG errors carry the public values that their failed check compared.
+  Codes are unchanged; each message now ends with these values.
+  - `Secp256k1Error.coordinateTooLarge value` and `Secp256r1Error.coordinateTooLarge value` carry the coordinate, written as 32 bytes of hex in the message.
+  - `Secp256k1Error.scalarOutOfRange value` carries the signature integer, `r` or `s`, written the same way; `r` is checked first.
+  - `KzgError.commitmentIndexOutOfBounds index count` carries the first index past the list and the number of commitments.
+  - `KzgError.cellIndexOutOfBounds index` carries the first cell index of 128 or more.
+  - `KzgError.indicesNotAscending previous next` carries the first pair of neighbours whose second index is not larger.
+  - `KzgError.notEnoughCells count` and `tooManyCells count` carry the number of cells given.
+  - `KzgError.duplicateCommitments index` carries the position of the first commitment that repeats an earlier one.
+  - The KZG theorems on these failures take the found index, as `find? … = some index`, in place of `any … = true`, and conclude the error with its fields.
+  - `Base.hexNat width value` writes a number in hex behind `0x`, padded to `width` digits and never cut, for these messages.
+  - `Base.any_eq_true_of_find?_eq_some` turns the found value back into the `any` that the definitions test.
+  - Secret values stay out of the errors: `zeroPrivateKey`, `privateKeyTooLarge`, `unrecoverableNonce` and `noNonce` keep no fields.
+
+- The Snappy, varint and protobuf errors carry the values their failed check compared.
+  Codes are unchanged; each message now ends with these values, in constructor order.
+  - `SnappyError.literalPastEnd` and `copyPastEnd` carry the bytes needed and the bytes left.
+  - `SnappyError.copyOffsetZero` carries the output position of the copy.
+  - `SnappyError.copyOffsetTooLarge` also carries the bytes written so far, after the offset.
+  - `Snappy.FrameError.missingStreamIdentifier` carries the type of the first chunk, or `none` for an empty stream.
+  - `Snappy.FrameError.headerTruncated` carries the bytes left, and `chunkPastEnd` the declared length and the bytes left.
+  - `Snappy.FrameError.badStreamIdentifier` and `checksumTruncated` carry the length of the chunk data.
+  - `Varint.VarintError.trailingBytes` carries the count of extra bytes, `overflow` the value, and `nonMinimal` the encoding length.
+  - `Uvarint.UvarintError.tooLarge` carries the value.
+  - `Protobuf.ProtobufError.truncated` carries the bytes needed and the bytes left.
+  - A nested error now starts on a new line of the message when the longer message no longer fits one line.
+
+- In Lean, `Base.ArithError.underflow` carries its operands, `underflow minuend subtrahend`, so a failed subtraction names the two values it compared.
+  `Base.Uint64.subChecked a b` fails with `.underflow a b`.
+  `overflow` and `divisionByZero` keep no fields.
+
+- In Lean, `Base.Base64.Base64Error` names where the decoder stopped, counting the characters of the text from 0.
+  `invalidChar position c` adds the position of the character, `invalidLength length` carries the length of the text, and `nonZeroPadBits position c` carries the last character and its position.
+  `Base64.readSextet` takes the position of its character, and `Base64.decodeList` the position of its first character, as a new first argument; `Base64.decode` starts at 0.
+  The ENR text decoder starts after the four characters of `enr:`, so its positions count the whole text.
+  The lemmas `readSextet_encodeSextet`, `decodeList_encodeList`, `encodeSextet_of_readSextet` and `encodeList_decodeList` hold at every starting position, an implicit argument.
+
+- In Lean, the errors of the light client carry the values that their check compared.
+  Nineteen constructors of `LightClientError` gain fields, and their codes keep their meaning.
+  - `invalidHeader` takes the slot of the header, and `unexpectedFinalizedHeader` the slot of the finalized header.
+  - `untrustedHeader` takes the trusted root and the root of the header.
+  - `invalidCurrentSyncCommitteeBranch`, `invalidFinalityBranch` and `invalidNextSyncCommitteeBranch` take the generalized index and the state root.
+  - `tooFewParticipants` takes the count of signers and the minimum.
+  - `slotsOutOfOrder` takes the current, signature, attested and finalized slots.
+  - `unknownSignaturePeriod` takes the signature period, the store period and whether the store knows the next committee.
+  - `irrelevantUpdate` takes the attested slot and the finalized slot of the store.
+  - `unexpectedNextSyncCommittee` takes the aggregate key of the committee, and `conflictingNextSyncCommittee` the aggregate keys of the store's committee and the update's.
+  - `invalidSignature` takes the signing root.
+  - `finalizedPeriodMismatch` takes the finalized period and the store period.
+  - `slotOverflow` takes the finalized slot and the timeout.
+  - `beforeAltair` takes the epoch of the state and the Altair epoch, and `stateNotAtBlock` the slot of the state and of its latest block header.
+  - `stateNotOfBlock` takes the block root of the state and the root it must equal, and `finalizedNotOfState` the finalized root of the state and the root of the given block.
+
+  The new `ToString` instance of `LightClientError` writes each error with its values, such as "expected trusted block root 0x…, got header root 0x…".
+  The Python `LightClientError` carries that message after "light client: ", in place of the Lean name of the constructor.
+
+- The errors of the block header, the RANDAO reveal, the vote on the deposit contract, the slashings, the block signature and the state root carry the values that their check compared.
+  `TransitionError.wrongParent` and `wrongStateRoot` hold the root of the block, then the root that the state gives.
+  `invalidRandaoReveal` holds the proposer and the epoch, and `tooManyEth1Votes` the number of votes and the limit.
+  `headerSlotsDiffer` and `headerProposersDiffer` hold the value of each header, and `sameHeaders` the slot and the proposer.
+  `invalidHeaderSignature` holds the proposer and the signing root, and `invalidBlockSignature` the proposer and the slot.
+  `notSlashableData` holds the source and target epochs of both attestations, `invalidIndexedAttestation` the position of the attestation, 1 or 2, and `noneSlashed` the number of validators in both.
+  The message of a transition error is on one line and writes each root in hex behind `0x`, as in `EthLib.Consensus.TransitionError.wrongParent 0x00… 0x6a…`.
+  A fork choice error that wraps a transition error writes it on one line too.
+  The codes do not change.
+  `processRandao_ne_invalidRandaoReveal` states that the step fails with an invalid reveal for no proposer and no epoch.
+
+- In Lean, every node of a Merkle tree has a `Merkle.Position`, its level and its index, and the tree passes positions instead of a level and an index.
+  The node hash has type `Position → α → α → m α`; it had type `Nat → Nat → α → α → m α`, with the level first.
+  `Merkle.node hash leaves ⟨level, j⟩`, `Merkle.siblings hash leaves p n`, `Merkle.ordered p` and `Merkle.climb hash p current siblings` take a position; `Merkle.root` and `Merkle.path` keep their arguments.
+  `Merkle.node hash leaves level j` becomes `Merkle.node hash leaves ⟨level, j⟩`, and the recursion on the level is `Merkle.node.go`.
+  A position names its `parent`, `sibling`, `left` and `right` children and its `ancestor` `k` levels up, and `EthLib.Cryptography.Proofs.Merkle.Position` proves how they relate.
+  `Merkle.div_two_div_pow` moves to that module, under the same name.
+  The searches `Merkle.findCollision`, `Merkle.findSecondPreimage` and `Merkle.climbPairs` take the starting position instead of a level and an index.
+  `Merkle.Collision` and `Merkle.SecondPreimage` hold one `position` field, the position of the node they attack, instead of a level and an index.
+  `Merkle.findCollision_valid` concludes `c.position = p.ancestor (k + 1)` in place of the level and index equations.
+  `Merkle.SecondPreimage.Valid` also requires the position to be above the leaves, where the node has children.
+  `Merkle.findSecondPreimage_valid` states that this node is a strict ancestor of the starting position, with `Position.IsAncestor`.
+  In the random oracle model, `Merkle.RandomOracle.NodeInput R` is `Position × R × R`, so the domain of the node oracle changes.
+  `Merkle.RandomOracle.nodeHash` and `Merkle.RandomOracle.queryNode` take a position.
+  The agreement hypotheses of `Merkle.node_congr`, `path_congr` and `climb_congr`, and of the XMSS and SPHINCS+ lemmas built on them, quantify over positions.
+  The query lemmas of `EthLib.Cryptography.Proofs.QueryAvoidance` take a position and a node hash of a position.
+  The node hashes of XMSS, SPHINCS+, FORS and the VRF take a position and compute the same bytes.
+  The XMSS, SPHINCS+ and FORS nodes and the SSZ climb still take a level or height and an index, and build the position.
+  Lemmas about climbs from a leaf state its positions as `(⟨0, j⟩ : Position).ancestor n` and its `sibling`, `left` and `right`, in place of `⟨n, j / 2 ^ n⟩`.
+  `Position.ancestor_mk_zero` and the `_mk` lemmas of the position module convert between the two forms.
+  `XmssSecurity.Concrete.CacheReplay.div_pow_succ` is removed; `Merkle.div_pow_div_two` states the same fact.
+  To migrate a node hash, read `p.level` and `p.index` where it read the level and the index.
+
+- In Lean, ten general lemmas that [#2647](https://github.com/ethereum/EthLib/pull/2647) made public move into the namespaces of the objects they describe ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
+  Statements are unchanged; use the new names.
+  - `active_of_mem_voters` becomes `Store.active_of_mem_voters`.
+  - `slot_mem_range_of_voteOrigin` becomes `Store.slot_mem_range_of_voteOrigin`.
+  - `exists_voteOrigin_of_mem_supporters` and `previousBlockSlot_le_previousCurrentSlot` become `Store.ForwardReachableWith.exists_voteOrigin_of_mem_supporters` and `Store.ForwardReachableWith.previousBlockSlot_le_previousCurrentSlot`.
+  - `data_eq_of_signed_of_target_epoch`, `latest_slot_floor_of_signed_rank`, `mem_supportersOf_of_latest_signed`, `latest_eq_of_rank_eq`, `notSlashed_checkpointState` and `previousSlot_le_of_time_le` get the prefix `Execution.`.
+
+- In Lean, `Store.isAncestor_of_same_blocks` no longer takes the hypothesis that the receiver holds the ancestor ([#2648](https://github.com/ethereum/EthLib/issues/2648)).
+  Remove the `targetKnown` argument, which came after `sourceKnown`.
+  The walk from the tip in the receiver reaches the ancestor, so the conclusion is unchanged.
+
+- In Lean, the theorems of the `Toolchain` proof modules move to sub-namespaces, and the theorems that repeat them are removed ([#2627](https://github.com/ethereum/EthLib/issues/2627)).
+  `Base.Toolchain.mkObj_eq`, `isNull_eq`, the `isNull` theorem of each constructor, and `getArr?_eq`, `getStr?_eq`, `getNat?_eq`, `getBool?_eq` and `getObjVal?_eq` move to `Base.Toolchain.Json`.
+  `Base.Toolchain.compare_eq` becomes `Base.Toolchain.String.compare_eq`, and `filterM_eq`, `filterAuxM_nil` and `filterAuxM_cons` move to `Base.Toolchain.List`.
+  `EthLib.Base.Proofs.Toolchain.Repr` is removed; import `EthLib.Base.Proofs.Nat` and use `Base.digitChar_eq` in place of `Base.Toolchain.digitChar_eq`.
+  `Serialization.JsonRpc.isNull_str` and `isNull_arr` are removed; use `Base.Toolchain.Json.isNull_str` and `isNull_arr`.
+  `Tls13.size_toUTF8` is removed; use `String.toUTF8_eq_toByteArray` and `String.size_toByteArray`.
+  Statements are unchanged.
+  The `isNull` theorems on `Json.null`, `bool`, `str`, `arr`, `obj` and `mkObj` are now `@[simp]` rules, so `simp` can close goals that it left open before.
+  Each entry of `scripts/check_layers_baseline.txt` now starts with the label of the rule that it allows.
+
+- In Lean, the Python conversion laws and properties move from `EthLib.Base.Exports.Proofs.PyValue` to `EthLib.Base.Proofs.Exports.PyValue` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Update imports for `pyExport_items` and the hexadecimal conversion theorems; their statements are unchanged.
+  `EthLib.Base.Exports.PyValue` imports the law instances at compile time, and `pyExport` keeps the same law constraints.
+  The Python extension links only runtime dependencies and preserves C exports and runtime initializers as public native symbols.
+  The linker hides EthLib's compile-time and legacy initializers and discards their unused sections.
+  C callers that initialize the extension through an `initialize_EthLib_*` symbol must use the corresponding `runtime_initialize_EthLib_*` symbol or import the Python module.
+
+- In Lean, the honest-duty supporter and head theorems use `VotesInSlots` for one complete epoch, including their accountable companions.
+  For `Execution.mem_supportersOf_of_duty_epoch` and its accountable companion, pass the scoped votes after the epoch and slot binders, before `beginOk`.
+  For `Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion, include the scoped votes inside the `margin` existential, after the time bounds and before the stake inequality.
+  For `Execution.exists_voteAt_of_duty_interval`, bind `begin`, `last` and `slot` before the scoped votes, and supply `beginTime` and `endTime` after `fits`.
+  `VotesInSlots` couples `VoteAt` and `VoteCommittees` on the same witness; the latter requires the committee check only after successful target-cache reads.
+  Conclusions and the existing unbounded `Votes` definition are unchanged.
+
+- In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
+  A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
+  `G1.size_compress` and `keyValidatePoint_size_ne` are removed, since the type states the length.
+  `G1.uncompress_ok_cases` no longer states the size, and `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` state its facts on the bytes of the input.
+  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and the theorems on decoded setups state their facts through them.
+  `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
+  `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
+  `SyncDrawable.keys` states key validation of each key as a vector.
+  No C export or Python function changes.
+
+- In Lean, `EthLib.Execution.Exports.Proofs.Evm` and `EthLib.Execution.Exports.Proofs.Trie` move to `EthLib.Execution.Proofs.Exports.Evm` and `EthLib.Execution.Proofs.Exports.Trie` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
+  Declaration names and statements are unchanged; update the imports.
+  Consumers that received these theorems through an `Exports` root must import the relevant proof module or `EthLib.Execution.Proofs`.
+
+- In Lean, `Evm.Call.TransferLog` becomes `Evm.TransferLog`, and the XMSS security modules `XmssSecurity.Scan.*` move to `XmssSecurity.Proof.Scan.*` ([#2629](https://github.com/ethereum/EthLib/pull/2629)).
+  The import checker now finds a cycle between directories through imports at any depth, and these moves break the two such cycles that remained.
+  Declaration names, namespaces and statements are unchanged; update the imports.
+
+- In Lean, specification modules keep only the theorems that their definitions and instances need, plus persistent `@[simp]` rules ([#2628](https://github.com/ethereum/EthLib/pull/2628)).
+  55 theorems move to the matching `Proofs` modules.
+  In Base, two move from `Base.BigEndian` to `Base.Proofs.BigEndian`, five from `Base.Except` to `Base.Proofs.Except`, and one from `Base.Hex` to `Base.Proofs.Hex`.
+  In Cryptography, twelve move from `Cryptography.Montgomery` to `Cryptography.Proofs.Montgomery.Core`, and one each from `Hash.Scrypt` and `Sphincs.Tree` to `Proofs.Hash.Scrypt` and `Proofs.Sphincs.Tree`.
+  The XMSS and SPHINCS+ constants follow: ten move from `Xmss.Constants` to `Proofs.Xmss.Constants`, and twenty-one from `Sphincs.Constants` to `Proofs.Sphincs.Constants`.
+  In Execution, one moves from `Evm.Step` to `Proofs.Evm.Step`, and in Serialization, one from `Ssz.Typed.Rooted` to `Proofs.Ssz.Typed.Rooted`.
+  The SSZ export proofs `EthLib.Serialization.Exports.Proofs.Ssz` become `EthLib.Serialization.Proofs.Exports.Ssz`, and `EthLib.Serialization.Exports` no longer imports them.
+  Declaration names and statements are unchanged; add the `Proofs` imports.
+
+- Fork-choice replay returns a nonempty list of handler outcomes for each input step ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  An admitted block's first outcome reports admission; the rest report its attestations and attester slashings, in order.
+  Carried operations run only for an admitted block, so a rejected block gives one outcome, its error.
+  Each successful handler commits independently, and a failed carried operation does not stop later calls.
+  An invalid payload verdict applies its removal after the step, even a rejected one, and after the carried operations of an admitted block.
+  Other inputs have one outcome.
+  This changes `fork_choice`, `forkChoice`, `replayForkChoice` and `replayForkChoiceConfirming`.
+  Every export that takes fork-choice steps replays blocks this way.
+  Callers must inspect each nested outcome, not treat the input as one atomic operation.
+  The public `runForkChoiceStep` block branch now performs bare admission only; its type is unchanged.
+  `Store.onBlockWithVotes` and its nine wrapper-only lemmas are removed; call the spec handlers separately.
+
+- In Lean, `Models.Network.Handles.block` calls `Store.onBlock` without processing carried operations ([#2622](https://github.com/ethereum/EthLib/pull/2622)).
+  The `blockAttestation` and `blockAttesterSlashing` constructors process them separately.
+  Each requires the enclosing signed block in the view and its root among the blocks of the receiving store, so carried operations run only for an admitted block.
+  Update case analyses of `Handles` to cover both constructors and their two new premises.
+  This changes `forkChoice` executions and `UpToDate`, and transitively `Prompt` and `VoteAt`, even where their signatures are unchanged.
+  `BlocksAdmitted` requires only bare `onBlock` success, with its other conditions unchanged.
+
+- In Lean, modules move so that no two directories of a layer import each other ([#2617](https://github.com/ethereum/EthLib/pull/2617)).
+  In Execution, `Evm.Call.Delegation`, `Evm.Machine.Errors`, `Blocks.Log` and `Fees.BlobGas` become `Evm.Delegation`, `Evm.Errors`, `Evm.Log` and `Transactions.BlobGas`.
+  In Serialization, `Ssz.Codec.Error` becomes `Ssz.Error`, and the proof modules `Proofs.Ssz.Type.Bounds`, `DefaultLaws` and `FitsLaws` move to `Proofs.Ssz.Codec`.
+  In Consensus, the proof module `Models.Network.ForkChoice` becomes `Proofs.ForkChoiceNetworkModel`.
+  In Cryptography, the XMSS `Unforgeability` modules move to `Security.XmssSecurity`, with `Statement` renamed `ConcreteStatement`, and the SPHINCS+ security modules regroup under `Forgery`, `GraphView`, `HiddenOracle`, `PreparedRun`, `RefinedForgery`, `ScanSigner` and `SmallBudget`.
+  Declaration names, namespaces and statements are unchanged; update the imports.
+
+- The QUIC and TLS codecs use packed byte arrays for byte strings, as [Shared types](ARCHITECTURE.md#shared-types) requires ([#2616](https://github.com/ethereum/EthLib/pull/2616)).
+  In Lean, packet-header fields, frame payloads, TLS byte fields and transcripts use `ByteArray` in place of `List UInt8`.
+  `Varint`, `Packet`, `Frame` and TLS `encode` and `decode` use `ByteArray` at their byte boundaries.
+  Use `.size` for a byte length and `.data.toList` only when calling the internal list readers.
+  In Python, these fields use `bytes` in place of `list[int]`; convert an existing byte list with `bytes(value)` and write an empty byte string as `b""`.
+  Collections of messages, extensions, key shares and ALPN protocol names remain lists.
+  Encoded wire bytes and rejection codes are unchanged.
+
+- In Lean, the proof modules `FastConfirmationCommittees`, `FastConfirmationConfirmedRoot`, `FastConfirmationIndicators`, `FastConfirmationSets` and `FastConfirmationSupporters` move under `EthLib.Consensus.Proofs.ForkChoice.FastConfirmation` as `Committees`, `ConfirmedRoot`, `Indicators`, `Sets` and `Supporters` ([#2566](https://github.com/ethereum/EthLib/pull/2566)).
+  The declarations of the former `FastConfirmation` module move to `FastConfirmation.Basic`, and importing `FastConfirmation` still provides them and all five leaves.
+  Declaration namespaces and statements are unchanged.
+
+- `ssz.get_generalized_index` names a field of a container only by its name ([#2480](https://github.com/ethereum/EthLib/issues/2480)).
+  A position given for a field is refused with the error for an unknown field.
+  In addition, a path takes `__active_fields__` and `__selector__`, the mixed-in nodes of a progressive container and of a union.
+
+- In Python, `consensus.api_post` and `consensus.api_gossip_event` return the data of each event as its JSON text, instead of the parsed value ([#2515](https://github.com/ethereum/EthLib/pull/2515)).
+  This is the `data` field of the Beacon API event stream, and the form that the fork choice events already return.
+  A caller that needs the value applies `json.loads` to that text.
+
+- In Lean, the SSZ exports read a Python value directly, without writing it as JSON first ([#2475](https://github.com/ethereum/EthLib/issues/2475)).
+  In Lean, `valueOfJson` becomes `valueOf`, `jsonOfValue` and `jsonOfValues` become `pyOfValue` and `pyOfValues`, and `descOf`, `tagged`, `optionalNat`, `pair` and `readValue` take a `PyValue`.
+  Bytes given as `bytes` are taken as they are, instead of being written as hex and read back.
+  Nothing breaks in Python: every input gives the same result or the same error as before.
+
+- In Lean, the shuffle, custody, keystore and discv5 callers of SHA-256 keep the digest as a `Vector UInt8 32` ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  `Shuffle.bucketBits` and `Keystore.passwordChecksum` return one, and `Shuffle.bitAt` and `DataAvailability.firstUInt64` take one.
+  A caller that needs the bytes applies `packBytes`, and `Sha256.packBytes_hash32` gives back the byte-array digest.
+  The keystore checksum theorems compare the checksum with `store.checksum` directly, and `checksumVector` is removed: use `passwordChecksum`.
+  Nothing breaks in Python.
+
+- The execution RPC answers `eth_simulateV1` with its simulated blocks ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  The results of the calls are not yet in the blocks.
+  In Lean, `fillHeader`, `outputChecks_fillHeader` and `runBody_fillHeader` move from `EthLib.Engine` to `EthLib.Execution.Blocks`, and `SimulateChoices` gains `gasCap`.
+  Nothing breaks in Python.
+
+- In Lean, the block environment gains the field `blobGasPrice` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  A simulation sets the base fee per blob gas with it, and its default `none` keeps the price of the excess blob gas.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks and the run of a transaction, and the simulation overrides of a body, take optional lifted rules.
+  A simulation can skip the nonce check and lift the gas caps of EIP-8037 with them.
+  The sender check gains a flag for the nonce check.
+  Nothing breaks in Python.
+
+- In Lean, the transaction environment gains the field `precompiles` ([#2108](https://github.com/ethereum/EthLib/issues/2108)).
+  It gives the address of the precompile that a call to each address runs.
+  Its default `some` keeps each precompile at its own address, so a real block is unchanged.
+  Supply that field in positional constructors, or use structure notation with its default.
+  The checks of a transaction, its run and the body of a block take optional simulation overrides.
+  A simulation can give the sender in place of the signature, and that sender may have code.
+  The sender check gains a flag for that case.
+  Nothing breaks in Python.
+
+- The execution RPC checks the requests of `eth_simulateV1` before their blocks run ([#2107](https://github.com/ethereum/EthLib/issues/2107)).
+  In Lean, `call_unknown` requires the method name to differ from `eth_simulateV1`.
+  Nothing breaks in Python: `rpc.apply_overrides` gives the state root after the account overrides of one block.
+
+- The execution RPC serves `eth_getBlockAccessList` and `debug_getRawBlockAccessList` ([#2106](https://github.com/ethereum/EthLib/issues/2106)).
+  In Lean, `BlockRecord` gains the optional field `accessList` for the retained list.
+  Supply that field in positional constructors, or use structure notation with its `none` default.
+  `Follows` requires each retained list to equal the execution builder's list.
+  `call_unknown` requires the method name to differ from both access-list method names.
+  Nothing breaks in Python: `rpc.serve` takes the new optional argument `pruned_access_lists` for block numbers whose lists are unavailable.
+  `rpc.encode_block_access_list` encodes a JSON list as its EIP-7928 RLP bytes.
+
+- In Lean, `Frame` gains the field `slashed`, after `pubkeysDistinct` ([#1451](https://github.com/ethereum/EthLib/issues/1451)).
+  A validator slashed before a step, at a registry position, is slashed after it at the same position.
+  A proof that builds a `Frame` with an anonymous constructor adds that field.
+  `frame_setValidatorAt_of_whole`, `frame_setValidator_of_whole` and `frame_setValidator` take a new premise `old.slashed = true → validator.slashed = true` after the proof of the key.
+  A caller passes `id` when the new validator copies the flag of the old one, and `fun _ => rfl` when it is slashed.
+  `initiateValidatorExit_balances_eq_and_pendingConsolidations_eq` moves to `Consensus/Proofs/Transition/PendingConsolidations.lean`, which `BalanceDrift.lean` imports publicly.
+
+- In Lean, the results on slashed flags state them at each position of the registry, through `slashedFlagAt state position`, the read `(state.validators.data[position]?).map (·.slashed)` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  From Gloas the registry has no limit in its type, so a position may lie beyond every `ValidatorIndex`.
+  A proof whose goal spells out the read unfolds the name first, as in `simp only [slashedFlagAt] at h`.
+  `slashedFlag_initiateValidatorExit` is renamed `slashedFlagAt_initiateValidatorExit`, and it takes a `position : Nat` in place of an index.
+  The second conjunct of `slashValidator_slashedFlag` holds at each position other than `slashedIndex.toNat`.
+  A caller that read either at an index `i` reads it at `i.toNat`.
+  The new `slashedFlag_eq_of_slashed` turns equal flags there into equal values of `slashedFlag` at `i`.
+  `slashIfSlashable_ok` and `foldlM_slashIfSlashable` gain a last conjunct: no slashed flag changes at a position other than that of their index, or that none of their indices names.
+  A pattern that takes them apart needs a fourth component.
+  `UpgradeFrame` gains the field `slashed`, since each upgrade keeps every slashed flag.
+  `ElectraKept` gains the same conjunct, so a pattern that takes it apart needs a fourth component too.
+  `UpgradeFrame.trans_blockFrame` takes the new premise `slashed`: the steps after the upgrade keep every slashed flag.
+  A block frame alone may slash, so it cannot give the field.
+  Compose the block frames of the steps first, and pass their slashed flags once.
+  `slashedFlagAt_processProposerSlashing` and `slashedFlagAt_processAttesterSlashing` state that a slashing changes flags only at the positions that it names.
+  `slashedFlagAt_foldlM` states the same for a fold of such steps.
+  `slashed_setValidatorAt` is renamed `slashedFlagAt_setValidatorAt`.
+  `foldlM_ok_invariant_of_mem` moves to `Base/Proofs/MapM.lean`, in the namespace `EthLib.Base`.
+
+- `engine_forkchoiceUpdated` checks that the most recent block of proof of work on the chain of the head is terminal, as step 3 of the method and step 2 of payload validation of Paris require.
+  A head whose chain fails the check is `INVALID`, with the zero hash, and the head does not change.
+  Once the known finalized block is a payload of the tree, a zero safe or finalized hash gives `-38002`.
+  The latest valid hash of an invalid head is zero when its latest valid block is of proof of work.
+  In Lean, `KnownPayload` has the new field `powTotalDifficulty`, `none` for a payload, so its anonymous constructor takes a fifth value.
+  `forkchoiceUpdated` takes a `TransitionConfiguration` first, and `forkchoiceUpdatedCall` takes one after the chain configuration.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_belowFinalized`, `forkchoiceUpdated_valid_none_iff`, `forkchoiceUpdated_of_invalid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` state the terminal block check.
+  `forkchoiceUpdated_valid`, `forkchoiceUpdated_of_onChain` and `forkchoiceUpdated_eq_error_iff` also state the rule on zero hashes, and `forkchoiceUpdated_of_invalid` answers `latestValidHash` in place of `latestValid`.
+  In Python, a block of the tree of `engine.forkchoice_updated` may carry `totalDifficulty` and `parentTotalDifficulty`.
+  The function takes the required keyword-only argument `terminal_total_difficulty`, as `engine.new_payload_on_chain` does.
+  A tree with no block of proof of work passes the check whatever that value, which must be below `2^256`.
+  The native `engine_forkchoice_updated` takes that value after the finalized block.
+- `engine_newPayload` on a chain checks that a parent of proof of work is a terminal block, as step 2 of payload validation of Paris requires.
+  A parent that fails the check makes the payload `INVALID`, with the zero hash and the new reason code 407.
+  In Lean, `PayloadError` has the new constructor `invalidTerminalBlock`, with that code.
+  `newPayloadOnChain` takes two new arguments before the chain: a `TransitionConfiguration`, and the total difficulty of the last block of the chain.
+  Its theorems take both values, and `newPayloadOnChain_of_stateTransition_ok`, `newPayloadOnChain_of_stateTransition_error` and `newPayloadOnChain_of_buildPayload` take the hypothesis that the parent passes the check.
+  In Python, `engine.new_payload_on_chain` takes the required keyword-only arguments `terminal_total_difficulty` and `total_difficulty`, and the native `engine_new_payload_on_chain` takes them after the recent blocks.
+  A last block from Paris on passes the check, so then any total difficulty, and any terminal total difficulty below `2^256`, do.
+- In Lean, the bound on the extra data of an Engine payload is the named constant `Execution.Blocks.MAX_EXTRA_DATA_BYTES`, in place of the literal `32`.
+  The statements of `anyPayload_executionPayloadJson`, `payloadV4_executionPayloadV4Json`, `payloadOfBlock_extraData` and `newPayloadParams_json` change only by that name, and so do `payloadOfBlock` and `anyPayload`.
+  The constant is `32`, so a proof that used `omega` on the bound first unfolds it, as in `simp only [MAX_EXTRA_DATA_BYTES]; omega`.
 - In Lean, `EpochFrameLaws` now extends `EpochStepLaws`, which holds every law except those for a new validator and for the queue of pending deposits.
   The theorems that need neither law moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statements, and they now take the smaller structure.
   Dot notation on a value of either structure still finds them; a full name such as `EpochFrameLaws.processSyncAggregate` becomes `EpochStepLaws.processSyncAggregate`.
+- In Lean, `processEpoch_split_of_lt_altair` moved from the `EpochFrameLaws` namespace to the `EpochStepLaws` namespace, with the same statement, and it now takes the smaller structure.
+  Dot notation on an `EpochFrameLaws` value still finds it.
+  A call by the full name `EpochFrameLaws.processEpoch_split_of_lt_altair laws` becomes `EpochStepLaws.processEpoch_split_of_lt_altair laws.toEpochStepLaws`.
 - In Lean, the JSON readers and writers of the base types moved from `EthLib.Engine.Json` to `EthLib.Serialization.JsonRpc`, with their theorems.
   They are `hexValue`, `hexDigits`, `bytesOf`, `bytes`, `fixed`, `address`, `quantity`, `bytesMax`, `uint64`, `paramsArray`, `array`, `fields`, `hasExactly`, `field`, `dataJson`, `quantityJson`, `listJson` and `optionJson`.
   Their namespace is now `EthLib.Serialization.JsonRpc`.
@@ -29,6 +976,20 @@ Not yet released.
   `conflict` and `ordered` imply the removed bound on the slot of `x`, so the theorems cover the same runs as before.
   The drift horizon in the conclusion of `accountable_safety` is the finalized epoch of `b`, not the larger of the two finalized epochs; `ordered` makes them equal.
 
+- In Lean, the direct safety endpoints bound the unslashed active stake at `x`, `unslashedKeys x.state`, in place of `activeKeys x.state` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  `Accountable` takes the shared prefix and the two tails, `shared left right`, in place of the two full runs, and `accountableKeys` takes them in place of the two full runs and the reference state.
+  Slashing evidence counts only in the tails; double votes still count over the full runs, and proposer slashings in the tails still count.
+  `accountableKeys` keeps only the unslashed keys active at `x`.
+  `recentKeys` keeps only unslashed keys, `referenceLoss` sums over `unslashedKeys x`, and `referenceGain` subtracts the support of `unslashedKeys x`.
+  So `boundaryStake`, and through it `stateDrift` and `derivedDrift`, count only unslashed recent stake.
+  `Run.slashed_evidence` holds for a run from any state, with no `genesis` argument, and concludes `SlashedAt x.state v.pubkey ∨ run.SlashingEvidence v.pubkey`.
+  `SlashedAt` names the predicate that `referenceLoss` stated inline before.
+  `verifiedConflict_of_accountable` takes `shared left right` and concludes `VerifiedConflict (shared.append left) (shared.append right) key`.
+  Pass `shared left right` where a caller passed `shared.append left`, `shared.append right` and `x`.
+  `DirectSafety.accountable_safety_justified_terminal` and `Store.Reachable.finalized_ancestor_or_accountable` change the same way: their stake alternative bounds the unslashed active stake, at `x` or at the anchor state, by `accountableKeys` of the shared prefix and the two tails.
+  The new Lean declarations are `DirectSafety.SlashedAt`, `DirectSafety.unslashedKeys`, `DirectSafety.EpochCall.pubkeysDistinct` and `Run.pubkeysDistinct`.
+  `Run.pubkeysDistinct` gives distinct keys at the end of a run from genesis; `EpochCall.pubkeysDistinct`, `view_quorum_count` and `view_voters_recent` read it.
+
 - In Lean, `DirectSafety.HashEvidence objects` is stated through the searches `findMessageCollision` and the new `findZeroRoot`, in place of a bounded existential ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
   No C export or Python function changes, and every theorem that mentions `HashEvidence` keeps its statement.
   `hashEvidence_iff` proves that the new body is equivalent to the old one, for every list of objects and with no hypothesis.
@@ -36,6 +997,24 @@ Not yet released.
   The two bodies are not definitionally equal.
   A proof that unfolds `HashEvidence` to take it apart first rewrites with `hashEvidence_iff`, or applies `hashEvidence_iff.mp`.
   A proof that builds the evidence as an `Or` of the old form applies `hashEvidence_iff.mpr`.
+
+- In Lean, `DirectSafety.slashingLimits` counts only the indices that are slashable at the operation.
+  It still reads every index with `getValidator`, so its errors are unchanged.
+  It then keeps the validators for which `isSlashableValidator` holds at the current epoch, the test of `slashIfSlashable`.
+  An attester slashing pays nothing for an index that is already slashed, so its limits no longer count one.
+  So every value derived from it can only decrease.
+  These are the `creditLimit` and `debitLimit` of the `.slashings` events, and through `fundingCredit (.slashings)` the values `activeStakeWindow`, `consolidationRate` and the right side of `departure_charges_le_funded_window`.
+  `residualCredit` and `sourceDrift` read the same limits, so they can only decrease too.
+  A call on one proposer that is not slashable now gives zero limits.
+  The replay of a successful proposer slashing is unchanged, since `processProposerSlashing` requires the proposer to be slashable.
+  Every theorem statement is unchanged.
+
+- In Lean, the four rules by which one justification step finalizes a checkpoint have one definition, `FinalizationStepRule state after checkpoint` ([#2187](https://github.com/ethereum/EthLib/issues/2187)).
+  The bits come from the state after the step, the epoch and the justified checkpoints from the state before it.
+  `weighJustificationAndFinalization_finalized` states its second disjunct as `FinalizationStepRule state after after.finalizedCheckpoint`, with the same unfolded body.
+  `DirectSafety.FinalizationRule call checkpoint` is `FinalizationStepRule call.cached call.weighed checkpoint`, with the same unfolded body.
+  A proof that took either apart by name first unfolds `FinalizationStepRule`.
+  No C export or Python function changes.
 
 - `verify_kzg_proof` checks its inputs in the order of EIP-4844: the commitment, `z`, `y`, then the proof.
   When more than one input is invalid, the first in that order gives the error.
@@ -104,7 +1083,7 @@ Not yet released.
   So `.2.2` of `Store.onAttestation_frame` and `Store.onAttesterSlashing_frame` becomes `.2.2.1`, and `.2.2.2.2` of `Store.onTickPerSlot_frame` becomes `.2.2.2.2.1`.
   The `.2.2.2` of the other four frames becomes `.2.2.2.1`.
   The new `Store.catchUp_preserves` states that catch-up keeps each property of the store that every tick within a slot keeps.
-  It has the form of `Store.onBlockWithVotes_preserves`.
+  It composes preservation over the individual tick steps.
   `Store.catchUp_frame`, `Store.catchUp_ordered` and the catch-up step of `Store.onTick_checkpointStates_latestMessages` now read it, with unchanged statements.
   The new `Store.onTick_ok` splits a tick into the slot of its time, the catch-up to that slot and one tick within it.
   `Store.onTick_frame`, `Store.getCurrentSlot_onTick`, `Store.onTick_ordered`, `Store.onTick_checkpointStates_latestMessages` and `Store.exists_getCurrentSlot_onTick_ge` now read it, with unchanged statements.
@@ -446,9 +1425,9 @@ Not yet released.
   Threads may call the exports at the same time, and a list that another thread changes during a call is read as a snapshot.
 - The consensus gossip and req/resp lists, the subscribed subnets and the SSZ root exports now take and return typed values ([#1551](https://github.com/ethereum/EthLib/pull/1551)).
   The C exports `eth_consensus_gossip_topics`, `eth_consensus_reqresp_protocol_ids`, `eth_consensus_reqresp_parse_protocol_id`, `eth_consensus_reqresp_request_bounds`, `eth_consensus_reqresp_response_bounds` and `eth_consensus_compute_subscribed_subnets` take the tuple of their arguments as one value.
-  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message`, `eth_consensus_merkle_proof` and `eth_pq_keys_ssz`.
+  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message` and `eth_consensus_merkle_proof`.
   A list comes back as a list, the subscribed subnets as a list of `int`, and a pair as a tuple, where each came back as JSON text.
-  The three SSZ exports return the root and the bytes as a pair, where they returned the two joined.
+  The two SSZ exports return the root and the bytes as a pair, where they returned the two joined.
   `eth_consensus_merkle_proof` returns the node and the list of its siblings, and `eth_consensus_compute_subscribed_subnets` takes the node ID as an `int`.
   In Python, a node ID of 2^256 or more, or an epoch or a generalized index of 2^64 or more, raises the error class of the method with code 0, where it raised `OverflowError`.
   A `bool` given for one of them raises the same error, where it read as 0 or 1.
@@ -634,6 +1613,21 @@ Not yet released.
   `readPrefix_short`, `decodeItemsFrom_eq` and `decodeItems_eq` take the same bound, and `decodeItem_of_readItem` takes it as an implicit argument.
   `decode` keeps its type, the inputs it accepts, its values and its errors.
   No C export or Python function changes.
+- In Lean, the reader of an `eth_getProof` answer moves into the specification ([#2099](https://github.com/ethereum/EthLib/issues/2099)).
+  `accountProofOfJson`, `storageProofOfJson` and `proofNodes` move from `EthLib.Engine.Exports` to `EthLib.Execution.Rpc`, in `Execution/Rpc/Proof.lean`.
+  They keep their types and their errors.
+  No C export or Python function changes.
+- The chain view serves `eth_getProof`, with the answer that `AccountProof.ofState` builds from the state after the block.
+
+- `eth_config` reports the current, next and last scheduled configurations from Dencun through Glamsterdam.
+  As EIP-7910 says, the report leaves out a future fork after Glamsterdam, and `next` and `last` are null when no supported fork remains.
+  A fork at a block after genesis is never a next or last configuration.
+  In Lean, `ChainView` adds `genesis` and `mergeForkBlock` for the fork checksum.
+  Supply both fields in positional constructors, or use structure notation with their `none` defaults.
+  `call_unknown` also requires that the method name differ from `eth_config`.
+  The configuration given to `rpc_serve` takes the optional keys `mergeForkBlock`, `genesisHash` and `genesisTime`.
+  It rejects a malformed value of these keys, one of the genesis pair without the other, and a genesis pair that disagrees with block zero.
+  The C and Python function signatures stay the same.
 
 ## 0.3.0
 

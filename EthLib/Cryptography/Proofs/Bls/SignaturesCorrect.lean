@@ -53,11 +53,6 @@ namespace Signatures
 
 open EthLib.Base
 
-/-- The bytes of a vector built from a byte array are that byte array. -/
-private theorem bytes_of_vector {n : Nat} (b : ByteArray) (h : b.data.size = n) :
-    (⟨(⟨b.data, h⟩ : Vector UInt8 n).toArray⟩ : ByteArray) = b :=
-  rfl
-
 /-- The scalar identity of a verification. -/
 private theorem one_mul_add_neg_mul (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
   ring
@@ -66,34 +61,31 @@ private theorem one_mul_add_neg_mul (a b : Fr) : 1 * (a * b) + -a * b = 0 := by
 
 It is stated on a variable point, so the kernel never evaluates a compression. -/
 theorem pointToPubkey_bytes (p : G1) :
-    (⟨(pointToPubkey p).toArray⟩ : ByteArray) = G1.compress p := by
-  unfold pointToPubkey
-  exact bytes_of_vector _ _
+    (⟨(pointToPubkey p).toArray⟩ : ByteArray) = packBytes (G1.compress p) :=
+  rfl
 
 /-- The bytes of the signature of a point are its compression. -/
 theorem pointToSignature_bytes (p : G2) :
-    (⟨(pointToSignature p).toArray⟩ : ByteArray) = G2.compress p := by
-  unfold pointToSignature
-  exact bytes_of_vector _ _
+    (⟨(pointToSignature p).toArray⟩ : ByteArray) = packBytes (G2.compress p) :=
+  rfl
 
 /-- The bytes of the public key of a secret key are the compressed multiple of the generator. -/
 theorem skToPk_bytes (sk : SecretKey) :
-    (⟨(skToPk sk).toArray⟩ : ByteArray) = G1.compress (G1.mul G1.generator sk.val) := by
+    (⟨(skToPk sk).toArray⟩ : ByteArray) = packBytes (G1.compress (G1.mul G1.generator sk.val)) := by
   unfold skToPk
   exact pointToPubkey_bytes _
 
-/-- The bytes of the public key of a point are its compression. -/
-theorem packBytes_pointToPubkey (p : G1) : packBytes (pointToPubkey p) = G1.compress p :=
-  pointToPubkey_bytes p
+/-- The public key of a point is its compression. -/
+theorem pointToPubkey_eq (p : G1) : pointToPubkey p = G1.compress p :=
+  rfl
 
-/-- The bytes of the signature of a point are its compression. -/
-theorem packBytes_pointToSignature (p : G2) : packBytes (pointToSignature p) = G2.compress p :=
-  pointToSignature_bytes p
+/-- The signature of a point is its compression. -/
+theorem pointToSignature_eq (p : G2) : pointToSignature p = G2.compress p :=
+  rfl
 
-/-- The bytes of the public key of a secret key are the compressed multiple of the generator. -/
-theorem packBytes_skToPk (sk : SecretKey) :
-    packBytes (skToPk sk) = G1.compress (G1.mul G1.generator sk.val) :=
-  skToPk_bytes sk
+/-- The public key of a secret key is the compressed multiple of the generator. -/
+theorem skToPk_eq (sk : SecretKey) : skToPk sk = G1.compress (G1.mul G1.generator sk.val) :=
+  rfl
 
 /-- A success passed on to a pure function gives its value. -/
 theorem bind_ok_pure {ε α β : Type} (a : α) (f : α → β) :
@@ -116,14 +108,18 @@ theorem coreVerify_of_represents {P : G1} {S Q : G2} {a b : Fr}
     {msg dst : ByteArray} (hP : G1.Represents P a) (ha : a ≠ 0)
     (hQ : HashToCurve.hashToG2 msg dst = .ok Q) (hb : G2.Represents Q b)
     (hS : G2.Represents S (a * b)) :
-    coreVerify (G1.compress P) msg (G2.compress S) dst = true := by
+    coreVerify (packBytes (G1.compress P)) msg (packBytes (G2.compress S)) dst = true := by
   obtain ⟨r, hr, hsub, hrep⟩ := G2.uncompress_compress_of_represents hS
   obtain ⟨P', hP', hP'rep⟩ := G1.keyValidatePoint_compress_of_represents hP ha
   have hcheck := (pairingLaws.two_pairs G1.represents_generator hrep hP'rep.neg hb).mpr
     (one_mul_add_neg_mul a b)
   unfold coreVerify
   -- Rewrite every discriminant first, or the kernel evaluates the hash on a variable message.
-  rw [hr, hP', hQ]
+  rw [exactBytes?_packBytes (G2.compress S)]
+  dsimp only
+  rw [hr, exactBytes?_packBytes]
+  dsimp only
+  rw [hP', hQ]
   dsimp only
   -- Rewrite `true && _` first, so the kernel does not unfold the pairing check.
   rw [show signatureSubgroupCheck r = true from hsub, Bool.true_and]
@@ -187,7 +183,7 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     (hacc : G2.Represents acc a) :
     ∃ R, (l.map fun x => pointToSignature (pt x)).foldlM
         (fun agg sig => do
-          let p ← G2.uncompress (packBytes sig)
+          let p ← G2.uncompress sig
           pure (agg.add p)) acc = .ok R ∧
       G2.Represents R (a + (l.map sc).sum) := by
   induction l generalizing acc a with
@@ -198,25 +194,25 @@ private theorem foldlM_aggregate {α : Type} (pt : α → G2) (sc : α → Fr)
     refine ⟨R, ?_, ?_⟩
     · -- Rewrite the decoding first, so the kernel never evaluates it.
       simp only [List.map_cons, List.foldlM_cons]
-      rw [packBytes_pointToSignature, hr]
+      rw [pointToSignature_eq, hr]
       exact hR
     · rw [List.map_cons]
       exact (add_sum_cons a (sc x) _) ▸ hRrep
 
 /-- The public key of a secret key is the compressed multiple of the generator. -/
 theorem pkBytes_eq (sk : SecretKey) :
-    pkBytes sk = G1.compress (G1.mul G1.generator sk.val) :=
+    pkBytes sk = packBytes (G1.compress (G1.mul G1.generator sk.val)) :=
   skToPk_bytes sk
 
 /-- Key validation accepts the public key of a secret key, as a representative of its scalar. -/
 private theorem skToPk_checks (sk : SecretKey) :
-    ∃ P, G1.keyValidatePoint (packBytes (skToPk sk)) = .ok P ∧ G1.Represents P sk.val := by
+    ∃ P, G1.keyValidatePoint (skToPk sk) = .ok P ∧ G1.Represents P sk.val := by
   obtain ⟨P, hP, hrep⟩ := G1.keyValidatePoint_compress_mul sk.property
-  exact ⟨P, (packBytes_skToPk sk).symm ▸ hP, hrep⟩
+  exact ⟨P, hP, hrep⟩
 
 /-- Adding a key that passes key validation adds its point. -/
 private theorem addPubkeyPoint_ok {pk : BLSPubkey} {P : G1}
-    (h : G1.keyValidatePoint (packBytes pk) = .ok P) (agg : G1) (i : Nat) :
+    (h : G1.keyValidatePoint pk = .ok P) (agg : G1) (i : Nat) :
     addPubkeyPoint agg (pk, i) = .ok (G1.add agg P) := by
   simp only [addPubkeyPoint, h]
   rfl
@@ -266,15 +262,13 @@ theorem fastAggregateVerify_of_represents {sks : List SecretKey}
   unfold fastAggregateVerify verify
   rw [hP]
   dsimp only
-  rw [packBytes_pointToPubkey, packBytes_pointToSignature]
+  rw [pointToSignature_eq]
   exact coreVerify_of_represents hPrep hsum hQ hb hS
 
 /-- A point that represents a scalar has the public key of that multiple of `g1`. -/
 private theorem pointToPubkey_eq_of_represents {P : G1} {s : Fr} (hP : G1.Represents P s) :
-    pointToPubkey P = pointToPubkey (G1.mul G1.generator s) := by
-  apply packBytes_injective
-  rw [packBytes_pointToPubkey, packBytes_pointToPubkey]
-  exact G1.compress_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
+    pointToPubkey P = pointToPubkey (G1.mul G1.generator s) :=
+  G1.compress_congr hP.1 (G1.valid_mul G1.valid_generator s) hP.2
 
 /-- Fast verification of honest keys is verification under the key of their scalar sum.
 
@@ -371,10 +365,9 @@ private noncomputable def keyPoint (sk : SecretKey) : G1 :=
   Classical.choose (G1.keyValidatePoint_compress_mul sk.property)
 
 private theorem keyPoint_spec (sk : SecretKey) :
-    G1.keyValidatePoint (packBytes (skToPk sk)) = .ok (keyPoint sk) ∧
-      G1.Represents (keyPoint sk) sk.val := by
-  rw [packBytes_skToPk]
-  exact Classical.choose_spec (G1.keyValidatePoint_compress_mul sk.property)
+    G1.keyValidatePoint (skToPk sk) = .ok (keyPoint sk) ∧
+      G1.Represents (keyPoint sk) sk.val :=
+  Classical.choose_spec (G1.keyValidatePoint_compress_mul sk.property)
 
 /-- Signing each pair of a key and a message succeeds with the multiple of its hash. -/
 private theorem mapM_sign_pairs (l : List (SecretKey × ByteArray)) :
@@ -382,19 +375,33 @@ private theorem mapM_sign_pairs (l : List (SecretKey × ByteArray)) :
       .ok (l.map fun p => pointToSignature (G2.mul (hashPoint p.2) p.1.val)) :=
   EthLib.Base.mapM_eq_ok_map fun p _ => sign_eq (hashPoint_spec p.2).1 p.1
 
-/-- The pairs that the aggregate verification builds from honest keys and messages. -/
-private theorem mapM_pairs (l : List (SecretKey × ByteArray)) :
-    (l.map fun p => (packBytes (skToPk p.1), p.2)).mapM (fun x => do
-        let xP ← G1.keyValidatePoint x.1
-        let q ← HashToCurve.hashToG2 x.2 DST
-        pure (G1.neg xP, q)) =
+/-- The pair that the aggregate verification builds from a valid key and a hashed message.
+
+It is stated on a variable key, so the kernel never evaluates a key to check its length. -/
+private theorem keyMessagePair_of_valid {k : Vector UInt8 48} {msg : ByteArray} {P : G1}
+    {Q : G2} (hk : G1.keyValidatePoint k = .ok P) (hq : HashToCurve.hashToG2 msg DST = .ok Q) :
+    keyMessagePair DST (packBytes k, msg) = .ok (G1.neg P, Q) := by
+  unfold keyMessagePair
+  rw [exactBytes?_packBytes]
+  dsimp only
+  rw [hk, hq]
+  rfl
+
+/-- The pairs that the aggregate verification builds from honest keys and messages.
+
+The key of each pair is any vector that key validation reads as the key point of its secret key.
+
+It stays a variable, so the kernel never evaluates a key to check its length. -/
+private theorem mapM_pairs (keyOf : SecretKey × ByteArray → Vector UInt8 48)
+    (hkey : ∀ p, G1.keyValidatePoint (keyOf p) = .ok (keyPoint p.1))
+    (l : List (SecretKey × ByteArray)) :
+    (l.map fun p => (packBytes (keyOf p), p.2)).mapM (keyMessagePair DST) =
       .ok (l.map fun p => (G1.neg (keyPoint p.1), hashPoint p.2)) := by
   induction l with
   | nil => rfl
   | cons p l ih =>
-    -- Rewrite the key and the hash first, so the kernel never evaluates them.
     simp only [List.map_cons, List.mapM_cons]
-    rw [(keyPoint_spec p.1).1, (hashPoint_spec p.2).1, ih]
+    rw [keyMessagePair_of_valid (hkey p) (hashPoint_spec p.2).1, ih]
     rfl
 
 /-- The scalars of an aggregate verification cancel. -/
@@ -441,12 +448,20 @@ theorem aggregateVerify_aggregate (l : List (SecretKey × ByteArray))
     rw [ite_eq_right (by cases l with
       | nil => exact absurd rfl hne
       | cons _ _ => simp)]
-    rw [packBytes_pointToSignature S, hr]
+    rw [pointToSignature_eq S, exactBytes?_packBytes]
     dsimp only
+    rw [hr]
+    dsimp only
+    -- Name the keys, so the kernel never evaluates one to check its length.
+    have hkey : ∀ p : SecretKey × ByteArray,
+        G1.keyValidatePoint ((fun x : SecretKey × ByteArray => skToPk x.1) p) =
+          .ok (keyPoint p.1) :=
+      fun p => (keyPoint_spec p.1).1
+    generalize (fun x : SecretKey × ByteArray => skToPk x.1) = keyOf at hkey ⊢
     rw [show signatureSubgroupCheck r = true from hsub, Bool.true_and, List.map_toArray,
       List.map_map, List.zip_toArray, zip_map_map, List.mapM_toArray]
     simp only [Function.comp_apply]
-    rw [mapM_pairs]
+    rw [mapM_pairs keyOf hkey]
     dsimp only [Functor.map, Except.map]
     -- One pair for the signature, then one for each key and message.
     have hpairs : #[(G1.generator, r)] ++
@@ -484,12 +499,12 @@ theorem ethAggregatePubkeys_skToPk (sks : List SecretKey) (hne : sks ≠ []) :
 
 /-- With no keys, the Ethereum fast aggregate verification accepts only the point at infinity. -/
 theorem ethFastAggregateVerify_empty (msg : ByteArray) (sig : BLSSignature) :
-    ethFastAggregateVerify #[] msg sig = true ↔ sig = infinitySignature := by
+    ethFastAggregateVerify #[] msg sig = true ↔ sig = G2_POINT_AT_INFINITY := by
   simp [ethFastAggregateVerify]
 
 /-- The signature of the point at infinity is the constant of the Ethereum wrapper. -/
-theorem pointToSignature_zero : pointToSignature G2.zero = infinitySignature := by
-  simp [pointToSignature, infinitySignature, G2_POINT_AT_INFINITY]
+theorem pointToSignature_zero : pointToSignature G2.zero = G2_POINT_AT_INFINITY := by
+  simp [pointToSignature, G2_POINT_AT_INFINITY]
 
 /-- Honest signatures on one message pass the Ethereum fast aggregate verification.
 

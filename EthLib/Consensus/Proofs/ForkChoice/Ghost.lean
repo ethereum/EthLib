@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.AttestationScores
 public import EthLib.Consensus.Proofs.ForkChoice.Head
 public import EthLib.Consensus.Proofs.Models.ForkChoice.LmdGhost
 public import EthLib.Consensus.Proofs.Transition.FfgStake
+import EthLib.Consensus.Proofs.ForkChoice.Supporters
 
 /-!
 # Proofs: the head of the fork choice is LMD-GHOST
@@ -22,6 +23,8 @@ The known blocks of the store form a tree, and an unknown root hangs under a com
 The slot of a block serves as its height, so a known parent has to sit at a lower slot.
 
 The view holds the nodes that lead to a viable leaf, and their ancestors.
+
+Before Gloas, each ancestor of a viable node is viable, or the justified block descends from it.
 
 A validator counts when it is active and not slashed in the justified state.
 
@@ -44,6 +47,8 @@ Those votes leave out the boost.
 The head then descends from it.
 
 That holds before Gloas, when each known block sits after its known parent.
+
+The proposer score succeeds when the boost times the largest possible total fits in 64 bits.
 -/
 
 @[expose] public section
@@ -53,6 +58,79 @@ namespace EthLib.Consensus
 open Base Models.ForkChoice
 
 variable {preset : Preset} {fork : Fork}
+
+section ProposerScore
+
+open Uint64 Models
+
+/-- The proposer score fits in 64 bits for every active stake up to a cap.
+
+The score divides the unslashed active total by the slots of an epoch, then multiplies by the boost.
+
+The total is at least one increment, so the increment and the cap bound it.
+
+The product of that bound and the boost must stay below `2^64`, or the checked product fails.
+
+The cap itself must stay below `2^64`, or the total fails. -/
+structure Config.ProposerScoreFits (config : Config) (preset : Preset) (cap : ℕ) : Prop where
+  total : cap < 2 ^ 64
+  share : max preset.EFFECTIVE_BALANCE_INCREMENT.toNat cap * config.PROPOSER_SCORE_BOOST.toNat <
+    2 ^ 64
+
+/-- The mainnet proposer score fits for an active stake up to `2 * 10^17` Gwei. -/
+theorem Config.proposerScoreFits_mainnet :
+    Config.mainnet.ProposerScoreFits Preset.mainnet (2 * 10 ^ 17) := by
+  constructor <;> decide
+
+/-- The minimal proposer score fits for an active stake up to `2 * 10^17` Gwei. -/
+theorem Config.proposerScoreFits_minimal :
+    Config.minimal.ProposerScoreFits Preset.minimal (2 * 10 ^ 17) := by
+  constructor <;> decide
+
+/-- The proposer score of a state succeeds when its active stake is at most a cap that fits.
+
+The registry must stay within its limit, and an epoch must have a slot. -/
+theorem computeProposerScore_exists {config : Config} {cap : ℕ}
+    (fits : config.ProposerScoreFits preset cap) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {state : BeaconState preset fork} (within : state.RegistryWithinLimit)
+    (bounded : stake (fun v => balanceAt state v.toNat)
+      (getActiveValidatorIndices state (getCurrentEpoch state)).toFinset ≤ cap) :
+    ∃ score, computeProposerScore config state = .ok score := by
+  obtain ⟨active, activeOk⟩ := getTotalActiveBalance_exists within (by have := fits.total; omega)
+  -- Each unslashed active index is an active index of the registry.
+  have subset : ∀ v ∈ (unslashedActiveBalances state).map (·.1),
+      v ∈ getActiveValidatorIndices state (getCurrentEpoch state) := by
+    intro v member
+    obtain ⟨validator, found, isActive, -⟩ := (mem_unslashedActiveBalances_iff within).mp member
+    exact (mem_getActiveValidatorIndices within).mpr ⟨validator, found, isActive⟩
+  obtain ⟨total, totalOk⟩ :=
+    getTotalBalance_exists_of_subset (getTotalActiveBalance_ok activeOk) subset
+  obtain ⟨-, -, totalEq⟩ := getTotalBalance_ok_iff_stake.mp totalOk
+  have stakeLe : stake (fun v => balanceAt state v.toNat)
+      ((unslashedActiveBalances state).map (·.1)).toFinset ≤ cap :=
+    le_trans (stake_mono (w := fun v => balanceAt state v.toNat) fun v member =>
+      List.mem_toFinset.mpr (subset v (List.mem_toFinset.mp member))) bounded
+  have slotsNe : preset.SLOTS_PER_EPOCH ≠ 0 := by
+    intro zero
+    simp [zero] at positive
+  -- The quotient is at most the total, which is at most the larger of increment and cap.
+  have productFits : (total / preset.SLOTS_PER_EPOCH).toNat * config.PROPOSER_SCORE_BOOST.toNat <
+      2 ^ 64 := by
+    rw [UInt64.toNat_div]
+    calc (total.toNat / preset.SLOTS_PER_EPOCH.toNat) * config.PROPOSER_SCORE_BOOST.toNat
+        ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat cap * config.PROPOSER_SCORE_BOOST.toNat :=
+          Nat.mul_le_mul_right _ (le_trans (Nat.div_le_self _ _)
+            (by rw [totalEq]; exact max_le_max le_rfl stakeLe))
+      _ < 2 ^ 64 := fits.share
+  have quotientOk :
+      divChecked total preset.SLOTS_PER_EPOCH = .ok (total / preset.SLOTS_PER_EPOCH) :=
+    divChecked_ok_iff.mpr ⟨slotsNe, UInt64.toNat_div _ _⟩
+  refine ⟨total / preset.SLOTS_PER_EPOCH * config.PROPOSER_SCORE_BOOST / 100, ?_⟩
+  simp only [computeProposerScore, calculateCommitteeFraction, totalOk, quotientOk,
+    mulChecked_of_lt productFits,
+    Except.mapError, bind, Except.bind, pure, Except.pure]
+
+end ProposerScore
 
 namespace Store
 
@@ -547,6 +625,88 @@ theorem filterNodeTree_parent {config : Config} (before : fork < .glamsterdam)
   rw [parentRoot, ← pPending]
   exact pMem
 
+/-- Before Gloas, a block that descends from another root, and is not that root, has a parent.
+
+The store holds the parent at an earlier slot, and the parent descends from that root too. -/
+private theorem isAncestor_parentRoot_of_ne {root ancestor : Root}
+    {block : BeaconBlock preset fork} (before : fork < .glamsterdam)
+    (found : store.blocks[root]? = some block)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨ancestor, .pending⟩ = .ok true)
+    (ne : root ≠ ancestor) :
+    ∃ parent, store.blocks[block.parentRoot]? = some parent ∧ parent.slot < block.slot ∧
+      store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨ancestor, .pending⟩ = .ok true := by
+  obtain ⟨ancestorBlock, ancestorFound⟩ := held_of_isAncestor descends
+  have walk := getAncestor_of_isAncestor_of_lt before ancestorFound descends
+  by_cases le : block.slot ≤ ancestorBlock.slot
+  · -- The walk stops at once, so it would reach the root itself.
+    rw [getAncestor_of_le found le] at walk
+    cases walk
+    exact absurd rfl ne
+  -- The walk steps to the parent, which the store holds at an earlier slot.
+  rw [getAncestor] at walk
+  split at walk
+  · simp_all
+  rename_i same sameFound
+  obtain rfl : block = same := Option.some.inj (found.symm.trans sameFound)
+  simp only [le, ↓reduceIte] at walk
+  split at walk
+  · simp [throw, throwThe, MonadExceptOf.throw] at walk
+  rename_i parent parentFound
+  split at walk
+  · rename_i lower
+    refine ⟨parent, parentFound, lower, ?_⟩
+    rw [parentPayloadStatus_of_lt before] at walk
+    simp [isAncestor, block_ok_iff.mpr ancestorFound, walk, bind, Except.bind, pure, Except.pure]
+  · simp [throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- Before Gloas, viability passes from a root to each of its ancestors.
+
+Take a root in the filtered tree, or one that the justified block descends from.
+
+Each ancestor of that root is then in the tree, or the justified block descends from it. -/
+theorem viable_of_ancestor {config : Config} {root member : Root}
+    {nodes : List ForkChoiceNode} (before : fork < .glamsterdam)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨member, .pending⟩ = .ok true)
+    (viable : store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true ∨ (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes) :
+    store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩ ⟨member, .pending⟩ = .ok true ∨
+      (⟨member, .pending⟩ : ForkChoiceNode) ∈ nodes := by
+  obtain ⟨memberBlock, memberFound⟩ := held_of_isAncestor descends
+  rcases viable with below | inTree
+  · -- The justified block descends from the root, so from the member too.
+    obtain ⟨rootBlock, rootFound, -⟩ := slot_le_of_isAncestor memberFound descends
+    exact .inl (isAncestor_trans_of_lt before rootFound memberFound below descends)
+  -- Walk down the filtered tree from the root, by the slot of the node, until the member.
+  have walkDown : ∀ s, ∀ n ∈ nodes, ∀ block : BeaconBlock preset fork,
+      store.blocks[n.root]? = some block → block.slot.toNat = s →
+      store.isAncestor ⟨n.root, .pending⟩ ⟨member, .pending⟩ = .ok true →
+      store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩ ⟨member, .pending⟩ =
+          .ok true ∨ (⟨member, .pending⟩ : ForkChoiceNode) ∈ nodes := by
+    intro s
+    induction s using Nat.strong_induction_on with
+    | _ s ih =>
+    intro n mem block found atSlot nDescends
+    rcases (filterNodeTree_parent before rfl tree n mem).2 with rfl | ⟨pending, ⟨same, sameFound,
+      parentIn⟩⟩
+    · -- The node is the justified block.
+      exact .inl nDescends
+    obtain rfl : block = same := Option.some.inj (found.symm.trans sameFound)
+    by_cases atMember : n.root = member
+    · -- The node is the member, and it is pending.
+      refine .inr ?_
+      obtain ⟨r, status⟩ := n
+      simp only at atMember pending
+      subst atMember pending
+      exact mem
+    · -- The member is below the node, so below its parent, which is in the tree too.
+      obtain ⟨parent, parentFound, lower, parentDescends⟩ :=
+        isAncestor_parentRoot_of_ne before found nDescends atMember
+      exact ih parent.slot.toNat (atSlot ▸ UInt64.lt_iff_toNat_lt.mp lower) _ parentIn parent
+        parentFound rfl parentDescends
+  obtain ⟨rootBlock, rootFound⟩ := (filterNodeTree_mem tree _ inTree).2.1
+  exact walkDown _ _ inTree rootBlock rootFound rfl descends
+
 /-- Before Gloas, the viable nodes below a node lie in its subtree.
 
 Every block between that node and a viable node is viable too. -/
@@ -614,6 +774,27 @@ theorem filterNodeTree_leaf {config : Config} :
     have childIn := filterNodeTree_self belowOk (List.ne_nil_of_mem xMem)
     exact absurd (List.mem_append_left _ (lift child childIn)) (leaf child childMem)
 
+/-- A viable leaf has a checkpoint block at the finalized epoch.
+
+That block is the finalized block, unless the finalized epoch is genesis. -/
+theorem isViableLeaf_checkpointBlock {config : Config} {node : ForkChoiceNode}
+    (viable : store.isViableLeaf config node = .ok true) :
+    ∃ checkpointBlock,
+      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpointBlock ∧
+        (store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
+          store.finalizedCheckpoint.root = checkpointBlock) := by
+  unfold isViableLeaf at viable
+  simp only [bind_ok_iff] at viable
+  obtain ⟨_, -, _, -, viable⟩ := viable
+  -- Both branches of the justified check end with the finalized check.
+  split at viable <;>
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
+      Bool.or_eq_true, decide_eq_true_eq] at viable
+  · obtain ⟨_, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+    exact ⟨checkpointBlock, checkpointOk, finalized⟩
+  · obtain ⟨_, -, _, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
+    exact ⟨checkpointBlock, checkpointOk, finalized⟩
+
 /-- A viable leaf agrees with the finalized checkpoint.
 
 Its checkpoint block at the finalized epoch is the finalized block, unless that epoch is genesis. -/
@@ -622,22 +803,7 @@ theorem isViableLeaf_finalized {config : Config} {node : ForkChoiceNode}
     store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
       store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch =
         .ok store.finalizedCheckpoint.root := by
-  unfold isViableLeaf at viable
-  simp only [bind_ok_iff] at viable
-  obtain ⟨_, -, _, -, viable⟩ := viable
-  -- Both branches of the justified check end with the finalized check.
-  have checked : ∃ checkpointBlock,
-      store.getCheckpointBlock node.root store.finalizedCheckpoint.epoch = .ok checkpointBlock ∧
-        (store.finalizedCheckpoint.epoch = GENESIS_EPOCH ∨
-          store.finalizedCheckpoint.root = checkpointBlock) := by
-    split at viable <;>
-      simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Bool.and_eq_true,
-        Bool.or_eq_true, decide_eq_true_eq] at viable
-    · obtain ⟨_, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
-      exact ⟨checkpointBlock, checkpointOk, finalized⟩
-    · obtain ⟨_, -, _, -, checkpointBlock, checkpointOk, -, finalized⟩ := viable
-      exact ⟨checkpointBlock, checkpointOk, finalized⟩
-  obtain ⟨checkpointBlock, checkpointOk, finalized⟩ := checked
+  obtain ⟨checkpointBlock, checkpointOk, finalized⟩ := isViableLeaf_checkpointBlock viable
   rcases finalized with genesis | same
   · exact .inl genesis
   · exact .inr (same ▸ checkpointOk)

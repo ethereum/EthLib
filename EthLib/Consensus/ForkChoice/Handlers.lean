@@ -100,7 +100,7 @@ def validateMergeBlock (config : Config) (powBlock : Hash32 → Option PowBlock)
   if config.TERMINAL_BLOCK_HASH ≠ Vector.replicate 32 0 then
     let epoch := computeEpochAtSlot preset block.slot
     if epoch < config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH then
-      throw (.terminalBlockHashNotActive epoch)
+      throw (.terminalBlockHashNotActive epoch config.TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH)
     if parentHash ≠ config.TERMINAL_BLOCK_HASH then throw (.notTerminalBlockHash parentHash)
     return
   let some terminal := powBlock parentHash | throw (.unknownPowBlock parentHash)
@@ -295,7 +295,7 @@ def validateTargetEpochAgainstCurrentTime (attestation : Attestation preset fork
   let currentEpoch ← store.getCurrentStoreEpoch config
   let previousEpoch := saturatingSub currentEpoch 1
   unless target.epoch = currentEpoch ∨ target.epoch = previousEpoch do
-    throw (.targetEpochNotRecent target.epoch)
+    throw (.targetEpochNotRecent target.epoch currentEpoch)
 
 /-- Check the vote of an attestation on the payload of its block, from Gloas.
 
@@ -332,16 +332,18 @@ def validateOnAttestation (attestation : Attestation preset fork) (isFromBlock :
   let target := attestation.data.target
   unless isFromBlock do store.validateTargetEpochAgainstCurrentTime config attestation
   if target.epoch ≠ computeEpochAtSlot preset attestation.data.slot then
-    throw (.targetEpochMismatch target.epoch)
+    throw (.targetEpochMismatch target.epoch (computeEpochAtSlot preset attestation.data.slot))
   discard <| store.block target.root
   let voted ← store.block attestation.data.beaconBlockRoot
   if attestation.data.slot < voted.slot then
-    throw (.futureVote attestation.data.beaconBlockRoot)
+    throw (.futureVote attestation.data.beaconBlockRoot attestation.data.slot voted.slot)
   if gloas : .glamsterdam ≤ fork then store.validatePayloadVote gloas attestation voted
-  if target.root ≠ (← store.getCheckpointBlock attestation.data.beaconBlockRoot target.epoch) then
-    throw (.targetNotCheckpointBlock target.root)
+  let checkpointRoot ← store.getCheckpointBlock attestation.data.beaconBlockRoot target.epoch
+  if target.root ≠ checkpointRoot then
+    throw (.targetNotCheckpointBlock target.root checkpointRoot)
   let due ← (addChecked attestation.data.slot 1).mapError .arith
-  if (← store.getCurrentSlot config) < due then throw (.attestationNotYetDue attestation.data.slot)
+  let currentSlot ← store.getCurrentSlot config
+  if currentSlot < due then throw (.attestationNotYetDue attestation.data.slot currentSlot)
 
 /-- The state of a checkpoint: the state of its block, advanced to the start of its epoch. -/
 def computeCheckpointState (checks : SignatureChecks) (target : Checkpoint) :
@@ -389,7 +391,7 @@ def onAttestation (checks : SignatureChecks) (attestation : Attestation preset f
   (checkAttestationCommittees targetState attestation).mapError .transition
   let indexed ← (getIndexedAttestation targetState attestation).mapError .accessor
   unless ← (isValidIndexedAttestation config checks targetState indexed).mapError .transition do
-    throw .invalidIndexedAttestation
+    throw (.invalidIndexedAttestation attestation.data)
   return store.updateLatestMessages indexed.attestingIndices.data.toList attestation
 
 /-- Check an attester slashing: its two votes are slashable together.
@@ -399,14 +401,14 @@ def validateOnAttesterSlashing (checks : SignatureChecks)
     (slashing : AttesterSlashing preset fork) :
     Except ForkChoiceError Unit := do
   unless isSlashableAttestationData slashing.attestation1.data slashing.attestation2.data do
-    throw .notSlashable
+    throw (.notSlashable slashing.attestation1.data slashing.attestation2.data)
   let state ← store.blockState store.justifiedCheckpoint.root
   unless ← (isValidIndexedAttestation config checks state slashing.attestation1).mapError
       .transition do
-    throw .invalidIndexedAttestation
+    throw (.invalidIndexedAttestation slashing.attestation1.data)
   unless ← (isValidIndexedAttestation config checks state slashing.attestation2).mapError
       .transition do
-    throw .invalidIndexedAttestation
+    throw (.invalidIndexedAttestation slashing.attestation2.data)
 
 /-- The store with the validators in both attestations of a slashing among the equivocators. -/
 def addEquivocators (slashing : AttesterSlashing preset fork) : Store preset fork :=
@@ -428,13 +430,14 @@ The signature is checked as an indexed vote with the validator as its only signe
 def validatePtcMessage (checks : SignatureChecks) (state : BeaconState preset fork)
     (message : PayloadAttestationMessage) (bound : 0 < preset.PTC_SIZE.toNat) :
     Except ForkChoiceError Unit := do
-  if message.data.slot ≠ (← store.getCurrentSlot config) then
-    throw (.ptcVoteNotCurrent message.data.slot)
+  let currentSlot ← store.getCurrentSlot config
+  if message.data.slot ≠ currentSlot then
+    throw (.ptcVoteNotCurrent message.data.slot currentSlot)
   let indexed : IndexedPayloadAttestation preset :=
     ⟨⟨#[message.validatorIndex], by simpa using Nat.succ_le_of_lt bound⟩, message.data,
       message.signature⟩
   unless ← (isValidIndexedPayloadAttestation config checks state indexed).mapError .transition do
-    throw .invalidPayloadAttestation
+    throw (.invalidPayloadAttestation message.validatorIndex message.data.slot)
 
 /-- The store with both votes of a payload vote at the given positions, for its block.
 
@@ -574,10 +577,11 @@ def validateOnBlock (checks : SignatureChecks) (sources : BlockSources preset fo
   let block := signed.message
   let preState ← store.blockState block.parentRoot
   store.validateParentPayload block
-  if (← store.getCurrentSlot config) < block.slot then throw (.futureBlock block.slot)
+  let currentSlot ← store.getCurrentSlot config
+  if currentSlot < block.slot then throw (.futureBlock block.slot currentSlot)
   let finalizedSlot ←
     (computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch).mapError .arith
-  if block.slot ≤ finalizedSlot then throw (.blockNotAfterFinalized block.slot)
+  if block.slot ≤ finalizedSlot then throw (.blockNotAfterFinalized block.slot finalizedSlot)
   let finalizedCheckpointBlock ←
     store.getCheckpointBlock block.parentRoot store.finalizedCheckpoint.epoch
   if store.finalizedCheckpoint.root ≠ finalizedCheckpointBlock then
@@ -637,21 +641,6 @@ def onBlock (checks : SignatureChecks) (sources : BlockSources preset fork)
   let blockRoot ← (SszType.hashTreeRoot signed.message).mapError .ssz
   if store.blocks.contains blockRoot then pure store
   else store.addBlock config checks sources signed blockRoot
-
-/-- The store after a signed block and the votes that it carries.
-
-The block comes first, then its attestations, then its attester slashings.
-
-The attestations come from a block, so the clock does not bound their epoch.
-
-From Gloas the block itself passes on the votes of the payload committee that it carries. -/
-def onBlockWithVotes (checks : SignatureChecks) (sources : BlockSources preset fork)
-    (signed : SignedBeaconBlock preset fork) : Except ForkChoiceError (Store preset fork) := do
-  let store ← store.onBlock config checks sources signed
-  let store ← signed.message.body.attestations.data.foldlM
-    (fun store attestation => store.onAttestation config checks attestation true) store
-  signed.message.body.attesterSlashings.data.foldlM
-    (fun store slashing => store.onAttesterSlashing config checks slashing) store
 
 /-- From Gloas: check that the node gets the data of the payload of a block.
 
@@ -730,20 +719,22 @@ def checkInclusionList (checks : SignatureChecks) (signed : SignedInclusionList)
     Except ForkChoiceError Bool := do
   let list := signed.message
   let currentSlot ← store.getCurrentSlot config
-  ensure (list.slot ≤ currentSlot) (.futureInclusionList list.slot)
+  ensure (list.slot ≤ currentSlot) (.futureInclusionList list.slot currentSlot)
   let lastSlot ← (addChecked list.slot config.MIN_SLOTS_FOR_INCLUSION_LISTS_REQUESTS).mapError
     .arith
-  ensure (currentSlot ≤ lastSlot) (.inclusionListTooOld list.slot)
+  ensure (currentSlot ≤ lastSlot) (.inclusionListTooOld list.slot currentSlot)
   let transactions := list.transactions.data.toList
   let size := (transactions.map (·.data.size)).sum
   ensure (0 < size ∧ size ≤ config.MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST.toNat)
-    (.invalidInclusionListSize size)
-  ensure (transactions.all (0 < ·.data.size)) .emptyInclusionListTransaction
+    (.invalidInclusionListSize size config.MAX_TRANSACTIONS_BYTES_PER_INCLUSION_LIST.toNat)
+  ensure (transactions.all (0 < ·.data.size))
+    (.emptyInclusionListTransaction (transactions.findIdx (·.data.size == 0)))
   let block ← store.block list.dependentRoot
   let dependentState ← store.blockState list.dependentRoot
   let epoch := computeEpochAtSlot preset list.slot
   let dependentSlot ← (computeShufflingDependentSlot preset epoch).mapError .arith
-  ensure (block.slot ≤ dependentSlot) (.dependentBlockTooLate list.dependentRoot)
+  ensure (block.slot ≤ dependentSlot)
+    (.dependentBlockTooLate list.dependentRoot block.slot dependentSlot)
   let possible ← store.isValidDependentRoot config list.dependentRoot dependentSlot
   ensure possible (.notPossibleDependentBlock list.dependentRoot)
   let start ← (computeShufflingLookaheadStartSlot preset epoch).mapError .arith
@@ -752,7 +743,7 @@ def checkInclusionList (checks : SignatureChecks) (signed : SignedInclusionList)
   ensure (list.validatorIndex ∈ committee.toList)
     (.notInInclusionListCommittee list.validatorIndex)
   let valid ← (isValidInclusionListSignature config state signed).mapError .accessor
-  ensure valid .invalidInclusionListSignature
+  ensure valid (.invalidInclusionListSignature list.validatorIndex list.slot)
   -- The time into the slot is read only for a list of the current slot.
   if list.slot = currentSlot then
     let due ← (getInclusionListDueMs config).mapError .arith

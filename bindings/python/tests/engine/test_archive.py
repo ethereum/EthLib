@@ -8,7 +8,7 @@ import pytest
 from ethlib import engine
 from parity.runners import run_engine_chain
 
-from .cases import check, config
+from .cases import MAINNET_TERMINAL_TOTAL_DIFFICULTY, check, config
 
 ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
 
@@ -83,7 +83,13 @@ def test_every_chain(archive) -> None:
                 "finalizedBlockHash": genesis,
             }
             method = f"engine_forkchoiceUpdatedV{payload['forkchoiceUpdatedVersion']}"
-            response = engine.forkchoice_updated(chain_config, tree, method, [state, None])
+            response = engine.forkchoice_updated(
+                chain_config,
+                tree,
+                method,
+                [state, None],
+                terminal_total_difficulty=MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+            )
             assert response["payloadStatus"]["status"] == "VALID"
             head = block["blockHash"]
         assert head == fixture["lastblockhash"]

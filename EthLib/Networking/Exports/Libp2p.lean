@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyDerive
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Networking.Libp2p.Mplex
 public import EthLib.Networking.Libp2p.MplexSession
 public import EthLib.Networking.Libp2p.Multistream

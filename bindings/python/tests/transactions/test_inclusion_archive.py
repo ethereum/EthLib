@@ -71,10 +71,10 @@ _RULES = {
     "PRIORITY_GREATER_THAN_MAX_FEE_PER_GAS": r"priorityFeeGreaterThanMaxFee",
     "INITCODE_SIZE_EXCEEDED": r"initCodeTooLarge",
     # A typed transaction before the fork of its type does not decode.
-    "TYPE_1_TX_PRE_FORK": r"unsupportedType 1",
-    "TYPE_2_TX_PRE_FORK": r"unsupportedType 2",
-    "TYPE_3_TX_PRE_FORK": r"unsupportedType 3",
-    "TYPE_4_TX_PRE_FORK": r"unsupportedType 4",
+    "TYPE_1_TX_PRE_FORK": r"unsupportedType \(type := 1\)",
+    "TYPE_2_TX_PRE_FORK": r"unsupportedType \(type := 2\)",
+    "TYPE_3_TX_PRE_FORK": r"unsupportedType \(type := 3\)",
+    "TYPE_4_TX_PRE_FORK": r"unsupportedType \(type := 4\)",
     # A type 3 or type 4 transaction without a recipient does not decode.
     "TYPE_3_TX_CONTRACT_CREATION": r"decoding: ",
     "TYPE_4_TX_CONTRACT_CREATION": r"decoding: ",

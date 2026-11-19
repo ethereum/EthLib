@@ -13,6 +13,7 @@ public import EthLib.Networking.Gossip.Cache
 - Every ID told of in gossip is found in the cache.
 - An ID inserted at a time is seen until its lifetime ends, and expiry then removes that entry.
 - Expiry keeps every answer at the time it runs, for the same lifetime.
+- The bytes of a message ID read back as that ID, and bytes that read as an ID are its bytes.
 -/
 
 @[expose] public section
@@ -177,5 +178,20 @@ theorem expire_insert (cache : SeenCache) {t now ttlMs : Nat} (id : MessageId)
     (h : t + ttlMs ≤ now) : (id, t) ∉ ((cache.insert t id).expire now ttlMs).entries := by
   simp [SeenCache.insert, SeenCache.expire]
   omega
+
+/-- The bytes of a message ID read back as that ID. -/
+theorem ofBytes?_toBytes (id : MessageId) : MessageId.ofBytes? id.toBytes = some id := by
+  have h : id.toBytes.size = 20 := id.size_toArray
+  simp only [MessageId.ofBytes?, h, ↓reduceDIte]
+  rfl
+
+/-- Bytes that read as a message ID are the bytes of that ID. -/
+theorem toBytes_of_ofBytes? {bytes : ByteArray} {id : MessageId}
+    (h : MessageId.ofBytes? bytes = some id) : id.toBytes = bytes := by
+  unfold MessageId.ofBytes? at h
+  split at h
+  · cases h
+    rfl
+  · cases h
 
 end EthLib.Networking.Proofs.Gossip.Cache

@@ -185,11 +185,7 @@ theorem builderFrame_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     BuilderFrame state after := by
-  obtain ⟨start, recorded⟩ :=
-    recordDepositRequestsStart_eq (state := state) (index := request.index)
-  simp only [processDepositRequest, recorded, liftAccessor_ok, addPendingDeposit, bind_ok_iff,
-    pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, rfl⟩ := computed
+  obtain ⟨-, -, -, _, _, rfl⟩ := processDepositRequest_ok computed
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 private theorem builderFrame_requestPartialWithdrawal {electra : .pectra ≤ fork}
@@ -215,14 +211,10 @@ theorem builderFrame_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BuilderFrame.refl _)
-    | exact builderFrame_initiateValidatorExit (liftAccessor_ok.mp computed)
-    | exact builderFrame_requestPartialWithdrawal computed
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
+  · exact BuilderFrame.refl _
+  · exact builderFrame_initiateValidatorExit exited
+  · exact builderFrame_requestPartialWithdrawal withdrawn
 
 private theorem builderFrame_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
@@ -245,15 +237,7 @@ private theorem builderFrame_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     BuilderFrame state after := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at computed
-  obtain ⟨⟨_, _⟩, churned, _, _, _, set, _, _, computed⟩ := computed
-  simp only [Except.ok.injEq] at computed
-  subst computed
-  simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at churned
-  obtain ⟨_, _, _, _, _, _, churned⟩ := churned
-  cases churned
+  obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
   refine (BuilderFrame.trans ?_ (builderFrame_setValidator set)).trans ?_ <;>
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
 
@@ -262,14 +246,11 @@ theorem builderFrame_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  unfold processConsolidationRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BuilderFrame.refl _)
-    | exact builderFrame_switchToCompoundingValidator (liftAccessor_ok.mp computed)
-    | exact builderFrame_queueConsolidation computed
+  rcases consolidationRequest_cases computed with
+    rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
+  · exact BuilderFrame.refl _
+  · exact builderFrame_switchToCompoundingValidator switched
+  · exact builderFrame_queueConsolidation queued
 
 /-- The deposit, withdrawal and consolidation requests of validators run in turn.
 

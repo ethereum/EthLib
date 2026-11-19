@@ -93,10 +93,13 @@ def createLightClientBootstrap (config : Config) (state : BeaconState preset for
     (block : SignedBeaconBlock preset fork) :
     Except LightClientError (LightClientBootstrap preset fork) := do
   let ⟨altair⟩ ← specifiedFork fork
-  require (computeEpochAtSlot preset state.slot ≥ config.ALTAIR_FORK_EPOCH) .beforeAltair
-  require (state.slot = state.latestBlockHeader.slot) .stateNotAtBlock
-  require ((← liftRoot (SszType.hashTreeRoot (← state.blockHeader))) =
-    (← liftRoot (SszType.hashTreeRoot block.message))) .stateNotOfBlock
+  require (computeEpochAtSlot preset state.slot ≥ config.ALTAIR_FORK_EPOCH)
+    (.beforeAltair (computeEpochAtSlot preset state.slot) config.ALTAIR_FORK_EPOCH)
+  require (state.slot = state.latestBlockHeader.slot)
+    (.stateNotAtBlock state.slot state.latestBlockHeader.slot)
+  let stateBlockRoot ← liftRoot (SszType.hashTreeRoot (← state.blockHeader))
+  let blockRoot ← liftRoot (SszType.hashTreeRoot block.message)
+  require (stateBlockRoot = blockRoot) (.stateNotOfBlock stateBlockRoot blockRoot)
   let gindex ← currentSyncCommitteeGindexAtSlot (preset := preset) (fork := fork) config
     state.slot
   return {
@@ -125,18 +128,24 @@ def createLightClientUpdate (config : Config) {signatureFork finalizedFork : For
     Except LightClientError (LightClientUpdate preset fork) := do
   let ⟨altair⟩ ← specifiedFork fork
   let ⟨signatureAltair⟩ ← specifiedFork signatureFork
-  require (computeEpochAtSlot preset attestedState.slot ≥ config.ALTAIR_FORK_EPOCH) .beforeAltair
+  require (computeEpochAtSlot preset attestedState.slot ≥ config.ALTAIR_FORK_EPOCH)
+    (.beforeAltair (computeEpochAtSlot preset attestedState.slot) config.ALTAIR_FORK_EPOCH)
   let aggregate := block.message.body.syncAggregate signatureAltair
   require (aggregate.participants ≥ preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
-    .tooFewParticipants
-  require (state.slot = state.latestBlockHeader.slot) .stateNotAtBlock
-  require ((← liftRoot (SszType.hashTreeRoot (← state.blockHeader))) =
-    (← liftRoot (SszType.hashTreeRoot block.message))) .stateNotOfBlock
+    (.tooFewParticipants aggregate.participants preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat)
+  require (state.slot = state.latestBlockHeader.slot)
+    (.stateNotAtBlock state.slot state.latestBlockHeader.slot)
+  let stateBlockRoot ← liftRoot (SszType.hashTreeRoot (← state.blockHeader))
+  let blockRoot ← liftRoot (SszType.hashTreeRoot block.message)
+  require (stateBlockRoot = blockRoot) (.stateNotOfBlock stateBlockRoot blockRoot)
   let period := computeSyncCommitteePeriodAtSlot preset
-  require (attestedState.slot = attestedState.latestBlockHeader.slot) .stateNotAtBlock
+  require (attestedState.slot = attestedState.latestBlockHeader.slot)
+    (.stateNotAtBlock attestedState.slot attestedState.latestBlockHeader.slot)
   let attestedRoot ← liftRoot (SszType.hashTreeRoot (← attestedState.blockHeader))
-  require (attestedRoot = (← liftRoot (SszType.hashTreeRoot attestedBlock.message)) ∧
-    attestedRoot = block.message.parentRoot) .stateNotOfBlock
+  let attestedBlockRoot ← liftRoot (SszType.hashTreeRoot attestedBlock.message)
+  require (attestedRoot = attestedBlockRoot) (.stateNotOfBlock attestedRoot attestedBlockRoot)
+  require (attestedRoot = block.message.parentRoot)
+    (.stateNotOfBlock attestedRoot block.message.parentRoot)
   let empty := LightClientHeader.empty preset fork
   let (nextSyncCommittee, nextSyncCommitteeBranch) ←
     if period attestedBlock.message.slot = period block.message.slot then do
@@ -151,11 +160,11 @@ def createLightClientUpdate (config : Config) {signatureFork finalizedFork : For
       let finalizedRoot := attestedState.finalizedCheckpoint.root
       let header ← if finalized.message.slot ≠ GENESIS_SLOT then do
           let header ← blockToLightClientHeader config finalized
-          require ((← liftRoot (SszType.hashTreeRoot header.beacon)) = finalizedRoot)
-            .finalizedNotOfState
+          let headerRoot ← liftRoot (SszType.hashTreeRoot header.beacon)
+          require (headerRoot = finalizedRoot) (.finalizedNotOfState finalizedRoot headerRoot)
           header.upgrade config fork finalizedEarlier
         else do
-          require (finalizedRoot = zeroBytes32) .finalizedNotOfState
+          require (finalizedRoot = zeroBytes32) (.finalizedNotOfState finalizedRoot zeroBytes32)
           pure empty
       let gindex ← finalizedRootGindexAtSlot (preset := preset) (fork := fork) config
         attestedState.slot

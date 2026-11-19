@@ -2,9 +2,9 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Resample
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Outside
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.HiddenOracle.Cost
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Seed.Guess
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.Graph
+public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.GraphView.HiddenGraph
 
 /-!
 # A sampled outside table is the lazy outside oracle

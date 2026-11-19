@@ -38,6 +38,9 @@ TRANSITION_TIME = 15_000
 # The fixtures use the deposit contract of mainnet, at the address of EIP-6110.
 DEPOSIT_CONTRACT_ADDRESS = bytes.fromhex("00000000219ab540356cbb839cbe05303d7705fa")
 
+# The terminal total difficulty of mainnet, from the configuration section of EIP-3675.
+MAINNET_TERMINAL_TOTAL_DIFFICULTY = 58750000000000000000000
+
 # The exceptions that each reason of an invalid payload stands for, by the code of the reason.
 EXCEPTIONS = {
     # A transaction does not decode at the fork of the payload.

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.Supply
 public import EthLib.Execution.Proofs.Transactions.Deletion
 
@@ -152,7 +153,7 @@ theorem supplyLe_processMessageCall [LawfulGasMeter Meter] {chainId : Nat}
     (h : processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok output) :
     SupplyLe fork state output.state := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -183,6 +184,7 @@ theorem supply_buyGas {env : BlockEnvironment fork} {state state' : State.Transa
       state'.createdAccounts = state.createdAccounts := by
   have hsender := buyGas_sender rfl h
   unfold buyGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨mid, hnonce, hfee⟩ := bind_ok_iff.mp h
   have hmid := State.TransactionState.supply_incrementNonce hnonce
   obtain ⟨account, hf, hsum⟩ := State.TransactionState.supply_modifyState hfee
@@ -241,6 +243,7 @@ theorem supply_settleGas {env : BlockEnvironment fork} {state state' : State.Tra
     let s := settlement fork (baseFeeOf env) sender tx gasLeft refund
     state'.supply = state.supply + s.senderRefund + s.priorityFee := by
   unfold settleGas at h
+  rw [paidBaseFee_empty] at h
   obtain ⟨refunded, hrefund, h⟩ := bind_ok_iff.mp h
   obtain ⟨paid, hpay, h⟩ := bind_ok_iff.mp h
   cases h
@@ -449,7 +452,7 @@ theorem processTransaction_supply {env : BlockEnvironment fork} {block : State.B
       (BurnsNone fork out.state →
         out.state.supply + burnedFees env tx out.gasUsed =
           (State.TransactionState.ofBlock block).supply) := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   split at h

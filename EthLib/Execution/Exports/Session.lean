@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Exports.Network
 public import EthLib.Execution.Network.Session
 public import EthLib.Execution.Network.Snap
@@ -120,7 +120,7 @@ def sessionExport (args : PyValue) : Result PyValue := pyExport sessionOf args
 
 /-- A message for a rejected eth message, phrased for someone reading a Python traceback. -/
 def ethSessionMessage : EthSessionError → String
-  | .beforeStatus => "message came before the peer's Status"
+  | .beforeStatus id => s!"message ID {id} came before the peer's Status"
   | .badStatus e => statusMessage e
   | .secondStatus => "a second Status came in an active session"
   | .unsolicited i => s!"response with request ID {i} answers no pending request"

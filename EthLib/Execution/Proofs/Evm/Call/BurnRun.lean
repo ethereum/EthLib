@@ -379,7 +379,11 @@ theorem runBurns_runFrame [LawfulGasMeter Meter] {bound : Nat}
     {evm ended : Evm fork Meter} {within : GasMeter.gasHeld evm.gas ≤ bound}
     (h : runFrame (step fork) (step_decreases fork) bound runChild evm within = .ok ended) :
     ∃ log, RunBurns fork Meter (.frame evm) ended log := by
-  fun_induction runFrame (step fork) (step_decreases fork) bound runChild evm within
+  revert h
+  refine runFrame_induct
+    (motive := fun evm _ r => r = .ok ended → ∃ log, RunBurns fork Meter (.frame evm) ended log)
+    ?case1 ?case2 ?case3 ?case4 ?case5 ?case6 ?case7 ?case8 evm within
+  all_goals (intros; rename_i h)
   case case1 => cases h
   case case2 =>
     cases h

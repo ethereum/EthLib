@@ -1,0 +1,75 @@
+module
+
+public import EthLib.Base.ByteReader
+public import EthLib.Base.Proofs.BigEndian
+
+/-!
+# Proofs: readers of byte fields
+
+Each reader recovers its field and preserves arbitrary trailing bytes.
+-/
+
+@[expose] public section
+
+namespace EthLib.Base.ByteReader
+
+/-- Reading as many bytes as a field holds returns that field and the bytes after it. -/
+@[simp] theorem bytes_append {ε : Type} (truncated : ε) (field rest : List UInt8) :
+    bytes truncated field.length (field ++ rest) = .ok (field, rest) := by
+  simp [bytes]
+
+/-- Reading a written integer returns it modulo the field width, and the bytes after it. -/
+@[simp] theorem uint_encode {ε : Type} (truncated : ε) (n value : Nat) (rest : List UInt8) :
+    uint truncated n (natToBytes n value ++ rest) = .ok (value % 256 ^ n, rest) := by
+  simp [uint, bytes, natToBytes_length, bytesToNat_natToBytes,
+    StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure]
+
+/-- A condition that holds consumes nothing. -/
+@[simp] theorem require_true {ε : Type} (condition : Prop) [Decidable condition]
+    (holds : condition) (error : ε) (rest : List UInt8) :
+    require condition error rest = .ok ((), rest) := by
+  simp [require, holds]
+
+/-- A successful byte read consumes exactly the returned field. -/
+theorem bytes_ok_iff {ε : Type} (truncated : ε) (n : Nat)
+    (input field rest : List UInt8) :
+    bytes truncated n input = .ok (field, rest) ↔
+      field.length = n ∧ input = field ++ rest := by
+  constructor
+  · intro accepted
+    dsimp only [bytes] at accepted
+    split at accepted
+    · cases accepted
+      exact ⟨by assumption, (List.take_append_drop n input).symm⟩
+    · contradiction
+  · rintro ⟨rfl, rfl⟩
+    exact bytes_append truncated field rest
+
+/-- A successful integer read consumes its unique encoding at the given width. -/
+theorem uint_ok_iff {ε : Type} (truncated : ε) (n value : Nat)
+    (input rest : List UInt8) :
+    uint truncated n input = .ok (value, rest) ↔
+      value < 256 ^ n ∧ input = natToBytes n value ++ rest := by
+  constructor
+  · intro accepted
+    unfold uint at accepted
+    cases read : bytes truncated n input with
+    | error error => simp [read, StateT.bind, bind, Except.bind] at accepted
+    | ok result =>
+      rcases result with ⟨field, trailing⟩
+      simp [read, StateT.bind, StateT.pure, bind, Except.bind, pure, Except.pure] at accepted
+      rcases accepted with ⟨rfl, rfl⟩
+      obtain ⟨length, split⟩ := (bytes_ok_iff truncated n input field trailing).mp read
+      constructor
+      · simpa [← length] using bytesToNat_lt field
+      · simpa [← length, natToBytes_bytesToNat] using split
+  · rintro ⟨bound, rfl⟩
+    simp [uint_encode, Nat.mod_eq_of_lt bound]
+
+/-- A successful condition check consumes no input and establishes its condition. -/
+theorem require_ok_iff {ε : Type} (condition : Prop) [Decidable condition]
+    (error : ε) (input rest : List UInt8) :
+    require condition error input = .ok ((), rest) ↔ condition ∧ input = rest := by
+  by_cases holds : condition <;> simp [require, holds]
+
+end EthLib.Base.ByteReader

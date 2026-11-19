@@ -141,26 +141,57 @@ structure PayloadStatus where
 inductive EngineError where
   /-- The parameters do not have the structure that the method expects. -/
   | invalidParams (reason : String)
-  /-- The payload belongs to a fork that the method does not support. -/
-  | unsupportedFork
-  /-- The safe or the finalized block is not on the chain of the head. -/
-  | invalidForkchoiceState
-  /-- The request names more items than the execution layer takes in one request. -/
-  | tooLargeRequest
+  /-- The method was asked to serve a fork, `fork`, that it does not support.
+
+  It is the fork of the payload, of the block the attributes build, or of the stored build.
+
+  For blobs, it is the fork the node is at.
+
+  It is none when the configuration has no fork active at the block. -/
+  | unsupportedFork (fork : Option Fork)
+  /-- The safe or the finalized block is not on the chain of the head.
+
+  `safe` and `finalized` are the two hashes of the forkchoice state. -/
+  | invalidForkchoiceState (safe finalized : Hash32)
+  /-- The request names `count` items, more than the `limit` the execution layer takes at once. -/
+  | tooLargeRequest (count limit : Nat)
   /-- The payload attributes do not have a structure that the version of the method takes. -/
   | invalidPayloadAttributes
-  /-- No build process has the requested payload ID. -/
-  | unknownPayload
-  deriving DecidableEq, Repr
+  /-- No build process has the requested payload ID, `id`. -/
+  | unknownPayload (id : PayloadId)
+  deriving DecidableEq
+
+/-- The constructor and its fields, laid out as a derived form would lay them out.
+
+Byte strings print in hex and forks by name.
+
+Hex keeps a hash on one short line, where a list of 32 numbers would wrap. -/
+instance : Repr EngineError where
+  reprPrec e prec :=
+    let hex (bytes : List UInt8) : Std.Format := Base.hexString bytes
+    let apply (name : String) (args : List Std.Format) : Std.Format :=
+      Repr.addAppParen (Std.Format.group (Std.Format.nest (if prec ≥ max_prec then 1 else 2)
+        (args.foldl (fun f arg => f ++ Std.Format.line ++ arg)
+          (Std.Format.text ("EthLib.Engine.EngineError." ++ name))))) prec
+    match e with
+    | .invalidParams reason => apply "invalidParams" [reprArg reason]
+    | .unsupportedFork fork => apply "unsupportedFork" [reprArg (fork.map Fork.name)]
+    -- Two hashes do not fit the width of a line together, so they stay on one line unbroken.
+    | .invalidForkchoiceState safe finalized =>
+      Repr.addAppParen (Std.Format.text ("EthLib.Engine.EngineError.invalidForkchoiceState " ++
+        Base.hexString safe.toList ++ " " ++ Base.hexString finalized.toList)) prec
+    | .tooLargeRequest count limit => apply "tooLargeRequest" [reprArg count, reprArg limit]
+    | .invalidPayloadAttributes => apply "invalidPayloadAttributes" []
+    | .unknownPayload id => apply "unknownPayload" [hex id.toList]
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
 def EngineError.code : EngineError → UInt32
   | .invalidParams _ => 32602
-  | .unsupportedFork => 38005
-  | .invalidForkchoiceState => 38002
-  | .tooLargeRequest => 38004
+  | .unsupportedFork _ => 38005
+  | .invalidForkchoiceState .. => 38002
+  | .tooLargeRequest .. => 38004
   | .invalidPayloadAttributes => 38003
-  | .unknownPayload => 38001
+  | .unknownPayload _ => 38001
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where
@@ -170,12 +201,16 @@ inductive PayloadError where
   | noEncoding
   /-- The block hash of the payload is not the hash of the header that it gives. -/
   | wrongBlockHash (expected computed : Hash32)
-  /-- The expected versioned hashes are not those of the blob transactions, in order. -/
-  | wrongVersionedHashes
+  /-- The expected versioned hashes are not those of the blob transactions, in order.
+
+  `expected` are the hashes of the request, and `actual` those of the transactions. -/
+  | wrongVersionedHashes (expected actual : List Hash32)
   /-- The block of the payload fails the state transition, with `error`. -/
   | invalidBlock (error : Execution.Blocks.BlockError)
   /-- The block access list is not the RLP encoding of a block access list. -/
   | invalidBlockAccessList
+  /-- The parent, of hash `parent`, is a block of proof of work that is not terminal. -/
+  | invalidTerminalBlock (parent : Hash32)
   deriving DecidableEq, Repr
 
 /-- The stable code of a reason, one per constructor, for the C exports.
@@ -187,8 +222,9 @@ def PayloadError.code : PayloadError → UInt32
   | .invalidTransaction .. => 401
   | .noEncoding => 402
   | .wrongBlockHash .. => 403
-  | .wrongVersionedHashes => 404
+  | .wrongVersionedHashes .. => 404
   | .invalidBlock _ => 405
   | .invalidBlockAccessList => 406
+  | .invalidTerminalBlock _ => 407
 
 end EthLib.Engine

@@ -12,12 +12,19 @@ namespace EthLib.Serialization.Ssz
 /--
 Joining a node with each branch node in turn, from the leaf upward.
 
+The hash may answer in a monad.
+
 The level counts how far the walk has climbed, which is the bit of the index it reads.
 
 It is the Merkle climb from the node at that level, hashing every node alike.
 -/
+def climbBranchM {m : Type → Type} [Monad m] (hash : ByteArray → m ByteArray)
+    (index level : Nat) (node : Bytes) (branch : List Bytes) : m Bytes :=
+  Cryptography.Merkle.climb (fun _ => combineM hash) ⟨level, index >>> level⟩ node branch
+
+/-- Joining a node with each branch node in turn, from the leaf upward, with SHA-256. -/
 def climbBranch (index level : Nat) (node : Bytes) (branch : List Bytes) : Bytes :=
-  (Cryptography.Merkle.climb (m := Id) (fun _ _ => combine) level (index >>> level) node branch).run
+  (climbBranchM (m := Id) Cryptography.Hash.Sha256.hash index level node branch).run
 
 /--
 A root rebuilt from one leaf and its branch, trusting every node to be 32 bytes wide.
@@ -55,72 +62,29 @@ def verifyMerkleProof (leaf : Bytes) (proof : List Bytes) (index : Nat) (root : 
   let rebuilt ← calculateMerkleRoot leaf proof index
   return rebuilt == root
 
-/-- The node held at an index, where one is held. -/
-def nodeAt (nodes : List (Nat × Bytes)) (index : Nat) : Option Bytes :=
-  (nodes.find? fun (at_, _) => at_ == index).map fun (_, node) => node
-
-/-- Levels a node sits below the root, which its index carries in its leading bit. -/
-def levelOf (index : Nat) : Nat :=
-  Nat.log2 index
-
-/-- One level's parents and shallower nodes, kept in their original order. -/
-def foldLevelNodes (depth : Nat) (nodes : List (Nat × Bytes)) :
-    List (Nat × Bytes) → Except Err (List (Nat × Bytes) × List (Nat × Bytes))
-  | [] => .ok ([], [])
-  | (index, node) :: rest => do
-    if levelOf index != depth then
-      -- A shallower node waits until the walk reaches its level.
-      let (parents, kept) ← foldLevelNodes depth nodes rest
-      return (parents, (index, node) :: kept)
-    else if index % 2 == 0 then
-      -- An even index owns the pair, with the odd index on its right.
-      match nodeAt nodes (index + 1) with
-      | some sibling =>
-        let (parents, kept) ← foldLevelNodes depth nodes rest
-        return ((gindexParent index, combine node sibling) :: parents, kept)
-      | none => throw .proofIncomplete
-    else if (nodeAt nodes (index - 1)).isNone then
-      -- An odd node must have a left sibling, which performs the actual hash.
-      throw .proofIncomplete
-    else foldLevelNodes depth nodes rest
-
-/-- Every pair at one level folded into its parent, with shallower nodes kept aside. -/
-def foldLevel (depth : Nat) (nodes : List (Nat × Bytes)) :
-    Except Err (List (Nat × Bytes)) := do
-  let (parents, kept) ← foldLevelNodes depth nodes nodes
-  return parents ++ kept
-
-/--
-Folding a node set upward one level at a time, until only the root is left.
-
-Recursion is on the depth rather than on the node set.
-
-The fold is therefore structural, and needs no bound of its own.
--/
-def foldToRoot : Nat → List (Nat × Bytes) → Except Err Bytes
-  | 0, nodes =>
-    match nodeAt nodes 1 with
-    | some root => .ok root
-    -- A proof from which the root never appeared authenticates nothing.
-    | none => .error .proofIncomplete
-  | depth + 1, nodes => do foldToRoot depth (← foldLevel (depth + 1) nodes)
+/-- The node hash of SSZ trees: SHA-256 of the two children, the same at every position. -/
+abbrev sszNodeHash : Cryptography.Merkle.Position → Bytes → Bytes → Id Bytes :=
+  fun _ => combineM Cryptography.Hash.Sha256.hash
 
 /--
 A root rebuilt from several leaves and the nodes they share, trusting each to be 32 bytes wide.
 
-Pairs combine from the deepest level upward, each parent built once.
+It is the root the Merkle multiproof rebuilds, in the tree as deep as the deepest index.
 
 Only the counts and the indices are checked.
 -/
 def calculateMultiMerkleRootUnchecked (leaves proof : List Bytes) (indices : List Nat) :
     Except Err Bytes := do
   if leaves.length != indices.length then throw (.leafCount indices.length leaves.length)
-  let helpers ← getHelperIndices indices
+  let (height, opened) ← claimPositions indices
+  -- The helpers are those of the indices, as positions.
+  let helpers := Cryptography.Merkle.helpers height opened
   if proof.length != helpers.length then throw (.proofLength helpers.length proof.length)
-  let nodes := indices.zip leaves ++ helpers.zip proof
-  -- No node sits below the deepest index given, so that is where the fold starts.
-  let deepest := (nodes.map fun (index, _) => levelOf index).foldl max 0
-  foldToRoot deepest nodes
+  match (Cryptography.Merkle.rebuild sszNodeHash (opened.zip leaves ++ helpers.zip proof)
+      height).run with
+  | some root => return root
+  -- Checked indices always determine the root, so this error is never raised.
+  | none => throw .proofIncomplete
 
 /--
 A root rebuilt from several leaves and the nodes they share.

@@ -83,7 +83,7 @@ def test_empty():
 
 def test_error_code_of_a_range_check():
     with raises(
-        discv5.Discv5Error, "invalid message: a size or a distance is out of range"
+        discv5.Discv5Error, "invalid message: type 1 has a size or a distance out of range"
     ) as error:
         discv5.decode_message(_message(1, _rlp_bytes(bytes(9)), _scalar(1)))
     assert error.value.code == 105
@@ -107,29 +107,29 @@ def test_field_of_the_wrong_form():
 
 
 def test_wrong_field_count():
-    with raises(discv5.Discv5Error, "invalid message: wrong field count for type 1") as error:
+    with raises(discv5.Discv5Error, "invalid message: type 1 with 1 fields") as error:
         discv5.decode_message(_message(1, _rlp_bytes(H("01"))))
     assert error.value.code == 104
 
 
 def test_request_id_of_nine_bytes():
-    with raises(ValueError, "invalid message: a size or a distance is out of range"):
+    with raises(ValueError, "invalid message: type 1 has a size or a distance out of range"):
         discv5.decode_message(_message(1, _rlp_bytes(bytes(9)), _scalar(1)))
 
 
 def test_distance_257():
-    with raises(ValueError, "invalid message: a size or a distance is out of range"):
+    with raises(ValueError, "invalid message: type 3 has a size or a distance out of range"):
         discv5.decode_message(_message(3, _rlp_bytes(H("01")), _rlp_list(_scalar(257))))
 
 
 def test_pong_address_of_five_bytes():
     plaintext = _message(2, _rlp_bytes(H("01")), _scalar(5), _rlp_bytes(bytes(5)), _scalar(1))
-    with raises(ValueError, "invalid message: a size or a distance is out of range"):
+    with raises(ValueError, "invalid message: type 2 has a size or a distance out of range"):
         discv5.decode_message(plaintext)
 
 
 def test_topic_distance_zero():
     # A distance from a topic is a positive integer.
     plaintext = _message(9, _rlp_bytes(H("01")), _rlp_bytes(bytes(32)), _rlp_list(_scalar(0)))
-    with raises(ValueError, "invalid message: a size or a distance is out of range"):
+    with raises(ValueError, "invalid message: type 9 has a size or a distance out of range"):
         discv5.decode_message(plaintext)

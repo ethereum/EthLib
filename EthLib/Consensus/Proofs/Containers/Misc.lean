@@ -1,10 +1,12 @@
 module
 
 public import EthLib.Consensus.Containers.Operations
+public import EthLib.Cryptography.Kzg.Constants
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Collections
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
 public import EthLib.Serialization.Proofs.Ssz.Typed.Rooted
+public import EthLib.Serialization.Proofs.Ssz.Codec.BindingDomain
 
 /-!
 # Proofs: the shared containers of the beacon chain are lawful
@@ -14,6 +16,10 @@ Each container has distinct field names, and converts to and from the tuple of i
 So its bytes decode back to it, and two values with one encoding are equal.
 
 A vector whose length comes from the preset needs that length to be positive.
+
+A summary of a span of slots has the root of the batch of that span.
+
+A header, a checkpoint or a vote has no list, so every variable-size count in it fits its word.
 -/
 
 @[expose] public section
@@ -21,6 +27,8 @@ A vector whose length comes from the preset needs that length to be positive.
 namespace EthLib.Consensus
 
 open Serialization.Ssz
+
+instance : NeZero Cryptography.Kzg.Constants.BYTES_PER_BLOB := ⟨by decide⟩
 
 instance : LawfulSszType ForkVersions := .container (by decide) (fun _ => rfl) (fun _ => rfl)
 
@@ -68,5 +76,62 @@ instance : LawfulSszType BLSToExecutionChange :=
 
 instance : LawfulSszType SignedBLSToExecutionChange :=
   .container (by decide) (fun _ => rfl) (fun _ => rfl)
+
+/-! ## Historical summaries -/
+
+/-- A summary of a span of slots has the root of the batch of that span.
+
+The summary holds the root of the block roots, then the root of the state roots.
+
+Its fields are the roots of the fields of the batch, so both merkleize the same two chunks. -/
+theorem hashTreeRoot_historicalSummary {preset : Preset} {batch : HistoricalBatch preset}
+    {blocks states : Root} (blocksRooted : SszType.hashTreeRoot batch.blockRoots = .ok blocks)
+    (statesRooted : SszType.hashTreeRoot batch.stateRoots = .ok states) :
+    SszType.hashTreeRoot
+        ({ blockSummaryRoot := blocks, stateSummaryRoot := states } : HistoricalSummary) =
+      SszType.hashTreeRoot batch := by
+  simp only [SszType.hashTreeRoot, bind, Except.bind] at blocksRooted statesRooted ⊢
+  cases blocksNode : SszType.root batch.blockRoots with
+  | error fault => simp [blocksNode] at blocksRooted
+  | ok blocksBytes =>
+  cases statesNode : SszType.root batch.stateRoots with
+  | error fault => simp [statesNode] at statesRooted
+  | ok statesBytes =>
+  simp only [blocksNode, statesNode] at blocksRooted statesRooted
+  simp only [SszType.root, Except.ok.injEq] at blocksNode statesNode
+  have chunk : ∀ root : Root,
+      hashTreeRoot (.byteVector 32) (.bytes root.toArray) = .ok root.toArray :=
+    fun root => hashTreeRoot_chunk (by simp [bytesPerChunk])
+  simp only [SszType.root, SszFields.roots, summaryRoot, blocksNode, statesNode,
+    toChunk_ok_iff.mp blocksRooted, toChunk_ok_iff.mp statesRooted, chunk, bind, Except.bind, pure,
+    Except.pure, List.map]
+  rw [hashTreeRoot_container_names]
+
+/-- Every variable-size count of a block header fits its 256-bit word, since it has no list. -/
+theorem BeaconBlockHeader.commitmentSized (header : BeaconBlockHeader) :
+    CommitmentSized (SszType.desc BeaconBlockHeader) (SszType.toValue header) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first | exact .byteVector _ _ | exact .uint _ _
+
+/-- Every variable-size count of a checkpoint fits its 256-bit word, since it has no list. -/
+theorem Checkpoint.commitmentSized (checkpoint : Checkpoint) :
+    CommitmentSized (SszType.desc Checkpoint) (SszType.toValue checkpoint) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first | exact .byteVector _ _ | exact .uint _ _
+
+/-- Every variable-size count of a vote fits its 256-bit word, since it has no list. -/
+theorem AttestationData.commitmentSized (data : AttestationData) :
+    CommitmentSized (SszType.desc AttestationData) (SszType.toValue data) := by
+  refine .container fun pair member => ?_
+  simp [SszType.desc, SszType.toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals first
+    | exact .byteVector _ _
+    | exact .uint _ _
+    | exact Checkpoint.commitmentSized _
 
 end EthLib.Consensus

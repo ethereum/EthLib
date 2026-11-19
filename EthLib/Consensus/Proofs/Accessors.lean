@@ -46,6 +46,18 @@ Every active validator is in a committee of its epoch, and no validator is in tw
 
 A committee is cut from the shuffle of the epoch of its slot.
 
+The seed of an epoch exists when the epoch plus the length of the history of mixes fits in 64 bits.
+
+The seed lookahead must also be shorter than that history.
+
+The shuffle of the epoch then has a value, when the registry holds at most `2^40` validators.
+
+A committee is cut when its position is below the count of the epoch, under two more bounds.
+
+The count and the active validators times it fit in 64 bits.
+
+Both hold when the registry times a bound on the committees of an epoch is below `2^64`.
+
 The members of the committees of a slot, cut from one shuffle, are those of each committee in turn.
 
 A validator is among those members exactly when one of the committees holds it.
@@ -279,6 +291,21 @@ theorem mem_getActiveValidatorIndices {state : BeaconState preset fork}
         isActiveValidator validator epoch = true :=
   mem_iff_of_getActiveValidatorIndicesChecked_ok
     (getActiveValidatorIndicesChecked_of_within within epoch)
+
+/-- Each active index names a position of the registry.
+
+It needs no bound on the registry: a position that wraps to 64 bits only gets smaller. -/
+theorem lt_size_of_mem_getActiveValidatorIndices {state : BeaconState preset fork}
+    {epoch : Epoch} {index : ValidatorIndex}
+    (member : index ∈ getActiveValidatorIndices state epoch) :
+    index.toNat < state.validators.data.size := by
+  simp only [getActiveValidatorIndices, List.mem_filterMap, Option.ite_none_right_eq_some,
+    Option.some.injEq, List.mem_zipIdx_iff_getElem?, Prod.exists] at member
+  obtain ⟨_, position, found, -, rfl⟩ := member
+  have inside := (List.getElem?_eq_some_iff.mp found).1
+  simp only [Array.length_toList] at inside
+  simp only [Nat.toUInt64_eq, UInt64.toNat_ofNat']
+  exact Nat.lt_of_le_of_lt (Nat.mod_le _ _) inside
 
 /-- The positions of the validators that pass a test increase strictly, as 64-bit indices.
 
@@ -537,13 +564,14 @@ theorem getPendingBalanceToWithdraw_ok_iff {state : BeaconState preset fork}
 
 /-- From Electra, the pending balance of a validator fails exactly when its sum reaches `2^64`.
 
-It then fails with a balance overflow. -/
+It then fails with a balance overflow that holds that sum. -/
 theorem getPendingBalanceToWithdraw_eq_error_iff {state : BeaconState preset fork}
     {electra : .pectra ≤ fork} {index : ValidatorIndex} {error : AccessorError} :
     getPendingBalanceToWithdraw state electra index = .error error ↔
       2 ^ 64 ≤ (((state.pendingPartialWithdrawals electra).data.toList.filter
           (·.validatorIndex = index)).map (·.amount.toNat)).sum ∧
-        error = .balanceOverflow := by
+        error = .balanceOverflow (((state.pendingPartialWithdrawals electra).data.toList.filter
+          (·.validatorIndex = index)).map (·.amount.toNat)).sum := by
   unfold getPendingBalanceToWithdraw
   simp only [EthLib.Base.sum_map_ite_eq_sum_filter
     fun withdrawal : PendingPartialWithdrawal => withdrawal.validatorIndex = index]
@@ -615,6 +643,50 @@ theorem getCurrentEpoch_ne_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.to
   simp only [UInt64.size] at this
   omega
 
+/-- With at least two slots in an epoch, the epoch after the current one is before the far future.
+
+It is the far future epoch less one at most, since the slot is below `2^64`. -/
+theorem getCurrentEpoch_succ_lt_farFuture (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (state : BeaconState preset fork) :
+    (getCurrentEpoch state).toNat + 1 < FAR_FUTURE_EPOCH.toNat := by
+  simp only [getCurrentEpoch, computeEpochAtSlot, UInt64.toNat_div]
+  have slotBound := state.slot.toNat_lt
+  have quotient : state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat ≤ state.slot.toNat / 2 :=
+    Nat.div_le_div_left twoSlots (by omega)
+  change state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 < 2 ^ 64 - 1
+  omega
+
+/-- With at least two slots in an epoch, the next epoch is before the far future.
+
+The checked addition alone allows the far future, from the epoch just before it. -/
+theorem nextEpoch_lt_farFuture {state : BeaconState preset fork} {next : Epoch}
+    (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
+    (nextOk : Uint64.addChecked (getCurrentEpoch state) 1 = .ok next) :
+    next < FAR_FUTURE_EPOCH := by
+  have sum := (Uint64.addChecked_ok_iff.mp nextOk).2
+  have bound := getCurrentEpoch_succ_lt_farFuture twoSlots state
+  have one : (1 : UInt64).toNat = 1 := rfl
+  rw [UInt64.lt_iff_toNat_lt]
+  omega
+
+/-- A validator active at the previous epoch is active at the current one or the one before it.
+
+At epoch zero the previous epoch is the current one. -/
+theorem active_current_or_before_of_active_previous (state : BeaconState preset fork)
+    (v : Validator) (active : isActiveValidator v (getPreviousEpoch state) = true) :
+    isActiveValidator v (getCurrentEpoch state) = true ∨
+      isActiveValidator v (getCurrentEpoch state - 1) = true := by
+  have previous := getPreviousEpoch_toNat state
+  by_cases zero : (getCurrentEpoch state).toNat = 0
+  · have same : getPreviousEpoch state = getCurrentEpoch state := UInt64.toNat_inj.mp (by omega)
+    exact Or.inl (same ▸ active)
+  · have one : (1 : UInt64) ≤ getCurrentEpoch state :=
+      UInt64.le_iff_toNat_le.mpr (by simp; omega)
+    have same : getPreviousEpoch state = getCurrentEpoch state - 1 := UInt64.toNat_inj.mp (by
+      rw [UInt64.toNat_sub_of_le _ _ one, previous]
+      rfl)
+    exact Or.inr (same ▸ active)
+
 /-- The current epoch is at most the slot, at every length of an epoch. -/
 theorem getCurrentEpoch_toNat_le_slot (state : BeaconState preset fork) :
     (getCurrentEpoch state).toNat ≤ state.slot.toNat := by
@@ -660,6 +732,14 @@ theorem getPreviousEpoch_add_one {state : BeaconState preset fork}
     apply UInt64.toNat_inj.mp
     simp [one]
 
+/-- No more validators are active in an epoch than the registry holds. -/
+theorem length_getActiveValidatorIndices_le (state : BeaconState preset fork)
+    (epoch : Epoch) :
+    (getActiveValidatorIndices state epoch).length ≤ state.validators.data.size := by
+  unfold getActiveValidatorIndices
+  refine Nat.le_trans (List.length_filterMap_le _ _) ?_
+  simp only [List.length_zipIdx, Array.length_toList, Nat.le_refl]
+
 /-- The number of active validators fits in 64 bits, when the registry stays within its limit. -/
 theorem length_getActiveValidatorIndices_lt {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) (epoch : Epoch) :
@@ -695,6 +775,48 @@ theorem getCommitteeCountPerSlot_le (state : BeaconState preset fork) (epoch : E
   all_goals simp_all [UInt64.le_iff_toNat_le]
   all_goals omega
 
+/-- The committees of an epoch fit in 64 bits, and so do the active validators times them.
+
+It needs the number of validators times a bound on the committees of an epoch to be below `2^64`.
+
+The bound is one more than the most committees of a slot, times the slots of an epoch. -/
+theorem committeeCount_fits {state : BeaconState preset fork} (epoch : Epoch)
+    (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64) :
+    (getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 ∧
+      (getActiveValidatorIndices state epoch).length *
+        ((getCommitteeCountPerSlot state epoch).toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64 := by
+  have perSlotMax := UInt64.le_iff_toNat_le.mp (getCommitteeCountPerSlot_le state epoch)
+  have lengthLe := length_getActiveValidatorIndices_le state epoch
+  simp only [Base.Uint64.toNat_max] at perSlotMax
+  have one : (1 : UInt64).toNat = 1 := rfl
+  -- With no validator, a slot has one committee.
+  have empty : state.validators.data.size = 0 → getCommitteeCountPerSlot state epoch = 1 := by
+    intro zero
+    have hlen : (getActiveValidatorIndices state epoch).length = 0 := by omega
+    simp [getCommitteeCountPerSlot, committeeCountOf, hlen]
+    apply UInt64.toNat_inj.mp
+    simp [Base.Uint64.toNat_max, Base.Uint64.toNat_min]
+  have perSlotLe : (getCommitteeCountPerSlot state epoch).toNat ≤
+      preset.MAX_COMMITTEES_PER_SLOT.toNat + 1 := by omega
+  have slotsSmall := preset.SLOTS_PER_EPOCH.toNat_lt
+  refine ⟨?_, ?_⟩
+  · rcases Nat.eq_zero_or_pos state.validators.data.size with zero | pos
+    · rw [empty zero, one]
+      omega
+    · calc _ ≤ (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) * preset.SLOTS_PER_EPOCH.toNat :=
+            Nat.mul_le_mul_right _ perSlotLe
+        _ ≤ state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+            preset.SLOTS_PER_EPOCH.toNat :=
+            Nat.mul_le_mul_right _ (Nat.le_mul_of_pos_left _ pos)
+        _ < 2 ^ 64 := committeeRoom
+  · calc _ ≤ state.validators.data.size * ((preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+          preset.SLOTS_PER_EPOCH.toNat) :=
+        Nat.mul_le_mul lengthLe (Nat.mul_le_mul_right _ perSlotLe)
+      _ = state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+          preset.SLOTS_PER_EPOCH.toNat := (Nat.mul_assoc _ _ _).symm
+      _ < 2 ^ 64 := committeeRoom
+
 /-- A committee that has a value comes from a positive count. -/
 theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed : Bytes32}
     {index count : UInt64} {committee : Array ValidatorIndex}
@@ -703,6 +825,29 @@ theorem count_ne_zero_of_computeCommittee {indices : Array ValidatorIndex} {seed
   cases shuffle : computeShuffledPermutation preset (UInt64.ofNat indices.size) seed <;>
     simp [computeCommittee, shuffledCommittee, shuffle, zero, bind, Except.bind, throw, throwThe,
       MonadExcept.throw, MonadExceptOf.throw] at computed
+
+/-- The seed of an epoch exists when the epoch plus the length of the history of mixes fits.
+
+The seed lookahead must also be shorter than that history. -/
+theorem getSeed_ok {state : BeaconState preset fork} {epoch : Epoch}
+    (domain : DomainType)
+    (epochRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat) :
+    ∃ seed, getSeed state epoch domain = .ok seed := by
+  have subOk : ∀ a b : UInt64, b.toNat ≤ a.toNat → Uint64.subChecked a b = .ok (a - b) :=
+    fun a b le => by simp [Uint64.subChecked, UInt64.le_iff_toNat_le, le]
+  have sum := Uint64.toNat_add_of_lt epochRoom
+  have first := subOk (epoch + preset.EPOCHS_PER_HISTORICAL_VECTOR) preset.MIN_SEED_LOOKAHEAD
+    (by omega)
+  have second := subOk (epoch + preset.EPOCHS_PER_HISTORICAL_VECTOR - preset.MIN_SEED_LOOKAHEAD) 1
+    (by rw [UInt64.toNat_sub_of_le _ _ (UInt64.le_iff_toNat_le.mpr (by omega))]; simp; omega)
+  have nonzero : preset.EPOCHS_PER_HISTORICAL_VECTOR ≠ 0 := by
+    intro zero
+    rw [zero] at lookahead
+    simp at lookahead
+  simp only [getSeed, getRandaoMix, readCircular, liftArith, Uint64.addChecked_of_lt epochRoom,
+    first, second, nonzero, bind, Except.bind, Except.mapError, pure, Except.pure, dite_false]
+  exact ⟨_, rfl⟩
 
 /-- A successful shuffle uses the checked active indices, and then shuffles their positions. -/
 theorem attesterShuffle_ok {state : BeaconState preset fork} {epoch : Epoch}
@@ -735,6 +880,33 @@ theorem getActiveValidatorIndicesChecked_of_attesterShuffle
   obtain ⟨_, _, indices, checked, _⟩ := computed
   rw [getActiveValidatorIndicesChecked_ok checked] at checked
   exact checked
+
+/-- The shuffle of an epoch succeeds when the registry holds at most `2^40` validators.
+
+It needs the epoch plus the length of the history of mixes to fit in 64 bits.
+
+It needs a seed lookahead shorter than that history. -/
+theorem attesterShuffle_ok_of_le {state : BeaconState preset fork} {epoch : Epoch}
+    (seedRoom : epoch.toNat + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (few : state.validators.data.size ≤ 2 ^ 40) :
+    ∃ shuffled, attesterShuffle state epoch =
+      .ok ((getActiveValidatorIndices state epoch).toArray, shuffled) := by
+  obtain ⟨seed, seedOk⟩ := getSeed_ok (state := state) (epoch := epoch) DOMAIN_BEACON_ATTESTER
+    seedRoom lookahead
+  have checked := getActiveValidatorIndicesChecked_of_size_le (state := state) (by omega) epoch
+  have lengthLe := length_getActiveValidatorIndices_le state epoch
+  have lt : (getActiveValidatorIndices state epoch).toArray.size < 2 ^ 64 := by
+    simp only [List.size_toArray]
+    omega
+  have countNat := UInt64.toNat_ofNat_of_lt' lt
+  have permuted := computeShuffledPermutation_eq (preset := preset) (seed := seed)
+    (count := UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size)
+    (by rw [countNat]; simp only [List.size_toArray]; omega)
+  refine ⟨Shuffle.shuffledPositions preset.SHUFFLE_ROUND_COUNT.toNat seed
+    (UInt64.ofNat (getActiveValidatorIndices state epoch).toArray.size).toNat, ?_⟩
+  simp only [attesterShuffle, seedOk, checked, liftArith, bind, Except.bind, Except.mapError,
+    Base.Uint64.ofNatChecked_of_lt lt, Nat.toUInt64_eq, permuted, pure, Except.pure]
 
 /-- A registry within its preset limit has the same checked and pure committee count. -/
 theorem getCommitteeCountPerSlotChecked_of_within {state : BeaconState preset fork}
@@ -783,6 +955,85 @@ theorem getBeaconCommittee_ok {state : BeaconState preset fork} {slot : Slot}
   refine ⟨seed, position, count, seedOk, by rw [positionEq, productEq], countEq, ?_⟩
   rw [computeCommittee, shuffleOk]
   exact committeeOk
+
+/-- A beacon committee is cut when its position is below the count of the epoch.
+
+It needs that count, and the active validators times it, to fit in 64 bits. -/
+theorem beaconCommitteeOf_ok {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (count : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (inside : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat + index.toNat <
+      perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (fits : active.size * (perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64) :
+    ∃ committee, beaconCommitteeOf preset slot index perSlot active shuffled = .ok committee := by
+  have productFits : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat < 2 ^ 64 := by omega
+  have sumFits : ((slot % preset.SLOTS_PER_EPOCH) * perSlot).toNat + index.toNat < 2 ^ 64 := by
+    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt productFits]
+    omega
+  have positionNat : ((slot % preset.SLOTS_PER_EPOCH) * perSlot + index).toNat =
+      (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat + index.toNat := by
+    rw [Base.Uint64.toNat_add_of_lt sumFits, UInt64.toNat_mul, Nat.mod_eq_of_lt productFits]
+  have countFits : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := count
+  have countNat : (perSlot * preset.SLOTS_PER_EPOCH).toNat =
+      perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat := by
+    rw [UInt64.toNat_mul, Nat.mod_eq_of_lt countFits]
+  obtain ⟨committee, cut⟩ := shuffledCommittee_ok (indices := active) (shuffled := shuffled)
+    (index := (slot % preset.SLOTS_PER_EPOCH) * perSlot + index)
+    (count := perSlot * preset.SLOTS_PER_EPOCH) (by
+      rw [UInt64.lt_iff_toNat_lt, positionNat, countNat]
+      exact inside) (by
+      rw [positionNat]
+      exact Nat.lt_of_le_of_lt (Nat.mul_le_mul_left _ (by omega)) fits)
+  refine ⟨committee, ?_⟩
+  simp only [beaconCommitteeOf, liftArith, Base.Uint64.mulChecked_of_lt
+    (by simpa only using productFits : (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot.toNat <
+      2 ^ 64), Base.Uint64.addChecked_of_lt sumFits,
+    Base.Uint64.mulChecked_of_lt countFits, bind, Except.bind, Except.mapError, cut]
+
+/-- A beacon committee is cut when its index is below the count of committees of a slot.
+
+An epoch must have a slot.
+
+The count of the epoch, and the active validators times it, must fit in 64 bits. -/
+theorem beaconCommitteeOf_ok_of_lt {slot : Slot} {index : CommitteeIndex} {perSlot : UInt64}
+    {active : Array ValidatorIndex} {shuffled : Array UInt64}
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (count : perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (fits : active.size * (perSlot.toNat * preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    (below : index < perSlot) :
+    ∃ committee, beaconCommitteeOf preset slot index perSlot active shuffled = .ok committee := by
+  refine beaconCommitteeOf_ok count ?_ fits
+  -- The committees of the earlier slots of the epoch come first, then this slot's.
+  have indexLt := UInt64.lt_iff_toNat_lt.mp below
+  have remainder := Nat.mod_lt slot.toNat positive
+  rw [UInt64.toNat_mod]
+  generalize perSlot.toNat = p at *
+  generalize slot.toNat % preset.SLOTS_PER_EPOCH.toNat = k at *
+  generalize preset.SLOTS_PER_EPOCH.toNat = e at *
+  calc k * p + index.toNat < k * p + p := Nat.add_lt_add_left indexLt _
+    _ = (k + 1) * p := (Nat.succ_mul k p).symm
+    _ ≤ e * p := Nat.mul_le_mul_right _ remainder
+    _ = p * e := Nat.mul_comm _ _
+
+/-- A beacon committee whose index is below the count of its slot is cut, when its bounds fit. -/
+theorem getBeaconCommittee_exists {state : BeaconState preset fork} {slot : Slot}
+    {index : CommitteeIndex}
+    (seedRoom : (computeEpochAtSlot preset slot).toNat +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (lookahead : preset.MIN_SEED_LOOKAHEAD.toNat < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (few : state.validators.data.size ≤ 2 ^ 40)
+    (committeeRoom : state.validators.data.size * (preset.MAX_COMMITTEES_PER_SLOT.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (below : index < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)) :
+    ∃ committee, getBeaconCommittee state slot index = .ok committee := by
+  obtain ⟨countFits, activeFits⟩ := committeeCount_fits (state := state)
+    (computeEpochAtSlot preset slot) committeeRoom
+  obtain ⟨shuffled, shuffleOk⟩ := attesterShuffle_ok_of_le (state := state)
+    (epoch := computeEpochAtSlot preset slot) seedRoom lookahead few
+  simp only [getBeaconCommittee, shuffleOk, bind, Except.bind]
+  exact beaconCommitteeOf_ok_of_lt positive countFits
+    (by simpa only [List.size_toArray] using activeFits) below
 
 /-- Each member of a committee is active in the epoch of its slot. -/
 theorem mem_getActiveValidatorIndices_of_getBeaconCommittee {state : BeaconState preset fork}
@@ -1815,6 +2066,33 @@ theorem getBlockRootAtSlot_ok_iff {state : BeaconState preset fork}
     obtain ⟨_, thrown, _⟩ := computed
     cases thrown
 
+/-- A read of a recorded root fails only for a slot out of range.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+theorem getBlockRootAtSlot_error {state : BeaconState preset fork} {slot : Slot}
+    {fault : AccessorError}
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : getBlockRootAtSlot state slot = .error fault) :
+    fault = .slotOutOfRange slot state.slot := by
+  unfold getBlockRootAtSlot at failed
+  by_cases before : slot < state.slot
+  · -- The bound of a slot before the state fits, so only the range checks can fail.
+    have bound : Uint64.addChecked slot preset.SLOTS_PER_HISTORICAL_ROOT =
+        .ok (slot + preset.SLOTS_PER_HISTORICAL_ROOT) :=
+      Uint64.addChecked_of_lt (by have := UInt64.lt_iff_toNat_lt.mp before; omega)
+    by_cases within : state.slot ≤ slot + preset.SLOTS_PER_HISTORICAL_ROOT
+    · have nonzero : preset.SLOTS_PER_HISTORICAL_ROOT ≠ 0 := by
+        intro zero
+        rw [zero, UInt64.add_zero] at within
+        exact absurd before (UInt64.not_lt.mpr within)
+      simp [before, liftArith, bound, within, readCircular, nonzero, Except.mapError, bind,
+        Except.bind] at failed
+    · simp [before, liftArith, bound, within, throw, throwThe, MonadExceptOf.throw,
+        Except.mapError, bind, Except.bind] at failed
+      exact failed.symm
+  · simp [before, throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at failed
+    exact failed.symm
+
 /-- A read of a recorded root succeeds when the slot is recent and its bound does not overflow.
 
 The buffer of roots must not be empty. -/
@@ -1868,5 +2146,85 @@ theorem getBlockRootAtSlot_congr {post : Fork} {state : BeaconState preset fork}
     (roots : other.blockRoots = state.blockRoots) (index : Slot) :
     getBlockRootAtSlot other index = getBlockRootAtSlot state index := by
   simp only [getBlockRootAtSlot, slot, roots]
+
+/-- The proposer search reads only the effective balances of the validators it draws.
+
+Each candidate is one of the indices, or index zero when the order leaves them. -/
+theorem proposerSearch_congr_validators {fork : Fork} {first second : Array Validator}
+    {indices : Array ValidatorIndex} {order : Nat → Nat} {seed : Bytes32}
+    (positive : 0 < first.size) (inside : ∀ index ∈ indices, index.toNat < first.size)
+    (agree : ∀ j < first.size, (first[j]?).map (·.effectiveBalance) =
+      (second[j]?).map (·.effectiveBalance)) :
+    ∀ {i : Nat}, proposerSearch preset fork first indices order seed i =
+      proposerSearch preset fork second indices order seed i := by
+  intro i
+  obtain ⟨left, leftEq⟩ : ∃ left, left = 2 ^ 64 - i := ⟨_, rfl⟩
+  induction left using Nat.strongRecOn generalizing i with
+  | _ left ih =>
+    unfold proposerSearch
+    have small : (indices.getD (order (i % indices.size)) 0).toNat < first.size := by
+      rw [Array.getD_eq_getD_getElem?]
+      by_cases within : order (i % indices.size) < indices.size
+      · rw [Array.getElem?_eq_getElem within, Option.getD_some]
+        exact inside _ (Array.getElem_mem within)
+      · rw [Array.getElem?_eq_none (Nat.le_of_not_lt within), Option.getD_none]
+        exact positive
+    have same := agree _ small
+    generalize indices.getD (order (i % indices.size)) 0 = candidate at same ⊢
+    cases hf : first[candidate.toNat]? <;> cases hs : second[candidate.toNat]? <;>
+      simp only [hf, hs, Option.map_none, Option.map_some, reduceCtorEq,
+        Option.some.injEq] at same
+    · simp only [hf, hs]
+    · simp only [hf, hs, same]
+      by_cases next : i + 1 < 2 ^ 64
+      · rw [ih (2 ^ 64 - (i + 1)) (by omega) rfl]
+      · have far : ¬ i + 1 < 18446744073709551616 := by omega
+        simp only [far, dite_false]
+
+/-- The proposer of a slot reads the slot, the RANDAO mixes and the proposer lookahead.
+
+It also reads the active validators of the epoch and their effective balances. -/
+theorem getBeaconProposerIndex_congr {fork : Fork} {s w : BeaconState preset fork}
+    (slot : w.slot = s.slot) (mixes : w.randaoMixes = s.randaoMixes)
+    (lookahead : ∀ fulu : .fusaka ≤ fork, w.proposerLookahead fulu = s.proposerLookahead fulu)
+    (active : getActiveValidatorIndicesChecked w (getCurrentEpoch s) =
+      getActiveValidatorIndicesChecked s (getCurrentEpoch s))
+    (effective : ∀ j < s.validators.data.size, (s.validators.data[j]?).map (·.effectiveBalance) =
+      (w.validators.data[j]?).map (·.effectiveBalance)) :
+    getBeaconProposerIndex w = getBeaconProposerIndex s := by
+  have epoch : getCurrentEpoch w = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
+  unfold getBeaconProposerIndex
+  split
+  · rename_i fulu
+    simp only [slot, lookahead fulu]
+  · have seed : getSeed w (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER =
+        getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER := by
+      unfold getSeed getRandaoMix
+      rw [mixes]
+    dsimp only
+    rw [epoch, seed, active, slot]
+    cases checked : getActiveValidatorIndicesChecked s (getCurrentEpoch s) with
+    | error => simp only [bind, Except.bind]
+    | ok indices =>
+      simp only [bind, Except.bind]
+      cases getSeed s (getCurrentEpoch s) DOMAIN_BEACON_PROPOSER with
+      | error => simp only
+      | ok mix =>
+        simp only
+        unfold computeProposerIndex
+        by_cases empty : indices.toArray.size = 0
+        · simp [empty, bind, Except.bind, throw, throwThe, MonadExcept.throw,
+            MonadExceptOf.throw]
+        have inside : ∀ index ∈ indices.toArray, index.toNat < s.validators.data.size := by
+          intro index member
+          obtain ⟨v, found, _⟩ :=
+            (mem_iff_of_getActiveValidatorIndicesChecked_ok checked).mp (by simpa using member)
+          exact (Array.getElem?_eq_some_iff.mp found).1
+        have positive : 0 < s.validators.data.size := by
+          obtain ⟨index, member⟩ := List.exists_mem_of_ne_nil indices
+            (fun nil => empty (by simp [nil]))
+          exact Nat.lt_of_le_of_lt (Nat.zero_le _) (inside index (by simpa using member))
+        simp only [empty, ↓reduceIte]
+        rw [proposerSearch_congr_validators positive inside effective]
 
 end EthLib.Consensus

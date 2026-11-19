@@ -1146,7 +1146,7 @@ theorem error_processMessage_of_empty {Meter : Type} [GasMeter Meter] [LawfulGas
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     (hcode : message.code = .empty) (hpre : precompileAddress fork message = none)
     (h : processMessage fork message state substate = .ok ended) : ended.val.error = none := by
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   unfold startState at h
   obtain ⟨ended0, hdo, rfl⟩ := Base.map_ok_iff.mp h
   split at hdo <;> (dsimp only at hdo; split at hdo)

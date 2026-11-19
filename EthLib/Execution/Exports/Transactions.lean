@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
@@ -50,10 +50,7 @@ open EthLib.Exports (Result PyValue forkUpTo pyExport)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
-
-/-- A value printed on one line, however long its numbers are. -/
-def oneLine {α : Type} [Repr α] (a : α) : String :=
-  (repr a).pretty 1000000
+open EthLib.Execution.Blocks.Exports (oneLine)
 
 /-- An RLP error, with the index of each structure field on the way to it. -/
 def rlpMessage : RlpError → String
@@ -338,7 +335,8 @@ def networkMessage : NetworkError → String
   | .wrongVersion v => s!"wrapper version {v} is not {WRAPPER_VERSION}"
   | .countMismatch h b c p =>
     s!"{h} versioned hashes, {b} blobs, {c} commitments and {p} proofs do not match"
-  | .versionedHashMismatch => "a commitment does not hash to its versioned hash"
+  | .versionedHashMismatch index expected actual =>
+    s!"commitment {index} hashes to {hexString expected.toList}, not to {hexString actual.toList}"
   | .kzg e => s!"kzg: {e.message}"
   | .proofRejected => "the proofs do not verify"
 
@@ -355,7 +353,7 @@ It returns the bytes of the transaction alone, as a block holds it.
 def networkCheckExport (fork bytes : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .bpo5 fork
   let w ← runNetwork (decodeNetwork fork bytes)
-  let setup ← runNetwork (Cryptography.Kzg.Exports.embeddedSetup.mapError .kzg)
+  let setup ← runNetwork ((Cryptography.Kzg.Exports.embeddedSetup ()).mapError .kzg)
   runNetwork (validateNetwork setup fork w)
   runNetwork ((encodeTransaction (.blob w.tx)).mapError (.transaction ∘ .encoding))
 

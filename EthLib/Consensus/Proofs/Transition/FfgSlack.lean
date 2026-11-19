@@ -188,8 +188,9 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   have targetSets := sets kept
   rw [epoch] at rootOk targetSets
   have before := chain current _ rootOk
-  have settled' := UInt64.le_iff_toNat_le.mp settled
-  have previous := getPreviousEpoch_toNat state
+  -- In both cases the source epoch of the link is below its target epoch.
+  have below := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled
+    (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)) current)
   -- The new checkpoint is the checkpoint of its epoch, with the root of its first slot.
   have target : after.currentJustifiedCheckpoint.toFfg block =
       ⟨block after.currentJustifiedCheckpoint.root,
@@ -198,14 +199,11 @@ theorem processJustificationAndFinalization_slackJustifiedCheckpoints
   rw [target] at link ⊢
   cases current
   · -- The previous epoch: its source is the previous justified checkpoint.
-    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk targetSets ⊢
-    have below := UInt64.lt_iff_toNat_lt.mp
-      (separated (UInt64.lt_iff_toNat_lt.mpr (by rw [one]; exact late)))
+    simp only [Bool.false_eq_true, ↓reduceIte] at link before rootOk targetSets below ⊢
     exact .link holds.1 (link.slackLink targetSets rootOk below before)
   · -- The current epoch: its source is the current justified checkpoint.
-    simp only [↓reduceIte] at link before rootOk targetSets ⊢
-    exact .link holds.2 (link.slackLink targetSets rootOk (by simp only [Checkpoint.toFfg]; omega)
-      before)
+    simp only [↓reduceIte] at link before rootOk targetSets below ⊢
+    exact .link holds.2 (link.slackLink targetSets rootOk below before)
 
 /-- An epoch has at least one slot when the slot after another one starts an epoch. -/
 theorem slotsPerEpoch_pos_of_mod {slot next : Slot} (sum : next.toNat = slot.toNat + 1)
@@ -244,10 +242,8 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
   have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
     unfold getPreviousEpoch
     rw [currentEq]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame epochedOk
     rw [frame.currentJustified] at changed ⊢
     rcases processJustificationAndFinalization_currentJustified justifiedOk with same |
       ⟨recent, rootOk⟩
@@ -262,9 +258,7 @@ theorem advanceSlot_getBlockRoot_currentJustified_of_ne
       rw [UInt64.toNat_add, UInt64.toNat_one, ← sum, Nat.mod_eq_of_lt next.toNat_lt]
     rw [← nextEq]
     exact ⟨recent, rootOk, boundary⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    exact absurd cachedFrame.currentJustified changed
+  · exact absurd cachedFrame.currentJustified changed
 
 /-- One slot keeps the two justified checkpoints slack-justified in the model.
 
@@ -315,10 +309,8 @@ theorem advanceSlot_slackJustifiedCheckpoints
   have previousEq : getPreviousEpoch cached = getPreviousEpoch state := by
     unfold getPreviousEpoch
     rw [currentEq]
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have positive := slotsPerEpoch_pos_of_mod sum boundary
+  obtain ⟨boundary, epochedOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochedOk
+  · have positive := slotsPerEpoch_pos_of_mod sum boundary
     -- The caching keeps the roots of both recent epochs.
     have roots : ∀ current : Bool,
         getBlockRoot cached (if current then getCurrentEpoch state else getPreviousEpoch state) =
@@ -385,9 +377,7 @@ theorem advanceSlot_slackJustifiedCheckpoints
     · unfold SlackJustifiedCheckpoints
       rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
       exact holds
-  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    unfold SlackJustifiedCheckpoints
+  · unfold SlackJustifiedCheckpoints
     rw [cachedFrame.previousJustified, cachedFrame.currentJustified]
     exact holds
 

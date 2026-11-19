@@ -8,6 +8,9 @@ public import EthLib.Networking.Proofs.Encoding.Protobuf
 # Proofs: the gossip RPC
 
 - Decoding the encoding of an RPC returns it, for an encoding shorter than `2^64` bytes.
+  This covers the fields of the partial message extension.
+- A subscription change, a control message or an RPC without an extension field has its default.
+- A peer that asks for partial messages can send them, and an unsubscription does neither.
 - A message whose records parse is rejected for signing exactly when it holds a forbidden field.
 - An RPC that publishes such a message is rejected.
 - For each forbidden field, a message with that field written first is rejected, even empty.
@@ -124,9 +127,49 @@ private theorem decodePrune_encode (m : Prune) (h : m.encode.size < 2 ^ 64) :
       Except.bind, pure, Except.pure]
   · simp [stringRecord, lenRecord, maxField, or_imp, forall_and]
 
+/-- Decoding the encoding of the extensions of a control message returns them. -/
+private theorem decodeControlExtensions_encode (e : ControlExtensions)
+    (h : e.encode.size < 2 ^ 64) : decodeControlExtensions e.encode = .ok e := by
+  unfold ControlExtensions.encode at h ⊢
+  obtain ⟨b⟩ := e
+  cases b <;>
+  · rw [decodeControlExtensions, recordsOf_serialize (by simp [maxField]) h]
+    simp [singular, repeated, valuesOf, uint64Of, bind, Except.bind, pure, Except.pure]
+
+/-- Decoding the encoding of a partial message returns it. -/
+private theorem decodePartial_encode (m : PartialMessagesExtension)
+    (h : m.encode.size < 2 ^ 64) : decodePartial m.encode = .ok m := by
+  unfold PartialMessagesExtension.encode at h ⊢
+  rw [decodePartial, recordsOf_serialize ?_ h]
+  · obtain ⟨t, g, p, q⟩ := m
+    cases p <;> cases q <;> simp [singular, repeated, valuesOf, lenRecord, bytesOf, bind,
+      Except.bind, pure, Except.pure]
+  · simp [lenRecord, maxField, or_imp, forall_and]
+
 /-- Merging empty control messages with others returns the others. -/
 private theorem merge_empty_left (c : Control) : Control.merge {} c = c := by
   cases c; simp [Control.merge]
+
+/-- A field without records has no values. -/
+private theorem valuesOf_eq_nil {rs : List Record} {n : Nat} (h : ∀ r ∈ rs, r.field ≠ n) :
+    valuesOf rs n = [] := by
+  simp only [valuesOf, List.filterMap_eq_nil_iff]
+  intro r hr
+  simp [h r hr]
+
+/-- A singular field without records has its default. -/
+private theorem singular_of_nil {read : Nat → Value → Except RpcError α} {d : α}
+    {rs : List Record} {n : Nat} (h : ∀ r ∈ rs, r.field ≠ n) : singular read d rs n = .ok d := by
+  simp [singular, repeated, valuesOf_eq_nil h, bind, Except.bind, pure, Except.pure]
+
+/-- The last item of the list of an optional value is that value. -/
+private theorem getLast?_toList (o : Option α) : o.toList.getLast? = o := by
+  cases o <;> rfl
+
+/-- An optional field without records is missing. -/
+private theorem lastMessage_of_nil {decode : ByteArray → Except RpcError α} {rs : List Record}
+    {n : Nat} (h : ∀ r ∈ rs, r.field ≠ n) : lastMessage decode rs n = .ok none := by
+  simp [lastMessage, repeated, valuesOf_eq_nil h, bind, Except.bind, pure, Except.pure]
 
 /-! ## Round trips -/
 
@@ -134,10 +177,10 @@ private theorem merge_empty_left (c : Control) : Control.merge {} c = c := by
 theorem decodeSubOpts_encode (s : SubOpts) (h : s.encode.size < 2 ^ 64) :
     decodeSubOpts s.encode = .ok s := by
   unfold SubOpts.encode at h ⊢
-  rw [decodeSubOpts, recordsOf_serialize (by simp [stringRecord, lenRecord, maxField]) h]
-  obtain ⟨sub, t⟩ := s
-  cases sub <;> simp [singular, repeated, valuesOf, stringRecord, lenRecord, stringOf_toUTF8,
-    uint64Of, bind, Except.bind, pure, Except.pure]
+  rw [decodeSubOpts, recordsOf_serialize (by simp [stringRecord, lenRecord, maxField]; grind) h]
+  obtain ⟨sub, t, rp, sp⟩ := s
+  cases sub <;> cases rp <;> cases sp <;> simp [singular, repeated, valuesOf, stringRecord,
+    lenRecord, stringOf_toUTF8, uint64Of, bind, Except.bind, pure, Except.pure]
 
 /-- Decoding the encoding of a message returns it. -/
 theorem decodeMessage_encode (m : Message) (h : m.encode.size < 2 ^ 64) :
@@ -154,52 +197,110 @@ theorem decodeControl_encode (c : Control) (h : c.encode.size < 2 ^ 64) :
   have h1 : c.ihave.mapM (decodeIHave ∘ IHave.encode) = .ok (c.ihave.map id) :=
     mapM_eq_ok_map fun x hx => decodeIHave_encode x <| size_lt_of_mem
       (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_left _ <|
-        List.mem_append_left _ <| mem_map_comp hx 1 _) h
+        List.mem_append_left _ <| List.mem_append_left _ <| mem_map_comp hx 1 _) h
   have h2 : c.iwant.mapM (decodeIWant ∘ IWant.encode) = .ok (c.iwant.map id) :=
     mapM_eq_ok_map fun x hx => decodeIWant_encode x <| size_lt_of_mem
       (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_left _ <|
-        List.mem_append_right _ <| mem_map_comp hx 2 _) h
+        List.mem_append_left _ <| List.mem_append_right _ <| mem_map_comp hx 2 _) h
   have h3 : c.graft.mapM (decodeGraft ∘ Graft.encode) = .ok (c.graft.map id) :=
     mapM_eq_ok_map fun x hx => decodeGraft_encode x <| size_lt_of_mem
-      (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_right _ <|
-        mem_map_comp hx 3 _) h
+      (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_left _ <|
+        List.mem_append_right _ <| mem_map_comp hx 3 _) h
   have h4 : c.prune.mapM (decodePrune ∘ Prune.encode) = .ok (c.prune.map id) :=
     mapM_eq_ok_map fun x hx => decodePrune_encode x <| size_lt_of_mem
-      (List.mem_append_left _ <| List.mem_append_right _ <| mem_map_comp hx 4 _) h
+      (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_right _ <|
+        mem_map_comp hx 4 _) h
   have h5 : c.idontwant.mapM (decodeIDontWant ∘ IDontWant.encode) = .ok (c.idontwant.map id) :=
     mapM_eq_ok_map fun x hx => decodeIDontWant_encode x <| size_lt_of_mem
-      (List.mem_append_right _ <| mem_map_comp hx 5 _) h
+      (List.mem_append_left _ <| List.mem_append_right _ <| mem_map_comp hx 5 _) h
+  have h6 : c.extensions.toList.mapM (decodeControlExtensions ∘ ControlExtensions.encode) =
+      .ok (c.extensions.toList.map id) :=
+    mapM_eq_ok_map fun x hx => decodeControlExtensions_encode x <| size_lt_of_mem (n := 6)
+      (List.mem_append_right _ <| mem_map_comp hx 6 _) h
   rw [decodeControl, recordsOf_serialize ?_ h]
-  · simp [repeated, valuesOf_append, valuesOf_map_comp, mapM_bytesOf_len, h1, h2, h3, h4, h5,
-      bind, Except.bind, pure, Except.pure]
+  · simp [lastMessage, getLast?_toList, repeated, valuesOf_append, valuesOf_map_comp,
+      mapM_bytesOf_len, h1, h2, h3, h4, h5, h6, bind, Except.bind, pure, Except.pure]
   · simp [lenRecord, maxField, or_imp, forall_and]
 
 /-- Decoding the encoding of an RPC returns it. -/
 theorem decodeRpc_encode (rpc : Rpc) (h : rpc.encode.size < 2 ^ 64) :
     decodeRpc rpc.encode = .ok rpc := by
-  obtain ⟨subs, pub, c⟩ := rpc
+  obtain ⟨subs, pub, c, part⟩ := rpc
   unfold Rpc.encode at h ⊢
   have h1 : subs.mapM (decodeSubOpts ∘ SubOpts.encode) = .ok (subs.map id) :=
     mapM_eq_ok_map fun x hx => decodeSubOpts_encode x <| size_lt_of_mem
-      (List.mem_append_left _ <| List.mem_append_left _ <| mem_map_comp hx 1 _) h
+      (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_left _ <|
+        mem_map_comp hx 1 _) h
   have h2 : pub.mapM (decodeMessage ∘ Message.encode) = .ok (pub.map id) :=
     mapM_eq_ok_map fun x hx => decodeMessage_encode x <| size_lt_of_mem
-      (List.mem_append_left _ <| List.mem_append_right _ <| mem_map_comp hx 2 _) h
+      (List.mem_append_left _ <| List.mem_append_left _ <| List.mem_append_right _ <|
+        mem_map_comp hx 2 _) h
+  have h4 : part.toList.mapM (decodePartial ∘ PartialMessagesExtension.encode) =
+      .ok (part.toList.map id) :=
+    mapM_eq_ok_map fun x hx => decodePartial_encode x <| size_lt_of_mem (n := 10)
+      (List.mem_append_right _ <| mem_map_comp hx 10 _) h
   by_cases hc : c = {}
   · subst hc
     simp only [ite_true] at h ⊢
     rw [decodeRpc, recordsOf_serialize ?_ h]
-    · simp [repeated, valuesOf_append, valuesOf_map_comp, mapM_bytesOf_len, h1, h2, bind,
-        Except.bind, pure, Except.pure]
+    · simp [lastMessage, getLast?_toList, repeated, valuesOf_append, valuesOf_map_comp,
+        mapM_bytesOf_len, h1, h2, h4, bind, Except.bind, pure, Except.pure]
     · simp [lenRecord, maxField, or_imp, forall_and]
   · have h3 : decodeControl c.encode = .ok c :=
-      decodeControl_encode c <| size_lt_of_mem (n := 3) (List.mem_append_right _ <| by simp [hc]) h
+      decodeControl_encode c <| size_lt_of_mem (n := 3)
+        (List.mem_append_left _ <| List.mem_append_right _ <| by simp [hc]) h
     simp only [hc, ite_false] at h ⊢
     rw [decodeRpc, recordsOf_serialize ?_ h]
-    · simp [repeated, valuesOf_append, valuesOf_map_comp, valuesOf_cons, valuesOf_nil, lenRecord,
-        mapM_bytesOf_len, h1, h2, h3, bytesOf, bind, Except.bind, pure, Except.pure,
+    · simp [lastMessage, getLast?_toList, repeated, valuesOf_append, valuesOf_map_comp,
+        valuesOf_cons, lenRecord, mapM_bytesOf_len, h1, h2, h3, h4, bytesOf, bind, Except.bind,
+        pure, Except.pure,
         merge_empty_left]
     · simp [lenRecord, maxField, or_imp, forall_and]
+
+/-! ## Messages without the extension fields -/
+
+/-- A subscription change without the fields of the partial message extension has both false. -/
+theorem decodeSubOpts_no_partial {bytes : ByteArray} {rs : List Record} {s : SubOpts}
+    (hr : recordsOf bytes = .ok rs) (hf : ∀ r ∈ rs, r.field ≠ 3 ∧ r.field ≠ 4)
+    (h : decodeSubOpts bytes = .ok s) :
+    s.requestsPartial = false ∧ s.supportsSendingPartial = false := by
+  have h3 : singular uint64Of 0 rs 3 = .ok 0 := singular_of_nil fun r hr => (hf r hr).1
+  have h4 : singular uint64Of 0 rs 4 = .ok 0 := singular_of_nil fun r hr => (hf r hr).2
+  simp only [decodeSubOpts, hr, h3, h4, bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (injection h with h; subst h; simp) | nomatch h
+
+/-- A control message without the field of the extensions has none. -/
+theorem decodeControl_no_extensions {bytes : ByteArray} {rs : List Record} {c : Control}
+    (hr : recordsOf bytes = .ok rs) (hf : ∀ r ∈ rs, r.field ≠ 6)
+    (h : decodeControl bytes = .ok c) : c.extensions = none := by
+  have h6 : lastMessage decodeControlExtensions rs 6 = .ok none := lastMessage_of_nil hf
+  simp only [decodeControl, hr, h6, bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (injection h with h; subst h; simp) | nomatch h
+
+/-- An RPC without the field of the partial message extension carries no partial message. -/
+theorem decodeRpc_no_partial {bytes : ByteArray} {rs : List Record} {rpc : Rpc}
+    (hr : recordsOf bytes = .ok rs) (hf : ∀ r ∈ rs, r.field ≠ 10)
+    (h : decodeRpc bytes = .ok rpc) : rpc.partialMessage = none := by
+  have h10 : lastMessage decodePartial rs 10 = .ok none := lastMessage_of_nil hf
+  simp only [decodeRpc, hr, h10, bind, Except.bind, pure, Except.pure] at h
+  repeat' split at h
+  all_goals first | (injection h with h; subst h; simp) | nomatch h
+
+/-! ## Partial flags -/
+
+/-- A peer that asks for partial messages can send them. -/
+theorem SubOpts.sendsPartial_of_asksPartial {s : SubOpts} (h : s.asksPartial = true) :
+    s.sendsPartial = true := by
+  cases s with
+  | mk sub t req sup => cases sub <;> cases req <;> cases sup <;> simp_all [SubOpts.asksPartial,
+      SubOpts.sendsPartial]
+
+/-- An unsubscription neither asks for partial messages nor can send them. -/
+theorem SubOpts.partial_of_unsubscribe {s : SubOpts} (h : s.subscribe = false) :
+    s.asksPartial = false ∧ s.sendsPartial = false := by
+  simp [SubOpts.asksPartial, SubOpts.sendsPartial, h]
 
 /-! ## `StrictNoSign` -/
 

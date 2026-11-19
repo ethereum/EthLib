@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Montgomery
+public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Base.Proofs.BigEndian
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.FieldTheory.Finite.Basic

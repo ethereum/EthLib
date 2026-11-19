@@ -1,6 +1,6 @@
 """The execution JSON-RPC API: its parameter readers, error codes, and a chain that serves it."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, TypeAlias, overload
 
@@ -128,6 +128,7 @@ def serve(
     requests: list[str],
     *,
     check_seal: bool = True,
+    pruned_access_lists: Collection[int] = (),
 ) -> list[str | None]:
     """
     Answer the texts of JSON-RPC requests from a chain, with the text of each response.
@@ -139,9 +140,41 @@ def serve(
     The forkchoice is the head, safe and finalized hashes; a zero safe or finalized hash names none.
     A block that does not decode or fails its transition raises RpcError with its block error code.
     Any other bad input raises RpcError with code 0, such as a head that is not the last block.
+
+    For eth_config, config may give mergeForkBlock, the FORK_NEXT_VALUE of EIP-3675.
+    When the first block is not block zero, eth_config needs genesisHash and genesisTime in config.
+    When it is block zero, serve reads both from it, and any given values must match.
+    A malformed, partial or mismatched value of these keys raises RpcError with code 0.
+
+    pruned_access_lists names block numbers whose block access lists the node pruned.
+    From Glamsterdam, both access-list methods answer code 4444 for a block with such a number.
     """
     view = (config, state, list(blocks), forkchoice, network_id, check_seal)
-    return _native.rpc_serve(view, requests)
+    return _native.rpc_serve(view, list(pruned_access_lists), requests)
+
+
+def encode_block_access_list(value: object) -> bytes:
+    """
+    Encode a block access-list JSON value as its EIP-7928 RLP bytes.
+
+    The value is the JSON result of eth_getBlockAccessList, as json.loads gives it.
+    A value outside the schema raises RpcError with code 32602, and the reason as message.
+    An encoding failure raises RpcError with code 32603.
+    """
+    return _native.rpc_encode_block_access_list(value)
+
+
+def apply_overrides(state: bytes, overrides: object) -> bytes:
+    """
+    The state root after the account overrides of one block of eth_simulateV1.
+
+    The state is in the input form of state_root.
+    The overrides are the JSON object stateOverrides.
+    Moves of precompiles are not checked, and change no state.
+    An object outside its schema raises RpcError with code 32602, and the reason as message.
+    A state that does not decode raises RpcError with the code of its state error.
+    """
+    return _native.rpc_apply_overrides(state, overrides)
 
 
 __all__ = [
@@ -155,6 +188,8 @@ __all__ = [
     "NumberSchema",
     "RpcError",
     "Schema",
+    "apply_overrides",
+    "encode_block_access_list",
     "error_groups",
     "pruned_history_unavailable",
     "read_param",

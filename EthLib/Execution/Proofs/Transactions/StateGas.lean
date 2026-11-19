@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Execution.Proofs.Evm.Call.MeterRules
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.Validity
@@ -83,7 +84,7 @@ private theorem processMessageCall_gas {chainId : Nat} {message : Message fork}
     (message.reservoir : Int) ≤ output.reservoir + output.stateGasUsed ∧
       (output.gasLeft + output.reservoir : Int) + output.stateGasUsed ≤
         message.gas + message.reservoir := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -179,7 +180,7 @@ theorem processTransaction_blockGas_execution_le_of_glamsterdam {env : BlockEnvi
   have hres := processMessageCall_reservoir_le hOutput
   dsimp only at hres
   rw [hBlock]
-  simp only [executionCapacity, hGlam, ↓reduceIte]
+  simp only [executionCapacity, hGlam, Bool.false_eq_true, ↓reduceIte]
   rw [← hIntrinsic] at hI
   simp only [GasCosts.TX_MAX_GAS_LIMIT] at hMax hexec ⊢
   omega

@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Base.Exports.Proofs.PyValue
+public import EthLib.Base.Exports.PyValue
 public import EthLib.Consensus.DepositTree
 
 /-!
@@ -30,9 +30,9 @@ namespace EthLib.Consensus.Exports
 open Base Serialization.Ssz
 open EthLib.Exports (Result PyValue pyExport ToPy FromPy FromPyItems toPy fromPy)
 
-/-- The result of a deposit tree operation, with the code and the text of its error. -/
+/-- The result of a deposit tree operation, with the code and the message of its error. -/
 def runDepositTree {α : Type} (result : Except DepositTreeError α) : Result α :=
-  result.mapError fun e => (e.code, reprStr e)
+  result.mapError fun e => (e.code, toString e)
 
 /-- The subtrees of a sparse tree in preorder, each one a tagged tuple. -/
 def depositMerkleTreeItems : DepositMerkleTree → List PyValue

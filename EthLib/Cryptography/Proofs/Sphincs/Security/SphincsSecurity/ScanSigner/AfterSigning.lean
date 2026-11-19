@@ -1,7 +1,8 @@
 module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.FairShare
-public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.LazyRun.InterpreterFacts
+public import
+  EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.ScanSigner.InterpreterFacts
 
 /-!
 # What a completed signing call leaves behind in the lazy run

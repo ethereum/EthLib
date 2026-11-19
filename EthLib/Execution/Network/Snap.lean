@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Protocol
 public import EthLib.Execution.State.Account
+public import EthLib.Execution.Trie.HexPrefix
 
 /-!
 # `Execution.Network.Snap`
@@ -189,14 +190,25 @@ inductive SnapError where
   | unknownId (id : Nat)
   /-- The data is not RLP of the shape that the message asks for. -/
   | rlp (error : RlpError)
+  /-- A trie node path of GetTrieNodes is longer than 32 bytes. -/
+  | pathLength (size : Nat)
+  /-- A partial trie node path of GetTrieNodes is not a valid compact encoding. -/
+  | compactPath (error : Trie.HexPrefixError)
+  /-- A list of trie node paths of GetTrieNodes is empty, so it names no account. -/
+  | emptyPathGroup
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
-A new constructor takes a new code, so that each code keeps its meaning. -/
+A new constructor takes a new code, so that each code keeps its meaning.
+
+The codes 3 and 4 belong to the errors of a range answer, so the path errors start at 5. -/
 def SnapError.code : SnapError → UInt32
   | .unknownId _ => 1
   | .rlp _ => 2
+  | .pathLength _ => 5
+  | .compactPath _ => 6
+  | .emptyPathGroup => 7
 
 namespace SnapMessage
 
@@ -323,5 +335,81 @@ def accessListsAnswer (expected : List Hash32) (lists : List Item) : Bool :=
         match Serialization.Rlp.encode list with
         | .ok bytes => Cryptography.Hash.Keccak.keccak256 bytes == hash
         | .error _ => false
+
+/-! ## Trie node paths -/
+
+/-- A path in a trie, as nibbles from the root. -/
+abbrev TriePath := List Trie.Nibble
+
+/--
+The path that the bytes of a GetTrieNodes request name, as [snap/1][snap1] reads them.
+
+A full path has 32 bytes, read as 64 nibbles, the high one of each byte first.
+
+Any 32 bytes read as a full path, though a compact path of 62 or 63 nibbles also has 32 bytes.
+
+A partial path has fewer bytes and is compact encoded.
+
+Its leaf flag is dropped here.
+
+A path of more than 32 bytes is an error.
+
+[snap1]: https://github.com/ethereum/devp2p/blob/a1d196b39a9ed2d16e623e1d7a2ba9f3d77ae08f/caps/snap.md#gettrienodes-0x06
+-/
+def readPath (bytes : ByteArray) : Except SnapError TriePath :=
+  if bytes.size = 32 then .ok (Trie.bytesToNibbleList bytes)
+  else if bytes.size < 32 then
+    match Trie.compactToNibbleList bytes with
+    | .ok (path, _) => .ok path
+    | .error e => .error (.compactPath e)
+  else .error (.pathLength bytes.size)
+
+/-- One list of paths of GetTrieNodes: an account node, or storage nodes of one account. -/
+inductive PathGroup where
+  /-- The node at a path in the account trie. -/
+  | account (path : TriePath)
+  /-- The nodes at some paths in the storage trie of the account at a path; at least one. -/
+  | storage (account : TriePath) (slots : List TriePath) (nonempty : slots ≠ [])
+  deriving DecidableEq
+
+/--
+The group that one list of paths names.
+
+A list of one path names an account node.
+
+The first path of a longer list names an account, and the others name nodes of its storage trie.
+-/
+def readGroup : List ByteArray → Except SnapError PathGroup
+  | [] => .error .emptyPathGroup
+  | [path] => return .account (← readPath path)
+  | account :: slot :: more => do
+    let account ← readPath account
+    let slot ← readPath slot
+    let more ← more.mapM readPath
+    return .storage account (slot :: more) (List.cons_ne_nil _ _)
+
+/-- The groups that the lists of paths of a GetTrieNodes request name, in order. -/
+def readGroups (paths : List (List ByteArray)) : Except SnapError (List PathGroup) :=
+  paths.mapM readGroup
+
+/-- The number of trie nodes that the groups ask for: one per account, one per storage path. -/
+def nodeCount (groups : List PathGroup) : Nat :=
+  (groups.map fun
+    | .account _ => 1
+    | .storage _ slots _ => slots.length).sum
+
+/--
+Whether the nodes of a TrieNodes answer fit a request of the groups, by count.
+
+The nodes come in the order of the request, and the peer may cut the answer short.
+
+The source asks a peer without the state for no node, and any other answer for at least one.
+
+The check cannot tell the two apart, so it accepts an empty answer.
+
+The nodes are requested by path, not by hash, so they are checked here by count only.
+-/
+def trieNodesAnswer (groups : List PathGroup) (nodes : List ByteArray) : Bool :=
+  nodes.length ≤ nodeCount groups
 
 end EthLib.Execution.Network

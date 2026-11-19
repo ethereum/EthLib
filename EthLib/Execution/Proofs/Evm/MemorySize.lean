@@ -119,7 +119,7 @@ theorem size_processMessage_mod [LawfulGasMeter Meter] {message : Message fork}
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     (h : processMessage fork message state substate meter held = .ok ended) :
     ended.val.memory.size % 32 = 0 := by
-  rw [processMessage] at h
+  rw [processMessage_unfold] at h
   obtain ⟨last, hlast, rfl⟩ := Base.map_ok_iff.mp h
   have hmod : last.val.memory.size % 32 = 0 := by
     dsimp only at hlast
@@ -155,7 +155,7 @@ theorem size_processCreateMessage_mod [LawfulGasMeter Meter] {message : Message 
     {ended : { evm : Evm fork Meter // GasMeter.gasHeld evm.gas ≤ message.gas }}
     (h : processCreateMessage fork message state substate meter held = .ok ended) :
     ended.val.memory.size % 32 = 0 := by
-  rw [processCreateMessage] at h
+  rw [processCreateMessage_unfold] at h
   obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨⟨evm, used⟩, hrun, h⟩ := Base.bind_ok_iff.mp h
   dsimp only at h

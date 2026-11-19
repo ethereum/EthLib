@@ -2,7 +2,7 @@ module
 
 public import EthLib.Base.Hash32
 public import EthLib.Serialization.Proofs.Ssz.Codec.Binding
-public import EthLib.Cryptography.Proofs.Merkle.RandomOracle
+public import EthLib.Cryptography.Proofs.Merkle.RandomOracle.Collision
 public import EthLib.Cryptography.Proofs.ExceptTAnswers
 public import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial
 
@@ -29,6 +29,8 @@ So the birthday bound of the oracle bounds the probability of a win.
 
 The bound counts every query of the experiment, the adversary's and the extraction's.
 
+A perfect subtree makes at most one oracle call per inner node, and its replay caches its messages.
+
 Source: Bellare and Rogaway, "Random Oracles are Practical", CCS 1993, section 2.
 
 <https://cseweb.ucsd.edu/~mihir/papers/ro.pdf>
@@ -43,7 +45,7 @@ open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography (evalWithAnswerFn_exceptT_bind evalWithAnswerFn_exceptT_pure
   evalWithAnswerFn_exceptT_throw evalWithAnswerFn_exceptT_lift evalWithAnswerFn_exceptT_liftExcept
   evalWithAnswerFn_exceptT_mapM)
-open EthLib.Cryptography.Merkle.RandomOracle (Collision prEvent_collision_le)
+open EthLib.Cryptography.Merkle.RandomOracle (Collision experimentWith prEvent_experimentWith_le)
 
 /-- The node hash as one oracle from byte strings to 32-byte digests. -/
 abbrev HashOracle : OracleSpec ByteArray := ByteArray →ₒ Hash32
@@ -92,9 +94,8 @@ def extract (shape : Desc) (first second : Value) : OracleComp HashOracle Outcom
 
 /-- The experiment: the adversary picks two values of the type, then the extraction runs. -/
 def experiment (shape : Desc) (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) :
-    OracleComp (unifSpec + HashOracle) Outcome := do
-  let (first, second) ← adversary
-  liftComp (extract shape first second) (unifSpec + HashOracle)
+    OracleComp (unifSpec + HashOracle) Outcome :=
+  experimentWith (fun pair => extract shape pair.1 pair.2) adversary
 
 /-- The adversary wins: two different values that fit one well-formed type have one root.
 
@@ -109,6 +110,10 @@ def Wins (shape : Desc) (outcome : Outcome) : Prop :=
 def tableHash (f : QueryImpl HashOracle Id) (x : ByteArray) : ByteArray :=
   ⟨(f x).toArray⟩
 
+/-- Every digest of a full answer table is 32 bytes. -/
+theorem tableHash_size (f : QueryImpl HashOracle Id) (x : ByteArray) : (tableHash f x).size = 32 :=
+  (f x).size_toArray
+
 /-- One query, run against a full answer table, is the table's digest as bytes. -/
 theorem evalWithAnswerFn_queryHash (f : QueryImpl HashOracle Id) (x : ByteArray) :
     evalWithAnswerFn f (queryHash x) = tableHash f x := by
@@ -122,13 +127,13 @@ theorem evalWithAnswerFn_combineM (f : QueryImpl HashOracle Id) (left right : By
   rfl
 
 /-- A zero root, run against a full answer table, is the zero root with that table. -/
-theorem evalWithAnswerFn_zeroSubtreeM (f : QueryImpl HashOracle Id) (depth : Nat) :
-    evalWithAnswerFn f (zeroSubtreeM queryHash depth) =
-      (zeroSubtreeM (m := Id) (tableHash f) depth).run := by
+theorem evalWithAnswerFn_zeroRootM (f : QueryImpl HashOracle Id) (depth : Nat) :
+    evalWithAnswerFn f (zeroRootM (combineM queryHash) zeroChunk depth) =
+      (zeroRootM (m := Id) (combineM (tableHash f)) zeroChunk depth).run := by
   induction depth with
   | zero => rfl
   | succ depth ih =>
-    simp only [zeroSubtreeM, evalWithAnswerFn_bind, ih, evalWithAnswerFn_combineM]
+    simp only [zeroRootM, evalWithAnswerFn_bind, ih, evalWithAnswerFn_combineM]
     rfl
 
 /-- A perfect subtree, run against a full answer table, is the subtree with that table. -/
@@ -140,12 +145,12 @@ theorem evalWithAnswerFn_subtreeAtM (f : QueryImpl HashOracle Id) (chunks : Arra
   | zero =>
     unfold subtreeAtM
     split
-    · exact evalWithAnswerFn_zeroSubtreeM f 0
+    · exact evalWithAnswerFn_zeroRootM f 0
     · rfl
   | succ depth ih =>
     unfold subtreeAtM
     split
-    · exact evalWithAnswerFn_zeroSubtreeM f _
+    · exact evalWithAnswerFn_zeroRootM f _
     · simp only [oracleHasher, Hasher.ofHash] at ih
       simp only [evalWithAnswerFn_bind, ih, oracleHasher, Hasher.ofHash, evalWithAnswerFn_combineM]
       rfl
@@ -156,7 +161,8 @@ theorem evalWithAnswerFn_merkleizeProgressiveUncheckedM (f : QueryImpl HashOracl
     evalWithAnswerFn f (merkleizeProgressiveUncheckedM oracleHasher chunks level) =
       (merkleizeProgressiveUncheckedM (Hasher.ofHash (m := Id) (tableHash f)) chunks
         level).run := by
-  rw [merkleizeProgressiveUncheckedM, merkleizeProgressiveUncheckedM]
+  rw [merkleizeProgressiveUncheckedM_unfold oracleHasher chunks level,
+    merkleizeProgressiveUncheckedM_unfold (Hasher.ofHash (m := Id) (tableHash f)) chunks level]
   split
   · rfl
   · rename_i hempty
@@ -258,6 +264,26 @@ theorem evalWithAnswerFn_rehash (f : QueryImpl HashOracle Id) (tree : Commitment
     simp only [rehash, evalWithAnswerFn_bind, ihLeft, ihRight, evalWithAnswerFn_combineM,
       evalWithAnswerFn_pure, CommitmentTree.root, CommitmentTree.messages]
 
+/-- A replayed query caches its input. -/
+theorem cached_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArray}
+    (hrun : simulateQ cache.toPartialImpl (queryHash x) = some digest) :
+    ∃ answer, cache x = some answer := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hrun
+  obtain ⟨answer, hanswer, -⟩ := Option.bind_eq_some_iff.mp hrun
+  exact ⟨answer, hanswer⟩
+
+/-- The answer of a replayed query is 32 bytes. -/
+theorem size_of_queryHash {cache : HashOracle.QueryCache} {x digest : ByteArray}
+    (hrun : simulateQ cache.toPartialImpl (queryHash x) = some digest) :
+    digest.data.size = 32 := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hrun
+  obtain ⟨answer, -, hanswer⟩ := Option.bind_eq_some_iff.mp hrun
+  simp at hanswer
+  subst hanswer
+  exact answer.size_toArray
+
 /-- A replayed rehash caches every hash input of the computation. -/
 theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     {result : Bytes × List Bytes}
@@ -277,14 +303,138 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     cases hrun
     intro x hx
     rcases List.mem_cons.mp hx with rfl | hx
-    · simp only [combineM, queryHash, simulateQ_bind, simulateQ_spec_query,
-        QueryCache.toPartialImpl_apply] at hparent
+    · simp only [combineM, simulateQ_bind] at hparent
       obtain ⟨inner, hinner, -⟩ := Option.bind_eq_some_iff.mp hparent
-      obtain ⟨digest, hdigest, -⟩ := Option.bind_eq_some_iff.mp hinner
-      exact ⟨digest, hdigest⟩
+      exact cached_of_queryHash hinner
     · rcases List.mem_append.mp hx with hx | hx
       · exact ihLeft hleft x hx
       · exact ihRight hright x hx
+
+/-- A fold of two nodes makes one oracle call. -/
+theorem combineM_queryBound (left right : Bytes) :
+    IsQueryBoundP (combineM queryHash left right) (fun _ => True) 1 := by
+  simp [combineM, queryHash]
+
+/-- The root of an all-zero subtree makes one oracle call per level. -/
+theorem zeroRootM_queryBound (depth : Nat) :
+    IsQueryBoundP (zeroRootM (combineM queryHash) zeroChunk depth) (fun _ => True) depth := by
+  induction depth with
+  | zero => trivial
+  | succ depth ih => exact isQueryBoundP_bind ih fun below _ => combineM_queryBound below below
+
+/-- The root of a perfect subtree makes at most one oracle call per inner node.
+
+A half past the data is an all-zero subtree, whose one call per level is within that count. -/
+theorem subtreeAtM_queryBound (chunks : Array Bytes) (depth start : Nat) :
+    IsQueryBoundP (subtreeAtM oracleHasher chunks depth start) (fun _ => True)
+      (2 ^ depth - 1) := by
+  induction depth generalizing start with
+  | zero =>
+    unfold subtreeAtM
+    split
+    · exact zeroRootM_queryBound 0
+    · trivial
+  | succ depth ih =>
+    have below : depth + 1 < 2 ^ (depth + 1) := Nat.lt_two_pow_self
+    have half : 1 ≤ 2 ^ depth := Nat.one_le_two_pow
+    unfold subtreeAtM
+    split
+    · exact (zeroRootM_queryBound (depth + 1)).mono (by omega)
+    · refine (isQueryBoundP_bind (ih start) fun _ _ =>
+        isQueryBoundP_bind (ih (start + 2 ^ depth)) fun _ _ =>
+          combineM_queryBound _ _).mono ?_
+      rw [Nat.pow_succ]
+      omega
+
+/-- A replayed subtree root caches every message of its perfect tree, with the answer of the table.
+
+It needs the table to agree with the cache. -/
+theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    (hf : cache.AgreesWithFn f) {chunks : Array Bytes} {depth start : Nat} {root : Bytes}
+    (hrun : simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth start) =
+      some root) :
+    ∀ x ∈ (CommitmentTree.perfect depth fun i => padded zeroChunk chunks (start + i)).messages
+        (tableHash f),
+      cache (ByteArray.mk x) = some (f (ByteArray.mk x)) := by
+  induction depth generalizing start root with
+  | zero => simp [CommitmentTree.perfect, CommitmentTree.messages]
+  | succ depth ih =>
+    -- Both halves are replayed, and the parent hashes their two roots.
+    obtain ⟨left, right, hleft, hright, hparent⟩ : ∃ left right,
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth start) = some left ∧
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth (start + 2 ^ depth)) =
+          some right ∧
+        simulateQ cache.toPartialImpl (combineM queryHash left right) = some root := by
+      unfold subtreeAtM at hrun
+      split at hrun
+      · rename_i past
+        -- Past the data, both halves are the all-zero subtree one level below.
+        have zero : ∀ position, position ≥ chunks.size →
+            subtreeAtM oracleHasher chunks depth position
+              = zeroRootM (combineM queryHash) zeroChunk depth := by
+          intro position beyond
+          unfold subtreeAtM
+          rw [ite_eq_left_of_eq_true _ _ (eq_true beyond)]
+          rfl
+        simp only [oracleHasher, Hasher.ofHash, zeroRootM, simulateQ_bind] at hrun
+        obtain ⟨below, hbelow, hroot⟩ := Option.bind_eq_some_iff.mp hrun
+        exact ⟨below, below, by rw [zero start past]; exact hbelow,
+          by rw [zero _ (Nat.le_add_right_of_le past)]; exact hbelow, hroot⟩
+      · simp only [simulateQ_bind] at hrun
+        obtain ⟨left, hleft, hrun⟩ := Option.bind_eq_some_iff.mp hrun
+        obtain ⟨right, hright, hroot⟩ := Option.bind_eq_some_iff.mp hrun
+        exact ⟨left, right, hleft, hright, hroot⟩
+    -- Each replayed half is the root of its perfect tree under the table.
+    have rooted : ∀ {position : Nat} {node : Bytes},
+        simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth position) =
+          some node →
+        (CommitmentTree.perfect depth fun i => padded zeroChunk chunks (position + i)).root
+          (tableHash f) = node := by
+      intro position node hnode
+      rw [CommitmentTree.perfect_subtreeAtM, ← evalWithAnswerFn_subtreeAtM]
+      exact cache.evalWithAnswerFn_eq_of_agreesWithFn hf _ hnode
+    intro x hx
+    simp only [CommitmentTree.perfect, CommitmentTree.messages, List.mem_cons, List.mem_append,
+      show ∀ i, start + (i + 2 ^ depth) = start + 2 ^ depth + i from fun i => by omega] at hx
+    rcases hx with rfl | hx | hx
+    · rw [rooted hleft, rooted hright]
+      simp only [combineM, simulateQ_bind] at hparent
+      obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
+      obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
+      rw [hdigest, hf hdigest]
+    · exact ih hleft x hx
+    · exact ih hright x hx
+
+/-- Two different inputs with one digest of a table collide in a cache.
+
+The cache must give both inputs the answers of the table. -/
+theorem collision_of_cached {cache : HashOracle.QueryCache} {f : QueryImpl HashOracle Id}
+    {a b : Bytes} (hdistinct : a ≠ b)
+    (hequal : tableHash f (ByteArray.mk a) = tableHash f (ByteArray.mk b))
+    (ha : cache (ByteArray.mk a) = some (f (ByteArray.mk a)))
+    (hb : cache (ByteArray.mk b) = some (f (ByteArray.mk b))) : Collision cache := by
+  refine ⟨ByteArray.mk a, ByteArray.mk b, f (ByteArray.mk a),
+    fun h => hdistinct (congrArg ByteArray.data h), ha, ?_⟩
+  rw [hb]
+  exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
+
+/-- Two replayed queries with one answer have one input, or the cache has a collision. -/
+theorem collision_or_eq_of_queryHash {cache : HashOracle.QueryCache}
+    {x y first second : ByteArray}
+    (hx : simulateQ cache.toPartialImpl (queryHash x) = some first)
+    (hy : simulateQ cache.toPartialImpl (queryHash y) = some second)
+    (same : first.data = second.data) : Collision cache ∨ x.data = y.data := by
+  simp only [queryHash, simulateQ_bind, simulateQ_spec_query,
+    QueryCache.toPartialImpl_apply] at hx hy
+  obtain ⟨firstAnswer, hfirst, hx⟩ := Option.bind_eq_some_iff.mp hx
+  obtain ⟨secondAnswer, hsecond, hy⟩ := Option.bind_eq_some_iff.mp hy
+  simp at hx hy
+  subst hx hy
+  by_cases equal : x = y
+  · exact .inr (congrArg ByteArray.data equal)
+  · refine .inl ⟨x, y, firstAnswer, equal, hfirst, ?_⟩
+    rw [hsecond]
+    exact congrArg some (Vector.toArray_inj.mp same).symm
 
 /-- A replayed winning extraction exposes a collision of the cache.
 
@@ -326,17 +476,14 @@ theorem collision_of_extract {cache : HashOracle.QueryCache} {shape : Desc} {fir
       subst heval
       obtain ⟨digest, hdigest⟩ := cached_of_rehash hreplay x hx
       rw [hdigest, hf hdigest]
-    have hwidth : ∀ x, (tableHash f x).size = 32 := fun x =>
-      show (f x).toArray.size = 32 from (f x).size_toArray
+    have hwidth := tableHash_size f
     -- A collision between the two expanded computations is a collision of the cache.
     cases hsearch : findMessageCollision (firstTree.messages (tableHash f))
         (secondTree.messages (tableHash f)) (tableHash f) with
     | some pair =>
       obtain ⟨hmem₁, hmem₂, -, -, hdistinct, hequal⟩ := findMessageCollision_valid hsearch
-      refine ⟨ByteArray.mk pair.1, ByteArray.mk pair.2, f (ByteArray.mk pair.1),
-        fun h => hdistinct (congrArg ByteArray.data h), hcached hresult₁ _ hmem₁, ?_⟩
-      rw [hcached hresult₂ _ hmem₂]
-      exact congrArg some (Vector.toArray_inj.mp (ByteArray.mk.inj hequal)).symm
+      exact collision_of_cached hdistinct hequal (hcached hresult₁ _ hmem₁)
+        (hcached hresult₂ _ hmem₂)
     | none =>
       -- With no collision, the two values are equal, against the win.
       have hclean : CommitmentTree.NoCollision firstTree secondTree (tableHash f) := by
@@ -370,18 +517,10 @@ theorem prEvent_wins_le [SampleableType Hash32] (shape : Desc)
     (adversary : OracleComp (unifSpec + HashOracle) (Value × Value)) {Q : Nat}
     (hQ : IsQueryBoundP (experiment shape adversary) (fun t => t.isRight = true) Q) :
     Pr{let z ← (simulateQ HashOracle.romImpl (experiment shape adversary)).run ∅}[Wins shape z.1] ≤
-      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) := by
-  refine (prEvent_mono_of_support _ _ _ ?_).trans
-    (prEvent_collision_le (experiment shape adversary) hQ)
-  intro z hz hwins
-  simp only [experiment, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
-  obtain ⟨⟨⟨first, second⟩, cache⟩, -, hz⟩ := hz
-  -- The extraction calls only the hash, which the random oracle answers with caching.
-  rw [QueryImpl.simulateQ_add_liftComp_right] at hz
-  -- The final cache replays the extraction without sampling again.
-  have hreplay := QueryImpl.simulateQ_toPartialImpl_snd_of_mem_support_run_simulateQ_withCaching
-    _ (extract shape first second) hz
-  exact collision_of_extract hreplay hwins
+      Q * ((Q : ℝ≥0∞) / Nat.card Hash32) :=
+  prEvent_experimentWith_le (fun pair : Value × Value => extract shape pair.1 pair.2) (Wins shape)
+    (fun {_} {claim} {_} hrun hwins =>
+      collision_of_extract (first := claim.1) (second := claim.2) hrun hwins) adversary hQ
 
 /-- The same bound for 32 uniform bytes per answer: probability at most `Q^2 / 2^256`. -/
 theorem prEvent_wins_le_two_pow (shape : Desc)

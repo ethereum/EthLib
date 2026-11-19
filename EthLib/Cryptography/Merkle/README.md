@@ -66,7 +66,7 @@ A tree hashes only at the levels it spans, so two node hashes that agree on thos
 Binding needs more care.
 A real node hash compresses two nodes into one, so it has collisions.
 A theorem that ended in "or a collision exists" would then hold for every hash and say nothing.
-So the theorems in `Binding.lean` name an algorithm that computes the collision from the forged opening, and prove that it succeeds.
+So the theorems in `Binding/` name an algorithm that computes the collision from the forged opening, and prove that it succeeds.
 
 `findCollision` walks two climbs from one position up.
 It returns the first level where they hash two different pairs to one parent.
@@ -87,18 +87,17 @@ On the honest climb the search returns nothing (`findSecondPreimage_honest`), so
 Both searches take one step per level of the climb, and each step hashes the pairs it compares.
 `findSecondPreimage` also computes the two honest children and the honest node that it compares against on each level.
 Like the tree, both searches run in any monad.
-The binding theorems run them in the identity monad, and `RandomOracle.lean` runs the same definitions against an oracle.
+The binding theorems run them in the identity monad, and `RandomOracle/Basic.lean` runs the same definitions against an oracle.
 
-`RandomOracle.lean` proves query budgets and probability bounds for both searches when an oracle answers their hash calls.
+The files in `RandomOracle/` prove query budgets and probability bounds for both searches when an oracle answers their hash calls.
 The oracle assigns independent uniform answers to distinct `(level, position, left, right)` tuples and remembers repeated inputs.
 The bounds exclude position-ignoring hashes, including those of SSZ and the VRF tree.
 They make no security claim about a concrete hash or quantum queries.
 
 With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds the probability of a collision among queried inputs by `q^2 / N` for at most `q` classical hash calls.
 This bound exceeds the standard birthday bound `q(q - 1) / (2N)` by the factor `2q / (q - 1)`: at most 4 for `q >= 2`, and close to 2 for large `q`.
-`prEvent_secondPreimage_le` bounds by `q / N` the probability that a queried input other than one fixed honest input has a target digest fixed before the run.
-As a second-preimage bound, it takes the target to be the honest digest and the other answers to stay uniform given that digest.
-That conditioning is a modelling step: the theorem does not tie the target to the honest input.
+For one fixed tree of height `t`, `Proofs/Merkle/RandomOracle/SecondPreimage.lean` bounds a second preimage by `(q + t) / N` for a forger with `q` hash calls.
+The forger sees the root and all honest paths.
 
 `findCollision_queryBound` gives at most `2h` calls, where `h` is the shorter path length.
 For paths and leaves fixed before the oracle is sampled, `prEvent_findCollision_queryNode_le` bounds the success probability of the search by `(2h)^2 / N`.

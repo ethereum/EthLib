@@ -1,5 +1,6 @@
 """The requests of ethereum/execution-apis through the readers of the parameters."""
 
+import hashlib
 import json
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,10 +12,6 @@ from raising import raises
 
 # `fixtures/README.md` gives the origin of the files and their licence.
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
-
-# The `eth_getProof` requests of the same commit, which the trie suite vendors.
-# `trie/getproof/README.md` gives their origin and their licence.
-GETPROOF = Path(__file__).resolve().parents[1] / "trie" / "getproof"
 
 # The block hash that the balance and call fixtures name.
 BLOCK_HASH = bytes.fromhex("6146b2fa7dd4d923ed43e2f25c8a2895369d15463ba974f83937f9a6fa58adbf")
@@ -29,6 +26,20 @@ def exchange(path: Path) -> tuple[list[object], dict[str, object]]:
     request = next(json.loads(line[3:]) for line in lines if line.startswith(">> "))
     response = next(json.loads(line[3:]) for line in lines if line.startswith("<< "))
     return request["params"], response
+
+
+def test_digests() -> None:
+    """Every file but the README and the pin list is pinned in `SHA256SUMS`, with its digest."""
+    lines = (FIXTURES / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    entries = [line.split() for line in lines if line and not line.startswith("#")]
+    assert all(len(entry) == 2 for entry in entries)
+    names = (
+        path.relative_to(FIXTURES).as_posix() for path in FIXTURES.rglob("*") if path.is_file()
+    )
+    vendored = set(names) - {"README.md", "SHA256SUMS"}
+    assert sorted(name for _, name in entries) == sorted(vendored)
+    for digest, name in entries:
+        assert hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest() == digest, name
 
 
 # Each failing request, with the schemas of its parameters, the rejected index and the reason.
@@ -137,19 +148,22 @@ BLOCKS = [
         FIXTURES / "eth_call/call-block-hash-object.io", 1, ("hash", BLOCK_HASH, False), id="call"
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-block-hash-object.io",
+        FIXTURES / "eth_getProof/get-account-proof-block-hash-object.io",
         2,
         ("hash", HEAD_HASH, False),
         id="getProof-hash-object",
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-blockhash.io",
+        FIXTURES / "eth_getProof/get-account-proof-blockhash.io",
         2,
         ("hash", HEAD_HASH, False),
         id="getProof-hash-string",
     ),
     pytest.param(
-        GETPROOF / "get-account-proof-latest.io", 2, ("tag", "latest"), id="getProof-latest"
+        FIXTURES / "eth_getProof/get-account-proof-latest.io",
+        2,
+        ("tag", "latest"),
+        id="getProof-latest",
     ),
 ]
 

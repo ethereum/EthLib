@@ -1,8 +1,8 @@
 """Build the `ethlib.cryptography._native` CPython extension from the Lean exports."""
 
+import json
 import platform
 import subprocess
-from glob import glob
 from pathlib import Path
 
 from setuptools import Extension, find_packages, setup
@@ -26,33 +26,66 @@ def _lean_sysroot() -> Path | None:
     return Path(out)
 
 
-def _current_objects(ir: Path, src: Path, sub: str = "") -> list[str]:
-    """
-    The `.c.o.export` objects under `ir / sub` whose module still exists.
-
-    Lake never deletes the object of a module that was moved or removed.
-
-    Linking it beside its successor would define every export twice.
-
-    So an object counts only while `src` holds the module's `.lean` file, at the same path.
-    """
-    objects = []
-    for obj in glob(str(ir / sub / "**" / "*.c.o.export"), recursive=True):
-        module = Path(obj).relative_to(ir).as_posix().removesuffix(".c.o.export")
-        if (src / f"{module}.lean").is_file():
-            objects.append(obj)
-    return objects
-
-
 def _collect_lean_objects() -> list[str]:
     """
-    Every current `.c.o.export` object that Lake produced for the modules under `EthLib/`.
+    The objects in the runtime import graph of `EthLib.Exports`.
 
-    The top level of the IR directory also holds tools such as `lake exe check-decls`.
+    Lean's `.ilean` records distinguish ordinary imports from `meta import`.
 
-    Their objects define `main`, so they are never linked into the extension.
+    The latter supply compile-time code or erased proofs, so their objects do not enter the link.
+
+    Follow ordinary imports regardless of their path, and require every object on that walk.
+
+    Unreachable objects left by a proof build or by a moved module then cannot enter the link.
     """
-    return sorted(_current_objects(LAKE_IR, REPO_ROOT, "EthLib"))
+    objects = []
+    pending = ["EthLib.Exports"]
+    visited = set()
+    while pending:
+        module = pending.pop()
+        if module in visited:
+            continue
+        visited.add(module)
+        module_path = Path(*module.split("."))
+        source = REPO_ROOT / module_path.with_suffix(".lean")
+        if not source.is_file():
+            raise RuntimeError(f"runtime Lean source is missing: {source}")
+        ilean = LAKE_IR.parent / "lib" / "lean" / module_path.with_suffix(".ilean")
+        metadata = json.loads(ilean.read_text())
+        if metadata.get("version") != 5 or metadata.get("module") != module:
+            raise RuntimeError(f"unsupported or mismatched Lean import metadata: {ilean}")
+        obj = LAKE_IR / module_path.with_suffix(".c.o.export")
+        if not obj.is_file():
+            raise RuntimeError(f"runtime Lean object is missing: {obj}")
+        objects.append(str(obj))
+        # Lean v4.36.0, Lean/Data/Lsp/Internal.lean, `ImportInfo.toJson`.
+        for imported, _private, _all, meta in metadata["directImports"]:
+            if not meta and (imported == "EthLib" or imported.startswith("EthLib.")):
+                pending.append(imported)
+    return sorted(objects)
+
+
+def _native_link_args(build_temp: Path) -> list[str]:
+    """
+    Discard unused EthLib compile-time and legacy initializers, keeping other native exports.
+
+    A module's object holds runtime, compile-time and legacy initializers.
+
+    Python calls only runtime initializers; the other phases can refer to proof modules.
+
+    Hiding those two initializer families lets the linker discard their unused sections.
+    """
+    if platform.system() == "Darwin":
+        return [
+            "-Wl,-dead_strip",
+            "-Wl,-unexported_symbol,_meta_initialize_EthLib_*",
+            "-Wl,-unexported_symbol,_initialize_EthLib_*",
+        ]
+    build_temp.mkdir(parents=True, exist_ok=True)
+    exports = build_temp / "native-exports.map"
+    exports.write_text("{ global: *; local: meta_initialize_EthLib_*; initialize_EthLib_*; };\n")
+    # Bind references to the extension's own definitions before discarding unused sections.
+    return ["-Wl,-Bsymbolic", "-Wl,--gc-sections", f"-Wl,--version-script={exports.resolve()}"]
 
 
 def _lean_runtime_link(sysroot: Path) -> tuple[list[str], list[str], list[str]]:
@@ -79,13 +112,12 @@ class LakeThenBuild(build_ext):
     """
     Build the Lean exports with Lake, then the extension with setuptools.
 
-    Only the exports and the specification they import are built: the proofs link nothing.
+    Conversion proofs are checked while the exports elaborate, but only runtime objects link.
     """
 
     def run(self):
         """Build the Lean exports, then link their objects into each extension."""
-        # The exports import the specification, so this builds both.
-        # It skips the proofs, which link nothing.
+        # Build the exports, their specification imports and their conversion proofs.
         subprocess.check_call(["lake", "build", "Exports"], cwd=str(REPO_ROOT))
         sysroot = _lean_sysroot()
         if sysroot is None:
@@ -95,10 +127,12 @@ class LakeThenBuild(build_ext):
         # Re-resolve include_dirs and link inputs lazily.
         # At metadata time (e.g. `uv build --sdist`) Lean may not be installed.
         runtime_objs, library_dirs, libraries = _lean_runtime_link(sysroot)
+        native_link_args = _native_link_args(Path(self.build_temp))
         for ext in self.extensions:
             if str(sysroot / "include") not in ext.include_dirs:
                 ext.include_dirs.append(str(sysroot / "include"))
             ext.extra_objects = _collect_lean_objects() + runtime_objs
+            ext.extra_link_args = list(ext.extra_link_args or []) + native_link_args
             for d in library_dirs:
                 if d not in ext.library_dirs:
                     ext.library_dirs.append(d)

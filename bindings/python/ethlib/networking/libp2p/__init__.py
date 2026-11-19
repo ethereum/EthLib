@@ -1,3 +1,3 @@
-"""The libp2p framing, negotiation and upgrade of a consensus connection, and secp256k1 peer IDs."""
+"""The libp2p framing, negotiation, upgrade and TLS authentication of a connection, and peer IDs."""
 
-__all__ = ["identity", "mplex", "multistream", "upgrade", "yamux"]
+__all__ = ["identity", "mplex", "multistream", "tls", "upgrade", "yamux"]

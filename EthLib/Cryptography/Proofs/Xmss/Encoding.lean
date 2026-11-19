@@ -25,10 +25,56 @@ variable {d d' : Digest} {x y : Vector (Fin CHAIN_LENGTH) V}
 
 /-! ## Unfolding a codeword -/
 
-/-- Digit `i` of a digest, as a number. -/
+/-- Byte `j` of a digest is base-256 digit `j` of its integer. -/
+private theorem toNat_getElem_digest (d : Digest) (j : Nat) (hj : j < DIGEST_LEN) :
+    (d[j]'hj).toNat = bytesToUint d / 256 ^ j % 256 := by
+  conv_lhs => rw [← Base.uintToBytes_bytesToUint d]
+  simp [Base.uintToBytes_eq_div]
+
+/-- The two bits at offset `2r` of a byte are base-4 digit `4j + r` of the integer. -/
+private theorem byte_digit (n j r : Nat) (hr : r < 4) :
+    (n / 256 ^ j % 256) >>> (2 * r) % 4 = n / 4 ^ (4 * j + r) % 4 := by
+  rw [Nat.shiftRight_eq_div_pow, pow_mul, show (2 : Nat) ^ 2 = 4 by norm_num, pow_add, pow_mul,
+    show (4 : Nat) ^ 4 = 256 by norm_num, ← Nat.div_div_eq_div_mul]
+  generalize n / 256 ^ j = m
+  interval_cases r <;> simp only [pow_zero, pow_one, Nat.reducePow] <;> omega
+
+/-- Digit `i` read from its byte is base-4 digit `i` of the digest's integer. -/
+theorem digit_val (d : Digest) (i : Fin DIGITS) :
+    (Internal.digit d i).val = bytesToUint d / 4 ^ i.val % 4 := by
+  simp only [Internal.digit, CHAIN_LENGTH]
+  rw [toNat_getElem_digest, byte_digit _ _ _ (Nat.mod_lt _ (by norm_num)), Nat.div_add_mod]
+
+/-- Digit `i` of a digest's vector of digits, as a number. -/
 @[simp] theorem digits_getElem_val (d : Digest) (i : Nat) (hi : i < DIGITS) :
     ((Internal.digits d)[i]'hi).val = bytesToUint d / 4 ^ i % 4 := by
-  simp [Internal.digits, CHAIN_LENGTH]
+  simp only [Internal.digits, Vector.getElem_ofFn, digit_val]
+
+/-- The digits read from the bytes are the base-4 digits of the digest's integer. -/
+theorem digits_eq_digits4 : Internal.digits = Wots.digits4 := by
+  funext d
+  refine Vector.ext fun i hi => Fin.ext ?_
+  have h := Vector.getElem_ofFn (i := i) (by simpa only [DIGITS] using hi)
+    (f := fun k : Fin 64 => (⟨bytesToUint d / 4 ^ k.val % 4, Nat.mod_lt _ (by decide)⟩ : Fin 4))
+  rw [digits_getElem_val]
+  exact (congrArg Fin.val h).symm
+
+/-- The codeword test is the form that builds all 64 digits, then tests the tail and the sum. -/
+theorem codeword?_eq_digits (d : Digest) :
+    codeword? d =
+      let x := Internal.digits d
+      let chains : Vector (Fin CHAIN_LENGTH) V :=
+        Vector.ofFn fun i => x[i.val]'(by have := i.isLt; simp only [V, DIGITS] at *; omega)
+      if (x.toList.drop V).all (·.val == 0) && Internal.digitSum chains == TARGET_SUM then
+        some chains
+      else none := by
+  -- The 6 digits the test reads are the tail of the vector.
+  have htail : (Internal.digits d).toList.drop V = (List.finRange (DIGITS - V)).map fun j =>
+      Internal.digit d ⟨V + j.val, by have := j.isLt; simp only [V, DIGITS] at *; omega⟩ := by
+    refine List.ext_getElem (by simp) fun k h₁ h₂ => ?_
+    simp [Internal.digits, List.getElem_drop]
+  simp only [codeword?, htail, List.all_map]
+  split <;> simp_all [Function.comp_def]
 
 /--
 A codeword holds the digest's first 58 digits.
@@ -39,7 +85,7 @@ theorem codeword?_eq_some (h : codeword? d = some x) :
     (∀ i : Fin V, (x[i] : Nat) = bytesToUint d / 4 ^ i.val % 4) ∧
       (∀ i, V ≤ i → i < DIGITS → bytesToUint d / 4 ^ i % 4 = 0) ∧
       Internal.digitSum x = TARGET_SUM := by
-  simp only [codeword?] at h
+  simp only [codeword?_eq_digits] at h
   obtain ⟨hcond, hx⟩ := Option.ite_none_right_eq_some.mp h
   obtain ⟨htail, hsum⟩ := Bool.and_eq_true _ _ |>.mp hcond
   -- The accepting branch returns the first 58 digits.

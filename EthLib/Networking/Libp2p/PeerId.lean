@@ -31,8 +31,10 @@ open EthLib.Cryptography.Secp256k1
 inductive IdentityError where
   /-- The bytes are not the canonical protobuf of a compressed point of the curve. -/
   | publicKey
-  /-- The bytes do not start with the identity code 0 and the length 37. -/
-  | peerId
+  /-- The bytes do not start with the identity code 0 and the length 37.
+
+  The field holds the first two bytes, or fewer when the input is shorter. -/
+  | peerId (header : List UInt8)
   /-- The secret is 0, or, in the exports, its bytes give a value at least the group order. -/
   | privateKey
   /-- The bytes are not a strict DER signature with r in [1, n) and s in [1, n/2]. -/
@@ -44,7 +46,7 @@ deriving Repr, DecidableEq
 /-- The stable code of an error, one per constructor. -/
 def IdentityError.code : IdentityError → UInt32
   | .publicKey => 1
-  | .peerId => 2
+  | .peerId _ => 2
   | .privateKey => 3
   | .signature => 4
   | .signing _ => 5
@@ -76,7 +78,7 @@ Text forms and hashed peer IDs of longer keys are not read. -/
 def decodePeerId (id : ByteArray) : Except IdentityError Point :=
   match id.data.toList with
   | 0x00 :: 0x25 :: key => decodePublicKey ⟨key.toArray⟩
-  | _ => .error .peerId
+  | bytes => .error (.peerId (bytes.take 2))
 
 /-- Derive and serialize the public key of a secp256k1 secret scalar, which must be nonzero.
 
@@ -98,23 +100,34 @@ def encodeSignature (r s : Nat) : ByteArray :=
   let integers := derInteger r ++ derInteger s
   ⟨([0x30, UInt8.ofNat integers.length] ++ integers).toArray⟩
 
-/-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
-def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) := do
+/-- The two positive scalars below `2 ^ 256` of a strict DER ECDSA signature (RFC 3279 §2.2.3).
+
+It serves every curve whose group order is at most `2 ^ 256`.
+
+Each curve checks its own scalar ranges after this read. -/
+def decodeScalars (signature : ByteArray) : Option (Nat × Nat) :=
   match signature.data.toList with
   | 0x30 :: total :: 0x02 :: rLength :: rest =>
-    if total.toNat + 2 != signature.size then throw .signature
-    let rBytes := rest.take rLength.toNat
-    match rest.drop rLength.toNat with
-    | 0x02 :: sLength :: sBytes =>
-      if sLength.toNat != sBytes.length then throw .signature
-      let r := EthLib.Base.bytesToNat rBytes
-      let s := EthLib.Base.bytesToNat sBytes
-      if 0 < r ∧ r < Fn.modulus ∧ 0 < s ∧ s ≤ Fn.modulus / 2 ∧
-          encodeSignature r s = signature then
-        return (r, s)
-      else throw .signature
-    | _ => throw .signature
-  | _ => throw .signature
+    if total.toNat + 2 != signature.size then none
+    else
+      match rest.drop rLength.toNat with
+      | 0x02 :: sLength :: sBytes =>
+        if sLength.toNat != sBytes.length then none
+        else
+          let r := EthLib.Base.bytesToNat (rest.take rLength.toNat)
+          let s := EthLib.Base.bytesToNat sBytes
+          if 0 < r ∧ r < 2 ^ 256 ∧ 0 < s ∧ s < 2 ^ 256 ∧ encodeSignature r s = signature then
+            some (r, s)
+          else none
+      | _ => none
+  | _ => none
+
+/-- Decode a strict DER sequence and require the secp256k1 low-s scalar ranges, BIP 62. -/
+def decodeSignature (signature : ByteArray) : Except IdentityError (Nat × Nat) :=
+  match decodeScalars signature with
+  | some (r, s) =>
+    if r < Fn.modulus ∧ s ≤ Fn.modulus / 2 then .ok (r, s) else .error .signature
+  | none => .error .signature
 
 /-- Sign SHA-256 of the message, then write its low-s signature in DER, peer-IDs "Secp256k1".
 

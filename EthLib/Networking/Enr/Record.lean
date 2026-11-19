@@ -61,8 +61,8 @@ inductive EnrError where
   | rlp (e : RlpError)
   /-- The item is a byte string, not a list. -/
   | notAList
-  /-- The list has no signature or no sequence number. -/
-  | tooFewItems
+  /-- The list has no signature or no sequence number: it holds only `count` items. -/
+  | tooFewItems (count : Nat)
   /-- The signature is a list, not a byte string. -/
   | signatureNotBytes
   /-- The sequence number is not an RLP scalar below `2^64`. -/
@@ -77,12 +77,16 @@ inductive EnrError where
   | unsortedKeys (key next : ByteArray)
   /-- The text does not start with `enr:`. -/
   | missingPrefix
-  /-- The text after `enr:` is not base64. -/
+  /-- The text after `enr:` is not base64.
+
+  Its positions count the characters of the whole text, `enr:` included. -/
   | base64 (e : Base64.Base64Error)
   /-- The record has no `id` pair, which names its identity scheme. -/
   | missingId
-  /-- The identity scheme is not "v4". -/
-  | unknownScheme
+  /-- The identity scheme is not "v4".
+
+  The field holds the value of the `id` pair, which is a list when it is not a byte string. -/
+  | unknownScheme (scheme : Item)
   /-- The `secp256k1` value is missing, or it is not a compressed point of the curve. -/
   | invalidPublicKey
   /-- The signature could not be made.
@@ -103,7 +107,7 @@ def EnrError.code : EnrError → UInt32
   | .tooLarge _ => 1
   | .rlp _ => 2
   | .notAList => 3
-  | .tooFewItems => 4
+  | .tooFewItems _ => 4
   | .signatureNotBytes => 5
   | .invalidSeq _ => 6
   | .keyNotBytes => 7
@@ -113,7 +117,7 @@ def EnrError.code : EnrError → UInt32
   | .missingPrefix => 11
   | .base64 _ => 12
   | .missingId => 13
-  | .unknownScheme => 14
+  | .unknownScheme _ => 14
   | .invalidPublicKey => 15
   | .signing => 16
 
@@ -173,7 +177,7 @@ def decode (bytes : ByteArray) : Except EnrError Enr := do
     unless pairs.any (·.1 = KEY_ID) do throw .missingId
     return ⟨signature, seq, pairs⟩
   | .list (.list _ :: _ :: _) => throw .signatureNotBytes
-  | .list _ => throw .tooFewItems
+  | .list items => throw (.tooFewItems items.length)
   | .bytes _ => throw .notAList
 
 /-- The prefix of the text form, `enr:`. -/
@@ -189,7 +193,7 @@ It fails unless the text is `enr:`, then the base64 of bytes that the decoder ac
 def fromText (text : String) : Except EnrError Enr :=
   match text.toList with
   | 'e' :: 'n' :: 'r' :: ':' :: rest => do
-    let bytes ← (Base64.decodeList rest).mapError .base64
+    let bytes ← (Base64.decodeList TEXT_PREFIX.length rest).mapError .base64
     decode ⟨bytes.toArray⟩
   | _ => throw .missingPrefix
 

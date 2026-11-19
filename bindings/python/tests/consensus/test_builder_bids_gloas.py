@@ -34,8 +34,8 @@ FEE_RECIPIENT = bytes(19) + b"\x01"
 ROOT_AT, SLOT_AT, VERSION_AT, HEADER_AT = 8, 40, 52, 64
 # The latest block header: slot, proposer, parent root, state root and body root.
 HEADER_SIZE = 112
-# The RANDAO mixes follow the block and state roots, the Eth1 data, the deposit index and four
-# offsets.
+# The RANDAO mixes follow the block and state roots and the Eth1 data.
+# The deposit index and four offsets also come before them.
 RANDAO_AT = 4368
 # Minimal slots per epoch, and the length of the vector of RANDAO mixes.
 SLOTS_PER_EPOCH, MIXES = 8, 64

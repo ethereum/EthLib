@@ -73,11 +73,14 @@ def forsLeafHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (s : Nat
     (secret : Digest) : m Digest :=
   th H pkSeed (adrsFors idx 0 (forsTreeIndex kappa 0 s)) (packBytes secret)
 
-/-- The parent at index `j` and height `z` of tree `kappa` of instance `idx`, from its children. -/
-def forsNodeHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (z j : Nat)
+/-- The parent at a position of tree `kappa` of instance `idx`, from its children.
+
+The position's level is the height `z`, and its index is the index `j`. -/
+def forsNodeHash (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) (p : Merkle.Position)
     (left right : Digest) : m Digest :=
   -- The payload is the left child, then the right child.
-  th H pkSeed (adrsFors idx z (forsTreeIndex kappa z j)) (packBytes left ++ packBytes right)
+  th H pkSeed (adrsFors idx p.level (forsTreeIndex kappa p.level p.index))
+    (packBytes left ++ packBytes right)
 
 /-- `Y_{0,s}`, computed from the secret: leaf `s` of tree `kappa` of instance `idx`. -/
 def forsLeaves (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES)
@@ -89,7 +92,7 @@ def forsLeaves (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TRE
 /-- `Y_{z,j}`: node `j` at height `z` of tree `kappa` of instance `idx`, FIPS 205's `fors_node`. -/
 def forsNode (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES)
     (z j : Nat) : m Digest :=
-  Merkle.node (forsNodeHash H pkSeed idx kappa) (forsLeaves H pkSeed prf idx kappa) z j
+  Merkle.node (forsNodeHash H pkSeed idx kappa) (forsLeaves H pkSeed prf idx kappa) ⟨z, j⟩
 
 /-- `Y^kappa_{a,0}`: the root of tree `kappa` of instance `idx`. -/
 def forsRoot (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES) : m Digest :=
@@ -139,7 +142,7 @@ def treeRecover (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
   -- Step 1: the leaf, from its revealed secret.
   let leaf ← forsLeafHash H pkSeed idx kappa s.val opening.secret
   -- Step 2: climb from height 0 to the root.
-  Merkle.climb (forsNodeHash H pkSeed idx kappa) 0 s.val leaf opening.path.toList
+  Merkle.climb (forsNodeHash H pkSeed idx kappa) ⟨0, s.val⟩ leaf opening.path.toList
 
 /-- `Fors.recover(idx, s, openings)`: the FORS public key that the openings lead to.
 

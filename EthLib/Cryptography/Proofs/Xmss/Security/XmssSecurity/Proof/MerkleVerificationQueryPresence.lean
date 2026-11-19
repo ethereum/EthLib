@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryPresence
-public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 
 @[expose] public section
 
@@ -31,7 +31,7 @@ attribute [irreducible] verificationAfterEndpoints
 
 def authenticationRootComputation (parameter : PublicParameter) (leafIndex : LeafIndex)
     (signature : Signature) (leaf : Digest) : OracleComp HashSpec Digest :=
-  Merkle.climb (Concrete.nodeAt parameter .bottom) 0 leafIndex.val leaf
+  Merkle.climb (Concrete.nodeAt parameter .bottom) ⟨0, leafIndex.val⟩ leaf
     (List.ofFn signature.authPath)
 
 def verificationAfterLeafRoot (publicKey : PublicKey) (leafIndex : LeafIndex)
@@ -267,7 +267,7 @@ theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptog
     (root : Digest)
     (hmem : (root, resultCache) ∈ support
       ((simulateQ randomOracle
-        (Merkle.climb (Concrete.nodeAt parameter layer) 0 j leaf ((List.ofFn path).take levels) :
+        (Merkle.climb (Concrete.nodeAt parameter layer) ⟨0, j⟩ leaf ((List.ofFn path).take levels) :
           OracleComp HashSpec Digest)).run initialCache))
     (hle : resultCache ≤ largerCache) :
     ∃ output, resultCache
@@ -280,7 +280,7 @@ theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptog
   | zero => omega
   | succ levels ih =>
       have hlevel : levels < treeHeight := by omega
-      rw [Merkle.climb_take_succ _ j leaf _ levels (by simp; omega), simulateQ_bind,
+      rw [Merkle.climb_take_succ _ ⟨0, j⟩ leaf _ levels (by simp; omega), simulateQ_bind,
         StateT.run_bind, mem_support_bind_iff] at hmem
       obtain ⟨⟨current, currentCache⟩, hcurrent, hnode⟩ := hmem
       have hcurrentLe : currentCache ≤ resultCache :=
@@ -291,10 +291,10 @@ theorem climb_query_cached (parameter : PublicParameter) (layer : EthLib.Cryptog
         have hcurrentEval := eval_answerFn_largerCache_eq_of_mem_support _
           initialCache currentCache largerCache current hcurrent (hcurrentLe.trans hle)
         rw [eval_climb] at hcurrentEval
-        have hparent : j / 2 ^ levels / 2 = j / 2 ^ (levels + 1) := by
-          rw [Nat.div_div_eq_div_mul, ← Nat.pow_succ]
         rw [Merkle.pairAt, hcurrentEval]
-        simp only [List.getElem_ofFn, hparent] at hnode
+        rw [EthLib.Cryptography.Merkle.Position.parent_ancestor,
+          EthLib.Cryptography.Merkle.Position.ancestor_mk_zero j (levels + 1)] at hnode
+        simp only [List.getElem_ofFn] at hnode
         rw [nodeAt_eq parameter layer ⟨levels, hlevel⟩, nodeAt_eq parameter layer ⟨levels, hlevel⟩]
           at hnode
         unfold Merkle.ordered

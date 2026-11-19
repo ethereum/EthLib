@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Proofs.Transactions.Unfold
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Transactions.Authorization
 public import EthLib.Execution.Proofs.Transactions.Settlement
@@ -14,6 +15,12 @@ From Berlin, a transaction starts with these addresses accessed:
 - its sender, and its recipient or the address it creates;
 - each address of its access list;
 - from Shapella, the beneficiary of its block.
+
+From Berlin, it starts with a slot accessed exactly when an entry of its access list lists it.
+
+That entry must name the address of the slot.
+
+When two entries name one address, the slots of both count.
 
 Before Berlin, it starts with no access.
 
@@ -132,11 +139,46 @@ theorem startAccessedAddresses_of_lt_berlin (h : fork < .berlin) :
   have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
   simp only [startAccessedAddresses, berlin, ↓reduceIte]
 
+/-- A fold of access entries into storage keys keeps the keys it starts from and adds each slot. -/
+private theorem mem_getD_foldl_accesses {address : Address} {key : Bytes32}
+    (accesses : List Access) (keys : Std.ExtTreeMap Address (Std.ExtTreeSet Bytes32)) :
+    key ∈ (accesses.foldl (fun keys access => keys.insert access.account
+        ((keys.getD access.account ∅).insertMany access.slots)) keys).getD address ∅ ↔
+      key ∈ keys.getD address ∅ ∨
+        ∃ access ∈ accesses, access.account = address ∧ key ∈ access.slots := by
+  induction accesses generalizing keys with
+  | nil => simp
+  | cons access rest ih =>
+    rw [List.foldl_cons, ih]
+    by_cases h : access.account = address
+    · subst h
+      simp only [Std.ExtTreeMap.getD_insert_self, Std.ExtTreeSet.mem_insertMany_list,
+        List.contains_iff_mem, List.mem_cons, exists_eq_or_imp, true_and]
+      exact or_assoc
+    · simp [Std.ExtTreeMap.getD_insert, h]
+
+/-- From Berlin, a transaction starts with a slot accessed exactly when its access list lists it.
+
+Some entry must name the address of the slot and list the slot.
+
+When two entries name one address, the slots of both count. -/
+theorem mem_startAccessedStorageKeys {address : Address} {key : Bytes32} (h : .berlin ≤ fork) :
+    key ∈ (startAccessedStorageKeys fork tx).getD address ∅ ↔
+      ∃ access ∈ tx.accesses, access.account = address ∧ key ∈ access.slots := by
+  simp only [startAccessedStorageKeys, h, ↓reduceIte, mem_getD_foldl_accesses]
+  simp
+
+/-- Before Berlin, a transaction starts with no storage key accessed, since no access counts. -/
+theorem startAccessedStorageKeys_of_lt_berlin (h : fork < .berlin) :
+    startAccessedStorageKeys fork tx = ∅ := by
+  have berlin : ¬Fork.berlin ≤ fork := Nat.not_le_of_lt h
+  simp only [startAccessedStorageKeys, berlin, ↓reduceIte]
+
 /-- From Hegotá, a transaction fails to run, since the rules of that fork are not here yet. -/
 theorem processTransaction_of_hegota_le {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} (h : .hegota ≤ fork) :
     processTransaction env block included tx = .error (.forkNotYetSpecified fork) := by
-  simp only [processTransaction, h, ↓reduceIte]
+  simp only [processTransaction_unfold, h, ↓reduceIte]
 
 /-- A transaction that runs is from a fork before Hegotá. -/
 theorem processTransaction_lt_hegota {env : BlockEnvironment fork} {block : State.BlockState}
@@ -153,7 +195,7 @@ theorem processTransaction_of_glamsterdam {env : BlockEnvironment fork}
     processTransaction env block included tx =
       runTransaction StateGasMeter env block included tx := by
   have hpre : ¬Fork.hegota ≤ fork := Nat.not_le_of_lt hlt
-  simp only [processTransaction, hpre, h, ↓reduceIte, GE.ge]
+  simp only [processTransaction_unfold, hpre, h, ↓reduceIte, GE.ge]
 
 /-! ## The first frame -/
 
@@ -174,7 +216,7 @@ theorem processMessageCall_of_halt {e : EvmError} {read : State.TransactionState
     (halts : e.aborts = false) :
     processMessageCall (Meter := Meter) chainId message state substate auths paid =
       .ok (.ofHalt (state.withReadsOf read) message.reservoir e) := by
-  simp only [processMessageCall, h, halts, Bool.false_eq_true, ↓reduceIte]
+  simp only [processMessageCall_unfold, h, halts, Bool.false_eq_true, ↓reduceIte]
 
 omit [LawfulGasMeter Meter] in
 /-- The first frame of a call that moves no ether, after its authorizations end with `done`.
@@ -294,7 +336,7 @@ theorem processTransaction_of_lt_glamsterdam {env : BlockEnvironment fork}
     processTransaction env block included tx = runTransaction Nat env block included tx := by
   have hpre : ¬Fork.glamsterdam ≤ fork := Nat.not_le_of_lt h
   have hlate : ¬Fork.hegota ≤ fork := fun hh => hpre (Nat.le_trans (by decide) hh)
-  simp only [processTransaction, hlate, hpre, ↓reduceIte, GE.ge]
+  simp only [processTransaction_unfold, hlate, hpre, ↓reduceIte, GE.ge]
 
 /-! ## The meter of the first frame -/
 
@@ -354,6 +396,37 @@ theorem gas_prepareFirstFrame {chainId : Nat} {message : Message fork}
     subst h
     rfl
 
+omit [LawfulGasMeter Meter] refl trans charge chargeState in
+/-- The state of the first frame has read the address that the message runs at.
+
+A creation reads the address it creates, and a call reads its recipient.
+
+This holds when the recipient of a call is the address that its message runs at. -/
+theorem currentRead_prepareFirstFrame {chainId : Nat} {message : Message fork}
+    {state : State.TransactionState} {substate : Substate} {auths : List Authorization}
+    {paid : Std.ExtTreeSet Address} {first : FirstFrame fork Meter}
+    (recipient : ∀ target, message.target = some target → target = message.currentTarget)
+    (h : prepareFirstFrame chainId message state substate auths paid = .ok first) :
+    message.currentTarget ∈ first.state.accountReads := by
+  unfold prepareFirstFrame at h
+  dsimp only [bind, Except.bind, pure, Except.pure] at h
+  split at h
+  · repeat' split at h
+    all_goals first | (cases h; done) | skip
+    all_goals
+      simp only [Except.ok.injEq] at h
+      subst h
+      exact Std.ExtTreeSet.mem_insert_self
+  · rename_i target htarget
+    obtain rfl := recipient target htarget
+    repeat' split at h
+    all_goals first | (cases h; done) | skip
+    all_goals
+      simp only [Except.ok.injEq] at h
+      subst h
+      simp [FirstFrame.ofMeter, State.TransactionState.recordAccountRead,
+        Std.ExtTreeSet.mem_insert]
+
 end Meter
 
 /-! ## The gas used -/
@@ -392,7 +465,7 @@ private theorem processMessageCall_reservoir {chainId : Nat} {message : Message 
     (h : processMessageCall (Meter := Nat) chainId { message with reservoir := 0 } state substate
       auths paid = .ok output) :
     output.reservoir = 0 := by
-  unfold processMessageCall at h
+  rw [processMessageCall_unfold] at h
   split at h
   · split at h
     · cases h
@@ -432,8 +505,8 @@ def TransactionRun (Meter : Type) [GasMeter Meter] [LawfulGasMeter Meter]
   messageTarget included.sender
       ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx = .ok target ∧
     buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-        included.sender target gas.execution tx = .ok message ∧
+    transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+        bought included.sender target gas.execution tx = .ok message ∧
     processMessageCall (Meter := Meter) env.chainId.toNat
         { message with reservoir := gas.reservoir } bought
         (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
@@ -451,7 +524,7 @@ theorem runTransaction_eq_ok {env : BlockEnvironment fork} {block : State.BlockS
     (h : runTransaction Meter env block included tx = .ok out) :
     ∃ target bought message output settled,
       TransactionRun Meter env block included tx out target bought message output settled := by
-  unfold runTransaction at h
+  rw [runTransaction_unfold] at h
   obtain ⟨target, hTarget, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨bought, hBought, h⟩ := Base.bind_ok_iff.mp h
   obtain ⟨message, hMessage, h⟩ := Base.bind_ok_iff.mp h
@@ -506,8 +579,8 @@ private theorem processTransaction_eq_ok_of_lt {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -545,8 +618,8 @@ theorem processTransaction_gasUsed_of_lt_london {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -590,8 +663,8 @@ theorem processTransaction_gasUsed_of_london_of_lt_pectra {env : BlockEnvironmen
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -636,8 +709,8 @@ theorem processTransaction_gasUsed {env : BlockEnvironment fork} {block : State.
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target (tx.gas.toNat - included.intrinsicGas) tx = .ok message ∧
       processMessageCall (Meter := Nat) env.chainId.toNat { message with reservoir := 0 } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
           (paidWrites included.sender target tx) = .ok output ∧
@@ -688,8 +761,8 @@ theorem processTransaction_gasUsed_of_glamsterdam {env : BlockEnvironment fork}
           ((State.TransactionState.ofBlock block).getAccount included.sender).nonce tx =
         .ok target ∧
       buyGas env (State.TransactionState.ofBlock block) included.sender tx = .ok bought ∧
-      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes⟩ bought
-          included.sender target gas.execution tx = .ok message ∧
+      transactionMessage env ⟨included.sender, included.gasPrice, fun _ => tx.blobHashes, some⟩
+          bought included.sender target gas.execution tx = .ok message ∧
       processMessageCall (Meter := StateGasMeter) env.chainId.toNat
           { message with reservoir := gas.reservoir } bought
           (startSubstate fork env.coinbase included.sender target tx) tx.authorizations
@@ -720,7 +793,7 @@ theorem processTransaction_blockGas_blob {env : BlockEnvironment fork}
     {block : State.BlockState} {included : Included} {out : TransactionOutput}
     (h : processTransaction env block included tx = .ok out) :
     out.blockGas.blob = Fees.BlobBaseFee.calculateTotalBlobGas tx := by
-  unfold processTransaction at h
+  rw [processTransaction_unfold] at h
   split at h
   · cases h
   · have hBlock : ∀ {Meter : Type} [GasMeter Meter] [LawfulGasMeter Meter],
@@ -762,5 +835,42 @@ theorem processTransaction_blockGas_state_of_lt {env : BlockEnvironment fork}
     out.blockGas.state = 0 := by
   obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
   rw [hBlock, transactionBlockGas_of_lt hlt]
+
+/-- A refund never raises the gas used: the gas used is at most the gas used with no refund. -/
+theorem gasUsed_le_gasUsed_zero (fork : Fork) (sender : Address) (tx : Transaction)
+    (gasLeft refundCounter : Nat) :
+    gasUsed fork sender tx gasLeft refundCounter ≤ gasUsed fork sender tx gasLeft 0 := by
+  unfold gasUsed gasRefund
+  simp only [Nat.min_zero, Nat.sub_zero]
+  split
+  · exact Nat.max_le.mpr ⟨Nat.le_trans (Nat.sub_le _ _) (Nat.le_max_left _ _), Nat.le_max_right _ _⟩
+  · exact Nat.sub_le _ _
+
+/-- A transaction that runs used at most the gas that it used before its refund.
+
+That holds for every map of the precompiles and every lifted rule of a simulation. -/
+theorem runTransaction_gasUsed_le {env : BlockEnvironment fork} {block : State.BlockState}
+    {included : Included} {out : TransactionOutput} {precompiles : Address → Option Address}
+    {lifted : LiftedRules}
+    (h : runTransaction Meter env block included tx precompiles lifted = .ok out) :
+    out.gasUsed ≤ out.gasBeforeRefund := by
+  rw [runTransaction_unfold] at h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨output, -, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨⟨settled, used⟩, hSettle, h⟩ := Base.bind_ok_iff.mp h
+  obtain ⟨_, -, h⟩ := Base.bind_ok_iff.mp h
+  cases h
+  have hUsed : used = gasUsed fork included.sender tx (output.gasLeft + output.reservoir)
+      output.refund := by
+    have hs := Base.mapError_ok_iff.mp hSettle
+    unfold settleGas at hs
+    obtain ⟨_, -, hs⟩ := Base.bind_ok_iff.mp hs
+    obtain ⟨_, -, hs⟩ := Base.bind_ok_iff.mp hs
+    cases hs
+    rfl
+  rw [hUsed]
+  exact gasUsed_le_gasUsed_zero _ _ _ _ _
 
 end EthLib.Execution.Transactions

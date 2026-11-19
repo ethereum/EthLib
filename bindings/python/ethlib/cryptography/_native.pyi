@@ -3,6 +3,13 @@
 from typing import Any, Literal
 
 from ethlib.networking.noise._types import CipherState, Completion, HandshakeState, Identity, Libp2pState, Remote
+from ethlib.networking.quic._codec_types import Header as QuicHeader
+from ethlib.networking.quic._codec_types import Frame as QuicFrame
+from ethlib.networking.quic._codec_types import PacketType as QuicPacketType
+from ethlib.networking.quic._tls_types import Message as TlsMessage
+from ethlib.networking.quic._tls_types import Extension as TlsExtension
+from ethlib.networking.quic._tls_types import Payload as TlsPayload
+from ethlib.networking.quic._tls_types import PayloadForm as TlsPayloadForm
 
 
 def eth_aggregate_pubkeys(pubkeys: list[bytes]) -> bytes:
@@ -166,11 +173,11 @@ def sha256(data: bytes) -> bytes:
     ...
 
 def keccak256(data: bytes) -> bytes:
-    """Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2."""
+    """Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:"""
     ...
 
 def keccak512(data: bytes) -> bytes:
-    """Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."""
+    """Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:"""
     ...
 
 def ethash_cache_size(block_number: int) -> int:
@@ -279,6 +286,14 @@ def hmac_sha256(key: bytes, message: bytes) -> bytes:
 
 def hkdf_sha256(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     """HKDF, RFC 5869 §2: extract, then expand."""
+    ...
+
+def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
+    """The HkdfLabel of RFC 8446 §7.1, for a label without its `tls13 ` prefix."""
+    ...
+
+def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
+    """Expand a SHA-256 secret with a TLS 1.3 label and context, RFC 8446 §7.1."""
     ...
 
 def concat_kdf_sha256(z: bytes, fixed_info: bytes, length: int) -> bytes:
@@ -569,6 +584,198 @@ def consensus_api_ssz(name: str, fork: str, type: str, document: Any) -> bytes:
     """The SSZ bytes of the value that a JSON document of the API holds."""
     ...
 
+def consensus_api_spec(name: str, config: dict[str, Any] | None) -> dict[str, Any]:
+    """The spec map of a preset and a configuration, as a `dict`."""
+    ...
+
+def consensus_api_fork_schedule(name: str, config: dict[str, Any] | None) -> list[dict[str, str]]:
+    """The fork schedule of a configuration, as a `list` of `dict`."""
+    ...
+
+def consensus_api_deposit_contract(name: str, config: dict[str, Any] | None) -> dict[str, str]:
+    """The deposit contract of a configuration, as a `dict`."""
+    ...
+
+def consensus_api_genesis(name: str, fork: str, state: bytes, config: dict[str, Any] | None) -> dict[str, str]:
+    """The genesis that a genesis state gives, as a `dict`."""
+    ...
+
+def consensus_api_state_query(name: str, fork: str, state: bytes, query: str, epoch: int | None) -> dict[str, Any]:
+    """The JSON response to a query on a state, as a `dict`."""
+    ...
+
+def consensus_api_state_query_ssz(name: str, fork: str, state: bytes, query: str) -> bytes:
+    """The SSZ body of the response to a query on a state, as `bytes`."""
+    ...
+
+def consensus_api_validator_status(validator: dict[str, Any], balance: int, epoch: int) -> tuple[str, str]:
+    """The status of a validator with a balance at an epoch, and the name of its group."""
+    ...
+
+def consensus_api_builder_status(name: str, fork: str, state: bytes, index: int) -> str:
+    """The status of the builder at an index of a state, as its name."""
+    ...
+
+def consensus_api_registry_query(name: str, fork: str, state: bytes, query: str, ids: list[str] | None, statuses: list[str] | None, in_query: bool) -> dict[str, Any]:
+    """The JSON response to a query on the registries of a state, as a `dict`."""
+    ...
+
+def consensus_api_validator_balances_ssz(name: str, fork: str, state: bytes, ids: list[str] | None, in_query: bool) -> bytes:
+    """The SSZ body of the balances answer, as `bytes`."""
+    ...
+
+def consensus_api_block_query(name: str, fork: str, block: bytes, query: str) -> dict[str, Any]:
+    """The JSON response to a query on a signed block, as a `dict`."""
+    ...
+
+def consensus_api_blobs(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> dict[str, Any]:
+    """The JSON response of the blobs endpoint, as a `dict`."""
+    ...
+
+def consensus_api_blobs_ssz(name: str, fork: str, block: bytes, blobs: list[bytes], hashes: list[bytes] | None) -> bytes:
+    """The SSZ body of the blobs answer, as `bytes`."""
+    ...
+
+def consensus_api_block_query_ssz(name: str, fork: str, block: bytes, query: str) -> bytes:
+    """The SSZ body of the answer to a query on a signed block, as `bytes`."""
+    ...
+
+def consensus_api_header(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, block: bytes) -> dict[str, Any]:
+    """The JSON response of the header endpoint for a signed block, as a `dict`."""
+    ...
+
+def consensus_api_headers(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, headers: list[bytes], slot: int | None, parent_root: bytes | None) -> dict[str, Any]:
+    """The JSON response of the headers endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> dict[str, Any]:
+    """The JSON response of the columns endpoint, as a `dict`."""
+    ...
+
+def consensus_api_columns_ssz(name: str, fork: str, sidecars: list[bytes], indices: list[int] | None) -> bytes:
+    """The SSZ body of the columns answer, as `bytes`."""
+    ...
+
+def consensus_api_payload_envelope(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> dict[str, Any]:
+    """The JSON response of the envelope endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, root: bytes, envelope: bytes) -> bytes:
+    """The SSZ body of the envelope answer, as `bytes`."""
+    ...
+
+def consensus_api_light_client_bootstrap(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]:
+    """The JSON response of the bootstrap endpoint, as a `dict`."""
+    ...
+
+def consensus_api_light_client_bootstrap_ssz(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> bytes:
+    """The SSZ body of the bootstrap answer, as `bytes`."""
+    ...
+
+def consensus_api_light_client_updates(name: str, config: dict[str, Any] | None, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> list[dict[str, Any]]:
+    """The JSON response of the updates endpoint, as a `list` of `dict`."""
+    ...
+
+def consensus_api_light_client_updates_ssz(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, known: list[tuple[int, str, bytes]], start_period: int, count: int) -> bytes:
+    """The SSZ body of the updates answer, as `bytes`."""
+    ...
+
+def consensus_api_light_client_decode_updates(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes, data: bytes) -> list[tuple[str, bytes]]:
+    """The fork name and the SSZ bytes of each update of the SSZ body of an updates answer."""
+    ...
+
+def consensus_api_light_client_latest(name: str, fork: str, kind: str, update: bytes | None) -> dict[str, Any]:
+    """The JSON response of the finality or the optimistic update endpoint, as a `dict`."""
+    ...
+
+def consensus_api_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the attestation data endpoint, as a `dict`."""
+    ...
+
+def consensus_api_payload_attestation_data(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, slot: int, payload_present: bool, blob_data_available: bool) -> dict[str, Any] | None:
+    """The JSON response of the payload attestation data endpoint, as a `dict`, or None for 204."""
+    ...
+
+def consensus_api_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the fork choice endpoint, as a `dict`."""
+    ...
+
+def consensus_api_chain_heads(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the heads endpoint, as a `dict`."""
+    ...
+
+def consensus_api_chain_events(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, first: int, genesis_root: bytes, optimistic_roots: list[bytes], config: dict[str, Any] | None) -> list[tuple[str, str]]:
+    """The events of the fork choice between two stores of a case."""
+    ...
+
+def consensus_api_fast_confirmation_event(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None) -> tuple[str, str]:
+    """The event of the last run of the fast confirmation rule in a case that passed."""
+    ...
+
+def consensus_api_aggregate_attestation(name: str, fork: str, state: bytes, attestations: list[bytes], singles: list[bytes], optimistic_roots: list[bytes], data_root: bytes, slot: int, committee_index: int) -> dict[str, Any]:
+    """The JSON response of the aggregate endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committee_contribution(name: str, fork: str, state: bytes, messages: list[bytes], optimistic_roots: list[bytes], slot: int, subcommittee_index: int, root: bytes) -> dict[str, Any]:
+    """The JSON response of the contribution endpoint, as a `dict`."""
+    ...
+
+def consensus_api_attestation_rewards(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, epoch: int, ids: list[str]) -> dict[str, Any]:
+    """The JSON response of the attestation rewards endpoint, as a `dict`."""
+    ...
+
+def consensus_api_block_rewards(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> dict[str, Any]:
+    """The JSON response of the block rewards endpoint, as a `dict`."""
+    ...
+
+def consensus_api_consensus_block_value(name: str, fork: str, state: bytes, block: bytes, replacements: dict[str, Any] | None) -> int:
+    """The consensus value of a signed block, in Wei."""
+    ...
+
+def consensus_api_prefer_local_v3(local_value: int, builder_value: int, builder_boost_factor: int) -> bool:
+    """From Bellatrix to Fulu: whether the node returns its local payload rather than the builder's."""
+    ...
+
+def consensus_api_capped_bid_value(bid: dict[str, Any]) -> int:
+    """The value of a bid, in Gwei: its value plus its execution payment, counted up to its cap."""
+    ...
+
+def consensus_api_bid_accepted(bid: dict[str, Any]) -> bool:
+    """Whether the terms of a bid accept it."""
+    ...
+
+def consensus_api_select_payload(local_value: int, bids: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """From Gloas: the bid that the node commits to, or none for its local payload."""
+    ...
+
+def consensus_api_builder_config_terms(data: bytes, slot: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """From Gloas, the terms that the SSZ bytes of a builder configuration give."""
+    ...
+
+def consensus_api_sync_committee_rewards(name: str, fork: str, state: bytes, aggregate: bytes, ids: list[str]) -> dict[str, Any]:
+    """The JSON response of the sync committee rewards endpoint, as a `dict`."""
+    ...
+
+def consensus_api_duties(name: str, fork: str, state: bytes, replacements: dict[str, Any] | None, kind: str, epoch: int, indices: list[int], genesis_root: bytes) -> dict[str, Any]:
+    """The JSON response of a duties endpoint, as a `dict`."""
+    ...
+
+def consensus_api_committees(name: str, fork: str, state: bytes, epoch: int | None, index: int | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_sync_committees(name: str, fork: str, state: bytes, epoch: int | None) -> dict[str, Any]:
+    """The JSON response of the sync committees endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> dict[str, Any]:
+    """The JSON response of the PTC endpoint, as a `dict`."""
+    ...
+
+def consensus_api_ptc_ssz(name: str, fork: str, state: bytes, config: dict[str, Any] | None, slot: int | None) -> bytes:
+    """The SSZ body of the PTC answer, as `bytes`."""
+    ...
+
 def consensus_api_resolve(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, queries: list) -> list:
     """The answer to each query, against the store after the steps of a fork choice case."""
     ...
@@ -611,6 +818,46 @@ def consensus_unblind_signed_blinded_block(name: str, fork: str, blinded: bytes,
 
 def consensus_verify_builder_request_auth_signature(name: str, fork: str, config: dict[str, Any] | None, pubkey: bytes, data: bytes) -> bool:
     """Whether a proposer key signed a Gloas request authentication given in SSZ."""
+    ...
+
+def consensus_builder_request_auth_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, path_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request for a bid, by name, in order."""
+    ...
+
+def consensus_builder_preferences_failures(name: str, fork: str, config: dict[str, Any] | None, agreed: bytes, current_slot: int, pubkey: bytes, version_header: str | None, data: bytes) -> list[str]:
+    """From Gloas: the failed checks of a request that submits preferences, by name, in order."""
+    ...
+
+def consensus_default_auth_data(url: str) -> bytes:
+    """The default data that a proposer and a builder agree, from the builder's URL."""
+    ...
+
+def consensus_relay_submission_bid(name: str, fork: str, data: bytes, pubkey: bytes) -> bytes:
+    """The SSZ bytes of the bid that a relay serves from a submission, under a key."""
+    ...
+
+def consensus_relay_validators(name: str, fork: str, state: bytes, registry: list[bytes]) -> list[dict[str, Any]]:
+    """At Fulu only: the list of validators that a relay serves, as a `list` of `dict`."""
+    ...
+
+def consensus_relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
+    """A delivered payload, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_received_bid(document: dict[str, Any]) -> dict[str, Any]:
+    """A received bid, read from its JSON and written back as a `dict`."""
+    ...
+
+def consensus_relay_delivered_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, proposer_pubkey: bytes | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of delivered payloads keep the payload of a JSON object."""
+    ...
+
+def consensus_relay_received_keeps(document: dict[str, Any], slot: int | None, block_hash: bytes | None, block_number: int | None, builder_pubkey: bytes | None) -> bool:
+    """Whether the filters of a query of received bids keep the bid of a JSON object."""
+    ...
+
+def consensus_relay_sort_delivered(order: str, documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Delivered payloads sorted by value in the given order, as a `list` of `dict`."""
     ...
 
 def consensus_builder_bid_value(value: int, execution_payment: int, max_execution_payment: int) -> int:
@@ -881,12 +1128,20 @@ def consensus_upgrade_state(name: str, fork: str, pre: bytes, config: dict[str, 
     """The state that the upgrade to a fork makes of a state of the fork before, as SSZ bytes."""
     ...
 
-def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list:
-    """The outcome of each step of a fork choice case, from an anchor state and an anchor block."""
+def consensus_fork_choice(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> list[list]:
+    """The handler outcomes of each step of a fork choice case, from an anchor state and block."""
     ...
 
 def consensus_gossip_validation(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, topic: str, messages: list[tuple[int, int, bytes] | tuple[int, int, bytes, str]], config: dict[str, Any] | None, verify: bool) -> list[tuple[str, str | None]]:
     """Validate the messages of a topic in turn, against the store of an anchor and later blocks."""
+    ...
+
+def consensus_api_post(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, blocks: list[tuple[int, int | None, bytes] | tuple[int, int | None, bytes, bytes | None]], finalized: tuple[int, bytes] | None, requests: list[tuple[int, str, list[bytes]] | tuple[int, str, list[bytes], str | None]], config: dict[str, Any] | None, verify: bool) -> list[tuple[int, list[tuple[int, str]], list[tuple[str, str]]]]:
+    """Answer the requests to pool and publish endpoints in turn."""
+    ...
+
+def consensus_api_gossip_event(name: str, fork: str, topic: str, data: bytes) -> tuple[str, str] | None:
+    """The event that an object gives if gossip accepts it, by the name of its gossip topic."""
     ...
 
 def consensus_light_client_sync(name: str, fork: str, bootstrap_fork: str, config: dict[str, Any] | None, trusted: bytes, genesis_validators_root: bytes, bootstrap: bytes, steps: list[tuple[str, str, int, bytes] | tuple[str, int] | tuple[str, str]]) -> list[tuple[tuple[int, bytes, bytes], tuple[int, bytes, bytes]]]:
@@ -943,18 +1198,6 @@ def consensus_fork_of_digest(name: str, config: dict[str, Any] | None, genesis_v
 
 def consensus_digests_identify(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool:
     """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
-    ...
-
-def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
-    ...
-
-def pq_keys_possession_signing_root(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes:
-    """The root that a proof of possession signs, on the chain with the given genesis validators."""
-    ...
-
-def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, proof: bytes) -> bool:
-    """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
 def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool:
@@ -1029,7 +1272,7 @@ def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str)
     """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
     ...
 
-def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int]) -> bool:
+def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes | str, ...]], committee: list[int]) -> bool:
     """Whether a response is valid for its request, as a Boolean."""
     ...
 
@@ -1197,6 +1440,18 @@ def ssz_hash_tree_root(type: str | dict[str, Any], value: dict[str, Any]) -> byt
     """The 32-byte hash tree root of a value of a type, both given in their tagged form."""
     ...
 
+def ssz_generalized_index(type: str | dict[str, Any], path: list[int | str]) -> int:
+    """The generalized index of the node that a path selects in the tree of a type."""
+    ...
+
+def ssz_merkle_proof(type: str | dict[str, Any], value: dict[str, Any], index: int) -> list[bytes]:
+    """The branch that proves the node at a generalized index of a value against its root."""
+    ...
+
+def ssz_merkleize_chunks(chunks: list[bytes], limit: int | None) -> bytes:
+    """The root of 32-byte chunks, in a tree padded to a power of two."""
+    ...
+
 def rlpx_ecies_encrypt(recipient: bytes, ephemeral: bytes, iv: bytes, shared_mac: bytes, message: bytes) -> bytes:
     """The ciphertext `R || iv || c || d` of `m` to the public key `recipient`."""
     ...
@@ -1305,6 +1560,10 @@ def snap_access_lists_answer(request: bytes, response: bytes, expected: list[byt
     """Whether `response` answers a GetBlockAccessLists `request`, given each block's access list hash."""
     ...
 
+def snap_trie_nodes_answer(request: bytes, response: bytes) -> bool:
+    """Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."""
+    ...
+
 def snap_full_account(slim: bytes) -> bytes:
     """The full RLP form of an account in slim form."""
     ...
@@ -1365,12 +1624,112 @@ def uvarint_decode(data: bytes) -> tuple[int, bytes]:
     """The value of the unsigned varint at the start of the bytes, and the bytes after it."""
     ...
 
+def quic_initial_secrets(destination_connection_id: bytes) -> tuple[bytes, bytes]:
+    """Derive the client and server Initial secrets for QUIC v1, RFC 9001 §5.2."""
+    ...
+
+def quic_packet_keys(suite: str, secret: bytes) -> tuple[bytes, bytes, bytes]:
+    """Derive the payload key, IV and header-protection key, in that order, RFC 9001 §5.1."""
+    ...
+
+def quic_tls_client_start(config: dict[str, object]) -> dict[str, object]:
+    """Start a client certificate handshake under an explicit policy, RFC 8446 §4.1.2."""
+    ...
+
+def quic_tls_server_start(config: dict[str, object]) -> dict[str, object]:
+    """Start a server certificate handshake under an explicit policy."""
+    ...
+
+def quic_tls_client_step(config: dict[str, object], expected: bytes, state: dict[str, object], message: dict[str, object]) -> dict[str, object]:
+    """Process one complete server message and check the intended peer ID at authentication."""
+    ...
+
+def quic_tls_server_step(config: dict[str, object], state: dict[str, object], message: dict[str, object]) -> dict[str, object]:
+    """Process one complete client message and require libp2p client authentication."""
+    ...
+
+def quic_tls_key_schedule(shared_secret: bytes, hello_transcript: bytes, server_transcript: bytes) -> tuple[bytes, bytes, bytes, bytes, bytes, bytes, bytes]:
+    """Return the early, handshake, master, two handshake traffic and two application traffic secrets."""
+    ...
+
+def quic_tls_derive_secret(secret: bytes, label: bytes, messages: bytes) -> bytes:
+    """Derive a SHA-256 secret from encoded handshake messages, RFC 8446 §7.1."""
+    ...
+
+def quic_tls_finished(secret: bytes, transcript: bytes) -> bytes:
+    """Compute the Finished `verify_data` over the transcript that precedes it, RFC 8446 §4.4.4."""
+    ...
+
+def quic_tls_message_encode(hash_length: int, message: TlsMessage) -> bytes:
+    """Encode one handshake message with its header and the caller's hash length, RFC 8446 §4."""
+    ...
+
+def quic_tls_message_decode(hash_length: int, data: bytes) -> tuple[TlsMessage, bytes]:
+    """Decode one complete message and return its fields and trailing bytes, RFC 8446 §4."""
+    ...
+
+def quic_tls_payload_encode(payload: TlsPayload) -> TlsExtension:
+    """Encode a structured extension payload without selecting an algorithm or protocol."""
+    ...
+
+def quic_tls_payload_decode(form: TlsPayloadForm, extension: TlsExtension) -> TlsPayload:
+    """Decode an extension in the payload form that its message context requires."""
+    ...
+
+def quic_tls_transcript(messages: list[bytes]) -> tuple[bytes, bytes]:
+    """Return the SHA-256 transcript of complete handshake messages and its hash, RFC 8446 §4.4.1."""
+    ...
+
+def quic_tls_certificate_verify_input(server: bool, digest: bytes) -> bytes:
+    """Build the CertificateVerify signed content from a SHA-256 transcript hash, RFC 8446 §4.4.3."""
+    ...
+
+def quic_protect(suite: str, secret: bytes, number: int, offset: int, header: bytes, plaintext: bytes) -> bytes:
+    """Protect a QUIC v1 header and payload using a SHA-256 traffic secret, RFC 9001 §§5.1 to 5.4."""
+    ...
+
+def quic_unprotect(suite: str, secret: bytes, expected: int, offset: int, packet: bytes) -> tuple[bytes, bytes]:
+    """Authenticate one isolated QUIC v1 packet, RFC 9001 §§5.3 to 5.4."""
+    ...
+
+def quic_retry_tag(original_dcid: bytes, retry: bytes) -> bytes:
+    """Compute a QUIC v1 Retry tag from the original destination ID and untagged Retry, RFC 9001 §5.8."""
+    ...
+
 def quic_varint_encode(value: int) -> bytes:
     """Encode a value below `2^62` with its shortest QUIC representation, RFC 9000 §16."""
     ...
 
 def quic_varint_decode(data: bytes) -> tuple[int, bytes]:
     """Read a QUIC integer and return its value and the trailing bytes, RFC 9000 §16."""
+    ...
+
+def quic_header_encode(header: QuicHeader) -> bytes:
+    """Encode a QUIC header, with checked lengths and packet-number bounds (RFC 9000 §17)."""
+    ...
+
+def quic_header_decode(short_connection_id_length: int, data: bytes) -> tuple[QuicHeader, bytes]:
+    """Read an authenticated header and return its fields and remaining bytes (RFC 9000 §17)."""
+    ...
+
+def quic_frame_encode(frame: QuicFrame) -> bytes:
+    """Encode one well-formed QUIC frame (RFC 9000 §19)."""
+    ...
+
+def quic_frame_decode(packet: QuicPacketType, data: bytes) -> tuple[QuicFrame, bytes]:
+    """Read one frame allowed in the given packet type (RFC 9000 §12.4)."""
+    ...
+
+def quic_packet_number_width(number: int, largest_acked: int | None) -> int:
+    """Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1."""
+    ...
+
+def quic_packet_number_encode(width: int, number: int) -> bytes:
+    """Write the low packet-number bytes (RFC 9000 §17.1)."""
+    ...
+
+def quic_packet_number_decode(width: int, truncated: int, expected: int) -> int:
+    """Reconstruct a packet number from its low bytes (RFC 9000 Appendix A.3)."""
     ...
 
 def multistream_encode(message: bytes) -> bytes:
@@ -1417,6 +1776,22 @@ def yamux_session(is_client: bool, events: list[tuple[bool, bytes]]) -> tuple[li
     """One side of a yamux session after the frames it receives and sends, from no stream."""
     ...
 
+def tls_certificate_read(data: bytes) -> tuple[Any, ...]:
+    """The certificate's signed bytes, SPKI, validity and extensions."""
+    ...
+
+def tls_certificate_authenticate(policy: dict[str, Any], now: int, chain: list[bytes]) -> bytes:
+    """The authenticated peer ID of a chain of exactly one certificate."""
+    ...
+
+def tls_certificate_authenticate_peer(policy: dict[str, Any], now: int, expected: bytes, chain: list[bytes]) -> bytes:
+    """The peer ID of one authenticated certificate, checked against the intended peer ID."""
+    ...
+
+def tls_certificate_verify_p256(spki: bytes, message: bytes, signature: bytes) -> bool:
+    """Verify DER ECDSA/SHA-256 under an uncompressed P-256 SubjectPublicKeyInfo."""
+    ...
+
 def libp2p_public_key(secret: bytes) -> bytes:
     """The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n)."""
     ...
@@ -1443,6 +1818,30 @@ def gossip_rpc_decode(data: bytes) -> dict[str, Any]:
 
 def gossip_rpc_encode(rpc: dict[str, Any]) -> bytes:
     """The bytes of an RPC."""
+    ...
+
+def gossip_parameters(slot_duration_ms: int, slots_per_epoch: int) -> dict[str, Any]:
+    """The gossipsub parameters, given the slot duration in milliseconds and the slots per epoch."""
+    ...
+
+def gossip_receive_rpc(fork: str, params: dict[str, Any], backoff_ms: int, prune_backoff_ms: int, standing: list[tuple[bytes, dict[str, Any]]], validation: list[tuple[bytes, str | tuple[str, str]]], now: int, src: bytes, rpc: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What the router does with one RPC, with its client choices given as tables."""
+    ...
+
+def gossip_join(params: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node joins a topic, and the GRAFTs it sends."""
+    ...
+
+def gossip_leave(params: dict[str, Any], choices: dict[str, Any], now: int, topic: str, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node leaves a topic, and the PRUNEs it sends."""
+    ...
+
+def gossip_publish(fork: str, params: dict[str, Any], choices: dict[str, Any], standing: list[tuple[bytes, dict[str, Any]]], now: int, message: dict[str, Any], state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after this node publishes a message, and where the message goes."""
+    ...
+
+def gossip_heartbeat(params: dict[str, Any], choices: dict[str, Any], ranking: list[bytes], standing: list[tuple[bytes, dict[str, Any]]], now: int, state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The router after one heartbeat, and the control messages it sends."""
     ...
 
 def receipt_reencode(fork: str, receipt: bytes) -> bytes:
@@ -1585,7 +1984,7 @@ def engine_jwt_check(secret: bytes, token: str, clock: int) -> bool:
     """Accept an HS256 Engine token only within 60 seconds of its issued-at time."""
     ...
 
-def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
+def engine_new_payload_on_chain(config: dict, state: bytes, recent: list[tuple[str, bytes, list[bytes]]], terminal_total_difficulty: int, total_difficulty: int, request: dict) -> tuple[dict, bytes, bytes] | tuple[dict, None, None]:
     """The payload status of an `engine_newPayload` request, on a chain that holds the parent."""
     ...
 
@@ -1593,8 +1992,8 @@ def engine_build_payload(config: dict, state: bytes, recent: list[tuple[str, byt
     """Build a payload on a chain, from attributes, the builder's choices and transactions."""
     ...
 
-def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, request: dict) -> dict:
-    """The response to an `engine_forkchoiceUpdated` request, against a tree of payloads."""
+def engine_forkchoice_updated(config: dict, tree: list, finalized: str | None, terminal_total_difficulty: int, request: dict) -> dict:
+    """The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks."""
     ...
 
 def engine_get_blobs(pool: list[tuple[bytes, bytes | None, bytes | None, list[tuple[bytes, bytes] | None] | None]], serving: bool, max_request: int, fork: str, request: dict) -> list | None:
@@ -1607,6 +2006,10 @@ def engine_get_payload(config: dict, store: list[tuple[bytes, str, bytes, bytes,
 
 def engine_get_payload_bodies(store: list[tuple[bytes, int | None, str, list[bytes], list[tuple[int, int, bytes, int]] | None, bytes | None]], latest: int, max_request: int, request: dict) -> list[dict | None]:
     """The answer to a payload bodies request, from a store of bodies."""
+    ...
+
+def engine_new_payload_routes(config: dict, preset: str, fork: str, request: bytes) -> tuple[list | None, str | None, int | None, bool]:
+    """The payload request of the beacon chain through the method and through its execution layer."""
     ...
 
 def engine_read_payload_status(status: dict[str, Any]) -> tuple[str, bytes | None, str | None]:
@@ -1633,6 +2036,14 @@ def engine_exchange_transition_configuration(terminal_total_difficulty: int, ter
     """The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration."""
     ...
 
+def engine_exchange_capabilities(request: dict) -> list[str]:
+    """The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines."""
+    ...
+
+def engine_get_client_version(code: str, name: str, version: str, commit: bytes, request: dict) -> list[dict[str, str]]:
+    """The answer to an `engine_getClientVersionV1` request, from a version object."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...
@@ -1643,6 +2054,14 @@ def engine_prepare_execution_payload(name: str, fork: str, state: bytes, config:
 
 def engine_prepare_execution_payload_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, custody_columns: bytes | None, verify: bool, config: dict | None) -> dict:
     """From Gloas: the forkchoice update of a proposer, as the value of its JSON."""
+    ...
+
+def engine_payload_attributes_event(name: str, fork: str, state: bytes, config: dict | None, safe_block_hash: bytes, finalized_block_hash: bytes, suggested_fee_recipient: bytes, pow_chain: list[bytes], terminal_number: int) -> tuple[str, str] | None:
+    """From Bellatrix to Fulu: the event of the payload attributes of a proposer."""
+    ...
+
+def engine_payload_attributes_event_gloas(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, head_root: bytes, head_status: int, state: bytes, safe_block_hash: bytes, suggested_fee_recipient: bytes, target_gas_limit: int, verify: bool, config: dict | None) -> tuple[str, str]:
+    """Gloas: the event of the payload attributes of a proposer."""
     ...
 
 def engine_finalized_execution_block_hash(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict | None) -> bytes:
@@ -1661,8 +2080,16 @@ def rpc_pruned_history_unavailable() -> tuple[tuple[bool, int], str]:
     """The code of history that the node pruned, with its message."""
     ...
 
-def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], requests: list[str]) -> list[str | None]:
+def rpc_serve(view: tuple[dict[str, Any], bytes, list[tuple[str, bytes]], tuple[bytes, bytes, bytes], int, bool], numbers: list[int], requests: list[str]) -> list[str | None]:
     """Answer requests of the execution JSON-RPC API from the chain that the arguments build."""
+    ...
+
+def rpc_encode_block_access_list(value: object) -> bytes:
+    """Encode a block access-list JSON value as its EIP-7928 RLP bytes."""
+    ...
+
+def rpc_apply_overrides(state: bytes, overrides: object) -> bytes:
+    """The state root after the account overrides of one block of `eth_simulateV1`."""
     ...
 
 def pyvalue_echo(value: object) -> object:

@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Bls.G1
 public import EthLib.Cryptography.Bls.G2
 public import EthLib.Cryptography.Bls.Errors
@@ -28,6 +29,8 @@ KZG accepts the point at infinity, so it tests for that encoding before key vali
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls
+
+open EthLib.Base (packBytes)
 
 /-! ## Sign convention -/
 
@@ -98,66 +101,49 @@ def tailAllZero (bytes : ByteArray) (start : Nat) : Bool :=
 theorem Fp.size_toBytesBE (x : Fp) : (Fp.toBytesBE x).size = 48 :=
   Montgomery.toBytesBE_size x
 
-private theorem size_set (b : ByteArray) (j : Nat) (v : UInt8) (h : j < b.size) :
-    (b.set j v h).size = b.size := Array.size_set h
-
 namespace G1
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 47 zero bytes. -/
-def infinityBytes : ByteArray :=
-  ByteArray.mk ((Vector.replicate 48 (0 : UInt8)).set 0 0xc0).toArray
+def infinityBytes : Vector UInt8 48 :=
+  (Vector.replicate 48 (0 : UInt8)).set 0 0xc0
 
 /-- Compressed 48-byte serialization. -/
-def compress (p : G1) : ByteArray := Id.run do
+def compress (p : G1) : Vector UInt8 48 := Id.run do
   if p.isInfinity then return infinityBytes
   let (x, y) := p.toAffine
   -- `x` as 48 big-endian bytes, with the flag bits ORed into byte 0.
-  let xBytes := x.toBytesBE
-  have hHead : 0 < xBytes.size := by rw [Fp.size_toBytesBE]; decide
+  let xBytes : Vector UInt8 48 := ⟨x.toBytesBE.data, Fp.size_toBytesBE x⟩
   let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp.signBit y then
-    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
     bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
 
 /-- Decompress 48 bytes into a point of `G1`.
 
 It fails on a malformed input and on a point off the curve. -/
-def uncompress (bytes : ByteArray) : Except BlsError G1 :=
-  if hSize : bytes.size ≠ 48 then .error .invalidG1Point
+def uncompress (bytes : Vector UInt8 48) : Except BlsError G1 :=
+  let head := bytes[0]
+  let isCompressed := (head &&& 0x80) ≠ 0
+  let isInfinity   := (head &&& 0x40) ≠ 0
+  let ySign        := (head &&& 0x20) ≠ 0
+  if !isCompressed then .error .invalidG1Point
+  else if isInfinity then
+    -- Infinity must be the canonical encoding, `0xc0` then 47 zero bytes, with no sign flag.
+    if ySign || head ≠ 0xc0 || !tailAllZero (packBytes bytes) 1 then .error .invalidG1Point
+    else .ok G1.zero
   else
-    let head := bytes[0]'(by omega)
-    let isCompressed := (head &&& 0x80) ≠ 0
-    let isInfinity   := (head &&& 0x40) ≠ 0
-    let ySign        := (head &&& 0x20) ≠ 0
-    if !isCompressed then .error .invalidG1Point
-    else if isInfinity then
-      -- Infinity must be the canonical encoding, `0xc0` then 47 zero bytes, with no sign flag.
-      if ySign || head ≠ 0xc0 || !tailAllZero bytes 1 then .error .invalidG1Point
-      else .ok G1.zero
-    else
-      -- Strip flag bits from the high byte before decoding `x`.
-      let xBytes := bytes.set 0 (head &&& 0x1f) (by omega)
-      match Fp.fromBytesBE xBytes with
+    -- Strip flag bits from the high byte before decoding `x`.
+    let xBytes := bytes.set 0 (head &&& 0x1f)
+    match Fp.fromBytesBE (packBytes xBytes) with
+    | .error _ => .error .invalidG1Point
+    | .ok x =>
+      -- Compute y^2 = x^3 + 4 and take a sqrt.
+      let rhs := x * x * x + Fp.ofNat 4
+      match Fp.sqrt rhs with
       | .error _ => .error .invalidG1Point
-      | .ok x =>
-        -- Compute y² = x³ + 4 and take a sqrt.
-        let rhs := x * x * x + Fp.ofNat 4
-        match Fp.sqrt rhs with
-        | .error _ => .error .invalidG1Point
-        | .ok yPos =>
-          let y := if Fp.signBit yPos = ySign then yPos else -yPos
-          .ok ⟨x, y, Fp.one⟩
-
-/-- A compressed `G1` point has 48 bytes. -/
-theorem size_compress (p : G1) : (compress p).size = 48 := by
-  unfold compress
-  simp only [Id.run]
-  split
-  · rfl
-  · split
-    · exact (size_set ..).trans ((size_set ..).trans (Fp.size_toBytesBE _))
-    · exact (size_set ..).trans (Fp.size_toBytesBE _)
+      | .ok yPos =>
+        let y := if Fp.signBit yPos = ySign then yPos else -yPos
+        .ok ⟨x, y, Fp.one⟩
 
 /-- Subgroup-membership check by the endomorphism `σ(x, y) = (β x, y)`.
 
@@ -182,7 +168,7 @@ The checks are those of `KeyValidate` in the IRTF BLS signature draft, section 2
 
 KZG accepts the point at infinity, so it tests for that encoding before calling this.
 -/
-def keyValidatePoint (bytes : ByteArray) : Except BlsError G1 := do
+def keyValidatePoint (bytes : Vector UInt8 48) : Except BlsError G1 := do
   -- Reject bytes that do not encode a point on the curve.
   let p ← uncompress bytes
   -- The identity is on the curve, but it is never a valid public key.
@@ -195,7 +181,7 @@ def keyValidatePoint (bytes : ByteArray) : Except BlsError G1 := do
 
 This runs the same checks as the point-returning version and discards the point.
 -/
-def keyValidate (bytes : ByteArray) : Except BlsError Unit := do
+def keyValidate (bytes : Vector UInt8 48) : Except BlsError Unit := do
   let _ ← keyValidatePoint bytes
 
 end G1
@@ -205,8 +191,8 @@ end G1
 namespace G2
 
 /-- Canonical compressed-infinity encoding: `0xc0` then 95 zero bytes. -/
-def infinityBytes : ByteArray :=
-  ByteArray.mk ((Vector.replicate 96 (0 : UInt8)).set 0 0xc0).toArray
+def infinityBytes : Vector UInt8 96 :=
+  (Vector.replicate 96 (0 : UInt8)).set 0 0xc0
 
 /-- Encode `Fp2` as 96 big-endian bytes (`c1 ‖ c0`). -/
 def fp2ToBytes (x : Fp2) : ByteArray :=
@@ -217,56 +203,45 @@ def fp2ToBytes (x : Fp2) : ByteArray :=
   rw [fp2ToBytes, ByteArray.size_append, Fp.size_toBytesBE, Fp.size_toBytesBE]
 
 /-- Compressed 96-byte serialization. -/
-def compress (p : G2) : ByteArray := Id.run do
+def compress (p : G2) : Vector UInt8 96 := Id.run do
   if p.isInfinity then return infinityBytes
   let (x, y) := p.toAffine
-  let xBytes := fp2ToBytes x
-  have hHead : 0 < xBytes.size := by rw [size_fp2ToBytes]; decide
+  -- `x` as 96 big-endian bytes, `c1` then `c0`, with the flag bits ORed into byte 0.
+  let xBytes : Vector UInt8 96 := ⟨(fp2ToBytes x).data, size_fp2ToBytes x⟩
   let mut bytes := xBytes.set 0 (xBytes[0] ||| 0x80)
   if Fp2.signBit y then
-    have hBytes : 0 < bytes.size := by rw [size_set]; exact hHead
     bytes := bytes.set 0 (bytes[0] ||| 0x20)
   return bytes
-
-/-- A compressed `G2` point has 96 bytes. -/
-theorem size_compress (p : G2) : (compress p).size = 96 := by
-  unfold compress
-  simp only [Id.run]
-  split
-  · rfl
-  · split
-    · exact (size_set ..).trans ((size_set ..).trans (size_fp2ToBytes _))
-    · exact (size_set ..).trans (size_fp2ToBytes _)
 
 /-- Decompress 96 bytes into a point of `G2`.
 
 It fails on a malformed input and on a point off the curve. -/
-def uncompress (bytes : ByteArray) : Except BlsError G2 :=
-  if hSize : bytes.size ≠ 96 then .error .invalidG2Point
+def uncompress (bytes : Vector UInt8 96) : Except BlsError G2 :=
+  let head := bytes[0]
+  let isCompressed := (head &&& 0x80) ≠ 0
+  let isInfinity   := (head &&& 0x40) ≠ 0
+  let ySign        := (head &&& 0x20) ≠ 0
+  if !isCompressed then .error .invalidG2Point
+  else if isInfinity then
+    -- Infinity must be the canonical encoding, `0xc0` then 95 zero bytes, with no sign flag.
+    if ySign || head ≠ 0xc0 || !tailAllZero (packBytes bytes) 1 then .error .invalidG2Point
+    else .ok G2.zero
   else
-    let head := bytes[0]'(by omega)
-    let isCompressed := (head &&& 0x80) ≠ 0
-    let isInfinity   := (head &&& 0x40) ≠ 0
-    let ySign        := (head &&& 0x20) ≠ 0
-    if !isCompressed then .error .invalidG2Point
-    else if isInfinity then
-      if ySign || head ≠ 0xc0 || !tailAllZero bytes 1 then .error .invalidG2Point
-      else .ok G2.zero
-    else
-      let cleared := bytes.set 0 (head &&& 0x1f) (by omega)
-      let c1Bytes := cleared.extract 0 48
-      let c0Bytes := cleared.extract 48 96
-      match Fp.fromBytesBE c1Bytes, Fp.fromBytesBE c0Bytes with
-      | .ok c1, .ok c0 =>
-        let x : Fp2 := ⟨c0, c1⟩
-        let rhs := x * x * x + bTwist
-        match Fp2.sqrt rhs with
-        | .error _ => .error .invalidG2Point
-        | .ok yPos =>
-          let yNeg := -yPos
-          let y := if Fp2.signBit yPos = ySign then yPos else yNeg
-          .ok ⟨x, y, Fp2.one⟩
-      | _, _ => .error .invalidG2Point
+    -- Strip flag bits from the high byte, then split `x` into `c1 ‖ c0`.
+    let cleared := packBytes (bytes.set 0 (head &&& 0x1f))
+    let c1Bytes := cleared.extract 0 48
+    let c0Bytes := cleared.extract 48 96
+    match Fp.fromBytesBE c1Bytes, Fp.fromBytesBE c0Bytes with
+    | .ok c1, .ok c0 =>
+      let x : Fp2 := ⟨c0, c1⟩
+      let rhs := x * x * x + bTwist
+      match Fp2.sqrt rhs with
+      | .error _ => .error .invalidG2Point
+      | .ok yPos =>
+        let yNeg := -yPos
+        let y := if Fp2.signBit yPos = ySign then yPos else yNeg
+        .ok ⟨x, y, Fp2.one⟩
+    | _, _ => .error .invalidG2Point
 
 /-- Subgroup-membership check by the endomorphism `psi` of the twist.
 

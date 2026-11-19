@@ -40,22 +40,24 @@ inductive BodyError where
   | decoding (error : RlpError)
   /-- A root cannot be computed, because a trie value is empty or too long to encode. -/
   | trie (error : TrieError)
-  /-- The trie root of the transactions is not the transactions root of the header. -/
-  | wrongTransactionsRoot
+  /-- The transactions root `expected` of the header is not `actual`, that of the transactions. -/
+  | wrongTransactionsRoot (expected actual : Hash32)
   /-- From Shapella, the body has no withdrawals. -/
   | missingWithdrawals
   /-- Before Shapella, the body has withdrawals. -/
   | unexpectedWithdrawals
-  /-- The trie root of the withdrawals is not the withdrawals root of the header. -/
-  | wrongWithdrawalsRoot
+  /-- The withdrawals root `expected` of the header is not `actual`, that of the withdrawals. -/
+  | wrongWithdrawalsRoot (expected actual : Hash32)
   /-- The ommers list holds more than two headers. -/
   | tooManyOmmers (count : Nat)
-  /-- The Keccak-256 hash of the ommers list is not the ommers hash of the header. -/
-  | wrongOmmersHash
+  /-- The ommers hash `expected` of the header is not `actual`, the hash of the ommers list. -/
+  | wrongOmmersHash (expected actual : Hash32)
   /-- An ommer has a block number above that of the block that holds it. -/
   | ommerAfterBlock (index number : Nat)
-  /-- A transaction is a byte string that is empty or whose first byte is not a type. -/
-  | untypedTransaction
+  /-- A transaction is a byte string whose first byte `first` is not a type.
+
+  The first byte is none when the string is empty. -/
+  | untypedTransaction (first : Option UInt8)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -66,14 +68,14 @@ A new constructor takes a new code, so that each code keeps its meaning. -/
 def BodyError.code : BodyError → UInt32
   | .decoding _ => 601
   | .trie _ => 602
-  | .wrongTransactionsRoot => 603
+  | .wrongTransactionsRoot .. => 603
   | .missingWithdrawals => 604
   | .unexpectedWithdrawals => 605
-  | .wrongWithdrawalsRoot => 606
+  | .wrongWithdrawalsRoot .. => 606
   | .tooManyOmmers _ => 607
-  | .wrongOmmersHash => 608
+  | .wrongOmmersHash .. => 608
   | .ommerAfterBlock .. => 609
-  | .untypedTransaction => 610
+  | .untypedTransaction _ => 610
 
 /-- The bytes that a transaction item stands for in the trie of the transactions root.
 
@@ -89,8 +91,8 @@ An RLP list starts with a byte of at least `0xc0`, so the two forms never stand 
 def transactionBytes : Item → Except BodyError ByteArray
   | .bytes b =>
     if h : 0 < b.size then
-      if b[0] < 0x80 then .ok b else .error .untypedTransaction
-    else .error .untypedTransaction
+      if b[0] < 0x80 then .ok b else .error (.untypedTransaction (some b[0]))
+    else .error (.untypedTransaction none)
   | item@(.list _) => (encode item).mapError .decoding
 
 /-- The bytes of each transaction of a body, in order. -/
@@ -102,14 +104,14 @@ def checkTransactions {fork : Fork} (header : Header fork) (transactions : Item)
     Except BodyError Unit := do
   let values ← transactionValues transactions
   let root ← (indexedRoot values).mapError .trie
-  ensure (root == header.transactionsRoot) .wrongTransactionsRoot
+  ensure (root == header.transactionsRoot) (.wrongTransactionsRoot header.transactionsRoot root)
 
 /-- The withdrawals of a body, from Shapella, match the withdrawals root of the header. -/
 def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
     (withdrawals : Item) : Except BodyError Unit := do
   let ws : List Withdrawal ← (Codec.ofItem withdrawals).mapError .decoding
   let root ← (withdrawalsRoot ws).mapError .trie
-  ensure (root == header.withdrawalsRoot h) .wrongWithdrawalsRoot
+  ensure (root == header.withdrawalsRoot h) (.wrongWithdrawalsRoot (header.withdrawalsRoot h) root)
 
 /-- The ommers of a body match the ommers hash of the header, and stay within its limits.
 
@@ -118,7 +120,8 @@ def checkOmmers {fork : Fork} (header : Header fork) (ommers : Item) : Except Bo
   let items ← ommers.toItems.mapError .decoding
   ensure (items.length ≤ MAX_OMMERS) (.tooManyOmmers items.length)
   let encoded ← (encode ommers).mapError .decoding
-  ensure (keccak256 encoded == header.ommersHash) .wrongOmmersHash
+  ensure (keccak256 encoded == header.ommersHash)
+    (.wrongOmmersHash header.ommersHash (keccak256 encoded))
   (List.range items.length).zip items |>.forM fun (i, ommer) => do
     let n ← (headerNumber ommer).mapError .decoding
     ensure (n ≤ header.number) (.ommerAfterBlock i n)

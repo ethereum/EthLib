@@ -150,45 +150,8 @@ private theorem kept_passPendingDeposits {stop : PendingDeposit → Bool} {nextE
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
       Kept state pass.1.state
-  | [], _, _, _, _, _, computed => by
-    simp only [passPendingDeposits, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact Kept.refl _
-  | deposit :: rest, state, processed, count, postponed, pass, computed => by
-    unfold passPendingDeposits at computed
-    simp only [bind, Except.bind, pure, Except.pure] at computed
-    split at computed
-    · cases computed
-      exact Kept.refl _
-    split at computed
-    · cases computed
-    split at computed
-    · split at computed
-      · cases computed
-      rename_i credited
-      split at computed
-      · cases computed
-      cases computed
-      exact (kept_applyPendingDeposit credited).trans
-        (kept_passPendingDeposits (deposits := rest) ‹_›)
-    split at computed
-    · split at computed
-      · cases computed
-      cases computed
-      exact kept_passPendingDeposits (deposits := rest) ‹_›
-    split at computed
-    · cases computed
-    split at computed
-    · cases computed
-      exact Kept.refl _
-    split at computed
-    · cases computed
-    rename_i credited
-    split at computed
-    · cases computed
-    cases computed
-    exact (kept_applyPendingDeposit credited).trans
-      (kept_passPendingDeposits (deposits := rest) ‹_›)
+  := fun computed => passPendingDeposits_of Kept Kept.refl (fun one two => one.trans two)
+    (fun ok => kept_applyPendingDeposit ok) computed
 
 /-- A pass over the pending consolidations keeps the mixes and the slot. -/
 private theorem kept_passPendingConsolidations {nextEpoch : Epoch} :
@@ -219,26 +182,6 @@ private theorem kept_passPendingConsolidations {nextEpoch : Epoch} :
       (Kept.of_payloadInputs (payloadInputs_increaseBalance raisedOk))).trans
       (kept_passPendingConsolidations (result := (passed, read)) passedOk)
 
-/-- The pending deposits and consolidations keep the mixes and the slot. -/
-private theorem kept_processPendingBalances
-    (computed : processPendingBalances config checks state = .ok after) : Kept state after := by
-  unfold processPendingBalances at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨middle, deposited, consolidated⟩ := computed
-    have deposits : Kept state middle := by
-      unfold processPendingDeposits at deposited
-      simp only [bind, Except.bind, pure, Except.pure] at deposited
-      repeat' (split at deposited <;> try cases deposited)
-      all_goals exact (kept_passPendingDeposits ‹_›).trans ⟨rfl, rfl⟩
-    refine deposits.trans ?_
-    unfold processPendingConsolidations at consolidated
-    simp only [bind, Except.bind, pure, Except.pure] at consolidated
-    repeat' (split at consolidated <;> try cases consolidated)
-    all_goals exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ Kept.refl _
-
 /-- The historical summaries update keeps the mixes and the slot. -/
 private theorem kept_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :
@@ -253,10 +196,10 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     {rooted synced looked : BeaconState preset fork}
     (syncedOk : processSyncCommitteeUpdates (processParticipationFlagUpdates rooted altair)
       altair = .ok synced)
-    (lookedOk : (if fulu : .fusaka ≤ fork then liftAccessor (processProposerLookahead synced fulu)
-      else pure synced) = .ok looked)
-    (windowed : (if gloas : .glamsterdam ≤ fork then liftAccessor (processPtcWindow looked gloas)
-      else pure looked) = .ok after) : Kept rooted after := by
+    (lookedOk : if fulu : .fusaka ≤ fork then processProposerLookahead synced fulu = .ok looked
+      else synced = looked)
+    (windowed : if gloas : .glamsterdam ≤ fork then processPtcWindow looked gloas = .ok after
+      else looked = after) : Kept rooted after := by
   have flags : Kept rooted (processParticipationFlagUpdates rooted altair) := ⟨rfl, rfl⟩
   have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced := by
     unfold processSyncCommitteeUpdates at syncedOk
@@ -265,20 +208,17 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     all_goals exact ⟨rfl, rfl⟩
   have lookedKept : Kept synced looked := by
     split at lookedOk
-    · simp only [processProposerLookahead, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at lookedOk
       obtain ⟨_, _, _, _, rfl⟩ := lookedOk
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at lookedOk
-      exact lookedOk ▸ Kept.refl _
+    · exact lookedOk ▸ Kept.refl _
   have windowedKept : Kept looked after := by
     split at windowed
-    · simp only [processPtcWindow, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at windowed
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at windowed
       obtain ⟨_, _, _, _, rfl⟩ := windowed
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at windowed
-      exact windowed ▸ Kept.refl _
+    · exact windowed ▸ Kept.refl _
   exact flags.trans <| syncedKept.trans <| lookedKept.trans windowedKept
 
 /-- An epoch one above another, as natural numbers, is its successor. -/
@@ -293,36 +233,47 @@ private theorem eq_add_one_of_toNat {next epoch : Epoch}
 private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
     MixesKeptBut (getCurrentEpoch state + 1) state after := by
-  unfold processEpochAltair at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨justified, justifiedOk, scored, scoredOk, rewarded, rewardedOk, registered,
-    registeredOk, slashed, slashedOk, reset, resetOk, pending, pendingOk, paid, paidOk, balanced,
-    balancedOk, cleared, clearedOk, mixed, mixedOk, computed⟩ := computed
-  have resetKept : Kept slashed reset := by
-    split at resetOk
-    · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset resetOk)
-    · simp only [pure, Except.pure, Except.ok.injEq] at resetOk
-      exact resetOk ▸ Kept.refl _
-  have paidKept : Kept pending paid := by
-    split at paidOk
-    · rw [processBuilderPendingPayments_eq (liftAccessor_ok.mp paidOk)]
+  have epochOk : processEpoch config checks state = .ok after := by
+    simpa only [processEpoch, altair, ↓reduceDIte] using computed
+  obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
+    syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut epochOk
+  have head : Kept state cleared := by
+    apply initial.transport Kept Kept.refl (fun a b => a.trans b)
+    intro k member a b ok
+    have edge := EpochStage.action_cases.mp ok
+    cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+    · exact Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization edge)
+    · exact kept_processInactivityUpdates edge
+    · exact Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties edge)
+    · exact kept_processRegistryUpdates edge
+    · exact Kept.of_eq (randaoMixes_slot_processSlashings edge)
+    · split at edge
+      · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset edge)
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · unfold processPendingDeposits at edge
+        simp only [bind, Except.bind, pure, Except.pure] at edge
+        repeat' (split at edge <;> try cases edge)
+        all_goals exact (kept_passPendingDeposits ‹_›).trans ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · unfold processPendingConsolidations at edge
+        simp only [bind, Except.bind, pure, Except.pure] at edge
+        repeat' (split at edge <;> try cases edge)
+        exact (kept_passPendingConsolidations ‹_›).trans ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · split at edge
+      · rw [processBuilderPendingPayments_eq edge]
+        exact ⟨rfl, rfl⟩
+      · exact edge ▸ Kept.refl _
+    · exact Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates edge)
+    · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
       exact ⟨rfl, rfl⟩
-    · simp only [pure, Except.pure, Except.ok.injEq] at paidOk
-      exact paidOk ▸ Kept.refl _
-  have clearedKept : Kept balanced cleared := by
-    obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq clearedOk
-    exact ⟨rfl, rfl⟩
-  have head : Kept state cleared :=
-    (Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization justifiedOk)).trans <|
-    (kept_processInactivityUpdates scoredOk).trans <|
-    (Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties rewardedOk)).trans <|
-    (kept_processRegistryUpdates registeredOk).trans <|
-    (Kept.of_eq (randaoMixes_slot_processSlashings slashedOk)).trans <| resetKept.trans <|
-    (kept_processPendingBalances pendingOk).trans <| paidKept.trans <|
-    (Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates balancedOk)).trans clearedKept
+    all_goals simp [EpochStage.prefixStages] at member
   have tail : Kept mixed after := by
-    split at computed <;> simp only [bind_ok_iff] at computed <;>
-      obtain ⟨rooted, rootedOk, synced, syncedOk, looked, lookedOk, windowed⟩ := computed
+    simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk lookedOk windowed
+    subst rotation
+    split at rootedOk
     · exact (kept_processHistoricalSummariesUpdate rootedOk).trans
         (kept_epochTail syncedOk lookedOk windowed)
     · exact (Kept.of_eq (randaoMixes_slot_processHistoricalRootsUpdate rootedOk)).trans
@@ -384,21 +335,10 @@ private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   have indexed : Kept state { state with eth1DepositIndex := fun _ => next } := ⟨rfl, rfl⟩
   refine indexed.trans ?_
-  unfold applyDeposit at applied
-  split at applied
-  · unfold applyDepositElectra at applied
-    split at applied
-    · simp only [bind_ok_iff] at applied
-      obtain ⟨_, _, applied⟩ := applied
-      split at applied
-      · simp only [bind_ok_iff, liftAccessor_ok] at applied
-        obtain ⟨_, added, pushed⟩ := applied
-        obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-        exact (kept_addValidatorToRegistry added).trans ⟨rfl, rfl⟩
-      · cases applied
-        exact Kept.refl _
-    · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp applied)
-      exact ⟨rfl, rfl⟩
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact Kept.refl _
+  · exact ⟨rfl, rfl⟩
+  · exact (kept_addValidatorToRegistry added).trans ⟨rfl, rfl⟩
   · exact kept_applyPendingDeposit applied
 
 /-- The operations of a block keep the mixes and the slot, at every fork. -/
@@ -477,7 +417,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
   unfold processBlock at computed
   split at computed
   · unfold processBlockAltair at computed
-    simp only [bind_ok_iff] at computed
+    simp only [stateBeforeOperations, bind_assoc, bind_ok_iff] at computed
     obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
       votedOk, _, operatedOk, synced⟩ := computed
     have paidStep : Writes state paid := by
@@ -501,7 +441,12 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
       (randao revealedOk).trans <| votedStep.trans <|
       (Writes.of_kept (kept_processOperations operatedOk)).trans
       (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processSyncAggregate synced)))
-  simp only [bind_ok_iff] at computed
+  rename_i notAltair
+  have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+  have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
+  have early' : fork < .hegota := Nat.lt_trans (Nat.lt_of_not_le notAltair) (by decide)
+  simp only [stateBeforeOperations, notGloas', notBellatrix', early', ↓reduceDIte, pure_bind,
+    bind_assoc, bind_ok_iff] at computed
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
   exact (header headerOk).trans <| (randao randaoOk).trans <|
     (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processEth1Data eth1Ok))).trans

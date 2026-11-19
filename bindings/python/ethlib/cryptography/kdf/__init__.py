@@ -1,4 +1,4 @@
-"""Key derivation with SHA-256: HKDF, the Concatenation KDF, PBKDF2 and scrypt."""
+"""Key derivation with SHA-256: HKDF, TLS 1.3 labels, the Concatenation KDF, PBKDF2, scrypt."""
 
 from ethlib.cryptography._native import (
     PBKDF2_HASH_LEN,
@@ -12,10 +12,12 @@ from ethlib.cryptography._native import (
     scrypt as native_scrypt,
     scrypt_block_mix as native_scrypt_block_mix,
     scrypt_romix as native_scrypt_romix,
+    tls13_expand_label as native_tls13_expand_label,
+    tls13_hkdf_label as native_tls13_hkdf_label,
 )
-from ethlib.errors import ConcatKdfError, HkdfError, Pbkdf2Error, ScryptError
+from ethlib.errors import ConcatKdfError, HkdfError, Pbkdf2Error, ScryptError, Tls13Error
 
-# The input keying material, the shared secret and the password are secret.
+# The input keying material, the TLS secret, the shared secret and the password are secret.
 # EthLib makes no constant-time claim.
 
 
@@ -33,6 +35,16 @@ def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
 def hkdf(salt: bytes, ikm: bytes, info: bytes, length: int) -> bytes:
     """HKDF-SHA-256 of RFC 5869 §2: `length` bytes of output keying material."""
     return native_hkdf_sha256(salt, ikm, info, length)
+
+
+def tls13_hkdf_label(label: bytes, context: bytes, length: int) -> bytes:
+    """The `HkdfLabel` of RFC 8446 §7.1, for a label given without its `tls13 ` prefix."""
+    return native_tls13_hkdf_label(label, context, length)
+
+
+def tls13_expand_label(secret: bytes, label: bytes, context: bytes, length: int) -> bytes:
+    """HKDF-Expand-Label of RFC 8446 §7.1 with SHA-256, on a 32-byte secret."""
+    return native_tls13_expand_label(secret, label, context, length)
 
 
 def concat_kdf(z: bytes, fixed_info: bytes, length: int) -> bytes:
@@ -73,6 +85,7 @@ __all__ = [
     "HkdfError",
     "Pbkdf2Error",
     "ScryptError",
+    "Tls13Error",
     "concat_kdf",
     "hkdf",
     "hkdf_extract",
@@ -81,4 +94,6 @@ __all__ = [
     "scrypt",
     "scrypt_block_mix",
     "scrypt_romix",
+    "tls13_expand_label",
+    "tls13_hkdf_label",
 ]

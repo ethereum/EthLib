@@ -5,8 +5,7 @@ public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Json
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.Fork
--- Showing that a payload field is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: the JSON decoders of the Engine API
@@ -34,6 +33,16 @@ A field decodes from an option exactly when reading the field back gives that op
 The decoders read back the payloads that the writers write.
 
 The extra data must then hold at most 32 bytes.
+
+A JSON value reads as a payload status exactly when it is an object of this form.
+
+Its members that are not `null` are among `status`, `latestValidHash` and `validationError`.
+
+The status is one of the five status names, and it must be present.
+
+The hash is 32 bytes in lowercase hex, and the error a string.
+
+The hash and the error may be absent.
 -/
 
 public section
@@ -42,6 +51,7 @@ namespace EthLib.Engine.Json
 
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
+open EthLib.Execution.Blocks (MAX_EXTRA_DATA_BYTES)
 
 /-- A failure with an invalid parameter is that error, never a value. -/
 @[simp] theorem invalid_eq {α : Type} (reason : String) :
@@ -184,7 +194,7 @@ private theorem fields_present {fork : Fork} (p : ExecutionPayload fork) :
     ∀ x ∈ executionPayloadFields p, x.2.isNull = false := by
   unfold executionPayloadFields
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
-    simp [h1, h2, dataJson, quantityJson, listJson, isNull_str, isNull_arr]
+    simp [h1, h2, dataJson, quantityJson, listJson]
 
 /-- A computation that has succeeded passes its value on. -/
 private theorem ok_bind {α β : Type} (a : α) (f : α → Decode β) :
@@ -226,7 +236,8 @@ private theorem bytesMax_dataJson (what : String) (n : Nat) (b : ByteArray) (h :
 
 /-- Fields that are those of a payload decode as a payload that reads back at its fork. -/
 private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) {j : Lean.Json} {fs : List (String × Lean.Json)}
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) {j : Lean.Json}
+    {fs : List (String × Lean.Json)}
     (hfs : fields "payload" j = .ok fs) (hp : fs.Perm (executionPayloadFields p)) :
     ∃ any, anyPayload j = .ok any ∧ any.atFork fork = .ok p := by
   have hd := names_distinct p
@@ -336,21 +347,26 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
 
 The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
 theorem anyPayload_executionPayloadJson {fork : Fork} (p : ExecutionPayload fork)
-    (extra : p.extraData.size ≤ 32) :
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
     ∃ any, anyPayload (executionPayloadJson p) = .ok any ∧ any.atFork fork = .ok p := by
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
   exact anyPayload_of_perm p extra hfs hp
 
-/-- The decoder of payloads of version 4 reads back the JSON of a payload from Dencun on.
+/-- The object of a payload of version 4 from Dencun on, and that object without its two new fields.
 
-It reads the payload at its fork, the block access list and the slot number.
+The first holds the pairs of the payload, then the access list and the slot.
 
-The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
-theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
-    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
-    (extra : p.extraData.size ≤ 32) :
-    ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
-      .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
+The second holds the pairs of the payload alone. -/
+private theorem fields_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
+    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork) :
+    ∃ fs, fields "payload" (executionPayloadV4Json p blockAccessList slotNumber) = .ok fs ∧
+      fs.Perm (executionPayloadFields p ++ [("blockAccessList",
+        dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]) ∧
+      (executionPayloadFields p ++ [("blockAccessList", dataJson blockAccessList.data.toList),
+        ("slotNumber", quantityJson slotNumber.toNat)]).Pairwise (fun a b => a.1 ≠ b.1) ∧
+      ∃ fs', fields "payload" (Lean.Json.mkObj
+          (fs.filter fun (name, _) => !amsterdamFields.contains name)) = .ok fs' ∧
+        fs'.Perm (executionPayloadFields p) := by
   have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun
   have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
     simp [executionPayloadFields, h1, dencun, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
@@ -373,11 +389,9 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
     rcases List.mem_append.mp hx with hx | hx
     · exact fields_present p x hx
     · simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
-      rcases hx with rfl | rfl <;> exact isNull_str _
+      rcases hx with rfl | rfl <;> exact Base.Toolchain.Json.isNull_str _
   obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" hdist hpres
   have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
-  have hex := hasExactly_of_perm hp
-  rw [List.map_append, hn] at hex
   -- The pairs of version 3 are those that keep their name when the two new names are dropped.
   have hflt : (executionPayloadFields p ++ [("blockAccessList",
       dataJson blockAccessList.data.toList), ("slotNumber", quantityJson slotNumber.toNat)]).filter
@@ -393,8 +407,27 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
   obtain ⟨fs', hfs', hp'⟩ := fields_mkObj "payload"
     (hfsd.sublist (List.filter_sublist ..))
     (fun x hx => hpres x (hp.mem_iff.mp (List.mem_filter.mp hx).1))
-  obtain ⟨any, hany, hat⟩ := anyPayload_of_perm p extra hfs'
-    (hp'.trans (hflt ▸ hp.filter _))
+  exact ⟨fs, hfs, hp, hdist, fs', hfs', hp'.trans (hflt ▸ hp.filter _)⟩
+
+/-- The decoder of payloads of version 4 reads back the JSON of a payload from Dencun on.
+
+It reads the payload at its fork, the block access list and the slot number.
+
+The extra data must hold at most 32 bytes, the bound of its type in the Engine API. -/
+theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork)
+    (blockAccessList : ByteArray) (slotNumber : UInt64) (dencun : .dencun ≤ fork)
+    (extra : p.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
+    ∃ any, payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) =
+      .ok (any, blockAccessList, slotNumber) ∧ any.atFork fork = .ok p := by
+  have h1 : Fork.shapella ≤ fork := Std.le_trans (by decide) dencun
+  have hn : (executionPayloadFields p).map Prod.fst = payloadFieldsV3 := by
+    simp [executionPayloadFields, h1, dencun, payloadFieldsV3, payloadFieldsV2, payloadFieldsV1]
+  obtain ⟨fs, hfs, hp, hdist, fs', hfs', hp'⟩ :=
+    fields_executionPayloadV4Json p blockAccessList slotNumber dencun
+  have hfsd := (hp.pairwise_iff fun hab => Ne.symm hab).mpr hdist
+  have hex := hasExactly_of_perm hp
+  rw [List.map_append, hn] at hex
+  obtain ⟨any, hany, hat⟩ := anyPayload_of_perm p extra hfs' hp'
   refine ⟨any, payloadV4_eq_ok_iff.mpr ⟨fs, hfs, ?_, hany,
     dataJson blockAccessList.data.toList, quantityJson slotNumber.toNat, ?_, ?_, ?_, ?_⟩, hat⟩
   · simpa [payloadFieldsV4, amsterdamFields] using hex
@@ -402,6 +435,64 @@ theorem payloadV4_executionPayloadV4Json {fork : Fork} (p : ExecutionPayload for
   · exact lookup_of_mem hfsd (hp.mem_iff.mpr (by simp))
   · exact bytes_dataJson _ _
   · exact uint64_toDigits _ _
+
+/-- A decoded payload holds the extra data that its field decodes to, within 32 bytes. -/
+private theorem extraData_of_anyPayload {j : Lean.Json} {any : AnyPayload}
+    (h : anyPayload j = .ok any) :
+    ∃ fs, fields "payload" j = .ok fs ∧ ∃ v, field "payload" fs "extraData" = .ok v ∧
+      bytesMax "extraData" MAX_EXTRA_DATA_BYTES v = .ok any.common.extraData := by
+  unfold anyPayload at h
+  dsimp only at h
+  repeat' (first
+    | (simp only [invalid_eq] at h; cases h; done)
+    | (obtain ⟨_, step, h⟩ := bind_ok_iff.mp h
+       first | cases step | obtain ⟨_, -, rfl⟩ := map_ok_iff.mp step | skip)
+    | split at h)
+  -- The extra data of the result is the value that its field decoded to.
+  all_goals
+    cases h
+    exact ⟨_, liftM_eq_ok_iff.mp ‹liftM (fields _ _) = _›, _,
+      liftM_eq_ok_iff.mp ‹liftM (field _ _ "extraData") = _›,
+      liftM_eq_ok_iff.mp ‹liftM (bytesMax _ _ _) = _›⟩
+
+/-- Fields that are those of a payload decode only when its extra data holds at most 32 bytes. -/
+private theorem extraData_le_of_perm {fork : Fork} (p : ExecutionPayload fork) {j : Lean.Json}
+    {fs : List (String × Lean.Json)} (hfs : fields "payload" j = .ok fs)
+    (hp : fs.Perm (executionPayloadFields p)) {any : AnyPayload} (h : anyPayload j = .ok any) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨fs', hfs', v, hv, hb⟩ := extraData_of_anyPayload h
+  obtain rfl := Except.ok.inj (hfs.symm.trans hfs')
+  rw [field_of_perm hp (names_distinct p)
+    (by simp [executionPayloadFields] :
+      ("extraData", dataJson p.extraData.data.toList) ∈ executionPayloadFields p)] at hv
+  obtain rfl := Except.ok.inj hv
+  obtain ⟨hb, hs⟩ := bytesMax_eq_ok_iff.mp hb
+  rw [bytes_dataJson] at hb
+  rwa [Except.ok.inj hb]
+
+/-- The decoder of payloads of versions 1 to 3 reads the JSON of a payload only when it fits.
+
+Its extra data must hold at most 32 bytes. -/
+theorem extraData_le_of_anyPayload_executionPayloadJson {fork : Fork} {p : ExecutionPayload fork}
+    {any : AnyPayload} (h : anyPayload (executionPayloadJson p) = .ok any) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨fs, hfs, hp⟩ := fields_mkObj "payload" (names_distinct p) (fields_present p)
+  exact extraData_le_of_perm p hfs hp h
+
+/-- The decoder of version 4 reads the JSON of a payload from Dencun on only when it fits.
+
+Its extra data must hold at most 32 bytes. -/
+theorem extraData_le_of_payloadV4_executionPayloadV4Json {fork : Fork} {p : ExecutionPayload fork}
+    {blockAccessList : ByteArray} {slotNumber : UInt64} (dencun : .dencun ≤ fork)
+    {x : AnyPayload × ByteArray × UInt64}
+    (h : payloadV4 (executionPayloadV4Json p blockAccessList slotNumber) = .ok x) :
+    p.extraData.size ≤ MAX_EXTRA_DATA_BYTES := by
+  obtain ⟨any, list, slot⟩ := x
+  obtain ⟨fs, hfs, -, -, fs', hfs', hp'⟩ :=
+    fields_executionPayloadV4Json p blockAccessList slotNumber dencun
+  obtain ⟨fs₀, hfs₀, -, hany, -⟩ := payloadV4_eq_ok_iff.mp h
+  obtain rfl := Except.ok.inj (hfs.symm.trans hfs₀)
+  exact extraData_le_of_perm p hfs' hp' hany
 
 /-- The name of every status reads back as that status. -/
 theorem statusOfName_name (s : Status) : statusOfName s.name = some s := by
@@ -425,11 +516,11 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
       [("status", a), ("latestValidHash", b), ("validationError", c)].lookup "validationError" =
         some c := fun _ _ _ => rfl
   have l1 : fs.lookup "status" = some (.str s.status.name) := by
-    rw [look, k1]; rfl
+    rw [look, k1]; simp [Option.filter_some]
   have l2 : fs.lookup "latestValidHash" = s.latestValidHash.map (dataJson ·.toList) := by
-    rw [look, k2]; cases s.latestValidHash <;> rfl
+    rw [look, k2]; cases s.latestValidHash <;> simp [optionJson, dataJson, Option.filter_some]
   have l3 : fs.lookup "validationError" = e.map .str := by
-    rw [look, k3]; cases e <;> rfl
+    rw [look, k3]; cases e <;> simp [optionJson, Option.filter_some]
   have hall : (fs.all (payloadStatusFields.contains ·.1)) = true := by
     rw [List.all_eq_true]
     intro p hm
@@ -445,6 +536,89 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
   cases lvh <;> cases e <;> simp [lift, fixed_dataJson, string, Option.mapM]
   all_goals rfl
 
+/-- A name reads as a status exactly when it is the name that the Engine API writes for it. -/
+theorem statusOfName_eq_some_iff {name : String} {s : Status} :
+    statusOfName name = some s ↔ name = s.name := by
+  constructor
+  · intro h
+    unfold statusOfName at h
+    have found := List.find?_some h
+    exact (beq_iff_eq.mp found).symm
+  · rintro rfl
+    exact statusOfName_name s
+
+/-- An optional value decodes exactly from the JSON of its value, and an absent value as absent.
+
+This holds for every reader that decodes a value exactly from one JSON form of it. -/
+theorem lift_mapM_eq_ok_iff {α : Type} {f : Lean.Json → Read α} {g : α → Lean.Json}
+    (hf : ∀ j a, f j = .ok a ↔ j = g a) {o : Option Lean.Json} {r : Option α} :
+    lift (o.mapM f) = .ok r ↔ o = r.map g := by
+  cases o with
+  | none => cases r <;> simp [lift, Option.mapM, Except.mapError, pure, Except.pure]
+  | some x =>
+    have e : lift (Option.mapM f (some x)) = (some <$> f x : Read _).mapError .invalidParams :=
+      rfl
+    rw [e]
+    cases h : f x <;> cases r <;> simp [Functor.map, Except.map, Except.mapError, ← hf, h]
+
+/-- A JSON value reads as a payload status exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `status` and, if present, `latestValidHash` and `validationError`.
+
+The value of `status` is the name of the status.
+
+The latest valid hash is `0x` and 64 lowercase hex digits, or absent.
+
+The validation error is a string, or absent. -/
+theorem payloadStatusOfJson_eq_ok_iff {j : Lean.Json} {s : PayloadStatus} {e : Option String} :
+    payloadStatusOfJson j = .ok (s, e) ↔
+      ∃ fs, fields "payloadStatus" j = .ok fs ∧
+        (∀ f ∈ fs, f.1 = "status" ∨ f.1 = "latestValidHash" ∨ f.1 = "validationError") ∧
+        fs.lookup "status" = some (.str s.status.name) ∧
+        fs.lookup "latestValidHash" = s.latestValidHash.map (fun h => .str (hexString h.toList)) ∧
+        fs.lookup "validationError" = e.map .str := by
+  obtain ⟨st, lvh⟩ := s
+  unfold payloadStatusOfJson
+  simp only [bind_ok_iff, liftM_eq_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  have allIff : fs.all (payloadStatusFields.contains ·.1) = true ↔
+      ∀ f ∈ fs, f.1 = "status" ∨ f.1 = "latestValidHash" ∨ f.1 = "validationError" := by
+    simp [List.all_eq_true, payloadStatusFields]
+  by_cases hall : fs.all (payloadStatusFields.contains ·.1) = true
+  · rw [and_iff_right (allIff.mp hall)]
+    simp only [hall, ite_true, bind_ok_iff, liftM_eq_ok_iff, field_eq_ok_iff, string_eq_ok_iff]
+    constructor
+    · rintro ⟨_, hs, name, rfl, h⟩
+      cases hn : statusOfName name with
+      | none =>
+        rw [hn] at h
+        cases h
+      | some st' =>
+        rw [hn] at h
+        simp only [bind_ok_iff, lift_mapM_eq_ok_iff fun _ _ => fixed_false_eq_ok_iff,
+          lift_mapM_eq_ok_iff fun _ _ => string_eq_ok_iff] at h
+        obtain ⟨l, hl, v, hv, h⟩ := h
+        cases h
+        obtain rfl := statusOfName_eq_some_iff.mp hn
+        exact ⟨hs, hl, hv⟩
+    · rintro ⟨hs, hl, he⟩
+      refine ⟨_, hs, st.name, rfl, ?_⟩
+      rw [statusOfName_name]
+      simp only [bind_ok_iff, lift_mapM_eq_ok_iff fun _ _ => fixed_false_eq_ok_iff,
+        lift_mapM_eq_ok_iff fun _ _ => string_eq_ok_iff]
+      exact ⟨lvh, hl, e, he, rfl⟩
+  -- A member of another name fails with an invalid parameter, never with a status.
+  · constructor
+    · intro h
+      simp only [bind, Except.bind] at h
+      split at h
+      · contradiction
+      · cases h
+    · rintro ⟨members, -⟩
+      exact absurd (allIff.mpr members) hall
+
 end EthLib.Engine.Json
 
 namespace EthLib.Engine
@@ -459,7 +633,8 @@ theorem checkRequestSize_eq_ok_iff (maxRequest count : Nat) :
 
 /-- A request is too large exactly when it asks for more items than the node takes. -/
 theorem checkRequestSize_eq_error_iff (maxRequest count : Nat) (e : EngineError) :
-    checkRequestSize maxRequest count = .error e ↔ maxRequest < count ∧ e = .tooLargeRequest := by
+    checkRequestSize maxRequest count = .error e ↔
+      maxRequest < count ∧ e = .tooLargeRequest count maxRequest := by
   unfold checkRequestSize
   by_cases h : maxRequest < count
   · simp [h, throw, throwThe, MonadExceptOf.throw, eq_comm]

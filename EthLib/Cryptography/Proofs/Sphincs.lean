@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.Sphincs.Constants
 public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
@@ -31,6 +32,8 @@ public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Sign
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Win
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Count
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Cost
+public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.AdversaryCalls
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability
 
 /-!

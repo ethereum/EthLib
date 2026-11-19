@@ -204,8 +204,10 @@ theorem processJustificationAndFinalization_slackBits
     intro epoch
     simp only [getBlockRoot, getBlockRootAtSlot_congr slot roots]
   have previousNat := getPreviousEpoch_toNat state
-  have settled' := UInt64.le_iff_toNat_le.mp settled
+  -- Once justification runs, each justified epoch is below the epoch of a link from it.
+  have currentBelow := UInt64.lt_iff_toNat_lt.mp (separated.source_lt settled late true)
   have below := UInt64.lt_iff_toNat_lt.mp (separated late)
+  simp only [↓reduceIte] at currentBelow
   -- A passing test of the current epoch gives a slack link from the old current justified one.
   have currentLink : ∀ root, threshold ≤ currentWeight →
       getBlockRoot state (getCurrentEpoch state) = .ok root →
@@ -369,10 +371,8 @@ theorem advanceSlot_slackBits
       exact before
     · rw [cachedFrame.slot]
       exact slot_lt_epoch_add_historical_of_le positive 2 window near
-  unfold epochIfLast at epochedOk
-  split at epochedOk
-  · rename_i boundary
-    have positive := slotsPerEpoch_pos_of_mod sum boundary
+  obtain ⟨boundary, epochedOk⟩ | ⟨inside, rfl⟩ := epochIfLast_cases epochedOk
+  · have positive := slotsPerEpoch_pos_of_mod sum boundary
     have window' : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
       omega
     have last : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0 := by
@@ -538,10 +538,7 @@ theorem advanceSlot_slackBits
       · rw [cachedFrame.justificationBits] at set
         rw [cachedRoots _ positive (by omega)] at read
         exact bits.previous set older root epoch read
-  · rename_i inside
-    simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
-    subst epochedOk
-    have afterEpoch : (getCurrentEpoch after).toNat = (getCurrentEpoch state).toNat := by
+  · have afterEpoch : (getCurrentEpoch after).toNat = (getCurrentEpoch state).toNat := by
       rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, afterEq]
       exact nextSlot_epoch_of_inside sum inside
     have positive : 1 ≤ (getCurrentEpoch state).toNat → 0 < preset.SLOTS_PER_EPOCH.toNat := by

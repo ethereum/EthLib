@@ -35,22 +35,6 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Base.Fork} {state : BeaconState preset fork}
 
-/-- Each validator is eligible or not, without an error, in the previous epoch. -/
-private theorem isEligibleValidator_exists_ok (validator : Validator) :
-    ∃ decided, isEligibleValidator (getPreviousEpoch state) validator = .ok decided := by
-  have le := getPreviousEpoch_toNat state
-  have lt := (getCurrentEpoch state).toNat_lt
-  have sum : (getPreviousEpoch state).toNat + (1 : UInt64).toNat < 2 ^ 64 := by
-    simp only [UInt64.toNat_one]
-    omega
-  unfold isEligibleValidator
-  split
-  · exact ⟨_, rfl⟩
-  · split
-    · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure]
-      exact ⟨_, _, by rw [liftArith, addChecked_of_lt sum]; rfl, rfl⟩
-    · exact ⟨_, rfl⟩
-
 /-- For a registry within its limit, the eligible validators are listed without an error. -/
 theorem getEligibleValidatorIndices_exists_ok (within : state.RegistryWithinLimit) :
     ∃ eligible, getEligibleValidatorIndices state = .ok eligible := by
@@ -61,7 +45,8 @@ theorem getEligibleValidatorIndices_exists_ok (within : state.RegistryWithinLimi
     simpa [Array.getElem?_eq_some_iff] using (Array.getElem?_eq_some_iff.mp (by simpa using this)).1
   have bound : state.validators.data.size ≤ _ := within
   have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  obtain ⟨decided, ok⟩ := isEligibleValidator_exists_ok (state := state) validator
+  obtain ⟨decided, ok⟩ : ∃ decided, isEligibleValidator (getPreviousEpoch state) validator =
+      .ok decided := ⟨_, isEligibleValidator_getPreviousEpoch validator⟩
   simp only [bind_ok_iff, ok]
   cases decided
   · exact ⟨none, _, rfl, rfl⟩
@@ -238,5 +223,56 @@ theorem processInactivityUpdates_total (config : Config) (altair : .altair ≤ f
     Except.map]
   rw [folded]
   rfl
+
+/-- From Altair, the update of the scores raises each score by at most the score bias.
+
+Each score after the update has a score at the same position before it.
+
+The new score is at most that old score plus the bias.
+
+This holds when the update succeeds. -/
+theorem processInactivityUpdates_score_le {config : Config} {altair : .altair ≤ fork}
+    {after : BeaconState preset fork}
+    (computed : processInactivityUpdates config state altair = .ok after) {i : Nat}
+    {score : UInt64} (found : (after.inactivityScores altair).data[i]? = some score) :
+    ∃ old, (state.inactivityScores altair).data[i]? = some old ∧
+      score.toNat ≤ old.toNat + config.INACTIVITY_SCORE_BIAS.toNat := by
+  by_cases genesis : getCurrentEpoch state = GENESIS_EPOCH
+  · rw [processInactivityUpdates_genesis altair genesis, Except.ok.injEq] at computed
+    subst computed
+    exact ⟨score, found, Nat.le_add_right _ _⟩
+  · obtain ⟨eligible, _, kept, changed⟩ := processInactivityUpdates_scores genesis computed
+    by_cases hit : ∀ index ∈ eligible, index.toNat ≠ i
+    · rw [kept i hit] at found
+      exact ⟨score, found, Nat.le_add_right _ _⟩
+    · push Not at hit
+      obtain ⟨index, mem, rfl⟩ := hit
+      obtain ⟨hitters, leak, old, new, _, _, olds, news, value⟩ := changed index mem
+      obtain rfl : new = score := Option.some.inj (news.symm.trans found)
+      refine ⟨old, olds, ?_⟩
+      rw [value]
+      split <;> omega
+
+/-- From Altair, the update of the scores keeps every score within a bound plus the score bias.
+
+Take a bound on every score before the update.
+
+After it, every score is at most that bound plus the bias.
+
+This holds when the update succeeds.
+
+The bound carries from one epoch to the next, with the bias added once per epoch. -/
+theorem processInactivityUpdates_scoreBound {config : Config} {altair : .altair ≤ fork}
+    {after : BeaconState preset fork} {bound : Nat}
+    (computed : processInactivityUpdates config state altair = .ok after)
+    (scored : ∀ score ∈ (state.inactivityScores altair).data, score.toNat ≤ bound) :
+    ∀ score ∈ (after.inactivityScores altair).data,
+      score.toNat ≤ bound + config.INACTIVITY_SCORE_BIAS.toNat := by
+  intro score member
+  obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp member
+  obtain ⟨old, olds, raised⟩ :=
+    processInactivityUpdates_score_le computed (Array.getElem?_eq_some_iff.mpr ⟨hi, rfl⟩)
+  have := scored old (Array.mem_iff_getElem?.mpr ⟨i, olds⟩)
+  omega
 
 end EthLib.Consensus

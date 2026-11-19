@@ -91,7 +91,7 @@ theorem trial_boundV
     calc _ ≤ ∑' out, Pr{let x ← interp tg initial model
                           (finishCostSource parameter data message ρ) b s'}[x = out] *
           pairWeight parameter data message reference gf gp ρ u := by
-          refine ENNReal.tsum_le_tsum fun out => ?_
+          refine tsum_le_tsum fun out => ?_
           by_cases hout : out ∈ support (interp tg initial model
               (finishCostSource parameter data message ρ) b s')
           · exact mul_le_mul_right (hVfin s' u b hrel' hs' hl out hout) _
@@ -272,7 +272,7 @@ theorem loop_boundV
               bound * ∑' u, Pr{let x ← ($ᵗ (DigestCall → HashOutput) : ProbComp
                   (DigestCall → HashOutput))}[x = u] *
                 (if Landed parameter (blockIndex (u firstCall)) then 0 else 1) := by
-            rw [← ENNReal.tsum_mul_left, ← ENNReal.tsum_add]
+            rw [← ENNReal.tsum_mul_left, ← tsum_add]
             refine tsum_congr fun u => ?_
             split_ifs
             · simp

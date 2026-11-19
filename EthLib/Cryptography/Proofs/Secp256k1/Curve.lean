@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.Field
+public import EthLib.Cryptography.Proofs.Montgomery.Fin
 public import EthLib.Cryptography.Proofs.Jacobian
 public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
@@ -206,11 +207,19 @@ theorem toJacobian_spec {p : Point} (hp : p.isOnCurve = true) :
     have hs := Jacobian.spec_of_eq (A := 0) (B := 7) (nonsingular_of h) hz hx hy
     exact ⟨hs.1, hs.2.trans (toPoint_affine hp).symm⟩
 
+/-- The point of a Jacobian form is its affine point, or the point at infinity. -/
+theorem ofJacobian_eq (p : Jacobian Fp.modulus) :
+    ofJacobian p = match p.toAffine with
+      | none => infinity
+      | some (x, y) => affine x y := by
+  unfold ofJacobian ofCoords Jacobian.toAffine
+  cases Jacobian.Coords.toAffine Fin.inverse p.toCoords <;> rfl
+
 /-- A Jacobian form on the curve gives a point of the curve, with the same group element. -/
 theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve 0 7 p) :
     (ofJacobian p).isOnCurve = true ∧ toPoint (ofJacobian p) = Jacobian.toPoint 0 7 p := by
   by_cases hz : p.z = 0
-  · simp only [ofJacobian, Jacobian.toAffine_of_z_eq_zero hz]
+  · simp only [ofJacobian_eq, Jacobian.toAffine_of_z_eq_zero hz]
     exact ⟨rfl, (Jacobian.toPoint_of_z_eq_zero hz).symm⟩
   · obtain ⟨x, y, h, hx, hy⟩ := Jacobian.toAffine_of_z_ne_zero hz
     rw [toZ_eq] at hx hy
@@ -218,22 +227,60 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve 0 7 p) 
     rw [← hx, ← hy] at he
     have hon : (affine x y).isOnCurve = true :=
       (isOnCurve_affine x y).mpr (by linear_combination he)
-    simp only [ofJacobian, h]
+    simp only [ofJacobian_eq, h]
     refine ⟨hon, ?_⟩
     rw [toPoint_affine hon, Jacobian.toPoint_of_z_ne_zero hp hz]
     simp only [hx, hy]
     rfl
 
+/-- Reading Montgomery limbs back is a change of field representation. -/
+theorem toFin_embedding : Jacobian.Coords.Embedding (Montgomery.toFin : Fp.Montgomery → Fp) :=
+  ⟨Montgomery.toFin_zero, Montgomery.toFin_one, Montgomery.toFin_add, Montgomery.toFin_sub,
+    Montgomery.toFin_mul, Montgomery.toFin_injective⟩
+
+/-- Normalizing in another representation gives the point of the form read back into `Fp`.
+
+It needs the inverse of that representation to read as the inverse of `Fp`. -/
+theorem ofCoords_map {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [DecidableEq F]
+    {f : F → Fp} (hf : Jacobian.Coords.Embedding f) {inv : F → F}
+    (hinv : ∀ x, f (inv x) = Fin.inverse (f x)) (q : Jacobian.Coords F) :
+    ofCoords inv f q = ofCoords Fin.inverse id (q.map f) := by
+  unfold ofCoords
+  rw [← Jacobian.Coords.map_toAffine hf hinv q]
+  cases q.toAffine inv <;> rfl
+
+/-- Normalizing on Montgomery limbs gives the point of the form read back into `Fp`. -/
+theorem ofMontgomeryCoords_eq (q : Jacobian.Coords Fp.Montgomery) :
+    ofMontgomeryCoords q = ofJacobian (Jacobian.ofCoords (q.map Montgomery.toFin)) := by
+  have : Fact (Nat.Prime Fp.params.p) := ⟨Fp.modulus_prime⟩
+  exact ofCoords_map toFin_embedding (fun x => Montgomery.toFin_inv x) q
+
+/-- Reading back the Montgomery form of a point gives its Jacobian form. -/
+theorem map_toMontgomeryCoords (p : Point) :
+    (toMontgomeryCoords p).map Montgomery.toFin = (toJacobian p).toCoords := by
+  show Jacobian.Coords.mk _ _ _ = Jacobian.Coords.mk _ _ _
+  congr 1 <;> exact Montgomery.toFin_ofFin (M := Fp.params) _
+
+/-- Double and add on Montgomery limbs is double and add on `Fp`, for every input. -/
+theorem mulBits_eq_jacobian (fuel k : Nat) (p : Point) :
+    mulBits fuel k p = ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p)) := by
+  rw [mulBits, ofMontgomeryCoords_eq]
+  have h := Jacobian.Coords.map_mulBits toFin_embedding 0 fuel k (toMontgomeryCoords p)
+  rw [toFin_embedding.map_zero, map_toMontgomeryCoords] at h
+  exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
+
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
-    (mulBits fuel k p).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
+    (mulBits fuel k p).isOnCurve = true := by
+  rw [mulBits_eq_jacobian]
+  exact (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
     (toJacobian_spec hp).1)).1
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
     toPoint (mulBits fuel k p) = k • toPoint p := by
   have hJ := toJacobian_spec hp
-  rw [mulBits, (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
+  rw [mulBits_eq_jacobian,
+    (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
     Jacobian.toPoint_mulBits toZ_a two_ne_zero' fuel k hJ.1 hk]
   exact congrArg (k • ·) hJ.2
 
@@ -287,9 +334,20 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
 
 /-! ## Two products with shared doublings -/
 
+/-- The shared chain on Montgomery limbs is the shared chain on `Fp`, for every input. -/
+theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
+    mulAdd k p l q =
+      ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+  rw [mulAdd, ofMontgomeryCoords_eq]
+  have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 256 k.val (toMontgomeryCoords p) l.val
+    (toMontgomeryCoords q)
+  rw [toFin_embedding.map_zero, map_toMontgomeryCoords, map_toMontgomeryCoords] at h
+  exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
+
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
-    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
+  rw [mulAdd_eq_jacobian]
+  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
     (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
 
 /-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
@@ -298,7 +356,8 @@ theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
-  rw [mulAdd, (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
+  rw [mulAdd_eq_jacobian,
+    (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
       hJp.1 hJq.1)).2,
     Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
       (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]

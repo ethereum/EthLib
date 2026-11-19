@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lean v4.35.0, Source Files and Modules, sections 5.4 and 5.6.1.
+# Lean v4.36.0, Source Files and Modules, sections 5.4 and 5.6.1.
 # Check ordinary consumers and proof-only invalidation without editing library sources.
 set -euo pipefail
 cd "$(dirname "$0")/.."

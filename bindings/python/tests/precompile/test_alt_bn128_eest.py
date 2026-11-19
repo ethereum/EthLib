@@ -125,12 +125,14 @@ def g2_times_r(point: tuple[Fq2, Fq2]) -> tuple[Fq2, Fq2] | None:
     return result
 
 
-def g1_variant(x: int, y: int) -> str | None:
-    """The error of a G1 point of EIP-196, or None for a point of the curve y^2 = x^3 + 3."""
-    if x >= P or y >= P:
-        return "invalidFieldElement"
+def g1_variant(raw: bytes) -> str | None:
+    """The error of a 64-byte G1 point of EIP-196, or None for a point of y^2 = x^3 + 3."""
+    x, y = int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")
+    for coordinate in (x, y):
+        if coordinate >= P:
+            return f"invalidFieldElement (value := {coordinate})"
     if (x, y) != (0, 0) and (y * y - x**3 - 3) % P != 0:
-        return "notOnCurve"
+        return f"notOnCurve (point := 0x{raw.hex()})"
     return None
 
 
@@ -140,9 +142,7 @@ def invalid_variant(address: int, data: bytes) -> str:
     if address in (0x06, 0x07):
         padded = data.ljust(128, b"\0")
         for offset in (0, 64) if address == 0x06 else (0,):
-            x = int.from_bytes(padded[offset : offset + 32], "big")
-            y = int.from_bytes(padded[offset + 32 : offset + 64], "big")
-            if variant := g1_variant(x, y):
+            if variant := g1_variant(padded[offset : offset + 64]):
                 return variant
         raise AssertionError("an invalid case with a valid ECADD or ECMUL input")
     # A pairing input is a list of 192-byte pairs of a G1 point and a G2 point.
@@ -150,31 +150,34 @@ def invalid_variant(address: int, data: bytes) -> str:
     # So a case with several faults expects the first one that a reader meets.
     # The reader checks each pair in full before the next.
     if len(data) % 192 != 0:
-        return f"invalidInputLength {len(data)}"
+        return f"invalidInputLength (size := {len(data)})"
     for offset in range(0, len(data), 192):
         words = [
             int.from_bytes(data[offset + i : offset + i + 32], "big") for i in range(0, 192, 32)
         ]
-        if variant := g1_variant(words[0], words[1]):
+        if variant := g1_variant(data[offset : offset + 64]):
             return variant
-        if any(word >= P for word in words[2:]):
-            return "invalidFieldElement"
+        for word in words[2:]:
+            if word >= P:
+                return f"invalidFieldElement (value := {word})"
+        # The bytes of the G2 point, as the errors name them.
+        point = f"(point := 0x{data[offset + 64 : offset + 192].hex()})"
         # EIP-197 writes each coordinate of G2 as its imaginary part, then its real part.
         g2 = ((words[3], words[2]), (words[5], words[4]))
         if g2 == ((0, 0), (0, 0)):
             continue
         x_cubed = fq2_mul(fq2_mul(g2[0], g2[0]), g2[0])
         if fq2_mul(g2[1], g2[1]) != fq2_add(x_cubed, TWIST_B):
-            return "notOnCurve"
+            return f"notOnCurve {point}"
         if g2_times_r(g2) is not None:
-            return "notInSubgroup"
+            return f"notInSubgroup {point}"
     raise AssertionError("an invalid case with a valid pairing input")
 
 
 def error(variant: str) -> str:
     """The message of a failed call, from the variant of its error."""
     return (
-        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128\n  "
+        "EthLib.Execution.Evm.Precompiles.PrecompileError.altBn128 "
         f"(EthLib.Execution.Evm.Precompiles.AltBn128.AltBn128Error.{variant})"
     )
 
@@ -200,7 +203,7 @@ def test_valid(fork: str, case: dict) -> None:
 def test_valid_one_gas_short(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
     cost = price(fork, case["address"], data)
-    with raises(ValueError, error(f"outOfGas {cost} {cost - 1}")):
+    with raises(ValueError, error(f"outOfGas (cost := {cost}) (gas := {cost - 1})")):
         run(fork, case["address"], data, cost - 1)
 
 
@@ -227,7 +230,9 @@ def test_succeeds_at_price(fork: str, case: dict) -> None:
 def test_short_of_gas(fork: str, case: dict) -> None:
     data = bytes.fromhex(case["input"])
     cost = price(fork, case["address"], data)
-    with raises(ValueError, error(f"outOfGas {cost} {cost + case['gas_modifier']}")):
+    with raises(
+        ValueError, error(f"outOfGas (cost := {cost}) (gas := {cost + case['gas_modifier']})")
+    ):
         run(fork, case["address"], data, cost + case["gas_modifier"])
 
 

@@ -16,6 +16,22 @@ A read of one byte of an untyped string gives zero past its end.
 
 @[expose] public section
 
+/-- Display packed bytes through their array of byte values. -/
+instance : Repr ByteArray where
+  reprPrec bytes prec := reprPrec bytes.data prec
+
+/-- Boolean equality agrees with equality of the packed byte arrays. -/
+instance : LawfulBEq ByteArray where
+  eq_of_beq {a b} same := by
+    have data : a.data = b.data := eq_of_beq same
+    cases a
+    cases b
+    cases data
+    rfl
+  rfl {a} := by
+    change (a.data == a.data) = true
+    exact BEq.rfl
+
 namespace EthLib.Base
 
 /-- `B_8`: exactly 8 bytes, such as the nonce of a block header. -/
@@ -39,6 +55,15 @@ def packBytes {n : Nat} (v : Vector UInt8 n) : ByteArray :=
   -- The length invariant is discarded, not checked: every object has one.
   ⟨v.toArray⟩
 
+/-- The bytes of a buffer as an object of `n` bytes, if the buffer has exactly `n` bytes.
+
+Examples:
+* `exactBytes? 2 (ByteArray.mk #[10, 20]) = some #v[10, 20]`
+* `exactBytes? 3 (ByteArray.mk #[10, 20]) = none`
+-/
+def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
+  if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
+
 /-- Read the `n` bytes of a buffer that start at an offset.
 
 The caller proves the buffer has room, so the read needs no fallback byte.
@@ -49,9 +74,9 @@ Example, with `b = ByteArray.mk #[10, 20, 30, 40]`:
 def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
     Vector UInt8 n :=
   -- Every index below the object's length lands inside the buffer.
-  Vector.ofFn fun i => b.data[offset + i.val]'(by
-    simp only [ByteArray.size] at h
-    omega)
+  --
+  -- Each byte is read in place: the array of all the bytes would copy the buffer for every byte.
+  Vector.ofFn fun i => b[offset + i.val]'(by omega)
 
 /-- The byte at index `i` of the buffer, or `0` past its end.
 

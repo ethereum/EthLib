@@ -3,8 +3,7 @@ module
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Engine.GetBlobs
 public import EthLib.Engine.Proofs.Json
--- Showing that a written value is not `null` unfolds the null test of Lean's JSON.
-import all Lean.Data.Json.Basic
+import EthLib.Base.Proofs.Toolchain.JsonBasic
 
 /-!
 # Proofs: `engine_getBlobs`, versions 1 to 4
@@ -33,7 +32,13 @@ Cell `i` is selected exactly when bit `i mod 8` of byte `i / 8` of the bitarray 
 
 The decoder reads back the parameters that the writer writes.
 
+It reads no JSON value other than what the writer writes.
+
 Each structure of the answer reads back from its JSON, and so does the answer of each version.
+
+A JSON value reads as a blob with its proof, or with its cell proofs, exactly in canonical form.
+
+Each blob and proof is then in lowercase hex.
 
 The cells of version 4 decode only from two arrays of one length, with `null` at the same positions.
 -/
@@ -141,7 +146,7 @@ end PooledBlob
 
 /-- From Fusaka, version 1 is an unsupported fork. -/
 theorem getBlobsV1_of_fusaka (pool : BlobPool) {fork : Fork} (hashes : List Bytes32)
-    (h : .fusaka ≤ fork) : getBlobsV1 pool fork hashes = .error .unsupportedFork := by
+    (h : .fusaka ≤ fork) : getBlobsV1 pool fork hashes = .error (.unsupportedFork (some fork)) := by
   simp [getBlobsV1, h, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
 
 /-- Before Fusaka, version 1 answers each hash in turn, or fails on a too large request. -/
@@ -331,19 +336,69 @@ theorem getBlobsV4_length {pool : BlobPool} {hashes : List Bytes32} {bits : Cell
     (h : getBlobsV4 pool hashes bits = .ok (some l)) : l.length = hashes.length := by
   simp [getBlobsV4_eq_some h]
 
+/-- A JSON value reads as the parameters of a version exactly when it is the array below.
+
+Its first item is the array of the versioned hashes in order, each `0x` and 64 lowercase hex digits.
+
+Before version 4 it has no other item.
+
+From version 4 its second and last item is the bitarray, `0x` and 32 lowercase hex digits.
+
+The bitarray is returned exactly from version 4. -/
+theorem getBlobsParams_eq_ok_iff {version : Nat} {params : Lean.Json} {hashes : List Bytes32}
+    {bits : Option CellBitarray} :
+    getBlobsParams version params = .ok (hashes, bits) ↔
+      version < 4 ∧ bits = none ∧
+          params = .arr #[.arr (hashes.map fun h => .str (hexString h.toList)).toArray] ∨
+        4 ≤ version ∧ ∃ b, bits = some b ∧
+          params = .arr #[.arr (hashes.map fun h => .str (hexString h.toList)).toArray,
+            .str (hexString b.toList)] := by
+  have count : decide (getBlobsParamCount version = 2) = decide (4 ≤ version) := by
+    unfold getBlobsParamCount
+    by_cases hv : 4 ≤ version <;> simp [hv]
+  cases params with
+  | arr items =>
+    obtain ⟨xs⟩ := items
+    simp only [getBlobsParams, Serialization.JsonRpc.paramsArray, count]
+    by_cases hv : 4 ≤ version
+    · simp only [hv, decide_true, Nat.not_lt.mpr hv, false_and, false_or, true_and]
+      match xs with
+      | [] => simp [bind, Except.bind, pure, Except.pure]
+      | [_] => simp [bind, Except.bind, pure, Except.pure]
+      | [h, b] =>
+        simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
+          ← Serialization.JsonRpc.array_fixed_false_eq_ok_iff (what := "hashes")
+            (w := "versioned hash")]
+        cases hh : Serialization.JsonRpc.array "hashes"
+          (Serialization.JsonRpc.fixed "versioned hash" 32 · false) h <;>
+          cases hb : Serialization.JsonRpc.fixed "indices_bitarray" CELL_BITARRAY_BYTES b false <;>
+          cases bits <;>
+          simp [hh, hb, bind, Except.bind, pure, Except.pure,
+            ← Serialization.JsonRpc.fixed_false_eq_ok_iff (what := "indices_bitarray")]
+      | _ :: _ :: _ :: _ => simp [bind, Except.bind, pure, Except.pure]
+    · simp only [hv, decide_false, Nat.not_le.mp hv, false_and, or_false, true_and]
+      match xs with
+      | [] => simp [bind, Except.bind, pure, Except.pure]
+      | [h] =>
+        simp only [Lean.Json.arr.injEq, Array.mk.injEq, List.cons.injEq, and_true,
+          ← Serialization.JsonRpc.array_fixed_false_eq_ok_iff (what := "hashes")
+            (w := "versioned hash")]
+        cases hh : Serialization.JsonRpc.array "hashes"
+          (Serialization.JsonRpc.fixed "versioned hash" 32 · false) h <;> cases bits <;>
+          simp [hh, bind, Except.bind, pure, Except.pure]
+      | _ :: _ :: _ => simp [bind, Except.bind, pure, Except.pure]
+  | _ => simp [getBlobsParams, Serialization.JsonRpc.paramsArray, bind, Except.bind]
+
 /-- The decoder of the parameters reads back the hashes and the bitarray that the writer writes.
 
 A bitarray is given exactly from version 4. -/
 theorem getBlobsParams_json {version : Nat} (hashes : List Bytes32)
     (bits : Option CellBitarray) (four : bits.isSome ↔ 4 ≤ version) :
     getBlobsParams version (getBlobsParamsJson hashes bits) = .ok (hashes, bits) := by
-  have hl : ∀ l : List Bytes32, List.mapM (fun x => (Except.ok x : Except String _)) l =
-      .ok l := fun l => by
-    simpa using mapM_eq_ok_map (g := id) (xs := l) fun _ _ => rfl
+  apply getBlobsParams_eq_ok_iff.mpr
   cases bits <;> simp at four <;>
-    simp [getBlobsParams, getBlobsParamsJson, getBlobsParamCount, four,
-      Serialization.JsonRpc.paramsArray, pure, Except.pure, bind, Except.bind,
-      Serialization.JsonRpc.array_listJson, Serialization.JsonRpc.fixed_dataJson, hl]
+    simp [four, getBlobsParamsJson, Serialization.JsonRpc.listJson,
+      Serialization.JsonRpc.dataJson]
 
 /-! ## The answer as JSON -/
 
@@ -354,7 +409,7 @@ theorem blobAndProofV1OfJson_json (x : BlobAndProofV1) :
       ("proof", Serialization.JsonRpc.dataJson x.proof.toList)].Pairwise
       fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
-    (by simp [Serialization.JsonRpc.isNull_str, Serialization.JsonRpc.dataJson])
+    (by simp [Serialization.JsonRpc.dataJson])
   have hex : Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true :=
     Serialization.JsonRpc.hasExactly_of_perm hp
   have r1 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
@@ -372,8 +427,7 @@ theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
       ("proofs", Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList)
         x.proofs.toList)].Pairwise fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobAndProof" hd
-    (by simp [Serialization.JsonRpc.isNull_str, Serialization.JsonRpc.isNull_arr,
-      Serialization.JsonRpc.dataJson, Serialization.JsonRpc.listJson])
+    (by simp [Serialization.JsonRpc.dataJson, Serialization.JsonRpc.listJson])
   have hex : Serialization.JsonRpc.hasExactly fs ["blob", "proofs"] = true :=
     Serialization.JsonRpc.hasExactly_of_perm hp
   have r1 := Serialization.JsonRpc.field_of_perm (what := "blobAndProof") hp hd
@@ -388,6 +442,76 @@ theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
   rcases x with ⟨b, ⟨⟨l⟩, h⟩⟩
   rfl
 
+/-- A JSON value reads as a blob and its proof exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `blob` and `proof`, each once.
+
+Each is `0x` and two lowercase hex digits for each of its bytes. -/
+theorem blobAndProofV1OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV1} :
+    blobAndProofV1OfJson j = .ok x ↔
+      ∃ fs, Serialization.JsonRpc.fields "blobAndProof" j = .ok fs ∧
+        Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true ∧
+        fs.lookup "blob" = some (.str (hexString x.blob.toList)) ∧
+        fs.lookup "proof" = some (.str (hexString x.proof.toList)) := by
+  unfold blobAndProofV1OfJson
+  simp only [bind_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  by_cases hex : Serialization.JsonRpc.hasExactly fs ["blob", "proof"] = true
+  · rw [and_iff_right hex]
+    simp only [hex, ↓reduceIte, bind_ok_iff, Serialization.JsonRpc.field_eq_ok_iff,
+      Serialization.JsonRpc.fixed_false_eq_ok_iff, pure, Except.pure, Except.ok.injEq]
+    obtain ⟨blob, proof⟩ := x
+    constructor
+    · rintro ⟨_, hb, blob, rfl, _, hp, proof, rfl, he⟩
+      cases he
+      exact ⟨hb, hp⟩
+    · rintro ⟨hb, hp⟩
+      exact ⟨_, hb, blob, rfl, _, hp, proof, rfl, rfl⟩
+  -- Any other set of members fails, never with a blob.
+  · simp [hex, bind, Except.bind, Serialization.JsonRpc.reject]
+
+/-- A JSON value reads as a blob and its cell proofs exactly when it is an object of the form below.
+
+A member whose value is `null` counts as absent.
+
+Its other members are `blob` and `proofs`, each once.
+
+The blob is `0x` and two lowercase hex digits for each of its bytes.
+
+The proofs are an array of one proof per cell, each written in the same way. -/
+theorem blobAndProofV2OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV2} :
+    blobAndProofV2OfJson j = .ok x ↔
+      ∃ fs, Serialization.JsonRpc.fields "blobAndProof" j = .ok fs ∧
+        Serialization.JsonRpc.hasExactly fs ["blob", "proofs"] = true ∧
+        fs.lookup "blob" = some (.str (hexString x.blob.toList)) ∧
+        fs.lookup "proofs" =
+          some (.arr (x.proofs.toList.map fun p => .str (hexString p.toList)).toArray) := by
+  unfold blobAndProofV2OfJson
+  simp only [bind_ok_iff]
+  refine exists_congr fun fs => and_congr_right fun _ => ?_
+  by_cases hex : Serialization.JsonRpc.hasExactly fs ["blob", "proofs"] = true
+  · rw [and_iff_right hex]
+    simp only [hex, ↓reduceIte, bind_ok_iff, Serialization.JsonRpc.field_eq_ok_iff,
+      Serialization.JsonRpc.fixed_false_eq_ok_iff,
+      Serialization.JsonRpc.array_fixed_false_eq_ok_iff]
+    obtain ⟨blob, proofs⟩ := x
+    constructor
+    · rintro ⟨_, hb, blob, rfl, _, hp, l, rfl, h⟩
+      split at h
+      · cases h
+        exact ⟨hb, hp⟩
+      -- A count of proofs other than one per cell fails.
+      · cases h
+    · rintro ⟨hb, hp⟩
+      refine ⟨_, hb, blob, rfl, _, hp, proofs.toList, rfl, ?_⟩
+      simp only [Vector.length_toList, ↓reduceDIte, pure, Except.pure]
+      rcases proofs with ⟨⟨l⟩, h⟩
+      rfl
+  -- Any other set of members fails, never with a blob.
+  · simp [hex, bind, Except.bind, Serialization.JsonRpc.reject]
+
 /-- A list of optional byte strings of a size reads back from its encoding as data. -/
 private theorem array_nullable_fixed_listJson {n : Nat} (what w : String)
     (l : List (Option (Vector UInt8 n))) :
@@ -397,7 +521,7 @@ private theorem array_nullable_fixed_listJson {n : Nat} (what w : String)
         (Serialization.JsonRpc.dataJson ·.toList)) l) = .ok l :=
   Serialization.JsonRpc.array_listJson_of what (Serialization.JsonRpc.nullable_optionJson
     (fun v => Serialization.JsonRpc.fixed_dataJson w v false)
-    (fun _ => Serialization.JsonRpc.isNull_str _)) l
+    (fun _ => Base.Toolchain.Json.isNull_str _)) l
 
 /-- Encoding the images of a list encodes each item through the composite encoder. -/
 private theorem listJson_map_option {α β : Type} (g : α → Lean.Json) (h : β → α)
@@ -437,7 +561,7 @@ theorem blobCellsOfJson_json (x : BlobCellsAndProofsV1) :
       (Serialization.JsonRpc.dataJson ·.toList)) (x.cells.map (·.map Prod.snd)))
       ].Pairwise fun a b => a.1 ≠ b.1 := by simp
   obtain ⟨fs, hfs, hp⟩ := Serialization.JsonRpc.fields_mkObj "blobCells" hd
-    (by simp [Serialization.JsonRpc.isNull_arr, Serialization.JsonRpc.listJson])
+    (by simp [Serialization.JsonRpc.listJson])
   have hex : Serialization.JsonRpc.hasExactly fs ["blob_cells", "proofs"] = true :=
     Serialization.JsonRpc.hasExactly_of_perm hp
   have r1 := Serialization.JsonRpc.field_of_perm (what := "blobCells") hp hd
@@ -455,11 +579,12 @@ private theorem isNull_of_nullable {α : Type} {f : Lean.Json → Serialization.
     j.isNull = o.isNone := by
   cases j with
   | null => simp only [Serialization.JsonRpc.nullable, pure, Except.pure, Except.ok.injEq] at h
-            subst h; rfl
+            subst h; exact Base.Toolchain.Json.isNull_null
   | _ =>
     revert h
     simp only [Serialization.JsonRpc.nullable]
-    cases f _ <;> simp [Functor.map, Except.map] <;> rintro rfl <;> rfl
+    cases f _ <;> simp [Functor.map, Except.map] <;> rintro rfl <;>
+      simp [Base.Toolchain.Json.isNull_eq]
 
 /-- A cell and its proof that read as one entry are both absent or both present, as the entry is.
 -/
@@ -528,7 +653,8 @@ theorem getBlobsV1OfJson_json (blobs : List (Option BlobAndProofV1)) :
     getBlobsV1OfJson (getBlobsV1Json blobs) = .ok blobs := by
   unfold getBlobsV1OfJson getBlobsV1Json
   rw [Serialization.JsonRpc.array_listJson_of _
-    (Serialization.JsonRpc.nullable_optionJson blobAndProofV1OfJson_json fun _ => rfl)]
+    (Serialization.JsonRpc.nullable_optionJson blobAndProofV1OfJson_json fun _ =>
+      Base.Toolchain.Json.isNull_mkObj _)]
   rfl
 
 /-- An answer of version 2 reads back from its JSON, a list or `null` alone. -/
@@ -537,7 +663,7 @@ theorem getBlobsV2OfJson_json (blobs : Option (List BlobAndProofV2)) :
   unfold getBlobsV2OfJson getBlobsV2Json
   rw [Serialization.JsonRpc.nullable_optionJson
     (Serialization.JsonRpc.array_listJson_of _ blobAndProofV2OfJson_json)
-    (fun _ => Serialization.JsonRpc.isNull_arr _)]
+    (fun _ => Base.Toolchain.Json.isNull_arr _)]
   rfl
 
 /-- An answer of version 3 reads back from its JSON, a list or `null` alone. -/
@@ -546,7 +672,8 @@ theorem getBlobsV3OfJson_json (blobs : Option (List (Option BlobAndProofV2))) :
   unfold getBlobsV3OfJson getBlobsV3Json
   rw [Serialization.JsonRpc.nullable_optionJson (Serialization.JsonRpc.array_listJson_of _
     (Serialization.JsonRpc.nullable_optionJson
-    blobAndProofV2OfJson_json fun _ => rfl)) (fun _ => Serialization.JsonRpc.isNull_arr _)]
+    blobAndProofV2OfJson_json fun _ => Base.Toolchain.Json.isNull_mkObj _))
+    (fun _ => Base.Toolchain.Json.isNull_arr _)]
   rfl
 
 /-- An answer of version 4 reads back from its JSON, a list or `null` alone. -/
@@ -555,7 +682,8 @@ theorem getBlobsV4OfJson_json (blobs : Option (List (Option BlobCellsAndProofsV1
   unfold getBlobsV4OfJson getBlobsV4Json
   rw [Serialization.JsonRpc.nullable_optionJson (Serialization.JsonRpc.array_listJson_of _
     (Serialization.JsonRpc.nullable_optionJson
-    blobCellsOfJson_json fun _ => rfl)) (fun _ => Serialization.JsonRpc.isNull_arr _)]
+    blobCellsOfJson_json fun _ => Base.Toolchain.Json.isNull_mkObj _))
+    (fun _ => Base.Toolchain.Json.isNull_arr _)]
   rfl
 
 end EthLib.Engine

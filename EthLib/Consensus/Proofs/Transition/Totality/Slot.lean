@@ -2,14 +2,15 @@ module
 
 public import EthLib.Consensus.Proofs.Accessors
 public import EthLib.Consensus.Proofs.Containers.Misc
+public import EthLib.Consensus.Transition.ForkBoundary
 public import EthLib.Consensus.Transition.StateTransition
 
 /-!
-# Proofs: the caching of a slot, the resets of an epoch and the update of the history succeed
+# Proofs: the steps of a slot, one slot and a run of slots succeed
 
 Advancing a state to a later slot can fail, for example on an overflow or on a full list.
 
-This file shows that some of its steps succeed, under small hypotheses.
+This file shows that its steps, and then the whole advance, succeed under small hypotheses.
 
 Each hypothesis is one that a run of slots can carry from one step to the next.
 
@@ -24,6 +25,10 @@ The resets of an epoch succeed when a next slot exists.
 Those that write a circular buffer also need it to have a positive length.
 
 The update of the history succeeds while its list has room for one more entry.
+
+One slot then succeeds when a next slot exists and, at the end of an epoch, the epoch succeeds.
+
+A run of slots succeeds when each state it reaches allows the next step.
 -/
 
 @[expose] public section
@@ -177,5 +182,112 @@ theorem processHistoricalSummariesUpdate_total (capella : .shapella ≤ fork)
       simp only [liftSsz, hb, hs, Except.mapError]
       exact ⟨_, rfl⟩
     · exact ⟨_, rfl⟩
+
+/-- One slot succeeds when a next slot exists and, at the end of an epoch, the epoch succeeds.
+
+The epoch transition runs on the state with the roots of the slot cached.
+
+The SSZ type of the state is assumed lawful, and the buffers of roots have a positive length. -/
+theorem advanceSlot_exists_ok {config : Config} {checks : SignatureChecks}
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]
+    (fits : state.slot.toNat + 1 < 2 ^ 64)
+    (epoch : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+      ∀ cached, processSlot state = .ok cached →
+        ∃ epoched, processEpoch config checks cached = .ok epoched) :
+    ∃ after, advanceSlot config checks state = .ok after := by
+  obtain ⟨cached, cachedOk⟩ := processSlot_total fits
+  have next : addChecked state.slot 1 = .ok (state.slot + 1) :=
+    addChecked_of_lt (by simpa using fits)
+  have sum : (state.slot + 1).toNat = state.slot.toNat + 1 := by
+    have := (addChecked_ok_iff.mp next).2
+    simpa using this
+  simp only [advanceSlot, liftAccessor, liftArith, next, cachedOk, Except.mapError, bind,
+    Except.bind]
+  by_cases boundary : (state.slot + 1) % preset.SLOTS_PER_EPOCH = 0
+  · have boundaryNat : (state.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+      have := congrArg UInt64.toNat boundary
+      rwa [UInt64.toNat_mod, sum] at this
+    obtain ⟨epoched, epochedOk⟩ := epoch boundaryNat cached cachedOk
+    simp only [epochIfLast, boundary, ↓reduceIte, epochedOk]
+    exact ⟨_, rfl⟩
+  · simp only [epochIfLast, boundary, ↓reduceIte, pure, Except.pure]
+    exact ⟨_, rfl⟩
+
+/-- A run of slots within one fork succeeds when each state it reaches allows one more slot.
+
+Each state that the run reaches before its end must have a next slot.
+
+At the end of an epoch, the epoch transition must succeed on that state with its roots cached. -/
+theorem advanceSlots_exists_ok {config : Config} {checks : SignatureChecks}
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat] :
+    ∀ {count : Nat} {state : BeaconState preset fork},
+      (∀ steps < count, ∀ reached, advanceSlots config checks steps state = .ok reached →
+        reached.slot.toNat + 1 < 2 ^ 64 ∧
+          ((reached.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+            ∀ cached, processSlot reached = .ok cached →
+              ∃ epoched, processEpoch config checks cached = .ok epoched)) →
+      ∃ after, advanceSlots config checks count state = .ok after
+  | 0, state, _ => ⟨state, rfl⟩
+  | count + 1, state, allowed => by
+    obtain ⟨fits, epoch⟩ := allowed 0 (Nat.succ_pos _) state rfl
+    obtain ⟨next, nextOk⟩ := advanceSlot_exists_ok fits epoch
+    obtain ⟨after, afterOk⟩ := advanceSlots_exists_ok (count := count) (state := next)
+      fun steps below reached reachedOk => allowed (steps + 1) (by omega) reached (by
+        simp only [advanceSlots, nextOk, bind, Except.bind]
+        exact reachedOk)
+    exact ⟨after, by simp only [advanceSlots, nextOk, bind, Except.bind]; exact afterOk⟩
+
+/-- The advance to a later slot within one fork succeeds when each state it reaches allows a slot.
+
+The conditions are those of a run of as many slots as the later slot is ahead of the state. -/
+theorem processSlots_exists_ok {config : Config} {checks : SignatureChecks}
+    [LawfulSszType (BeaconState preset fork)] [NeZero preset.SLOTS_PER_HISTORICAL_ROOT.toNat]
+    {slot : Slot} (later : state.slot < slot)
+    (allowed : ∀ steps < slot.toNat - state.slot.toNat, ∀ reached,
+      advanceSlots config checks steps state = .ok reached →
+        reached.slot.toNat + 1 < 2 ^ 64 ∧
+          ((reached.slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 0 →
+            ∀ cached, processSlot reached = .ok cached →
+              ∃ epoched, processEpoch config checks cached = .ok epoched)) :
+    ∃ after, processSlots config checks state slot = .ok after := by
+  obtain ⟨after, afterOk⟩ := advanceSlots_exists_ok allowed
+  refine ⟨after, ?_⟩
+  have ensured : ensure (state.slot < slot)
+      (TransitionError.slotNotAfter slot state.slot) = .ok () := ensure_ok_iff.mpr later
+  simp only [processSlots, ensured, bind, Except.bind]
+  exact afterOk
+
+/-- A run of slots across forks succeeds when the step from each state it reaches succeeds.
+
+A step is one slot, then the upgrades that are due at the slot it reaches. -/
+theorem advanceSlotsAcross_exists_ok {config : Config} {checks : SignatureChecks} :
+    ∀ {count : Nat} {forked : ForkedBeaconState preset},
+      (∀ steps < count, ∀ reached, advanceSlotsAcross config checks steps forked = .ok reached →
+        ∃ next, advanceSlotAcross config checks reached = .ok next) →
+      ∃ after, advanceSlotsAcross config checks count forked = .ok after
+  | 0, forked, _ => ⟨forked, rfl⟩
+  | count + 1, forked, allowed => by
+    obtain ⟨next, nextOk⟩ := allowed 0 (Nat.succ_pos _) forked rfl
+    obtain ⟨after, afterOk⟩ := advanceSlotsAcross_exists_ok (count := count) (forked := next)
+      fun steps below reached reachedOk => allowed (steps + 1) (by omega) reached (by
+        simp only [advanceSlotsAcross, nextOk, bind, Except.bind]
+        exact reachedOk)
+    exact ⟨after, by simp only [advanceSlotsAcross, nextOk, bind, Except.bind]; exact afterOk⟩
+
+/-- The advance to a later slot succeeds when the step from each state it reaches succeeds.
+
+The run has as many steps as the later slot is ahead of the state. -/
+theorem processSlotsAcross_exists_ok {config : Config} {checks : SignatureChecks}
+    {forked : ForkedBeaconState preset} {slot : Slot} (later : forked.state.slot < slot)
+    (step : ∀ steps < slot.toNat - forked.state.slot.toNat, ∀ reached,
+      advanceSlotsAcross config checks steps forked = .ok reached →
+        ∃ next, advanceSlotAcross config checks reached = .ok next) :
+    ∃ after, processSlotsAcross config checks forked slot = .ok after := by
+  obtain ⟨after, afterOk⟩ := advanceSlotsAcross_exists_ok step
+  refine ⟨after, ?_⟩
+  have ensured : ensure (forked.state.slot < slot)
+      (TransitionError.slotNotAfter slot forked.state.slot) = .ok () := ensure_ok_iff.mpr later
+  simp only [processSlotsAcross, ensured, bind, Except.bind]
+  exact afterOk
 
 end EthLib.Consensus

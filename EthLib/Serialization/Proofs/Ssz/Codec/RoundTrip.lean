@@ -32,7 +32,7 @@ theorem recovered {shape : Desc} (covered : Recovers shape) :
     cases admits with
     | uint bound =>
       refine ⟨reads_back (roundTrip_uint bound), fun _ _ fixed wrote => ?_⟩
-      simp only [Desc.fixedSize, Option.some.injEq, serialize, bound, ↓reduceIte,
+      simp only [Desc.fixedSize, Option.some.injEq, serialize, uintFits_iff, bound, ↓reduceIte,
         Except.ok.injEq] at fixed wrote
       subst fixed wrote
       exact uintBytes_size _ _

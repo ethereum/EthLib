@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.ErrorFormat
 public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Ripemd160
 public import EthLib.Execution.Evm.Words
@@ -44,7 +45,18 @@ def gasCost (size : Nat) : Nat := GAS_BASE + GAS_PER_WORD * wordCount size
 inductive Ripemd160Error where
   /-- The gas given was below the price, so the call consumes all its gas. -/
   | outOfGas (cost gas : Nat)
-  deriving Repr, DecidableEq
+  deriving DecidableEq
+
+/-- A constructor of the error, named in full, applied to its arguments. -/
+def ripemd160ErrorFormat (name : String) (args : List Std.Format) (prec : Nat) : Std.Format :=
+  constructorFormat ("EthLib.Execution.Evm.Precompiles.Ripemd160.Ripemd160Error." ++ name) args prec
+
+/-- The form of the error in Lean syntax, with each value named. -/
+def Ripemd160Error.reprPrec : Ripemd160Error → Nat → Std.Format
+  | .outOfGas cost gas, p =>
+    ripemd160ErrorFormat "outOfGas" [namedArg "cost" cost, namedArg "gas" gas] p
+
+instance : Repr Ripemd160Error := ⟨Ripemd160Error.reprPrec⟩
 
 /-- The stable code of an error, one per constructor.
 

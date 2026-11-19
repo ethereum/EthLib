@@ -12,7 +12,10 @@ public import EthLib.Cryptography.Xmss.Serialization
 
 C-ABI exports for leanXMSS, callable from the Python C extension.
 
-Only key generation, signing, verification and reading a signature's leaf index cross the boundary, with the sizes.
+Key generation, signing, verification and reading a signature's leaf index cross the boundary.
+
+So do the sizes and the two parameters of a codeword, as constants.
+
 The scheme is a black box to callers: no hash, chain or tree is exported.
 -/
 
@@ -74,6 +77,22 @@ def constPubKeySize (_ : Unit) : UInt64 :=
 @[export eth_xmss_const_sig_size]
 def constSigSize (_ : Unit) : UInt64 :=
   UInt64.ofNat SIG_SIZE
+
+/-! ## Codeword parameters
+
+A digit of a digest is below `CHAIN_LENGTH`, and a codeword's chain digits sum to `TARGET_SUM`.
+
+No operation takes either as an argument.
+
+The test-vector generators read them to build signatures whose digest is not a codeword. -/
+
+@[export eth_xmss_const_chain_length]
+def constChainLength (_ : Unit) : UInt64 :=
+  UInt64.ofNat CHAIN_LENGTH
+
+@[export eth_xmss_const_target_sum]
+def constTargetSum (_ : Unit) : UInt64 :=
+  UInt64.ofNat TARGET_SUM
 
 /-! ## Operations -/
 

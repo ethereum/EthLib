@@ -482,13 +482,28 @@ def _engine_payload(fixture: dict, payload: dict, state: bytes, recent: list) ->
 
     config, _ = chain_of(fixture)
     method = f"engine_newPayloadV{payload['newPayloadVersion']}"
+    # The chains start at Paris, so no parent is a block of proof of work to check as terminal.
     if "errorCode" in payload:
         with pytest.raises(engine.EngineError) as error:
-            engine.new_payload_on_chain(config, state, recent, method, payload["params"])
+            engine.new_payload_on_chain(
+                config,
+                state,
+                recent,
+                method,
+                payload["params"],
+                terminal_total_difficulty=0,
+                total_difficulty=0,
+            )
         assert -error.value.code == int(payload["errorCode"])
         return "error", state, recent
     status, header, accounts = engine.new_payload_on_chain(
-        config, state, recent, method, payload["params"]
+        config,
+        state,
+        recent,
+        method,
+        payload["params"],
+        terminal_total_difficulty=0,
+        total_difficulty=0,
     )
     expected = payload.get("validationError")
     if not expected:

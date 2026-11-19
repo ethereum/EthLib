@@ -37,8 +37,9 @@ theorem exists_digit_subnetTopicName (base : String) (subnet : SubnetID) :
 
 /-- No name of a topic with no subnet holds a decimal digit. -/
 theorem no_digit_global : ∀ topic ∈ GossipTopic.global, ∀ c ∈ topic.name.toList,
-    c.isDigit = false := by
-  decide
+    c.isDigit = false :=
+  -- Instance search would decide the inner bound by checking every character, not the list.
+  @of_decide_eq_true _ (@List.decidableBAll _ _ (fun _ => List.decidableBAll _ _) _) rfl
 
 /-- The name of a subnet topic is not the name of a topic with no subnet. -/
 theorem find?_global_subnetTopicName {t : GossipTopic} {base : String} {subnet : SubnetID}

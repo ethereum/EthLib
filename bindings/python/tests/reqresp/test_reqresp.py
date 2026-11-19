@@ -233,27 +233,32 @@ def test_response_chunk_with_bytes_after():
         reqresp.decode_response_chunk(0, 0, 100, chunk + _chunk(0xFE, b""))
 
 
+# The messages of a varint and a framing error end with the inner error.
+VARINT = "length prefix is not a valid varint: EthLib.Networking.Encoding.Varint.VarintError."
+FRAME = "payload is not a valid Snappy framed stream: EthLib.Networking.Snappy.FrameError."
+
+
 def test_non_minimal_varint():
     message = bytes([0x84, 0x00]) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD)
-    with raises(ValueError, "length prefix is not a valid varint"):
+    with raises(ValueError, VARINT + "nonMinimal 2"):
         reqresp.decode_payload(0, 100, message)
 
 
 def test_varint_over_ten_bytes():
     message = bytes([0x80] * 10 + [0x00]) + STREAM_IDENTIFIER
-    with raises(ValueError, "length prefix is not a valid varint"):
+    with raises(ValueError, VARINT + "tooLong"):
         reqresp.decode_payload(0, 100, message)
 
 
 def test_bad_checksum():
     message = _varint(4) + STREAM_IDENTIFIER + _uncompressed(PAYLOAD, checksum=0)
-    with raises(ValueError, "payload is not a valid Snappy framed stream"):
+    with raises(ValueError, FRAME + "checksumMismatch 0 2443234960"):
         reqresp.decode_payload(0, 100, message)
 
 
 def test_missing_stream_identifier():
     message = _varint(4) + _uncompressed(PAYLOAD)
-    with raises(ValueError, "payload is not a valid Snappy framed stream"):
+    with raises(ValueError, FRAME + "missingStreamIdentifier (some 1)"):
         reqresp.decode_payload(0, 100, message)
 
 
@@ -288,7 +293,7 @@ def test_error_message_too_long():
 
 
 def test_context_truncated():
-    with raises(ValueError, "response chunk ends inside its context bytes"):
+    with raises(ValueError, "response chunk has 2 context bytes, not the 4 of the method"):
         reqresp.decode_response_chunk(4, 0, 100, bytes([0, 0x6A, 0x95]))
 
 
