@@ -5347,28 +5347,12 @@ private theorem margin_arith (ρn ρd K depth B band s L1 L2 pd sync D a X : ℕ
     (closed : (ρd - ρn * K) * (B + band) ≤ ρd * (a + D + band) + ρn * s) :
     B - X - sync ≤ a := by
   have depthMul : K * (L1 + 1) ≤ depth * (L1 + 1) := Nat.mul_le_mul_right _ epochs
-  have rate : ρn * K * (B + band) ≤ ρd * (K * (L1 + 1)) :=
-    calc ρn * K * (B + band) = K * (ρn * (B + band)) := by ring
-      _ ≤ K * (ρd * (L1 + 1)) := Nat.mul_le_mul_left _ first
-      _ = ρd * (K * (L1 + 1)) := by ring
-  by_cases big : ρd ≤ ρn * K
-  · -- the closed form is vacuous, and the leak already covers the base
-    have step : ρd * (B + band) ≤ ρd * (K * (L1 + 1)) :=
-      calc ρd * (B + band) ≤ ρn * K * (B + band) := Nat.mul_le_mul_right _ big
-        _ ≤ ρd * (K * (L1 + 1)) := rate
-    have base := Nat.le_of_mul_le_mul_left step positive
-    omega
-  · have small : ρn * K < ρd := Nat.lt_of_not_ge big
-    have expand : ρd * (B + band) =
-        (ρd - ρn * K) * (B + band) + ρn * K * (B + band) :=
-      calc ρd * (B + band) = ((ρd - ρn * K) + ρn * K) * (B + band) := by
-            rw [Nat.sub_add_cancel small.le]
-        _ = _ := by ring
-    have spread : ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) =
-        ρd * (a + D + band) + ρd * (L2 + 1) + ρd * (K * (L1 + 1)) := by ring
-    have total : ρd * (B + band) ≤ ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) := by omega
-    have cancel := Nat.le_of_mul_le_mul_left total positive
-    omega
+  have step := rate_step ρn ρd K L1 (B + band) first
+  have spread : ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) =
+      ρd * (a + D + band) + ρd * (L2 + 1) + ρd * (K * (L1 + 1)) := by ring
+  have total : ρd * (B + band) ≤ ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) := by omega
+  have cancel := Nat.le_of_mul_le_mul_left total positive
+  omega
 
 /-- The margin of the floor of a key on C's run, from the rate of its leak.
 
@@ -5421,20 +5405,8 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
           preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
         low - (events.map (syncDebit i.toNat)).sum ≤ a := by
   obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin h.bands.1 i.toNat
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have shallow := h.shallow
   have nearC := h.near
-  simp only at finSplit called
-  have short : (getCurrentEpoch pulled).toNat + 1 <
-      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-    omega
-  have partialLe : (events.map (floorPartialDebit i)).sum ≤
-      (pinTerms config pulled anc fin).partialsDue i.toNat :=
-    (Run.partialDebit_le (fromFin.append tailC) electra h.early (getCurrentEpoch pulled).toNat
-      ((getCurrentEpoch pulled).toNat + 1) nearC short i replayed).trans
-      (partials_le_due electra i)
+  have partialLe := run_partials_le_due h (fromFin.append tailC) nearC i replayed
   refine ⟨effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
     actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, ρn, ρd, by omega,
     pass_of_leak h (fromFin.append tailC) nearC i ⟨val, initial⟩ ρn ρd leaky,
