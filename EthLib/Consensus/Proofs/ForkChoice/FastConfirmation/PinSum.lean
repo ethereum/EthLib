@@ -6615,7 +6615,9 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a key at a state of R's prefix is within `ebUp` and a few increments.
+/-- The effective balance of a key at each state of R's run from the finalized state is bounded.
+
+It is within `ebUp` and a few increments.
 
 The increments are the whole ones of its sync debits and its slashing slack.
 
@@ -6645,7 +6647,7 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
         actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           (evs.map (penaltyDebit v.toNat)).sum + (evs.map (syncDebit v.toNat)).sum +
           (evs.map (floorPartialDebit v)).sum + W) :
-    ∀ z ∈ tail.balancePath, effectiveAt z v.toNat ≤
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
       (pinTerms config pulled anc fin).ebUp v.toNat +
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           (((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) /
@@ -6663,21 +6665,6 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
   obtain ⟨B, hB⟩ : ∃ B, B = A +
       ((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum + W) :=
     ⟨_, rfl⟩
-  -- every state of R's run from the finalized state is the end of a run from it to R's
-  have splitRun : ∀ {z0 : BeaconState preset fork}
-      (q1 : Run config checks ⟨fork, split⟩ ⟨fork, z0⟩)
-      (q2 : Run config checks ⟨fork, z0⟩ ⟨fork, pulled⟩), q1.append q2 = tail →
-      ∀ z' ∈ (fromFin.append q1).balancePath, ∃ (zs : BeaconState preset fork)
-        (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
-        (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩),
-        z' = ⟨fork, zs⟩ ∧ r1.append r2 = fromFin.append tail := by
-    intro z0 q1 q2 cut z' member
-    obtain ⟨r1, r2, cut'⟩ := balancePath_endpoint (fromFin.append q1) q2 (Nat.le_refl _) member
-    obtain ⟨zf, zs⟩ := z'
-    have same : fork = zf := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
-    subst same
-    refine ⟨zs, r1, r2, rfl, ?_⟩
-    rw [cut', ← Run.append_assoc, cut]
   -- the balance ceiling at each state of that run
   have ceiling : ∀ {zs : BeaconState preset fork} (r1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
       (r2 : Run config checks ⟨fork, zs⟩ ⟨fork, pulled⟩), r1.append r2 = fromFin.append tail →
@@ -6689,25 +6676,35 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
       (fun pre post _ => effective_le_cap_pulled h pre post v.toNat) r1 r2 cut
     omega
   intro z member
-  obtain ⟨q1, q2, cutT⟩ := balancePath_endpoint tail
+  obtain ⟨r1, r2, cutZ⟩ := balancePath_endpoint (fromFin.append tail)
     (Run.nil : Run config checks ⟨fork, pulled⟩ ⟨fork, pulled⟩) (Nat.le_refl _) member
   obtain ⟨zf, zs⟩ := z
-  have same : fork = zf := (fork_eq_of_run q1 q2 (Nat.le_refl _)).symm
+  have same : fork = zf := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   subst same
-  have cutT' : q1.append q2 = tail := cutT
+  -- every state of the run to `zs` is the end of a run from the finalized state to R's
+  have atPath : ∀ z' ∈ r1.balancePath, ∃ (zs' : BeaconState preset fork)
+      (s1 : Run config checks ⟨fork, fin⟩ ⟨fork, zs'⟩)
+      (s2 : Run config checks ⟨fork, zs'⟩ ⟨fork, pulled⟩),
+      z' = ⟨fork, zs'⟩ ∧ s1.append s2 = fromFin.append tail := by
+    intro z' member'
+    obtain ⟨s1, s2, cutS⟩ := balancePath_endpoint r1 r2 (Nat.le_refl _) member'
+    obtain ⟨zf', zs'⟩ := z'
+    have same' : fork = zf' := (fork_eq_of_run s1 s2 (Nat.le_refl _)).symm
+    subst same'
+    exact ⟨zs', s1, s2, rfl, cutS.trans cutZ⟩
   have startCap : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat ≤
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat :=
     effective_le_cap_pulled h (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩)
       (fromFin.append tail) v.toNat
-  have bound := PinSplit2.Run.effective_ceiling_of_balance_ceiling (fromFin.append q1) h.early
+  have bound := PinSplit2.Run.effective_ceiling_of_balance_ceiling r1 h.early
     h.fulu v.toNat inFin B (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
     alignedCap startCap
     (fun z' member' => by
-      obtain ⟨zs', r1, r2, rfl, cut⟩ := splitRun q1 q2 cutT' z' member'
-      exact ceiling r1 r2 cut)
+      obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
+      exact ceiling s1 s2 cut)
     (fun z' member' => by
-      obtain ⟨zs', r1, r2, rfl, cut⟩ := splitRun q1 q2 cutT' z' member'
-      exact cap_le_cap_of_run h r2 v.toNat)
+      obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
+      exact cap_le_cap_of_run h s2 v.toNat)
   obtain ⟨origin, -⟩ := bound
   -- the envelope `ebUp` and the rounding
   obtain ⟨t, ht⟩ :
@@ -10142,7 +10139,9 @@ private theorem voter_floorAt (h : Setting config checks g split fin pulled anc 
     omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a counted voter along R's run is within `ebUp` and a few increments.
+/-- The effective balance of a counted voter at each state of R's run from the finalized state.
+
+It is within `ebUp` and a few increments.
 
 The increments are the whole ones of its sync debits and its slashing slack.
 
@@ -10164,7 +10163,8 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
     (inFin : i < fin.validators.data.size)
     (frozen : PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) i =
       PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) :
-    ∀ z ∈ tail.balancePath, effectiveAt z i ≤ (pinTerms config pulled anc fin).ebUp i +
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤
+      (pinTerms config pulled anc fin).ebUp i +
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
         ((syncD eventsF i + syncD events i + slashW (pinTerms config pulled anc fin) i) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
