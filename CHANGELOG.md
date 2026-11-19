@@ -47,6 +47,8 @@ Not yet released.
   A key that has begun to exit before the step must be activated, as a hypothesis, and a block never appends a slashed key.
   The pin's closure of the created keys reads it.
 
+- `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; PinSum's `created_first_state` reads it.
+
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
   `Execution.quorumDriftWithin` builds those runs from the stores and proves `QuorumDriftWithin` with BLS checks.

@@ -1389,6 +1389,44 @@ private theorem processExecutionRequests {body : BeaconBlockBody preset fork}
     (foldlM (fun _ _ _ ok => processWithdrawalRequest ok) withdrawals).trans
       (foldlM (fun _ _ _ ok => processConsolidationRequest ok) consolidations)
 
+private theorem passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} {deposits : List PendingDeposit} {processed : Gwei} {count : Nat}
+    {postponed : Array PendingDeposit} {pass}
+    (computed : Consensus.passPendingDeposits config checks stop nextEpoch available state
+      processed count postponed deposits = .ok pass) : UnassignedKept state pass.1.state :=
+  passPendingDeposits_of UnassignedKept refl (fun one two => one.trans two)
+    (fun ok => applyPendingDeposit ok) computed
+
+private theorem processPendingDeposits {electra : .pectra ≤ fork}
+    (computed : Consensus.processPendingDeposits config checks state electra = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.processPendingDeposits at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' (split at computed <;> try cases computed)
+  all_goals exact (passPendingDeposits ‹_›).trans of_data
+
+private theorem processEffectiveBalanceUpdates
+    (computed : Consensus.processEffectiveBalanceUpdates state = .ok after) :
+    UnassignedKept state after := by
+  unfold Consensus.processEffectiveBalanceUpdates at computed
+  refine foldlM (fun _ _ _ ok => ?_) computed
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
+  obtain ⟨_, found, _, _, _, _, set⟩ := ok
+  exact setValidatorAt found set id
+
+/-- Every epoch stage but the registry updates keeps the unassigned suffixes. -/
+private theorem edge {k : EpochStage} (edge : EpochStage.Edge config checks k state after)
+    (other : k ≠ .registry) : UnassignedKept state after := by
+  cases k
+  case registry => exact absurd rfl other
+  case pendingDeposits =>
+    simp only [EpochStage.Edge] at edge
+    split at edge
+    · exact processPendingDeposits edge
+    · exact edge ▸ refl _
+  case effectiveBalances => exact processEffectiveBalanceUpdates edge
+  all_goals exact of_data (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
+
 end UnassignedKept
 
 /-- Block operations append validators with no assigned epoch.
@@ -1436,6 +1474,82 @@ theorem processConsolidationRequest_epochs_unassigned {n : Nat} {electra : .pect
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
   UnassignedKept.processConsolidationRequest ok n pending
 
+/-- The epoch step appends validators with no assigned epoch.
+
+The stages before the pending deposits keep the registry size, so the suffix is empty there.
+
+The registry updates are among them, so a new validator gets no activation in the same epoch.
+
+The pending deposits append unassigned validators, and the later stages keep them so. -/
+private theorem newUnassigned_processEpoch
+    (computed : processEpoch config checks state = .ok after) :
+    UnassignedFrom state.validators.data.size after := by
+  obtain ⟨justified, scored, rewarded, registered, slashed, reset, deposited, consolidated,
+    settled, updated, justifiedOk, scoredOk, rewardedOk, registeredOk, slashedOk, resetOk,
+    depositedOk, consolidatedOk, settledOk, updatedOk, rest⟩ :=
+    (processEpoch_trace computed).through_effectiveBalances
+  have keeps {k : EpochStage} {a b : BeaconState preset fork}
+      (ok : EpochStage.action config checks k a = .ok b) (other : k ≠ .registry) :
+      UnassignedKept a b :=
+    UnassignedKept.edge (EpochStage.action_cases.mp ok) other
+  have same {k : EpochStage} {a b : BeaconState preset fork}
+      (ok : EpochStage.action config checks k a = .ok b)
+      (other : k ≠ .registry ∧ k ≠ .pendingDeposits ∧ k ≠ .effectiveBalances) :
+      b.validators.data.size = a.validators.data.size := by
+    rw [(EpochStage.action_cases.mp ok).validators_eq other]
+  have registrySize := (sameSizes_processRegistryUpdates
+    (EpochStage.action_cases.mp registeredOk)).1
+  have sizes : reset.validators.data.size = state.validators.data.size := by
+    have one := same justifiedOk ⟨nofun, nofun, nofun⟩
+    have two := same scoredOk ⟨nofun, nofun, nofun⟩
+    have three := same rewardedOk ⟨nofun, nofun, nofun⟩
+    have five := same slashedOk ⟨nofun, nofun, nofun⟩
+    have six := same resetOk ⟨nofun, nofun, nofun⟩
+    omega
+  have start : UnassignedFrom state.validators.data.size reset :=
+    sizes ▸ unassignedFrom_size reset
+  have tail := rest.transport UnassignedKept UnassignedKept.refl (fun one two => one.trans two)
+    (fun k member _ _ ok => keeps ok (by rintro rfl; simp at member))
+  exact tail _ (keeps updatedOk nofun _ (keeps settledOk nofun _ (keeps consolidatedOk nofun _
+    (keeps depositedOk nofun _ start))))
+
+/-- A slot appends validators with no assigned epoch, through its epoch step if it has one. -/
+private theorem newUnassigned_advanceSlot
+    (computed : advanceSlot config checks state = .ok after) :
+    UnassignedFrom state.validators.data.size after := by
+  simp only [advanceSlot, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
+    addChecked_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+  obtain ⟨next, _, cached, cachedOk, epoched, epochedOk, rfl⟩ := computed
+  have cachedSize : cached.validators.data.size = state.validators.data.size := by
+    obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+    rfl
+  have epochedFrom : UnassignedFrom state.validators.data.size epoched := by
+    unfold epochIfLast at epochedOk
+    split at epochedOk
+    · exact cachedSize ▸ newUnassigned_processEpoch epochedOk
+    · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+      subst epochedOk
+      exact cachedSize ▸ unassignedFrom_size _
+  exact UnassignedKept.of_data (same := rfl) _ epochedFrom
+
+/-- From Electra, an upgrade keeps the validators. -/
+private theorem upgradeNext_validators_of_electra {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (electra : .pectra ≤ pre.fork) (computed : upgradeNext config checks pre = .ok post) :
+    post.val.state.validators.data = pre.state.validators.data := by
+  obtain ⟨fork, state⟩ := pre
+  cases fork <;> simp only at electra <;> first
+    | exact absurd electra (by decide)
+    | simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
+        throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToFulu_spec upgraded).1
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToGloas_spec upgraded).1
+  · obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact (upgradeHezeFields_lists _).1
+
 /-- Block operations leave newly admitted validators with both epochs unassigned. -/
 theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBody preset fork}
     {parentSlot : Slot}
@@ -1443,6 +1557,46 @@ theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBod
     ∀ i v, state.validators.data.size ≤ i → after.validators.data[i]? = some v →
       v.activationEpoch = FAR_FUTURE_EPOCH ∧ v.exitEpoch = FAR_FUTURE_EPOCH :=
   newUnassigned_processOperations ok
+
+/-- Before Gloas, a block appends validators with no assigned epoch, in its operations only. -/
+private theorem newUnassigned_processBlock {block : BeaconBlock preset fork}
+    {engine : ExecutionEngine preset fork} (early : fork < .glamsterdam)
+    (computed : processBlock config checks engine state block = .ok after) :
+    UnassignedFrom state.validators.data.size after := by
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
+  have kept : UnassignedFrom state.validators.data.size last := by
+    rw [← congrArg (·.data.size) (started.validators_eq early)]
+    exact processOperations_new_validator_epochs_unassigned operated
+  split at synced
+  · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+    exact UnassignedKept.of_data (same := rfl) _ kept
+  · cases synced
+    exact kept
+
+/-- From Electra and before Gloas, a step leaves the validators it appends with no assigned epoch.
+
+A block appends them in its operations.
+
+A slot appends them in the pending deposits of its epoch step, after the registry updates.
+
+The later stages of the epoch step and the upgrades keep them unassigned. -/
+theorem Step.new_validators_unassigned {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) (early : n.fork < .glamsterdam)
+    (electra : .pectra ≤ m.fork) :
+    ∀ (i : Nat) (w : Validator), m.state.validators.data.size ≤ i →
+      n.state.validators.data[i]? = some w →
+      w.activationEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch = FAR_FUTURE_EPOCH := by
+  cases step with
+  | slot ok =>
+    obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
+    exact (processUpgrades_induction (forked := ⟨m.fork, advanced⟩)
+      (property := fun post => .pectra ≤ post.fork ∧
+        UnassignedFrom m.state.validators.data.size post.state)
+      (fun {pre post} held next => ⟨Nat.le_trans held.1 (Nat.le_of_lt post.2),
+        UnassignedKept.of_data (upgradeNext_validators_of_electra held.1 next) _ held.2⟩)
+      ⟨electra, newUnassigned_advanceSlot slotOk⟩ upgrades).2
+  | block engine signed due ok =>
+    exact newUnassigned_processBlock early (applySignedBlock_ok ok).2.1
 
 /-- Once the exit of a validator is set, its withdrawable epoch only rises.
 
