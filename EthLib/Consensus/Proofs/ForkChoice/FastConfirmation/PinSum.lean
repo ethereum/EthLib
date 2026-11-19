@@ -99,6 +99,11 @@ structure PinTerms (preset : Preset) where
   newKeySeats : ℕ
   newKeySlack : ℕ
   newKeyFloor : ℕ
+  leakAt : ℕ → ℕ → ℕ
+  ebUp : ℕ → ℕ
+  leak : ℕ → ℕ
+  partialsDue : ℕ → ℕ
+  drop : ℕ → ℕ
 
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
 def PinTerms.total (t : PinTerms preset) : ℕ :=
@@ -482,7 +487,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     lowB := fun i => decide ((validator i).any (fun v =>
       decide (finalized < v.withdrawableEpoch.toNat) &&
         decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
-    lowEB, newKeySeats, newKeySlack, newKeyFloor }
+    lowEB, newKeySeats, newKeySlack, newKeyFloor, leakAt, ebUp, leak, partialsDue, drop }
 /-- The copy is faithful: the named terms sum to `pinReserve`. -/
 theorem pinReserve_eq_total (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     pinReserve config state ancestor finalizedState =
@@ -526,6 +531,15 @@ theorem queueKeys_unfold (config : Config)
           (pinTerms config state ancestor finalizedState).exitFloor + 2 +
         (pinTerms config state ancestor finalizedState).lowKeys +
         (pinTerms config state ancestor finalizedState).newKeySeats := rfl
+
+/-- `lowEB` takes the drops from the smaller of the two effective balances, capped at activation. -/
+theorem lowEB_unfold (config : Config) (state ancestor finalizedState : BeaconState preset fork)
+    (i : ℕ) :
+    (pinTerms config state ancestor finalizedState).lowEB i =
+      min (min (balanceAt state i) (balanceAt finalizedState i) -
+          (pinTerms config state ancestor finalizedState).partialsDue i)
+        preset.MIN_ACTIVATION_BALANCE.toNat -
+        (pinTerms config state ancestor finalizedState).drop i := rfl
 
 /-- `lowB` is the filter of `lowKeys`. -/
 theorem lowKeys_eq (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
