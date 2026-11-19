@@ -1282,6 +1282,42 @@ private theorem kept_processEth1Data {before : fork < .hegota} {body : BeaconBlo
 
 /-! ## The sync aggregate -/
 
+/-- Sync rewards: no rise without a signer or paid proposer there, no fall without a non-signer. -/
+theorem syncRewards_bounds {reward proposerReward index : Nat} {chosen : ValidatorIndex} :
+    ∀ (members : List (ValidatorIndex × Bool)) (balance : Nat),
+      ((∀ member ∈ members, member.2 = true → member.1.toNat ≠ index ∧ chosen.toNat ≠ index) →
+        members.foldl (fun balance member =>
+          if member.2 then balance + (if member.1.toNat = index then reward else 0) +
+            (if chosen.toNat = index then proposerReward else 0)
+          else if member.1.toNat = index then balance - reward else balance) balance ≤ balance) ∧
+      ((∀ member ∈ members, member.2 = false → member.1.toNat ≠ index) →
+        balance ≤ members.foldl (fun balance member =>
+          if member.2 then balance + (if member.1.toNat = index then reward else 0) +
+            (if chosen.toNat = index then proposerReward else 0)
+          else if member.1.toNat = index then balance - reward else balance) balance)
+  | [], _ => ⟨fun _ => Nat.le_refl _, fun _ => Nat.le_refl _⟩
+  | member :: members, balance => by
+    rw [List.foldl_cons]
+    constructor
+    · intro apart
+      refine Nat.le_trans ((syncRewards_bounds members _).1
+        fun other inside => apart other (List.mem_cons_of_mem _ inside)) ?_
+      have head := apart member List.mem_cons_self
+      split
+      · rename_i signed
+        simp [(head signed).1, (head signed).2]
+      · split
+        · exact Nat.sub_le _ _
+        · exact Nat.le_refl _
+    · intro apart
+      refine Nat.le_trans ?_ ((syncRewards_bounds members _).2
+        fun other inside => apart other (List.mem_cons_of_mem _ inside))
+      have head := apart member List.mem_cons_self
+      split
+      · exact Nat.le_trans (Nat.le_add_right _ _) (Nat.le_add_right _ _)
+      · rename_i unset
+        simp [head (by simpa using unset)]
+
 /-- The sync rewards do not raise a balance when no signer and no paid proposer sit at it. -/
 private theorem syncRewards_le {reward proposerReward index : Nat} {chosen : ValidatorIndex} :
     ∀ (members : List (ValidatorIndex × Bool)) (balance : Nat),
@@ -1289,19 +1325,9 @@ private theorem syncRewards_le {reward proposerReward index : Nat} {chosen : Val
       members.foldl (fun balance member =>
         if member.2 then balance + (if member.1.toNat = index then reward else 0) +
           (if chosen.toNat = index then proposerReward else 0)
-        else if member.1.toNat = index then balance - reward else balance) balance ≤ balance
-  | [], _, _ => Nat.le_refl _
-  | member :: members, balance, apart => by
-    rw [List.foldl_cons]
-    refine Nat.le_trans (syncRewards_le members _
-      fun other inside => apart other (List.mem_cons_of_mem _ inside)) ?_
-    have head := apart member List.mem_cons_self
-    split
-    · rename_i signed
-      simp [(head signed).1, (head signed).2]
-    · split
-      · exact Nat.sub_le _ _
-      · exact Nat.le_refl _
+        else if member.1.toNat = index then balance - reward else balance) balance ≤ balance :=
+  fun members balance => (syncRewards_bounds (reward := reward)
+    (proposerReward := proposerReward) (index := index) (chosen := chosen) members balance).1
 
 /-- A member with a bit has another position, when no key with that bit is the key there. -/
 theorem signers_elsewhere {pubkeys : Array Cryptography.Bls.BLSPubkey}

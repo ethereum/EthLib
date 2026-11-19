@@ -784,17 +784,9 @@ private theorem syncRewards_ge {reward proposerReward index : Nat} {chosen : Val
       balance ≤ members.foldl (fun balance member =>
         if member.2 then balance + (if member.1.toNat = index then reward else 0) +
           (if chosen.toNat = index then proposerReward else 0)
-        else if member.1.toNat = index then balance - reward else balance) balance
-  | [], _, _ => Nat.le_refl _
-  | member :: members, balance, apart => by
-    rw [List.foldl_cons]
-    refine Nat.le_trans ?_ (syncRewards_ge members _
-      fun other inside => apart other (List.mem_cons_of_mem _ inside))
-    have head := apart member List.mem_cons_self
-    split
-    · exact Nat.le_trans (Nat.le_add_right _ _) (Nat.le_add_right _ _)
-    · rename_i unset
-      simp [head (by simpa using unset)]
+        else if member.1.toNat = index then balance - reward else balance) balance :=
+  fun members balance => (syncRewards_bounds (reward := reward)
+    (proposerReward := proposerReward) (index := index) (chosen := chosen) members balance).2
 
 /-- The sync aggregate keeps a balance from falling.
 
