@@ -1372,7 +1372,7 @@ private theorem Ledger.consolidate {electra : .pectra ≤ fork}
     (Ledger.of_eq (t := { marked with pendingConsolidations := fun _ => pending }) rfl rfl)
 
 /-- A consolidation request converts at most one validator, and moves no other balance. -/
-private theorem ledger_processConsolidationRequest {electra : .pectra ≤ fork}
+theorem ledger_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config s electra request = .ok t) :
     ∃ conv : Finset ValidatorIndex, Ledger s t ∅ conv 0 0 0 ∧ conv.card ≤ 1 := by

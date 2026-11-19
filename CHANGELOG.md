@@ -46,7 +46,9 @@ Not yet released.
 - `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
   It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
   `ledger_depositWithdrawalRequests` says that the deposit requests and then the withdrawal requests of a payload move no balance and keep the credentials.
-  The pin's balance bound for a key that switches to compounding reads both.
+  `ledger_processConsolidationRequest` says that a consolidation request converts at most one validator and moves no other balance.
+  `recordBalance_single` says that a recorded operation that succeeds runs its action at the input state and appends one event with its source, states and limits.
+  The pin's balance bound for a key that switches to compounding reads these four lemmas.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.

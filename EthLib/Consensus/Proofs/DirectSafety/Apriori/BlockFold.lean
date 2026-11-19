@@ -486,7 +486,7 @@ private theorem operationReplay_sync {x : ForkedBeaconState preset} {high : Nat}
     rfl rfl rfl rfl rfl frame.balancesMatch bounded
 
 /-- One recorded operation: its limits at the input, its action, and one appended event. -/
-private theorem recordBalance_single {fork : Fork} {source : BalanceSource}
+theorem recordBalance_single {fork : Fork} {source : BalanceSource}
     {limits : BeaconState preset fork → Except TransitionError (Nat × Nat)}
     {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
     {s t : BeaconState preset fork} {prior events : List (BalanceEvent preset)}
