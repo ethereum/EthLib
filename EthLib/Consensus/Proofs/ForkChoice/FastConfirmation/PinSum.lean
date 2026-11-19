@@ -16731,6 +16731,8 @@ A prefix state of the finalized epoch can reach that balance.
 
 A key that `exitedSlashable`, `late` or `pendingR` charges is read at its balance and rise, or `bF`.
 
+It is also read at its effective balance at the finalized state.
+
 It is read without `ebUp`, which can exceed them.
 
 Otherwise it is also at least the key's bound `ebUp`. -/
@@ -16738,13 +16740,9 @@ private def whistleEnv (t : PinTerms preset) (pulled anc fin : BeaconState prese
     ℕ :=
   if t.slashedRB i = true then
     max (balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (balanceAt fin i)
-  else if ((pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
-      ((pulled.validators.data[i]?.map fun v =>
-        decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true) ∧
-      ((pulled.validators.data[i]?).any fun v =>
-        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true) ∨
+  else if exitedSlashable anc pulled i = true ∨
       (t.tight = false ∧ (t.lateB i = true ∨ t.pendingRB i = true)) then
-    max (balanceAt pulled i + t.rise i) (t.bF i)
+    max (balanceAt pulled i + t.rise i) (max (t.bF i) (balanceAt fin i))
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
 /-- The credits that raise the effective balance of a key of R's registry on C's branch.
