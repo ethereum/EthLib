@@ -12623,7 +12623,18 @@ private theorem syncCr_gross_shared (h : Setting config checks g split fin pulle
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (v : ℕ) (positive : 0 < syncCr eventsF v) :
-    0 < grossScan v high (fromFin.append tailC) := sorry
+    0 < grossScan v high (fromFin.append tailC) := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨-, sync⟩ := creditScan_bounds ∅
+    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) high
+    (fun _ => 0) fromFin replayedF (fun e _ _ => by simp)
+  have bound := sync (by simp) electra h.early
+    (fun ok _ fork early replayed i => (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) v
+  have split := creditScan_append (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
+    (fun _ => false) v high fromFin tailC
+  unfold grossScan
+  unfold syncCr at positive
+  omega
 
 /-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
 private theorem sum_bandR (events : List (BalanceEvent preset)) (T : Finset ValidatorIndex) :
