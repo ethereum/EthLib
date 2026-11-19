@@ -1864,7 +1864,8 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.mul_comm (_ - _)] at times
       nlinarith
   have key := PinSplit2.passPenaltyRate_le_leak (config := config)
-    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize h.facts.room T.toNat_lt aligned band scored
+    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize h.facts.room
+    T.toNat_lt aligned band scored
   dsimp only at key
   refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
   simp only [pinTerms]
