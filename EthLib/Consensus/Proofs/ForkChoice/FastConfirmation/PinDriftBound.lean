@@ -1094,6 +1094,58 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 private def keyCredit (i : ℕ) (e : BalanceEvent preset) : ℕ :=
   actualBalanceAt e.after i - actualBalanceAt e.before i
 
+/-- The credits to the key in one step, from the sources that count at that kind of step. -/
+private def stepCredit (blockP slotP : BalanceSource → Bool) (v : ℕ)
+    {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
+  let events := step.balanceEvents.toOption.getD []
+  match step with
+  | .slot _ => ((events.filter (slotP ·.source)).map (keyCredit v)).sum
+  | .block .. => ((events.filter (blockP ·.source)).map (keyCredit v)).sum
+
+/-- The credits to the key over a run, and the number of block steps that credit it.
+
+The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
+private def creditScan (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x : ForkedBeaconState preset} :
+    {y : ForkedBeaconState preset} → Run config checks x y → ℕ × ℕ
+  | _, .nil => (0, 0)
+  | _, .snoc (middle := m) pre step =>
+    let before := creditScan blockP slotP v high pre
+    if (getCurrentEpoch m.state).toNat ≤ high + 1 then
+      let credit := stepCredit blockP slotP v step
+      (before.1 + credit, before.2 + match step with
+        | .block .. => if 0 < credit then 1 else 0
+        | .slot _ => 0)
+    else before
+
+/-- The credits that a scan reads from a run, after one more step. -/
+private theorem creditScan_snoc_fst (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
+    (step : Step config checks m y) :
+    (creditScan blockP slotP v high (pre.snoc step)).1 =
+      if (getCurrentEpoch m.state).toNat ≤ high + 1 then
+        (creditScan blockP slotP v high pre).1 + stepCredit blockP slotP v step
+      else (creditScan blockP slotP v high pre).1 := by
+  change (if (getCurrentEpoch m.state).toNat ≤ high + 1 then
+      ((creditScan blockP slotP v high pre).1 + stepCredit blockP slotP v step, _)
+    else creditScan blockP slotP v high pre).1 = _
+  split_ifs <;> rfl
+
+/-- The credits of a run to a key, read as a scan, add over `append`. -/
+private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
+    (post : Run config checks m y) :
+    (creditScan blockP slotP v high (pre.append post)).1 =
+      (creditScan blockP slotP v high pre).1 + (creditScan blockP slotP v high post).1 := by
+  induction post with
+  | nil => rfl
+  | snoc post step ih =>
+    change (creditScan blockP slotP v high ((pre.append post).snoc step)).1 = _
+    rw [creditScan_snoc_fst, creditScan_snoc_fst]
+    split
+    · omega
+    · exact ih
+
 /-- One slashing credits at most the slashed key's effective balance over the quotient.
 
 The credits go to the proposer and the whistleblower together. -/
