@@ -174,9 +174,9 @@ def pairFactor (pq : G1 F × G2 F) : Option (Fp12 F) :=
 
 /-- Returns `true` iff `∏ e(P_i, Q_i) = 1`.
 
-The Miller loops are multiplied first, in the order of the pairs.
+The factors of the pairs are multiplied first, in the order of the pairs.
 
-Then one final exponentiation serves the whole product. -/
+Then one final exponentiation applies to the whole product. -/
 def pairingCheck (pairs : Array (G1 F × G2 F)) : Bool :=
   (finalExponentiation ((pairs.filterMap pairFactor).foldl (· * ·) Fp12.one)).isOne
 
