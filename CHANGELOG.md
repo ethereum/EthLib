@@ -25,6 +25,9 @@ Not yet released.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
   `FloorTrace.step_general`, `FloorTrace.run_of_le_cap_general` and `FloorTrace.run_of_le_cap` are the activated cases.
+  They also accept a different guard in place of the final key's exit.
+  It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
+  Master's headers are the cases with the exit guard.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
@@ -40,6 +43,10 @@ Not yet released.
 - `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
   The pin's drift bound reads it.
 
+- `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
+  `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
+  The pin's claim about the keys that are pending at the start of an epoch reads them.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
@@ -47,8 +54,11 @@ Not yet released.
 
 - `Step.consolidation_withdrawable` says what a step does to the withdrawable epoch of a key before its pending consolidations.
   The key keeps the withdrawable epoch it had at the start of the step, or has one set after the next epoch.
-  It takes a step from Electra with a positive withdrawal delay.
+  It takes a step with a positive withdrawal delay.
   The pin's drift bound reads it for the source of a pending consolidation.
+
+- `Run.departure_charge_site` splits a run at the step that assigns the exit of a departure charge, with the validator before and after that step.
+  The pin's drift bound reads it for the activation of a key whose exit a counting state charges.
 
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
@@ -68,6 +78,8 @@ Not yet released.
   `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
   `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
   Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
+  `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period` makes the keys of the current committee, one period later, the keys of the next committee at the start.
+  The pin's seat count reads it to bound the debited sync-committee seats of the two branches.
   `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
   `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes.
   The slot ends an epoch, and it records at most one deposit event.
