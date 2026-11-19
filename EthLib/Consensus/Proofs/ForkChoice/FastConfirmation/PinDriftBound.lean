@@ -4325,6 +4325,15 @@ private theorem syncReward_le_envelope {fork : Fork} {s : BeaconState preset for
   exact Nat.div_le_div_right (Nat.div_le_div_right (Nat.div_le_div_right
     (Nat.mul_le_mul_right 2 baseLe)))
 
+/-- The credits of an event over a set of keys are at most its credits over the registry. -/
+private theorem keys_credits_le (S : Finset ℕ) (e : BalanceEvent preset) :
+    ∑ j ∈ S, (actualBalanceAt e.after j - actualBalanceAt e.before j) ≤ e.credits := by
+  unfold BalanceEvent.credits
+  refine Finset.sum_le_sum_of_ne_zero fun j _ positive => Finset.mem_range.mpr ?_
+  by_contra outside
+  apply positive
+  simp [actualBalanceAt, Array.getElem?_eq_none (Nat.le_of_not_lt outside)]
+
 /-- The events of a replay record no sync pass. -/
 private def NoSync {fork : Fork} (pre : BalanceReplay preset fork) : Prop :=
   ∀ e ∈ pre.2, e.source ≠ .sync
