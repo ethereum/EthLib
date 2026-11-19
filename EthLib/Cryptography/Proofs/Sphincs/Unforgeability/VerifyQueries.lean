@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Merkle.Completeness
 public import EthLib.Cryptography.Proofs.Sphincs.Encoding
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Wots
+public import EthLib.Cryptography.Proofs.HashSig.Calls
 
 /-!
 # Proofs: the hash calls of leanSPHINCS verification
@@ -41,62 +42,9 @@ namespace EthLib.Cryptography.Sphincs.Unforgeability
 
 open EthLib.Cryptography.Sphincs.Constants
 open OracleSpec OracleComp
-
-/-! ## The inputs a computation queries
-
-This part holds for every oracle computation. -/
-
-section Queries
-
-variable {ι : Type} {spec : OracleSpec ι} {α : Type}
-
-/-- The inputs a computation queries when `f` answers every query, in the order of the queries. -/
-def queriesWith (f : QueryImpl spec Id) (oa : OracleComp spec α) : List spec.Domain :=
-  OracleComp.construct (C := fun _ => List spec.Domain) (fun _ => [])
-    (fun t _ rest => t :: rest (f t)) oa
-
-/-- A computation that returns at once queries nothing. -/
-@[simp] theorem queriesWith_pure (f : QueryImpl spec Id) (a : α) :
-    queriesWith f (pure a : OracleComp spec α) = [] :=
-  rfl
-
-/-- A computation that starts with a query queries that input, then what the rest queries. -/
-@[simp] theorem queriesWith_query_bind (f : QueryImpl spec Id) (t : spec.Domain)
-    (k : spec.Range t → OracleComp spec α) :
-    queriesWith f ((query t : OracleComp spec (spec.Range t)) >>= k)
-      = t :: queriesWith f (k (f t)) :=
-  rfl
-
-/-- A computation with at most `n` queries on every path queries at most `n` inputs. -/
-theorem length_queriesWith_le (f : QueryImpl spec Id) {oa : OracleComp spec α} {n : ℕ}
-    (h : IsTotalQueryBound oa n) : (queriesWith f oa).length ≤ n := by
-  induction oa using OracleComp.inductionOn generalizing n with
-  | pure a => simp
-  | query_bind t k ih =>
-    rw [isTotalQueryBound_query_bind_iff] at h
-    have := ih (f t) (h.2 (f t))
-    change (t :: queriesWith f (k (f t))).length ≤ n
-    rw [List.length_cons]
-    omega
-
-/-- Two answer functions that agree on the inputs queried under the first give the same result.
-
-The queries are then the same too. -/
-theorem evalWithAnswerFn_congr (f g : QueryImpl spec Id) {oa : OracleComp spec α}
-    (h : ∀ t ∈ queriesWith f oa, f t = g t) :
-    evalWithAnswerFn f oa = evalWithAnswerFn g oa ∧ queriesWith f oa = queriesWith g oa := by
-  induction oa using OracleComp.inductionOn with
-  | pure a => simp
-  | query_bind t k ih =>
-    change ∀ t' ∈ t :: queriesWith f (k (f t)), f t' = g t' at h
-    simp only [List.mem_cons, forall_eq_or_imp] at h
-    obtain ⟨hk₁, hk₂⟩ := ih (f t) h.2
-    change evalWithAnswerFn f (k (f t)) = evalWithAnswerFn g (k (g t)) ∧
-      t :: queriesWith f (k (f t)) = t :: queriesWith g (k (g t))
-    rw [← h.1]
-    exact ⟨hk₁, congrArg _ hk₂⟩
-
-end Queries
+open EthLib.Cryptography.HashSig (queriesWith queriesWith_pure queriesWith_query_bind
+  length_queriesWith_le evalWithAnswerFn_congr queriesWith_bind queriesWith_map
+  length_queriesWith_ofFnInOrder length_queriesWith_chain length_queriesWith_climb)
 
 /-! ## Verification under a map of monads
 
@@ -407,55 +355,6 @@ So verification makes exactly as many calls as its bound when it accepts. -/
 section Exact
 
 variable {ι : Type} {spec : OracleSpec ι} (F : QueryImpl spec Id)
-
-/-- A bind queries what its first part queries, then what the rest queries after that answer. -/
-theorem queriesWith_bind {α β : Type} (oa : OracleComp spec α) (k : α → OracleComp spec β) :
-    queriesWith F (oa >>= k)
-      = queriesWith F oa ++ queriesWith F (k (evalWithAnswerFn F oa)) := by
-  induction oa using OracleComp.inductionOn with
-  | pure a => simp
-  | query_bind t k' ih =>
-    rw [bind_assoc]
-    change t :: queriesWith F (k' (F t) >>= k) = (t :: queriesWith F (k' (F t))) ++ _
-    rw [ih, evalWithAnswerFn_bind, List.cons_append]
-    rfl
-
-/-- A map queries what the computation queries. -/
-theorem queriesWith_map {α β : Type} (g : α → β) (oa : OracleComp spec α) :
-    queriesWith F (g <$> oa) = queriesWith F oa := by
-  rw [map_eq_bind_pure_comp, queriesWith_bind]
-  simp
-
-/-- Computing a vector in order queries the inputs of its entries, entry 0 first. -/
-theorem length_queriesWith_ofFnInOrder {α : Type} :
-    ∀ (k : Nat) (f : Fin k → OracleComp spec α),
-      (queriesWith F (HashSig.ofFnInOrder k f)).length = ∑ i, (queriesWith F (f i)).length
-  | 0, _ => rfl
-  | k + 1, f => by
-    rw [HashSig.ofFnInOrder, Fin.sum_univ_succ, queriesWith_bind, List.length_append,
-      queriesWith_bind, List.length_append, length_queriesWith_ofFnInOrder k]
-    simp
-
-/-- A walk of `steps` steps queries `steps` inputs, when each step queries one. -/
-theorem length_queriesWith_chain {α : Type} {k : Nat} (step : Fin k → α → OracleComp spec α)
-    (hstep : ∀ i v, (queriesWith F (step i v)).length = 1) (start : Nat) :
-    ∀ (steps : Nat) (h : start + steps ≤ k) (value : α),
-      (queriesWith F (Wots.chain step start steps h value)).length = steps
-  | 0, _, _ => rfl
-  | s + 1, h, value => by
-    rw [Wots.chain_succ, queriesWith_bind, List.length_append,
-      length_queriesWith_chain step hstep start s _ value, hstep]
-
-/-- A climb queries one input per sibling, when each node hash queries one. -/
-theorem length_queriesWith_climb {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
-    (hhash : ∀ p left right, (queriesWith F (hash p left right)).length = 1) :
-    ∀ (siblings : List α) (p : Merkle.Position) (current : α),
-      (queriesWith F (Merkle.climb hash p current siblings)).length = siblings.length
-  | [], _, _ => rfl
-  | _ :: rest, p, current => by
-    rw [Merkle.climb, queriesWith_bind, List.length_append, hhash,
-      length_queriesWith_climb hash hhash rest, List.length_cons]
-    omega
 
 variable (H : ByteArray → OracleComp spec (Vector UInt8 32))
   (hH : ∀ x, (queriesWith F (H x)).length = 1)
