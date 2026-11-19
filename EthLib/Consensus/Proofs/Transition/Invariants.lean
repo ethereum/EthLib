@@ -1343,31 +1343,6 @@ theorem applyExpectedWithdrawals_of
   apply applyExpectedWithdrawals_of_setters R refl trans withdraw (computed := computed)
   all_goals exact fun _ _ => keep (BlockFrame.of_validators ⟨rfl, rfl⟩) rfl
 
-/-- A relation holds across the withdrawal step when it holds of the state to itself.
-
-It must also hold across the expected withdrawals.
-
-The step either keeps the state or applies the expected withdrawals. -/
-theorem processWithdrawals_of
-    (R : BeaconState preset fork → BeaconState preset fork → Prop) (refl : R state state)
-    {capella : .shapella ≤ fork}
-    (applied : ∀ {expected : ExpectedWithdrawals},
-      Consensus.applyExpectedWithdrawals state capella expected = .ok after → R state after)
-    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (computed : Consensus.processWithdrawals state capella payload = .ok after) :
-    R state after := by
-  unfold Consensus.processWithdrawals at computed
-  split at computed
-  · split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, appliedOk⟩ := computed
-      exact applied appliedOk
-    · cases computed
-      exact refl
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, appliedOk⟩ := computed
-    exact applied appliedOk
-
 namespace EpochFrameLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}

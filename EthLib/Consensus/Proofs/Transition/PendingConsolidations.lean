@@ -285,17 +285,13 @@ private theorem attestation {attestation : Attestation preset fork} {parentSlot 
 
 private theorem withdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (early : fork < .glamsterdam)
     (ok : processWithdrawals state capella payload = .ok after) :
-    QueueKept state after := by
-  unfold processWithdrawals at ok
-  rw [dite_eq_right (show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early)] at ok
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, applied⟩ := ok
-  apply applyExpectedWithdrawals_of_setters QueueKept (fun _ => rfl)
-    (fun one two => one.trans two) (fun ok => by rw [applyWithdrawal_eq ok]; rfl)
-    _ _ _ _ _ _ applied
-  all_goals exact fun _ _ => rfl
+    QueueKept state after :=
+  processWithdrawals_of QueueKept rfl (fun applied => by
+    apply applyExpectedWithdrawals_of_setters QueueKept (fun _ => rfl)
+      (fun one two => one.trans two) (fun ok => by rw [applyWithdrawal_eq ok]; rfl)
+      _ _ _ _ _ _ applied
+    all_goals exact fun _ _ => rfl) ok
 
 private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix : .bellatrix ≤ fork}
     (early : fork < .glamsterdam)
@@ -306,7 +302,7 @@ private theorem blockExecution {body : BeaconBlockBody preset fork} {bellatrix :
   split at ok
   · simp only [bind_ok_iff] at ok
     obtain ⟨_, withdrawn, paid⟩ := ok
-    apply (withdrawals early withdrawn).trans
+    apply (withdrawals withdrawn).trans
     obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
     rfl
   · dsimp only at ok
