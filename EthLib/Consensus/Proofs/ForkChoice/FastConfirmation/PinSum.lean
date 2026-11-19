@@ -17573,25 +17573,21 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key that the shared segment created has a first state on the shared segment.
+/-- A key that a run from the finalized state creates has a first state on the run.
 
-At that state its effective balance is within the floor of its balance.
+At that state its effective balance is within the floor of its balance, and it is unslashed.
 
 Before it the key is absent from the path, so its effective balance is zero.
 
-The key is unassigned or scheduled there, since the state is no later than its scheduling state.
-
-So it holds its effective balance within its balance, and the effective balance is aligned. -/
+A step that appends a key leaves it unassigned, so the first state is where the key is created. -/
 private theorem created_first_state (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
-      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
-    (created : fin.validators.data.size ≤ v.toNat)
-    (inside : v.toNat < split.validators.data.size) :
+    {e : BeaconState preset fork} (run : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    {v : ValidatorIndex} (created : fin.validators.data.size ≤ v.toNat)
+    (inside : v.toNat < e.validators.data.size) :
     ∃ (c : BeaconState preset fork) (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
-      (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩), toC.append fromC = fromFin ∧
+      (fromC : Run config checks ⟨fork, c⟩ ⟨fork, e⟩), toC.append fromC = run ∧
       v.toNat < c.validators.data.size ∧
+      (∀ u, c.validators.data[v.toNat]? = some u → u.slashed = false) ∧
       (∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p v.toNat = 0) ∧
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
@@ -17599,46 +17595,30 @@ private theorem created_first_state (h : Setting config checks g split fin pulle
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   classical
   obtain ⟨toFin⟩ := h.toFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨w, foundC, neFar, lowC⟩ := activated
-  have ordered := activated_ordered h fromFin tailC ⟨w, foundC, neFar, lowC⟩
-  have finAbsent : fin.validators.data[v.toNat]? = none := Array.getElem?_eq_none created
-  obtain ⟨z, pre, post, v0, vy, splitEq, found0, foundY, sameAct, actEq, actLe⟩ :=
-    PinSplit.Run.start_state (fromFin.append tailC) h.window v.toNat
-      (fun u found => by simp only [finAbsent] at found; cases found)
-      ⟨w, foundC, neFar, lowC⟩ ordered
-  obtain rfl := Option.some.inj (foundY.symm.trans foundC)
-  have actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := fun same =>
-    neFar (sameAct.symm.trans same)
-  have sameActNat := congrArg UInt64.toNat sameAct
-  have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have actBound := v0.activationEpoch.toNat_lt
-  -- the effective balance of a key within its balance is within the floor of the balance
-  have floor : ∀ {c : BeaconState preset fork} (run : Run config checks g ⟨fork, c⟩)
-      {u : Validator} {b : Gwei}, c.validators.data[v.toNat]? = some u →
-      c.balances.data[v.toNat]? = some b → u.effectiveBalance ≤ b →
-      effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
-          actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    intro c run u b foundU foundB le
-    have aligned := FloorTrace.effective_aligned run h.genesis h.aligned v.toNat
-    have within : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat := by
-      simp only [effectiveAt, actualBalanceAt, foundU, foundB, Option.map_some, Option.getD_some]
-      exact UInt64.le_iff_toNat_le.mp le
-    have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat within
-    rw [aligned] at rounded
-    simpa using rounded
-  -- the first state of the shared segment that holds the key
-  obtain ⟨m, n, pre0, step, post0, cutFlip, absentM, presentN⟩ := Run.split_at_flip fromFin
+  -- the first state of the run that holds the key
+  obtain ⟨m, n, pre0, step, post0, cutFlip, absentM, presentN⟩ := Run.split_at_flip run
     (fun s : ForkedBeaconState preset => v.toNat < s.state.validators.data.size)
     (by simpa using created) inside
   have forkN : fork = n.fork := (fork_eq_of_run (pre0.snoc step) post0 (Nat.le_refl _)).symm
+  have electra : .pectra ≤ m.fork :=
+    Nat.le_trans (Nat.le_trans (by decide) h.fulu) (fork_le_of_chainSteps pre0.chainSteps)
   obtain ⟨fork, ns⟩ := n
   subst forkN
   simp only at presentN
   have sizeM : ¬ v.toNat < m.state.validators.data.size := absentM
+  obtain ⟨vn, foundN⟩ : ∃ vn, ns.validators.data[v.toNat]? = some vn :=
+    ⟨_, Array.getElem?_eq_getElem presentN⟩
+  -- a step that appends the key leaves it unassigned, so it is funded and unslashed there
+  obtain ⟨far, -⟩ := Step.new_validators_unassigned step h.early electra v.toNat vn
+    (Nat.le_of_not_lt sizeM) foundN
+  have finite : getCurrentEpoch ns < FAR_FUTURE_EPOCH :=
+    UInt64.lt_iff_toNat_lt.mpr (by
+      have := getCurrentEpoch_succ_lt_farFuture h.twoSlots ns
+      omega)
+  obtain ⟨unassigned, -⟩ := EthLib.Consensus.Internal.run_eligible_balance
+    (toFin.append (pre0.snoc step)) h.genesis h.caps.activation h.caps.compounding h.aligned
+    h.early finite
+  obtain ⟨⟨b, foundB, le⟩, -, clean⟩ := unassigned v.toNat vn foundN far
   -- the key is absent at each state of the path before the first state
   have before : ∀ p ∈ (pre0.snoc step).balancePath, p = ⟨fork, ns⟩ ∨ effectiveAt p v.toNat = 0 := by
     intro p member
@@ -17651,42 +17631,20 @@ private theorem created_first_state (h : Setting config checks g split fin pulle
       have absent : p.state.validators.data[v.toNat]? = none :=
         Array.getElem?_eq_none (by omega)
       simp [effectiveAt, absent]
-  -- the first state is no later than the scheduling state `z`
-  have runNZ : Nonempty (Run config checks ⟨fork, ns⟩ z) := by
-    have one : (pre0.snoc step).append (post0.append tailC) = fromFin.append tailC := by
-      rw [cutFlip, Run.append_assoc]
-    rcases Run.prefix_total (pre0.snoc step) (post0.append tailC) pre post one splitEq.symm with
-      ⟨r, -⟩ | ⟨r, cutZ⟩
-    · exact ⟨r⟩
-    · rcases Run.prefix_snoc pre r pre0 step cutZ with ⟨same, -⟩ | ⟨r', -⟩
-      · subst same
-        exact ⟨Run.nil⟩
-      · have grows := registryGrows_of_chainSteps r'.chainSteps
-        have present := (Array.getElem?_eq_some_iff.mp found0).1
-        omega
-  obtain ⟨toNZ⟩ := runNZ
-  have orderNZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps toNZ.chainSteps)
-  simp only at actEq actLe orderNZ
-  obtain ⟨vn, foundN⟩ : ∃ vn, ns.validators.data[v.toNat]? = some vn :=
-    ⟨_, Array.getElem?_eq_getElem presentN⟩
-  obtain ⟨later, foundLater, life⟩ := toNZ.registryLifecycle.validators v.toNat vn foundN
-  have sameLater : later = v0 := Option.some.inj (foundLater.symm.trans found0)
-  subst sameLater
-  have finite : getCurrentEpoch ns < FAR_FUTURE_EPOCH :=
-    UInt64.lt_iff_toNat_lt.mpr (by omega)
-  obtain ⟨unassigned, scheduled⟩ := EthLib.Consensus.Internal.run_eligible_balance
-    (toFin.append (pre0.snoc step)) h.genesis h.caps.activation h.caps.compounding h.aligned
-    h.early finite
-  refine ⟨ns, pre0.snoc step, post0, cutFlip.symm, presentN, before, ?_⟩
-  by_cases far : vn.activationEpoch = FAR_FUTURE_EPOCH
-  · obtain ⟨⟨b, foundB, le⟩, -, -⟩ := unassigned v.toNat vn foundN far
-    exact floor (toFin.append (pre0.snoc step)) foundN foundB le
-  · have act := life.activationEpoch far
-    have actNat := congrArg UInt64.toNat act
-    obtain ⟨funded, -, -⟩ := scheduled electra v.toNat vn foundN (Or.inl far)
-      (UInt64.lt_iff_toNat_lt.mpr (by simp only; omega))
-    obtain ⟨b, foundB, le⟩ := funded (by simp only; omega)
-    exact floor (toFin.append (pre0.snoc step)) foundN foundB le
+  refine ⟨ns, pre0.snoc step, post0, cutFlip.symm, presentN, fun u found => ?_, before, ?_⟩
+  · rw [foundN] at found
+    cases found
+    exact clean
+  · -- the effective balance of a key within its balance is within the floor of the balance
+    have aligned := FloorTrace.effective_aligned (toFin.append (pre0.snoc step)) h.genesis
+      h.aligned v.toNat
+    have within : effectiveAt (⟨fork, ns⟩ : ForkedBeaconState preset) v.toNat ≤
+        actualBalanceAt (⟨fork, ns⟩ : ForkedBeaconState preset) v.toNat := by
+      simp only [effectiveAt, actualBalanceAt, foundN, foundB, Option.map_some, Option.getD_some]
+      exact UInt64.le_iff_toNat_le.mp le
+    have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat within
+    rw [aligned] at rounded
+    simpa using rounded
 
 /-- The exit of a key that the finalized state does not hold is late for the whole run.
 
@@ -17760,8 +17718,8 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
     omega
   · -- the key is created on the shared segment, and its envelope starts at its first state
     have splitSize : v.toNat < split.validators.data.size := Nat.lt_of_not_le absent
-    obtain ⟨c, toC, fromC, cutC, insideC, before, floorStart⟩ := created_first_state h fromFin
-      tailC (activated_of_quorum h.early voter) created splitSize
+    obtain ⟨c, toC, fromC, cutC, insideC, -, before, floorStart⟩ :=
+      created_first_state h fromFin created splitSize
     by_cases frozen : PinSplit2.capAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat =
         PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat ∧
       PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
