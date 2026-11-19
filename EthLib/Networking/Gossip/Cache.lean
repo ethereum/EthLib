@@ -40,7 +40,7 @@ abbrev MessageId := Vector UInt8 20
 
 /-- The bytes of a message ID, as the IHAVE and IWANT messages carry them. -/
 def MessageId.toBytes (id : MessageId) : ByteArray :=
-  ⟨id.toArray⟩
+  Base.packBytes id
 
 /-- The message ID of some bytes, if there are exactly 20 of them. -/
 def MessageId.ofBytes? (bytes : ByteArray) : Option MessageId :=

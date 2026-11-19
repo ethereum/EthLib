@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Networking.Gossip.Cache
 
 /-!
@@ -180,18 +181,12 @@ theorem expire_insert (cache : SeenCache) {t now ttlMs : Nat} (id : MessageId)
   omega
 
 /-- The bytes of a message ID read back as that ID. -/
-theorem ofBytes?_toBytes (id : MessageId) : MessageId.ofBytes? id.toBytes = some id := by
-  have h : id.toBytes.size = 20 := id.size_toArray
-  simp only [MessageId.ofBytes?, Base.exactBytes?, h, ↓reduceDIte]
-  rfl
+theorem ofBytes?_toBytes (id : MessageId) : MessageId.ofBytes? id.toBytes = some id :=
+  Base.exactBytes?_packBytes id
 
 /-- Bytes that read as a message ID are the bytes of that ID. -/
 theorem toBytes_of_ofBytes? {bytes : ByteArray} {id : MessageId}
-    (h : MessageId.ofBytes? bytes = some id) : id.toBytes = bytes := by
-  unfold MessageId.ofBytes? Base.exactBytes? at h
-  split at h
-  · cases h
-    rfl
-  · cases h
+    (h : MessageId.ofBytes? bytes = some id) : id.toBytes = bytes :=
+  Base.packBytes_of_exactBytes? h
 
 end EthLib.Networking.Proofs.Gossip.Cache
