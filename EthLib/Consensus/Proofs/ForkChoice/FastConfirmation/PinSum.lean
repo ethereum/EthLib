@@ -4165,11 +4165,69 @@ private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step 
       exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
         plain foundN switched
 
+/-- A step that makes a key compound leaves its balance within the smaller of two bounds.
+
+Those are its balance before the step and the activation balance, each plus the credits of the step.
+
+Both bounds add the same credits, so the smaller of the two bases carries them. -/
+private theorem step_flip_min {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
+    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
+    actualBalanceAt n i ≤ min (actualBalanceAt m i) preset.MIN_ACTIVATION_BALANCE.toNat +
+      stepCredit (fun _ => true) (fun _ => true) i step := by
+  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
+  have base := PinSplit2.step_balance_le_events step early i replayed
+  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
+      (events.map (keyCredit i)).sum := by
+    cases step <;> simp [stepCredit, replayed, Except.toOption]
+  have flip := step_flip_balance step early fulu invariant i flat large
+  rw [credit] at flip ⊢
+  omega
+
+/-- A step that makes a registered key compound is a block step, so it stays in its epoch.
+
+A slot step keeps whether each validator of its first state compounds. -/
+private theorem step_flip_epoch {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork)
+    (i : ℕ) (inside : i < m.state.validators.data.size)
+    (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i) :
+    (getCurrentEpoch n.state).toNat = (getCurrentEpoch m.state).toNat := by
+  have electraM : .pectra ≤ m.fork := Nat.le_trans (by decide) fulu
+  have electraN : .pectra ≤ n.fork := Nat.le_trans electraM step.chainStep.fork_le
+  obtain ⟨v, found⟩ : ∃ v, m.state.validators.data[i]? = some v :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  obtain ⟨w, foundN, switched⟩ := compounding_of_cap electraN large
+  have strict : preset.MIN_ACTIVATION_BALANCE.toNat <
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+    have large' := large
+    rw [capAt_of_found electraN foundN, switched] at large'
+    simpa using large'
+  have plain : hasCompoundingWithdrawalCredential v = false := by
+    by_contra compounds
+    have yes : hasCompoundingWithdrawalCredential v = true := by simpa using compounds
+    rw [capAt_of_found electraM found, yes] at flat
+    simp at flat
+    omega
+  cases step with
+  | slot ok =>
+    obtain ⟨w', found', same⟩ := slot_compounding_kept ok fulu early found
+    have equal := Option.some.inj (found'.symm.trans foundN)
+    subst equal
+    simp [switched, plain] at same
+  | @block f s t engine signed due ok =>
+    obtain ⟨-, processed, -⟩ := applySignedBlock_ok ok
+    have slot := (frame_processBlock processed).slot
+    simp only [getCurrentEpoch, slot]
+
 /-- A run from a key with plain credentials to a key with compounding credentials splits at a step.
 
 The step makes the key compound.
 
-It leaves the balance of the key within the activation balance plus the credits of the step. -/
+It leaves the balance of the key within the activation balance plus the credits of the step.
+
+If the key is in the registry of the first state, the step does not cross an epoch. -/
 private theorem Run.flip_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ x.fork) (invariant : Invariant x.state)
     (i : ℕ) (flat : PinSplit2.capAt x i ≤ preset.MIN_ACTIVATION_BALANCE.toNat)
@@ -4180,7 +4238,9 @@ private theorem Run.flip_split {x y : ForkedBeaconState preset} (tail : Run conf
       PinSplit2.capAt m i ≤ preset.MIN_ACTIVATION_BALANCE.toNat ∧
       preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt n i ∧
       actualBalanceAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
-        stepCredit (fun _ => true) (fun _ => true) i step := by
+        stepCredit (fun _ => true) (fun _ => true) i step ∧
+      (i < x.state.validators.data.size →
+        (getCurrentEpoch n.state).toNat = (getCurrentEpoch m.state).toNat) := by
   obtain ⟨m, n, pre, step, post, split, notYet, arrived⟩ := Run.split_at_flip tail
     (fun z => preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt z i)
     (show ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinSplit2.capAt x i by omega) compounding
@@ -4190,7 +4250,9 @@ private theorem Run.flip_split {x y : ForkedBeaconState preset} (tail : Run conf
   have earlyN : n.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
   exact ⟨m, n, pre, step, post, split.symm, Nat.le_of_not_lt before, after,
-    step_flip_balance step earlyN fuluM (Run.invariant invariant pre) i before after⟩
+    step_flip_balance step earlyN fuluM (Run.invariant invariant pre) i before after,
+    fun inside => step_flip_epoch step earlyN fuluM i
+      (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps pre.chainSteps)) before after⟩
 
 /-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
