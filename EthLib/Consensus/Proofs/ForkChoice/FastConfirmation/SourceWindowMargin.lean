@@ -1862,7 +1862,7 @@ private theorem caller_parent_voter_reaches {Δ : ℕ} (sync : e.Synchronous Δ)
     have covers := (parentCases k' le current).resolve_left unfit
     have checkpoint := chain w receiver k' k le receiverTime
     obtain ⟨_, finalized, _, held, _, descends⟩ :=
-      Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
+      Store.isAncestor_of_getCheckpointBlock checkpoint
     exact .inl (.inr (.inr (Store.isAncestor_trans_of_lt preGloas held known descends covers)))
   · exact .inr collision
   have counted := e.equivocatingIndices_honest slots

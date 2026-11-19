@@ -833,15 +833,13 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
       (UInt64.le_trans callAtStart (boundary_le_of_duty duty (dataEpoch ▸ boundaryOk)))
       dataBefore)
   have offStart : isStartSlotAtEpoch preset callSlot' = .ok false := by
-    unfold isStartSlotAtEpoch computeSlotsSinceEpochStart
-    rw [boundaryOk]
-    simp only [Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq]
-    apply decide_eq_false
+    rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_false_iff_not]
     intro zero
-    have below := UInt64.le_of_lt (UInt64.not_le.mp callAtStart)
-    have eqNat := congrArg UInt64.toNat zero
-    rw [UInt64.toNat_sub_of_le _ _ below] at eqNat
-    exact callAtStart (UInt64.le_iff_toNat_le.mpr (by simpa using Nat.le_of_sub_eq_zero eqNat))
+    have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
+    simp only [computeEpochAtSlot, UInt64.toNat_div] at boundaryNat
+    have slotDiv := Nat.mod_add_div callSlot'.toNat preset.SLOTS_PER_EPOCH.toNat
+    rw [Nat.mul_comm] at boundaryNat
+    exact callAtStart (UInt64.le_iff_toNat_le.mpr (by omega))
   -- Off the first slot, the no-conflict test passes with an honest count.
   have reservedN := inputs.2.2.1 callSlot' callSlotOk offStart
   have rootNe : computeEpochAtSlot preset callerBlock.slot ≠ computeEpochAtSlot preset callSlot' :=
@@ -878,7 +876,7 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
       .ok target0.root := by
     obtain ⟨_, _, _, blockRead, rfl⟩ := Store.getCurrentTarget_eq_ok_iff.mp target0Ok
     exact blockRead
-  obtain ⟨-, block0, -, held0, -, -⟩ := Store.isAncestor_of_getCheckpointBlock preGloas read0
+  obtain ⟨-, block0, -, held0, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read0
   obtain ⟨anc, ancStored, -⟩ := reachedU.blockStatesFromParents held0
   obtain ⟨fin, finRead, finAnchor⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedU sound anchorSlot params nonzeroU ancStored
@@ -1181,7 +1179,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
       · exact ok
       · rw [reachedW.anchorState_root, Except.ok.injEq] at zero
         exact absurd zero nonzero
-    have composed := (Store.getCheckpointBlock_trans preGloas rootRead finalLe).trans sliceRead
+    have composed := (Store.getCheckpointBlock_trans rootRead finalLe).trans sliceRead
     -- The read moves to the caller's store, and up to its head.
     have boundaryRead := composed
     unfold Store.getCheckpointBlock at boundaryRead
@@ -1351,11 +1349,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   swap
   · exfalso
     have startTrue : isStartSlotAtEpoch preset callSlot = .ok true := by
-      have first := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) callSlot
-      unfold isStartSlotAtEpoch computeSlotsSinceEpochStart at atBoundary ⊢
-      rw [first] at atBoundary ⊢
-      simp only [Except.mapError, bind, Except.bind, pure, Except.pure, Except.ok.injEq]
-        at atBoundary ⊢
+      rw [isStartSlotAtEpoch_eq] at atBoundary ⊢
       simpa using atBoundary
     exact inputs.2.2.2.2.1 callSlot _ _ callSlotOk startTrue epochOk rootEpochOkN rfl
   -- The call's slot and the next epoch's boundary start before the receiver's time.
@@ -1474,7 +1468,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
     exact tRead
   have targetNat := congrArg UInt64.toNat targetEpoch
   obtain ⟨-, targetBlock, -, targetHeld, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   obtain ⟨anc, ancStored, -⟩ := reachedQ.blockStatesFromParents targetHeld
   obtain ⟨fin, finRead, finAnchor⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedQ sound anchorSlot params
@@ -1868,7 +1862,7 @@ private theorem finalized_read_above_root {anchor : Store preset fork} {Δ time 
     rw [Nat.add_mul, Nat.one_mul] at mono
     omega
   exact Store.getCheckpointBlock_of_isAncestor preGloas rootFound above boundaryOk boundaryLe
-    ((Store.getCheckpointBlock_trans preGloas rootRead finalLe).trans finalRead)
+    ((Store.getCheckpointBlock_trans rootRead finalLe).trans finalRead)
 
 /-- The root is in the receiver's filtered tree, given the finality reads of held states.
 

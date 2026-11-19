@@ -702,7 +702,7 @@ theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : 
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
   obtain ⟨_, target, _, targetKnown, _, _⟩ :=
-    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
+    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock checkpoint
   have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
     have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
     simp only [UInt64.toNat_one] at sum

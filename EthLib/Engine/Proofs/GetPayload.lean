@@ -8,6 +8,10 @@ import EthLib.Base.Proofs.Toolchain.JsonBasic
 /-!
 # Proofs: `engine_getPayload`
 
+A version returns exactly the forks whose fields are its own.
+
+So each fork from Paris to Glamsterdam has a version, and no other fork has one.
+
 An unknown payload ID returns the Engine API's unknown-payload error.
 
 Each other refusal happens when its check fails and every earlier check passes.
@@ -38,6 +42,41 @@ open EthLib.Cryptography.Kzg
 open EthLib.Cryptography.Kzg.Constants
 open EthLib.Execution.Blocks (Block MAX_EXTRA_DATA_BYTES)
 open EthLib.Execution.Transactions
+
+/-- A version returns a payload of a fork exactly when its fields are those of the fork.
+
+Versions 3 to 6 start at the forks that add their fields: Dencun, Pectra, Fusaka and Glamsterdam.
+
+Each ends where the next one starts, and version 6 ends after Glamsterdam.
+
+Version 2 returns Paris and Shapella, and version 1 Paris alone. -/
+theorem acceptsGetPayloadFork_eq_true_iff (version : Nat) (fork : Fork) :
+    acceptsGetPayloadFork version fork = true ↔
+      1 ≤ version ∧ version ≤ 6 ∧ .paris ≤ fork ∧ fork < .hegota ∧
+        (version = 1 → fork < .shapella) ∧ (3 ≤ version ↔ .dencun ≤ fork) ∧
+        (4 ≤ version ↔ .pectra ≤ fork) ∧ (5 ≤ version ↔ .fusaka ≤ fork) ∧
+        (6 ≤ version ↔ .glamsterdam ≤ fork) := by
+  match version with
+  | 0 | 1 | 2 | 3 | 4 | 5 | 6 => cases fork <;> decide
+  | n + 7 => simp [acceptsGetPayloadFork]
+
+/-- Some version returns a payload of a fork exactly when the fork is from Paris to Glamsterdam. -/
+theorem exists_acceptsGetPayloadFork_iff (fork : Fork) :
+    (∃ version, acceptsGetPayloadFork version fork = true) ↔ .paris ≤ fork ∧ fork < .hegota := by
+  constructor
+  · rintro ⟨version, h⟩
+    obtain ⟨-, -, hLow, hHigh, -⟩ := (acceptsGetPayloadFork_eq_true_iff version fork).mp h
+    exact ⟨hLow, hHigh⟩
+  · intro ⟨hLow, hHigh⟩
+    cases fork <;> first
+      | exact absurd hLow (by decide)
+      | exact absurd hHigh (by decide)
+      | exact ⟨1, rfl⟩
+      | exact ⟨2, rfl⟩
+      | exact ⟨3, rfl⟩
+      | exact ⟨4, rfl⟩
+      | exact ⟨5, rfl⟩
+      | exact ⟨6, rfl⟩
 
 /-- A missing build process returns unknown payload, before any fork or bundle check. -/
 theorem getPayload_eq_error_of_store_eq_none (config : ChainConfig) (setup : TrustedSetup)

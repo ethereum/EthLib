@@ -1233,7 +1233,6 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
       HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
-  have positive := fit.positive
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
     have := parameters.roots
     omega
@@ -1246,19 +1245,18 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
     anchorZero slots parameters delay genesis pre roots absent heldEarly bounded enough terminal
     afterAnchor byzantine
   -- The caller reads its head at each rollover, and every honest store has a head.
-  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by omega
   have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time :=
     anchorEpochOk ▸ signedAll
-  rcases e.callRolloverRead_or_evidence sync slots history preGloas admitted fits prompt votes
+  rcases e.callRolloverRead_or_evidence sync slots preGloas admitted fits prompt votes
       anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits fit caller n head.root with
+      heldEarly enough terminal ceiling scoreFits fit.seeds caller n head.root with
     rollover | collision | evidence
   rotate_left
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inl evidence))
-  rcases e.honestHeadsExist_or_evidence sync slots positive preGloas admitted fits prompt votes
+  rcases e.honestHeadsExist_or_evidence sync slots preGloas admitted fits prompt votes
       anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits (e.world n).time with
+      heldEarly enough terminal ceiling scoreFits fit.seeds (e.world n).time with
     exist | collision | evidence
   rotate_left
   · exact .inr (.inl collision)
@@ -1608,7 +1606,7 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
   -- Each up-to-date honest store has a head, and its coverage before that time gives the root.
   obtain ⟨viable, exist⟩ := viable
   refine .inl fun w receiver k nodes low high upToDate tree => ?_
-  obtain ⟨hd, hdOk⟩ := exist w receiver k nodes low high upToDate tree
+  obtain ⟨hd, hdOk⟩ := exist w receiver k low high upToDate
   exact viable (e.world k).time low high (fun earlier lower upper => cover earlier lower (by omega))
     w receiver k nodes hd rfl upToDate hdOk tree
 

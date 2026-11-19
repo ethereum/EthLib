@@ -159,6 +159,10 @@ inductive EngineError where
   | invalidPayloadAttributes
   /-- No build process has the requested payload ID, `id`. -/
   | unknownPayload (id : PayloadId)
+  /-- The reorg to the head of the forkchoice state is deeper than the execution layer allows.
+
+  The client software sets that limit, so no method of this library returns this error. -/
+  | tooDeepReorg
   deriving DecidableEq
 
 /-- The constructor and its fields, laid out as a derived form would lay them out.
@@ -183,6 +187,7 @@ instance : Repr EngineError where
     | .tooLargeRequest count limit => apply "tooLargeRequest" [reprArg count, reprArg limit]
     | .invalidPayloadAttributes => apply "invalidPayloadAttributes" []
     | .unknownPayload id => apply "unknownPayload" [hex id.toList]
+    | .tooDeepReorg => apply "tooDeepReorg" []
 
 /-- The code of an error: its JSON-RPC code is the negative of this number. -/
 def EngineError.code : EngineError → UInt32
@@ -192,6 +197,7 @@ def EngineError.code : EngineError → UInt32
   | .tooLargeRequest .. => 38004
   | .invalidPayloadAttributes => 38003
   | .unknownPayload _ => 38001
+  | .tooDeepReorg => 38006
 
 /-- Why a payload is not valid, before its transactions run or when they run. -/
 inductive PayloadError where

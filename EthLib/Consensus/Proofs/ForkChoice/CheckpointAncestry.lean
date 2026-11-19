@@ -57,56 +57,20 @@ private theorem getCheckpointBlock_ok_iff {root target : Root} {epoch : Epoch} :
     cases reached : store.getAncestor ⟨root, .pending⟩ start <;>
       simp [reached, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-/-- A pending node descends from the pending node of each root on its chain.
-
-Before Gloas the walk keeps the pending status, as each parent is pending then. -/
-private theorem isAncestor_of_ancestorRoots (lower : store.ParentsBelow) {root target : Root}
-    {slot : Slot} (walk : store.ancestorRoots root slot target) :
-    store.isAncestor ⟨root, .pending⟩ ⟨target, .pending⟩ = .ok true := by
-  obtain ⟨node, reached, rfl⟩ := walk
-  by_cases gloas : .glamsterdam ≤ fork
-  · obtain ⟨block, found, le⟩ := getAncestor_le reached
-    have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok node := by
-      rw [getAncestor_trans le reached, getAncestor_of_le found (UInt64.le_refl _)]
-    simp [isAncestor_pending gloas, block_ok_iff.mpr found, stops, bind, Except.bind, pure,
-      Except.pure]
-  · obtain ⟨-, origin, -⟩ := getAncestor_climbs (lower := lower) reached
-    obtain ⟨nodeRoot, status⟩ := node
-    have pending : status = .pending := by
-      rcases origin with same | ⟨_, _, _, _, _, _, parentStatus, _⟩
-      · cases same
-        rfl
-      · exact parentStatus.trans (parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas))
-    subst pending
-    exact isAncestor_of_getAncestor reached
-
 /-- Two checkpoint blocks of one chain, at ordered epochs, are on one chain themselves.
 
 The earlier block is the ancestor of the later one at the first slot of the earlier epoch. -/
-private theorem getCheckpointBlock_of_le (lower : store.ParentsBelow)
+private theorem getCheckpointBlock_of_le
     {root early late : Root} {earlyEpoch lateEpoch : Epoch} (ordered : earlyEpoch ≤ lateEpoch)
     (earlyBlock : store.getCheckpointBlock root earlyEpoch = .ok early)
     (lateBlock : store.getCheckpointBlock root lateEpoch = .ok late) :
     store.isAncestor ⟨late, .pending⟩ ⟨early, .pending⟩ = .ok true ∧
       store.getCheckpointBlock late earlyEpoch = .ok early := by
-  obtain ⟨startEarly, startedEarly, nodeEarly, walkEarly, rfl⟩ :=
-    getCheckpointBlock_ok_iff.mp earlyBlock
-  obtain ⟨startLate, startedLate, node, reached, rfl⟩ := getCheckpointBlock_ok_iff.mp lateBlock
-  have startLe : startEarly ≤ startLate := by
-    rw [computeStartSlotAtEpoch_ok_iff] at startedEarly startedLate
-    rw [UInt64.le_iff_toNat_le, startedEarly.2, startedLate.2]
-    exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp ordered)
-  -- The walk to the earlier start can stop at the later block on the way.
-  have walk : store.ancestorRoots node.root startEarly nodeEarly.root := by
-    have same := getAncestor_root (store := store) node .pending startEarly
-    rw [← getAncestor_trans startLe reached, walkEarly] at same
-    cases reaching : store.getAncestor ⟨node.root, .pending⟩ startEarly with
-    | error e => simp [reaching, Functor.map, Except.map] at same
-    | ok other =>
-      simp only [reaching, Functor.map, Except.map, Except.ok.injEq] at same
-      exact ⟨other, reaching, same.symm⟩
-  exact ⟨isAncestor_of_ancestorRoots lower walk,
-    getCheckpointBlock_ok_iff.mpr ⟨startEarly, startedEarly, walk⟩⟩
+  -- The earlier read of the root goes through the later checkpoint.
+  have read : store.getCheckpointBlock late earlyEpoch = .ok early :=
+    (getCheckpointBlock_trans lateBlock ordered) ▸ earlyBlock
+  obtain ⟨_, _, _, _, _, descends⟩ := isAncestor_of_getCheckpointBlock read
+  exact ⟨descends, read⟩
 
 end Store
 
@@ -639,7 +603,6 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
     (genesis : Genesis config checks g)
     (pre : Run config checks g ⟨fork, anchorState⟩)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
     (unknownEarlier : earlier.blocks[anchorBlock.parentRoot]? = none)
     (importedEarlier : earlier.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
     (earlyEarlier : ∀ next ∈ config.nextFork fork,
@@ -689,7 +652,6 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
     have := parameters.roots
     omega
-  have lower := reachable.parentsBelow anchorSlot unknownParent
   have afterJ : getCurrentEpoch anchorState < j.epoch :=
     UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp afterF)
       (UInt64.le_iff_toNat_le.mp ordered))
@@ -731,7 +693,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
           UInt64.le_trans anchorSlot (slot_le_of_getCurrentEpoch_lt positive afterF startOk)
         have blockBF := getCheckpointBlock_eq_of_checkpointPath headersA headersB lastA lastB
           startOk later paths blockA
-        exact .inl (Store.getCheckpointBlock_of_le lower ordered blockBF blockB)
+        exact .inl (Store.getCheckpointBlock_of_le ordered blockBF blockB)
       · exact .inr ⟨stateA, left, va, ⟨rootA, heldA⟩, fieldA.symm, .inr (evidence zero)⟩
     · exact .inr ⟨stateA, left, va, ⟨rootA, heldA⟩, fieldA.symm, .inr (evidence zero)⟩
   · -- Different paths conflict, and direct accountable safety covers the two views.
@@ -811,7 +773,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_between {confi
       (fun _ _ held => heldEnough (.inr held)) (·.currentJustifiedCheckpoint) _ afterJ
       (.inl ⟨rfl, .inl rfl⟩)
   rcases reachable.finalized_ancestor_or_accountable_of_view reachableEarlier parameters genesis
-      pre anchorSlot unknownParent unknownEarlier importedEarlier earlyEarlier afterF ordered
+      pre anchorSlot unknownEarlier importedEarlier earlyEarlier afterF ordered
       heldB fieldB selectedB terminalB pathB enough (fun _ _ held => heldEnough (.inl held)) with
     read | ⟨stateA, left, va, heldA, fieldA, bound⟩
   · exact .inr (.inl read)
@@ -1044,7 +1006,7 @@ private theorem Store.Reachable.held_finalized_read_or_accountable {config : Con
       (reachable.linked_of_unknown (UInt64.le_of_eq anchorSlot) unknownParent) imported early pre
       held
     rcases reachable.finalized_ancestor_or_accountable_of_view reachableEarlier parameters genesis
-        pre (UInt64.le_of_eq anchorSlot) unknownParent unknownEarlier importedEarlier earlyEarlier
+        pre (UInt64.le_of_eq anchorSlot) unknownEarlier importedEarlier earlyEarlier
         (UInt64.not_le.mp atAnchor) ordered (vb := .realized) held rfl (.inl rfl) trivial path
         enough (fun _ _ found => heldEnough (.inl found)) with
       ⟨-, read⟩ | ⟨stateA, left, va, heldA, fieldA, bound⟩
