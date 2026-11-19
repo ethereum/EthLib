@@ -1823,33 +1823,28 @@ private theorem replayRewards_absent {f : Fork} {pass : BeaconState preset f}
       simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
       obtain ⟨_, _, after, actionOk, rfl⟩ := ok
       have increased := liftAccessor_ok.mp actionOk
-      obtain ⟨sizes, balances⟩ := sameSizes_increaseBalance increased
+      have same := sameSizes_increaseBalance increased
       have registry := increaseBalance_validators increased
       obtain ⟨preMatched, preSame, preSum⟩ := held
       have preSize : pre.1.balances.data.size ≤ v := by
         unfold BalancesMatch at preMatched
         rw [preMatched, preSame]
         exact outside
-      have afterMatched : BalancesMatch after := by
-        unfold BalancesMatch at preMatched ⊢
-        omega
-      refine ⟨afterMatched, registry.trans preSame, ?_⟩
+      refine ⟨balancesMatch_of_sameSizes same preMatched, registry.trans preSame, ?_⟩
       simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
         List.sum_nil, preSum, DirectSafety.Apriori.Internal.rewardCredit, ↓reduceIte,
         actualBalanceAt, Array.getElem?_eq_none preSize,
-        Array.getElem?_eq_none (show after.balances.data.size ≤ v by omega), Option.map_none,
+        Array.getElem?_eq_none (show after.balances.data.size ≤ v by rw [same.2]; exact preSize),
+        Option.map_none,
         Option.getD_none, Nat.sub_self, Nat.add_zero])
     (fun {source pre post index penalty} sourceCases held ok => by
       simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
       obtain ⟨_, _, after, actionOk, rfl⟩ := ok
       have decreased := liftAccessor_ok.mp actionOk
-      obtain ⟨sizes, balances⟩ := sameSizes_decreaseBalance decreased
+      have same := sameSizes_decreaseBalance decreased
       have registry := decreaseBalance_validators decreased
       obtain ⟨preMatched, preSame, preSum⟩ := held
-      have afterMatched : BalancesMatch after := by
-        unfold BalancesMatch at preMatched ⊢
-        omega
-      refine ⟨afterMatched, registry.trans preSame, ?_⟩
+      refine ⟨balancesMatch_of_sameSizes same preMatched, registry.trans preSame, ?_⟩
       rcases sourceCases with rfl | rfl <;>
         simp [List.map_append, List.sum_append, preSum,
           DirectSafety.Apriori.Internal.rewardCredit])
