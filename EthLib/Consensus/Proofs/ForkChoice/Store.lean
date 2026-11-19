@@ -24,11 +24,11 @@ Each node of a block descends from the pending node of its parent at an earlier 
 
 The walk to a lower slot can stop at a higher slot on the way, and go on from there.
 
-So before Gloas, a checkpoint read goes through the checkpoint the root reads at a later epoch.
-
 From Gloas the walk gives each parent an empty or full status.
 
 It reaches the same blocks whatever the status of its start.
+
+So at every fork, a checkpoint read goes through the checkpoint the root reads at a later epoch.
 -/
 
 @[expose] public section
