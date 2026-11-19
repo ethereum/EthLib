@@ -5309,6 +5309,131 @@ private theorem existing_low_explicit
   simp only [potentialFloor] at potential
   exact le_trans arith (Nat.add_le_add_right potential _)
 
+/-- The arithmetic of the margin of the floor of a key on C's run.
+
+The closed form of the potential floor, less the sync debits, is at least the base less the fall.
+
+The fall holds the leak at the base and the band for each epoch of the depth, and the carry.
+
+`L1` and `L2` are the leaks an increment above the base with the band and above the shortfall.
+
+The rate bounds the base with the band and the shortfall by them, plus one each. -/
+private theorem margin_arith (ρn ρd K depth B band s L1 L2 pd sync D a X : ℕ)
+    (positive : 0 < ρd) (first : ρn * (B + band) ≤ ρd * (L1 + 1))
+    (second : ρn * s ≤ ρd * (L2 + 1)) (epochs : K ≤ depth)
+    (fall : (L2 + 1) + depth * (L1 + 1) + pd ≤ X) (debit : D ≤ sync + pd)
+    (closed : (ρd - ρn * K) * (B + band) ≤ ρd * (a + D + band) + ρn * s) :
+    B - X - sync ≤ a := by
+  have depthMul : K * (L1 + 1) ≤ depth * (L1 + 1) := Nat.mul_le_mul_right _ epochs
+  have rate : ρn * K * (B + band) ≤ ρd * (K * (L1 + 1)) :=
+    calc ρn * K * (B + band) = K * (ρn * (B + band)) := by ring
+      _ ≤ K * (ρd * (L1 + 1)) := Nat.mul_le_mul_left _ first
+      _ = ρd * (K * (L1 + 1)) := by ring
+  by_cases big : ρd ≤ ρn * K
+  · -- the closed form is vacuous, and the leak already covers the base
+    have step : ρd * (B + band) ≤ ρd * (K * (L1 + 1)) :=
+      calc ρd * (B + band) ≤ ρn * K * (B + band) := Nat.mul_le_mul_right _ big
+        _ ≤ ρd * (K * (L1 + 1)) := rate
+    have base := Nat.le_of_mul_le_mul_left step positive
+    omega
+  · have small : ρn * K < ρd := Nat.lt_of_not_ge big
+    have expand : ρd * (B + band) =
+        (ρd - ρn * K) * (B + band) + ρn * K * (B + band) :=
+      calc ρd * (B + band) = ((ρd - ρn * K) + ρn * K) * (B + band) := by
+            rw [Nat.sub_add_cancel small.le]
+        _ = _ := by ring
+    have spread : ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) =
+        ρd * (a + D + band) + ρd * (L2 + 1) + ρd * (K * (L1 + 1)) := by ring
+    have total : ρd * (B + band) ≤ ρd * (a + D + band + (L2 + 1) + K * (L1 + 1)) := by omega
+    have cancel := Nat.le_of_mul_le_mul_left total positive
+    omega
+
+/-- The margin of the floor of a key on C's run, from the rate of its leak.
+
+The balance of the key from the finalized block is above the closed form of the potential floor.
+
+The closed form reads the rate that `leak_rate` gives and the shortfall of the balance.
+
+It also reads the debits of the run, which are its sync debits and its partials.
+
+The partials are at most those due.
+
+`low` is the base less `X`.
+
+`X` is at least the fall.
+
+The fall is the carry, the leak for each epoch of the depth, and the partials due.
+
+The leak is read at the base with the band. -/
+private theorem floorC_margin (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (base0 X low : ℕ)
+    (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+      (withdrawalMaxEffectiveBalance preset fork val).toNat)
+    (hlow : low = base0 - X)
+    (fall : ((pinTerms config pulled anc fin).leakAt
+          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          ((pinTerms config pulled anc fin).leakAt
+            (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
+    ∃ slack ρn ρd : ℕ,
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+          (preset.downwardBand + slack) ∧
+      (∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+        (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+        (before.snoc step).append after = fromFin.append tailC → ∀ evs,
+        step.balanceEvents = .ok evs →
+        (evs.map (penaltyDebit i.toNat)).sum ≤ ρn * effectiveAt m i.toNat / ρd) ∧
+      ∀ a D k : ℕ, k ≤ (getCurrentEpoch counted).toNat - (getCurrentEpoch fin).toNat →
+        D ≤ (events.map (syncDebit i.toNat)).sum + (events.map (floorPartialDebit i)).sum →
+        (ρd - ρn * k) * (min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+            (withdrawalMaxEffectiveBalance preset fork val).toNat +
+          preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
+        low - (events.map (syncDebit i.toNat)).sum ≤ a := by
+  obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin h.bands.1 i.toNat
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have shallow := h.shallow
+  have nearC := h.near
+  simp only at finSplit called
+  have short : (getCurrentEpoch pulled).toNat + 1 <
+      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+    omega
+  have partialLe : (events.map (floorPartialDebit i)).sum ≤
+      (pinTerms config pulled anc fin).partialsDue i.toNat :=
+    (Run.partialDebit_le (fromFin.append tailC) electra h.early (getCurrentEpoch pulled).toNat
+      ((getCurrentEpoch pulled).toNat + 1) nearC short i replayed).trans
+      (partials_le_due electra i)
+  refine ⟨effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+    actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, ρn, ρd, by omega,
+    pass_of_leak h (fromFin.append tailC) nearC i ⟨val, initial⟩ ρn ρd leaky,
+    fun a D k hk hD closed => ?_⟩
+  rw [← hbase0] at closed
+  have bound := margin_arith ρn ρd k
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) base0
+    preset.downwardBand
+    (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+    ((pinTerms config pulled anc fin).leakAt
+      (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat)
+    ((pinTerms config pulled anc fin).leakAt
+      (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+        actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat)
+    ((pinTerms config pulled anc fin).partialsDue i.toNat)
+    (events.map (syncDebit i.toNat)).sum D a X
+    positive (above _) (above _) (by omega) fall (by omega) closed
+  omega
+
 end LowBound
 
 /-- The low bound of an existing key is covered by its exit charge and its sync debits.
