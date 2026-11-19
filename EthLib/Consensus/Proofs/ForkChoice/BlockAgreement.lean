@@ -151,27 +151,29 @@ theorem Execution.exists_signed_of_blocks
   · exact .inl old
   · exact .inr ⟨sb, pre, post, mem, msg, hash, rest⟩
 
-/-- An honest store that starts at the anchor store stays reachable from the anchor. -/
+/-- A store that starts at the anchor store stays reachable from the anchor. -/
 private theorem Execution.reachable_of_start
     (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {v : ν}
-    (honest : v ∈ J) (start : e.start v = anchor) (i : ℕ) :
+    (start : e.start v = anchor) (i : ℕ) :
     Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
-  have initial : Store.Reachable config anchorState anchorBlock (e.start v) :=
-    start ▸ Store.Reachable.anchor anchored
-  exact e.state_induction
-    (I := fun w s => w = v → Store.Reachable config anchorState anchorBlock s)
-    (fun w _ same => same ▸ initial)
-    (fun _ _ _ _ _ _ reached moved same => moved.reachable (reached same)) i v honest rfl
+  induction i with
+  | zero =>
+    change Store.Reachable config anchorState anchorBlock (e.start v)
+    exact start ▸ Store.Reachable.anchor anchored
+  | succ i ih =>
+    rcases e.state_succ i v with same | ⟨_, moved⟩
+    · exact same ▸ ih
+    · exact moved.reachable ih
 
 /-- Stores from one anchor agree on states wherever their blocks agree. -/
 theorem Execution.blockStates_eq (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    {u w : ν} (first : u ∈ J) (second : w ∈ J) (startFirst : e.start u = anchor)
+    {u w : ν} (startFirst : e.start u = anchor)
     (startSecond : e.start w = anchor) {n k : ℕ}
     (sameBlocks : ∀ (root : Root) left right, ((e.world n).state u).blocks[root]? = some left →
       ((e.world k).state w).blocks[root]? = some right → left = right)
@@ -232,9 +234,9 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
   induction height using Nat.strong_induction_on generalizing root left right with
   | ind height ih =>
     obtain ⟨lb, lbFound⟩ :=
-      (e.reachable_of_start anchored first startFirst n).known_of_blockState leftFound
+      (e.reachable_of_start anchored startFirst n).known_of_blockState leftFound
     obtain ⟨rb, rbFound⟩ :=
-      (e.reachable_of_start anchored second startSecond k).known_of_blockState rightFound
+      (e.reachable_of_start anchored startSecond k).known_of_blockState rightFound
     have message := sameBlocks root lb rb lbFound rbFound
     subst rb
     cases initial : anchor.blocks[root]? with
@@ -407,7 +409,7 @@ theorem Execution.targetStates_eq_or_collision {anchor : Store preset fork}
     e.targetState_fixedChecks anchored start first leftStored leftRead
   obtain ⟨rightBase, rightSlot, rightFound, rightSlotOk, rightRun⟩ :=
     e.targetState_fixedChecks anchored start second rightStored rightRead
-  have baseEq := e.blockStates_eq anchored first second (start u first) (start w second)
+  have baseEq := e.blockStates_eq anchored (start u first) (start w second)
     (agree (u, n) ⟨first, nBound⟩ (w, k) ⟨second, kBound⟩) leftFound rightFound
   have slotEq := Except.ok.inj (leftSlotOk.symm.trans rightSlotOk)
   subst rightBase
@@ -516,8 +518,8 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     have memK := sync.2.2 n k ordered v honest u receiver (.block sb) memN late
     obtain ⟨pre, preFound, _, _, _⟩ := Store.validateOnBlock_ok valid
     obtain ⟨other, otherFound, _⟩ :=
-      (e.reachable_of_start anchored receiver startReceiver k).blockStatesFromParents pk
-    have states : pre = other := e.blockStates_eq anchored honest receiver startSender
+      (e.reachable_of_start anchored startReceiver k).blockStatesFromParents pk
+    have states : pre = other := e.blockStates_eq anchored startSender
       startReceiver (agree i (Nat.le_of_lt before)) preFound (msg ▸ otherFound)
     have otherPre : ((e.world k).state u).blockStates[sb.message.parentRoot]? = some pre := by
       rw [states, msg]
@@ -656,8 +658,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   · exact .inr collision
   have oneBlock v hv u hu n k hn hk := agree v hv u hu n k hn hk
   left
-  have reachedSender := e.reachable_of_start anchored honest startSender
-  have reachedReceiver := e.reachable_of_start anchored receiver startReceiver
+  have reachedSender := e.reachable_of_start anchored startSender
+  have reachedReceiver := e.reachable_of_start anchored startReceiver
   -- The payload came from an envelope that the sender accepted before.
   rcases e.exists_envelope_of_verified gloas verified with
     initial | ⟨i, before, envelope, _, mem, rfl, handled⟩
@@ -677,7 +679,7 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   obtain ⟨state, stateFound, dataOk, envelopeOk, recorded, record, -⟩ :=
     Store.onExecutionPayloadEnvelope_ok handled
   obtain ⟨other, otherFound⟩ := held
-  have sameState : state = other := e.blockStates_eq anchored honest receiver startSender
+  have sameState : state = other := e.blockStates_eq anchored startSender
     startReceiver (oneBlock v honest u receiver i k iBound bounded) stateFound otherFound
   subst sameState
   -- The receiver records the envelope as the sender did.
@@ -773,7 +775,7 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   obtain rfl := agree v honest u receiver i k iBound bounded _ _ _ sentFound parentFound
   refine (Store.validateParentPayload_ok_iff gloas).mpr ⟨sent, parentFound, fun full => ?_⟩
   -- The receiver holds the parent's state, as it holds the parent.
-  have reached := e.reachable_of_start anchored receiver startReceiver k
+  have reached := e.reachable_of_start anchored startReceiver k
   obtain ⟨parentState, parentStateFound, -⟩ := reached.blockStatesFromParents parentFound
   rcases e.payloadVerified_of_partiallySynchronous sync gloas anchorSlot anchored honest receiver
       startSender startReceiver (n := i) (by omega) bounded

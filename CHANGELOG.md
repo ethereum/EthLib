@@ -368,6 +368,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.
+  A caller drops those two arguments.
+
 - In Lean, `VoteAt.accepted_at_next_slot` and `VoteAt.recorded_at_next_slot` no longer take the premise `epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The honest vote data already puts the target at the epoch of the duty slot.
   A caller drops that argument.

@@ -646,7 +646,7 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
   have reached := e.reachable
     (fun u hu => (start u hu).symm ▸ EthLib.Consensus.Store.Reachable.anchor anchored) k w receiver
   obtain ⟨receiverBase, receiverBaseFound, _, _⟩ := reached.blockStatesFromParents known
-  have baseEq := e.blockStates_eq anchored honest receiver (start v honest) (start w receiver)
+  have baseEq := e.blockStates_eq anchored (start v honest) (start w receiver)
     (agree (v, n) ⟨honest, nBound⟩ (w, k) ⟨receiver, kBound⟩) baseFound receiverBaseFound
   subst receiverBase
   have computed : ((e.world k).state w).computeCheckpointState config checks
