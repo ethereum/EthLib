@@ -187,6 +187,58 @@ private theorem gainOn_round (depth P C : ℕ)
     simp
   rw [this]
 
+
+end PinSum
+end EthLib.Consensus.Models.Network
+
+open DirectSafety.Apriori.Internal in
+/-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains. -/
+private theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) (P : ℕ)
+    (hP : P = ((getBaseRewardPerIncrement preset
+      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+        (getTotalActiveBalance pulled).toOption.getD 0 / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
+    (i : ℕ) (inside : i < split.validators.data.size) (capI Dp Ds W pd : ℕ)
+    (hcap : capI = ((pulled.validators.data[i]?).map fun v =>
+      (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0)
+    (alignedCap : capI % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤ capI)
+    (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z i ≤ capI)
+    (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) i) capI ≤
+      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
+    (hW : W ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (debits : Dp ≤ ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+      (pinTerms config pulled anc fin).leakAt capI i + pd)
+    (top : min capI (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        (pinTerms config pulled anc fin).leakAt capI i + pd + preset.downwardBand) ≤
+      (pinTerms config pulled anc fin).ebUp i)
+    (small : ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+      ((11 * (pinTerms config pulled anc fin).gainRate i + 9) / 10 + 3) <
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (rateLow : 11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRate i + 1) ≤ (pinTerms config pulled anc fin).ebUp i) :
+    ∀ z ∈ tailC.balancePath, min (actualBalanceAt z i) capI ≤
+      actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W +
+        (netScan i highC tailC +
+          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1) +
+        (gainOn preset (min (pinTerms config pulled anc fin).depth
+            ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) P
+          ((11 * (netScan i highC tailC +
+            (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 + Ds) +
+              9) / 10) +
+          (min (pinTerms config pulled anc fin).depth
+              ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+            (pinTerms config pulled anc fin).gainRate i +
+          min (pinTerms config pulled anc fin).depth
+              ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+            (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2))) :=
+  sorry
+
 end Concrete
 
 end PinSum
