@@ -5555,6 +5555,7 @@ private theorem ebUp_eq (config : Config) (pulled anc fin : BeaconState preset f
   simp only [pinTerms, dueAmount, electra, ↓reduceDIte]
   rfl
 
+open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
 
 The key is in the low regime, so its effective balance bound `ebUp` closes the ceiling.
