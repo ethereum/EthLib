@@ -1749,19 +1749,16 @@ private theorem key_capped {g : ForkedBeaconState preset}
         (hasCompoundingWithdrawalCredential vC = true →
           hasCompoundingWithdrawalCredential vR = true))) :
     effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor := by
-  have capped := UInt64.le_iff_toNat_le.mp
-    (run.effectiveBalance_capped genesis caps.activation caps.compounding early vC
-      (Array.mem_of_getElem? foundC))
-  simp only [effectiveAt, foundC, Option.map_some, Option.getD_some]
-  refine le_trans capped ?_
   rcases cases with high | ⟨low, frozen⟩
   · rw [high]
-    simp only [withdrawalMaxEffectiveBalance, electra, ↓reduceIte, getMaxEffectiveBalance]
-    split
-    · exact le_rfl
-    · exact UInt64.le_iff_toNat_le.mp caps.compounding
-  · rw [low]
-    exact UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen)
+    exact PinSplit5.effectiveAt_le_capMax run genesis caps early i
+  · have capped := UInt64.le_iff_toNat_le.mp
+      (run.effectiveBalance_capped genesis caps.activation caps.compounding early vC
+        (Array.mem_of_getElem? foundC))
+    simp only [effectiveAt, foundC, Option.map_some, Option.getD_some]
+    rw [low]
+    exact le_trans capped
+      (UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen))
 
 /-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
