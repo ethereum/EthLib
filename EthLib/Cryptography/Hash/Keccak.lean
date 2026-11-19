@@ -437,12 +437,18 @@ In bits, `x = 8 * rate` and `m = 8 * len`:
 
 So a whole block of padding is added when `len` is a multiple of the rate.
 
-In bytes, least significant bit first (Appendix B.1), byte `i` of `P` is the padding byte above. -/
+In bytes, least significant bit first (Appendix B.1), byte `i` of `P` is the padding byte above.
+
+Only the first and the last padding bytes can be nonzero.
+
+So `P` is built as zero bytes, and then those two are set. -/
 def padding (rate len : Nat) : ByteArray :=
   -- P fills the rest of the last block: k = rate - len mod rate bytes.
   let k := rate - len % rate
-  -- Byte i of P, for i = 0 to k - 1.
-  ⟨Array.ofFn fun i : Fin k => paddingByte rate len i⟩
+  -- The k bytes start as zeros.
+  let zeros : ByteArray := ⟨Array.replicate k 0⟩
+  -- Byte 0 gets the first 1 bit and byte k - 1 the final one: for k = 1, byte 0 is 0b10000001.
+  (zeros.set! 0 (paddingByte rate len 0)).set! (k - 1) (paddingByte rate len (k - 1))
 
 /-- The message followed by its padding: the string `P` of FIPS 202 §4, Algorithm 8, step 1. -/
 def pad (rate : Nat) (msg : ByteArray) : ByteArray :=

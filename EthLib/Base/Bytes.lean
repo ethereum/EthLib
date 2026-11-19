@@ -74,9 +74,9 @@ Example, with `b = ByteArray.mk #[10, 20, 30, 40]`:
 def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
     Vector UInt8 n :=
   -- Every index below the object's length lands inside the buffer.
-  Vector.ofFn fun i => b.data[offset + i.val]'(by
-    simp only [ByteArray.size] at h
-    omega)
+  --
+  -- Each byte is read in place: the array of all the bytes would copy the buffer for every byte.
+  Vector.ofFn fun i => b[offset + i.val]'(by omega)
 
 /-- The byte at index `i` of the buffer, or `0` past its end.
 

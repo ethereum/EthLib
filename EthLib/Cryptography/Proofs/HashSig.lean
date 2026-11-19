@@ -25,7 +25,7 @@ Both make the same calls in the same order.
 
 namespace EthLib.Cryptography.HashSig
 
-open EthLib.Base (packBytes readBytes readBytes_packBytes)
+open EthLib.Base (packBytes readBytes readBytes_eq_ofFn_data readBytes_packBytes)
 
 /-! ## Reading fixed-size objects -/
 
@@ -53,7 +53,7 @@ theorem packBytes_unpackBytes? {n : Nat} {b : ByteArray} (hb : b.size = n) :
     (unpackBytes? n b).map packBytes = some b := by
   -- A buffer of exactly the right length has room, so the guard passes.
   rw [unpackBytes?, dite_eq_left (by omega : 0 + n ≤ b.size)]
-  simp only [Option.map_some, packBytes, readBytes, Vector.toArray_ofFn, Nat.zero_add]
+  simp only [Option.map_some, packBytes, readBytes_eq_ofFn_data, Vector.toArray_ofFn, Nat.zero_add]
   -- The object's length is the buffer's, so the read indices cover it exactly.
   have hdata : b.data.size = n := hb
   subst hdata
@@ -81,7 +81,7 @@ theorem readBytes_append_left {a b : ByteArray} {offset n : Nat} (h)
     readBytes (a ++ b) offset n h = readBytes a offset n inside := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_left (by simp only [ByteArray.size] at inside; omega)]
 
 /-- A read that starts after the first part of a concatenation reads the second. -/
@@ -90,7 +90,7 @@ theorem readBytes_append_right {a b : ByteArray} {offset n : Nat} (h) :
       = readBytes b offset n (by simp only [ByteArray.size_append] at h; omega) := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_right (by simp only [ByteArray.size]; omega)]
   -- The index past the first part is the index into the second.
   congr 1
@@ -115,10 +115,11 @@ theorem packBytes_readBytes (b : ByteArray) (offset n : Nat) (h) :
   apply ByteArray.ext
   apply Array.ext
   · simp only [ByteArray.size] at h
-    simp only [packBytes, readBytes, Vector.toArray_ofFn, Array.size_ofFn, Array.size_extract]
+    simp only [packBytes, readBytes_eq_ofFn_data, Vector.toArray_ofFn, Array.size_ofFn,
+      Array.size_extract]
     omega
   · intro i h₁ h₂
-    simp [packBytes, readBytes]
+    simp [packBytes, readBytes_eq_ofFn_data]
 
 /-! ## Computing a vector in order -/
 
