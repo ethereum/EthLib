@@ -2066,9 +2066,9 @@ private theorem two_bands_le_exitingBands (config : Config)
         (if ∃ c ∈ tailC.departureCharges, c.index = v.toNat then preset.upwardBand else 0) := by
       intro v hv
       by_cases hc : ∃ c ∈ tailC.departureCharges, c.index = v.toNat
-      · rw [if_pos hc]
+      · simp only [hc, ↓reduceIte]
         exact bounded _
-      · rw [if_neg hc]
+      · simp only [hc, ↓reduceIte]
         have notBand : ¬ 0 < bandC tailC highC v.toNat := fun pos =>
           hc (charged v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2 pos)
         omega
