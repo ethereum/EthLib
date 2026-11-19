@@ -790,6 +790,338 @@ private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ)
       ((events.filter (·.source = .sync)).map (keyDebit v)).sum :=
   sum_map_sync events (keyDebit v)
 
+/-- A key's credit in an event is at most the event's credit limit. -/
+private theorem keyCredit_le_creditLimit (i : ℕ) (e : BalanceEvent preset)
+    (bounded : e.credits ≤ e.creditLimit) : keyCredit i e ≤ e.creditLimit := by
+  refine le_trans ?_ bounded
+  unfold keyCredit
+  by_cases within : i < e.after.state.balances.data.size
+  · exact Finset.single_le_sum (f := fun j =>
+      actualBalanceAt e.after j - actualBalanceAt e.before j)
+      (fun _ _ => Nat.zero_le _) (Finset.mem_range.mpr within)
+  · have missing : actualBalanceAt e.after i = 0 := by
+      simp [actualBalanceAt, Array.getElem?_eq_none (Nat.le_of_not_lt within)]
+    omega
+
+/-- A property of the states of a trace that each stage keeps holds at its end. -/
+private theorem epochTrace_invariant {σ ε : Type} {action : EpochStage → σ → Except ε σ}
+    (P : σ → Prop) (step : ∀ k s u, P s → action k s = .ok u → P u)
+    {ks : List EpochStage} {s t : σ} (trace : EpochTrace action ks s t) :
+    P s → P t := by
+  induction trace with
+  | nil => exact id
+  | cons ok _ ih => exact fun held => ih (step _ _ _ held ok)
+
+/-- The stages of an epoch replay record no slashing event with a credit limit. -/
+private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
+    {pre post : BalanceReplay preset fork}
+    (held : ∀ e ∈ pre.2, e.source = .slashings → e.creditLimit = 0)
+    (ok : epochReplayAction (config := config) (checks := checks) k pre = .ok post) :
+    ∀ e ∈ post.2, e.source = .slashings → e.creditLimit = 0 := by
+  have carried : ∀ {a : BeaconState preset fork → Except TransitionError (BeaconState preset fork)},
+      carryBalance a pre = .ok post → ∀ e ∈ post.2, e.source = .slashings → e.creditLimit = 0 := by
+    intro a ok'
+    simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok'
+    obtain ⟨_, _, rfl⟩ := ok'
+    exact held
+  have unchanged : (pure pre : Except TransitionError (BalanceReplay preset fork)) = .ok post →
+      ∀ e ∈ post.2, e.source = .slashings → e.creditLimit = 0 := by
+    intro ok'
+    simp only [pure, Except.pure, Except.ok.injEq] at ok'
+    subst ok'
+    exact held
+  cases k
+  case justification =>
+    simp only [epochReplayAction] at ok
+    exact carried ok
+  case inactivity =>
+    simp only [epochReplayAction] at ok
+    split at ok
+    · exact carried ok
+    · exact unchanged ok
+  case rewards =>
+    simp only [epochReplayAction] at ok
+    refine replayRewards_induction (config := config)
+      (fun p => ∀ e ∈ p.2, e.source = .slashings → e.creditLimit = 0) ?_ ?_ held ok
+    · intro pre' post' index reward held' ok'
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok'
+      obtain ⟨_, _, _, _, rfl⟩ := ok'
+      intro e member source
+      rcases List.mem_append.mp member with old | new
+      · exact held' e old source
+      · obtain rfl := List.mem_singleton.mp new
+        exact absurd source (by simp)
+    · intro src pre' post' index penalty pen held' ok'
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok'
+      obtain ⟨_, _, _, _, rfl⟩ := ok'
+      intro e member source
+      rcases List.mem_append.mp member with old | new
+      · exact held' e old source
+      · obtain rfl := List.mem_singleton.mp new
+        have same : src = .slashings := source
+        rcases pen with h | h <;> rw [h] at same <;> cases same
+  case registry =>
+    simp only [epochReplayAction] at ok
+    exact carried ok
+  case slashings =>
+    simp only [epochReplayAction, recordBalance, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at ok
+    obtain ⟨⟨credit, debit⟩, limited, after, computed, rfl⟩ := ok
+    simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at limited
+    obtain ⟨_, _, zero, _⟩ := limited
+    intro e member source
+    rcases List.mem_append.mp member with old | new
+    · exact held e old source
+    · obtain rfl := List.mem_singleton.mp new
+      exact zero.symm
+  case eth1Reset =>
+    simp only [epochReplayAction] at ok
+    split at ok
+    · exact carried ok
+    · exact unchanged ok
+  case pendingDeposits =>
+    simp only [epochReplayAction] at ok
+    split at ok
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, rfl⟩ := ok
+      intro e member source
+      rcases List.mem_append.mp member with old | new
+      · exact held e old source
+      · obtain rfl := List.mem_singleton.mp new
+        exact absurd source (by simp)
+    · exact unchanged ok
+  case pendingConsolidations =>
+    simp only [epochReplayAction] at ok
+    split at ok
+    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, rfl⟩ := ok
+      intro e member source
+      rcases List.mem_append.mp member with old | new
+      · exact held e old source
+      · obtain rfl := List.mem_singleton.mp new
+        exact absurd source (by simp)
+    · exact unchanged ok
+  all_goals
+    simp only [epochReplayAction] at ok
+    exact unchanged ok
+
+/-- A slot step records no slashing event with a credit limit. -/
+private theorem slot_slashing_credit {m n : ForkedBeaconState preset}
+    {ok : advanceSlotAcross config checks m = .ok n} (early : n.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)} (replayed : (Step.slot ok).balanceEvents = .ok events) :
+    ∀ e ∈ events, e.source = .slashings → e.creditLimit = 0 := by
+  intro e member source
+  obtain ⟨advanced, cached, crossings, -, -, -, crossingOk, split⟩ :=
+    Step.balanceEvents_slot ok early replayed
+  have notCrossing : e ∉ crossings := fun inside => by
+    have crossing := upgradeBalanceReplay_crossing crossingOk e inside
+    rw [crossing] at source
+    cases source
+  rcases split with ⟨-, rfl⟩ | ⟨middle, updated, recorded, recordOk, -, -, -, shape, -⟩
+  · exact absurd member notCrossing
+  · rw [shape] at member
+    rcases List.mem_append.mp member with inside | inside
+    · exact epochTrace_invariant (action := epochReplayAction (config := config) (checks := checks))
+        (fun p => ∀ e ∈ p.2, e.source = .slashings → e.creditLimit = 0)
+        (fun k s u held ok => epochReplayAction_slashing_credit k held ok)
+        (epochBalanceReplay_trace recordOk) (fun e member => by simp at member) e inside source
+    · exact absurd inside notCrossing
+
+/-- An event of a block step credits a key only from the sources of `credC`, `whistC` and sync.
+
+A deposit event of a block credits nothing from Electra. -/
+private theorem block_event_credit {g : ForkedBeaconState preset} {fork : Fork}
+    {s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
+    {signed : SignedBeaconBlock preset fork} {due : upgradeDue config ⟨fork, s⟩ = false}
+    {ok : applySignedBlock config checks engine s signed true = .ok t}
+    (shared : Run config checks g ⟨fork, s⟩) (genesis : Genesis config checks g)
+    (early : fork < .glamsterdam) (electra : .pectra ≤ fork) (i : ℕ)
+    {events : List (BalanceEvent preset)}
+    (replayed : (Step.block engine signed due ok).balanceEvents = .ok events)
+    (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
+    ∀ e ∈ events, keyCredit i e ≤
+      (if e.source = .rewards ∨ e.source = .consolidations then keyCredit i e else 0) +
+        (if e.source = .slashings then keyCredit i e else 0) + syncCredit i e := by
+  intro e member
+  obtain ⟨fk, positive⟩ := Step.balanceEvents_credit_sources
+    (Step.block engine signed due ok) early (run_justified_separated shared genesis).1
+    replayed e member
+  have limit := keyCredit_le_creditLimit i e (bounded e member)
+  by_cases rc : e.source = .rewards ∨ e.source = .consolidations
+  · simp [rc]
+  by_cases sl : e.source = .slashings
+  · simp [rc, sl]
+  by_cases sy : e.source = .sync
+  · simp [rc, sl, sy, syncCredit, keyCredit]
+  have zero : e.creditLimit = 0 := by
+    by_contra pos
+    rcases positive (Nat.pos_of_ne_zero pos) with h | h | h | h | h
+    · exact rc (.inl h)
+    · exact sy h
+    · exact sl h
+    · exact pos (funding_block_events (config := config) (checks := checks) early engine s
+        signed.message (Step.balanceEvents_block early replayed) e member h
+        (Nat.le_trans electra fk))
+    · exact rc (.inr h)
+  rw [if_neg rc, if_neg sl]
+  omega
+
+/-- An event of a slot step, but for the epoch rewards, credits a key only from `credC` and sync. -/
+private theorem slot_event_credit {g m n : ForkedBeaconState preset}
+    {ok : advanceSlotAcross config checks m = .ok n}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (early : n.fork < .glamsterdam) (i : ℕ) {events : List (BalanceEvent preset)}
+    (replayed : (Step.slot ok).balanceEvents = .ok events)
+    (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
+    ∀ e ∈ events, e.source ≠ .rewards → keyCredit i e ≤
+      (if e.source = .consolidations ∨ e.source = .deposits then keyCredit i e else 0) +
+        syncCredit i e := by
+  intro e member notRewards
+  obtain ⟨-, positive⟩ := Step.balanceEvents_credit_sources (Step.slot ok) early
+    (run_justified_separated shared genesis).1 replayed e member
+  have limit := keyCredit_le_creditLimit i e (bounded e member)
+  by_cases cd : e.source = .consolidations ∨ e.source = .deposits
+  · simp [cd]
+  by_cases sy : e.source = .sync
+  · simp [cd, sy, syncCredit, keyCredit]
+  have zero : e.creditLimit = 0 := by
+    by_contra pos
+    rcases positive (Nat.pos_of_ne_zero pos) with h | h | h | h | h
+    · exact notRewards h
+    · exact sy h
+    · exact pos (slot_slashing_credit early replayed e member h)
+    · exact cd (.inr h)
+    · exact cd (.inl h)
+  rw [if_neg cd]
+  omega
+
+/-- The events that a filter selects sum as the events with the others at zero. -/
+private theorem sum_filter_ite (events : List (BalanceEvent preset))
+    (f : BalanceEvent preset → ℕ) (p : BalanceSource → Bool) :
+    ((events.filter (p ·.source)).map f).sum =
+      (events.map fun e => if p e.source = true then f e else 0).sum := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih =>
+    by_cases h : p e.source = true
+    · simp [List.filter_cons, h, ih]
+    · simp [List.filter_cons, h, ih]
+
+/-- A bound for each selected event gives the bound for the sums of the credits that it splits. -/
+private theorem sum_credits_split (events : List (BalanceEvent preset))
+    (f g : BalanceEvent preset → ℕ) (r p q : BalanceSource → Bool)
+    (each : ∀ e ∈ events, r e.source = true →
+      f e ≤ (if p e.source = true then f e else 0) + (if q e.source = true then f e else 0) +
+        g e) :
+    ((events.filter (r ·.source)).map f).sum ≤ ((events.filter (p ·.source)).map f).sum +
+      ((events.filter (q ·.source)).map f).sum + (events.map g).sum := by
+  rw [sum_filter_ite, sum_filter_ite, sum_filter_ite, ← List.sum_map_add, ← List.sum_map_add]
+  refine List.sum_le_sum fun e member => ?_
+  by_cases hr : r e.source = true
+  · rw [if_pos hr]
+    exact each e member hr
+  · rw [if_neg hr]
+    exact Nat.zero_le _
+
+/-- A bound for each event of a list gives the bound for the sum of all its credits. -/
+private theorem sum_credits_split_all (events : List (BalanceEvent preset))
+    (f g : BalanceEvent preset → ℕ) (p q : BalanceSource → Bool)
+    (each : ∀ e ∈ events,
+      f e ≤ (if p e.source = true then f e else 0) + (if q e.source = true then f e else 0) +
+        g e) :
+    (events.map f).sum ≤ ((events.filter (p ·.source)).map f).sum +
+      ((events.filter (q ·.source)).map f).sum + (events.map g).sum := by
+  rw [sum_filter_ite, sum_filter_ite, ← List.sum_map_add, ← List.sum_map_add]
+  exact List.sum_le_sum each
+
+/-- A filter that selects no event sums to zero. -/
+private theorem sum_filter_none (events : List (BalanceEvent preset))
+    (f : BalanceEvent preset → ℕ) :
+    ((events.filter fun _ => false).map f).sum = 0 := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih => simpa [List.filter_cons] using ih
+
+/-- The events of a step are within their credit limits. -/
+private theorem step_events_bounded {g m n : ForkedBeaconState preset}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (step : Step config checks m n) (early : n.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
+    ∀ e ∈ events, e.credits ≤ e.creditLimit := by
+  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
+    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
+    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
+      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+  obtain ⟨found, foundOk, bounded⟩ := Run.balanceEvents_bounded shared (Run.nil.snoc step)
+    genesis early (getCurrentEpoch n.state).toNat
+  rw [run] at foundOk
+  cases foundOk
+  exact fun e member => (bounded e member).1
+
+/-- The credits of a step, net for a block step, are at most those of `credC`, `whistC` and sync. -/
+private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (step : Step config checks m n) (early : n.fork < .glamsterdam) (electra : .pectra ≤ m.fork)
+    (i : ℕ) {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events) :
+    stepNet i step + stepCredit (fun _ => false) (fun s => decide (s ≠ .rewards)) i step ≤
+      stepCredit (fun s => decide (s = .rewards ∨ s = .consolidations))
+        (fun s => decide (s = .consolidations ∨ s = .deposits)) i step +
+      stepCredit (fun s => decide (s = .slashings)) (fun _ => false) i step +
+      (events.map (syncCredit i)).sum := by
+  have bounded := step_events_bounded shared genesis step early replayed
+  have base := step_balance_le_events step early i replayed
+  cases step with
+  | block engine signed due ok =>
+    have each := block_event_credit shared genesis early electra i replayed bounded
+    have split := sum_credits_split_all events (keyCredit i) (syncCredit i)
+      (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
+      (fun e m => by simpa using each e m)
+    simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
+      sum_filter_none] at base ⊢
+    omega
+  | slot ok =>
+    have each := slot_event_credit shared genesis early i replayed bounded
+    have split := sum_credits_split events (keyCredit i) (syncCredit i)
+      (fun s => decide (s ≠ .rewards)) (fun s => decide (s = .consolidations ∨ s = .deposits))
+      (fun _ => false) (fun e m notRewards => by simpa using each e m (by simpa using notRewards))
+    simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
+      sum_filter_none] at split ⊢
+    omega
+
+/-- The credits of a run, net for its block steps, are at most those of `credC`, `whistC`, sync. -/
+private theorem credits_le_sources {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (genesis : Genesis config checks g)
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam) (electra : .pectra ≤ x.fork)
+    (i high : ℕ) {events : List (BalanceEvent preset)}
+    (replayed : tail.balanceEvents high = .ok events) :
+    netScan i high tail + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+      tail).1 ≤ credC tail high i + whistC tail high i + (events.map (syncCredit i)).sum := by
+  induction tail generalizing events with
+  | nil =>
+    simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
+    subst replayed
+    simp [credC, whistC, netScan_nil, creditScan_nil_fst]
+  | @snoc middle last pre step ih =>
+    simp only [Run.balanceEvents, bind_ok_iff] at replayed
+    obtain ⟨prior, priorOk, rest⟩ := replayed
+    have previous := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) priorOk
+    by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
+    · simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
+      obtain ⟨added, addedOk, rfl⟩ := rest
+      have one := step_credit_le_sources (shared.append pre) genesis step early
+        (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)) i addedOk
+      unfold credC whistC at previous ⊢
+      rw [netScan_snoc, creditScan_snoc_fst, creditScan_snoc_fst, creditScan_snoc_fst]
+      simp only [selected, ↓reduceIte, List.map_append, List.sum_append]
+      omega
+    · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
+      obtain rfl := rest
+      unfold credC whistC at previous ⊢
+      rw [netScan_snoc, creditScan_snoc_fst, creditScan_snoc_fst, creditScan_snoc_fst]
+      simp only [selected, ↓reduceIte]
+      exact previous
+
 /-- The key's effective balance when its exit starts on a run, or 0.
 
 It is the amount of the key's departure charge, which reads the effective balance at the exit call.

@@ -1921,6 +1921,23 @@ private theorem balance_le_pathCredits (i : ℕ) :
       simp only [pathCredits]
       omega
 
+/-- A step raises the balance of a key by at most the credits of its events. -/
+private theorem step_balance_le_events {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) (early : n.fork < .glamsterdam) (i : ℕ)
+    {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
+    actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum := by
+  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
+    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
+    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
+      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+  have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
+    (Nat.le_succ _) run false i
+  have ends := Run.balancePath_ends (Run.nil.snoc step)
+  have rise := balance_le_pathCredits i _ m n ends.1 ends.2
+  simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
+  exact le_trans rise (Nat.add_le_add_left cover _)
+
 /-- A step raises the balance of a key by at most its epoch rewards and its other credits.
 
 A block step counts the rise of the key's balance across the whole step.
@@ -1936,19 +1953,7 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
     omega
   | slot oks =>
     obtain ⟨events, ok⟩ := (Step.slot oks : Step config checks m n).balanceEvents_ok early
-    have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
-      UInt64.le_iff_toNat_le.mp (Step.slot oks : Step config checks m n).chainStep.currentEpoch_le
-    have run : (Run.nil.snoc (Step.slot oks : Step config checks m n)).balanceEvents
-        (getCurrentEpoch n.state).toNat = .ok events := by
-      simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
-        (getCurrentEpoch n.state).toNat + 1 by omega, ok]
-    have cover := coverage_run (Run.nil.snoc (Step.slot oks : Step config checks m n)) early
-      (getCurrentEpoch n.state).toNat (Nat.le_succ _) run false i
-    have ends := Run.balancePath_ends (Run.nil.snoc (Step.slot oks : Step config checks m n))
-    have rise := balance_le_pathCredits i _ m n ends.1 ends.2
-    simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
-    have base : actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum :=
-      le_trans rise (Nat.add_le_add_left cover _)
+    have base := step_balance_le_events (Step.slot oks : Step config checks m n) early i ok
     simp only [epochRewards, stepNet, stepCredit, ok, Except.toOption, Option.getD_some] at base ⊢
     have split := List.sum_map_filter_add_sum_map_filter_not
       (fun e : BalanceEvent preset => e.source = .rewards) (keyCredit i) events
