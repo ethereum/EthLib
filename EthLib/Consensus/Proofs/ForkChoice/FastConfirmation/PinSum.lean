@@ -7,6 +7,8 @@ import EthLib.Consensus.Proofs.Transition.FfgJustification
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.SlashedExit
 import EthLib.Consensus.Proofs.Transition.ChainRoots
+import EthLib.Consensus.Proofs.DirectSafety.ChurnBounds
+import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 import EthLib.Consensus.Proofs.Transition.SlashedPersistence
 import EthLib.Consensus.Proofs.Transition.EpochReads
@@ -1162,6 +1164,46 @@ private theorem K6_exit_late {g : ForkedBeaconState preset}
     omega
   have ended := mt (cActive w.exitEpoch).mpr notX
   omega
+
+/-- A key of the split's registry that R has withdrawable by the finalized epoch is not charged.
+
+The charge would be on C's tail.
+
+Its exit is at most its withdrawable epoch, so R's exit is assigned by the finalized epoch.
+
+An exit assigned after the split is at least the split's epoch plus one and the seed lookahead.
+
+So the split already holds the exit, and a run never charges an exit twice. -/
+private theorem no_charge_of_settled {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {i : ℕ} {w : Validator}
+    (inside : i < split.validators.data.size) (found : pulled.validators.data[i]? = some w)
+    (settled : w.withdrawableEpoch.toNat ≤ anc.finalizedCheckpoint.epoch.toNat) :
+    ∀ c ∈ tailC.departureCharges, c.index ≠ i := by
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  have valid := Run.invariant (Genesis.invariant h.genesis) ((rf.append rs).append rp)
+  have ordered := UInt64.le_iff_toNat_le.mp
+    (valid.exitsOrdered w (Array.mem_of_getElem? found))
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots split
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have oldFound := Array.getElem?_eq_getElem inside
+  have assigned : split.validators.data[i].exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    intro unset
+    have wAssigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+      intro far
+      rw [far, farNat] at ordered
+      omega
+    obtain ⟨c, member, -, epoch⟩ := rp.departure_charge_of_assigned i _ w oldFound found unset
+      wAssigned
+    have late := rp.departureCharges_epoch_ge_start (Nat.le_trans (by decide) h.fulu) h.early c
+      member
+    omega
+  intro c member
+  exact tailC.departure_charge_ne_of_assigned i _ oldFound assigned c member
 
 /-- A key counted in C and inactive at R, read at R's record, is in one of five classes.
 
