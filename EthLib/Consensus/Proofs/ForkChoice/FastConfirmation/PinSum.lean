@@ -7490,19 +7490,18 @@ private theorem cap_le_cap_of_run (caps : CapOrder preset) {z y : ForkedBeaconSt
     simp only [found', Option.map_some, Option.getD_some]
     exact UInt64.le_iff_toNat_le.mp mono
 
-/-- A key's effective balance at the end of a run from the finalized state is at most its cap.
+/-- A key's effective balance at the end of a run from genesis is at most its cap there.
 
 The cap is the one at that state. -/
-private theorem effective_le_cap_at (h : Setting config checks g split fin pulled anc counted V)
-    {z : BeaconState preset fork} (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, z⟩) (i : ℕ) :
-    effectiveAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
-      PinSplit2.capAt (⟨fork, z⟩ : ForkedBeaconState preset) i := by
-  obtain ⟨shared⟩ := h.toFin
-  cases found : z.validators.data[i]? with
+private theorem effective_le_cap_at {g z : ForkedBeaconState preset}
+    (shared : Run config checks g z)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (early : z.fork < .glamsterdam) (i : ℕ) : effectiveAt z i ≤ PinSplit2.capAt z i := by
+  cases found : z.state.validators.data[i]? with
   | none => simp [effectiveAt, found]
   | some w =>
-    have capped := DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax (shared.append toZ)
-      h.genesis h.caps h.early found
+    have capped := DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax shared genesis caps
+      early found
     simpa [PinSplit2.capAt, found] using capped
 
 /-- On R's branch a key's effective balance is at most its cap at R. -/
@@ -7510,8 +7509,10 @@ private theorem effective_le_cap_pulled (h : Setting config checks g split fin p
     {z : BeaconState preset fork} (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, z⟩)
     (post : Run config checks ⟨fork, z⟩ ⟨fork, pulled⟩) (i : ℕ) :
     effectiveAt (⟨fork, z⟩ : ForkedBeaconState preset) i ≤
-      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i :=
-  Nat.le_trans (effective_le_cap_at h toZ i) (cap_le_cap_of_run h.caps post h.early i)
+      PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i := by
+  obtain ⟨shared⟩ := h.toFin
+  exact Nat.le_trans (effective_le_cap_at (shared.append toZ) h.genesis h.caps h.early i)
+    (cap_le_cap_of_run h.caps post h.early i)
 
 /-- A state of the balance path of a run between two states of one fork is a state of that fork.
 
@@ -7794,7 +7795,7 @@ private theorem key_stay (h : Setting config checks g split fin pulled anc count
       ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinSplit2.capAt z i :=
     fun r z member => by
       obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
-      exact effective_le_cap_at h (toC.append r1) i
+      exact effective_le_cap_at (shared.append (toC.append r1)) h.genesis h.caps h.early i
   obtain ⟨c1, c2, c3, -⟩ := effective_ceiling_flip h (fromC.append tailC) invariant i inside Bc
     (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) (capped tailC)
     (capCeil_path (fromC.append tailC) h.caps h.early (Nat.le_refl _) i) balanceC
@@ -7974,7 +7975,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   have capSP : PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤ capI :=
     hcap0 ▸ cap_le_cap_of_run h.caps toPulled h.early i
   have capCeil := capCeil_path tailC h.caps h.early (Nat.le_refl _) i
-  have effS := effective_le_cap_at h fromFin i
+  have effS := effective_le_cap_at (shared.append fromFin) h.genesis h.caps h.early i
   have minMax := UInt64.le_iff_toNat_le.mp h.caps.compounding
   obtain ⟨kindS, aMin, aMax⟩ := capAt_kind h i inside
   obtain ⟨kindC, -, -⟩ := capAt_kind h i sizeC
@@ -8288,7 +8289,8 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
-      exact effective_le_cap_at h (toC.append s1) v.toNat)
+      exact effective_le_cap_at (shared.append (toC.append s1)) h.genesis h.caps h.early
+        v.toNat)
     (fun z' member' => by
       obtain ⟨zs', s1, s2, rfl, cut⟩ := atPath z' member'
       exact cap_le_cap_of_run h.caps s2 h.early v.toNat)
@@ -8384,9 +8386,7 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
   have incPos := h.bands.1
   have inside : i < fin.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
   obtain ⟨shared⟩ := h.toFin
-  have alignedMax : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-    simpa [UInt64.toNat_mod] using congrArg UInt64.toNat h.aligned.2.2
+  have alignedMax := (cap_values_aligned h.aligned).2
   have startCap := PinSplit5.effectiveAt_le_capMax shared h.genesis h.caps h.early i
   have capCeil : ∀ z ∈ run.balancePath,
       PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := fun z member => by
@@ -15058,6 +15058,7 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
     keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat := by
   classical
+  obtain ⟨toFin⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
@@ -15222,7 +15223,8 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
       omega) (onR z member))
   have cappedC : balanceAt counted v.toNat ≤
       capForOf (pinTerms config pulled anc fin) pulled v.toNat :=
-    Nat.le_trans (effective_le_cap_at h (fromFin.append tailC) v.toNat) (Nat.le_trans capC
+    Nat.le_trans (effective_le_cap_at (toFin.append (fromFin.append tailC)) h.genesis h.caps
+      h.early v.toNat) (Nat.le_trans capC
       (capAt_le_capForOf _ pulled v.toNat (capAt_le_capMax h.caps electra v.toNat)))
   have maxLe : M ≤ (pinTerms config pulled anc fin).ebUp v.toNat +
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
