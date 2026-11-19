@@ -4,7 +4,6 @@ public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
-import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
 # Proofs: each proposer of the lookahead is active in its epoch along a run
@@ -256,24 +255,5 @@ theorem LookaheadActive.proposer_active {state : BeaconState preset fork}
     have small := toNat_mod_lt (i := state.slot) nonzero
     exact h fulu _ (Nat.lt_of_lt_of_le small (Nat.le_mul_of_pos_left _ (Nat.succ_pos _)))
       _ (by rw [Nat.div_eq_of_lt small]; rfl)
-
-/-- The state before the sync aggregate of a block keeps the invariant of the state before the block.
-
-The sync aggregate changes only the balances. -/
-theorem LookaheadActive.last_of_processBlock
-    (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
-    {engine : ExecutionEngine preset fork}
-    {state last after : BeaconState preset fork} {block : BeaconBlock preset fork}
-    (h : LookaheadActive state)
-    (ok : processBlock config checks engine state block = .ok after)
-    (synced : (if altair : .altair ≤ fork then
-        processSyncAggregate config checks last altair (block.body.syncAggregate altair)
-      else pure last) = .ok after) : LookaheadActive last := by
-  have kept := h.processBlock covers ok
-  split at synced
-  · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-    exact kept
-  · cases synced
-    exact kept
 
 end EthLib.Consensus
