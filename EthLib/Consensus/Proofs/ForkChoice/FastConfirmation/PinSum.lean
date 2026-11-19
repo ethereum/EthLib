@@ -10433,11 +10433,10 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
     band keys).2.1
   exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
 
-/-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
+/-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
-The proposer's share of the sync credits is in `syncF`, so the bound adds the `syncProposer` part
-that `credits`, `exitingCredits` and `branchR` leave. -/
-private theorem bud_sync_base (h : Setting config checks g split fin pulled anc counted V)
+It also holds the shares of `CS` and of the shared segment's exited keys of `SC`. -/
+theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -10445,12 +10444,18 @@ private theorem bud_sync_base (h : Setting config checks g split fin pulled anc 
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
+        (∑ v ∈ (K4 pulled counted V), syncD eventsF v.toNat) +
         (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
+        (∑ v ∈ (K5 counted V), syncD eventsF v.toNat) +
         (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
+      (∑ v ∈ (K6 pulled counted), syncD eventsF v.toNat) +
       (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
       wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
       wShare preset fork
-        (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
+        (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
+      wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) +
+      wShare preset fork (∑ v ∈ SC pulled counted split with
+        (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, syncCr eventsF v.toNat) ≤
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth *
             (pinTerms config pulled anc fin).syncProposer) := by
@@ -10464,6 +10469,7 @@ private theorem bud_sync_base (h : Setting config checks g split fin pulled anc 
   -- the five sets are pairwise disjoint
   obtain ⟨d45, d46, d56, d1, d15, d16⟩ := classes_disjoint h
   obtain ⟨dS, dVS⟩ := sc_disjoint h
+  obtain ⟨dCK, dCV⟩ := cs_disjoint h
   have d2 : Disjoint (V ∪ K4 pulled counted V) (K5 counted V) :=
     Finset.disjoint_union_left.mpr ⟨d15, d45⟩
   have d3 : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V) (K6 pulled counted) :=
@@ -10480,28 +10486,62 @@ private theorem bud_sync_base (h : Setting config checks g split fin pulled anc 
     · exact Finset.disjoint_left.mp dS (Finset.mem_union_left _ (Finset.mem_union_right _ in5))
         slashed
     · exact Finset.disjoint_left.mp dS (Finset.mem_union_right _ in6) slashed
+  have dCS : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
+      SC pulled counted split) (CS pulled counted) := by
+    rw [Finset.disjoint_left]
+    intro v member created
+    simp only [Finset.mem_union] at member
+    rcases member with (((inV | in4) | in5) | in6) | inSC
+    · exact Finset.disjoint_left.mp dCV inV created
+    · exact Finset.disjoint_left.mp dCK (by simp [in4]) created
+    · exact Finset.disjoint_left.mp dCK (by simp [in5]) created
+    · exact Finset.disjoint_left.mp dCK (by simp [in6]) created
+    · exact Finset.disjoint_left.mp dCK (by simp [inSC]) created
   obtain ⟨U, hU⟩ : ∃ U : Finset ValidatorIndex,
-      U = V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split :=
+      U = V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
+        CS pulled counted :=
     ⟨_, rfl⟩
   obtain ⟨g, hg⟩ : ∃ g : ValidatorIndex → ℕ, ∀ v, g v =
-      syncD eventsF v.toNat + syncF events v.toNat + syncF eventsC v.toNat := ⟨_, fun _ => rfl⟩
+      syncF events v.toNat + syncF eventsC v.toNat := ⟨_, fun _ => rfl⟩
   have sumU : ∑ v ∈ U, g v = ∑ v ∈ V, g v + ∑ v ∈ K4 pulled counted V, g v +
       ∑ v ∈ K5 counted V, g v + ∑ v ∈ K6 pulled counted, g v +
-      ∑ v ∈ SC pulled counted split, g v := by
-    rw [hU, Finset.sum_union d4, Finset.sum_union d3, Finset.sum_union d2, Finset.sum_union d1]
-  -- each class is weighed at most three times its movement, and the shares at most their own
+      ∑ v ∈ SC pulled counted split, g v + ∑ v ∈ CS pulled counted, g v := by
+    rw [hU, Finset.sum_union dCS, Finset.sum_union d4, Finset.sum_union d3, Finset.sum_union d2,
+      Finset.sum_union d1]
+  -- the keys of SC that exited by the finalized epoch hold the shared credits, and the rest debits
+  set EK := (SC pulled counted split).filter
+    (fun v => (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true) with hEK
+  set NF := (SC pulled counted split).filter
+    (fun v => ¬ (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true) with hNF
+  have dKN : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) NF :=
+    Finset.disjoint_of_subset_right (Finset.filter_subset _ _) d4
+  have dKE : Disjoint (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) EK :=
+    Finset.disjoint_of_subset_right (Finset.filter_subset _ _) d4
+  have dNE : Disjoint NF EK := Finset.disjoint_left.mpr fun v inN inE =>
+    (Finset.mem_filter.mp inN).2 (Finset.mem_filter.mp inE).2
+  have scSplit : ∑ v ∈ SC pulled counted split, syncD eventsF v.toNat =
+      ∑ v ∈ EK, syncD eventsF v.toNat + ∑ v ∈ NF, syncD eventsF v.toNat :=
+    (Finset.sum_filter_add_sum_filter_not _ _ fun v : ValidatorIndex => syncD eventsF v.toNat).symm
+  have unionD : ∑ v ∈ V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ NF,
+      syncD eventsF v.toNat = ∑ v ∈ V, syncD eventsF v.toNat +
+        ∑ v ∈ K4 pulled counted V, syncD eventsF v.toNat +
+        ∑ v ∈ K5 counted V, syncD eventsF v.toNat + ∑ v ∈ K6 pulled counted, syncD eventsF v.toNat +
+        ∑ v ∈ NF, syncD eventsF v.toNat := by
+    rw [Finset.sum_union dKN, Finset.sum_union d3, Finset.sum_union d2, Finset.sum_union d1]
+  have unionK : ∑ v ∈ EK, (syncCr eventsF v.toNat + syncD eventsF v.toNat) =
+      ∑ v ∈ EK, syncCr eventsF v.toNat + ∑ v ∈ EK, syncD eventsF v.toNat :=
+    Finset.sum_add_distrib
+  -- each class is weighed at most three times its tail movement, and the shares at most their own
   have classV : ∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat)) =
-      ∑ v ∈ V, g v :=
-    Finset.sum_congr rfl fun v _ => by rw [hg]; omega
+      ∑ v ∈ V, syncD eventsF v.toNat + ∑ v ∈ V, g v := by
+    rw [← Finset.sum_add_distrib]
+    exact Finset.sum_congr rfl fun v _ => by rw [hg]
   have class4 : ∑ v ∈ K4 pulled counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
-      ∑ v ∈ K4 pulled counted V, g v :=
-    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+      ∑ v ∈ K4 pulled counted V, g v := Finset.sum_le_sum fun v _ => (hg v).ge
   have class5 : ∑ v ∈ K5 counted V, (syncF events v.toNat + syncF eventsC v.toNat) ≤
-      ∑ v ∈ K5 counted V, g v :=
-    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+      ∑ v ∈ K5 counted V, g v := Finset.sum_le_sum fun v _ => (hg v).ge
   have class6 : ∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat) ≤
-      ∑ v ∈ K6 pulled counted, g v :=
-    Finset.sum_le_sum fun v _ => by rw [hg]; omega
+      ∑ v ∈ K6 pulled counted, g v := Finset.sum_le_sum fun v _ => (hg v).ge
   have credits : wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) ≤
       ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat :=
     (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
@@ -10510,40 +10550,75 @@ private theorem bud_sync_base (h : Setting config checks g split fin pulled anc 
       exact Nat.le_add_right _ _)
   have debits : wShare preset fork
       (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) ≤
-      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) :=
-    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      ∑ v ∈ SC pulled counted split, syncD eventsF v.toNat +
+        ∑ v ∈ SC pulled counted split, syncF events v.toNat := by
+    rw [← Finset.sum_add_distrib]
+    exact (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
       unfold syncD
       rw [syncF_eq]
       omega)
+  have creditsF : wShare preset fork (∑ v ∈ EK, syncCr eventsF v.toNat) ≤
+      ∑ v ∈ EK, syncCr eventsF v.toNat := wShare_le h.facts _
+  have creditsCS : wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) ≤
+      ∑ v ∈ CS pulled counted, g v :=
+    (wShare_le h.facts _).trans (Finset.sum_le_sum fun v _ => by
+      rw [hg]
+      unfold syncCr
+      rw [syncF_eq eventsC]
+      omega)
   have shares : ∑ v ∈ SC pulled counted split, syncF eventsC v.toNat +
-      ∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncF events v.toNat) =
+      ∑ v ∈ SC pulled counted split, syncF events v.toNat =
       ∑ v ∈ SC pulled counted split, g v := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl fun v _ => by rw [hg]; omega
-  refine le_trans (b := 3 * ∑ v ∈ U, g v) ?_ ?_
-  · rw [sumU]
+  obtain ⟨S, hS⟩ : ∃ S, S = ∑ v ∈ V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ NF,
+      syncD eventsF v.toNat + ∑ v ∈ EK, (syncCr eventsF v.toNat + syncD eventsF v.toNat) :=
+    ⟨_, rfl⟩
+  refine le_trans (b := 3 * (∑ v ∈ U, g v + S)) ?_ ?_
+  · rw [sumU, hS]
     omega
-  -- the keys of the five sets, at their positions, move by the three runs' seat bounds
-  have covered := sum_toNat_le (S := U) (P := U.image fun v : ValidatorIndex => v.toNat)
-    (fun i => syncD eventsF i + syncF events i + syncF eventsC i)
-    fun v member => Finset.mem_image_of_mem _ member
-  have toPositions : ∑ v ∈ U, g v ≤ ∑ i ∈ U.image (fun v : ValidatorIndex => v.toNat),
-      (syncD eventsF i + syncF events i + syncF eventsC i) :=
-    (Finset.sum_congr rfl fun v _ => hg v).le.trans covered
+  -- the shared segment moves the debited keys and the keys of EK by one envelope for each seat
+  obtain ⟨PD, hPD⟩ : ∃ PD, PD = (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
+      NF).image fun v : ValidatorIndex => v.toNat := ⟨_, rfl⟩
+  obtain ⟨PK, hPK⟩ : ∃ PK, PK = EK.image fun v : ValidatorIndex => v.toNat := ⟨_, rfl⟩
+  have dP : Disjoint PD PK := by
+    have injective : Function.Injective fun v : ValidatorIndex => v.toNat :=
+      fun a b same => UInt64.toNat_inj.mp same
+    rw [hPD, hPK, Finset.disjoint_image injective]
+    exact Finset.disjoint_union_left.mpr ⟨dKE, dNE⟩
+  have posD := sum_toNat_le (S := V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ NF)
+    (P := PD) (fun i => syncD eventsF i)
+    fun v member => by rw [hPD]; exact Finset.mem_image_of_mem _ member
+  have posK := sum_toNat_le (S := EK) (P := PK) (fun i => syncCr eventsF i + syncD eventsF i)
+    fun v member => by rw [hPK]; exact Finset.mem_image_of_mem _ member
   have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       fromFin.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
         2 * T.toNat ≤ 3 * pulledTotal.toNat :=
     step_band_of_guard h fromFin (by omega) pulledOk
-  have shared := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
-    pulledTotal.toNat band (U.image fun v : ValidatorIndex => v.toNat)).1
+  -- no block of the shared segment has a proposer among the keys of EK
+  have apartK : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      fromFin.Contains step → PinSplit5.stepApart PK step := sorry
+  have sharedRun := (PinSplit5.Run.syncDebits_le fromFin h.fulu h.early highF replayedF
+    pulledTotal.toNat band ∅).2.2 PD PK dP apartK
+  unfold PinSplit5.syncSeatMoves at sharedRun
+  have sharedS : S ≤ ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat) *
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        PinSplit5.syncEnvelope preset pulledTotal.toNat := by
+    rw [hS]
+    exact (Nat.add_le_add posD posK).trans sharedRun
+  -- the tails move the keys of the five sets by their seat bounds
+  have toPositions : ∑ v ∈ U, g v ≤ ∑ i ∈ U.image (fun v : ValidatorIndex => v.toNat),
+      (syncF events i + syncF eventsC i) :=
+    (Finset.sum_congr rfl fun v _ => hg v).le.trans (sum_toNat_le (S := U)
+      (P := U.image fun v : ValidatorIndex => v.toNat) (fun i => syncF events i + syncF eventsC i)
+      fun v member => Finset.mem_image_of_mem _ member)
   have first := syncF_run_le h pulledTotal pulledOk tail (Nat.le_succ _) high replayed
     (U.image fun v : ValidatorIndex => v.toNat)
   have second := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC
     (U.image fun v : ValidatorIndex => v.toNat)
-  generalize U.image (fun v : ValidatorIndex => v.toNat) = P at toPositions shared first second
-  have splitP : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) =
-      ∑ i ∈ P, syncD eventsF i + ∑ i ∈ P, syncF events i + ∑ i ∈ P, syncF eventsC i := by
-    rw [Finset.sum_add_distrib, Finset.sum_add_distrib]
+  generalize U.image (fun v : ValidatorIndex => v.toNat) = P at toPositions first second
+  have splitP : ∑ i ∈ P, (syncF events i + syncF eventsC i) =
+      ∑ i ∈ P, syncF events i + ∑ i ∈ P, syncF eventsC i := Finset.sum_add_distrib
   have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
     rw [pulledOk]
     rfl
@@ -10586,54 +10661,26 @@ private theorem bud_sync_base (h : Setting config checks g split fin pulled anc 
   have scaleShare := Nat.mul_le_mul_right
     (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)
     (show e1 + e2 ≤ depth + depth by omega)
-  have positions : ∑ i ∈ P, (syncD eventsF i + syncF events i + syncF eventsC i) ≤
+  have positions : ∑ v ∈ U, g v + S ≤
       (ef + e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
         (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share) := by
-    rw [splitP]
-    calc _ ≤ ef * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
-          e1 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
-          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) :=
-          Nat.add_le_add (Nat.add_le_add shared first) second
+    have tails : ∑ i ∈ P, (syncF events i + syncF eventsC i) ≤
+        e1 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) +
+          e2 * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * (env + share) := by
+      rw [splitP]
+      exact Nat.add_le_add first second
+    calc _ ≤ _ := Nat.add_le_add (toPositions.trans tails) sharedS
       _ = _ := by ring
-  calc 3 * ∑ v ∈ U, g v
+  calc 3 * (∑ v ∈ U, g v + S)
       ≤ 3 * ((ef + e1 + e2) *
           (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
         (e1 + e2) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
-        Nat.mul_le_mul_left _ (toPositions.trans positions)
+        Nat.mul_le_mul_left _ positions
     _ ≤ 3 * ((depth + d) * (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env) +
         (depth + depth) *
           (preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) :=
         Nat.mul_le_mul_left _ (Nat.add_le_add scaleEnv scaleShare)
     _ = _ := by ring
-
-/-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
-
-It also holds the shares of `CS` and of the shared segment's exited keys of `SC`. -/
-theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (highF : ℕ)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents highF = .ok eventsF)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    3 * ((∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
-        (∑ v ∈ (K4 pulled counted V), syncD eventsF v.toNat) +
-        (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
-        (∑ v ∈ (K5 counted V), syncD eventsF v.toNat) +
-        (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat))) +
-      (∑ v ∈ (K6 pulled counted), syncD eventsF v.toNat) +
-      (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
-      wShare preset fork (∑ v ∈ SC pulled counted split, syncCr eventsC v.toNat) +
-      wShare preset fork
-        (∑ v ∈ SC pulled counted split, (syncD eventsF v.toNat + syncD events v.toNat)) +
-      wShare preset fork (∑ v ∈ CS pulled counted, syncCr eventsC v.toNat) +
-      wShare preset fork (∑ v ∈ SC pulled counted split with
-        (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, syncCr eventsF v.toNat) ≤
-        (pinTerms config pulled anc fin).syncSeats +
-          6 * ((pinTerms config pulled anc fin).depth *
-            (pinTerms config pulled anc fin).syncProposer) :=
-  have := bud_sync_base h fromFin highF replayedF tail high replayed tailC highC replayedC
-  sorry
 
 /-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
