@@ -6626,7 +6626,8 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat = cb := fun E => by
     rw [hcb]
     unfold PinSplit2.creditBound
-    simp only [Nat.mul_zero, Nat.zero_mul, Nat.zero_div, Nat.add_zero] <;> omega
+    simp only [Nat.mul_zero, Nat.zero_mul, Nat.zero_div, Nat.add_zero]
+    omega
   obtain ⟨E, hE⟩ : ∃ E, E = max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
       (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
         (cb - cb % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := ⟨_, rfl⟩
