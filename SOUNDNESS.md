@@ -4399,6 +4399,13 @@ A payload and its block determine each other.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
 `exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`acceptsFork_eq_true_iff` gives the forks of each version.
+From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
+Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Version 2 takes Paris and Shapella, and version 1 Paris alone.
+`acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
+Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
+So version 5 returns Fusaka and the BPO forks, and some version returns each fork from Paris to Glamsterdam (`exists_acceptsGetPayloadFork_iff`).
 `validRequests_iff` states when the execution requests of version 4 and later pass.
 Each request must have more than one byte, and their first bytes must strictly increase along the list.
 `status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID`, or `INVALID_BLOCK_HASH` only at version 1, with no latest valid hash.
