@@ -1612,7 +1612,7 @@ private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high
 
 /-- The reward per increment at a state of a run from the finalized state, times the previous
 epoch's active increments, is at most the pin's rate times the active increments. -/
-private theorem rate_of_guard (facts : PinPresetFacts preset)
+private theorem rate_of_guard
     (h : Setting config checks g split fin pulled anc counted V)
     {m : BeaconState preset fork} (toM : Run config checks ⟨fork, fin⟩ ⟨fork, m⟩)
     (inside : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat)
@@ -1654,13 +1654,13 @@ private theorem rate_of_guard (facts : PinPresetFacts preset)
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
   rw [quarter]
-  exact rate_arith facts.rewardScale facts.incrementSize facts.reward clamp high band stake
+  exact rate_arith h.facts.rewardScale h.facts.incrementSize h.facts.reward clamp high band stake
 
 /-- The effective balance of a key that stays on its path is at most the rise of the main regime. -/
 private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Nat}
     (incPos : 0 < inc)
     (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max finEB (min (Bc - Bc % inc) capHigh)))
-    (aligned : eC % inc = 0) (capped : eC ≤ capFor) (ceiling : Bc ≤ high + S)
+    (aligned : eC % inc = 0) (capped : eC ≤ capFor + S + U) (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ inc ≤ U + 1) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
       (max finEB (high - high % inc))) - eR) + S + U := by
@@ -1697,8 +1697,7 @@ private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Na
       omega
     omega
 
-/-- A key's effective balance at the end of a run from the finalized state stays that of R, or is at
-most the ceiling that the balance's ceiling allows. -/
+/-- On C's branch a key keeps R's effective balance, or stays within the ceiling of its balance. -/
 private theorem key_stay {fin pulled counted : BeaconState preset fork}
     (rC : Run config checks ⟨fork, fin⟩ ⟨fork, counted⟩)
     (rR : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
@@ -1739,8 +1738,29 @@ private theorem effective_aligned {g x : ForkedBeaconState preset}
     have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
     simpa [effectiveAt, found, UInt64.toNat_mod] using this
 
-/-- A key's effective balance on C's branch is at most its balance on R's, plus the main regime of
-the rise, plus the slacks. -/
+/-- A key's effective balance on C's branch is at most the cap that `capFor` reads. -/
+private theorem key_capped {g : ForkedBeaconState preset}
+    {counted : BeaconState preset fork} (run : Run config checks g ⟨fork, counted⟩)
+    (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
+    (early : fork < .glamsterdam) (electra : .pectra ≤ fork) (i : ℕ) {vC vR : Validator}
+    (foundC : counted.validators.data[i]? = some vC) {capFor : ℕ}
+    (cases : capFor = preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat ∨
+      (capFor = (withdrawalMaxEffectiveBalance preset fork vR).toNat ∧
+        (hasCompoundingWithdrawalCredential vC = true →
+          hasCompoundingWithdrawalCredential vR = true))) :
+    effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor := by
+  rcases cases with high | ⟨low, frozen⟩
+  · rw [high]
+    exact PinSplit5.effectiveAt_le_capMax run genesis caps early i
+  · have capped := UInt64.le_iff_toNat_le.mp
+      (run.effectiveBalance_capped genesis caps.activation caps.compounding early vC
+        (Array.mem_of_getElem? foundC))
+    simp only [effectiveAt, foundC, Option.map_some, Option.getD_some]
+    rw [low]
+    exact le_trans capped
+      (UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen))
+
+/-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
     {fin pulled counted : BeaconState preset fork} (shared : Run config checks g ⟨fork, fin⟩)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -1755,7 +1775,7 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
     (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
     (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP)
     (capFor high S U : ℕ)
-    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor)
+    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor + S + U)
     (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
@@ -1967,6 +1987,174 @@ private theorem sum_le_exiting (config : Config)
   have mark := of_decide_eq_true (member v hv)
   obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
   exact mem_positions_filter config state ancestor finalizedState found mark
+
+/-- `exitingBands` is two bands for each key that `exitingB` marks and for each queue key. -/
+private theorem exitingBands_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).exitingBands =
+      2 * ((((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+        (pinTerms config state ancestor finalizedState).exitingB i = true).card +
+        (pinTerms config state ancestor finalizedState).queueKeys)) * preset.upwardBand := by
+  dsimp only [pinTerms]
+  simp only [decide_eq_true_eq]
+
+/-- At most as many keys as the positions that `exitingB` marks are marked. -/
+private theorem card_exitingB_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
+    (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
+    S.card ≤ ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
+      (pinTerms config state ancestor finalizedState).exitingB i = true).card := by
+  refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
+    (fun a _ b _ same => UInt64.toNat_inj.mp same)
+  have mark := of_decide_eq_true (member v hv)
+  obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
+  exact mem_positions_filter config state ancestor finalizedState found
+    (p := fun i => (pinTerms config state ancestor finalizedState).exitingB i = true) (member v hv)
+
+/-- The two further bands of the keys of `K5` are at most `exitingBands`, given their charges. -/
+private theorem two_bands_le_exitingBands (config : Config)
+    (pulled anc fin counted : BeaconState preset fork) (V : Finset ValidatorIndex)
+    {x : ForkedBeaconState preset} (tailC : Run config checks x ⟨fork, counted⟩) (highC : ℕ)
+    (charged : ∀ v ∈ K5 counted V, (pinTerms config pulled anc fin).exitingB v.toNat = false →
+      0 < bandC tailC highC v.toNat → ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (count : (((K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = false).filter
+        fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card ≤
+      (pinTerms config pulled anc fin).queueKeys) :
+    2 * (∑ v ∈ K5 counted V, bandC tailC highC v.toNat) ≤
+      (pinTerms config pulled anc fin).exitingBands := by
+  have bounded (v : ℕ) : bandC tailC highC v ≤ preset.upwardBand := by
+    unfold bandC
+    split <;> omega
+  rw [exitingBands_eq]
+  set A := (K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true
+  set B := (K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = false
+  have parts : ∑ v ∈ K5 counted V, bandC tailC highC v.toNat =
+      ∑ v ∈ A, bandC tailC highC v.toNat + ∑ v ∈ B, bandC tailC highC v.toNat := by
+    rw [← Finset.sum_filter_add_sum_filter_not (K5 counted V)
+      (fun v => (pinTerms config pulled anc fin).exitingB v.toNat = true)]
+    simp [A, B]
+  have first : ∑ v ∈ A, bandC tailC highC v.toNat ≤ A.card * preset.upwardBand := by
+    rw [← smul_eq_mul, ← Finset.sum_const]
+    exact Finset.sum_le_sum fun v _ => bounded _
+  have second : ∑ v ∈ B, bandC tailC highC v.toNat ≤
+      (B.filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card *
+        preset.upwardBand := by
+    have pointwise : ∀ v ∈ B, bandC tailC highC v.toNat ≤
+        (if ∃ c ∈ tailC.departureCharges, c.index = v.toNat then preset.upwardBand else 0) := by
+      intro v hv
+      by_cases hc : ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+      · simp only [hc, ↓reduceIte]
+        exact bounded _
+      · simp only [hc, ↓reduceIte]
+        have notBand : ¬ 0 < bandC tailC highC v.toNat := fun pos =>
+          hc (charged v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2 pos)
+        omega
+    calc ∑ v ∈ B, bandC tailC highC v.toNat
+        ≤ ∑ v ∈ B, (if ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+          then preset.upwardBand else 0) := Finset.sum_le_sum pointwise
+      _ = (B.filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat).card *
+          preset.upwardBand := by
+        rw [← Finset.sum_filter, Finset.sum_const, smul_eq_mul]
+  have inA := card_exitingB_le config pulled anc fin A fun v hv => (Finset.mem_filter.mp hv).2
+  have times := Nat.mul_le_mul_right preset.upwardBand inA
+  have timesB := Nat.mul_le_mul_right preset.upwardBand count
+  rw [parts]
+  nlinarith
+
+/-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
+private theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
+    (member : v ∈ K5 counted V) (flag : (pinTerms config pulled anc fin).exitingB v.toNat = false) :
+    ∃ c ∈ tailC.departureCharges, c.index = v.toNat := by
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨listed, unslashedC⟩, notActive, -⟩ := inK5
+  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
+    notActive (by simpa [AC, activeVoters] using now)
+  rcases listed with now | before
+  · exact absurd now notCurrent
+  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  have notNow : isActiveValidator u (getCurrentEpoch counted) = false := by
+    cases now : isActiveValidator u (getCurrentEpoch counted)
+    · rfl
+    · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
+  have exitC := (previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩
+  have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
+  have assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
+    notFar (UInt64.toNat_inj.mp (by rw [← exitC.2, far]))
+  by_cases inherited : ∃ old, split.validators.data[v.toNat]? = some old ∧
+      old.exitEpoch ≠ FAR_FUTURE_EPOCH
+  · exfalso
+    obtain ⟨old, oldFound, oldAssigned⟩ := inherited
+    obtain ⟨uC, foundUC, keptC⟩ := tailC.registryLifecycle.validators v.toNat old oldFound
+    have sameU : uC = u := Option.some.inj (foundUC.symm.trans foundU)
+    rw [sameU] at keptC
+    obtain ⟨w, foundW, keptP⟩ := toPulled.registryLifecycle.validators v.toNat old oldFound
+    have gap := (shared.append fromFin).exit_activation_gap h.genesis v.toNat old oldFound
+      oldAssigned
+    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
+    have actAssigned : old.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+      intro far
+      rw [far, farNat] at gap
+      have := old.exitEpoch.toNat_lt
+      omega
+    have exitU : u.exitEpoch = old.exitEpoch := keptC.exitEpoch oldAssigned
+    have actU : u.activationEpoch = old.activationEpoch := keptC.activationEpoch actAssigned
+    have exitW : w.exitEpoch = old.exitEpoch := keptP.exitEpoch oldAssigned
+    have actW : w.activationEpoch = old.activationEpoch := keptP.activationEpoch actAssigned
+    have epochU : old.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
+      rw [← exitU]
+      exact exitC.2
+    have actLt : old.activationEpoch.toNat < (getCurrentEpoch counted).toNat := by
+      rw [← actU]
+      exact exitC.1
+    have laterNat := UInt64.le_iff_toNat_le.mp h.later
+    have nearNat := h.near
+    have previous := getPreviousEpoch_toNat pulled
+    have exitWNat : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
+      rw [exitW]
+      exact epochU
+    have actWNat : w.activationEpoch.toNat = old.activationEpoch.toNat := by rw [actW]
+    have activeAt (e : Epoch) (low : w.activationEpoch.toNat ≤ e.toNat)
+        (high : e.toNat < w.exitEpoch.toNat) : isActiveAt pulled e v.toNat = true :=
+      isActiveAt_eq_true_iff.mpr ⟨w, foundW, by
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
+          UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt]
+        exact ⟨low, high⟩⟩
+    have activeR : isActiveAt pulled (getPreviousEpoch pulled) v.toNat = true ∨
+        isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true := by
+      rcases Nat.lt_or_ge (getCurrentEpoch pulled).toNat (getCurrentEpoch counted).toNat with
+        before | same
+      · exact .inr (activeAt _ (by omega) (by omega))
+      · exact .inl (activeAt _ (by omega) (by omega))
+    have notSlashed : w.slashed = false ∨ anc.finalizedCheckpoint.epoch.toNat +
+        preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ w.withdrawableEpoch.toNat := by
+      cases slashed : w.slashed
+      · exact .inl rfl
+      · have delayed := slashed_waits (shared.append fromFin) h.genesis toPulled tailC h.early
+          h.caps h.delay foundW slashed unslashedC
+        have := UInt64.le_iff_toNat_le.mp h.finalized
+        exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
+    have marked : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
+      simp only [pinTerms, decide_eq_true_eq]
+      refine ⟨?_, ?_, ?_⟩
+      · rcases activeR with active | active <;> simp [active]
+      · simpa [foundW] using notSlashed
+      · simpa [foundW] using
+          (show w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 by omega)
+    rw [flag] at marked
+    exact Bool.false_ne_true marked
+  · obtain ⟨c, member, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
+      (fun w hw => by
+        by_contra far
+        exact inherited ⟨w, hw, far⟩) u foundU assignedC
+    exact ⟨c, member, index⟩
 
 /-- D-4: the keys whose exit R reads. -/
 theorem bud_exiting :
