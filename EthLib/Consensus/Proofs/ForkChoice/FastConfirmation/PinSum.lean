@@ -5002,6 +5002,13 @@ private theorem partials_le_due (electra : .pectra ≤ fork) (v : ValidatorIndex
   funext entry
   simp [Bool.decide_and, UInt64.toNat_inj, Bool.and_comm]
 
+/-- A call's cutoff is within the withdrawal delay of the finalized state. -/
+private theorem window_short (h : Setting config checks g split fin pulled anc counted V) :
+    (getCurrentEpoch pulled).toNat + 1 <
+      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  have shallow := h.shallow
+  omega
+
 /-- The partials paid to a key over a run from the finalized state are at most those due.
 
 The run ends by the call's cutoff, which is within the withdrawal delay of the finalized state. -/
@@ -5012,18 +5019,9 @@ private theorem run_partials_le_due (h : Setting config checks g split fin pulle
     (replayed : whole.balanceEvents (getCurrentEpoch pulled).toNat = .ok events) :
     (events.map (floorPartialDebit v)).sum ≤
       (pinTerms config pulled anc fin).partialsDue v.toNat := by
-  obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have shallow := h.shallow
-  have nearC := h.near
-  simp only at finSplit called
-  have short : (getCurrentEpoch pulled).toNat + 1 <
-      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-    omega
   exact (Run.partialDebit_le whole electra h.early (getCurrentEpoch pulled).toNat
-    ((getCurrentEpoch pulled).toNat + 1) near short v replayed).trans
+    ((getCurrentEpoch pulled).toNat + 1) near (window_short h) v replayed).trans
     (partials_le_due electra v)
 
 /-- The effective balance of a key at a state of the run from the finalized state, before its exit.
@@ -5426,13 +5424,8 @@ The partial payments are none.
 
 No queued entry names the key at the finalized state, and one queued later is not due in the window.
 
-The charge is below `exitFloor`, so the debits exceed the slack.
-
-The hypothesis `site` is the split of the run at the departure charge.
-
-The hypothesis `hysteresis` is the bands of hysteresis after an epoch step. -/
+The charge is below `exitFloor`, so the debits exceed the slack. -/
 private theorem pending_key_claim_of (h : Setting config checks g split fin pulled anc counted V)
-    (hysteresis : PinSplit.EpochStartHysteresis preset config checks)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
@@ -5441,22 +5434,15 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
     (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
     (fresh : fin.validators.data[v.toNat]? = none ∨
-      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH)
-    (site : ∀ c ∈ tailC.departureCharges,
-      ∃ a b, ∃ pre : Run config checks ⟨fork, split⟩ a, ∃ step : Step config checks a b,
-        ∃ post : Run config checks b ⟨fork, counted⟩, (pre.snoc step).append post = tailC ∧
-          ∃ v w, a.state.validators.data[c.index]? = some v ∧
-            b.state.validators.data[c.index]? = some w ∧
-            v.exitEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
-            c.amount = v.effectiveBalance.toNat ∧ c.epoch = w.exitEpoch.toNat)
-    :
+      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
     (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
   classical
   obtain ⟨toFin⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨c, cMember, cIndex⟩ := charged
   obtain ⟨a, b, pre, step, post, split', vv, w, found, foundB, unset, set, activated, amount,
-    epoch⟩ := charge_activated (x := ⟨fork, split⟩) electra tailC c (site c cMember)
+    epoch⟩ := charge_activated (x := ⟨fork, split⟩) electra tailC c
+    (tailC.departure_charge_site c cMember)
   rw [cIndex] at found foundB
   -- the exit epoch of the charge is at most C's epoch, since the key is not active there
   obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
@@ -5528,7 +5514,12 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
       exact getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
   have floor := PinSplit.Run.new_key_effective_floor toFin h.genesis h.parameters h.caps h.aligned
     h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard (fromFin.append pre) aEarly
-    aInside h.window h.delay h.bands h.facts v.toNat pending active hysteresis priorOk
+    aInside h.window h.delay h.bands h.facts v.toNat pending active
+    (fun step fulu early crossing =>
+      DirectSafety.Apriori.Internal.hysteresis_of_crossing_slot
+        (DirectSafety.Apriori.Internal.slot_of_crossing step
+          (UInt64.lt_iff_toNat_lt.mp crossing)) h.bands fulu early
+        (UInt64.lt_iff_toNat_lt.mp crossing)) priorOk
   -- no queued partial withdrawal names the key at the finalized state, which has no activation
   have genesisPartials : Internal.AssignedPartials g.state := by
     obtain ⟨_, _, _, initialized⟩ := h.genesis
@@ -5554,15 +5545,9 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
         exact assignedU far
     rw [none]
     rfl
-  have finEpoch : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
-    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-  have short : (getCurrentEpoch pulled).toNat + 1 < (getCurrentEpoch fin).toNat +
-      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-    have shallow := h.shallow
-    have called := UInt64.le_iff_toNat_le.mp h.called
-    omega
   have debits := Run.partialDebit_le (fromFin.append pre) electra aEarly
-    (getCurrentEpoch pulled).toNat ((getCurrentEpoch pulled).toNat + 1) aInside short v priorOk
+    (getCurrentEpoch pulled).toNat ((getCurrentEpoch pulled).toNat + 1) aInside
+    (window_short h) v priorOk
   have toUInt : v.toNat.toUInt64 = v := by simp
   have partials : (prior.map (DirectSafety.Apriori.Internal.floorPartialDebit
       v.toNat.toUInt64)).sum = 0 := by
