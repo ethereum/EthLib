@@ -1659,7 +1659,7 @@ private theorem rate_of_guard (facts : PinPresetFacts preset)
 private theorem rise_arith {inc band capFor high finEB eR eC Bc capHigh S U : Nat}
     (incPos : 0 < inc)
     (stay : eC = eR ∨ (eC ≤ Bc + band ∧ eC ≤ max finEB (min (Bc - Bc % inc) capHigh)))
-    (aligned : eC % inc = 0) (capped : eC ≤ capFor) (ceiling : Bc ≤ high + S)
+    (aligned : eC % inc = 0) (capped : eC ≤ capFor + S + U) (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ inc ≤ U + 1) :
     eC ≤ eR + (min capFor (min (high + band - (high + band) % inc)
       (max finEB (high - high % inc))) - eR) + S + U := by
@@ -1794,7 +1794,7 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
     (balanceR : ∀ z ∈ rR.balancePath, actualBalanceAt z i ≤ Bp)
     (capR : ∀ z ∈ rR.balancePath, PinSplit2.capAt z i ≤ capP)
     (capFor high S U : ℕ)
-    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor)
+    (capped : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i ≤ capFor + S + U)
     (ceiling : Bc ≤ high + S)
     (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
