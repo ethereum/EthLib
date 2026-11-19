@@ -4,6 +4,7 @@ public import EthLib.Networking.Enr.V4
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Networking.Proofs.Enr.Record
+public import EthLib.Cryptography.Proofs.EcdsaSignature
 
 /-!
 # Proofs: the "v4" identity scheme
@@ -61,14 +62,16 @@ theorem verifyV4_eq_true_iff {r : Enr} :
         (Base.bytesToNat (r.signature.data.toList.take 32))
         (Base.bytesToNat (r.signature.data.toList.drop 32)) = true := by
   unfold verifyV4
+  rw [EcdsaSignature.read?_eq, EcdsaSignature.SIGNATURE_LEN]
   constructor
   · intro h
     split at h
     · rename_i q content hq hc
-      split at h
-      · rename_i hsz
+      by_cases hsz : r.signature.size = 64
+      · simp only [hsz, ↓reduceIte] at h
         exact ⟨q, content, hq, hc, hsz, h⟩
-      · cases h
+      · simp only [hsz, ↓reduceIte] at h
+        cases h
     · cases h
   · rintro ⟨q, content, hq, hc, hsz, hv⟩
     rw [hq, hc]

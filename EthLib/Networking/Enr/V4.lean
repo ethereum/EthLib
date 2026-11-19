@@ -4,6 +4,7 @@ public import EthLib.Networking.Enr.Record
 public import EthLib.Cryptography.Secp256k1.Address
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.EcdsaSignature
 
 /-!
 # `Networking.Enr.V4`
@@ -73,11 +74,9 @@ ECDSA accepts a high `s` here, since the EIP adds no low-s rule. -/
 def verifyV4 (r : Enr) : Bool :=
   match r.publicKeyV4, Serialization.Rlp.encode r.content with
   | .ok q, .ok content =>
-    if r.signature.size = 64 then
-      let sig := r.signature.data.toList
-      Ecdsa.verify q (Hash.Keccak.keccak256 content)
-        (Base.bytesToNat (sig.take 32)) (Base.bytesToNat (sig.drop 32))
-    else false
+    match EcdsaSignature.read? r.signature with
+    | some (rr, ss) => Ecdsa.verify q (Hash.Keccak.keccak256 content) rr ss
+    | none => false
   | _, _ => false
 
 /-- The node ID of a "v4" record: the Keccak-256 hash of `x` then `y` of its public key.
