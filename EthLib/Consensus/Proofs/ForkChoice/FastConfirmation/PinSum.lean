@@ -1653,6 +1653,213 @@ private theorem sync_debit_seat {f : Fork} {c t : BeaconState preset f} (altair 
   · exact seat
   · omega
 
+/-- The events of a block's passes credit no key but the proposer, from the sources that matter.
+
+None of them has a sync or consolidation source.
+
+A rewards or slashings event credits only the proposer. -/
+private def PassCredits (proposer : ℕ) (events : List (BalanceEvent preset)) : Prop :=
+  ∀ e ∈ events, e.source ≠ .sync ∧ e.source ≠ .consolidations ∧
+    ((e.source = .rewards ∨ e.source = .slashings) →
+      ∀ i, proposer ≠ i → keyCredit i e = 0)
+
+/-- A carried pass records nothing. -/
+private theorem PassCredits.carry {f : Fork} {proposer : ℕ}
+    {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
+    {pre post : BalanceReplay preset f} (held : PassCredits proposer pre.2)
+    (ok : carryBalance action pre = .ok post) : PassCredits proposer post.2 := by
+  rw [(PinSplit4.carryBalance_cases ok).2]
+  exact held
+
+/-- A recorded pass adds an event.
+
+A rewards or slashings event credits only the proposer. -/
+private theorem PassCredits.record {f : Fork} {proposer : ℕ} {source : BalanceSource}
+    {limits : BeaconState preset f → Except TransitionError (Nat × Nat)}
+    {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
+    {pre post : BalanceReplay preset f} (held : PassCredits proposer pre.2)
+    (ok : recordBalance source limits action pre = .ok post)
+    (notSync : source ≠ .sync) (notConsolidation : source ≠ .consolidations)
+    (lowered : (source = .rewards ∨ source = .slashings) → ∀ t, action pre.1 = .ok t →
+      ∀ i, proposer ≠ i →
+        actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i ≤
+          actualBalanceAt (⟨f, pre.1⟩ : ForkedBeaconState preset) i) :
+    PassCredits proposer post.2 := by
+  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+  obtain ⟨⟨credit, debit⟩, _, t, computed, rfl⟩ := ok
+  intro e member
+  rcases List.mem_append.mp member with old | new
+  · exact held e old
+  · obtain rfl := List.mem_singleton.mp new
+    exact ⟨notSync, notConsolidation, fun source i other =>
+      Nat.sub_eq_zero_of_le (lowered source t computed i other)⟩
+
+/-- A pass that does not lower a balance, and keeps the sizes, does not raise it. -/
+private theorem actualBalanceAt_le_of_down {f : Fork} {s u : BeaconState preset f}
+    (sizes : SameSizes s u) {i : ℕ} (down : BalanceDown i s u) :
+    actualBalanceAt (⟨f, u⟩ : ForkedBeaconState preset) i ≤
+      actualBalanceAt (⟨f, s⟩ : ForkedBeaconState preset) i := by
+  by_cases inside : i < s.balances.data.size
+  · obtain ⟨b, held⟩ : ∃ b, s.balances.data[i]? = some b :=
+      ⟨_, Array.getElem?_eq_getElem inside⟩
+    obtain ⟨later, found, le⟩ := down b held
+    simp only [actualBalanceAt, held, found, Option.map_some, Option.getD_some]
+    exact UInt64.le_iff_toNat_le.mp le
+  · have outS : s.balances.data[i]? = none := Array.getElem?_eq_none (Nat.le_of_not_lt inside)
+    have outU : u.balances.data[i]? = none :=
+      Array.getElem?_eq_none (by have := sizes.2; omega)
+    simp [actualBalanceAt, outS, outU]
+
+/-- A fold of recorded passes ends at the state of the fold of their actions. -/
+private theorem record_fold_state {α : Type} (src : BalanceSource)
+    (lim : α → BeaconState preset fork → Except TransitionError (ℕ × ℕ))
+    (act : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)) :
+    ∀ (items : List α) (p q : BalanceReplay preset fork),
+      items.foldlM (fun pre x => recordBalance src (lim x) (act · x) pre) p = .ok q →
+      items.foldlM act p.1 = .ok q.1 := by
+  intro items
+  induction items with
+  | nil =>
+    intro p q ok
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at ok
+    subst ok
+    rfl
+  | cons x rest ih =>
+    rintro ⟨first, events⟩ q ok
+    rw [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨⟨second, recorded⟩, step, others⟩ := ok
+    obtain ⟨_, _, -, actionOk, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single step
+    show List.foldlM act first (x :: rest) = _
+    rw [List.foldlM_cons, actionOk]
+    exact ih _ _ others
+
+/-- The replay of a block ends with its sync pass, after passes that credit only its proposer.
+
+The proposer of the block is the one that the state before the sync pass reads.
+
+The other passes record events that `PassCredits` describes.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState preset fork}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    {engine : ExecutionEngine preset fork} {block : BeaconBlock preset fork}
+    {events : List (BalanceEvent preset)}
+    (replay : blockBalanceReplay (config := config) (checks := checks) early engine a block =
+      .ok (t, events)) :
+    ∃ (c : BeaconState preset fork) (rest : List (BalanceEvent preset)) (altair : .altair ≤ fork)
+      (aggregate : SyncAggregate preset) (credit debit : ℕ),
+      events = rest ++ [⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, credit, debit⟩] ∧
+      getBeaconProposerIndex c = .ok block.proposerIndex ∧
+      processSyncAggregate config checks c altair aggregate = .ok t ∧
+      PassCredits block.proposerIndex.toNat rest := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+  have bellatrix : .bellatrix ≤ fork := Nat.le_trans (by decide) electra
+  have before : fork < .hegota := Nat.lt_trans early (by decide)
+  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
+  have normalized := replay
+  unfold blockBalanceReplay at normalized
+  simp only [altair, bellatrix, electra, ↓reduceDIte] at normalized
+  simp only [← bind_assoc] at normalized
+  simp only [bind_assoc] at normalized
+  simp only [bind_ok_iff, ensure_ok_iff] at normalized
+  obtain ⟨headed, headedOk, executed, executedOk, revealed, revealedOk, voted, votedOk, x1, x2, x3,
+    x4, proposed, proposedOk, slashed, slashedOk, attested, attestedOk, deposited, depositedOk,
+    exited, exitedOk, changed, changedOk, requested, requestedOk, withdrawn, withdrawnOk,
+    consolidated, consolidatedOk, syncOk⟩ := normalized
+  -- The proposer of the block is read at the state before its operations.
+  have headerOk : processBlockHeader a block = .ok headed.1 :=
+    (PinSplit4.carryBalance_cases headedOk).1
+  have input : OperationsInput config checks engine a block voted.1 :=
+    ⟨a, headed.1, executed.1, revealed.1, by simp [notGloas, pure, Except.pure], headerOk,
+      by simpa only [bellatrix, ↓reduceDIte] using (PinSplit4.recordBalance_cases executedOk).1,
+      (PinSplit4.carryBalance_cases revealedOk).1,
+      by simpa only [before, ↓reduceDIte] using (PinSplit4.carryBalance_cases votedOk).1⟩
+  have read := (operationsInput_proposer apart input).1
+  -- The operations apply the actions of the replay in order, so they keep that proposer.
+  have operated : processOperations config checks voted.1 block.body a.latestBlockHeader.slot =
+      .ok consolidated.1 := by
+    have pOk := record_fold_state _ _ _ _ _ _ proposedOk
+    have sOk := record_fold_state _ _ _ _ _ _ slashedOk
+    have aOk := record_fold_state _ _ _ _ _ _ attestedOk
+    have dOk := record_fold_state _ _ _ _ _ _ depositedOk
+    have cOk := record_fold_state _ _ _ _ _ _ consolidatedOk
+    simp only [Array.foldlM_toList] at pOk sOk aOk dOk cOk
+    unfold processOperations
+    simp only [notGloas, electra, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, processExecutionRequests]
+    exact ⟨x1, x2, x3, x4, proposed.1, pOk, slashed.1, sOk, attested.1, aOk, deposited.1, dOk,
+      exited.1, (PinSplit4.carryBalance_cases exitedOk).1, changed.1,
+      (PinSplit4.carryBalance_cases changedOk).1, requested.1,
+      (PinSplit4.carryBalance_cases requestedOk).1, withdrawn.1,
+      (PinSplit4.carryBalance_cases withdrawnOk).1, cOk⟩
+  have link := (processOperations_proposer apart operated).1.trans read
+  -- The passes before the operations record no credit but the proposer's.
+  have base : PassCredits block.proposerIndex.toNat ([] : List (BalanceEvent preset)) :=
+    fun e member => by simp at member
+  have start : PassCredits block.proposerIndex.toNat voted.2 :=
+    (((base.carry headedOk).record executedOk (by decide) (by decide)
+      fun h => absurd h (by decide)).carry revealedOk).carry votedOk
+  have step : ∀ {source : BalanceSource}
+      {limits : BeaconState preset fork → Except TransitionError (Nat × Nat)}
+      {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
+      (pre post : BalanceReplay preset fork), (source = .rewards ∨ source = .slashings) →
+      (getBeaconProposerIndex pre.1 = .ok block.proposerIndex ∧
+        PassCredits block.proposerIndex.toNat pre.2) →
+      recordBalance source limits action pre = .ok post →
+      (∀ s u, action s = .ok u → getBeaconProposerIndex s = .ok block.proposerIndex →
+        SameSizes s u ∧ (∀ i, block.proposerIndex.toNat ≠ i → BalanceDown i s u) ∧
+          getBeaconProposerIndex u = .ok block.proposerIndex) →
+      getBeaconProposerIndex post.1 = .ok block.proposerIndex ∧
+        PassCredits block.proposerIndex.toNat post.2 := by
+    intro source limits action pre post src ⟨seen, held⟩ ok props
+    obtain ⟨-, -, kept⟩ := props _ _ (PinSplit4.recordBalance_cases ok).1 seen
+    refine ⟨kept, held.record ok ?_ ?_ fun _ u computed i other => ?_⟩
+    · rcases src with rfl | rfl <;> decide
+    · rcases src with rfl | rfl <;> decide
+    · obtain ⟨sizes, down, -⟩ := props _ _ computed seen
+      exact actualBalanceAt_le_of_down sizes (down i other)
+  have away : block.proposerIndex.toNat ≠ block.proposerIndex.toNat + 1 := by omega
+  have proposedR := foldlM_ok_invariant (fun p : BalanceReplay preset fork =>
+      getBeaconProposerIndex p.1 = .ok block.proposerIndex ∧
+        PassCredits block.proposerIndex.toNat p.2)
+    (fun pre _ post held ok => step pre post (Or.inr rfl) held ok fun s u c r =>
+      ⟨sameSizes_processProposerSlashing c,
+        fun i other => (processProposerSlashing_balanceDown apart c r other).1,
+        ((processProposerSlashing_balanceDown apart c r away).2).trans r⟩)
+    ⟨read, start⟩ proposedOk
+  have slashedR := foldlM_ok_invariant (fun p : BalanceReplay preset fork =>
+      getBeaconProposerIndex p.1 = .ok block.proposerIndex ∧
+        PassCredits block.proposerIndex.toNat p.2)
+    (fun pre _ post held ok => step pre post (Or.inr rfl) held ok fun s u c r =>
+      ⟨sameSizes_processAttesterSlashing c,
+        fun i other => (processAttesterSlashing_balanceDown apart c r other).1,
+        ((processAttesterSlashing_balanceDown apart c r away).2).trans r⟩)
+    proposedR slashedOk
+  have attestedR := foldlM_ok_invariant (fun p : BalanceReplay preset fork =>
+      getBeaconProposerIndex p.1 = .ok block.proposerIndex ∧
+        PassCredits block.proposerIndex.toNat p.2)
+    (fun pre _ post held ok => step pre post (Or.inl rfl) held ok fun s u c r =>
+      ⟨sameSizes_processAttestation c,
+        fun i other => (processAttestation_balanceDown apart c r other).1,
+        ((processAttestation_balanceDown apart c r away).2).trans r⟩)
+    slashedR attestedOk
+  -- The remaining passes before the sync pass record no rewards or slashings.
+  have depositedC := foldlM_ok_invariant (fun p : BalanceReplay preset fork =>
+      PassCredits block.proposerIndex.toNat p.2)
+    (fun _ _ _ held ok => held.record ok (by decide) (by decide) fun h => absurd h (by decide))
+    attestedR.2 depositedOk
+  have requestedC := ((((depositedC.carry exitedOk).carry changedOk).carry requestedOk).carry
+    withdrawnOk)
+  have consolidatedC := foldlM_ok_invariant (fun p : BalanceReplay preset fork =>
+      PassCredits block.proposerIndex.toNat p.2)
+    (fun _ _ _ held ok => held.record ok (by decide) (by decide) fun h => absurd h (by decide))
+    requestedC consolidatedOk
+  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
+    Prod.mk.injEq] at syncOk
+  obtain ⟨⟨credit, debit⟩, -, u, synced, rfl, rfl⟩ := syncOk
+  exact ⟨consolidated.1, consolidated.2, altair, _, credit, debit, rfl, link, synced,
+    consolidatedC⟩
+
 /-- A list of at most one element has equal members. -/
 private theorem list_eq_of_length_le_one {α : Type} {L : List α} (short : L.length ≤ 1) {a b : α}
     (ha : a ∈ L) (hb : b ∈ L) : a = b := by
@@ -3962,29 +4169,6 @@ private theorem slot_compounding_kept {m n : ForkedBeaconState preset}
     obtain ⟨later, laterFound, same⟩ := processEpochAltair_credentials epochOk found
     exact ⟨later, laterFound, by unfold hasCompoundingWithdrawalCredential; rw [same]⟩
   · exact ⟨v, found, rfl⟩
-
-/-- A fold of recorded passes ends at the state of the fold of their actions. -/
-private theorem record_fold_state {α : Type} (src : BalanceSource)
-    (lim : α → BeaconState preset fork → Except TransitionError (ℕ × ℕ))
-    (act : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)) :
-    ∀ (items : List α) (p q : BalanceReplay preset fork),
-      items.foldlM (fun pre x => recordBalance src (lim x) (act · x) pre) p = .ok q →
-      items.foldlM act p.1 = .ok q.1 := by
-  intro items
-  induction items with
-  | nil =>
-    intro p q ok
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at ok
-    subst ok
-    rfl
-  | cons x rest ih =>
-    rintro ⟨first, events⟩ q ok
-    rw [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨⟨second, recorded⟩, step, others⟩ := ok
-    obtain ⟨_, _, -, actionOk, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single step
-    show List.foldlM act first (x :: rest) = _
-    rw [List.foldlM_cons, actionOk]
-    exact ih _ _ others
 
 /-- A consolidation request keeps whether a validator compounds.
 
