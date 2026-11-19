@@ -591,7 +591,7 @@ theorem runScores_le {x y : ForkedBeaconState preset} (tail : Run config checks 
   scoresBelowAt_run_all (start := fun _ => startInactivityScore config x) tail altair early era
     (scoresBelowAt_start x altair (i + 1)) later i (Nat.lt_succ_self i) score found
 
-/-- A key's score on a branch from Altair is its start score plus at most a bias per epoch. -/
+/-- A key's score on a branch from Altair is at most its start score plus a bias per epoch. -/
 theorem runScore_le_start {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
     (era : .pectra ≤ x.fork ∨ y.fork < .pectra) (later : .altair ≤ y.fork) {i : Nat}
