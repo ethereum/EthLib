@@ -542,7 +542,7 @@ Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
 The evidence is relative to the anchor.
 
-Two steps of a checked call assume this read.
+The steps of a checked call that read the caller's head take this read.
 
 With it, an accepted current-target test has its honest signers up to these alternatives.
 

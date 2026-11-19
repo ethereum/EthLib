@@ -3287,9 +3287,10 @@ At each up-to-date honest store up to `time`, the root is in the filtered tree o
 The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
 Each such store has a head, by `Execution.honestHeadsExist_or_evidence` in `HonestHeads.lean`, up to the same alternatives ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
-It reads `CheckpointStakeCeiling`, `ProposerScoreFits`, the epoch room of `Config.CommitteeWindowsFit.seeds` and the network and duty premises that the headline already takes.
+It reads `CheckpointStakeCeiling`, `ProposerScoreFits`, the bound of `Config.CommitteeWindowsFit.seeds` on the epoch of the largest 64-bit time and the network and duty premises that the headline already takes.
 The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot and is accepted.
-So the store holds its justified block, and its filtered tree reads: `HonestHeadsExist` has no premise on that tree.
+So the store holds its justified block, and its filtered tree computes without error.
+That is why `HonestHeadsExist` needs no premise on the tree.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
 `HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
