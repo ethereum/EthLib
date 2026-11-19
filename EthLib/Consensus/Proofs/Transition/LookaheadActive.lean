@@ -113,31 +113,6 @@ private theorem LookaheadActive.upgradeToFulu {pre : BeaconState preset .pectra}
     (Vector.getElem_mem _ |> fun member => by simpa using member)
   exact isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩
 
-/-- The epoch of the next slot is the same, or one more when the next slot starts an epoch. -/
-private theorem epoch_next {slot next : Slot} (sum : next.toNat = slot.toNat + 1) :
-    (next % preset.SLOTS_PER_EPOCH = 0 → next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) ∧
-    (next % preset.SLOTS_PER_EPOCH ≠ 0 → next.toNat / preset.SLOTS_PER_EPOCH.toNat =
-      slot.toNat / preset.SLOTS_PER_EPOCH.toNat) := by
-  have divides : next % preset.SLOTS_PER_EPOCH = 0 ↔
-      preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat := by
-    constructor
-    · intro zero
-      exact Nat.dvd_of_mod_eq_zero (by simpa using congrArg UInt64.toNat zero)
-    · intro divides
-      exact UInt64.toNat_inj.mp (by simpa using Nat.mod_eq_zero_of_dvd divides)
-  have step : next.toNat / preset.SLOTS_PER_EPOCH.toNat = slot.toNat /
-      preset.SLOTS_PER_EPOCH.toNat +
-        if preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat then 1 else 0 := by
-    rw [sum]
-    exact Nat.succ_div
-  exact ⟨fun zero => by rw [step]; simp [divides.mp zero],
-    fun nonzero => by
-      have not : ¬preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat := fun dvd =>
-        nonzero (divides.mpr dvd)
-      rw [step]
-      simp [not]⟩
-
 /-- A slot keeps the invariant. -/
 private theorem LookaheadActive.advanceSlot
     (covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -145,7 +120,6 @@ private theorem LookaheadActive.advanceSlot
     (ok : Consensus.advanceSlot config checks state = .ok after) : LookaheadActive after := by
   obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok ok
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  obtain ⟨boundary, inside⟩ := epoch_next sum
   unfold epochIfLast at epochedOk
   split at epochedOk
   · rename_i end_
@@ -159,7 +133,7 @@ private theorem LookaheadActive.advanceSlot
         (getCurrentEpoch ({ epoched with slot := next } : BeaconState preset fork)).toNat =
         (getCurrentEpoch state).toNat + 1 := by
       simp only [getCurrentEpoch_toNat]
-      exact boundary end_
+      exact nextSlot_epoch_of_boundary sum end_
     have kept : ActiveKept (activityFixedEpoch state) state
         ({ epoched with slot := next } : BeaconState preset fork) :=
       (ActiveKept.of_validators rfl _).trans
@@ -191,7 +165,7 @@ private theorem LookaheadActive.advanceSlot
     subst epochedOk
     refine h.keep covers (UInt64.toNat_inj.mp ?_) rfl (ActiveKept.of_validators rfl _)
     simp only [getCurrentEpoch_toNat]
-    exact inside (fun zero => ‹¬_› zero)
+    exact nextSlot_epoch_of_inside sum ‹_›
 
 /-- The upgrades keep the invariant, and Fulu starts it. -/
 private theorem LookaheadActive.upgradeNext {pre : ForkedBeaconState preset}
