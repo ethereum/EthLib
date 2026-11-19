@@ -2343,7 +2343,10 @@ private theorem Run.effective_floor_of_envelope {x y : ForkedBeaconState preset}
           | cons a l =>
             have head : a = m := by simpa [hp] using ends.1
             rcases List.mem_cons.mp (hp ▸ atN) with same | later
-            · simp [Run.balancePath, ← same, head, atM]
+            · have atBefore : n ∈ before.balancePath := by
+                rw [same, head]
+                exact atM
+              simp [Run.balancePath, atBefore]
             · simp [Run.balancePath, hp, later]
       have top := envelope m onPath.1
       have closeBand := near n onPath.2
