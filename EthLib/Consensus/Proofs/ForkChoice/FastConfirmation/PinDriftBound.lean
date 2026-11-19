@@ -33,6 +33,9 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
 import EthLib.Consensus.Proofs.Transition.Totality.Supply
 import EthLib.Consensus.Proofs.Transition.EffectiveFall
+import EthLib.Consensus.Proofs.DirectSafety.Evidence
+import EthLib.Consensus.Proofs.DirectSafety.Fields
+import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 
 /-!
 # The quorum of a call drifts by at most its pin reserve, on another branch
@@ -86,31 +89,113 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
-/-- A key of the split's registry that R slashed and C did not has waited the slashings vector.
+/-- A run from a state without a property to a state with it splits at a step that gains it. -/
+private theorem Run.split_at_flip {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (P : ForkedBeaconState preset → Prop) (missing : ¬P x) (held : P y) :
+    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      tail = (pre.snoc step).append post ∧ ¬P m ∧ P n := by
+  induction tail with
+  | nil => exact absurd held missing
+  | @snoc middle last pre step ih =>
+    by_cases inside : P middle
+    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih inside
+      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
+      rw [split]
+      rfl
+    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
 
-It is slashed on R's branch after the split.
+/-- The key of a step's slashing evidence is the key of a validator of the step's first state. -/
+private theorem slashingEvidence_key {x y : ForkedBeaconState preset} (st : Step config checks x y)
+    {key : Cryptography.Bls.BLSPubkey} (evidence : st.SlashingEvidence key) :
+    ∃ (j : ℕ) (v : Validator), x.state.validators.data[j]? = some v ∧ v.pubkey = key := by
+  cases st with
+  | slot _ => exact False.elim evidence
+  | block engine signed due ok =>
+    rcases evidence with ⟨_, _, v, found, key⟩ | ⟨_, _, i, _, v, found, key⟩
+    · exact ⟨_, v, found, key⟩
+    · exact ⟨_, v, found, key⟩
+
+/-- A validator that first appears in a step, at a position the first state lacks, is unslashed.
+
+A slashed validator of the last state has a slashed key at the first state.
+
+Otherwise the step carries a slashing that names its key.
+
+Either way a validator of the first state holds that key.
+
+The keys of a run from genesis are distinct. -/
+private theorem fresh_unslashed {g m n : ForkedBeaconState preset}
+    (toM : Run config checks g m) (step : Step config checks m n)
+    (genesis : Genesis config checks g) {i : ℕ} (fresh : m.state.validators.data.size ≤ i)
+    {w : Validator} (found : n.state.validators.data[i]? = some w) : w.slashed = false := by
+  by_contra not
+  have slashed : w.slashed = true := by simpa using not
+  have unique : PubkeysDistinct n.state := (toM.snoc step).pubkeysDistinct genesis
+  have kept := (validatorKeys_prefix_and_distinct_of_chainSteps
+    (Relation.ReflTransGen.single step.chainStep)).1
+  have taken : ∀ (j : ℕ) (v : Validator), m.state.validators.data[j]? = some v →
+      v.pubkey = w.pubkey → False := by
+    intro j v read key
+    obtain ⟨current, currentRead, currentKey⟩ :=
+      validators_getElem?_of_validatorKeys_prefix kept read
+    have same := unique.index_eq currentRead found (currentKey.trans key)
+    have inside := (Array.getElem?_eq_some_iff.mp read).1
+    omega
+  have member : w ∈ n.state.validators.data.toList := Array.mem_toList_iff.mpr
+    (Array.mem_of_getElem? found)
+  rcases (Run.nil.snoc step).slashed_evidence w member slashed with
+    ⟨v, memberV, key, -⟩ | ⟨a, b, st, contained, evidence⟩
+  · obtain ⟨j, read⟩ := List.mem_iff_getElem?.mp memberV
+    exact taken j v (by simpa using read) key
+  · cases contained with
+    | last =>
+      obtain ⟨j, v, read, key⟩ := slashingEvidence_key step evidence
+      exact taken j v read key
+    | earlier inner _ => cases inner
+
+/-- A key that R slashed and C did not has waited the slashings vector.
+
+The key may be one of the split's registry, or one that joined the registry after the split.
+
+It is slashed on R's branch after the split, or after it joined.
 
 So its withdrawable epoch is at least the split's epoch plus `EPOCHS_PER_SLASHINGS_VECTOR`.
 
-A run keeps every slashing, so the counting state would hold it slashed if the split did. -/
-private theorem slashed_waits {split pulled counted : BeaconState preset fork}
+A run keeps every slashing, so the counting state would hold a key slashed at the split slashed. -/
+private theorem slashed_waits {g : ForkedBeaconState preset}
+    {split pulled counted : BeaconState preset fork}
+    (toSplit : Run config checks g ⟨fork, split⟩) (genesis : Genesis config checks g)
     (toPulled : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (toCounted : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     (early : fork < .glamsterdam) (caps : CapOrder preset)
-    (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    {i : ℕ} (inside : i < split.validators.data.size)
-    {validator : Validator} (found : pulled.validators.data[i]? = some validator)
+    (withdrawDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {i : ℕ} {validator : Validator} (found : pulled.validators.data[i]? = some validator)
     (slashed : validator.slashed = true)
     (unslashedC : ((counted.validators.data[i]?).map (·.slashed)).getD true = false) :
     (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       validator.withdrawableEpoch.toNat := by
-  have oldFound := Array.getElem?_eq_getElem inside
-  cases oldSlashed : split.validators.data[i].slashed
-  · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
-      withdrawDelay i _ validator oldFound found oldSlashed slashed).2
-  · obtain ⟨now, nowFound, nowSlashed⟩ :=
-      toCounted.slashedPersistence i _ oldFound oldSlashed
-    simp [nowFound, nowSlashed] at unslashedC
+  by_cases inside : i < split.validators.data.size
+  · have oldFound := Array.getElem?_eq_getElem inside
+    cases oldSlashed : split.validators.data[i].slashed
+    · exact (toPulled.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+        withdrawDelay i _ validator oldFound found oldSlashed slashed).2
+    · obtain ⟨now, nowFound, nowSlashed⟩ :=
+        toCounted.slashedPersistence i _ oldFound oldSlashed
+      simp [nowFound, nowSlashed] at unslashedC
+  · -- The key joined the registry in R's run, and it was not slashed when it first appeared.
+    obtain ⟨m, n, pre, step, post, -, notYet, arrived⟩ := Run.split_at_flip toPulled
+      (fun z => i < z.state.validators.data.size) inside
+      (Array.getElem?_eq_some_iff.mp found).1
+    obtain ⟨w, arrivedFound⟩ : ∃ w, n.state.validators.data[i]? = some w :=
+      ⟨_, Array.getElem?_eq_getElem arrived⟩
+    have unslashedAtN := fresh_unslashed (toSplit.append pre) step genesis
+      (Nat.le_of_not_lt notYet) arrivedFound
+    have delayed := (post.newly_slashed_withdrawableEpoch caps.activation caps.compounding early
+      withdrawDelay i w validator arrivedFound found unslashedAtN slashed).2
+    have forward : (getCurrentEpoch split).toNat ≤ (getCurrentEpoch n.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (pre.snoc step).chainSteps)
+    omega
 
 /-- A key in the counting state's quorum that is not active at its epoch is in `exiting`.
 
@@ -125,11 +210,13 @@ If R holds it slashed, the slashing came after the split.
 The counting state holds it unslashed, and a run keeps every slashing.
 
 Then its withdrawable epoch is at least the split's epoch plus `EPOCHS_PER_SLASHINGS_VECTOR`. -/
-private theorem previousOnly_mem_exiting {split pulled counted anc : BeaconState preset fork}
+private theorem previousOnly_mem_exiting {g : ForkedBeaconState preset}
+    {split pulled counted anc : BeaconState preset fork}
+    (toSplit : Run config checks g ⟨fork, split⟩) (genesis : Genesis config checks g)
     (toPulled : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (toCounted : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     (early : fork < .glamsterdam) (caps : CapOrder preset)
-    (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (withdrawDelay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (finalized : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split)
     (tight : getCurrentEpoch counted ≤ activityFixedEpoch split)
     (later : getCurrentEpoch pulled ≤ getCurrentEpoch counted)
@@ -191,8 +278,8 @@ private theorem previousOnly_mem_exiting {split pulled counted anc : BeaconState
     cases slashed : validator.slashed
     · exact .inl rfl
     · obtain ⟨old, oldFound, -⟩ := isActiveAt_eq_true_iff.mp splitP
-      have delayed := slashed_waits toPulled toCounted early caps withdrawDelay
-        (Array.getElem?_eq_some_iff.mp oldFound).1 found slashed unslashedC
+      have delayed := slashed_waits toSplit genesis toPulled toCounted early caps withdrawDelay
+        found slashed unslashedC
       have := UInt64.le_iff_toNat_le.mp finalized
       exact .inr (Nat.le_trans (Nat.add_le_add_right this _) delayed)
 
@@ -4376,7 +4463,7 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
     ∃ (c : BeaconState preset fork) (rest : List (BalanceEvent preset))
       (aggregate : SyncAggregate preset) (credit debit : ℕ),
       events = rest ++ [⟨.sync, ⟨fork, c⟩, ⟨fork, t⟩, credit, debit⟩] ∧
-      (∀ e ∈ rest, e.source ≠ .sync) ∧ (∀ i, (rest.map (syncDebit i)).sum = 0) ∧
+      (∀ i, (rest.map (syncDebit i)).sum = 0) ∧
       processSyncAggregate config checks c altair aggregate = .ok t := by
   have normalized := replay
   unfold blockBalanceReplay at normalized
@@ -4419,7 +4506,7 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
   simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
     Prod.mk.injEq] at syncOk
   obtain ⟨⟨credit, debit⟩, limitsOk, u, synced, rfl, rfl⟩ := syncOk
-  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, eleven, fun i => ?_, synced⟩
+  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, fun i => ?_, synced⟩
   exact List.sum_eq_zero fun x member => by
     obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
     simp [syncDebit, eleven e inside]
@@ -4438,7 +4525,7 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
     (keys : Finset ℕ) :
     ∑ i ∈ keys, (events.map (syncDebit i)).sum ≤
       preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope preset total := by
-  obtain ⟨c, rest, aggregate, credit, debit, rfl, -, silent, synced⟩ :=
+  obtain ⟨c, rest, aggregate, credit, debit, rfl, silent, synced⟩ :=
     blockReplay_sync_split early altair replay
   obtain ⟨reward, proposer, rewardOk, -, -, debits⟩ := sync_bounds altair _ synced
   have bound := (DirectSafety.Apriori.Internal.keys_debits_le keys
@@ -5193,22 +5280,6 @@ private theorem ChainStep.epoch_le_succ {a b : ForkedBeaconState preset}
     have same := processBlock_slot (applySignedBlock_ok ok).2.1
     simp only [getCurrentEpoch, same]
     exact Nat.le_succ _
-
-/-- A run from a state without a property to a state with it splits at a step that gains it. -/
-private theorem Run.split_at_flip {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (P : ForkedBeaconState preset → Prop) (missing : ¬P x) (held : P y) :
-    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m)
-      (step : Step config checks m n) (post : Run config checks n y),
-      tail = (pre.snoc step).append post ∧ ¬P m ∧ P n := by
-  induction tail with
-  | nil => exact absurd held missing
-  | @snoc middle last pre step ih =>
-    by_cases inside : P middle
-    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih inside
-      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
-      rw [split]
-      rfl
-    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
 
 /-- A run from an epoch to a later one has a slot step that leaves a given epoch between them. -/
 private theorem Run.cross_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)

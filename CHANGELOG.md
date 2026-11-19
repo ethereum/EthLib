@@ -33,6 +33,11 @@ Not yet released.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
   The pin's drift bound reads it for the keys that registry updates eject before the pending consolidations.
 
+- `Step.consolidation_withdrawable` says what a step does to the withdrawable epoch of a key before its pending consolidations.
+  The key keeps the withdrawable epoch it had at the start of the step, or has one set after the next epoch.
+  It takes a step from Electra with a positive withdrawal delay.
+  The pin's drift bound reads it for the source of a pending consolidation.
+
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
 
