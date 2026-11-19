@@ -5376,6 +5376,102 @@ private theorem deposits_K46_le (h : Setting config checks g split fin pulled an
     simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
     exact ⟨w, found, active.2⟩
 
+/-- A key slashed at C and not slashed at the start of a deposit event is not withdrawable there.
+
+The key is not slashed at the step's start, and the run from there ends with it slashed.
+
+At the step that slashes it, the key is slashable, so it is not yet withdrawable.
+
+Until then its withdrawable epoch is the one it has at the event's start, or its exit is far off. -/
+private theorem slashed_deposit_held (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {u w : ForkedBeaconState preset} (ok : advanceSlotAcross config checks u = .ok w)
+    (contained : tailC.Contains (Step.slot ok)) {es : List (BalanceEvent preset)}
+    (replayedEs : (Step.slot ok : Step config checks u w).balanceEvents = .ok es)
+    {e : BalanceEvent preset} (inStep : e ∈ es) (dep : e.source = .deposits)
+    (ordered : ExitsOrdered e.before.state) (life : RegistryLifecycle e.before.state counted)
+    {i : ℕ} (slashedC : ∃ b, counted.validators.data[i]? = some b ∧ b.slashed = true)
+    {a : Validator} (found : e.before.state.validators.data[i]? = some a)
+    (clean : a.slashed = false) :
+    (getCurrentEpoch e.before.state).toNat < a.withdrawableEpoch.toNat := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨pre, post, rfl⟩ := Run.contains_split tailC (Step.slot ok) contained
+  have earlyW : w.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
+  have fuluU : .fusaka ≤ u.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)
+  have toU := (toFin.append fromFin).append pre
+  obtain ⟨-, wdKept, -, size, persist, sameEpoch⟩ := PinSplit4.Run.events_kept toU h.genesis
+    (Run.nil.snoc (Step.slot ok)) fuluU earlyW ok (.last .nil _) replayedEs e inStep dep
+  obtain ⟨au, foundU⟩ : ∃ au, u.state.validators.data[i]? = some au :=
+    ⟨_, Array.getElem?_eq_getElem (lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp found).1 size)⟩
+  have cleanU : au.slashed = false := by
+    cases flag : au.slashed
+    · rfl
+    · obtain ⟨x, read, marked⟩ := persist i au foundU flag
+      obtain rfl := Option.some.inj (read.symm.trans found)
+      simp [clean] at marked
+  obtain ⟨m, n, preR, step, postR, -, notM, isN⟩ := Run.split_at_flip
+    ((Run.nil.snoc (Step.slot ok)).append post)
+    (fun z => ∃ b, z.state.validators.data[i]? = some b ∧ b.slashed = true)
+    (by
+      rintro ⟨b, read, marked⟩
+      obtain rfl := Option.some.inj (foundU.symm.trans read)
+      simp [cleanU] at marked) slashedC
+  have toM := toU.append preR
+  obtain ⟨bn, foundN, slashedN⟩ := isN
+  obtain ⟨bm, foundM⟩ : ∃ bm, m.state.validators.data[i]? = some bm := by
+    by_cases inside : i < m.state.validators.data.size
+    · exact ⟨_, Array.getElem?_eq_getElem inside⟩
+    · have := fresh_unslashed toM step h.genesis (Nat.le_of_not_lt inside) foundN
+      simp [this] at slashedN
+  have cleanM : bm.slashed = false := by
+    cases flag : bm.slashed
+    · rfl
+    · exact absurd ⟨bm, foundM, flag⟩ notM
+  have earlyN : n.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps postR.chainSteps) h.early
+  have lateM : (getCurrentEpoch m.state).toNat < bm.withdrawableEpoch.toNat := by
+    have holds := Run.invariant (Genesis.invariant h.genesis) toM
+    have bound := UInt64.le_iff_toNat_le.mp (holds.exitsOrdered bm (Array.mem_of_getElem? foundM))
+    by_cases exited : bm.exitEpoch ≤ getCurrentEpoch m.state
+    · have slashable := (Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable
+        h.caps.activation h.caps.compounding earlyN i bm bn foundM foundN cleanM slashedN exited
+      exact UInt64.lt_iff_toNat_lt.mp slashable
+    · have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
+      omega
+  have epochs : (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch m.state).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps preR.chainSteps)
+  have sameNat := congrArg UInt64.toNat sameEpoch
+  by_cases unset : au.exitEpoch = FAR_FUTURE_EPOCH
+  · have bound := UInt64.le_iff_toNat_le.mp (ordered a (Array.mem_of_getElem? found))
+    have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots e.before.state
+    by_cases assigned : a.exitEpoch = FAR_FUTURE_EPOCH
+    · rw [assigned] at bound
+      omega
+    · obtain ⟨wc, readC, bC⟩ := slashedC
+      obtain ⟨later, readL, lifeL⟩ := life.validators i a found
+      obtain rfl : later = wc := Option.some.inj (readL.symm.trans readC)
+      have exitC := congrArg UInt64.toNat (lifeL.exitEpoch assigned)
+      obtain ⟨charge, member, -, charged⟩ := Run.departure_charge_of_assigned
+        ((Run.nil.snoc (Step.slot ok)).append post) i au later foundU readC unset
+        (by rw [lifeL.exitEpoch assigned]; exact assigned)
+      have late := DirectSafety.Run.departureCharges_epoch_ge_start
+        ((Run.nil.snoc (Step.slot ok)).append post) (Nat.le_trans (by decide) fuluU) h.early charge
+        member
+      omega
+  · have keptM := PinSplit4.kept_run toU h.genesis fuluU preR
+      (Nat.lt_of_le_of_lt step.chainStep.fork_le earlyN)
+    obtain ⟨le1, moved1⟩ := wdKept i au a foundU found unset
+    obtain ⟨le2, moved2⟩ := keptM.withdrawable i au bm foundU foundM unset
+    have e1 := UInt64.le_iff_toNat_le.mp le1
+    have e2 := UInt64.le_iff_toNat_le.mp le2
+    have eq1 : a.withdrawableEpoch = au.withdrawableEpoch := moved1.resolve_left (by simp [clean])
+    have eq2 : bm.withdrawableEpoch = au.withdrawableEpoch := moved2.resolve_left (by simp [cleanM])
+    have := congrArg UInt64.toNat eq1
+    have := congrArg UInt64.toNat eq2
+    omega
+
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

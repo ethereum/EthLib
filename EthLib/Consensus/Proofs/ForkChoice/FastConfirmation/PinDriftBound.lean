@@ -3201,7 +3201,9 @@ Block deposits are not covered.
 
 From Electra they credit no existing key.
 
-The registry at the event's start has at most the size of the one at the slot step's start. -/
+The registry at the event's start has at most the size of the one at the slot step's start.
+
+A slashed key at the slot step's start is slashed at the event's start, and their epochs agree. -/
 private theorem Run.events_kept {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (tail : Run config checks x y) (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam)
@@ -3213,7 +3215,9 @@ private theorem Run.events_kept {g x y : ForkedBeaconState preset}
       RegistryLifecycle x.state e.before.state ∧
       WithdrawableKept x.state e.before.state ∧
       getCurrentEpoch e.before.state ≤ getCurrentEpoch y.state ∧
-      e.before.state.validators.data.size ≤ u.state.validators.data.size := by
+      e.before.state.validators.data.size ≤ u.state.validators.data.size ∧
+      SlashedPersistence u.state e.before.state ∧
+      getCurrentEpoch e.before.state = getCurrentEpoch u.state := by
   intro e member source
   obtain ⟨pre, post, rfl⟩ := Run.contains_split tail (Step.slot ok) contained
   have stepFork := (Step.slot ok : Step config checks u w).chainStep.fork_le
@@ -3267,10 +3271,10 @@ private theorem Run.events_kept {g x y : ForkedBeaconState preset}
           have cachedSize : cached.validators.data.size = u.state.validators.data.size := by
             obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
             rfl
-          refine ⟨total.life, total.withdrawable, ?_, (grew.size.trans cachedSize).le⟩
           have same : getCurrentEpoch six.1 = getCurrentEpoch u.state := by
             simp only [getCurrentEpoch, grew.slot, cachedSlot]
-          exact same ▸ epochLe
+          exact ⟨total.life, total.withdrawable, same ▸ epochLe,
+            (grew.size.trans cachedSize).le, (cachedKept.trans grew.kept).slashed, same⟩
       · rw [List.mem_singleton.mp last] at source
         cases source
 end PinSplit4
