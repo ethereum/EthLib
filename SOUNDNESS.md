@@ -64,7 +64,6 @@ Most of these theorems are about correctness: an honest run gives the expected a
 
 Some of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
-The binding of an EIP-8450 proof of possession follows from it.
 The unforgeability of leanSPHINCS holds for EthLib's own definitions too.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
@@ -128,23 +127,6 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
-
-### EIP-8450 proof of possession
-
-A proof of possession is a leanXMSS signature, at leaf index 0, of a root that names a BLS key and the leanXMSS key.
-Completeness is `isValidPqPossessionProof_sign` (`Consensus/Proofs/PqKeys/Possession.lean`): a key generated from a seed that signs its possession root at leaf 0 gives a proof that the check accepts.
-`isValidPqPossessionProofWith_of_index_ne` shows that a proof at any other leaf index fails.
-
-Binding is `possession_binding` (`Consensus/Proofs/PqKeys/PossessionBinding.lean`).
-Its game is the leanXMSS game, except that the adversary returns a BLS key and a proof.
-It wins when the check accepts the proof for that BLS key and the honest leanXMSS key.
-And no signing request for their possession root returned that proof.
-Such an adversary turns into a leanXMSS adversary with the same hash calls that wins whenever it wins, so the bound is again `q / 2^127`.
-The game checks a proof as the specification does, and `possessionVerdict_eq` shows that the two verdicts agree for every hash.
-
-The theorem says nothing about two BLS keys whose possession roots collide under SHA-256.
-A proof that the key holder made for one of them is then valid for the other.
-The game does not count that as a win.
 
 ### Merkle trees
 
@@ -6445,12 +6427,11 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on the idealisations listed below, and on any hypothesis that its statement names.
 The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
-The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
+The codeword searches of each scheme share the bullet of that scheme:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
-  The binding of an EIP-8450 proof of possession rests on the same oracle.
-  So do the failure bounds of the codeword searches of leanXMSS.
+  The failure bounds of the codeword searches of leanXMSS rest on the same oracle.
 - leanSPHINCS: the hash `H`, Keccak-256, is a random oracle on byte strings, as for leanXMSS.
   The unforgeability theorem says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
@@ -6574,12 +6555,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 526 operations and 51 size constants.
-The Python extension calls 526 of the operations and 51 of the constants.
+Lean exports 523 operations and 51 size constants.
+The Python extension calls 523 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11851 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
+11776 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1584), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (821), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -6716,7 +6697,6 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Consensus/Proofs/DepositRandomOracleAccepted.lean`
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
-- `EthLib/Consensus/Proofs/PqKeys/`
 - `EthLib/Consensus/Proofs/SigningRandomOracle.lean`
 - `EthLib/Cryptography/Proofs/Aes/`
 - `EthLib/Cryptography/Proofs/BadOnBudget.lean`

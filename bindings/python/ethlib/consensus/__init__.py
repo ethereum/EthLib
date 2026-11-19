@@ -303,33 +303,6 @@ def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, by
     return _native.consensus_upgrade_operation(name, type_name, data)
 
 
-def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
-    return _native.pq_keys_ssz(type_name, data)
-
-
-def pq_keys_possession_signing_root(
-    genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, name: str = "mainnet"
-) -> bytes:
-    """The root that an EIP-8450 proof of possession signs."""
-    return _native.pq_keys_possession_signing_root(
-        name, genesis_validators_root, pubkey, xmss_public_key
-    )
-
-
-def pq_keys_is_valid_possession_proof(
-    genesis_validators_root: bytes,
-    pubkey: bytes,
-    xmss_public_key: bytes,
-    proof: bytes,
-    name: str = "mainnet",
-) -> bool:
-    """Whether an EIP-8450 proof of possession is valid."""
-    return _native.pq_keys_is_valid_possession_proof(
-        name, genesis_validators_root, pubkey, xmss_public_key, proof
-    )
-
-
 def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list[int]:
     """The shuffled position of every index below the count."""
     return _native.consensus_compute_shuffled_permutation(name, count, seed)
@@ -2317,9 +2290,6 @@ __all__ = [
     "consensus_version",
     "consensus_version_fork",
     "upgrade_operation",
-    "pq_keys_ssz",
-    "pq_keys_possession_signing_root",
-    "pq_keys_is_valid_possession_proof",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
     "reqresp_protocol_ids",

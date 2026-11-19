@@ -536,9 +536,6 @@ PyObject* py_consensus_get_execution_payload_bid          (PyObject* self, PyObj
 PyObject* py_consensus_get_self_built_execution_payload_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_execution_payload_envelope     (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validators_custody_requirement (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar         (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_inclusion_proof(PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_kzg_proofs(PyObject* self, PyObject* args);

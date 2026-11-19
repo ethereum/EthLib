@@ -345,14 +345,6 @@ cases = ["**"]
 generator = "not established"
 checked = "beacon-APIs at 7911555e holds no program that writes the OpenAPI document or the types files, and the README names none"
 
-[[directories."tests/consensus/pq_keys"]]
-cases = ["ssz/**", "possession/*/data.yaml"]
-generator = "EthLib script on eth-ssz-specs 0.1.0"
-
-[[directories."tests/consensus/pq_keys"]]
-cases = ["possession/*/proof.yaml"]
-generator = "ethlib"
-
 [[directories."tests/cryptography/bls"]]
 cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**"]
 generator = "bls12-381-tests v0.1.2"

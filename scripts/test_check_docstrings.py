@@ -144,12 +144,11 @@ class CheckDocstrings(unittest.TestCase):
             ],
         )
 
-    def test_ignored_and_excluded_files_are_skipped(self) -> None:
+    def test_ignored_files_are_skipped(self) -> None:
         files = {
             ".gitignore": "build/\nvenv/\n",
             "build/lib/e.py": MODULE_LINES,
             "venv/lib/f.py": MODULE_LINES,
-            "tests/consensus/pq_keys/generate.py": MODULE_LINES,
         }
         self.assertEqual(self.run_check(files), [])
 
