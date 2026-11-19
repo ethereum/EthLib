@@ -1089,7 +1089,7 @@ theorem FloorTrace.run_of_le_cap_or_fulu
           noCrossing⟩) replayed
   exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path⟩
 
-/-- The potential floor of a branch from Fusaka, for a key that stays unslashed. -/
+/-- The potential floor and the origin of a branch from Fusaka, for a key that stays unslashed. -/
 private theorem FloorTrace.run_potential_core
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1110,21 +1110,22 @@ private theorem FloorTrace.run_potential_core
       quotient ≤ (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
       ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    PotentialFloor tail i v events := by
+    PotentialFloor tail i v events ∧
+      (MaxEffectiveBalancesAligned preset → EffectiveOrigin tail i.toNat) := by
   have unslashed : v.slashed = false := by
     cases flag : v.slashed
     · rfl
     · obtain ⟨z, found, marked⟩ := tail.slashedPersistence i.toNat v initial flag
       have := clean z found
       simp [marked] at this
-  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, potential, -⟩ :=
+  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, potential, origin⟩ :=
     FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
         exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
           noCrossing⟩) replayed
-  exact potential
+  exact ⟨potential, fun aligned => origin aligned fulu⟩
 
 /-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form. -/
 theorem FloorTrace.run_potential_floor
@@ -1159,9 +1160,9 @@ theorem FloorTrace.run_potential_floor
           (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat +
             (preset.downwardBand + slack)) ≤
         ρd * (actualBalanceAt y i.toNat + D + (preset.downwardBand + slack)) := by
-  obtain ⟨-, closed⟩ := FloorTrace.run_potential_core shared tail genesis caps delay early fulu
-    high endEpoch i v initial clean quotient positive guards replayed ρn ρd slack fulu bands clean
-    (by omega) pass
+  have core := FloorTrace.run_potential_core shared tail genesis caps delay early fulu high
+    endEpoch i v initial clean quotient positive guards replayed
+  obtain ⟨-, closed⟩ := core.1 ρn ρd slack fulu bands clean (by omega) pass
   refine ⟨nonPassDebt i events, ?_, potential_old ρn ρd _ _ slack _ _ closed⟩
   have := penaltyDebit_le_floor i.toNat events
   unfold nonPassDebt
@@ -1201,9 +1202,9 @@ theorem FloorTrace.run_potential_floor_once
           (min (actualBalanceAt x i.toNat) (withdrawalMaxEffectiveBalance preset x.fork v).toNat +
             preset.downwardBand) ≤
         ρd * (actualBalanceAt y i.toNat + D + preset.downwardBand) + ρn * slack := by
-  obtain ⟨-, closed⟩ := FloorTrace.run_potential_core shared tail genesis caps delay early fulu
-    high endEpoch i v initial clean quotient positive guards replayed ρn ρd slack fulu bands clean
-    start pass
+  have core := FloorTrace.run_potential_core shared tail genesis caps delay early fulu high
+    endEpoch i v initial clean quotient positive guards replayed
+  obtain ⟨-, closed⟩ := core.1 ρn ρd slack fulu bands clean start pass
   refine ⟨nonPassDebt i events, ?_, ?_⟩
   · have := penaltyDebit_le_floor i.toNat events
     unfold nonPassDebt
@@ -1239,20 +1240,8 @@ theorem FloorTrace.run_effective_origin
         pre.append post = tail ∧ effectiveAt y i.toNat = effectiveAt m i.toNat ∧
           effectiveAt m i.toNat ≤ actualBalanceAt m i.toNat ∧
           effectiveAt m i.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-  have unslashed : v.slashed = false := by
-    cases flag : v.slashed
-    · rfl
-    · obtain ⟨z, found, marked⟩ := tail.slashedPersistence i.toNat v initial flag
-      have := clean z found
-      simp [marked] at this
-  obtain ⟨last, -, -, -, -, w, -, -, -, -, -, -, -, origin⟩ :=
-    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
-      initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
-      (fun pre step post split w found => by
-        obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩, quotient_le,
-          noCrossing⟩) replayed
-  exact origin maxAligned fulu
+  exact (FloorTrace.run_potential_core shared tail genesis caps delay early fulu high endEpoch i v
+    initial clean quotient positive guards replayed).2 maxAligned
 
 /-- The per-key accounting trace of a branch, from a floor.
 
