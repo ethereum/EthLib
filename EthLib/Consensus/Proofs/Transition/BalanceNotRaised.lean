@@ -1057,6 +1057,20 @@ theorem balanceNotRaised_processEpochAltair {altair : .altair ≤ fork}
     scoredOk, rewardedOk, raised unnamed untargeted, atKept, effective, credentials, updatedOk,
     afterBalances, afterValidators, scoreKept⟩
 
+/-- From Altair, an epoch keeps the withdrawal credentials of each validator of the registry. -/
+theorem processEpochAltair_credentials {altair : .altair ≤ fork}
+    (computed : processEpochAltair config checks state altair = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator) :
+    ∃ later, after.validators.data[index]? = some later ∧
+      later.withdrawalCredentials = validator.withdrawalCredentials := by
+  obtain ⟨-, -, -, settled, updated, -, -, -, -, -, updatedOk, -, afterValidators, -, atIndex⟩ :=
+    processEpochAltair_walk computed
+  obtain ⟨kept, -, atKept, -, credentials, -⟩ := atIndex found
+  obtain ⟨balance, owned⟩ := processEffectiveBalanceUpdates_owned updatedOk atKept
+  obtain ⟨new, read, -⟩ :=
+    processEffectiveBalanceUpdates_effectiveBalance_eq updatedOk atKept owned
+  exact ⟨{ kept with effectiveBalance := new }, by rw [afterValidators]; exact read, credentials⟩
+
 /-- From Altair, the steps of an epoch after the update of the inactivity scores keep a score.
 
 This holds when the epoch succeeds, at each position of the registry before the epoch.
