@@ -435,9 +435,11 @@ theorem toNat_roundToIncrement (preset : Preset) (amount : Gwei) :
     rw [UInt64.toNat_mod]
     exact Nat.mod_le _ _)), UInt64.toNat_mod]
 
-/-- A share of a total, at least the least churn and rounded down to an increment, is bounded.
+/-- A share of a total, raised to the least churn and rounded down to an increment, is bounded.
 
-It is at least one increment, and at most the least churn plus the total. -/
+When the least churn is at least one increment, so is the share.
+
+The share is at most the least churn plus the total. -/
 theorem roundToIncrement_share_bounds {config : Config} (total quotient : Gwei)
     (increment : 0 < preset.EFFECTIVE_BALANCE_INCREMENT)
     (minimum : preset.EFFECTIVE_BALANCE_INCREMENT ≤ config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA) :

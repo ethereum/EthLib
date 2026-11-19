@@ -494,11 +494,12 @@ private theorem processParentExecutionPayload_registryLoad_le {gloas : .glamster
   simp only [Array.length_toList, Nat.one_mul] at one three
   omega
 
-/-- The operations keep the count and the queue, apart from their deposits and requests.
+/-- The operations keep the registry size and the queue, apart from their deposits and requests.
 
 From Gloas every step keeps them.
 
-Before Gloas the deposits and then, from Electra, the requests sit between steps that keep them. -/
+Before Gloas the deposits sit between steps that keep them, and from Electra the requests come last.
+-/
 private theorem processOperations_cut {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
     (.glamsterdam ≤ fork ∧ LoadKept state after) ∨
@@ -580,7 +581,8 @@ private theorem processOperations_registryLoad_le {body : BeaconBlockBody preset
   generalize (if Fork.pectra ≤ fork then 2 else 1) = perDeposit at *
   omega
 
-/-- The steps before the operations keep the count and the queue after the parent payload. -/
+/-- After the parent payload, the steps before the operations keep the registry size and the queue.
+-/
 private theorem operationsInput_parented {block : BeaconBlock preset fork}
     {input : BeaconState preset fork}
     (started : OperationsInput config checks engine state block input) :

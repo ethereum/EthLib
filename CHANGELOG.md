@@ -330,8 +330,8 @@ Not yet released.
 
 - Six epoch and deposit steps keep the inputs of a payload: `payloadInputs_applyPendingDeposit`, `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations` and `payloadInputs_processHistoricalSummariesUpdate`.
 
-- `roundToIncrement_share_bounds` bounds a share of a total that is at least the least churn and rounded down to an increment.
-  The share is at least one increment, and at most the least churn plus the total.
+- `roundToIncrement_share_bounds` bounds a share of a total, raised to the least churn and rounded down to an increment.
+  When the least churn is at least one increment, so is the share, and the share is at most the least churn plus the total.
 
 - `epochs_le_div_add_one` bounds the epochs that hold an amount plus less than one churn, when the churn is at least one increment.
   They are at most the amount in increments, plus one.
