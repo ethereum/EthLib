@@ -318,6 +318,17 @@ Not yet released.
 - `upgradeNext_validators_of_electra` states that, from Electra, an upgrade keeps the validators as the same sequence.
   The pin's drift bound reads it for the registry along a slot step, and `ChainStep.exit_assigned_activated` reads it for the upgrades of a slot.
 
+- `LookaheadActive` says that, from Fulu, each entry of the proposer lookahead of a state is active in its epoch.
+  Position `k` is `k / SLOTS_PER_EPOCH` epochs after the current epoch.
+  `Run.lookaheadActive` states it along every run from genesis that ends before Gloas, when `MAX_SEED_LOOKAHEAD` is above `MIN_SEED_LOOKAHEAD`.
+  `LookaheadActive.proposer_active` states that a proposer read from a state that holds it is active in the epoch of the state.
+  The pin's whistleblower and sync bounds read it to show that a validator that exited before the finalized epoch proposes no block.
+
+- `processBlock_proposerLookahead` states that a successful block leaves the proposer lookahead unchanged.
+  `processEpoch_lookahead_cut` states that, from Fulu, an epoch draws its new last epoch of proposers from a state just before that draw.
+  That state has the slot and the lookahead of the epoch's start, and the registry of the epoch's end.
+  `Run.lookaheadActive` reads both.
+
 ### Changes that break callers
 
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
