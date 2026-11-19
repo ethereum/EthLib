@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Cryptography.Exports.Secp256k1
 public import EthLib.Networking.Rlpx.Frame
 
 /-!
@@ -43,11 +44,9 @@ def runEcies {α : Type} (act : Except Ecies.EciesError α) : Result α :=
 
 /-- A private key of 32 big-endian bytes, or an error unless it is below `n`. -/
 def readPrivateKey (bytes : ByteArray) : Result Fn :=
-  if bytes.size = 32 then
-    let k := Base.bytesToNat bytes.data.toList
-    if h : k < Fn.modulus then pure ⟨k, h⟩
-    else throw (0, "private key is not below n")
-  else throw (0, s!"bad private key size: {bytes.size}, expected 32")
+  Cryptography.Secp256k1.Exports.readPrivateKey bytes
+    (fun size => (0, s!"bad private key size: {size}, expected 32"))
+    (0, "private key is not below n")
 
 /-- An encoded public key, or an error. -/
 def readPublicKey (bytes : ByteArray) : Result Point :=
