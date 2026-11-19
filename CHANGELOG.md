@@ -16,6 +16,13 @@ Not yet released.
   The new field implies the old one, so a reader of the old field reads the new one through `le_of_eq`.
   `CapStep.refl`, `CapStep.trans` and `CapStep.data` carry the new field, and the readers in this repository keep their statements.
 
+- The result of `Store.Reachable.finalizedState_of_blockState` is stronger.
+  After the anchor epoch, it also says that the store reads the finalized block of the state from the state's own block.
+  That read is `store.getCheckpointBlock root anc.finalizedCheckpoint.epoch = .ok anc.finalizedCheckpoint.root`.
+  Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
+  The new statement implies the old one, so a reader of the old statement drops the last conjunct.
+  The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
+
 ### Proof additions
 
 - `Run.slashed_withdrawable_eq` says that a validator that is slashed, with an assigned exit, keeps its withdrawable epoch along a run.

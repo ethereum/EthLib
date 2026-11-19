@@ -278,7 +278,9 @@ Before that the anchor state stands in for it.
 
 A finalized checkpoint of a held block state after the anchor epoch names a held block.
 
-Its state root is nonzero, so the checkpoint is not the anchor's zero-root read. -/
+Its state root is nonzero, so the checkpoint is not the anchor's zero-root read.
+
+The block of the state reads that finalized block at the checkpoint's epoch. -/
 theorem Store.Reachable.finalizedState_of_blockState {store : Store preset fork}
     (reachable : Store.Reachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
@@ -287,19 +289,22 @@ theorem Store.Reachable.finalizedState_of_blockState {store : Store preset fork}
     ∃ fin : BeaconState preset fork,
       (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
         store.blockStates[anc.finalizedCheckpoint.root]? = some fin) ∧
-      (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) := by
+      (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) ∧
+      (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
+        store.getCheckpointBlock root anc.finalizedCheckpoint.epoch =
+          .ok anc.finalizedCheckpoint.root) := by
   by_cases later : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
   · rcases reachable.getCheckpointBlock_of_blockState sound (UInt64.le_of_eq anchorSlot)
         params.slots (by have := params.roots; omega) ancOk (.inl (by simp)) later with
-      ⟨-, known⟩ | zero
+      ⟨read, known⟩ | zero
     · rw [Std.TreeMap.contains_eq_isSome_getElem?] at known
       obtain ⟨block, held⟩ := Option.isSome_iff_exists.mp known
       obtain ⟨fin, stored, -⟩ := reachable.blockStatesFromParents held
-      exact ⟨fin, fun _ => stored, fun le => absurd later (UInt64.not_lt.mpr le)⟩
+      exact ⟨fin, fun _ => stored, fun le => absurd later (UInt64.not_lt.mpr le), fun _ => read⟩
     · obtain ⟨anchorKey, -, anchorFound⟩ := reachable.anchor_known
       rw [reachable.anchorState_root, Except.ok.injEq] at zero
       exact absurd zero (nonzero anchorKey anchorBlock anchorFound)
-  · exact ⟨anchorState, fun lt => absurd lt later, fun _ => rfl⟩
+  · exact ⟨anchorState, fun lt => absurd lt later, fun _ => rfl, fun lt => absurd lt later⟩
 
 /-- The reserved count is a count at the margin plus the call's pin reserve.
 
@@ -355,7 +360,7 @@ private theorem pinned_count {u : ValidatorIndex} {n margin : ℕ} {head : Root}
         simp only [targetOk, reduceCtorEq] at targetOk'
     | ok target =>
       obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget reachable preGloas targetOk
-      obtain ⟨fin, finRead, finAnchor⟩ :=
+      obtain ⟨fin, finRead, finAnchor, -⟩ :=
         Store.Reachable.finalizedState_of_blockState reachable sound anchorSlot params nonzero ancOk
       refine ⟨margin + pinReserve config pulled anc fin,
         targetVotes_of_reserved reserved pulledOk targetOk ancOk finRead finAnchor, ?_⟩
@@ -700,7 +705,7 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true := by
     have targetEpoch : target'.epoch = epoch := Except.ok.inj (targetEpochOk.symm.trans epochOk)
     obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget sr preGloas targetOk
-    obtain ⟨fin, finRead, finAnchor⟩ :=
+    obtain ⟨fin, finRead, finAnchor, -⟩ :=
       Store.Reachable.finalizedState_of_blockState sr sound anchorSlot params nonzero ancOk
     rw [countMargin stateOk targetOk ancOk finRead finAnchor] at bound
     have quorum := pin_quorum_of_count check bound
