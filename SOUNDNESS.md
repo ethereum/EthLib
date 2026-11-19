@@ -4671,6 +4671,9 @@ The next and last are those of the first and last fork times after the head whos
 The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+`mem_configSystemContracts_iff` gives the system contracts of each fork.
+The beacon roots contract counts from Cancun.
+From Prague the history storage contract, the chain's deposit contract and the request contracts of the fork count too.
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
 The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
 
