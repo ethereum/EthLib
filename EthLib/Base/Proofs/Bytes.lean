@@ -138,10 +138,38 @@ theorem exactBytes_of_size_ne {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat �
     (h : b.size ≠ n) : exactBytes n b bad = .error (bad b.size) :=
   exactArray_of_size_ne bad h
 
-/-- The bytes of an object, read back at its size, give the object. -/
+/-- A buffer built from an object's array, read back at its size, gives the object. -/
 @[simp] theorem exactBytes_mk_toArray {ε : Type} {n : Nat} (v : Vector UInt8 n) (bad : Nat → ε) :
     exactBytes n ⟨v.toArray⟩ bad = .ok v :=
   exactBytes_of_size_eq (b := ⟨v.toArray⟩) bad v.size_toArray
+
+/-- The packed bytes of an object, read back at its size, give the object. -/
+@[simp] theorem exactBytes_packBytes {ε : Type} {n : Nat} (v : Vector UInt8 n) (bad : Nat → ε) :
+    exactBytes n (packBytes v) bad = .ok v :=
+  exactArray_toArray v bad
+
+/-- A buffer reads as an object exactly when the object has the bytes of the buffer. -/
+theorem exactBytes_eq_ok_iff {ε : Type} {n : Nat} {b : ByteArray} {bad : Nat → ε}
+    {v : Vector UInt8 n} : exactBytes n b bad = .ok v ↔ v.toArray = b.data :=
+  exactArray_eq_ok_iff
+
+/-- A buffer fails to read exactly when it has another length, with the error for that length. -/
+theorem exactBytes_eq_error_iff {ε : Type} {n : Nat} {b : ByteArray} {bad : Nat → ε} {e : ε} :
+    exactBytes n b bad = .error e ↔ b.size ≠ n ∧ e = bad b.size := by
+  by_cases h : b.size = n
+  · rw [exactBytes_of_size_eq bad h]
+    constructor
+    · intro made
+      cases made
+    · rintro ⟨other, -⟩
+      exact absurd h other
+  · rw [exactBytes_of_size_ne bad h]
+    constructor
+    · intro made
+      cases made
+      exact ⟨h, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
 
 /-- An object read from a buffer has the bytes of that buffer. -/
 theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
