@@ -226,7 +226,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The largest inactivity score at the finalized block's state.
   let scoreMaxFin := if altair : .altair ≤ fork then
       ((finalizedState.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0
-  -- Sync debits on this branch can raise a key's effective balance above `ebUp`.
+  -- A key's effective balance before its sync debits on this branch can sit above `ebUp`.
+  --
+  -- `ebUp` reads its balance after them.
   --
   -- Its inactivity and flag penalties then run at the raised balance, which `rise` does not read.
   --
