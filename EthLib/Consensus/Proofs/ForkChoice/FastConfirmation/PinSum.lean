@@ -5728,6 +5728,13 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
       absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
     simp
 
+/-- A state of a run that is not of a later fork than its start is of the fork of the start.
+
+A run never moves the fork back. -/
+private theorem fork_eq_of_run {x a : ForkedBeaconState preset} (run : Run config checks x a)
+    (low : a.fork ≤ x.fork) : a.fork = x.fork :=
+  Fork.ctorIdx_injective (Nat.le_antisymm low (fork_le_of_chainSteps run.chainSteps))
+
 /-- The pin's rate bounds the reward rate at each state of a prefix of C's tail.
 
 The prefix ends at most one epoch after the call, and its states are of the fork of the setting. -/
@@ -5744,8 +5751,7 @@ private theorem key_rate_forked (h : Setting config checks g split fin pulled an
   obtain ⟨fromFin⟩ := h.fromFin
   refine ⟨P, fun a run forkLe near total perIncrement totalOk perOk => ?_⟩
   obtain ⟨af, as⟩ := a
-  have sameFork : af = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm forkLe (fork_le_of_chainSteps run.chainSteps))
+  have sameFork : af = fork := fork_eq_of_run run forkLe
   subst sameFork
   simp only at near totalOk perOk ⊢
   exact rateAll (fromFin.append run) (by omega) total perIncrement totalOk perOk
