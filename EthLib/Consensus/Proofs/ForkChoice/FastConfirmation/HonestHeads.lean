@@ -897,4 +897,86 @@ private theorem Execution.activeEquivocatorsRegistered_or_evidence {anchor : Sto
     (UInt64.lt_iff_toNat_lt.mpr positive) walk justifiedFound startOk bound baseFound advanced
     sourceWalk blockFound heldFound finalLe registered active
 
+/-! ## From Gloas: up-to-date honest stores have a head -/
+
+/-- Honest justified states read by `last` have effective balances that add up to at most `cap`.
+
+An assumption on the run: the supply of ether bounds the stake of the whole registry. -/
+def CheckpointRegistryStakeCeiling (cap last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k (state : BeaconState preset fork), (e.world k).time ≤ last →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    effectiveBalanceSum state ≤ cap
+
+/-- From Gloas, an up-to-date honest store up to `last` has a head.
+
+Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
+
+The evidence is relative to the anchor.
+
+The anchor's registry must leave room up to the horizon.
+
+Every honest justified state must have effective balances that add up to at most `2 * 10^17` Gwei.
+
+The committee windows must fit, and the proposer boost and the head reads must fit that cap.
+
+The claim holds from every start time. -/
+theorem Execution.honestHeadsExist_or_evidence_of_gloas {Δ : ℕ} (sync : e.Synchronous Δ)
+    (gloas : .glamsterdam ≤ fork) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
+    (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    {horizon : Epoch} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (fit : config.CommitteeWindowsFit preset)
+    (weights : config.HeadWeightsFit preset (2 * 10 ^ 17))
+    (room : AnchorRegistryRoom preset anchorState horizon)
+    (supply : CheckpointRegistryStakeCeiling (e := e) (2 * 10 ^ 17) last) (first : ℕ) :
+    HonestHeadsExist (e := e) first last ∨
+    HonestCollision (e := e) last ∨
+    HistoricalDirectSafetyEvidence (e := e) pre last := by
+  have slots : 0 < config.SLOT_DURATION_MS := UInt64.lt_trans (by decide) weights.slots
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  -- The store holds the state of its justified checkpoint, through an honest vote for it.
+  rcases e.justifiedState_or_evidence sync slots admitted fits prompt votes anchored start
+      anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
+      enough terminal with states | alternative
+  swap
+  · exact .inr alternative
+  -- The justified state registers the equivocators that the head reads count.
+  rcases e.activeEquivocatorsRegistered_or_evidence anchored start anchorSlot anchorBoundary slots
+      bounded roots absent parameters genesis pre heldEarly enough terminal with
+    registered | evidence
+  swap
+  · exact .inr (.inr evidence)
+  have registries := e.honestRegistries_of_room slots gloas anchored start
+    (UInt64.le_of_eq anchorSlot) sound bounded room
+  left
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+    have := parameters.lookahead
+    omega
+  intro w hw k _ inTime upToDate
+  have reached := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
+  have forward := reached.forwardReachable
+  obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
+  obtain ⟨held, within⟩ := registries w hw k inTime
+  -- The justified block is held, as the store holds the justified state, so the tree is computed.
+  obtain ⟨base, -, baseFound, -⟩ :=
+    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
+  obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
+    (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) fit.seeds history
+    (forward.reachable.known_of_blockState baseFound)
+  exact Store.getHead_exists_of_gloas gloas forward (UInt64.le_of_eq anchorSlot)
+    (absent w hw k inTime) fit scoreFits weights tree stateOk (within state stateOk) held
+    (supply w hw k state inTime stateOk) (registered w hw k state inTime stateOk)
+
 end EthLib.Consensus.Models.Network
