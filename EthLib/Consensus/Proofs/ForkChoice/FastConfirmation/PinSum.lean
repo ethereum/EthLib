@@ -16172,7 +16172,45 @@ private theorem K5_charge_site (h : Setting config checks g split fin pulled anc
         step.departureCharges.any (·.index == v.toNat) = true ∧
         (∀ w, a.state.validators.data[v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH) ∧
         v.toNat < a.state.validators.data.size ∧
-        exitQ tailC v.toNat = effectiveAt a v.toNat := sorry
+        exitQ tailC v.toNat = effectiveAt a v.toNat := by
+  obtain ⟨c, cMember, cIndex⟩ := charged
+  obtain ⟨a, b, pre, step, post, site, vv, w, found, foundB, unset, set, amount, epoch⟩ :=
+    tailC.departure_charge_site c cMember
+  rw [cIndex] at found foundB
+  -- the key exits at C's epoch, so the charge counts
+  obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
+  have exitSame := life.exitEpoch set
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
+  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
+    notActive (by simpa [AC, activeVoters] using now)
+  rcases listed with now | before
+  · exact absurd now notCurrent
+  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  have notNow : isActiveValidator u (getCurrentEpoch counted) = false := by
+    cases now : isActiveValidator u (getCurrentEpoch counted)
+    · rfl
+    · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
+  have exitC := ((previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩).2
+  have same : u = wc := Option.some.inj (foundU.symm.trans foundC)
+  have counts : c.epoch ≤ (getCurrentEpoch counted).toNat := by
+    have exitNat := congrArg UInt64.toNat exitSame
+    subst same
+    omega
+  have exitQEq : exitQ tailC v.toNat = c.amount := by
+    rcases exitQ_cases tailC v.toNat with ⟨none, -⟩ | ⟨d, dMember, dIndex, -, dQ⟩
+    · exact absurd counts (none c cMember cIndex)
+    · rw [dQ, charge_unique tailC dMember cMember (dIndex.trans cIndex.symm)]
+  obtain ⟨d, dMember, dIndex, -⟩ :=
+    (Run.nil.snoc step).departure_charge_of_assigned v.toNat vv w found foundB unset set
+  refine ⟨a, b, pre, step, post, site, ?_, fun x hx => ?_, ?_, ?_⟩
+  · refine List.any_eq_true.mpr ⟨d, ?_, by simpa using dIndex⟩
+    simpa [Run.departureCharges] using dMember
+  · exact (Option.some.inj (found.symm.trans hx)) ▸ unset
+  · exact (Array.getElem?_eq_some_iff.mp found).1
+  · simp only [exitQEq, amount, effectiveAt, found, Option.map_some, Option.getD_some]
 
 /-- Within one epoch, a key's balance rises at most by its block credits.
 
