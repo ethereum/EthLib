@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block under synchrony at every fork, when the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.
+
 - `Store.getHead_exists_of_gloas` shows that from Gloas the head of a store that the handlers build can be computed ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It is the Gloas twin of `Store.getHead_exists`.
   The store must hold its justified state, whose effective balances add up to at most `2 * 10^17` Gwei (`effectiveBalanceSum`).
