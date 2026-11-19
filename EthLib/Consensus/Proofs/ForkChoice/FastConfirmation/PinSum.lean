@@ -98,6 +98,7 @@ structure PinTerms (preset : Preset) where
   bF : ℕ → ℕ
   perIncrement : ℕ
   depthFin : ℕ
+  scoreMaxFin : ℕ
   slashCharge : ℕ
   consolidationGain : ℕ
   otherGain : ℕ
@@ -609,7 +610,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
     proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
-    consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, slashCharge, consolidationGain,
+    consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin, slashCharge,
+    consolidationGain,
     otherGain, keptArm,
     creditLow := (33 * depth * consolidationGain + 11 * depth * otherGain +
       30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
@@ -924,6 +926,16 @@ def bandX (X : BeaconState preset fork) (high v : ℕ) : ℕ :=
 /-- The flag reward of one increment over one epoch, at the pin's rate. -/
 private def flagRate (t : PinTerms preset) : ℕ :=
   t.perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
+
+/-- The leak of one increment over the window, at the largest score of the finalized state.
+
+It is the leak part of `slashCharge`, read at one increment, and `slashCharge` covers it twice. -/
+private def slashLeak (config : Config) (fork : Fork) (t : PinTerms preset) : ℕ :=
+  t.depthFin * (2 * t.perIncrement +
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (t.scoreMaxFin + t.depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat *
+        (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
 
 /-- The initial slashing penalty of a key slashed on R's branch after the split, at the cap. -/
 private def slashW (t : PinTerms preset) (i : ℕ) : ℕ :=
@@ -10220,7 +10232,9 @@ private theorem flagRate_le (t : PinTerms preset) : flagRate t ≤ t.perIncremen
 
 The slashed, proposer and rounding charges have weight three, as has the whistleblower charge.
 
-The slashed charge covers the flag gain of two windows, and `W` holds that and the unit gain. -/
+The slashed charge covers the flag gain of two windows and the leak of one increment.
+
+The remainder `W` holds those and the unit gain. -/
 private theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     ∃ W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
@@ -10242,12 +10256,17 @@ private theorem branchR_split (config : Config)
       (pinTerms config state ancestor finalizedState).slashedR *
           (2 * (pinTerms config state ancestor finalizedState).depthFin *
             flagRate (pinTerms config state ancestor finalizedState)) +
+        (pinTerms config state ancestor finalizedState).slashedR *
+          slashLeak config fork (pinTerms config state ancestor finalizedState) +
         (pinTerms config state ancestor finalizedState).unitGain *
           (pinTerms config state ancestor finalizedState).slashedR ≤ W := by
   -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
-  have charge : ∀ d p x f : ℕ, f ≤ p → 2 * d * f ≤ d * (2 * (2 * p) + x + 1) := fun d p x f le =>
-    calc 2 * d * f = d * (2 * f) := by ring
-      _ ≤ d * (2 * (2 * p) + x + 1) := Nat.mul_le_mul_left _ (by omega)
+  have charge : ∀ d p a b Q f : ℕ, f ≤ p → a ≤ b →
+      2 * d * f + d * (2 * p + a / Q + 1) ≤ d * (2 * (2 * p) + b / Q + 1) :=
+    fun d p a b Q f le ab => by
+      have floor := Nat.div_le_div_right (c := Q) ab
+      calc 2 * d * f + d * (2 * p + a / Q + 1) = d * (2 * f + (2 * p + a / Q + 1)) := by ring
+        _ ≤ d * (2 * (2 * p) + b / Q + 1) := Nat.mul_le_mul_left _ (by omega)
   obtain ⟨W, D, U, split, gain, unit⟩ : ∃ W D U : ℕ,
       (pinTerms config state ancestor finalizedState).branchR =
       3 * (W + (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + D) *
@@ -10267,19 +10286,23 @@ private theorem branchR_split (config : Config)
                 (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
       2 * (pinTerms config state ancestor finalizedState).depthFin *
-          flagRate (pinTerms config state ancestor finalizedState) ≤ D ∧
+          flagRate (pinTerms config state ancestor finalizedState) +
+        slashLeak config fork (pinTerms config state ancestor finalizedState) ≤ D ∧
       U = (pinTerms config state ancestor finalizedState).unitGain := by
     refine ⟨_, _, _, rfl, ?_, rfl⟩
-    exact charge _ _ _ _ (flagRate_le _)
+    exact charge _ _ _ _ _ _ (flagRate_le _)
+      (by rw [Nat.mul_assoc]; exact Nat.le_mul_of_pos_left _ (by norm_num))
   subst unit
   refine ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR +
     (pinTerms config state ancestor finalizedState).unitGain *
       (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring, ?_⟩
   have step : (pinTerms config state ancestor finalizedState).slashedR *
       (2 * (pinTerms config state ancestor finalizedState).depthFin *
-        flagRate (pinTerms config state ancestor finalizedState)) ≤
+          flagRate (pinTerms config state ancestor finalizedState) +
+        slashLeak config fork (pinTerms config state ancestor finalizedState)) ≤
       D * (pinTerms config state ancestor finalizedState).slashedR :=
     (Nat.mul_comm _ _).le.trans (Nat.mul_le_mul_right _ gain)
+  rw [Nat.mul_add] at step
   omega
 
 /-- The sync part of the proposer credit is at most the proposer credit. -/
@@ -10318,6 +10341,8 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
     3 * ((pinTerms config pulled anc fin).slashedR *
         (2 * (pinTerms config pulled anc fin).depthFin *
           flagRate (pinTerms config pulled anc fin))) +
+      3 * ((pinTerms config pulled anc fin).slashedR *
+        slashLeak config fork (pinTerms config pulled anc fin)) +
       3 * ((pinTerms config pulled anc fin).unitGain * (pinTerms config pulled anc fin).slashedR) +
       3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth *
@@ -10373,6 +10398,8 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     3 * ((pinTerms config pulled anc fin).slashedR *
         (2 * (pinTerms config pulled anc fin).depthFin *
           flagRate (pinTerms config pulled anc fin))) +
+      3 * ((pinTerms config pulled anc fin).slashedR *
+        slashLeak config fork (pinTerms config pulled anc fin)) +
       3 * ((pinTerms config pulled anc fin).unitGain * (pinTerms config pulled anc fin).slashedR) +
       3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth *
@@ -10941,7 +10968,7 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
 
 /-- The leak that the counted keys' sync debits on R's branch induce, at their weights.
 
-It fits `syncLeak`. -/
+It fits `syncLeak`, and the leak of one increment for each key slashed on R's branch. -/
 private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -10954,7 +10981,9 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
     (∑ v ∈ (K4 pulled counted V), inducedR (pinTerms config pulled anc fin) tail v.toNat) +
       3 * (∑ v ∈ (K5 counted V), inducedR (pinTerms config pulled anc fin) tail v.toNat) +
       (∑ v ∈ (K6 pulled counted), inducedR (pinTerms config pulled anc fin) tail v.toNat) ≤
-      (pinTerms config pulled anc fin).syncLeak :=
+      (pinTerms config pulled anc fin).syncLeak +
+        3 * ((pinTerms config pulled anc fin).slashedR *
+          slashLeak config fork (pinTerms config pulled anc fin)) :=
   sorry
 
 end Stubs
