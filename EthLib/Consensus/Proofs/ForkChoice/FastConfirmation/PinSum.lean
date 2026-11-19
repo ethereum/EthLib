@@ -56,7 +56,7 @@ At the merge its content moves into PinDriftBound, every helper private, and thi
 namespace EthLib.Consensus.Models.Network
 namespace PinSum
 
-open Base Uint64 Models DirectSafety
+open Base Uint64 Models DirectSafety PinSplit
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
@@ -591,12 +591,6 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   voting : ∀ v ∈ V, v ∈ activeVoters pulled ∧ (slashedFlagAt counted v.toNat).getD false = false
 
 /-! ## Flows of the two branches -/
-
-/-- The credit that one balance event gives to the key at position `i`.
-
-This is `keyCredit` of the exiting-credit lemmas, verbatim. -/
-def keyCredit (i : ℕ) (e : BalanceEvent preset) : ℕ :=
-  actualBalanceAt e.after i - actualBalanceAt e.before i
 
 /-- The deposits applied to the key on R's branch, over the replayed events of the run from the
 split. -/
