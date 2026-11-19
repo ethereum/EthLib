@@ -2301,7 +2301,6 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   exact key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed stays
     retained
 
-
 /-- The floor debit of a replay is its penalties plus its sync debits. -/
 private theorem floorPenaltyDebit_sum (i : ℕ) (events : List (BalanceEvent preset)) :
     (events.map (DirectSafety.Apriori.Internal.floorPenaltyDebit i)).sum =
