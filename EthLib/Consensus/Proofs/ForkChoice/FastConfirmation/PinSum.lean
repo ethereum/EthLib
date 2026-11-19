@@ -9590,6 +9590,94 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       exact slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle |>.trans
         (by omega)
 
+/-- A key of `K6` beyond R's registry holds the activation reserve at a state two epochs before it.
+
+The run from the split reaches that state first, and then C.
+
+The key is active at C and absent at the split.
+
+Its activation was assigned two epochs before it.
+
+At that state its balance is at least `MAX_EFFECTIVE_BALANCE`.
+
+Its effective balance is within the downward band of its balance, and at least that.
+
+The key is idle before that state, so its balance is at most the credits that the scans count. -/
+private theorem created_start (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {v : ValidatorIndex} (member : v ∈ K6 pulled counted)
+    (created : pulled.validators.data.size ≤ v.toNat) :
+    ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
+      (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧
+      z.fork < .glamsterdam ∧ z.fork ≤ fork ∧
+      (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch counted).toNat ∧
+      preset.MAX_EFFECTIVE_BALANCE.toNat ≤ actualBalanceAt z v.toNat ∧
+      effectiveAt z v.toNat ≤ actualBalanceAt z v.toNat + preset.downwardBand ∧
+      preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z v.toNat ∧
+      actualBalanceAt z v.toNat ≤ netScan v.toNat highC pre +
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
+        (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
+          pre).1 := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  -- The key is active at C and absent at the split.
+  obtain ⟨w, foundC, activeC⟩ := active_of_activeVoters h.early (Finset.mem_filter.mp member).1
+  have activeAt : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
+    isActiveAt_eq_true_iff.mpr ⟨w, foundC, activeC⟩
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  have splitAbsent : split.validators.data[v.toNat]? = none :=
+    Array.getElem?_eq_none (by omega)
+  have pending : ∀ u, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[v.toNat]? =
+      some u → (getCurrentEpoch (⟨fork, split⟩ : ForkedBeaconState preset).state).toNat + 1 <
+        u.activationEpoch.toNat := fun u found => by
+    simp only [splitAbsent] at found
+    cases found
+  obtain ⟨z, pre, post, v0, vy, splitEq, found0, -, sameAct, actEq, actLe, exitGt⟩ :=
+    PinSplit.Run.start_state tailC h.window v.toNat pending activeAt
+  have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have exitBound := vy.exitEpoch.toNat_lt
+  have actBound := v0.activationEpoch.toNat_lt
+  have actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+    intro same
+    rw [sameAct] at same
+    have := congrArg UInt64.toNat same
+    omega
+  have zFork : z.fork ≤ fork := fork_le_of_chainSteps post.chainSteps
+  have zEarly : z.fork < .glamsterdam := Nat.lt_of_le_of_lt zFork h.early
+  have actZ : (getCurrentEpoch z.state).toNat + 2 = v0.activationEpoch.toNat := by
+    rw [sameAct]
+    exact actEq
+  -- At that state the key holds the activation reserve, which is positive.
+  obtain ⟨-, funded, hysteresis, reserve⟩ :=
+    PinSplit.Run.funded_at_start shared h.genesis h.caps h.aligned electra pre zEarly v.toNat found0
+      actNeFar actZ
+  have zCounted : (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch counted).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
+  -- The key has no balance at the start, and no credit scan counts a step before that state.
+  have startZero : actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat = 0 := by
+    have matched : split.balances.data.size = split.validators.data.size :=
+      (Run.invariant (Genesis.invariant h.genesis) shared).balancesMatch
+    simp only [actualBalanceAt, Array.getElem?_eq_none (show
+      split.balances.data.size ≤ v.toNat by omega), Option.map_none,
+      Option.getD_none]
+  refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, funded, hysteresis, reserve, ?_⟩
+  exact key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega) (by omega)
+    (fun m run w found assigned => by
+      obtain ⟨later, foundLater, life⟩ := run.registryLifecycle.validators v.toNat w found
+      have same : later = v0 := Option.some.inj (foundLater.symm.trans found0)
+      subst same
+      have act := life.activationEpoch assigned
+      have mZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps run.chainSteps)
+      rw [← act]
+      omega)
+    startZero pre Run.nil
+
 /-- A key of `K6` beyond R's registry was created on C's branch, and it is credited there.
 
 A block step's net rise or a slot step's deposit credits it, or a consolidation pays it.
@@ -9628,43 +9716,8 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
     rw [Finset.sum_singleton] at scan
     exact le_of_le_of_eq scan only
   rw [consZero] at consScan
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  -- The key is active at C and absent at the split.
-  obtain ⟨w, foundC, activeC⟩ := active_of_activeVoters h.early (Finset.mem_filter.mp member).1
-  have activeAt : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
-    isActiveAt_eq_true_iff.mpr ⟨w, foundC, activeC⟩
-  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
-    registryGrows_of_chainSteps toPulled.chainSteps
-  have splitAbsent : split.validators.data[v.toNat]? = none :=
-    Array.getElem?_eq_none (by omega)
-  have pending : ∀ u, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[v.toNat]? =
-      some u → (getCurrentEpoch (⟨fork, split⟩ : ForkedBeaconState preset).state).toNat + 1 <
-        u.activationEpoch.toNat := fun u found => by
-    simp only [splitAbsent] at found
-    cases found
-  obtain ⟨z, pre, post, v0, vy, splitEq, found0, -, sameAct, actEq, actLe, exitGt⟩ :=
-    PinSplit.Run.start_state tailC h.window v.toNat pending activeAt
-  have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have exitBound := vy.exitEpoch.toNat_lt
-  have actBound := v0.activationEpoch.toNat_lt
-  have actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    intro same
-    rw [sameAct] at same
-    have := congrArg UInt64.toNat same
-    omega
-  have zFork : z.fork ≤ fork := fork_le_of_chainSteps post.chainSteps
-  have zEarly : z.fork < .glamsterdam := Nat.lt_of_le_of_lt zFork h.early
-  have actZ : (getCurrentEpoch z.state).toNat + 2 = v0.activationEpoch.toNat := by
-    rw [sameAct]
-    exact actEq
-  -- At that state the key holds the activation reserve, which is positive.
-  obtain ⟨-, funded, -, -⟩ :=
-    PinSplit.Run.funded_at_start shared h.genesis h.caps h.aligned electra pre zEarly v.toNat found0
-      actNeFar actZ
+  obtain ⟨z, pre, post, splitEq, -, -, -, funded, -, -, walk⟩ :=
+    created_start h tailC highC endEpochC member created
   have positive : 0 < preset.MAX_EFFECTIVE_BALANCE.toNat := by
     have newKey := h.facts.newKey .fusaka
     have size := h.facts.incrementSize
@@ -9673,31 +9726,12 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
     rw [none] at newKey
     simp only [Nat.mul_zero, Nat.zero_div, Nat.zero_sub, Nat.le_zero] at newKey
     omega
-  have zCounted : (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch counted).toNat :=
-    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-  -- The key has no balance at the start, and no credit scan counts a step before that state.
-  have startZero : actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat = 0 := by
-    have matched : split.balances.data.size = split.validators.data.size :=
-      (Run.invariant (Genesis.invariant h.genesis) shared).balancesMatch
-    simp only [actualBalanceAt, Array.getElem?_eq_none (show
-      split.balances.data.size ≤ v.toNat by omega), Option.map_none,
-      Option.getD_none]
   subst splitEq
   rw [netScan_append] at scansZero
   have depSplit := creditScan_append (fun _ => false) (fun s => decide (s = .deposits))
     v.toNat highC pre post
   have consSplit := creditScan_append (fun _ => false) (fun s => decide (s = .consolidations))
     v.toNat highC pre post
-  have zero := key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega) (by omega)
-    (fun m run w found assigned => by
-      obtain ⟨later, foundLater, life⟩ := run.registryLifecycle.validators v.toNat w found
-      have same : later = v0 := Option.some.inj (foundLater.symm.trans found0)
-      subst same
-      have act := life.activationEpoch assigned
-      have mZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps run.chainSteps)
-      rw [← act]
-      omega)
-    startZero pre Run.nil
   omega
 
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
