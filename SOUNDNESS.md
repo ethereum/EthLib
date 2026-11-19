@@ -107,7 +107,7 @@ It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH +
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-No theorem charges the signer less than this bound.
+The library proves no smaller bound on the calls of a request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.

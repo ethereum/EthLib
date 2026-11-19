@@ -31,7 +31,7 @@ A second form counts only the adversary's own calls: `qH` calls of `H` and `r` r
 
 Its bound is `Q / 2^127`, with `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`.
 
-For `r <= 2^32` it is `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
+For `r <= 2^32` it is at most `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
 
 The game runs EthLib's key generation, signing and verification.
 

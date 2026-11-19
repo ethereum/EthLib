@@ -195,7 +195,7 @@ theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
 
 /-! ## The bounds -/
 
-/-- With `qH` calls of `H` and `r` signing requests, a forgery has chance `<= Q / 2^127`.
+/-- With at most `qH` calls of `H` and `r` requests, a forgery has chance `<= Q / 2^127`.
 
 `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384` counts the game's calls. -/
 theorem forgeAdvantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
@@ -204,10 +204,10 @@ theorem forgeAdvantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
   unforgeable _ (by simp only [gameQueries, keyGenQueries]; omega) adversary
     (hasHashQueryBound_of_budget adversary hbudget)
 
-/-- The calls of key generation, `2^32` requests and the final verification. -/
+/-- An upper bound on the calls of key generation, `2^32` requests and the final verification. -/
 def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
-/-- With `qH` calls of `H` and at most `2^32` requests, a forgery has chance `<= (qH + C) / 2^127`.
+/-- With at most `qH` calls of `H` and `2^32` requests, a forgery has chance `<= (qH + C) / 2^127`.
 
 `C = 2^65 + 615 * 2^48 + 205 * 2^16 + 385` covers key generation, the signer and the verifier. -/
 theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
