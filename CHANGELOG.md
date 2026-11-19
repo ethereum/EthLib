@@ -28,6 +28,11 @@ Not yet released.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
+- `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
+  They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
+  The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
+  The pin's drift bound reads it for the keys that registry updates eject before the pending consolidations.
+
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
 
