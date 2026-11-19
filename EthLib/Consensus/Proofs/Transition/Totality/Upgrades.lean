@@ -313,9 +313,7 @@ private theorem getPendingAttestingIndices_lt {pre : BeaconState preset .phase0}
   · rename_i committee committeeOk
     have inCommittee := mem_of_committeeAttesters ok member
     have active := mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk inCommittee
-    obtain ⟨_, read, -⟩ :=
-      (mem_getActiveValidatorIndices (pre.validators.bound (by decide))).mp active
-    exact (Array.getElem?_eq_some_iff.mp read).1
+    exact lt_size_of_mem_getActiveValidatorIndices active
 
 /-- The upgrade to Altair succeeds when the pending attestations read and the draw has its bounds.
 

@@ -122,10 +122,8 @@ theorem total_same_epoch {x y : ForkedBeaconState preset}
     getTotalActiveBalance x.state = .ok total := by
   have startEarly := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) early
   have inside : ∀ i ∈ getActiveValidatorIndices x.state (getCurrentEpoch x.state),
-      i.toNat < x.state.validators.data.size := fun i member => by
-    obtain ⟨v, found, _⟩ := (mem_getActiveValidatorIndices
-      (x.state.validators.bound startEarly)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
+      i.toNat < x.state.validators.data.size := fun i member =>
+    lt_size_of_mem_getActiveValidatorIndices member
   have weights := run_same_epoch_effective tail early same
   have active := (activeKept_of_chainSteps tail.chainSteps).getActiveValidatorIndices_eq
     (getCurrentEpoch_le_activityFixedEpoch x.state)
@@ -159,10 +157,8 @@ theorem increment_le_reference
     positiveFloor.trans_le (floor_initial_le_reference x high)
   have unique := (shared.pubkeysDistinct genesis)
   have inside : ∀ i ∈ getActiveValidatorIndices x.state (getCurrentEpoch x.state),
-      i.toNat < x.state.validators.data.size := fun i member => by
-    obtain ⟨v, found, _⟩ :=
-        (mem_getActiveValidatorIndices (x.state.validators.bound early)).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
+      i.toNat < x.state.validators.data.size := fun i member =>
+    lt_size_of_mem_getActiveValidatorIndices member
   have value : referenceStake x = ∑ i ∈
       (getActiveValidatorIndices x.state (getCurrentEpoch x.state)).toFinset,
         effectiveAt x i.toNat := by
