@@ -5628,6 +5628,29 @@ private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
   rw [← sum_syncDebit_eq events v]
   exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
+/-- The sync movement over any keys of a run from the split to a state within a call's reach is at
+most its seats' envelope, read at the pulled state's total. -/
+private theorem syncF_run_le (h : Setting config checks g split fin pulled anc counted V)
+    (pulledTotal : Gwei) (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal)
+    {e : BeaconState preset fork} (t : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
+    (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    (highE : ℕ) {evs : List (BalanceEvent preset)} (replayed : t.balanceEvents highE = .ok evs)
+    (keys : Finset ℕ) :
+    ∑ i ∈ keys, syncF evs i ≤
+      ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch split).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+          PinSplit5.syncSeatEnvelope preset pulledTotal.toNat := by
+  obtain ⟨fromFin⟩ := h.fromFin
+  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      t.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat := by
+    intro u w step member T read
+    exact step_band_of_guard h (fromFin.append t) within pulledOk step
+      ((Run.contains_append _ _ _).mpr (.inr member)) T read
+  have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
+    band keys).2
+  exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
+
 /-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
 
 The proposer's share of the sync credits is in `syncF`, so the bound adds the `syncProposer` part
@@ -5649,24 +5672,6 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
   have called := UInt64.le_iff_toNat_le.mp h.called
   have later := UInt64.le_iff_toNat_le.mp h.later
   have near := h.near
-  -- the sync movement of a run from the split over any keys, at the pulled state's total
-  have run : ∀ {e : BeaconState preset fork} (t : Run config checks ⟨fork, split⟩ ⟨fork, e⟩),
-      (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-      ∀ (highE : ℕ) {evs : List (BalanceEvent preset)}, t.balanceEvents highE = .ok evs →
-      ∀ keys : Finset ℕ, ∑ i ∈ keys, syncF evs i ≤
-        ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch split).toNat) *
-          preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-            PinSplit5.syncSeatEnvelope preset pulledTotal.toNat := by
-    intro e t within highE evs replayed keys
-    have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-        t.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
-          2 * T.toNat ≤ 3 * pulledTotal.toNat := by
-      intro u w step member T read
-      exact step_band_of_guard h (fromFin.append t) within pulledOk step
-        ((Run.contains_append _ _ _).mpr (.inr member)) T read
-    have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
-      band keys).2
-    exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
   -- the four sets are pairwise disjoint
   obtain ⟨d45, d46, d56, d1, d15, d16⟩ := classes_disjoint h
   have d2 : Disjoint (V ∪ K4 pulled counted V) (K5 counted V) :=
@@ -5684,10 +5689,10 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (P := (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted).image
       fun v : ValidatorIndex => v.toNat)
     (fun i => syncF events i + syncF eventsC i) fun v member => Finset.mem_image_of_mem _ member
-  have first := run tail (Nat.le_succ _) high replayed
+  have first := syncF_run_le h pulledTotal pulledOk tail (Nat.le_succ _) high replayed
     ((V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted).image
       fun v : ValidatorIndex => v.toNat)
-  have second := run tailC near highC replayedC
+  have second := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC
     ((V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted).image
       fun v : ValidatorIndex => v.toNat)
   generalize (V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted).image
@@ -5758,6 +5763,82 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
         depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share)) := by
         omega
     _ = _ := by ring
+
+/-- The sync credits of any keys on C's branch are at most the seats' envelope and the proposer's
+share, each over the depth.
+
+This is the second run of `bud_sync` for credits alone, and `syncSeats` weighs it at `depth`. -/
+private theorem syncCredits_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (keys : Finset ℕ) :
+    ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤
+      (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
+          preset.SYNC_COMMITTEE_SIZE.toNat *
+          PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+        (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer := by
+  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  have run := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC keys
+  have credits : ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤ ∑ i ∈ keys, syncF eventsC i :=
+    Finset.sum_le_sum fun i _ => (Nat.le_add_right _ _).trans (syncF_eq eventsC i).ge
+  have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
+    rw [pulledOk]
+    rfl
+  have proposer : (pinTerms config pulled anc fin).syncProposer =
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
+          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  rw [proposer, totalEq]
+  unfold PinSplit5.syncSeatEnvelope at run
+  generalize (pinTerms config pulled anc fin).depth = depth at depthEq ⊢
+  generalize PinSplit5.syncEnvelope preset pulledTotal.toNat = env at *
+  generalize env * PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat) =
+    share at *
+  have depthCounted : (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch split).toNat ≤ depth :=
+    by omega
+  have bounded : ∑ i ∈ keys, syncF eventsC i ≤
+      depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * env +
+        depth * preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * share := by
+    refine run.trans ?_
+    rw [Nat.mul_add]
+    exact Nat.add_le_add
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ depthCounted)))
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ depthCounted)))
+  calc _ ≤ _ := credits.trans bounded
+    _ = _ := by ring
+
+/-- The flag gains of the other credits of a key set, floored key by key, are at most the gain of
+their weighted sum, floored once.
+
+Each floor of a sum is at least the sum of the floors, in the increments and in the weights. -/
+private theorem otherGain_sum_le {ι : Type} (S : Finset ι) (w c : ι → ℕ)
+    (depth inc P F WD OC : ℕ) (within : ∑ i ∈ S, w i * c i ≤ OC) :
+    ∑ i ∈ S, w i * (depth * (c i / inc * P * F / WD)) ≤ depth * (OC / inc * P * F / WD) := by
+  have inner : ∑ i ∈ S, w i * (c i / inc) ≤ OC / inc :=
+    (Finset.sum_le_sum fun i _ => Nat.mul_div_le_mul_div_assoc (w i) (c i) inc).trans
+      ((DirectSafety.Apriori.Internal.sum_div_le S (fun i => w i * c i) inc).trans
+        (Nat.div_le_div_right within))
+  have outer : ∑ i ∈ S, w i * (c i / inc * P * F / WD) ≤ (OC / inc * P * F) / WD := by
+    calc ∑ i ∈ S, w i * (c i / inc * P * F / WD)
+        ≤ ∑ i ∈ S, (w i * (c i / inc) * P * F) / WD := Finset.sum_le_sum fun i _ => by
+          have := Nat.mul_div_le_mul_div_assoc (w i) (c i / inc * P * F) WD
+          rwa [show w i * (c i / inc * P * F) = w i * (c i / inc) * P * F by ring] at this
+      _ ≤ (∑ i ∈ S, w i * (c i / inc) * P * F) / WD :=
+          DirectSafety.Apriori.Internal.sum_div_le S _ WD
+      _ = ((∑ i ∈ S, w i * (c i / inc)) * P * F) / WD := by
+          rw [← Finset.sum_mul, ← Finset.sum_mul]
+      _ ≤ (OC / inc * P * F) / WD :=
+          Nat.div_le_div_right (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ inner))
+  calc ∑ i ∈ S, w i * (depth * (c i / inc * P * F / WD))
+      = depth * ∑ i ∈ S, w i * (c i / inc * P * F / WD) := by
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun i _ => by ring
+    _ ≤ depth * (OC / inc * P * F / WD) := Nat.mul_le_mul_left _ outer
 
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/
