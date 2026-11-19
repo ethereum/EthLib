@@ -2109,24 +2109,6 @@ private theorem kept_processEpoch {fork : Fork} {s t : BeaconState preset fork}
     (fun one two => one.trans two)
     (fun _ _ _ _ computed => kept_stage electra (EpochStage.action_cases.mp computed))
 
-/-- From Electra, an upgrade keeps the validators as the same sequence. -/
-private theorem upgradeNext_validators {pre : ForkedBeaconState preset}
-    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (electra : .pectra ≤ pre.fork) (computed : upgradeNext config checks pre = .ok post) :
-    post.val.state.validators.data = pre.state.validators.data := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-      throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
-  all_goals try (dsimp only at electra; exact absurd electra (by decide))
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToFulu_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToGloas_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    exact (upgradeHezeFields_lists _).1
-
 /-- From Electra, a slot of a run keeps the registry. -/
 private theorem kept_slot {u w : ForkedBeaconState preset} (electra : .pectra ≤ u.fork)
     (ok : advanceSlotAcross config checks u = .ok w) : Kept u.state w.state := by
@@ -2147,7 +2129,7 @@ private theorem kept_slot {u w : ForkedBeaconState preset} (electra : .pectra �
   exact (processUpgrades_induction (forked := ⟨u.fork, advanced⟩)
     (property := fun z => .pectra ≤ z.fork ∧ Kept u.state z.state)
     (fun {_ post} held more => ⟨Nat.le_trans held.1 (Nat.le_of_lt post.property),
-      held.2.trans (Kept.of_data (upgradeNext_validators held.1 more))⟩)
+      held.2.trans (Kept.of_data (upgradeNext_validators_of_electra held.1 more))⟩)
     ⟨electra, advancedKept⟩ upgrades).2
 
 /-- From Fulu and before Gloas, a block keeps the registry. -/
@@ -4063,7 +4045,7 @@ private theorem ExitFarFrom.of_chainStep {a b : ForkedBeaconState preset}
       (property := fun post => ExitFarFrom a.state.validators.data.size post.state ∧
         .pectra ≤ post.fork)
       (fun {pre post} kept ok =>
-        ⟨kept.1.of_data (PinSplit4.upgradeNext_validators kept.2 ok),
+        ⟨kept.1.of_data (upgradeNext_validators_of_electra kept.2 ok),
           Nat.le_trans kept.2 (Nat.le_of_lt post.property)⟩)
       ⟨atAdvanced, electra⟩ upgrades).1
   | block engine signed validate ok =>

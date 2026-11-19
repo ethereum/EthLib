@@ -277,6 +277,12 @@ Not yet released.
   `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
+- `ChainStep.exit_assigned_activated` states that, from Electra, a chain step assigns an exit only to a validator that is activated at the step's start epoch.
+  The pin's drift bound reads it to show that a key whose exit starts on a run was activated before its exit.
+
+- `upgradeNext_validators_of_electra` states that, from Electra, an upgrade keeps the validators as the same sequence.
+  The pin's drift bound reads it for the registry along a slot step, and `ChainStep.exit_assigned_activated` reads it for the upgrades of a slot.
+
 ### Changes that break callers
 
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
