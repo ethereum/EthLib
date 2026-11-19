@@ -5917,7 +5917,7 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat preset.downwardBand base0 finEB
       (min (actualBalanceAt (⟨fork, wS⟩ : ForkedBeaconState preset) i.toNat)
         (withdrawalMaxEffectiveBalance preset fork valW).toNat) X
-      (pinTerms config pulled anc fin).partialsDue i.toNat
+      ((pinTerms config pulled anc fin).partialsDue i.toNat)
       D (actualBalanceAt (⟨fork, nS⟩ : ForkedBeaconState preset) i.toNat)
       ((pinTerms config pulled anc fin).leakAt
         (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat)
