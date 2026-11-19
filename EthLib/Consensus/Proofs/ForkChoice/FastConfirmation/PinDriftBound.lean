@@ -1855,6 +1855,108 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
         exact Nat.zero_le _
       · exact reward_sum_le _ _ _ _ P scaled none small
 
+/-- The balances at the two ends of a chain of events rise by at most the credits of the events. -/
+private theorem chain_credit_le (i : ℕ) :
+    ∀ (L : List (BalanceEvent preset)) (a b : ℕ),
+    L.IsChain (fun e e' => ∀ j, actualBalanceAt e.after j = actualBalanceAt e'.before j) →
+    (∀ e ∈ L.head?, actualBalanceAt e.before i = a) →
+    (∀ e ∈ L.getLast?, actualBalanceAt e.after i = b) →
+    (L = [] → b = a) → b ≤ a + (L.map (keyCredit i)).sum := by
+  intro L
+  induction L with
+  | nil =>
+    intro a b _ _ _ empty
+    have same := empty rfl
+    simp only [List.map_nil, List.sum_nil]
+    omega
+  | cons e rest ih =>
+    intro a b link head last _
+    have first : actualBalanceAt e.before i = a := head e (by simp)
+    cases rest with
+    | nil =>
+      have final : actualBalanceAt e.after i = b := last e (by simp)
+      simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, keyCredit]
+      omega
+    | cons e' rest' =>
+      have linked := List.isChain_cons_cons.mp link
+      have next := ih (actualBalanceAt e'.before i) b linked.2
+        (fun f hf => by
+          simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hf
+          subst hf
+          rfl)
+        (fun f hf => last f (by rw [List.getLast?_cons_cons]; exact hf))
+        (fun h => absurd h (List.cons_ne_nil _ _))
+      have joined := linked.1 i
+      have expand : ((e :: e' :: rest').map (keyCredit i)).sum =
+          keyCredit i e + ((e' :: rest').map (keyCredit i)).sum := by simp
+      rw [expand]
+      unfold keyCredit
+      omega
+
+/-- A step raises the balance of a key by at most the credits of its events. -/
+private theorem step_balance_le_credits {x y : ForkedBeaconState preset}
+    (step : Step config checks x y) (early : y.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events) (i : ℕ) :
+    actualBalanceAt y i ≤ actualBalanceAt x i + (events.map (keyCredit i)).sum := by
+  obtain ⟨p, first, second, -, split, firstEmpty, head1, last1, link1, secondEmpty, head2, last2,
+    link2, -⟩ := step.balanceChain early replayed
+  subst split
+  have one := chain_credit_le i first (actualBalanceAt x i) (actualBalanceAt p i) link1
+    (fun e he => head1 e he i) (fun e he => last1 e he i) (fun h => firstEmpty h i)
+  have two := chain_credit_le i second (actualBalanceAt p i) (actualBalanceAt y i) link2
+    (fun e he => head2 e he i) (fun e he => last2 e he i) (fun h => secondEmpty h i)
+  rw [List.map_append, List.sum_append]
+  omega
+
+/-- A sum over a list splits over a test and its complement. -/
+private theorem sum_filter_split {α : Type} (L : List α) (p : α → Bool) (f : α → ℕ) :
+    (L.map f).sum = ((L.filter p).map f).sum + ((L.filter fun a => !p a).map f).sum := by
+  induction L with
+  | nil => rfl
+  | cons a rest ih =>
+    by_cases hp : p a = true
+    · simp only [List.filter_cons, hp, ↓reduceIte, List.map_cons, List.sum_cons, Bool.not_true,
+        Bool.false_eq_true]
+      omega
+    · have hp' : p a = false := by simpa using hp
+      simp only [List.filter_cons, hp', Bool.false_eq_true, ↓reduceIte, List.map_cons,
+        List.sum_cons, Bool.not_false]
+      omega
+
+/-- A step raises the balance of a key by at most its epoch rewards and its other credits. -/
+private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (i : ℕ) :
+    actualBalanceAt n i ≤ actualBalanceAt m i + epochRewards i step +
+      stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
+  obtain ⟨events, ok⟩ := step.balanceEvents_ok early
+  have base := step_balance_le_credits step early ok i
+  cases step with
+  | block engine signed due okb =>
+    simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some,
+      List.filter_true] at base ⊢
+    omega
+  | slot oks =>
+    simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some] at base ⊢
+    have split := sum_filter_split events (fun e => decide (e.source = .rewards)) (keyCredit i)
+    have same : (events.filter fun e => !decide (e.source = .rewards)) =
+        events.filter fun e => decide (e.source ≠ .rewards) := by
+      congr 1
+      funext e
+      simp
+    rw [same] at split
+    omega
+
+/-- The bound on a key's balance along a run: its start, the epoch rewards, and its other credits.
+
+The epoch rewards are those of the epochs that the run ends, at the rate given by `E` and `P`. -/
+private def creditBound {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (i high E P : ℕ) : ℕ :=
+  actualBalanceAt x i +
+    ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) *
+      (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
+    (creditScan (fun _ => true) (fun s => decide (s ≠ .rewards)) i high tail).1
+
 end Rewards
 
 /-- A balance ceiling, an envelope or a floor on a key's balance bounds its effective balance.
