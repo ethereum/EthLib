@@ -872,49 +872,65 @@ private theorem processSyncCommitteeUpdates_eq_of_inside {altair : .altair ≤ f
   Except.ok.inj (ok.symm.trans
     (processSyncCommitteeUpdates_inside (processSyncCommitteeUpdates_epoch ok) inside))
 
+/-- Every epoch stage but the committee and lookahead updates keeps both committees and the
+lookahead. -/
+private theorem stage_same (altair : .altair ≤ fork) {k : EpochStage}
+    (other : k ≠ .syncCommittees) (look : k ≠ .proposerLookahead) {a b : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks k a b) : SameSyncCommittees a b := by
+  cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+  case justification => exact (SameSyncCommittees.processJustificationAndFinalization edge)
+  case inactivity => exact (SameSyncCommittees.processInactivityUpdates edge)
+  case rewards => exact (SameSyncCommittees.processRewardsAndPenalties edge)
+  case registry => exact (SameSyncCommittees.processRegistryUpdates edge)
+  case slashings => exact (SameSyncCommittees.processSlashings edge)
+  case eth1Reset =>
+    split at edge
+    · exact (SameSyncCommittees.processEth1DataReset edge)
+    · subst edge
+      exact ⟨rfl, rfl, rfl⟩
+  case pendingDeposits =>
+    split at edge
+    · exact (SameSyncCommittees.processPendingDeposits edge)
+    · subst edge
+      exact ⟨rfl, rfl, rfl⟩
+  case pendingConsolidations =>
+    split at edge
+    · exact (SameSyncCommittees.processPendingConsolidations edge)
+    · subst edge
+      exact ⟨rfl, rfl, rfl⟩
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+      exact ⟨rfl, rfl, rfl⟩
+    · subst edge
+      exact ⟨rfl, rfl, rfl⟩
+  case effectiveBalances => exact (SameSyncCommittees.processEffectiveBalanceUpdates edge)
+  case slashingsReset => exact (SameSyncCommittees.processSlashingsReset edge)
+  case randaoReset => exact (SameSyncCommittees.processRandaoMixesReset edge)
+  case history =>
+    split at edge
+    · exact (SameSyncCommittees.processHistoricalSummariesUpdate edge)
+    · exact (SameSyncCommittees.processHistoricalRootsUpdate edge)
+  case participation =>
+    subst edge
+    exact ⟨rfl, rfl, rfl⟩
+  case syncCommittees => exact absurd rfl other
+  case proposerLookahead => exact absurd rfl look
+  case ptcWindow =>
+    split at edge
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      exact ⟨rfl, rfl, rfl⟩
+    · subst edge
+      exact ⟨rfl, rfl, rfl⟩
+
 /-- Every epoch stage but the committee update keeps both committees. -/
 private theorem stage_keeps (altair : .altair ≤ fork) {k : EpochStage}
     (other : k ≠ .syncCommittees) {a b : BeaconState preset fork}
     (edge : EpochStage.Edge config checks k a b) : KeepsCommittees a b := by
-  cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-  case justification => exact (SameSyncCommittees.processJustificationAndFinalization edge).keeps
-  case inactivity => exact (SameSyncCommittees.processInactivityUpdates edge).keeps
-  case rewards => exact (SameSyncCommittees.processRewardsAndPenalties edge).keeps
-  case registry => exact (SameSyncCommittees.processRegistryUpdates edge).keeps
-  case slashings => exact (SameSyncCommittees.processSlashings edge).keeps
-  case eth1Reset =>
-    split at edge
-    · exact (SameSyncCommittees.processEth1DataReset edge).keeps
-    · subst edge
-      exact ⟨rfl, rfl⟩
-  case pendingDeposits =>
-    split at edge
-    · exact (SameSyncCommittees.processPendingDeposits edge).keeps
-    · subst edge
-      exact ⟨rfl, rfl⟩
-  case pendingConsolidations =>
-    split at edge
-    · exact (SameSyncCommittees.processPendingConsolidations edge).keeps
-    · subst edge
-      exact ⟨rfl, rfl⟩
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-      exact ⟨rfl, rfl⟩
-    · subst edge
-      exact ⟨rfl, rfl⟩
-  case effectiveBalances => exact (SameSyncCommittees.processEffectiveBalanceUpdates edge).keeps
-  case slashingsReset => exact (SameSyncCommittees.processSlashingsReset edge).keeps
-  case randaoReset => exact (SameSyncCommittees.processRandaoMixesReset edge).keeps
-  case history =>
-    split at edge
-    · exact (SameSyncCommittees.processHistoricalSummariesUpdate edge).keeps
-    · exact (SameSyncCommittees.processHistoricalRootsUpdate edge).keeps
-  case participation =>
-    subst edge
-    exact ⟨rfl, rfl⟩
-  case syncCommittees => exact absurd rfl other
-  case proposerLookahead =>
+  by_cases look : k = .proposerLookahead
+  · subst look
+    simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
@@ -922,13 +938,20 @@ private theorem stage_keeps (altair : .altair ≤ fork) {k : EpochStage}
       exact ⟨rfl, rfl⟩
     · subst edge
       exact ⟨rfl, rfl⟩
-  case ptcWindow =>
-    split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact ⟨rfl, rfl⟩
-    · subst edge
-      exact ⟨rfl, rfl⟩
+  · exact (stage_same altair other look edge).keeps
+
+/-- Every epoch stage but the lookahead update keeps the lookahead. -/
+private theorem stage_lookahead (altair : .altair ≤ fork) {k : EpochStage}
+    (look : k ≠ .proposerLookahead) {a b : BeaconState preset fork}
+    (edge : EpochStage.Edge config checks k a b) : b.proposerLookahead = a.proposerLookahead := by
+  by_cases sync : k = .syncCommittees
+  · subst sync
+    simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+    unfold Consensus.processSyncCommitteeUpdates at edge
+    simp only [bind, Except.bind, pure, Except.pure] at edge
+    repeat' (split at edge <;> try cases edge)
+    all_goals rfl
+  · exact (stage_same altair sync look edge).2.2
 
 /-- An epoch keeps committee provenance and the slot.
 
@@ -1366,6 +1389,64 @@ theorem processBlock_currentSyncCommittee {block : BeaconBlock preset fork}
     (ok : processBlock config checks engine state block = .ok after) :
     after.currentSyncCommittee altair = state.currentSyncCommittee altair :=
   congrFun (SameSyncCommittees.processBlock ok).1 altair
+
+/-- A block leaves the proposer lookahead unchanged. -/
+theorem processBlock_proposerLookahead {block : BeaconBlock preset fork}
+    {engine : ExecutionEngine preset fork}
+    (ok : processBlock config checks engine state block = .ok after) :
+    after.proposerLookahead = state.proposerLookahead :=
+  (SameSyncCommittees.processBlock ok).2.2
+
+/-- A run of epoch stages without the lookahead update keeps the slot and the lookahead. -/
+private theorem stages_lookahead (altair : .altair ≤ fork) {stages : List EpochStage}
+    (absent : EpochStage.proposerLookahead ∉ stages) {a b : BeaconState preset fork}
+    (trace : EpochTrace (EpochStage.action config checks) stages a b) :
+    b.slot = a.slot ∧ b.proposerLookahead = a.proposerLookahead :=
+  trace.transport (fun a b => b.slot = a.slot ∧ b.proposerLookahead = a.proposerLookahead)
+    (fun _ => ⟨rfl, rfl⟩) (fun ab bc => ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩)
+    (fun k member _ _ computed =>
+      have edge := EpochStage.action_cases.mp computed
+      ⟨edge.slot_eq,
+        stage_lookahead altair (fun same => absurd (by rw [← same]; exact member) absent) edge⟩)
+
+/-- From Fulu, an epoch draws its new last epoch of proposers from a state just before the draw.
+
+That state has the slot and the lookahead of the epoch's start.
+
+Only the window update follows it, so the registry of the epoch's end is its registry. -/
+theorem processEpoch_lookahead_cut (fulu : .fusaka ≤ fork)
+    (ok : Consensus.processEpoch config checks state = .ok after) :
+    ∃ (m looked : BeaconState preset fork), m.slot = state.slot ∧
+      m.proposerLookahead = state.proposerLookahead ∧
+      processProposerLookahead m fulu = .ok looked ∧
+      after.validators.data = m.validators.data ∧
+      after.proposerLookahead = looked.proposerLookahead ∧ after.slot = state.slot := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
+  have trace := processEpoch_trace ok
+  have shape : EpochStage.epochStages = (EpochStage.prefixStages ++ EpochStage.middleStages ++
+      [.participation, .syncCommittees]) ++ [.proposerLookahead, .ptcWindow] := rfl
+  rw [shape] at trace
+  obtain ⟨m, early, rest⟩ := EpochTrace.append_iff.mp trace
+  have kept := stages_lookahead altair
+    (by simp [EpochStage.prefixStages, EpochStage.middleStages]) early
+  obtain _ | ⟨draw, rest⟩ := rest
+  obtain _ | ⟨window, done⟩ := rest
+  cases done
+  have drawEdge := EpochStage.action_cases.mp draw
+  have windowEdge := EpochStage.action_cases.mp window
+  have slot := windowEdge.slot_eq.trans (drawEdge.slot_eq.trans kept.1)
+  simp only [EpochStage.Edge, fulu, ↓reduceDIte] at drawEdge
+  refine ⟨m, _, kept.1, kept.2, drawEdge, ?_⟩
+  have shape := drawEdge
+  simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at shape
+  obtain ⟨_, _, _, _, rfl⟩ := shape
+  simp only [EpochStage.Edge] at windowEdge
+  split at windowEdge
+  · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at windowEdge
+    obtain ⟨_, _, _, _, rfl⟩ := windowEdge
+    exact ⟨rfl, rfl, slot⟩
+  · subst windowEdge
+    exact ⟨rfl, rfl, slot⟩
 
 /-- Block execution leaves the proposer lookahead unchanged. -/
 theorem processBlockExecution_proposerLookahead {body : BeaconBlockBody preset fork}
