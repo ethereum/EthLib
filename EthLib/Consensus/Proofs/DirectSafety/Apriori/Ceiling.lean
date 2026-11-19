@@ -241,7 +241,7 @@ private theorem increment_dvd_total {f : Fork} {s : BeaconState preset f}
   · rw [Nat.max_eq_left high]
 
 /-- The base reward per increment exists at a positive total, if the scaled factor fits. -/
-private theorem perIncrement_exists {total : Gwei} (positive : 0 < total.toNat)
+theorem perIncrement_exists {total : Gwei} (positive : 0 < total.toNat)
     (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat <
       2 ^ 64) :
     ∃ perIncrement, getBaseRewardPerIncrement preset total = .ok perIncrement := by

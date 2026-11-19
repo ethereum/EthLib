@@ -939,20 +939,22 @@ private structure PinPresetFacts (preset : Preset) : Prop where
       preset.MAX_EFFECTIVE_BALANCE.toNat /
         (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+  /-- (preset fact) The increment times the base reward factor does not overflow a `Gwei`. -/
+  fits : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
-    by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
-    by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
