@@ -1521,13 +1521,10 @@ theorem walkMembers_cover [DecidablePred (· ∈ J)] {Δ : ℕ} {anchor : Store 
   -- The caller reads its head at each rollover, unless stores collide or historical evidence holds.
   have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 limit :=
     ctx.anchorEpochOk ▸ ctx.signedAll
-  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
-    have := ctx.ring
-    omega
-  rcases e.callRolloverRead_or_evidence ctx.sync ctx.slots history ctx.preGloas ctx.admitted
+  rcases e.callRolloverRead_or_evidence ctx.sync ctx.slots ctx.preGloas ctx.admitted
       ctx.fits ctx.prompt ctx.votes ctx.anchored ctx.start ctx.anchorSlot ctx.anchorBoundary signed
       ctx.roots ctx.absent ctx.bounded ctx.parameters ctx.genesis pre ctx.heldEarly ctx.enough
-      ctx.terminal ctx.ceiling ctx.scoreFits ctx.fit ctx.caller n head.root with
+      ctx.terminal ctx.ceiling ctx.scoreFits ctx.fit.seeds ctx.caller n head.root with
     rollover | collision | evidence
   rotate_left
   · exact .inr (.inl collision)
