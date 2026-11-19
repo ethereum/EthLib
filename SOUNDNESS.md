@@ -6646,6 +6646,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
 - `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
 - `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/Models/`
 - `EthLib/Cryptography/Proofs/OneCallPermutation.lean`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
