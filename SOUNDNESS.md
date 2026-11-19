@@ -1325,6 +1325,25 @@ Let the adversary make `q` calls to the permutation and its inverse.
 These bounds hold in the random permutation model only.
 Keccak-f[1600] is one fixed permutation, and treating it as a uniform one is a heuristic that EthLib assumes and does not prove.
 
+The bounds that model Keccak-256 as a random oracle on byte strings can be carried to the sponge over a uniform permutation.
+That carrying rests on the hypothesis below.
+`Proofs/Indifferentiability.lean` defines indifferentiability from a random oracle, after Definition 1 of [Bertoni, Daemen, Peeters and Van Assche](https://keccak.team/files/SpongeIndifferentiability.pdf), §2, without its bounds on running times.
+Its simulator asks the random oracle at most once per call.
+The simulator of their §4.3, Algorithm 3, does so, adapted to a 256-bit oracle that leaves it to draw the other output bits.
+`realProb_le_romProb_add` is the composition for single-stage games, Theorem 3.1 of [Ristenpart, Shacham and Shrimpton](https://hovav.net/ucsd/dist/revindiff.pdf).
+Their §4 shows that the composition fails for multi-stage games.
+Let each hash call cost at least 1.
+`isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
+`Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
+Its bound is the closed form of equation (6) of Bertoni et al., which bounds the exact term of their Theorem 2.
+EthLib does not prove that the closed form bounds the exact term.
+For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
+EthLib does not prove this hypothesis, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
+Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
+The distinguisher here asks only for 256-bit outputs of byte strings.
+The definition bounds no running time, so only random-oracle bounds that count queries alone carry over.
+
 ### KZG
 
 No text is agreed yet as the normative KZG specification.
@@ -6641,6 +6660,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/HashSig/`
 - `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
 - `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Indifferentiability.lean`
 - `EthLib/Cryptography/Proofs/Kzg/`
 - `EthLib/Cryptography/Proofs/LazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
