@@ -1,6 +1,6 @@
 # The area labels of a pull request, from the paths it changes.
 #
-# The workflow workflows/labeler.yml applies them with sync-labels.
+# The paths job of workflows/labeler.yml applies them with sync-labels.
 # So it also removes a label of this file once the pull request no longer changes a matching path.
 # A child label, such as crypto: keccak, matches a subset of its parent's paths.
 # So every file that gives a child also gives its parent.

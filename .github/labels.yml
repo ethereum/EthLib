@@ -3,7 +3,7 @@
 # The workflow labels-sync.yml creates and updates these labels on every change to this file.
 # It never deletes a label, so a label that is missing here stays on the repository.
 # Each family has one hue: the parent label is dark and its children are light.
-# labeler.yml maps paths to the area labels, and title-labels.yml maps titles to the rest.
+# labeler.yml maps paths to the area labels, and workflows/labeler.yml maps titles to the rest.
 
 # Areas: the cryptographic primitives under EthLib/Cryptography.
 - name: "crypto"
@@ -203,6 +203,11 @@
 - name: "statement-change"
   color: "b60205"
   description: "Breaking change: the title has ! before the colon"
+
+# An issue whose title starts with meta: tracks other issues.
+- name: "meta"
+  color: "bdbdbd"
+  description: "A tracking issue"
 
 # Labels that existed before this file, kept with their values.
 - name: "bug"
