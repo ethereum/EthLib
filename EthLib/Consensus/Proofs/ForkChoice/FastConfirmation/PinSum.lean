@@ -31,6 +31,7 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -5084,7 +5085,29 @@ theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := sorry
+    3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have within := BeaconState.registryWithinLimit_of_lt h.early pulled
+  -- The keys of `V` are active at R's epoch, so no deposit event credits a withdrawable one.
+  have recent : ∀ i ∈ V.image UInt64.toNat, ∃ w, pulled.validators.data[i]? = some w ∧
+      (isActiveValidator w (getCurrentEpoch pulled) = true ∨
+        isActiveValidator w (getPreviousEpoch pulled) = true) := by
+    intro i hi
+    obtain ⟨v, member, rfl⟩ := Finset.mem_image.mp hi
+    have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
+      simpa [activeVoters] using (h.voting v member).1
+    obtain ⟨u, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
+    exact ⟨u, found, .inl active⟩
+  refine bud_deposits_of h tail high endEpoch replayed fun e member deposit => ?_
+  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tail h.genesis h.early
+    h.delay replayed e member).2.2
+  have credited := Run.deposit_credit_le_funding (toFin.append fromFin) tail h.genesis h.early
+    h.twoSlots high endEpoch replayed (V.image UInt64.toNat) recent e member deposit
+    (Nat.le_trans electra forkLe)
+  rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at credited
+  exact credited
 
 /-- Two charges of a run at one position are the same charge. -/
 private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run config checks x y)
