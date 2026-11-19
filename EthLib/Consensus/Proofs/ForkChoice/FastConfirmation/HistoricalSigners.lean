@@ -96,9 +96,15 @@ The count passed, so a validator among the quorum voters of that set voted for t
 
 The set misses the count when the quorum voters outside it hold less than two thirds of the total.
 
-That bound is the premise `few`, for each state that the store counts in.
+That bound is the premise `fewCounted`, for each state that the store counts in.
 
-It also reads that the state's epoch is at most one past the store's justified epoch.
+It gets the counting data of the state.
+
+That is the held block, the slots toward its child, and the read of the justified block.
+
+It also gets the epoch of the state.
+
+That epoch is after `epoch`, within one of the store's justified epoch, and not after the horizon.
 
 The vote was cast in a block the store holds, below the counting state.
 
@@ -128,10 +134,19 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
     (slotOk : ((e.world k).state w).getCurrentSlot config = .ok slot)
     (later : epoch < ((e.world k).state w).justifiedCheckpoint.epoch)
     (p : ValidatorIndex → Prop) [DecidablePred p]
-    (fewCounted : ∀ (state : BeaconState preset fork) (total : Gwei),
-      CountedState ((e.world k).state w) config state → epoch < getCurrentEpoch state →
+    (fewCounted : ∀ (root : Root) (base state : BeaconState preset fork) (total : Gwei),
+      ((e.world k).state w).blockStates[root]? = some base →
+      (state = base ∨ ∃ (slot : Slot) (childRoot : Root) (child : BeaconBlock preset fork),
+        ((e.world k).state w).blocks[childRoot]? = some child ∧ child.parentRoot = root ∧
+        slot ≤ child.slot ∧ processSlots config checks base slot = .ok state) →
+      ((e.world k).state w).getCheckpointBlock root
+        ((e.world k).state w).justifiedCheckpoint.epoch =
+          .ok ((e.world k).state w).justifiedCheckpoint.root →
+      epoch < getCurrentEpoch state →
+      ((e.world k).state w).justifiedCheckpoint.epoch ≤ getCurrentEpoch state →
       (getCurrentEpoch state).toNat ≤
         ((e.world k).state w).justifiedCheckpoint.epoch.toNat + 1 →
+      (getCurrentEpoch state).toNat ≤ horizon.toNat →
       getTotalActiveBalance state = .ok total →
       3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | ¬p v} <
         2 * total.toNat) :
@@ -153,17 +168,24 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
   -- The count moved the checkpoint, to the counting state's current or previous epoch.
   have moved : pulled.currentJustifiedCheckpoint ≠ counted.currentJustifiedCheckpoint :=
     fun same => changed (same.symm.trans pulledC)
-  obtain ⟨countedLater, countedEpoch⟩ : GENESIS_EPOCH + 1 < getCurrentEpoch counted ∧
+  obtain ⟨⟨countedLater, countedEpoch⟩, rootRead⟩ : (GENESIS_EPOCH + 1 < getCurrentEpoch counted ∧
       (getCurrentEpoch counted).toNat ≤
         ((e.world k).state w).justifiedCheckpoint.epoch.toNat + 1 ∧
       ((e.world k).state w).justifiedCheckpoint.epoch.toNat ≤
-        (getCurrentEpoch counted).toNat := by
+        (getCurrentEpoch counted).toNat) ∧
+      getBlockRoot counted ((e.world k).state w).justifiedCheckpoint.epoch =
+        .ok ((e.world k).state w).justifiedCheckpoint.root := by
     rcases processJustificationAndFinalization_reads pulledOk with ⟨-, same⟩ |
       ⟨late, _, _, _, _, _, _, _, _, _, _, weighed⟩
     · exact (moved (same ▸ rfl)).elim
     rcases weighJustificationAndFinalization_currentJustified weighed with ⟨same, -⟩ |
-      ⟨current, -, -, -, -, -, epochEq, -⟩
+      ⟨current, -, -, -, -, -, epochEq, rootOk⟩
     · exact (moved same).elim
+    have rootRead : getBlockRoot counted ((e.world k).state w).justifiedCheckpoint.epoch =
+        .ok ((e.world k).state w).justifiedCheckpoint.root := by
+      rw [← pulledC]
+      exact rootOk
+    refine ⟨?_, rootRead⟩
     rw [← pulledC, epochEq]
     refine ⟨late, ?_⟩
     cases current
@@ -215,24 +237,76 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
   have epochLt : epoch < getCurrentEpoch counted := by
     have := countedEpoch.2
     exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+  have justifiedLe : ((e.world k).state w).justifiedCheckpoint.epoch ≤ getCurrentEpoch counted :=
+    UInt64.le_iff_toNat_le.mpr countedEpoch.2
+  have justifiedAfter : getCurrentEpoch anchorState <
+      ((e.world k).state w).justifiedCheckpoint.epoch :=
+    UInt64.lt_iff_toNat_lt.mpr (by omega)
+  -- The store walks from the counting root to the justified checkpoint, less than a buffer back.
+  obtain ⟨reachedSlot, path'⟩ : ∃ reachedSlot,
+      state = base ∨ processSlots config checks base reachedSlot = .ok state := by
+    rcases path with same | ⟨reachedSlot, slotsOk⟩
+    · exact ⟨0, .inl same⟩
+    · exact ⟨reachedSlot, .inr slotsOk⟩
+  have walk : ((e.world k).state w).getCheckpointBlock root
+      ((e.world k).state w).justifiedCheckpoint.epoch =
+        .ok ((e.world k).state w).justifiedCheckpoint.root :=
+    (reached.counted_history anchorSlot anchorHeader anchorZero
+      (roots w honest k high) held path' cached
+      (fun _ start startOk => by
+        have startNat := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+        have epochLe := countedEpoch.1
+        rw [getCurrentEpoch_toNat] at epochLe
+        have slotLt := Nat.lt_div_mul_add (a := counted.slot.toNat) positive
+        have spread := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat epochLe
+        rw [Nat.add_mul, Nat.one_mul] at spread
+        rw [startNat, sameSlot]
+        omega)
+      rootRead
+      (fun start startOk => by
+        have startNat := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+        have epochLt := UInt64.lt_iff_toNat_lt.mp justifiedAfter
+        rw [getCurrentEpoch_toNat] at epochLt
+        have slotLt := Nat.lt_div_mul_add (a := anchorState.slot.toNat) positive
+        have spread :=
+          Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (Nat.succ_le_of_lt epochLt)
+        rw [Nat.succ_mul] at spread
+        exact UInt64.le_iff_toNat_le.mpr (by rw [startNat]; omega))).2
+  -- No state of the count is after the horizon, since the store's epoch is not.
+  have stateBound := reached.forwardReachable.blockState_epoch_le_current slots
+    (UInt64.le_of_eq anchorSlot) epochOk
+  have insideHeld : ∀ {r : Root} {s : BeaconState preset fork},
+      ((e.world k).state w).blockStates[r]? = some s → (getCurrentEpoch s).toNat ≤ horizon.toNat :=
+    fun found => Nat.le_trans (UInt64.le_iff_toNat_le.mp (stateBound _ _ found))
+      (UInt64.le_iff_toNat_le.mp horizonBound)
   have few : ∀ total, getTotalActiveBalance counted = .ok total →
       3 * stake (fun index => balanceAt counted index.toNat)
         {v ∈ quorumVoters counted | ¬p v} < 2 * total.toNat := by
     intro total totalOk
     rcases shape with rfl | ⟨state, childRoot, child, childFound, parent, before, path, -,
       countedOk⟩
-    · exact fewCounted counted total ⟨root, counted, held, .inl rfl⟩ epochLt
-        countedEpoch.1 totalOk
+    · exact fewCounted root counted counted total held (.inl rfl) walk epochLt justifiedLe
+        countedEpoch.1 (insideHeld held) totalOk
     · -- Caching a slot keeps the registry, the balances and the slot that the count reads.
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok countedOk
-      have counts : CountedState ((e.world k).state w) config state := by
-        refine ⟨root, base, held, ?_⟩
-        rcases path with rfl | ⟨reached, slotsOk⟩
-        · exact .inl rfl
-        · refine .inr ⟨checks, reached, childRoot, child, childFound, parent, ?_, slotsOk⟩
+      obtain ⟨childState, childStored, -⟩ := reached.reachable.blockStatesFromParents childFound
+      have childSlot := reached.reachable.blockState_slot_eq anchorSlot childFound childStored
+      rcases path with rfl | ⟨reachedSlot, slotsOk⟩
+      · exact fewCounted root state state total held (.inl rfl) walk epochLt justifiedLe
+          countedEpoch.1 (insideHeld held) totalOk
+      · have slotLe : reachedSlot ≤ child.slot := by
           rw [← (processSlots_slot slotsOk).2]
           exact UInt64.le_of_lt before
-      exact fewCounted state total counts epochLt countedEpoch.1 totalOk
+        refine fewCounted root base state total held
+          (.inr ⟨reachedSlot, childRoot, child, childFound, parent, slotLe, slotsOk⟩) walk
+          epochLt justifiedLe countedEpoch.1 ?_ totalOk
+        have epochLe : getCurrentEpoch state ≤ getCurrentEpoch childState := by
+          have : state.slot ≤ childState.slot := by
+            rw [childSlot, (processSlots_slot slotsOk).2]
+            exact slotLe
+          rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, getCurrentEpoch_toNat]
+          exact Nat.div_le_div_right (UInt64.le_iff_toNat_le.mp this)
+        exact Nat.le_trans (UInt64.le_iff_toNat_le.mp epochLe) (insideHeld childStored)
   -- The count's active stake is above one and a half increments.
   have large := counted_stake_large anchored start anchorSlot genesis pre absent heldEarly enough
     terminal honest high held shape countedLater upper
@@ -246,35 +320,13 @@ theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store 
     exact UInt64.lt_iff_toNat_lt.mpr (by omega)
   rcases member with earlier | below
   · exact absurd earlier (UInt64.not_le.mpr voteEpoch)
-  -- The store walks from the counting root to the vote's target, read less than a buffer back.
-  obtain ⟨reachedSlot, path'⟩ : ∃ reachedSlot,
-      state = base ∨ processSlots config checks base reachedSlot = .ok state := by
-    rcases path with same | ⟨reachedSlot, slotsOk⟩
-    · exact ⟨0, .inl same⟩
-    · exact ⟨reachedSlot, .inr slotsOk⟩
-  have walk := (reached.counted_history anchorSlot anchorHeader anchorZero
-    (roots w honest k high) held path' cached
-    (fun _ start startOk => by
-      have startNat := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
-      have epochLe := countedEpoch.1
-      rw [← target, getCurrentEpoch_toNat] at epochLe
-      have slotLt := Nat.lt_div_mul_add (a := counted.slot.toNat) positive
-      have spread := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat epochLe
-      rw [Nat.add_mul, Nat.one_mul] at spread
-      rw [startNat, sameSlot]
-      omega)
-    link.2.2.2
-    (fun start startOk => by
-      have startNat := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
-      have epochLt := UInt64.lt_iff_toNat_lt.mp voteEpoch
-      rw [getCurrentEpoch_toNat] at epochLt
-      have slotLt := Nat.lt_div_mul_add (a := anchorState.slot.toNat) positive
-      have spread := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (Nat.succ_le_of_lt epochLt)
-      rw [Nat.succ_mul] at spread
-      exact UInt64.le_iff_toNat_le.mpr (by rw [startNat]; omega))).2
+  have voteWalk : ((e.world k).state w).getCheckpointBlock root vote.2.target.epoch =
+      .ok vote.2.target.root := by
+    rw [target]
+    exact walk
   -- The vote is a statement of a message sent by now, of a slot before the store's slot.
   obtain ⟨m, sent, signed, before⟩ := e.exists_sent_of_votesBelow anchored start anchorSlot slots
-    positive apart delay honest (absent w honest k high) below walk slotOk
+    positive apart delay honest (absent w honest k high) below voteWalk slotOk
   exact ⟨vote.1, voter, k, le_rfl, m, sent, vote.2, signed, target, before⟩
 
 /-- Each up-to-date honest store's justified checkpoint after an epoch has an honest signer.
@@ -324,7 +376,9 @@ theorem Execution.justifiedHonestlySigned [DecidablePred (· ∈ J)] {anchor : S
   exact Execution.justifiedSigned_at anchored start anchorSlot anchorHeader anchorZero slots
     parameters delay genesis pre roots absent heldEarly bounded enough terminal afterAnchor honest
     high slotOk later (· ∈ J)
-    fun state total counts epochLt _ totalOk =>
-      byzantine w honest k state total low high upToDate counts epochLt totalOk
+    fun root base state total held shape _ epochLt _ _ _ totalOk =>
+      byzantine w honest k state total low high upToDate
+        ⟨root, base, held, shape.imp id fun ⟨slot, childRoot, child, found, parent, le, ok⟩ =>
+          ⟨checks, slot, childRoot, child, found, parent, le, ok⟩⟩ epochLt totalOk
 
 end EthLib.Consensus.Models.Network
