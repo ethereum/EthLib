@@ -1063,7 +1063,7 @@ theorem processEpochAltair_credentials {altair : .altair ≤ fork}
     {validator : Validator} (found : state.validators.data[index]? = some validator) :
     ∃ later, after.validators.data[index]? = some later ∧
       later.withdrawalCredentials = validator.withdrawalCredentials := by
-  obtain ⟨-, -, -, settled, updated, -, -, -, -, -, updatedOk, -, afterValidators, -, atIndex⟩ :=
+  obtain ⟨_, _, _, settled, updated, -, -, -, -, -, updatedOk, -, afterValidators, -, atIndex⟩ :=
     processEpochAltair_walk computed
   obtain ⟨kept, -, atKept, -, credentials, -⟩ := atIndex found
   obtain ⟨balance, owned⟩ := processEffectiveBalanceUpdates_owned updatedOk atKept
