@@ -489,7 +489,6 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     change (e.world k).time ≤ (e.world n).time at time
     have positive := sync.1
     omega
-  have nBound : (e.world n).time ≤ last := by omega
   unfold Store.getCheckpointBlock at final
   simp only [bind_ok_iff, mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at final
   obtain ⟨finalSlot, finalStart, ancestor, walk, ancestorRoot⟩ := final
@@ -511,10 +510,6 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
         exact old
       exact e.blocks_of_le (Nat.zero_le k) initial
     have memN := e.monotone_view v (Nat.le_of_lt before) mem
-    have iBound : (e.world i).time ≤ last := by
-      have := e.monotone_time (Nat.le_of_lt before)
-      dsimp at this
-      omega
     have memK := sync.2.2 n k ordered v honest u receiver (.block sb) memN late
     obtain ⟨pre, preFound, _, _, _⟩ := Store.validateOnBlock_ok valid
     obtain ⟨other, otherFound, _⟩ :=
