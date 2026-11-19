@@ -477,6 +477,38 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have kept := e.checkpointStates_of_le w arrivalLe (Store.checkpointState_ok_iff.mp stateOk)
   exact Store.checkpointState_ok_iff.mpr kept
 
+/-- An honest store that holds its justified state computes its viable nodes.
+
+It is forward reachable from the anchor, which the head computation reads too.
+
+The epoch of the latest 64-bit time plus the history of mixes must fit in 64 bits. -/
+private theorem Execution.filteredTree_of_justifiedState {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (sound : Invariant anchorState)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (parameters : DirectSafety.Parameters preset)
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    {w : ValidatorIndex} (hw : w ∈ J) (k : ℕ)
+    (unknown : ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    {state : BeaconState preset fork}
+    (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state) :
+    Store.ForwardReachable config anchorState anchorBlock ((e.world k).state w) ∧
+      ∃ nodes, ((e.world k).state w).getFilteredNodeTree config = .ok nodes := by
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+    have := parameters.lookahead
+    omega
+  have reached := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
+  have forward := reached.forwardReachable
+  -- The justified block is held, as the store holds the justified state.
+  obtain ⟨base, -, baseFound, -⟩ :=
+    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
+  exact ⟨forward, getFilteredNodeTree_exists forward sound slots anchorSlot anchorBoundary unknown
+    seeds history (forward.reachable.known_of_blockState baseFound)⟩
+
 /-- Every up-to-date honest store in the interval has a head. -/
 def HonestHeadsExist (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
@@ -521,20 +553,11 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
       enough terminal with states | alternative
   · left
     have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
-    have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
-      have := parameters.lookahead
-      omega
     intro w hw k _ inTime upToDate
-    have reached := e.forwardReachableWith
-      (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
-    have forward := reached.forwardReachable
     obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
-    -- The justified block is held, as the store holds the justified state.
-    obtain ⟨base, -, baseFound, -⟩ :=
-      reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-    obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
-      (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) seeds history
-      (forward.reachable.known_of_blockState baseFound)
+    obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+      (UInt64.le_of_eq anchorSlot) anchorBoundary parameters seeds hw k (absent w hw k inTime)
+      stateOk
     -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
     exact Store.getHead_exists preGloas forward (UInt64.le_of_eq anchorSlot) (absent w hw k inTime)
       parameters.slots scoreFits tree stateOk (ceiling w hw k _ state inTime stateOk)
@@ -940,21 +963,12 @@ theorem Execution.honestHeadsExist_or_evidence_of_gloas {Δ : ℕ} (sync : e.Syn
   have registries := e.honestRegistries_of_room slots gloas anchored start
     (UInt64.le_of_eq anchorSlot) sound bounded room
   left
-  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
-    have := parameters.lookahead
-    omega
   intro w hw k _ inTime upToDate
-  have reached := e.forwardReachableWith
-    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
-  have forward := reached.forwardReachable
   obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
   obtain ⟨held, within⟩ := registries w hw k inTime
-  -- The justified block is held, as the store holds the justified state, so the tree is computed.
-  obtain ⟨base, -, baseFound, -⟩ :=
-    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-  obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
-    (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) fit.seeds history
-    (forward.reachable.known_of_blockState baseFound)
+  obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+    (UInt64.le_of_eq anchorSlot) anchorBoundary parameters fit.seeds hw k (absent w hw k inTime)
+    stateOk
   exact Store.getHead_exists_of_gloas gloas forward (UInt64.le_of_eq anchorSlot)
     (absent w hw k inTime) fit scoreFits weights tree stateOk (within state stateOk) held
     (supply w hw k state inTime stateOk) (registered w hw k state inTime stateOk)
