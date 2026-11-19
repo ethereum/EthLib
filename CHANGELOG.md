@@ -77,9 +77,8 @@ Not yet released.
   The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
 
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
-  At each up-to-date honest store whose fork choice returns a head, the root is in the filtered tree or below the justified block.
+  At each up-to-date honest store, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
-  Stores whose `getHead` returns an error are not covered, pending [#2060](https://github.com/ethereum/EthLib/issues/2060).
   `Execution.honestHeadsCover_of_checked_call` keeps the root on every up-to-date honest head chain over the same interval.
   It replaces the consistency and the leaf of `Execution.honestHeadsCover_of_signed_justification` with the rule's checks.
   It derives the honest signer from `ByzantineCountedStake anchorEpoch 0 time`, a wider bound than the call-epoch one of `Execution.honestHeadsCover_of_byzantine_bound`, and adds the premise `JustifiedPinned`.
@@ -90,9 +89,10 @@ Not yet released.
   `Execution.rootHeld_of_honest_vote` holds the root from the call on, from the honest vote that `Execution.honest_vote_of_caller_margin` finds behind the caller's margin.
   `Execution.heldFinality_or_evidence` reads a store's finalized checkpoint on a held state's justified chain, or gives `HeldStateFinalityEvidence`.
   `DelayFits.deadline_add_le`, `Store.ForwardReachable.finalized_add_two_le_or_anchor` and `Store.getCheckpointBlock_trans` are general steps.
-  The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead`, `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
+  The new premises `CallCheckpointInputs`, `TargetChecked`, `AcceptedRealizedRecent`, `AcceptedRealizedHead`, `CallRolloverRead` (derived by the headlines), `JustifiedPinned`, `TargetIncluded` and `QuorumDriftWithin` are described in `SOUNDNESS.md`.
   `DirectSafety.AccountableOrHashEvidence` is the direct-safety bound on two tails or hash evidence on their runs, and the statements that spelled it out now name it.
-  `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read, and `RootViableAt` is the viability of a root at one time.
+  `quorumReserve` and `pinReserve` are the reserves that `QuorumDriftWithin`, `JustifiedPinned` and the reserved count of a call read.
+  `RootViableAt` is the viability of a root at one time.
 
 - The checked-call proofs add these general facts.
   `SelectedCheckpointsAgree` says that honest justified checkpoints agree at each epoch, and `Execution.selectedCheckpointsAgree_or_evidence` derives it or returns evidence.
@@ -221,6 +221,17 @@ Not yet released.
   `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
+- Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
+  `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
+  The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
+  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store whose filtered tree reads has a head.
+  The alternatives are a collision of two honest stores and `HistoricalDirectSafetyEvidence`.
+  `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` with the same alternatives.
+  The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
+  `Store.getAttestationScore_eq_of_checked`, `Store.stake_supportersOf_eq_sum`, `Store.isAncestor_ok_of_orphans_le` and `Store.onAttestation_eq_of_reads` are the steps that existing proofs now share.
+  `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
+  `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
+
 ### Changes that break callers
 
 - In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
@@ -239,6 +250,10 @@ Not yet released.
 - The JSON parser of Lean v4.36.0 rejects an object that names one member twice.
   A JSON-RPC request with such an object now answers with the parse error `-32700`, where it read the last member before.
   The same holds for a keystore read from JSON text.
+
+- In Lean, `Execution.rootViable_of_checked_call` concludes `RootViable root (e.world n).time time` again, in place of `RootViableAt root T` at each time `T` of the interval ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It and `Execution.honestHeadsCover_of_checked_call` no longer take `rollover : CallRolloverRead …`, which `Execution.callRolloverRead_or_evidence` derives from their other premises.
+  A caller drops the argument; a caller that read `RootViableAt` at a time `T` applies `RootViable` to the store at `T`.
 
 - In Lean, `HistoricalDirectSafetyEvidence` now records a conflict.
   It requires that the earlier finalized epoch is at most the later justified epoch.

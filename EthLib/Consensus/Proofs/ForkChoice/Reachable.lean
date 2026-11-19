@@ -699,6 +699,25 @@ theorem Reachable.orphans_le (reachable : Reachable config anchorState anchorBlo
     (otherFound : store.blocks[other]? = some otherBlock) : block.slot ≤ otherBlock.slot :=
   (reachable.orphansLow anchorSlot).orphansLe root other block otherBlock found orphan otherFound
 
+/-- The descent check from a known block to a known block can be computed.
+
+Each known parent must sit below its child.
+
+Each known block whose parent is unknown must sit at or below the target block. -/
+theorem isAncestor_ok_of_orphans_le (lower : store.ParentsBelow) {node : ForkChoiceNode}
+    {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block)
+    (orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
+      store.blocks[root]? = some orphan → store.blocks[orphan.parentRoot]? = none →
+      orphan.slot ≤ block.slot)
+    {start : ForkChoiceNode} {startBlock : BeaconBlock preset fork}
+    (startFound : store.blocks[start.root]? = some startBlock) :
+    ∃ descends, store.isAncestor start node = .ok descends := by
+  obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_orphans_le lower orphansLe startFound
+  have known : store.block node.root = .ok block := by simp [Store.block, found]; rfl
+  unfold isAncestor
+  simp only [known, walk, bind, Except.bind]
+  split <;> exact ⟨_, rfl⟩
+
 /-- Before Gloas and without a boost, the head of a reachable store is the head of LMD-GHOST.
 
 That needs the anchor block at or before the slot of the anchor state.

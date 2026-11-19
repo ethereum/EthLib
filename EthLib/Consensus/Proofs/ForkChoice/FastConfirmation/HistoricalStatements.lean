@@ -298,9 +298,9 @@ def RootViableAt (root : Root) (T : Nat) : Prop :=
 
 The filtered tree grows from the justified block, so either way the root does not conflict with it.
 
-So this assumes that no honest justified checkpoint conflicts with the root over the interval.
+It says that no honest justified checkpoint conflicts with the root over the interval.
 
-That is the checkpoint-consistency half of the safety of the confirmation, assumed, not derived. -/
+The checked-call headline derives it, and a few lower steps still take it as a premise. -/
 def RootViable (root : Root) (first last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →

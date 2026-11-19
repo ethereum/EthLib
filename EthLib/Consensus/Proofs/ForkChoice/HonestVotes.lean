@@ -128,22 +128,23 @@ theorem Execution.exists_signed_origin_of_latestMessages {anchor : Store preset 
       apply extend
       have reachable := e.reachable
         (fun w hw => (start w hw) ▸ Store.Reachable.anchor anchored) n u receiver
+      have states := fun {c : Checkpoint} {st : BeaconState preset fork}
+        (known : ((e.world n).state u).checkpointStates[c]? = some st) =>
+        handles.checkpointStates_of_found known
       cases handles with
       | tick timeLe fits ticked =>
         have clockLe : ((e.world n).state u).timeMs ≤ (e.world n).time.toUInt64 := by
           rw [UInt64.le_iff_toNat_le, Nat.toUInt64, UInt64.toNat_ofNat_of_lt' fits]
           exact timeLe
         exact keep ih (Store.onTick_checkpointStates_latestMessages ticked).2
-          (fun known => (Store.onTick_frame ticked).2.2.1 ▸ known)
-          (fun known => (Store.onTick_checkpointStates_latestMessages ticked).1 ▸ known)
+          (fun known => (Store.onTick_frame ticked).2.2.1 ▸ known) states
           (Store.exists_getCurrentSlot_onTick_ge clockLe ticked)
       | attestation seen handled =>
         exact attestationStep reachable ih ⟨_, seen, fun _ h => h⟩ handled
       | attesterSlashing _ handled => exact slash ih handled
       | block _ blockOk =>
         exact keep ih (Store.onBlock_checkpointStates_latestMessages blockOk).2
-          (Store.onBlock_blocks_of_found blockOk)
-          (fun known => (Store.onBlock_checkpointStates_latestMessages blockOk).1 ▸ known)
+          (Store.onBlock_blocks_of_found blockOk) states
           (fun slotOk => ⟨_, slotOk ▸ (Store.onBlock_sameClock blockOk).getCurrentSlot,
             UInt64.le_refl _⟩)
       | blockAttestation seen _ _ carried handled =>

@@ -272,15 +272,9 @@ theorem removeDescendants_ok (lower : store.ParentsBelow)
           else none) (l := store.blocks.keys) fun other mem => by
       obtain ⟨otherBlock, otherFound⟩ := Option.isSome_iff_exists.mp
         (Std.TreeMap.mem_iff_isSome_getElem?.mp (Std.TreeMap.mem_keys.mp mem))
-      obtain ⟨ancestor, walk⟩ := getAncestor_ok_of_orphans_le lower (slot := firstBlock.slot)
-        (fun r b found parentUnknown => orphansLe r first b firstBlock found parentUnknown
-          firstFound) (node := ⟨other, .pending⟩) otherFound
-      have blockOk : store.block first = .ok firstBlock := by simp [Store.block, firstFound]; rfl
-      have decided : ∃ b, store.isAncestor ⟨other, .pending⟩ ⟨first, .pending⟩ = .ok b := by
-        unfold Store.isAncestor
-        simp only [blockOk, walk, bind, Except.bind]
-        split <;> exact ⟨_, rfl⟩
-      obtain ⟨b, decided⟩ := decided
+      obtain ⟨b, decided⟩ := isAncestor_ok_of_orphans_le lower (node := ⟨first, .pending⟩)
+        firstFound (fun r b found parentUnknown => orphansLe r first b firstBlock found
+          parentUnknown firstFound) (start := ⟨other, .pending⟩) otherFound
       refine ⟨if b then some other else none, ?_⟩
       simp [decided, bind, Except.bind, pure, Except.pure]
     refine ⟨store.removeBlocks out, ?_⟩

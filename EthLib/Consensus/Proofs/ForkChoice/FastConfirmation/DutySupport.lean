@@ -140,12 +140,7 @@ theorem Execution.mem_supportersOf_of_latest_signed {anchor : Store preset fork}
   have before : (e.world n).time < (e.world k).time := by
     apply lt_of_le_of_ne (e.monotone_time earlier.le)
     intro sameTime
-    have genesisEq : ((e.world k).state w).genesisTimeMs = genesisTimeMs := by
-      have left := (e.clock_bounds v n).1
-      have right := (e.clock_bounds w k).1
-      rw [start v honest] at left
-      rw [start w receiver] at right
-      exact right.trans (left.symm.trans genesis)
+    have genesisEq := e.genesisTimeMs_eq_of_honest start honest genesis receiver k
     have sameClock : ((e.world k).state w).timeMs = ((e.world n).state v).timeMs :=
       UInt64.toNat_inj.mp (upToDate.1.trans (sameTime.symm.trans current.1.symm))
     have slotOk : ((e.world k).state w).getCurrentSlot config =
@@ -440,13 +435,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
     have eq := oneBlock v honest w receiver n k (by rw [vote.atTime]; omega) (by omega)
       root block rootBlock held known
     exact eq ▸ held
-  have genesis : ∀ j, ((e.world j).state w).genesisTimeMs = genesisTimeMs := by
-    intro j
-    have left := (e.clock_bounds v n).1
-    have right := (e.clock_bounds w j).1
-    rw [start v honest] at left
-    rw [start w receiver] at right
-    exact right.trans (left.symm.trans vote.genesis)
+  have genesis := e.genesisTimeMs_eq_of_honest start honest vote.genesis receiver
   obtain ⟨⟨pre, preTime, preLate, preCurrent⟩, ⟨boundary, boundaryTime, boundaryCurrent⟩⟩ :=
     e.exists_duty_boundaries fits (prompt.of_le (atTime ▸ boundaryLe)) receiver nextSlotOk
       slotTimeOk followingTimeOk deadlineOk started
@@ -484,13 +473,9 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
         omega
       exact ⟨boundary, preBefore, boundaryBefore, boundaryTime, boundaryCurrent⟩
   obtain ⟨arrival, preArrival, arrivalLe, arrivalTime, arrivalCurrent⟩ := arrivalExists
-  have currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok followingSlot := by
-    unfold Store.getCurrentSlot
-    rw [genesis arrival]
-    have clock : ((e.world arrival).state w).timeMs = followingTime :=
-      UInt64.toNat_inj.mp (arrivalCurrent.1.trans arrivalTime)
-    rw [clock]
-    exact mapError_ok_iff.mpr (computeSlotAtTimeMs_computeTimeAtSlotMs slots followingTimeOk)
+  have currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok followingSlot :=
+    e.getCurrentSlot_of_slot_start slots (genesis arrival) followingTimeOk arrivalTime
+      arrivalCurrent
   have votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
       some headBlock := dataRoot ▸ e.blocks_of_le preArrival admittedHead
   have targetRead := vote.data_target anchored anchorSlot anchorBoundary start honest

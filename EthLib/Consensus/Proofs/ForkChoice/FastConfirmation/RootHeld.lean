@@ -102,13 +102,8 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
     exact fits.deadline_add_le deadline (computeSlotAtTimeMs_computeTimeAtSlotMs slots beginOk)
       early
   -- Every honest store runs on the model's genesis, as the signer's does.
-  have genesisOf (w : ValidatorIndex) (hw : w ∈ J) (j : ℕ) :
-      ((e.world j).state w).genesisTimeMs = genesisTimeMs := by
-    have left := (e.clock_bounds v k).1
-    have right := (e.clock_bounds w j).1
-    rw [anchored v honest] at left
-    rw [anchored w hw] at right
-    exact right.trans (left.symm.trans signerGenesis)
+  have genesisOf (w : ValidatorIndex) (hw : w ∈ J) :=
+    e.genesisTimeMs_eq_of_honest anchored honest signerGenesis hw
   -- A receiver up to date at the start of the call's slot holds the root.
   have receipt (w : ValidatorIndex) (receiver : w ∈ J) (r : ℕ)
       (atCall : (e.world r).time = begin.toNat)
@@ -117,12 +112,8 @@ theorem Execution.rootHeld_of_honest_vote {Δ : ℕ} {anchor : Store preset fork
       ∃ b : BeaconBlock preset fork, ((e.world r).state w).blocks[root]? = some b := by
     have rBound : (e.world r).time ≤ time := atCall ▸ atBegin ▸ within
     have reachedW := reached w receiver r
-    have clockEq : ((e.world r).state w).timeMs = begin :=
-      UInt64.toNat_inj.mp (current.1.trans atCall)
-    have slotOk : ((e.world r).state w).getCurrentSlot config = .ok slot := by
-      unfold Store.getCurrentSlot
-      rw [genesisOf w receiver r, clockEq]
-      exact mapError_ok_iff.mpr (computeSlotAtTimeMs_computeTimeAtSlotMs slots beginOk)
+    have slotOk : ((e.world r).state w).getCurrentSlot config = .ok slot :=
+      e.getCurrentSlot_of_slot_start slots (genesisOf w receiver r) beginOk atCall current
     have epochOk : ((e.world r).state w).getCurrentStoreEpoch config =
         .ok (computeEpochAtSlot preset slot) := by
       simp [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure]

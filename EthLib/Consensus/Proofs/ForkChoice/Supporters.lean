@@ -70,15 +70,16 @@ def supportersOf (state : BeaconState preset fork) (node : ForkChoiceNode) :
 
 variable {store}
 
-/-- The votes that the store counts for a node are the stake of its supporters.
+/-- The stake of the supporters of a node is the sum of the balances whose vote counts for it.
 
 A validator weighs its effective balance in the state.
 
 The registry of the state must stay within the limit of the preset. -/
-theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset fork}
-    {score : Gwei} (within : state.RegistryWithinLimit)
-    (computed : store.getAttestationScore node state = .ok score) :
-    stake (fun v => balanceAt state v.toNat) (store.supportersOf state node) = score.toNat := by
+theorem stake_supportersOf_eq_sum {node : ForkChoiceNode} {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) :
+    stake (fun v => balanceAt state v.toNat) (store.supportersOf state node) =
+      ((unslashedActiveBalances state).map fun entry =>
+        if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
   set entries := unslashedActiveBalances state
   -- Each entry is a position of the registry with its effective balance.
   have balance : ∀ entry ∈ entries, balanceAt state entry.1.toNat = entry.2.toNat := by
@@ -108,12 +109,22 @@ theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset f
     exact sorted.imp UInt64.ne_of_lt
   have chosen := ((List.filter_sublist (p := fun entry : ValidatorIndex × Gwei =>
     store.voteCountsFor node entry.1) (l := entries)).map (·.1)).nodup distinct
-  rw [supportersOf, stake, List.sum_toFinset _ chosen, List.map_map,
-    store.getAttestationScore_toNat_eq_sum computed]
+  rw [supportersOf, stake, List.sum_toFinset _ chosen, List.map_map]
   exact (congrArg List.sum (List.map_congr_left (g := fun entry => entry.2.toNat)
     fun entry member => balance entry (List.mem_of_mem_filter member))).trans
       (by simpa using (EthLib.Base.sum_map_ite_eq_sum_filter
         (fun entry => store.voteCountsFor node entry.1 = true) _ entries).symm)
+
+/-- The votes that the store counts for a node are the stake of its supporters.
+
+A validator weighs its effective balance in the state.
+
+The registry of the state must stay within the limit of the preset. -/
+theorem stake_supportersOf {node : ForkChoiceNode} {state : BeaconState preset fork}
+    {score : Gwei} (within : state.RegistryWithinLimit)
+    (computed : store.getAttestationScore node state = .ok score) :
+    stake (fun v => balanceAt state v.toNat) (store.supportersOf state node) = score.toNat := by
+  rw [stake_supportersOf_eq_sum within, store.getAttestationScore_toNat_eq_sum computed]
 
 /-- The vote of each supporter of a node counts for that node. -/
 theorem voteCountsFor_of_mem_supportersOf {state : BeaconState preset fork}

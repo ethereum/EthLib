@@ -2153,11 +2153,7 @@ private theorem genesis_of_honest_latest {Δ time : ℕ}
   obtain ⟨nextOk, nextTime, nextTimeOk, nextLeNat⟩ := successor_time_of_past past beginOk
   obtain ⟨_, _, _, _, _, _, n', _, _, _, vote, _⟩ := exists_dutyVote_of_signed votes fits honest
     (e.view_subset_sent n u seen) signed nextOk nextTimeOk (by omega)
-  have left := (e.clock_bounds v n').1
-  have right := (e.clock_bounds w k).1
-  rw [start v honest] at left
-  rw [start w receiver] at right
-  exact right.trans (left.symm.trans vote.genesis)
+  exact e.genesisTimeMs_eq_of_honest start honest vote.genesis receiver k
 
 /-- On validators the source counts as unslashed and active, its counted weight is its balance. -/
 private theorem stake_counted_eq {source : BeaconState preset fork}

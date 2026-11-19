@@ -38,20 +38,6 @@ public theorem slotStart_le_clock {store : Store preset fork}
   rw [genesisEq] at read
   exact slotStart_le_of_slotAtTime read before
 
-/-- The slot after one before a store's current slot exists, and starts by the store's clock.
-
-The store must follow the model's time of genesis. -/
-private theorem nextSlotStart_le_clock {store : Store preset fork}
-    (genesisEq : store.genesisTimeMs = genesisTimeMs) {current slot : Slot}
-    (currentOk : store.getCurrentSlot config = .ok current) (before : slot < current) :
-    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
-      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
-      following.toNat ≤ store.timeMs.toNat := by
-  have read := mapError_ok_iff.mp currentOk
-  change computeSlotAtTimeMs config _ _ = .ok current at read
-  rw [genesisEq] at read
-  exact nextSlotStart_le_of_slotAtTime read before
-
 /-- An honest duty lies between the call and a store's time.
 
 Its slot is at or after the call's slot and before the store's current slot.
@@ -78,14 +64,9 @@ public theorem duty_window_of_slot_le {anchor : Store preset fork} {Δ : ℕ}
   obtain ⟨callStart', callStartOk', -, callLe⟩ := exists_timeAtSlotMs_of_le after dutyStartOk
   rw [callStartOk, Except.ok.injEq] at callStartOk'
   subst callStart'
-  -- The store follows the signer's time of genesis.
-  have senderGenesis := (e.clock_bounds v k').1
-  have receiverGenesis := (e.clock_bounds w k).1
-  rw [start v honest] at senderGenesis
-  rw [start w receiver] at receiverGenesis
   -- The deadline and the delay fall before the next slot, which starts by the store's clock.
-  obtain ⟨nextOk, following, followingOk, followingLe⟩ := nextSlotStart_le_clock
-    (receiverGenesis.trans (senderGenesis.symm.trans genesis)) currentOk before
+  obtain ⟨nextOk, following, followingOk, followingLe⟩ := Store.nextSlotStart_le_clock
+    (e.genesisTimeMs_eq_of_honest start honest genesis receiver k) currentOk before
   have bound := fits.before_boundary nextOk dutyStartOk followingOk deadline
   refine ⟨?_, ?_⟩
   · have := UInt64.le_iff_toNat_le.mp callLe
