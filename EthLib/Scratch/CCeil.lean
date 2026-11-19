@@ -235,7 +235,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
             (pinTerms config pulled anc fin).gainRate i +
           min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
-            (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2))) :=
+            (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2))) := by
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
