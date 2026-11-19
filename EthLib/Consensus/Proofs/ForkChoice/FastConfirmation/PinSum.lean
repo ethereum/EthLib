@@ -16112,8 +16112,74 @@ private theorem y_floor_le (I WD F P D Df q Cr Ds DsF W gc S U Fl : ℕ)
     (cases : (I ≤ U + 1 ∧ Cr + Fl ≤ S ∧
         gc + (D * q + D) ≤ Fl + Df * ((11 * q + 9) / 10 + 3)) ∨
       (Cr = 0 ∧ Ds = 0 ∧ DsF = 0 ∧ W < I ∧ (0 < W → I ≤ S + U))) :
-    Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) % I ≤ S + U :=
-  sorry
+    Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) % I ≤ S + U := by
+  have hI : 0 < I := by
+    rcases Nat.eq_zero_or_pos I with h | h
+    · subst h; simp at key
+    · exact h
+  have hWD : 0 < WD := by
+    rcases Nat.eq_zero_or_pos WD with h | h
+    · subst h; simp at key
+    · exact h
+  rcases cases with ⟨hU, hCr, hgc⟩ | ⟨hCr, hDs, hDsF, hW, hS⟩
+  · refine le_trans (Nat.sub_le _ _) ?_
+    omega
+  · subst hCr hDs hDsF
+    rcases Nat.eq_zero_or_pos D with hD | hD
+    · subst hD
+      have : gc = 0 := by rw [hform]; simp
+      subst this
+      simp
+    · have hG : 10 * ((11 * q + 9) / 10) + 9 ≥ 11 * q + 9 := by omega
+      have h1 : D * (11 * q + 30) ≤ 10 * (Df * ((11 * q + 9) / 10 + 3)) := by
+        calc D * (11 * q + 30) ≤ Df * (11 * q + 30) := Nat.mul_le_mul_right _ hDf
+          _ ≤ Df * (10 * ((11 * q + 9) / 10 + 3)) :=
+            Nat.mul_le_mul_left _ (by omega)
+          _ = 10 * (Df * ((11 * q + 9) / 10 + 3)) := by ring
+      have hX : 11 * (D * q + D) < 10 * I := by
+        have : 11 * (D * q + D) < D * (11 * q + 30) := by
+          have : D * (11 * q + 30) = 11 * (D * q + D) + 19 * D := by ring
+          omega
+        omega
+      rcases Nat.eq_zero_or_pos W with hW0 | hW0
+      · subst hW0
+        have zero : 11 * (0 + 0 + 0 + 0 + D * q + D) / (10 * I) = 0 :=
+          Nat.div_eq_of_lt (by omega)
+        have g0 : gc = 0 := by rw [hform, zero]; simp
+        subst g0
+        have : D * q + D < I := by omega
+        simp only [Nat.zero_add]
+        rw [Nat.mod_eq_of_lt this]
+        omega
+      · have quot : 11 * (0 + 0 + 0 + W + D * q + D) / (10 * I) ≤ 2 := by
+          have : 11 * (0 + 0 + 0 + W + D * q + D) < 3 * (10 * I) := by omega
+          have := (Nat.div_lt_iff_lt_mul (by omega)).2 this
+          omega
+        have gcle : gc ≤ D * (2 * P * F / WD) := by
+          rw [hform]
+          refine Nat.mul_le_mul_left _ (Nat.div_le_div_right ?_)
+          exact Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ quot)
+        have gclt : 11 * gc < 2 * I := by
+          have h2 : D * (2 * P * F / WD) * WD ≤ D * (2 * P * F) := by
+            calc D * (2 * P * F / WD) * WD = D * (WD * (2 * P * F / WD)) := by ring
+              _ ≤ D * (2 * P * F) := Nat.mul_le_mul_left _ (Nat.mul_div_le _ _)
+          have h3 : WD * (11 * gc) < WD * (2 * I) := by
+            calc WD * (11 * gc) ≤ WD * (11 * (D * (2 * P * F / WD))) := by
+                  exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ gcle)
+              _ = 11 * (D * (2 * P * F / WD) * WD) := by ring
+              _ ≤ 11 * (D * (2 * P * F)) := Nat.mul_le_mul_left _ h2
+              _ = 2 * (11 * D * (P * F)) := by ring
+              _ < 2 * (WD * I) := by omega
+              _ = WD * (2 * I) := by ring
+          exact Nat.lt_of_mul_lt_mul_left h3
+        have hY : 0 + (gc + (D * q + D)) < 2 * I := by omega
+        have hdiv : (0 + (gc + (D * q + D))) / I ≤ 1 := by
+          have := (Nat.div_lt_iff_lt_mul hI).2 (by omega : 0 + (gc + (D * q + D)) < 2 * I)
+          omega
+        have hmod := Nat.div_add_mod (0 + (gc + (D * q + D))) I
+        have : I * ((0 + (gc + (D * q + D))) / I) ≤ I * 1 := Nat.mul_le_mul_left _ hdiv
+        have := hS hW0
+        omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
