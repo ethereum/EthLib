@@ -6659,7 +6659,9 @@ private theorem Run.exists_epoch_split {x y : ForkedBeaconState preset}
     exact ⟨z, pre, (Run.nil.snoc (Step.slot ok)).append rest, hz, by
       rw [split, Run.append_assoc]; rfl⟩
 
-/-- A key that is active at the end of a run is scheduled two epochs before its activation.
+/-- A key that is activated by the end of a run is scheduled two epochs before its activation.
+
+The key may have exited, so long as its activation is before its exit.
 
 It is not active by the epoch after the start of the run.
 
@@ -6670,24 +6672,25 @@ private theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run con
     (window : preset.SeedLookaheadAtLeastThree) (i : ℕ)
     (pending : ∀ v, x.state.validators.data[i]? = some v →
       (getCurrentEpoch x.state).toNat + 1 < v.activationEpoch.toNat)
-    (active : isActiveAt y.state (getCurrentEpoch y.state) i = true) :
+    (activated : ∃ vy, y.state.validators.data[i]? = some vy ∧
+      vy.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ vy.activationEpoch ≤ getCurrentEpoch y.state)
+    (ordered : ∀ vy, y.state.validators.data[i]? = some vy →
+      vy.activationEpoch.toNat < vy.exitEpoch.toNat) :
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks x z) (post : Run config checks z y)
       (v0 vy : Validator), tail = pre.append post ∧ z.state.validators.data[i]? = some v0 ∧
       y.state.validators.data[i]? = some vy ∧ v0.activationEpoch = vy.activationEpoch ∧
       (getCurrentEpoch z.state).toNat + 2 = vy.activationEpoch.toNat ∧
-      vy.activationEpoch.toNat ≤ (getCurrentEpoch y.state).toNat ∧
-      (getCurrentEpoch y.state).toNat < vy.exitEpoch.toNat := by
-  obtain ⟨vy, foundY, activeY⟩ := isActiveAt_eq_true_iff.mp active
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeY
-  have lowY := UInt64.le_iff_toNat_le.mp activeY.1
-  have highY := UInt64.lt_iff_toNat_lt.mp activeY.2
+      vy.activationEpoch.toNat ≤ (getCurrentEpoch y.state).toNat := by
+  obtain ⟨vy, foundY, -, activeY⟩ := activated
+  have lowY := UInt64.le_iff_toNat_le.mp activeY
+  have highY := ordered vy foundY
   have exitBound := vy.exitEpoch.toNat_lt
   have fixedWindow := window.lookahead
   -- Activity at the epoch `A` of the key, as the end state reads it.
   have activeAtA : isActiveAt y.state vy.activationEpoch i = true := by
     refine isActiveAt_eq_true_iff.mpr ⟨vy, foundY, ?_⟩
     simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
-    exact ⟨UInt64.le_refl _, UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
+    exact ⟨UInt64.le_refl _, UInt64.lt_iff_toNat_lt.mpr highY⟩
   have kept (h : ForkedBeaconState preset) (run : Run config checks h y)
       (le : vy.activationEpoch.toNat ≤ (getCurrentEpoch h.state).toNat +
         preset.MAX_SEED_LOOKAHEAD.toNat) :
@@ -6722,7 +6725,7 @@ private theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run con
   have same : w = vy := Option.some.inj (foundW.symm.trans foundY)
   subst same
   exact ⟨z, pre, post, v0, w, split, foundZ, foundY, (life.activationEpoch assigned).symm,
-    by omega, lowY, highY⟩
+    by omega, lowY⟩
 
 /-! ## Hypothesis of the new key's floor -/
 
@@ -8073,8 +8076,19 @@ private theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
       effectiveAt y i + (events.map (syncDebit i)).sum +
         (events.map (floorPartialDebit i.toUInt64)).sum := by
   classical
-  obtain ⟨z, pre, post, v0, vy, split, found0, foundY, sameAct, actEq, actLe, exitGt⟩ :=
-    Run.start_state tail window i pending active
+  obtain ⟨wa, foundA, activeA⟩ := isActiveAt_eq_true_iff.mp active
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeA
+  have exitGt := UInt64.lt_iff_toNat_lt.mp activeA.2
+  have lowA := UInt64.le_iff_toNat_le.mp activeA.1
+  obtain ⟨z, pre, post, v0, vy, split, found0, foundY, sameAct, actEq, actLe⟩ :=
+    Run.start_state tail window i pending ⟨wa, foundA, fun far => by
+      have := congrArg UInt64.toNat far
+      have bound := wa.exitEpoch.toNat_lt
+      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega, activeA.1⟩ fun vy found => by
+      obtain rfl := Option.some.inj (found.symm.trans foundA)
+      omega
+  obtain rfl := Option.some.inj (foundY.symm.trans foundA)
   have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   have exitBound := vy.exitEpoch.toNat_lt
   have xz := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
