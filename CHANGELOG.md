@@ -330,6 +330,12 @@ Not yet released.
 
 - Six epoch and deposit steps keep the inputs of a payload: `payloadInputs_applyPendingDeposit`, `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations` and `payloadInputs_processHistoricalSummariesUpdate`.
 
+- `roundToIncrement_share_bounds` bounds a share of a total, raised to the least churn and rounded down to an increment.
+  When the least churn is at least one increment, so is the share, and the share is at most the least churn plus the total.
+
+- `epochs_le_div_add_one` bounds the epochs that hold an amount plus less than one churn, when the churn is at least one increment.
+  They are at most the amount in increments, plus one.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
