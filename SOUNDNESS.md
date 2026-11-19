@@ -2324,15 +2324,18 @@ The trie commits to a map from byte keys to byte values under one 32-byte root.
 Two theorems in `Execution/Proofs/Trie/Binding.lean` describe what the root binds, for every hash.
 
 The first is `verifyProof_binding`, about two Merkle proofs of one key that verify against one root.
-They are one proof and give the key one value.
+They read as one list of nodes and give the key one value.
 Otherwise `findProofCollision` returns two different nodes of the proofs with one hash.
+A proof reads as itself, except the proof of no nodes against the root of the empty trie.
+The empty trie has no node, so that proof reads as the encoding of its root node, `0x80`, which `readNodes` writes.
 The second is `root_binding`, about two tries with one root.
 They give every key one value, or `findCollision` returns such a collision in the proofs of that key.
 Both searches are proved to return only collisions, and to return none for an input compared with itself.
 
 `verifyProof_sound`, in the same file, compares a proof with the proof that the trie builds for the key.
-The proof is that honest proof and gives the trie's value of the key.
-Otherwise `findProofCollision` returns a collision between the two proofs.
+The proof reads as that honest proof and gives the trie's value of the key.
+Otherwise `findProofCollision` returns a collision between the nodes that the proof reads as and the honest proof.
+`verifyProof_nil_eq_ok_iff` proves that the proof of no nodes verifies only against the root of the empty trie, where it shows the key unset.
 
 A secured trie hashes each key into its path, so two of its keys can have one path.
 `root_binding` and `verifyProof_sound` name that case too.

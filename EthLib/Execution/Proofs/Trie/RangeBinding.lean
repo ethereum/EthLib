@@ -132,12 +132,16 @@ def rangeKeyProof (hash : ByteArray → Hash32) (root start : Hash32)
 
 /-- The search compares the range's proof of a key with the trie's own proof of it.
 
+It reads the range's proof as the check of one key against the root reads it.
+
 It returns the first two nodes at one place that differ but have one hash. -/
 def findRangeCollision (hash : ByteArray → Hash32) (trie : Trie) (root start : Hash32)
     (entries : List (Hash32 × ByteArray)) (proof : List ByteArray) (key : Hash32) :
     Option (ByteArray × ByteArray) :=
   match getProof hash trie ⟨key.toArray⟩ with
-  | .ok honest => findProofCollision hash (rangeKeyProof hash root start entries proof key) honest
+  | .ok honest =>
+    findProofCollision hash (readNodes hash root (rangeKeyProof hash root start entries proof key))
+      honest
   | .error _ => none
 
 /-- Every pair that the search returns is a collision. -/
@@ -157,7 +161,8 @@ theorem findRangeCollision_of_eq (hash : ByteArray → Hash32) {trie : Trie}
     {key : Hash32}
     (h : getProof hash trie ⟨key.toArray⟩ = .ok (rangeKeyProof hash root start entries proof key)) :
     findRangeCollision hash trie root start entries proof key = none := by
-  simp only [findRangeCollision, h, findProofCollision_self]
+  simp only [findRangeCollision, h, readNodes_of_ne_nil hash root (getProof_ne_nil h),
+    findProofCollision_self]
 
 /-- A whole trie sent with no proof, against the trie of its own entries, has no collision. -/
 theorem findRangeCollision_whole (hash : ByteArray → Hash32) (root start key : Hash32)
@@ -166,14 +171,17 @@ theorem findRangeCollision_whole (hash : ByteArray → Hash32) (root start key :
       ⟨false, entries.map fun (entryKey, value) => (⟨entryKey.toArray⟩, value)⟩
       root start entries [] key = none := by
   simp only [findRangeCollision, rangeKeyProof, List.isEmpty_nil, ↓reduceIte]
-  split <;> simp_all [findProofCollision_self]
+  split
+  · rename_i honest hhonest
+    simp [readNodes_of_ne_nil hash root (getProof_ne_nil hhonest), findProofCollision_self]
+  · rfl
 
 /-- The pair that the search returns holds a node of each of the two proofs of the key. -/
 theorem mem_of_findRangeCollision (hash : ByteArray → Hash32) {trie : Trie}
     {root start : Hash32} {entries : List (Hash32 × ByteArray)} {proof : List ByteArray}
     {key : Hash32} {pair : ByteArray × ByteArray}
     (h : findRangeCollision hash trie root start entries proof key = some pair) :
-    pair.1 ∈ rangeKeyProof hash root start entries proof key ∧
+    pair.1 ∈ readNodes hash root (rangeKeyProof hash root start entries proof key) ∧
       ∃ honest, getProof hash trie ⟨key.toArray⟩ = .ok honest ∧ pair.2 ∈ honest := by
   unfold findRangeCollision at h
   split at h
@@ -478,7 +486,12 @@ private theorem verifyProof_of_follow (hash : ByteArray → Hash32) {root : Hash
       (bytesToNibbleList key) proof = .ok (value, [])) :
     verifyProof hash root false key proof = .ok value := by
   unfold follow at h
-  simp only [verifyProof, keyPath_eq, Bool.false_eq_true, ↓reduceIte, Bind.bind]
+  -- A proof of no nodes cannot resolve the root, so the proof has a node and reads as itself.
+  have hne : proof ≠ [] := by
+    rintro rfl
+    simp [resolve, size_hashBytes, Except.bind] at h
+  simp only [verifyProof, keyPath_eq, Bool.false_eq_true, ↓reduceIte, Bind.bind,
+    readNodes_of_ne_nil hash root hne]
   cases hres : resolve hash (.bytes ⟨root.toArray⟩) proof with
   | error => simp [hres, Except.bind] at h
   | ok next =>
