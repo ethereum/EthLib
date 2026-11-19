@@ -1355,23 +1355,7 @@ private theorem effective_update_at {f : Fork} {s t : BeaconState preset f}
   have found : ∃ v, s.validators.data[i]? = some v :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
   obtain ⟨v, found⟩ := found
-  have owned : ∃ balance, s.balances.data[i]? = some balance := by
-    have computed := ok
-    unfold processEffectiveBalanceUpdates at computed
-    obtain ⟨middle, next, prefixOk, atIndex, -⟩ :=
-      (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial) (fun _ _ => trivial)
-        (fun _ _ _ _ => trivial) computed).2 i (by simpa using inside)
-    have balances : middle.balances = s.balances :=
-      foldlM_ok_invariant (fun c : BeaconState preset f => c.balances = s.balances)
-        (fun _ _ _ kept step => by
-          simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
-          obtain ⟨_, _, _, _, _, _, set⟩ := step
-          obtain ⟨_, rfl⟩ := setValidatorAt_ok set
-          exact kept) rfl prefixOk
-    simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok, List.getElem_range] at atIndex
-    obtain ⟨_, _, balance, read, _⟩ := atIndex
-    exact ⟨balance, balances ▸ getBalanceAt_eq_ok_iff.mp read⟩
-  obtain ⟨balance, owned⟩ := owned
+  obtain ⟨balance, owned⟩ := processEffectiveBalanceUpdates_owned ok found
   obtain ⟨new, read, updated⟩ := processEffectiveBalanceUpdates_effectiveBalance_eq ok found owned
   exact ⟨v, balance, new, found, owned, read, processEffectiveBalanceUpdates_balances ok, updated⟩
 

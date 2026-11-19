@@ -47,6 +47,17 @@ Not yet released.
   `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
   The pin's claim about the keys that are pending at the start of an epoch reads them.
 
+- `processEpochAltair_credentials` says that an epoch from Altair keeps the withdrawal credentials of each validator in the registry before it.
+  `processEffectiveBalanceUpdates_owned` says that the pass of the effective balances finds a balance at each position of its registry.
+  The pin's balance bound for a key that switches to compounding on C's branch reads both.
+
+- `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
+  It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
+  `ledger_depositWithdrawalRequests` says that the deposit requests and then the withdrawal requests of a payload move no balance and keep the credentials.
+  `ledger_processConsolidationRequest` says that a consolidation request converts at most one validator and moves no other balance.
+  `recordBalance_single` says that a recorded operation that succeeds runs its action at the input state and appends one event with its source, states and limits.
+  The pin's balance bound for a key that switches to compounding reads these four lemmas.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
