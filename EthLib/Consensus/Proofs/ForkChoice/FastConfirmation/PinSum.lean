@@ -7946,6 +7946,39 @@ private theorem classes_disjoint (h : Setting config checks g split fin pulled a
   · simp only [K6, Finset.mem_filter] at b
     exact b.2.2 (h.voting v a).1
 
+/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
+private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
+    Disjoint V (SC pulled counted split) := by
+  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
+    intro v hv hs
+    simp only [Q, quorumVoters, Finset.mem_filter] at hv
+    have unslashed := hv.2
+    unfold slashedFlagAt at hs
+    rw [hs] at unslashed
+    simp at unslashed
+  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
+    intro v hv
+    simp only [Finset.mem_union] at hv
+    rcases hv with (h4 | h5) | h6
+    · simp only [K4, Finset.mem_filter] at h4
+      exact h4.2.2.1
+    · simp only [K5, Finset.mem_filter] at h5
+      exact h5.1
+    · simp only [K6, Finset.mem_filter] at h6
+      exact h6.2.1
+  refine ⟨?_, ?_⟩
+  · rw [Finset.disjoint_left]
+    intro v hk hs
+    simp only [SC, Finset.mem_filter] at hs
+    exact qS v (inQ v hk) hs.2.1
+  · rw [Finset.disjoint_left]
+    intro v hv hs
+    simp only [SC, Finset.mem_filter] at hs
+    have unslashed := (h.voting v hv).2
+    rw [hs.2.1] at unslashed
+    simp at unslashed
+
 /-- A key that a run credits.
 
 A block step nets it a credit, or a pending-deposit pass credits it. -/
@@ -7974,41 +8007,42 @@ private theorem creditUnits_eq (config : Config) (pulled anc fin : BeaconState p
   simp only [decide_eq_true_eq]
   exact ⟨_, _, rfl, Nat.le_add_right _ _⟩
 
-/-- The credited keys of `K4`, `K5` and `K6`, with `K5` at weight three, fit the credited-key slots.
+/-- The credited keys of `K4`, `K5`, `K6` and `SC` fit the credited-key slots of the window.
 
-The slots are the proposers, the seats and the deposit recipients of the window.
-
-Two more are left for each key that R reads as exiting or that the queues let exit.
-
-A credited key of `K6` beyond R's registry was created by a deposit on C's branch.
-
-It uses a slot of the deposit recipients, as the other credited keys of the three classes do. -/
-private theorem credit_slots_le (h : Setting config checks g split fin pulled anc counted V)
+The slots are the proposers, the seats and the deposit recipients of the window. -/
+private theorem credited_classes_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
     ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
+      ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card +
       ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
-      3 * ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card ≤
+      ((SC pulled counted split).filter fun v => creditedKey tailC highC v = true).card ≤
     (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
       ((pinTerms config pulled anc fin).depth /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
           preset.SYNC_COMMITTEE_SIZE.toNat +
-      (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
-      2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
-        (pinTerms config pulled anc fin).exitingB i = true).card +
-          (pinTerms config pulled anc fin).queueKeys)) := by
+      (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
   classical
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  obtain ⟨dSC, -⟩ := sc_disjoint h
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   set C4 := (K4 pulled counted V).filter fun v => creditedKey tailC highC v = true
   set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
   set C6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
-  -- The three classes are apart, and each key of them is in C's registry.
+  set CS := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
+  -- The four classes are apart, and each key of them is in C's registry.
   have apart : Disjoint (C4 ∪ C6) C5 :=
     Finset.disjoint_union_left.mpr ⟨Finset.disjoint_filter_filter d45,
       (Finset.disjoint_filter_filter d56).symm⟩
-  have card3 : (C4 ∪ C6 ∪ C5).card = C4.card + C6.card + C5.card := by
-    rw [Finset.card_union_of_disjoint apart,
+  have apartSC : Disjoint (C4 ∪ C6 ∪ C5) CS :=
+    Finset.disjoint_of_subset_left (u := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+      (fun v hv => by
+        simp only [C4, C5, C6, Finset.mem_union, Finset.mem_filter] at hv
+        simp only [Finset.mem_union]
+        tauto)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dSC)
+  have card4 : (C4 ∪ C6 ∪ C5 ∪ CS).card = C4.card + C6.card + C5.card + CS.card := by
+    rw [Finset.card_union_of_disjoint apartSC, Finset.card_union_of_disjoint apart,
       Finset.card_union_of_disjoint (Finset.disjoint_filter_filter d46)]
   have inCounted : ∀ v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V,
       v.toNat < counted.validators.data.size := by
@@ -8024,47 +8058,31 @@ private theorem credit_slots_le (h : Setting config checks g split fin pulled an
       rcases listed.1 with now | before
       · exact lt_size_of_mem_getActiveValidatorIndices now
       · exact lt_size_of_mem_getActiveValidatorIndices before
+  have inSC : ∀ v ∈ SC pulled counted split, v.toNat < counted.validators.data.size := by
+    intro v hv
+    have flag := (Finset.mem_filter.mp hv).2.1
+    simp only [slashedFlagAt, Option.map_eq_some_iff] at flag
+    obtain ⟨w, found, -⟩ := flag
+    exact (Array.getElem?_eq_some_iff.mp found).1
   -- Those keys are credited keys of the run, which `credited_keys_le` counts by slots.
   have credited := credited_keys_le h tailC highC
-  have fit : (C4 ∪ C6 ∪ C5).card ≤
+  have fit : (C4 ∪ C6 ∪ C5 ∪ CS).card ≤
       ((Finset.range counted.validators.data.size).filter fun i =>
         0 < netScan i highC tailC +
           (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1).card :=
     by
     refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
       (fun a _ b _ same => UInt64.toNat_inj.mp same)
-    have member : v ∈ C4 ∪ C6 ∪ C5 := hv
-    have classed : v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V := by
-      simp only [C4, C5, C6, Finset.mem_union, Finset.mem_filter] at member ⊢
+    have member : v ∈ C4 ∪ C6 ∪ C5 ∪ CS := hv
+    have classed : v ∈ K4 pulled counted V ∪ K6 pulled counted ∪ K5 counted V ∨
+        v ∈ SC pulled counted split := by
+      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member ⊢
       tauto
     have flag : creditedKey tailC highC v = true := by
-      simp only [C4, C5, C6, Finset.mem_union, Finset.mem_filter] at member
+      simp only [C4, C5, C6, CS, Finset.mem_union, Finset.mem_filter] at member
       tauto
-    exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (inCounted v classed),
-      of_decide_eq_true flag⟩
-  -- A credited key of `K5` is read as exiting at R, or has a departure charge on C's run.
-  have fiveCount : C5.card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
-        (pinTerms config pulled anc fin).exitingB i = true).card +
-      (pinTerms config pulled anc fin).queueKeys := by
-    set A := (K5 counted V).filter fun v =>
-      (pinTerms config pulled anc fin).exitingB v.toNat = true
-    set B := ((K5 counted V).filter fun v =>
-      (pinTerms config pulled anc fin).exitingB v.toNat = false).filter
-        fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
-    have cover : C5 ⊆ A ∪ B := by
-      intro v member
-      have inK5 := (Finset.mem_filter.mp member).1
-      by_cases exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true
-      · exact Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inK5, exiting⟩)
-      · have flag : (pinTerms config pulled anc fin).exitingB v.toNat = false := by
-          simpa using exiting
-        exact Finset.mem_union_right _ (Finset.mem_filter.mpr
-          ⟨Finset.mem_filter.mpr ⟨inK5, flag⟩, K5_charged h tailC inK5 flag⟩)
-    have exitingLe := card_exitingB_le config pulled anc fin A fun v hv =>
-      (Finset.mem_filter.mp hv).2
-    have chargedLe := charged_count h tailC
-    exact (Finset.card_le_card cover).trans ((Finset.card_union_le _ _).trans
-      (Nat.add_le_add exitingLe chargedLe))
+    exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
+      (classed.elim (inCounted v) (inSC v)), of_decide_eq_true flag⟩
   -- The slots of the run's epochs are at most those of the window.
   have near := h.near
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
@@ -8108,38 +8126,55 @@ private theorem credit_slots_le (h : Setting config checks g split fin pulled an
   rw [depthEq]
   omega
 
-/-- The keys slashed at C and not at the split are in no class of C's quorum, and not in `V`. -/
-private theorem sc_disjoint (h : Setting config checks g split fin pulled anc counted V) :
-    Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted) (SC pulled counted split) ∧
-    Disjoint V (SC pulled counted split) := by
-  have qS : ∀ v ∈ Q counted, slashedFlagAt counted v.toNat ≠ some true := by
-    intro v hv hs
-    simp only [Q, quorumVoters, Finset.mem_filter] at hv
-    have unslashed := hv.2
-    unfold slashedFlagAt at hs
-    rw [hs] at unslashed
-    simp at unslashed
-  have inQ : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted, v ∈ Q counted := by
-    intro v hv
-    simp only [Finset.mem_union] at hv
-    rcases hv with (h4 | h5) | h6
-    · simp only [K4, Finset.mem_filter] at h4
-      exact h4.2.2.1
-    · simp only [K5, Finset.mem_filter] at h5
-      exact h5.1
-    · simp only [K6, Finset.mem_filter] at h6
-      exact h6.2.1
-  refine ⟨?_, ?_⟩
-  · rw [Finset.disjoint_left]
-    intro v hk hs
-    simp only [SC, Finset.mem_filter] at hs
-    exact qS v (inQ v hk) hs.2.1
-  · rw [Finset.disjoint_left]
-    intro v hv hs
-    simp only [SC, Finset.mem_filter] at hs
-    have unslashed := (h.voting v hv).2
-    rw [hs.2.1] at unslashed
-    simp at unslashed
+/-- The credited keys of `K4`, `K5` and `K6`, with `K5` at weight three, fit the credited-key slots.
+
+The slots are the proposers, the seats and the deposit recipients of the window.
+
+Two more are left for each key that R reads as exiting or that the queues let exit.
+
+A credited key of `K6` beyond R's registry was created by a deposit on C's branch.
+
+It uses a slot of the deposit recipients, as the other credited keys of the three classes do. -/
+private theorem credit_slots_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
+    ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
+      ((K6 pulled counted).filter fun v => creditedKey tailC highC v = true).card +
+      3 * ((K5 counted V).filter fun v => creditedKey tailC highC v = true).card ≤
+    (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
+      ((pinTerms config pulled anc fin).depth /
+        max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 2) *
+          preset.SYNC_COMMITTEE_SIZE.toNat +
+      (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+      2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+          (pinTerms config pulled anc fin).queueKeys)) := by
+  classical
+  have classes := credited_classes_le h tailC highC
+  set C5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
+  -- A credited key of `K5` is read as exiting at R, or has a departure charge on C's run.
+  have fiveCount : C5.card ≤ ((pinTerms config pulled anc fin).positions.filter fun i =>
+        (pinTerms config pulled anc fin).exitingB i = true).card +
+      (pinTerms config pulled anc fin).queueKeys := by
+    set A := (K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = true
+    set B := ((K5 counted V).filter fun v =>
+      (pinTerms config pulled anc fin).exitingB v.toNat = false).filter
+        fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat
+    have cover : C5 ⊆ A ∪ B := by
+      intro v member
+      have inK5 := (Finset.mem_filter.mp member).1
+      by_cases exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true
+      · exact Finset.mem_union_left _ (Finset.mem_filter.mpr ⟨inK5, exiting⟩)
+      · have flag : (pinTerms config pulled anc fin).exitingB v.toNat = false := by
+          simpa using exiting
+        exact Finset.mem_union_right _ (Finset.mem_filter.mpr
+          ⟨Finset.mem_filter.mpr ⟨inK5, flag⟩, K5_charged h tailC inK5 flag⟩)
+    have exitingLe := card_exitingB_le config pulled anc fin A fun v hv =>
+      (Finset.mem_filter.mp hv).2
+    have chargedLe := charged_count h tailC
+    exact (Finset.card_le_card cover).trans ((Finset.card_union_le _ _).trans
+      (Nat.add_le_add exitingLe chargedLe))
+  omega
 
 /-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
 
