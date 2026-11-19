@@ -560,8 +560,11 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
       decide (finalized < v.withdrawableEpoch.toNat))
   -- The reward is read at `ebUp`.
+  --
+  -- The slashing's loss is read at the finalized balance plus an increment, if that is larger.
   let flagged := ∑ i ∈ positions with slashable i ∧
-      2 * (lowEB i - ebUp i / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat) <
+      2 * (lowEB i - max (ebUp i) (max (finEB i) (base0 i) + inc) /
+        p.MIN_SLASHING_PENALTY_QUOTIENT.toNat) <
         3 * (ebUp i / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat),
     3 * (ebUp i / p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
   -- No key's sync-seat debits are bounded from what the call reads, so they are charged together.
