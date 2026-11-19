@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.BlockStates
 public import EthLib.Consensus.Proofs.ForkChoice.Checkpoints
 public import EthLib.Consensus.Proofs.Transition.RunKept
+import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
 
 /-!
 # Proofs: the states of a store run on along its chains of blocks
@@ -370,5 +371,58 @@ theorem Store.ForwardReachableWith.runKept_of_checkpointState {checks : Signatur
     (fun ok => runKept_stateTransition ok)
     (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
     anchorSlot target found startOk atOrAfter checkpointFound stateFound
+
+/-- Two growth bounds in a row, each over a span of epochs, give one over the whole span. -/
+private theorem growth_trans {a b c ea eb ec perEpoch : ℕ} (first : ea ≤ eb) (second : eb ≤ ec)
+    (one : b ≤ a + perEpoch * (eb - ea)) (two : c ≤ b + (ec - eb) * perEpoch) :
+    c ≤ a + perEpoch * (ec - ea) := by
+  have split : perEpoch * (ec - ea) = perEpoch * (eb - ea) + (ec - eb) * perEpoch := by
+    rw [Nat.mul_comm (ec - eb), ← Nat.mul_add]
+    congr 1
+    omega
+  omega
+
+/-- From Gloas, the registry of a reachable store grows only by its epochs of pending deposits.
+
+Each held block state and checkpoint state starts from the anchor's validators.
+
+Each epoch since the anchor adds at most the pending deposits of one epoch. -/
+theorem Store.Reachable.validators_size_le_of_gloas (gloas : .glamsterdam ≤ fork)
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    (∀ (root : Root) (state : BeaconState preset fork), store.blockStates[root]? = some state →
+      state.validators.data.size ≤ anchorState.validators.data.size +
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat)) ∧
+    (∀ (checkpoint : Checkpoint) (state : BeaconState preset fork),
+      store.checkpointStates[checkpoint]? = some state →
+      state.validators.data.size ≤ anchorState.validators.data.size +
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat)) := by
+  -- Each held state is at or after the anchor's epoch, and the bound passes along each block.
+  have blocks : ∀ (root : Root) (state : BeaconState preset fork),
+      store.blockStates[root]? = some state →
+      (getCurrentEpoch anchorState).toNat ≤ (getCurrentEpoch state).toNat ∧
+        state.validators.data.size ≤ anchorState.validators.data.size +
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+            ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) := by
+    intro root state held
+    refine reachable.blockState_induction reachable.blockStatesFromParents
+      (fun _ state => (getCurrentEpoch anchorState).toNat ≤ (getCurrentEpoch state).toNat ∧
+        state.validators.data.size ≤ anchorState.validators.data.size +
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+            ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat))
+      (fun _ _ => ⟨Nat.le_refl _, by simp⟩) ?_ held
+    intro _ _ _ _ _ _ _ _ _ _ _ _ _ transitioned ⟨first, one⟩
+    obtain ⟨second, two⟩ := stateTransition_validators_size_le gloas transitioned
+    exact ⟨first.trans second, growth_trans first second one two⟩
+  refine ⟨fun root state held => (blocks root state held).2, ?_⟩
+  -- A checkpoint state is a held block state, or that state with its slots processed.
+  intro checkpoint state found
+  obtain ⟨base, start, baseHeld, -, kept⟩ := reachable.checkpointStatesFromBlocks found
+  obtain ⟨first, one⟩ := blocks _ base baseHeld
+  rcases kept with ⟨-, rfl⟩ | ⟨-, checks, -, slots⟩
+  · exact one
+  · obtain ⟨second, two⟩ := processSlots_validators_size_le slots
+    exact growth_trans first second one two
 
 end EthLib.Consensus
