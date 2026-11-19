@@ -5436,6 +5436,15 @@ private theorem leak_rate (config : Config) (pulled anc fin : BeaconState preset
     (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat incPos
   exact ⟨ρn, ρd, positive, fun eb aligned => bound eb aligned, fun x => above x⟩
 
+/-- The rate times the epochs and the base is at most the leak for each epoch, plus one.
+
+The leak is read an increment above the base. -/
+private theorem rate_cost (ρn ρd K L Y : ℕ) (first : ρn * Y ≤ ρd * (L + 1)) :
+    ρn * K * Y ≤ ρd * (K * (L + 1)) :=
+  calc ρn * K * Y = K * (ρn * Y) := by ring
+    _ ≤ K * (ρd * (L + 1)) := Nat.mul_le_mul_left _ first
+    _ = ρd * (K * (L + 1)) := by ring
+
 /-- The leak at a base, for each epoch of the depth, covers the base's share of the closed form.
 
 The rate bounds the base by the leak an increment above it, plus one.
@@ -5443,10 +5452,7 @@ The rate bounds the base by the leak an increment above it, plus one.
 The closed form takes the rate for each epoch from the base, and its rest is the base's share. -/
 private theorem rate_step (ρn ρd K L Y : ℕ) (first : ρn * Y ≤ ρd * (L + 1)) :
     ρd * Y ≤ (ρd - ρn * K) * Y + ρd * (K * (L + 1)) := by
-  have rate : ρn * K * Y ≤ ρd * (K * (L + 1)) :=
-    calc ρn * K * Y = K * (ρn * Y) := by ring
-      _ ≤ K * (ρd * (L + 1)) := Nat.mul_le_mul_left _ first
-      _ = ρd * (K * (L + 1)) := by ring
+  have rate := rate_cost ρn ρd K L Y first
   have cover : ρd ≤ (ρd - ρn * K) + ρn * K := by omega
   calc ρd * Y ≤ ((ρd - ρn * K) + ρn * K) * Y := Nat.mul_le_mul_right _ cover
     _ = (ρd - ρn * K) * Y + ρn * K * Y := by ring
@@ -5616,12 +5622,18 @@ The segment loses the rate of the leak for each epoch and the partials due.
 The rate bounds the base with the band by the leak, and the test bounds the fall by the band.
 
 A quarter of an increment bounds the band, as the preset requires. -/
-private theorem stay_arith (ρn ρd K k inc band B M Bw X pd D bal : ℕ)
+private theorem stay_arith (ρn ρd K k depth inc band B M Bw X pd D bal L1 L2 : ℕ)
     (positive : 0 < ρd) (incPos : 0 < inc) (quarter : 4 * band ≤ inc) (big : inc ≤ M)
-    (testB : M ≤ B + band)
-    (fallX : X ≤ band) (rate : ρn * K * (B + band) + ρd * pd ≤ ρd * X) (epochs : k ≤ K)
+    (testB : M ≤ B + band) (fallX : X ≤ band) (first : ρn * (B + band) ≤ ρd * (L1 + 1))
+    (fall : (L2 + 1) + depth * (L1 + 1) + pd ≤ X) (epochs : k ≤ K) (depthK : K ≤ depth)
     (start : M + inc ≤ Bw) (debit : D ≤ pd)
     (closed : (ρd - ρn * k) * (Bw + band) ≤ ρd * (bal + D + band)) : M ≤ bal := by
+  have cost := rate_cost ρn ρd K L1 (B + band) first
+  have depthMul : K * (L1 + 1) ≤ depth * (L1 + 1) := Nat.mul_le_mul_right _ depthK
+  have rate : ρn * K * (B + band) + ρd * pd ≤ ρd * X := by
+    have fits : ρd * (K * (L1 + 1) + pd) ≤ ρd * X := Nat.mul_le_mul_left ρd (by omega)
+    rw [Nat.mul_add] at fits
+    omega
   have yPos : 0 < B + band := by omega
   have bound : ρn * K * (B + band) ≤ ρd * (B + band) :=
     calc ρn * K * (B + band) ≤ ρd * X := by omega
