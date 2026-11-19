@@ -477,7 +477,8 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
         (forward w hw arrival).reachable.blockStatesFromParents votedKnown
       rcases e.payloadVerified_of_partiallySynchronous sync gloas (UInt64.le_of_eq anchorSlot)
           anchored hv hw (start v hv) (start w hw) (by simpa using late) arrivalBound
-          (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted)) verified
+          (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted) ▸
+            Store.onExecutionPayloadEnvelope_verified accepted) verified
           ⟨st, stFound⟩ with delivered | collision
       swap
       · exact absurd collision noCollision

@@ -587,7 +587,7 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
 
 Both stores start at the anchor store, and the receiver holds the state of the payload's block.
 
-The receiver keeps its store under each envelope of its view, as an up-to-date store does.
+The receiver holds the payload of each envelope in its view as verified, as up-to-date stores do.
 
 The anchor block must not be after the anchor state, so that no walk reaches the anchor's parent.
 
@@ -604,7 +604,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     (closed : ∀ (signed : SignedExecutionPayloadEnvelope preset fork) after,
       .envelope gloas signed ∈ (e.world k).view u →
       ((e.world k).state u).onExecutionPayloadEnvelope config checks sources gloas signed =
-        .ok after → after = (e.world k).state u)
+        .ok after →
+      ((e.world k).state u).isPayloadVerified gloas signed.message.beaconBlockRoot = true)
     {root : Root} (verified : ((e.world n).state v).isPayloadVerified gloas root = true)
     (held : ∃ state, ((e.world k).state u).blockStates[root]? = some state) :
     ((e.world k).state u).isPayloadVerified gloas root = true ∨ HonestCollision (e := e) last := by
@@ -670,10 +671,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     simp only [Store.blockState_ok_iff.mpr otherFound, bind, Except.bind]
     rw [dataOk]
     simp only [Except.mapError, envelopeOk, recordHere, pure, Except.pure]
-  -- The receiver is closed under the envelopes of its view, so this one leaves its store as it is.
-  have fixed := closed _ _ memK acceptedHere
-  rw [← fixed]
-  simp [Store.isPayloadVerified]
+  -- The receiver holds the payload of each envelope of its view that it accepts.
+  exact closed _ _ memK acceptedHere
 
 /-- At every fork, synchrony and compatible finality deliver a block or name a collision.
 
@@ -736,7 +735,8 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   rcases e.payloadVerified_of_partiallySynchronous sync gloas (anchorSlot gloas) anchored honest
       receiver
       startSender startReceiver (n := i) (by omega) bounded
-      (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted)) (sentVerified full)
+      (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted) ▸
+        Store.onExecutionPayloadEnvelope_verified accepted) (sentVerified full)
       ⟨parentState, parentStateFound⟩ with delivered | collision
   · exact delivered
   · -- A collision of bounded honest stores contradicts their agreement.

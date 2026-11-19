@@ -24,7 +24,7 @@ Not yet released.
 
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
-  The receiver's store must be closed under the envelopes that it accepts from its view.
+  The receiver's store must hold the payload of each envelope that it accepts from its view as verified.
   Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
   `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
   `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
@@ -392,6 +392,12 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Its premise `closed` now asks only that the receiver holds the payload of each envelope it accepts from its view as verified.
+  It no longer asks that the envelope leaves the store unchanged.
+  This survives two valid envelopes for one root.
+  A caller with the old premise `old` passes `fun s a m h => old s a m h ▸ Store.onExecutionPayloadEnvelope_verified h`.
 
 - In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.
