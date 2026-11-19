@@ -81,11 +81,12 @@ theorem recoverSigner_valid {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p 
     (h : recoverSigner hash sig = .ok p) :
     p.isOnCurve = true ∧ p ≠ .infinity := by
   unfold recoverSigner at h
+  generalize EcdsaSignature.toNats (sig.take EcdsaSignature.SIGNATURE_LEN) = rs at h
+  obtain ⟨r, s⟩ := rs
   dsimp only at h
   split at h
   · rename_i hv
-    cases hr : Ecdsa.recover hash (Base.bytesToNat (sig.toList.take 32))
-        (Base.bytesToNat ((sig.toList.drop 32).take 32)) ⟨sig[64].toNat, hv⟩ with
+    cases hr : Ecdsa.recover hash r s ⟨sig[64].toNat, hv⟩ with
     | error e => simp [hr, Except.mapError] at h
     | ok q =>
       simp only [hr, Except.mapError, Except.ok.injEq] at h
@@ -103,10 +104,21 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
   have hls := Base.natToBytes_length 32 s.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
-  unfold recoverSigner signatureBytes
+  -- The first 64 bytes are `r || s`, and they read back as the two integers.
+  have hrs : (Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val).length =
+      EcdsaSignature.SIGNATURE_LEN := by
+    simp [hlr, hls, EcdsaSignature.SIGNATURE_LEN]
+  have hsc :
+      EcdsaSignature.toNats ((signatureBytes (r, s, odd)).take EcdsaSignature.SIGNATURE_LEN) =
+        (r.val, s.val) := by
+    unfold EcdsaSignature.toNats
+    erw [Vector.toList_take]
+    simp only [signatureBytes, Vector.toList_mk, List.take_left' hrs, List.take_left' hlr,
+      List.drop_left' hlr, Base.bytesToNat_natToBytes, hmod]
+  unfold recoverSigner
+  rw [hsc]
+  unfold signatureBytes
   cases odd <;>
-    simp only [Vector.toList, List.take_left' hlr, List.append_assoc,
-      List.drop_left' hlr, List.take_left' hls, Base.bytesToNat_natToBytes, hmod] <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
      simp [hlr, hls, Except.mapError, hrec])
 

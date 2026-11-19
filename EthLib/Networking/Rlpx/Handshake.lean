@@ -4,6 +4,7 @@ public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.EcdsaSignature
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -196,11 +197,9 @@ def signatureBytes (sig : Fn × Fn × Bool) : Vector UInt8 65 :=
 
 /-- The public key that signed a hash, from a signature `r || s || v`. -/
 def recoverSigner (hash : Vector UInt8 32) (sig : Vector UInt8 65) : Except HandshakeError Point :=
-  let bytes := sig.toList
+  let (r, s) := EcdsaSignature.toNats (sig.take EcdsaSignature.SIGNATURE_LEN)
   let v := sig[64]
-  if h : v.toNat < 2 then
-    (Ecdsa.recover hash (Base.bytesToNat (bytes.take 32))
-      (Base.bytesToNat ((bytes.drop 32).take 32)) ⟨v.toNat, h⟩).mapError .secp256k1
+  if h : v.toNat < 2 then (Ecdsa.recover hash r s ⟨v.toNat, h⟩).mapError .secp256k1
   else .error (.badRecoveryId v)
 
 /--

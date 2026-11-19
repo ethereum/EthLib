@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Hash.Hkdf
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.EcdsaSignature
 public import EthLib.Networking.Discv5.Distance
 
 /-!
@@ -86,9 +87,8 @@ def idSign (sk : Fn) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : Node
 /-- Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A. -/
 def idVerify (pk : Point) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId)
     (signature : ByteArray) : Bool :=
-  signature.size == 64 &&
-    Ecdsa.verify pk (idSignatureHash challengeData ephemeralPubkey nodeIdB)
-      (Base.bytesToNat (signature.data.toList.take 32))
-      (Base.bytesToNat (signature.data.toList.drop 32))
+  match Cryptography.EcdsaSignature.read? signature with
+  | some (r, s) => Ecdsa.verify pk (idSignatureHash challengeData ephemeralPubkey nodeIdB) r s
+  | none => false
 
 end EthLib.Networking.Discv5
