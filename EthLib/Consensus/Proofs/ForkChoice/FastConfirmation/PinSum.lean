@@ -493,7 +493,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
           consolidationsX + depth * proposerCredit +
-          2 * (depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)) + 9) / 10 +
+          -- C's seat rewards.
+          depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
+          -- The shared segment's and R's seat debits.
+          depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) + 9) / 10 +
         creditedKeys * inc) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
