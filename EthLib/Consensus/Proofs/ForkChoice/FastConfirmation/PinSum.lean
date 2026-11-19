@@ -13994,6 +13994,47 @@ private def whistleExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
   preset.upwardBand + t.depth * t.gainRateMax +
     (credC tail high i + whistC tail high i + syncCr eventsC i)
 
+/-- The bound on the effective balance at its slashing of a key created after the split.
+
+The key is active at C.
+
+At a high gain rate it is the largest cap.
+
+Otherwise it is the key's credits, their gains over the window, and a band. -/
+private def createdCeil (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (high : ℕ) (eventsC : List (BalanceEvent preset)) (i : ℕ) :
+    ℕ :=
+  let credits := credC tail high i + whistC tail high i + syncCr eventsC i
+  let rate := t.perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
+  if t.gainHigh = true then preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+  else
+    credits + t.depth * (11 * credits / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * rate /
+      WEIGHT_DENOMINATOR.toNat) + t.depth * (rate / WEIGHT_DENOMINATOR.toNat + 2) +
+        preset.downwardBand
+
+/-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
+
+Its credits since its creation are credits of C's branch, which P's `created_ceiling` reads.
+
+That lemma bounds its effective balance at every state after its creation.
+
+The credits of the run are at most `credC`, `whistC` and the seat credits, so the bound reads them.
+
+The key is active at C, so `start_state` finds its creation state.
+
+Off the high gain rate, `gainHigh` is false, which gives the lemma's premise on the rate. -/
+private theorem created_active (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (created : ¬ i < split.validators.data.size)
+    (active : isActiveAt counted (getCurrentEpoch counted) i = true)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
+    effectiveAt a i ≤ createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i :=
+  sorry
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The whistleblower credits of any set of keys on C's branch are at most the reward base.
 
@@ -14015,7 +14056,7 @@ A key of R's registry that is also slashed on R's branch is a term of the first 
 
 A consumer that pays those terms by another budget splits that sum by the key's slashing on R.
 
-A key created after the split that is active at C is read at `ceilA`.
+A key created after the split that is active at C is read at `createdCeil`.
 
 A key created after the split that has exited by C is read at its charge and credits.
 
@@ -14025,19 +14066,12 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (ceilA : ℕ → ℕ)
     (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, i < split.validators.data.size →
         (split.validators.data[i]?.map (·.slashed)).getD false = false →
           effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled i +
             whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
               fin i)
-    (active : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
-      tailC.Contains step → ∀ i, ¬ i < split.validators.data.size →
-        isActiveAt counted (getCurrentEpoch counted) i = true →
-        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
-          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
-        effectiveAt a i ≤ ceilA i)
     (S : Finset ValidatorIndex) :
     ∑ v ∈ S, whistC tailC highC v.toNat ≤
       (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
@@ -14047,7 +14081,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
       (∑ i ∈ ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
           (fun i => isActiveAt counted (getCurrentEpoch counted) i = true),
-        min (ceilA i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+        min (createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i)
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
       (∑ i ∈ ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
           (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true),
@@ -14068,7 +14103,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
       else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := ⟨_, fun _ => rfl⟩
   obtain ⟨cr, hcr⟩ : ∃ cr : ℕ → ℕ, ∀ i, cr i =
       if isActiveAt counted (getCurrentEpoch counted) i = true then
-        min (ceilA i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+        min (createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i)
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
       else min (chargeAmt tailC i +
           whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC i)
@@ -14087,7 +14123,7 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
       exact le_min (registry step member i inside unslashed) capped
     · simp only [unslashed]
       exact capped
-  -- the created keys are read at `ceilA` while active at C, and at their charge after
+  -- the created keys are read at `createdCeil` while active at C, and at their charge after
   have createdE : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, split.validators.data.size ≤ i →
         (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
@@ -14100,8 +14136,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
       h.caps aEarly i
     by_cases act : isActiveAt counted (getCurrentEpoch counted) i = true
     · simp only [act]
-      exact Nat.div_le_div_right
-        (le_min (active step member i (Nat.not_lt.mpr created) act flag) capped)
+      exact Nat.div_le_div_right (le_min (created_active h tailC highC endEpochC replayedC step
+        member i (Nat.not_lt.mpr created) act flag) capped)
     · simp only [act]
       exact Nat.div_le_div_right (le_min (created_charge h fromFin tailC
         (whistleExtra (pinTerms config pulled anc fin) tailC highC eventsC)
