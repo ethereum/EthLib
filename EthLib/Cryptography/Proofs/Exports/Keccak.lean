@@ -11,7 +11,9 @@ The permutation export reads a 200-byte state into lanes, applies Keccak-f[1600]
 
 This file proves that it returns the bit-level Keccak-f[1600] of FIPS 202 §3.3 and Algorithm 7.
 
-The state string holds bit `64(5y + x) + z` at `A[x, y, z]`, by FIPS 202 §3.1.2.
+Bit `64(5y + x) + z` of the state string is `A[x, y, z]`, by FIPS 202 §3.1.2.
+
+The output is written back in the same order, by FIPS 202 §3.1.3.
 
 Each byte holds its bits from the least significant, by FIPS 202 Appendix B.1.
 -/
@@ -110,7 +112,7 @@ private theorem bytesOfLanes_eq (B : Keccak.State) :
 
 /-- For every 200-byte state, the export returns Keccak-f[1600] of the bit model.
 
-Output byte `i` is byte `i` of the permuted state string, as FIPS 202 Appendix B.1 orders it. -/
+Output byte `i` is byte `i` of the permuted state string, by FIPS 202 §3.1.3 and Appendix B.1. -/
 theorem keccakF1600_eq {state : ByteArray} (h : state.size = 200) :
     keccakF1600 state =
       .ok ⟨(squeezeBytes 200 (permutation (ofString (messageBits state)))).toArray⟩ := by
