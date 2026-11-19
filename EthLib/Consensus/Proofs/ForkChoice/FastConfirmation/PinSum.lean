@@ -16332,6 +16332,50 @@ private theorem netScan_le_grossScan {g x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam) (electra : .pectra ≤ x.fork)
     (i high : ℕ) : netScan i high tail ≤ grossScan i high tail := sorry
 
+/-- The exact rise fold: from a run that has the key's charge, its balance rises by the steps after.
+
+Each step adds its epoch rewards, which `riseScan` sums once the charge is seen.
+
+It also adds its net block credits and the credits of its slot steps other than the rewards.
+
+The rewards that `riseScan` sums do not fall along the run. -/
+private theorem rise_fold (i high : ℕ) {x m : ForkedBeaconState preset}
+    (pre : Run config checks x m) (seen : (riseScan i high pre).1 = true) :
+    ∀ {y : ForkedBeaconState preset} (t : Run config checks m y), y.fork < .glamsterdam →
+      (getCurrentEpoch y.state).toNat ≤ high + 1 →
+      (riseScan i high (pre.append t)).1 = true ∧
+      (riseScan i high pre).2 ≤ (riseScan i high (pre.append t)).2 ∧
+      actualBalanceAt y i + (riseScan i high pre).2 ≤ actualBalanceAt m i +
+        (riseScan i high (pre.append t)).2 + netScan i high t +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high t).1 := by
+  intro y t
+  induction t with
+  | nil =>
+    intro _ _
+    refine ⟨seen, Nat.le_refl _, ?_⟩
+    show actualBalanceAt m i + (riseScan i high pre).2 ≤
+      actualBalanceAt m i + (riseScan i high pre).2 + 0 + 0
+    omega
+  | @snoc n y t step ih =>
+    intro early endEpoch
+    have nEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+    have ny := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+    obtain ⟨flag, mono, fold⟩ := ih nEarly (by omega)
+    have within : (getCurrentEpoch n.state).toNat ≤ high + 1 := by omega
+    have bound := PinSplit2.step_balance_le step early i
+    have net := netScan_snoc i high t step
+    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+      t step
+    simp only [within, ↓reduceIte] at net credit
+    change (riseScan i high ((pre.append t).snoc step)).1 = true ∧
+      (riseScan i high pre).2 ≤ (riseScan i high ((pre.append t).snoc step)).2 ∧
+      actualBalanceAt y i + (riseScan i high pre).2 ≤ actualBalanceAt m i +
+        (riseScan i high ((pre.append t).snoc step)).2 + netScan i high (t.snoc step) +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high (t.snoc step)).1
+    simp only [riseScan, flag, Bool.true_or, true_or, true_and, within, ↓reduceIte]
+    rw [net, credit]
+    exact ⟨by omega, by omega⟩
+
 /-- The exact rise of a charged key's balance after its charge.
 
 The cap is fixed from the state `b` after the step that starts the exit.
@@ -16363,7 +16407,111 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
     ∀ z ∈ post.balancePath, actualBalanceAt z i ≤
       actualBalanceAt b i + (riseScan i highC ((pre.snoc step).append post)).2 +
         netScan i highC post +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := sorry
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
+  have aFork : a.fork = fork := fork_eq_of_run pre ((Run.nil.snoc step).append post)
+    (Nat.le_refl _)
+  have bFork : b.fork = fork := fork_eq_of_run (pre.snoc step) post (Nat.le_refl _)
+  have aFulu : .fusaka ≤ a.fork := by rw [aFork]; exact h.fulu
+  have bEarly : b.fork < .glamsterdam := by rw [bFork]; exact h.early
+  have stepPath : ∀ p ∈ step.balancePath, p = a ∨ p = b := by
+    cases step with
+    | block => intro p hp; simpa [Step.balancePath] using hp
+    | slot ok =>
+      obtain ⟨next, advanced, upgraded⟩ := bind_ok_iff.mp ok
+      have same := DirectSafety.Apriori.Internal.processUpgrades_eq_of_window upgraded
+        aFulu bEarly
+      subst same
+      intro p hp
+      simpa [Step.balancePath, advanced, Except.toOption] using hp
+  have bCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
+  have ab := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  simp only at bCounted
+  have within : (getCurrentEpoch a.state).toNat ≤ highC + 1 := by omega
+  -- the charge: the key's exit is set at `b`
+  obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
+  obtain ⟨w, foundB, assigned, -⟩ := (Run.nil.snoc step).departure_charge_exit charge
+    (by simpa [Run.departureCharges] using member)
+  rw [beq_iff_eq.mp index] at foundB
+  -- a state of the path of `post` splits it
+  have splitPost : ∀ z ∈ post.balancePath, ∃ (r1 : Run config checks b z)
+      (r2 : Run config checks z ⟨fork, counted⟩), r1.append r2 = post := fun z hz => by
+    obtain ⟨r1, r2, eq⟩ := balancePath_endpoint post
+      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩)
+      (by rw [bFork]; exact Nat.le_refl _) hz
+    exact ⟨r1, r2, eq⟩
+  -- the cap: compounding needs an unset exit, so the cap is fixed from `b`
+  have capPost : ∀ z ∈ post.balancePath, PinSplit2.capAt z i ≤ PinSplit2.capAt b i := by
+    intro z hz
+    obtain ⟨r1, r2, -⟩ := splitPost z hz
+    have zFork : z.fork = fork := fork_eq_of_run ((pre.snoc step).append r1) r2 (Nat.le_refl _)
+    have electraZ : .pectra ≤ z.fork := by rw [zFork]; exact Nat.le_trans (by decide) h.fulu
+    have electraB : .pectra ≤ b.fork := by rw [bFork]; exact Nat.le_trans (by decide) h.fulu
+    obtain ⟨wz, foundZ, kept⟩ := r1.compounding_of_exit_assigned h.caps.activation
+      h.caps.compounding (by rw [zFork]; exact h.early) i w foundB assigned
+    rw [capAt_of_found electraZ foundZ, capAt_of_found electraB foundB]
+    have order := UInt64.le_iff_toNat_le.mp h.caps.compounding
+    cases hz : hasCompoundingWithdrawalCredential wz <;>
+      cases hb : hasCompoundingWithdrawalCredential w <;> simp_all
+  -- the fold from `b`, through the charged prefix
+  have seen : (riseScan i highC (pre.snoc step)).1 = true := by
+    simp [riseScan, charged]
+  have riseStep : (riseScan i highC (pre.snoc step)).2 =
+      (riseScan i highC pre).2 + PinSplit2.epochRewards i step := by
+    simp [riseScan, charged, within]
+  have stepBound := PinSplit2.step_balance_le step bEarly i
+  have netStep : netScan i highC ((Run.nil.snoc step).append post) =
+      stepNet i step + netScan i highC post := by
+    rw [netScan_append, netScan_snoc, netScan_nil]
+    simp [within]
+  have creditStep : (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC
+      ((Run.nil.snoc step).append post)).1 =
+      stepCredit (fun _ => false) (fun s => decide (s ≠ .rewards)) i step +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
+    rw [creditScan_append, creditScan_snoc_fst, creditScan_nil_fst]
+    simp [within]
+  have fromB : ∀ z ∈ post.balancePath, actualBalanceAt z i + (riseScan i highC (pre.snoc step)).2 ≤
+      actualBalanceAt b i + (riseScan i highC ((pre.snoc step).append post)).2 +
+        netScan i highC post +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
+    intro z hz
+    obtain ⟨r1, r2, eq⟩ := splitPost z hz
+    have zEarly : z.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+    have zCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
+    simp only at zCounted
+    obtain ⟨flag, -, fold⟩ := rise_fold i highC (pre.snoc step) seen r1 zEarly (by omega)
+    obtain ⟨-, mono, -⟩ := rise_fold i highC ((pre.snoc step).append r1) flag r2 h.early endEpochC
+    rw [← Run.append_assoc, eq] at mono
+    have net := netScan_append i highC r1 r2
+    have credit := creditScan_append (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r1 r2
+    rw [eq] at net credit
+    omega
+  refine ⟨fun z hz => ?_, capPost, fun z hz => ?_, fun z hz => ?_⟩
+  · rw [Run.balancePath_append] at hz
+    rcases List.mem_append.mp hz with head | tail
+    · simp only [Run.balancePath, List.mem_append, List.mem_singleton] at head
+      have capA := cap_le_cap_of_run h.caps (Run.nil.snoc step) bEarly i
+      rcases head with rfl | onStep
+      · exact capA
+      · rcases stepPath z onStep with rfl | rfl
+        · exact capA
+        · exact Nat.le_refl _
+    · exact capPost z (List.mem_of_mem_tail tail)
+  · have riseLe := (rise_fold i highC (pre.snoc step) seen post h.early endEpochC).2.1
+    rw [Run.balancePath_append] at hz
+    rcases List.mem_append.mp hz with head | tail
+    · simp only [Run.balancePath, List.mem_append, List.mem_singleton] at head
+      rcases head with rfl | onStep
+      · omega
+      · rcases stepPath z onStep with rfl | rfl
+        · omega
+        · rw [netStep, creditStep]
+          omega
+    · have := fromB z (List.mem_of_mem_tail tail)
+      rw [netStep, creditStep]
+      omega
+  · have := fromB z hz
+    omega
 
 /-- The credits of a charged key from the epoch's start are those of `propC`, `whistC` and sync.
 
