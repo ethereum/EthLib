@@ -5027,11 +5027,11 @@ private theorem credDepR_sum_le (V : Finset ValidatorIndex) (events : List (Bala
       have split : ∑ v ∈ V, credDepR (e :: rest) v.toNat =
           ∑ v ∈ V, keyCredit v.toNat e + ∑ v ∈ V, credDepR rest v.toNat := by
         rw [← Finset.sum_add_distrib]
-        exact Finset.sum_congr rfl fun v _ => by simp [credDepR, List.filter_cons, dep]
+        exact Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
       simp only [List.map_cons, List.sum_cons]
       omega
     · have same : ∑ v ∈ V, credDepR (e :: rest) v.toNat = ∑ v ∈ V, credDepR rest v.toNat :=
-        Finset.sum_congr rfl fun v _ => by simp [credDepR, List.filter_cons, dep]
+        Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
       simp only [List.map_cons, List.sum_cons]
       omega
 
