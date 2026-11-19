@@ -15700,7 +15700,9 @@ A key credited only by a consolidation of X takes row H's unit.
 
 A key slashed only on R's branch takes its unit in `branchR`.
 
-The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave. -/
+The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave.
+
+The keys of `SC` alone fit the slots and the extra units at weight one. -/
 private theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -15709,7 +15711,7 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    (∑ v ∈ (K4 pulled counted V),
+    ((∑ v ∈ (K4 pulled counted V),
         unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
       3 * (∑ v ∈ (K5 counted V),
           unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
@@ -15724,7 +15726,13 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
         3 * (pinTerms config pulled anc fin).unitGain *
           (pinTerms config pulled anc fin).consolidationsXCount +
         3 * ((pinTerms config pulled anc fin).unitGain *
-          (pinTerms config pulled anc fin).slashedR) := by
+          (pinTerms config pulled anc fin).slashedR)) ∧
+      ∑ v ∈ SC pulled counted split,
+          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat ≤
+        (pinTerms config pulled anc fin).creditUnits +
+          (pinTerms config pulled anc fin).unitGain *
+            ((pinTerms config pulled anc fin).consolidationsXCount +
+              (pinTerms config pulled anc fin).slashedR) := by
   classical
   obtain ⟨N, units, slots⟩ := creditUnits_eq config pulled anc fin
   obtain ⟨d45, d46, d56, -⟩ := classes_disjoint h
@@ -15878,6 +15886,24 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
       3 * (pinTerms config pulled anc fin).consolidationsXCount +
       3 * (pinTerms config pulled anc fin).slashedR := by
     omega
+  -- The keys of `SC` alone take one slot each, and the other classes' slots are not weighed.
+  have keySC : Gsc.card ≤ N + (pinTerms config pulled anc fin).consolidationsXCount +
+      (pinTerms config pulled anc fin).slashedR := by
+    omega
+  refine ⟨?_, ?_⟩
+  swap
+  · rw [ssc, units]
+    calc (pinTerms config pulled anc fin).unitGain * Gsc.card
+        ≤ (pinTerms config pulled anc fin).unitGain * (N +
+            (pinTerms config pulled anc fin).consolidationsXCount +
+            (pinTerms config pulled anc fin).slashedR) := Nat.mul_le_mul_left _ keySC
+      _ = (pinTerms config pulled anc fin).unitGain * N +
+          (pinTerms config pulled anc fin).unitGain *
+            ((pinTerms config pulled anc fin).consolidationsXCount +
+              (pinTerms config pulled anc fin).slashedR) := by ring
+      _ ≤ _ := by
+        rw [Nat.add_mul, Nat.mul_comm (pinTerms config pulled anc fin).unitGain N]
+        exact Nat.add_le_add (Nat.le_add_right _ _) (Nat.le_refl _)
   rw [s4, s5, s6, ssc, scs, units]
   calc (pinTerms config pulled anc fin).unitGain * G4.card +
         3 * ((pinTerms config pulled anc fin).unitGain * G5.card) +
@@ -19356,8 +19382,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
   have f1 := flow_split (config := config) h tail high endEpoch replayed fromFin replayedF tailC
     highC endEpochC replayedC
-  have u1 := bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
-    endEpochC replayedC
+  have u1 := (bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
+    endEpochC replayedC).1
   have l1 := (bud_syncLeak (config := config) h tail high endEpoch replayed fromFin replayedF
     tailC highC endEpochC replayedC).1
   have cg := creditGain_split config pulled anc fin
