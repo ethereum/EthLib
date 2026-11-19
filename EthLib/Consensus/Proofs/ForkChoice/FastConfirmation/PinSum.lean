@@ -14324,6 +14324,30 @@ private theorem slash_gain_small {I db WD F P D W : ℕ} (hI : 0 < I)
   · simp only [Nat.zero_mul, Nat.zero_div, Nat.mul_zero, Nat.zero_add]
     omega
 
+/-- The credits of C's run before a key's slashing are within the credit terms of `whistleSlack`.
+
+They are the key's net block credits and its slot credits other than rewards, up to the step.
+
+The net block credits are within the gross rewards, slashings and sync credits.
+
+The sync block credits are within the key's sync credits of the whole run.
+
+The deposits before the step are those of `depPre`, since the key is unslashed before it.
+
+The consolidation credits are within `consAmt`. -/
+private theorem credits_prefix_le (h : Setting config checks g split fin pulled anc counted V)
+    {a b : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
+    (step : Step config checks a b) (post : Run config checks b ⟨fork, counted⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)}
+    (replayedC : ((pre.snoc step).append post).balanceEvents highC = .ok eventsC) (i : ℕ)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
+    netScan i highC pre +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC pre).1 ≤
+      propN ((pre.snoc step).append post) highC i + depPre eventsC i +
+        whistC ((pre.snoc step).append post) highC i + syncCr eventsC i + consAmt eventsC i :=
+  sorry
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
 
