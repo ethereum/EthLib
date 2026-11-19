@@ -344,7 +344,7 @@ private theorem Stop.selected_local_replay
     exact stop.selected_prefix_exit_gt chosen rest v found
       (getCurrentEpoch_succ_lt_farFuture twoSlots stop.state.state)
 /-- The effective balance of a key reached from genesis is at most its largest. -/
-private theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
+theorem effectiveAt_le_withdrawalMax (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (early : x.fork < .glamsterdam) {i : Nat} {v : Validator}
     (initial : x.state.validators.data[i]? = some v) :
@@ -1109,7 +1109,8 @@ private theorem FloorTrace.run_potential_core
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1129,11 +1130,13 @@ private theorem FloorTrace.run_potential_core
       initial (Or.inr fulu) 0 0 quotient (Nat.zero_le _) positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found
-        exact ⟨Or.inl retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
+        exact ⟨retained, ⟨fun _ => short, fun h => absurd h (by simp [unslashed])⟩,
           quotient_le, noCrossing⟩) replayed
   exact ⟨potential, fun aligned => origin aligned fulu⟩
 
-/-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form. -/
+/-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_potential_floor
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1148,7 +1151,8 @@ theorem FloorTrace.run_potential_floor
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1174,7 +1178,9 @@ theorem FloorTrace.run_potential_floor
   unfold nonPassDebt
   omega
 
-/-- The potential floor of a run whose effective balance starts above its balance, charged once. -/
+/-- The potential floor of a run whose effective balance starts above its balance, charged once.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_potential_floor_once
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1189,7 +1195,8 @@ theorem FloorTrace.run_potential_floor_once
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -1218,7 +1225,9 @@ theorem FloorTrace.run_potential_floor_once
   · refine Nat.le_trans closed (Nat.add_le_add_left ?_ _)
     split <;> simp
 
-/-- From Fusaka, a key's effective balance after a run is its start value or an update's. -/
+/-- From Fusaka, a key's effective balance after a run is its start value or an update's.
+
+The guard keeps the exit or withdrawable epoch of the key after the call's cutoff at each state. -/
 theorem FloorTrace.run_effective_origin
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
@@ -1233,7 +1242,8 @@ theorem FloorTrace.run_effective_origin
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
