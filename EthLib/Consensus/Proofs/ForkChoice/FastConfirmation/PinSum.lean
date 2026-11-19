@@ -5385,24 +5385,17 @@ private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
     | exact absurd fusaka (by decide)
     | exact absurd early (by decide)
 
-/-- A key of `K5` that is not activated at the finalized state loses seats.
+/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
 
-The loss is read from the floor of a new key.
+The key is missing at the finalized state, or its activation there is unassigned.
 
-Its charge splits C's run at the step that exits it, and the key is activated there, by (I1).
+It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
+balance less its sync debits, from `Run.new_key_effective_floor`.
 
-It is active at that state.
+A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
 
-So the floor of a new key from the finalized state reads its effective balance, which is the charge.
-
-The floor adds the key's sync debits and its partial payments.
-
-The partial payments are none.
-
-No queued entry names the key at the finalized state, and one queued later is not due in the window.
-
-The charge is below `exitFloor`, so the debits exceed the slack. -/
-private theorem pending_key_claim_of (h : Setting config checks g split fin pulled anc counted V)
+It has no partial withdrawals queued, since a request needs an active key. -/
+private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
@@ -5413,6 +5406,17 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     (fresh : fin.validators.data[v.toNat]? = none ∨
       ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
     (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
+  -- The charge splits C's run at the step that exits the key.
+  --
+  -- The key is activated there, by (I1).
+  --
+  -- The key is active at that state, so the floor of a new key reads its effective balance.
+  --
+  -- That balance is the charge, and the floor adds the key's sync debits and partial payments.
+  --
+  -- The partial payments are none, since no queued entry names the key at the finalized state.
+  --
+  -- An entry queued later is not due in the window.
   classical
   obtain ⟨toFin⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -5545,29 +5549,6 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
     simp only [List.map_append, List.sum_append]
     omega
   omega
-
-/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
-
-The key is missing at the finalized state, or its activation there is unassigned.
-
-It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
-balance less its sync debits, from `Run.new_key_effective_floor`.
-
-A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
-
-It has no partial withdrawals queued, since a request needs an active key. -/
-private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    {events : List (BalanceEvent preset)}
-    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
-    (v : ValidatorIndex) (member : v ∈ K5 counted V)
-    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
-    (fresh : fin.validators.data[v.toNat]? = none ∨
-      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
-    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum :=
-  pending_key_claim_of h fromFin tailC replayed v member charged small fresh
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
 
