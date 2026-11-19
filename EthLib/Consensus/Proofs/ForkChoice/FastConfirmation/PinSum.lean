@@ -1206,9 +1206,10 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
     intro p r1 r2 whole
     have early := forkEnd r2
     obtain ⟨pFork, pState⟩ := p
-    obtain rfl : fork = pFork := (Fork.ctorIdx_injective
+    have sameFork : pFork = fork := Fork.ctorIdx_injective
       (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
-        (fork_le_of_chainSteps r1.chainSteps))).symm
+        (fork_le_of_chainSteps r1.chainSteps))
+    obtain rfl : fork = pFork := sameFork.symm
     set p : ForkedBeaconState preset := ⟨fork, pState⟩ with hp
     have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
     simp only at order
