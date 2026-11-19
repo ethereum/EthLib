@@ -348,6 +348,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the module `EthLib.Cryptography.Proofs.IdLoops` is removed, with its seven lemmas in the namespace `IdLoops`.
+  They are `id_pure`, `id_bind`, `forIn_list_yield`, `forIn_range_yield`, `forIn_range_yield_ite`, `forIn_range_yield_ite₂` and `foldl_range'_getElem!`.
+  They turned `for` loops of `Id.run do` blocks into folds.
+  No proof of EthLib uses them, since the last such loop, the tail scan of a compressed BLS point, became a fold ([#2045](https://github.com/ethereum/EthLib/pull/2045)).
+  `Proofs/Bls/G1Msm.lean` and `Proofs/Bls/G2Compress.lean` no longer import the module.
+
 - In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The root of an ancestor walk does not depend on the payload status of its start.
   So a read at an earlier epoch goes through the checkpoint of a later one.
