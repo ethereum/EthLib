@@ -8283,7 +8283,9 @@ The run from `c` is the rest of the run from the finalized state to the split, t
 
 The finalized state is `c` for a key of the finalized registry.
 
-The effective balance of a key at `c` is within `ebUp`, or within the floor of its balance there.
+The effective balance of a key at `c` is within `ebUp` and the finalized one.
+
+Or it is within the floor of its balance there.
 
 A key that the shared segment created starts from the floor of its balance.
 
@@ -8314,8 +8316,9 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
     (inside : v.toNat < c.validators.data.size) (W : ℕ)
-    (start : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat ∨
+    (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+        (pinTerms config pulled anc fin).ebUp v.toNat ∧
+        effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤ balanceAt fin v.toNat) ∨
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
           actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
@@ -8396,7 +8399,7 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         min (B - B % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
           (PinSplit2.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat) := by
-    rcases start with within | floorC
+    rcases start with ⟨within, -⟩ | floorC
     · exact Or.inl within
     · refine Or.inr (Nat.le_min.mpr ⟨?_, ?_⟩)
       · have atC := ceiling (Run.nil : Run config checks ⟨fork, c⟩ ⟨fork, c⟩) (fromC.append tail)
@@ -12883,8 +12886,9 @@ private theorem envelope_of_voter (h : Setting config checks g split fin pulled 
     (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
     (inside : v.toNat < c.validators.data.size)
-    (start : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat ∨
+    (start : (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+        (pinTerms config pulled anc fin).ebUp v.toNat ∧
+        effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤ balanceAt fin v.toNat) ∨
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
           actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
@@ -16737,7 +16741,7 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
     omega
   have envAll := envelope_of_voter h fromFin tail replayedF replayed v unslashed
     (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) fromFin (run_nil_append fromFin) inFin
-    (Or.inl (effective_fin_le_ebUp h v.toNat)) late
+    (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) late
   have startEff := envAll (⟨fork, split⟩ : ForkedBeaconState preset) memberSplit
   have floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat)
       (PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat) ≤
