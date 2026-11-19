@@ -42,11 +42,9 @@ structure Scheme where
   SecretKey : Type
   /-- The messages. -/
   Message : Type
-  /-- What a signer reads beyond its key and the message.
-
-  For a stateful scheme it is the leaf index or epoch.
-
-  For a stateless scheme it is the unit type. -/
+  /-- What a signer reads beyond its key and the message:
+  - for a stateful scheme, the leaf index or epoch;
+  - for a stateless scheme, the unit type. -/
   SignContext : Type
   /-- What key generation reads, such as a seed. -/
   KeyGenInput : Type
