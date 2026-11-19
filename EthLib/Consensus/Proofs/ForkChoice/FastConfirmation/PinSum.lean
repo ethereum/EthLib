@@ -6092,7 +6092,10 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (key : 11 * depth * (P * F) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (start : S + Cr ≤ e0 + Cr' + W) :
-    ∃ gc, 10 * gc ≤ Cr' + W + depth * q + depth ∧
+    ∃ gc, gc = depth * (11 * (Cr' + W + depth * q + depth) /
+        (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ∧
+      10 * gc ≤ Cr' + W + depth * q + depth ∧
       (∀ z ∈ post.balancePath, min (actualBalanceAt z i) capHigh ≤ S + Cr +
         (gc + (depth * q + depth))) ∧
       effectiveAt y i ≤ e0 + C := by
@@ -6133,8 +6136,10 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     capHigh high (e0 + C) P
   have balances := fourth alignedCap startCap capCeil (fun z member => .inr (rate z member))
     endEpoch fixpoint
-  refine ⟨gainOn preset depth P C, ?_, fun z member => Nat.le_trans (balances z member) bound,
+  refine ⟨gainOn preset depth P C, ?_, ?_, fun z member => Nat.le_trans (balances z member) bound,
     ?_⟩
+  · unfold gainOn
+    rw [hC, div_round_mul _ _ incPos]
   · unfold gainOn
     omega
   · refine Nat.le_trans (third _ alignedCap startCap balances capCeil).1 ?_
@@ -6222,7 +6227,19 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     (rateLow : 11 * (pinTerms config pulled anc fin).depth *
       ((pinTerms config pulled anc fin).gainRate v.toNat + 1) ≤
         (pinTerms config pulled anc fin).ebUp v.toNat) :
-    ∃ gc, 10 * gc ≤ (netScan v.toNat highC tailC +
+    ∃ gc, gc = min (pinTerms config pulled anc fin).depth
+          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        (11 * ((netScan v.toNat highC tailC +
+          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 +
+            (events.map (syncDebit v.toNat)).sum + (eventsF.map (syncDebit v.toNat)).sum) + W +
+          min (pinTerms config pulled anc fin).depth
+              ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+            (pinTerms config pulled anc fin).gainRate v.toNat +
+          min (pinTerms config pulled anc fin).depth
+            ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) /
+          (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ∧
+      10 * gc ≤ (netScan v.toNat highC tailC +
           (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 +
             (events.map (syncDebit v.toNat)).sum + (eventsF.map (syncDebit v.toNat)).sum) + W +
         min (pinTerms config pulled anc fin).depth
@@ -6350,8 +6367,8 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         rw [← hq']
         exact Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 hDle)) rateLow))
     (by omega)
-  obtain ⟨gc, hgc, bound, -⟩ := core
-  refine ⟨gc, hgc, fun z member => ?_⟩
+  obtain ⟨gc, hform, hgc, bound, -⟩ := core
+  refine ⟨gc, hform, hgc, fun z member => ?_⟩
   have := min_le_left (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
     capI
   have := bound z member
