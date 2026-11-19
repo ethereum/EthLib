@@ -127,7 +127,7 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (hC : (11 * Cr' + 9) / 10 ≤ C)
     (epochs : (getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat ≤ depth)
     (startBal : min (actualBalanceAt n i) capHigh ≤ S)
-    (startEff : effectiveAt n i ≤ e0)
+    (startEff : effectiveAt n i ≤ e0 + C)
     (credits : netScan i high post +
       (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post).1 ≤ Cr)
     (small : depthFin * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
@@ -158,7 +158,7 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
         PinSplit2.creditBound post i high (e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) P
           capHigh % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       e0 + C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    max_le (Nat.le_trans startEff (Nat.le_add_right_of_le (Nat.le_add_right e0 C)))
+    max_le (Nat.le_trans startEff (Nat.le_add_right _ _))
       (Nat.le_trans (Nat.min_le_right _ _)
         (floor_le_of_lt incPos alignedE (Nat.lt_of_le_of_lt bound closed)))
   obtain ⟨-, -, -, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
@@ -202,12 +202,14 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
         (getTotalActiveBalance pulled).toOption.getD 0 / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
-    (i : ℕ) (inside : i < split.validators.data.size) (capI Dp Ds W pd : ℕ)
+    (i : ℕ) (inside : i < split.validators.data.size) (capI Dp Ds DsF W pd : ℕ)
     (hcap : capI = ((pulled.validators.data[i]?).map fun v =>
       (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0)
     (alignedCap : capI % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
     (startCap : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤ capI)
     (capCeil : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z i ≤ capI)
+    (startEff : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤
+      (pinTerms config pulled anc fin).ebUp i + DsF)
     (floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) i) capI ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
     (hW : W ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
@@ -229,15 +231,136 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         (gainOn preset (min (pinTerms config pulled anc fin).depth
             ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) P
           ((11 * (netScan i highC tailC +
-            (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 + Ds) +
-              9) / 10) +
+            (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 + Ds +
+              DsF) + 9) / 10) +
           (min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
             (pinTerms config pulled anc fin).gainRate i +
           min (pinTerms config pulled anc fin).depth
               ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
             (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2))) :=
-  sorry
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have incPos := h.bands.1
+  have near := h.near
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  obtain ⟨Df, hDf⟩ : ∃ Df, Df =
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := ⟨_, rfl⟩
+  rw [← hDf] at debits top small
+  obtain ⟨D, hD⟩ : ∃ D, D = min (pinTerms config pulled anc fin).depth Df := ⟨_, rfl⟩
+  rw [← hDf, ← hD]
+  obtain ⟨e0, he0⟩ : ∃ e0, e0 = (pinTerms config pulled anc fin).ebUp i := ⟨_, rfl⟩
+  obtain ⟨q, hq⟩ : ∃ q, q = (pinTerms config pulled anc fin).gainRate i := ⟨_, rfl⟩
+  obtain ⟨Cr, hCr⟩ : ∃ Cr, Cr = netScan i highC tailC +
+    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 := ⟨_, rfl⟩
+  rw [← he0] at top startEff rateLow
+  rw [← hq] at small rateLow ⊢
+  rw [← hCr]
+  have hq' : q = e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := by
+    rw [hq, he0, hP]
+    rfl
+  obtain ⟨C, hC⟩ : ∃ C, C = preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+      ((((11 * (Cr + Ds + DsF) + 9) / 10) + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) /
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := ⟨_, rfl⟩
+  have alignedC : C % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+    rw [hC]
+    exact Nat.mul_mod_right _ _
+  have coverC : (11 * (Cr + Ds + DsF) + 9) / 10 ≤ C := by
+    have div := Nat.div_add_mod (((11 * (Cr + Ds + DsF) + 9) / 10) +
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    have lt := Nat.mod_lt (((11 * (Cr + Ds + DsF) + 9) / 10) +
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) incPos
+    rw [hC]
+    omega
+  have alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+    obtain ⟨t, ht⟩ : ∃ t, (pinTerms config pulled anc fin).ebUp i =
+        max (max (balanceAt pulled i) (balanceAt fin i))
+          (min capI (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
+      subst hcap
+      exact ⟨_, rfl⟩
+    have a1 : balanceAt pulled i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
+      FloorTrace.effective_aligned (shared.append (fromFin.append toPulled)) h.genesis h.aligned i
+    have a2 : balanceAt fin i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
+      FloorTrace.effective_aligned shared h.genesis h.aligned i
+    have a3 : (t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) %
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+      have := Nat.div_add_mod t preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+      rw [show t - t % preset.EFFECTIVE_BALANCE_INCREMENT.toNat =
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (t / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+        by omega]
+      exact Nat.mul_mod_right _ _
+    have pair : ∀ a b : ℕ, a % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        max a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 ∧
+          min a b % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := fun a b ha hb => by
+      rcases le_total a b with l | l
+      · rw [max_eq_right l, min_eq_left l]
+        exact ⟨hb, ha⟩
+      · rw [max_eq_left l, min_eq_right l]
+        exact ⟨ha, hb⟩
+    rw [he0, ht]
+    exact (pair _ _ (pair _ _ a1 a2).1 ((pair _ _ alignedCap a3).2)).1
+  have rateAll : ∀ z ∈ tailC.balancePath, ∀ total perIncrement : Gwei,
+      getTotalActiveBalance z.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+    intro z member total perIncrement totalOk perOk
+    by_cases anyOk : ∃ total perIncrement : Gwei,
+        getBaseRewardPerIncrement preset total = .ok perIncrement
+    swap
+    · exact absurd ⟨total, perIncrement, perOk⟩ anyOk
+    obtain ⟨t0, p0, p0ok⟩ := anyOk
+    obtain ⟨pq, pqOk⟩ := quarter_base_ok h.facts p0ok
+      ((getTotalActiveBalance pulled).toOption.getD 0)
+    have Pq : P = pq.toNat := by
+      rw [hP, pqOk]
+      rfl
+    obtain ⟨r1, r2, -⟩ := balancePath_endpoint tailC
+      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) (Nat.le_refl _) member
+    obtain ⟨mf, ms⟩ := z
+    have above : fork ≤ mf := fork_le_of_chainSteps r1.chainSteps
+    have below : mf ≤ fork := fork_le_of_chainSteps r2.chainSteps
+    have same : mf = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
+    subst same
+    have zEpoch : (getCurrentEpoch ms).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+      have := epoch_le_of_slot_le ms.slot counted.slot (Run.slot_le r2)
+      omega
+    rw [Pq]
+    exact rate_of_guard h (fromFin.append r1) zEpoch pqOk total perIncrement totalOk perOk
+  have hDle : D ≤ (pinTerms config pulled anc fin).depth := hD ▸ min_le_left _ _
+  have hDDf : D ≤ Df := hD ▸ min_le_right _ _
+  have epochs : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤ D := by
+    rw [hD]
+    refine Nat.le_min.mpr ⟨?_, ?_⟩
+    · omega
+    · omega
+  have core := c_ceiling_abstract tailC h.early h.fulu i inside highC P capI alignedCap startCap
+    capCeil rateAll endEpochC incPos D Df Cr (Cr + Ds + DsF) e0 C
+    (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W) capI) W
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q
+    (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) hDDf rfl hq'
+    rfl alignedE0 alignedC coverC epochs (le_min floorR (min_le_right _ _)) (by omega)
+    hCr.ge small (Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 hDle)) rateLow)
+    (by omega) hW
+  have rounded : gainOn preset D P C =
+      gainOn preset D P ((11 * (Cr + Ds + DsF) + 9) / 10) := by
+    rw [hC]
+    exact gainOn_round D P _ incPos
+  intro z member
+  have bound := core z member
+  rw [rounded] at bound
+  have := min_le_left (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
+    capI
+  omega
 
 end Concrete
 
