@@ -444,7 +444,9 @@ theorem Execution.not_honestCollision_of_agree {time : ℕ}
   obtain ⟨leftFound, rightFound, different⟩ := Store.findBlockCollision_held found
   exact different (agree a ha b hb i j hi hj r left right leftFound rightFound)
 
-/-- Synchrony and compatible finality deliver a block, when bounded honest stores agree.
+/-- Synchrony and compatible finality deliver a block, when the sender agrees with the receiver.
+
+The sender's store at each event up to its own agrees with the receiver's store on shared roots.
 
 The receiver must pass the check of the parent's payload of each block that the sender validated.
 
@@ -456,10 +458,9 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     {v u : ValidatorIndex} (honest : v ∈ J) (receiver : u ∈ J) (startSender : e.start v = anchor)
     (startReceiver : e.start u = anchor) {n k : ℕ}
-    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
-      ∀ (r : Root) (left right : BeaconBlock preset fork),
-      ((e.world i).state a).blocks[r]? = some left →
-      ((e.world j).state b).blocks[r]? = some right → left = right)
+    (agree : ∀ i ≤ n, ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world i).state v).blocks[r]? = some left →
+      ((e.world k).state u).blocks[r]? = some right → left = right)
     (late : max (e.world n).time GST + Δ ≤ (e.world k).time) (bounded : (e.world k).time ≤ last)
     (upToDate : UpToDate config checks sources (e.world k).time ((e.world k).view u)
       ((e.world k).state u))
@@ -480,7 +481,6 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
         ((e.world k).state u).finalizedCheckpoint.epoch ≤ epoch →
         ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
         ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot := by
-  have oneBlock v hv u hu n k hn hk := agree v hv u hu n k hn hk
   have ordered : n ≤ k := by
     by_contra! before
     have time := e.monotone_time (Nat.le_of_lt before)
@@ -518,9 +518,7 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     obtain ⟨other, otherFound, _⟩ :=
       (e.reachable_of_start anchored receiver startReceiver k).blockStatesFromParents pk
     have states : pre = other := e.blockStates_eq anchored honest receiver startSender
-      startReceiver
-      (oneBlock v honest u receiver i k iBound bounded)
-      preFound (msg ▸ otherFound)
+      startReceiver (agree i (Nat.le_of_lt before)) preFound (msg ▸ otherFound)
     have otherPre : ((e.world k).state u).blockStates[sb.message.parentRoot]? = some pre := by
       rw [states, msg]
       exact otherFound
@@ -567,12 +565,12 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
         cases added
         obtain ⟨existing, existingFound⟩ := Option.isSome_iff_exists.mp
           (by rwa [Std.TreeMap.contains_eq_isSome_getElem?] at known)
-        have eq := oneBlock v honest u receiver n k nBound bounded r b existing bf existingFound
+        have eq := agree n le_rfl r b existing bf existingFound
         simpa [msg, eq] using existingFound
       · exact (Store.onBlock_new hash known added).2.1
     simpa [fixed, msg] using inserted
   obtain ⟨⟨b, bf, bk⟩, agree⟩ := Store.getAncestor_of_admission
-    (oneBlock v honest u receiver n k nBound bounded) base admission walk
+    (agree n le_rfl) base admission walk
   have eq := Option.some.inj (found.symm.trans bf)
   subst b
   refine ⟨bk, ?_⟩
@@ -618,9 +616,15 @@ theorem Execution.blocks_of_partiallySynchronous {GST Δ last : ℕ}
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
       ∃ root collision, Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
+  have senderBound : ∀ i ≤ n, (e.world i).time ≤ last := fun i le => by
+    have time : (e.world i).time ≤ (e.world n).time := e.monotone_time le
+    have := le_max_left (e.world n).time GST
+    omega
   rcases e.blocksAgree_or_collision last with agree | collision
   · exact .inl (e.blocks_of_partiallySynchronous_core sync admitted anchored honest receiver
-      (start v honest) (start u receiver) agree late bounded upToDate finalizedKnown
+      (start v honest) (start u receiver)
+      (fun i le => agree v honest u receiver i k (senderBound i le) bounded) late bounded
+      upToDate finalizedKnown
       (fun _ _ _ _ _ _ _ => Store.validateParentPayload_of_lt preGloas) found final)
   · exact .inr collision
 
@@ -745,11 +749,17 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
         ((e.world n).state v).getCheckpointBlock root epoch = .ok checkpointRoot →
         ((e.world k).state u).getCheckpointBlock root epoch = .ok checkpointRoot) ∨
     HonestCollision (e := e) last := by
+  have senderBound : ∀ i ≤ n, (e.world i).time ≤ last := fun i le => by
+    have time : (e.world i).time ≤ (e.world n).time := e.monotone_time le
+    have := le_max_left (e.world n).time GST
+    omega
   rcases e.blocksAgree_or_collision last with agree | collision
   swap
   · exact .inr collision
   refine .inl (e.blocks_of_partiallySynchronous_core sync admitted anchored honest receiver
-    startSender startReceiver agree late bounded upToDate finalizedKnown ?_ found final)
+    startSender startReceiver
+    (fun i le => agree v honest u receiver i k (senderBound i le) bounded) late bounded
+    upToDate finalizedKnown ?_ found final)
   intro i before signed blockRoot post valid ⟨parent, parentFound⟩
   by_cases gloas : .glamsterdam ≤ fork
   swap

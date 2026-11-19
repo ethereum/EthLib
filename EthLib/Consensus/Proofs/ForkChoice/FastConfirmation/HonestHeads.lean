@@ -162,7 +162,7 @@ The history of mixes must span two epochs, the grace of a voting source. -/
 private theorem getFilteredNodeTree_exists
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
-    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (unknown : store.blocks[anchorBlock.parentRoot]? = none)
     (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
@@ -171,8 +171,8 @@ private theorem getFilteredNodeTree_exists
     (justifiedHeld : ∃ block, store.blocks[store.justifiedCheckpoint.root]? = some block) :
     ∃ nodes, store.getFilteredNodeTree config = .ok nodes := by
   have reachable := forward.reachable
-  have lower := reachable.parentsBelow (UInt64.le_of_eq anchorSlot) unknown
-  obtain ⟨current, currentOk, -, -⟩ := forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
+  have lower := reachable.parentsBelow anchorSlot unknown
+  obtain ⟨current, currentOk, -, -⟩ := forward.slots_le_current slots anchorSlot
   have epochOk : store.getCurrentStoreEpoch config = .ok (computeEpochAtSlot preset current) := by
     simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
   -- The current epoch leaves room for two more epochs, by the fit of the seeds.
@@ -190,7 +190,7 @@ private theorem getFilteredNodeTree_exists
   -- The finalized epoch is between the anchor's epoch and the current one.
   have finalLe : store.finalizedCheckpoint.epoch ≤ computeEpochAtSlot preset current :=
     UInt64.le_trans (reachable.finalized_le_justified sound)
-      (forward.justified_epoch_le_current sound slots (UInt64.le_of_eq anchorSlot) epochOk).1
+      (forward.justified_epoch_le_current sound slots anchorSlot epochOk).1
   have anchorLe : getCurrentEpoch anchorState ≤ store.finalizedCheckpoint.epoch := by
     rcases UInt64.le_total store.finalizedCheckpoint.epoch (getCurrentEpoch anchorState) with
       le | le
@@ -211,7 +211,7 @@ private theorem getFilteredNodeTree_exists
   have aboveAnchor : anchorBlock.slot ≤ boundary := by
     have floor := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
     refine UInt64.le_trans (le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch anchorBoundary
-      (UInt64.le_of_eq anchorSlot) floor) ?_
+      anchorSlot floor) ?_
     rw [UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp floor).2,
       (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2]
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp anchorLe)
@@ -219,7 +219,7 @@ private theorem getFilteredNodeTree_exists
   have orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
       store.blocks[root]? = some orphan → store.blocks[orphan.parentRoot]? = none →
       orphan.slot ≤ boundary := fun _ _ found orphan =>
-    UInt64.le_trans (reachable.orphans_le (UInt64.le_of_eq anchorSlot) found orphan anchorFound)
+    UInt64.le_trans (reachable.orphans_le anchorSlot found orphan anchorFound)
       aboveAnchor
   -- Each held node computes its viable nodes, by descent on the rank.
   suffices held : ∀ (node : ForkChoiceNode) (block : BeaconBlock preset fork),
@@ -238,7 +238,7 @@ private theorem getFilteredNodeTree_exists
   · obtain ⟨ancestor, walk⟩ := Store.getAncestor_ok_of_orphans_le lower orphansLe
       (node := ⟨node.root, .pending⟩) found
     obtain ⟨viable, viableOk⟩ := isViableLeaf_exists forward sound slots
-      (UInt64.le_of_eq anchorSlot) epochOk room found ⟨ancestor.root, by
+      anchorSlot epochOk room found ⟨ancestor.root, by
         simp [Store.getCheckpointBlock, boundaryOk, walk, Except.mapError, bind, Except.bind,
           pure, Except.pure]⟩
     simp only [viableOk]
@@ -550,8 +550,8 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
     -- The justified block is held, as the store holds the justified state.
     obtain ⟨base, -, baseFound, -⟩ :=
       reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-    obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots anchorSlot
-      anchorBoundary (absent w hw k inTime) seeds history
+    obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
+      (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) seeds history
       (forward.reachable.known_of_blockState baseFound)
     -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
     exact Store.getHead_exists preGloas forward (UInt64.le_of_eq anchorSlot) (absent w hw k inTime)
