@@ -997,6 +997,12 @@ The key is unslashed at the start.
 
 Or it is slashed at the start, and its delayed penalty is not due along the branch.
 
+The key is activated, or the branch is from Fulu.
+
+At each step, the key's exit epoch after the step is beyond the window.
+
+Or its withdrawable epoch before the step is beyond the window.
+
 The high-water mark of the trace stays within any bound on the effective balance of the branch. -/
 theorem FloorTrace.run_of_le_cap_general
     (shared : Run config checks g x) (tail : Run config checks x y)
@@ -1006,13 +1012,14 @@ theorem FloorTrace.run_of_le_cap_general
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     (i : ValidatorIndex) (v : Validator)
     (initial : x.state.validators.data[i.toNat]? = some v)
-    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH)
+    (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH ∨ .fusaka ≤ x.fork)
     (low base quotient : Nat) (low_le : low ≤ (withdrawalMaxEffectiveBalance preset x.fork v).toNat)
     (positive : 0 < quotient)
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       ((v.slashed = false → (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∧
@@ -1043,10 +1050,7 @@ theorem FloorTrace.run_of_le_cap_general
         (v.slashed = true → last.slashedHigh = none) := by
   obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, marks, none, -⟩ :=
     FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
-      initial (Or.inl activated) low base quotient low_le positive
-      (fun pre step post split w found => by
-        obtain ⟨retained, rest⟩ := guards pre step post split w found
-        exact ⟨Or.inl retained, rest⟩) replayed
+      initial activated low base quotient low_le positive guards replayed
   exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path, marks, none⟩
 
 /-- The per-key floor trace of a branch from a floor, for an activated key or a branch from Fulu. -/
@@ -1087,7 +1091,7 @@ theorem FloorTrace.run_of_le_cap_or_fulu
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) := by
   obtain ⟨last, trace, balance, debt, effective, w, final, capped, used, path, -⟩ :=
-    FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
+    FloorTrace.run_of_le_cap_general shared tail genesis caps delay early high endEpoch i v
       initial activated low base quotient low_le positive
       (fun pre step post split w found => by
         obtain ⟨retained, short, quotient_le, noCrossing⟩ := guards pre step post split w found

@@ -27,10 +27,11 @@ Not yet released.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
-  `FloorTrace.step_general`, `FloorTrace.run_of_le_cap_general` and `FloorTrace.run_of_le_cap` are the activated cases.
+  `FloorTrace.step_general` and `FloorTrace.run_of_le_cap` are the activated cases.
   They also accept a different guard in place of the final key's exit.
   It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
   Master's headers are the cases with the exit guard.
+  `FloorTrace.run_of_le_cap_general` takes the same guard and covers an activated key or a branch from Fulu.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 

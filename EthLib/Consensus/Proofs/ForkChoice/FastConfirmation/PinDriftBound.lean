@@ -5790,7 +5790,7 @@ private theorem epochFloor : EpochFloorStatement preset config checks := by
       preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat / 2 := by simp
   obtain ⟨last, trace, balance, debt, -, w, final, -, used, -, bounded, startSlashed⟩ :=
     FloorTrace.run_of_le_cap_general shared r genesis caps delay hn
-      (getCurrentEpoch m.state).toNat endEpoch iv val hval hact
+      (getCurrentEpoch m.state).toNat endEpoch iv val hval (Or.inl hact)
       (min (actualBalanceAt m iv.toNat) C) (effectiveAt m iv.toNat)
       (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat
       (Nat.le_trans (Nat.min_le_right _ _) hC) positive'
@@ -5801,7 +5801,7 @@ private theorem epochFloor : EpochFloorStatement preset config checks := by
         have atMost := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
           ((Run.nil.snoc step).append post').chainSteps)
         have inv := Run.invariant genesis.invariant (shared.append pre')
-        refine ⟨?_, ⟨fun _ => by omega, fun slashed => ?_⟩, ?_,
+        refine ⟨Or.inl ?_, ⟨fun _ => by omega, fun slashed => ?_⟩, ?_,
           fun evs hevs e member crossing => ?_⟩
         · obtain ⟨w', found', life⟩ := post'.registryLifecycle.validators iv.toNat w found
           have kept := hexit w' found'
