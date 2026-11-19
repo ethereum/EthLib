@@ -365,8 +365,9 @@ private theorem potential_stay (ρn ρd k band g cap EB Pm Pn : ℕ) (gcap : g �
     calc (ρd - ρn * k) * (g + band) ≤ ρd * (g + band) := Nat.mul_le_mul_right _ (Nat.sub_le _ _)
       _ ≤ ρd * (Pn + band) := Nat.mul_le_mul_left _ (by omega)
 
-/-- A step that crosses an epoch loses at most its pass penalty, which the effective balance
-bounds. -/
+/-- A step that crosses an epoch loses at most its pass penalty.
+
+The effective balance bounds the pass penalty. -/
 private theorem potential_cross (ρn ρd k band g cap EB Pm Pn pen : ℕ) (gcap : g ≤ cap)
     (ebcap : EB ≤ cap) (eb : EB ≤ Pm + band)
     (ih : (ρd - ρn * k) * (g + band) ≤ ρd * (Pm + band)) (floor : min Pm cap ≤ Pn + pen)
@@ -520,7 +521,11 @@ private theorem penaltyDebit_le_floor (i : ℕ) (events : List (BalanceEvent pre
 /-- The floor of a branch from its start: its effective balance stays within the potential.
 
 The potential is the balance plus the debits that are no pass penalties.
-Its closed form loses at most the pass rate for each epoch, and vanishes if that reaches one.
+
+Its closed form loses at most the pass rate for each epoch.
+
+It vanishes if that loss reaches one.
+
 The rate bounds a pass penalty by a fraction of the effective balance. -/
 private def PotentialFloor {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (i : ValidatorIndex) (v : Validator) (events : List (BalanceEvent preset)) : Prop :=
@@ -917,11 +922,7 @@ theorem FloorTrace.run_of_le_cap_or_fulu
           noCrossing⟩) replayed
   exact ⟨last, trace, balance, debt, effective, w, final, capped, used, path⟩
 
-/-- From Fusaka, a key that ends the branch unslashed keeps its balance above a closed form.
-
-The closed form loses at most the pass rate of the effective balance for each epoch the branch ends.
-It is vacuous exactly where that loss reaches the whole floor, which the truncated difference
-`ρd - ρn * k` shows as zero. -/
+/-- From Fusaka, an unslashed key's balance plus non-pass debits stays above a closed form. -/
 theorem FloorTrace.run_potential_floor
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
