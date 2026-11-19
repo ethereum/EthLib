@@ -1661,7 +1661,9 @@ The increments that set the flag in the previous epoch are at most those active 
 
 The rate read there is at most `P` times the active increments.
 
-A key that is not active in the previous epoch earns nothing, so it needs no rate. -/
+A key that is not active in the previous epoch earns nothing, so it needs no rate.
+
+That is also stated outright, as its reward being 0. -/
 private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : BeaconState preset f}
     (within : state.RegistryWithinLimit) {flag : Fin PARTICIPATION_FLAG_WEIGHTS.length}
     {rewards penalties : Array Gwei}
@@ -1680,6 +1682,8 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
         PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
         (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
     (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+      (rewards.getD v 0).toNat = 0) ∧
+    (v.toUInt64 ∉ getActiveValidatorIndices state (getPreviousEpoch state) →
       (rewards.getD v 0).toNat = 0) := by
   obtain ⟨participating, participatingBalance, total', flaggedOk, weighed, totalOk, perKey⟩ :=
     getFlagIndexDeltas_getD within computed
@@ -1692,8 +1696,10 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
         PARTICIPATION_FLAG_WEIGHTS[flag].toNat *
         (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
       (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+        (rewards.getD v 0).toNat = 0) ∧
+      (v.toUInt64 ∉ getActiveValidatorIndices state (getPreviousEpoch state) →
         (rewards.getD v 0).toNat = 0) :=
-    ⟨by rw [h, Nat.zero_mul]; exact Nat.zero_le _, fun _ => h⟩
+    ⟨by rw [h, Nat.zero_mul]; exact Nat.zero_le _, fun _ => h, fun _ => h⟩
   by_cases isEligible : eligible = true
   swap
   · exact zero (by simp [(notEligible (by simpa using isEligible)).1])
@@ -1724,7 +1730,8 @@ private theorem flagReward_le {f : Fork} (altair : .altair ≤ f) {state : Beaco
         (participatingBalance.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
     rw [formula]
     exact Nat.div_mul_le_self _ _
-  refine ⟨?_, fun none => by rw [formula, none, Nat.zero_mul, Nat.div_zero]⟩
+  refine ⟨?_, fun none => by rw [formula, none, Nat.zero_mul, Nat.div_zero],
+    fun idle => absurd (mem_getUnslashedParticipatingIndices flaggedOk _ present).1 idle⟩
   -- A key with less than one increment has no base reward.
   by_cases small : balanceAt state v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0
   · have noBase : base.toNat = 0 := by rw [baseEq, ← stakeV, small, Nat.zero_mul]
@@ -1788,7 +1795,9 @@ The credit is scaled by `64` and by the active increments.
 
 It is at most the key's increments times `54`, `P` and the active increments.
 
-A state with no active increment pays nothing. -/
+A state with no active increment pays nothing.
+
+A key that is not active in the previous epoch is paid nothing. -/
 private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
     {pass : BeaconState preset f} (within : pass.RegistryWithinLimit)
     {rewarded : BalanceReplay preset f}
@@ -1808,6 +1817,8 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
           balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 54 *
             (P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ∧
         (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 →
+          (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0) ∧
+        (v.toUInt64 ∉ getActiveValidatorIndices pass (getPreviousEpoch pass) →
           (rewarded.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0) := by
   by_cases genesis : getCurrentEpoch pass = GENESIS_EPOCH
   · simp only [replayRewards, genesis, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at replayed
@@ -1842,10 +1853,10 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
       (source.1.getD v 0).toNat + (target.1.getD v 0).toNat + (head.1.getD v 0).toNat := by
     omega
   rw [wd] at one two three
-  obtain ⟨b1, z1⟩ := one
-  obtain ⟨b2, z2⟩ := two
-  obtain ⟨b3, z3⟩ := three
-  refine .inr ⟨total, active, ?_, fun none => ?_⟩
+  obtain ⟨b1, z1, i1⟩ := one
+  obtain ⟨b2, z2, i2⟩ := two
+  obtain ⟨b3, z3, i3⟩ := three
+  refine .inr ⟨total, active, ?_, fun none => ?_, fun idle => ?_⟩
   · have scaled := Nat.mul_le_mul_right
       (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * 64) sum
     simp only [Nat.add_mul] at scaled
@@ -1855,6 +1866,10 @@ private theorem replayRewards_credit_le {f : Fork} (altair : .altair ≤ f)
   · have := z1 none
     have := z2 none
     have := z3 none
+    omega
+  · have := i1 idle
+    have := i2 idle
+    have := i3 idle
     omega
 
 /-- Quotients of the reward bound: the rewards of a pass are at most a rate for each increment. -/
@@ -1932,7 +1947,8 @@ A key past the registry of a state with matched balances gets no reward. -/
 private theorem epochRewards_le {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (altair : .altair ≤ m.fork) (early : n.fork < .glamsterdam)
     (v : ℕ) (known : v < m.state.validators.data.size ∨ BalancesMatch m.state) (E P : ℕ)
-    (envelope : effectiveAt m v ≤ E)
+    (envelope : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
+      effectiveAt m v ≤ E)
     (rate : v.toUInt64 ∉ getActiveValidatorIndices m.state (getPreviousEpoch m.state) ∨
       ∀ total perIncrement : Gwei, getTotalActiveBalance m.state = .ok total →
         getBaseRewardPerIncrement preset total = .ok perIncrement →
@@ -2035,16 +2051,18 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
         rw [sums]
         exact rate total perIncrement (totalEq.symm.trans totalOk) perOk
       have bound := replayRewards_credit_le altair within rewardedOk P v insidePass ratePass
-      have small : balanceAt pass v / preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-          E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-        Nat.div_le_div_right (by rw [balanceAtEq]; exact envelope)
       have flagSum : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum = 54 := rfl
       have wd : WEIGHT_DENOMINATOR.toNat = 64 := by decide
       rw [flagSum, wd]
-      rcases bound with zero | ⟨total, -, scaled, none⟩
+      rcases bound with zero | ⟨total, -, scaled, none, idle⟩
       · rw [zero]
         exact Nat.zero_le _
-      · exact reward_sum_le _ _ _ _ P scaled none small
+      rcases envelope with inactive | envelope
+      · rw [idle (by rw [prevEq]; exact inactive)]
+        exact Nat.zero_le _
+      · exact reward_sum_le _ _ _ _ P scaled none (Nat.div_le_div_right (by
+          rw [balanceAtEq]
+          exact envelope))
 
 /-- The balance at the end of a path of states rises by at most the increases between its states. -/
 private theorem balance_le_pathCredits (i : ℕ) :
@@ -2324,7 +2342,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
             (fun p member => capC p (List.mem_append_left _ member))
           rw [Nat.min_comm] at c1
           have envelope : effectiveAt middle i ≤ E := c1.trans closed
-          have rewards := epochRewards_le step altair early i (Or.inl room) E P envelope
+          have rewards := epochRewards_le step altair early i (Or.inl room) E P (.inr envelope)
             (rate middle (List.mem_append_left _ atMiddle))
           have stepBound := step_balance_le step early i
           have mid := ihPre _ atMiddle
