@@ -17,6 +17,7 @@ From Gloas, a size limit of its topic bounds it too.
 - Only aggregates, attester slashings, data column sidecars, bids and inclusion lists have one.
 - From Gloas, the size limit of a data column sidecar topic is the largest size of a sidecar.
 - With a size limit, the bound of a topic is the lower of the limit and the bound of its type.
+- From Electra, aggregates, attestations and attester slashings have the bounds of Electra.
 - A payload that the gossip decoder accepts at its topic's bound is within the type's largest size.
 - That payload is also within the size limit of the topic.
 - A message that a node serializes, within the payload cap, passes the decoder once compressed.
@@ -76,6 +77,47 @@ theorem topicBound_eq_min {shape : Desc} {limit : UInt64}
     (limited : topic.sizeLimit preset config fork = some limit) :
     topicBound preset config fork topic = some (min (payloadBounds shape).2 limit) := by
   simp [topicBound, h, limited]
+
+/-- From Electra, aggregates, attestations and attester slashings have the bounds of Electra.
+
+Those are the bounds of their types at Electra.
+
+The size limits of Gloas on aggregates and attester slashings are their largest sizes at Electra.
+
+This holds for the mainnet and minimal presets. -/
+theorem topicBound_eq_pectra (named : preset = .mainnet ∨ preset = .minimal)
+    (electra : .pectra ≤ fork)
+    (attesting : topic = .beaconAggregateAndProof ∨ (∃ subnet, topic = .beaconAttestation subnet) ∨
+      topic = .attesterSlashing) :
+    topicBound preset config fork topic =
+      (topicDesc preset config .pectra topic).map fun shape => (payloadBounds shape).2 := by
+  -- Electra sets no size limit, so its bound is that of the type.
+  suffices stable : topicBound preset config fork topic = topicBound preset config .pectra topic by
+    rw [stable, topicBound, sizeLimit_of_lt_gloas (by decide)]
+  -- These topics are listed at every fork, so only their types and size limits can differ.
+  have listed : topic ∈ config.gossipTopics fork ↔ topic ∈ config.gossipTopics .pectra := by
+    rcases attesting with rfl | ⟨subnet, rfl⟩ | rfl <;>
+      simp [Config.gossipTopics, subnetTopics, GossipTopic.gloas]
+  -- Their size limits do not read the configuration.
+  have sizeLimit_eq : ∀ fork, topic.sizeLimit preset config fork =
+      topic.sizeLimit preset Config.mainnet fork := by
+    rcases attesting with rfl | ⟨subnet, rfl⟩ | rfl <;> intro <;> rfl
+  unfold topicBound topicDesc
+  by_cases member : topic ∈ config.gossipTopics .pectra
+  · simp only [member, listed.mpr member, ite_true, Option.map_some]
+    rcases attesting with rfl | ⟨subnet, rfl⟩ | rfl
+    · rw [sizeLimit_eq, sizeLimit_eq]
+      rcases named with rfl | rfl <;> cases fork <;>
+        first | exact absurd electra (by decide) | decide +kernel
+    · -- From Electra, an attestation subnet carries a single attestation, with no size limit.
+      have single : ∀ fork, .pectra ≤ fork → (GossipTopic.beaconAttestation subnet).messageDesc
+          preset fork = SszType.desc SingleAttestation := fun _ later => ite_eq_left later
+      rw [single fork electra, single .pectra (by decide)]
+      rfl
+    · rw [sizeLimit_eq, sizeLimit_eq]
+      rcases named with rfl | rfl <;> cases fork <;>
+        first | exact absurd electra (by decide) | decide +kernel
+  · simp [member, mt listed.mp member]
 
 /-- A payload that the gossip decoder accepts at its topic's bound is within the largest size. -/
 theorem size_le_of_decodePayload {shape : Desc} {bound : UInt64} {data payload : ByteArray}
