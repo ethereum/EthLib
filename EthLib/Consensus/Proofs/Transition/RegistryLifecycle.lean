@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.EpochParticipation
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Trace
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 /-!
@@ -1531,24 +1532,6 @@ private theorem newUnassigned_advanceSlot
       subst epochedOk
       exact cachedSize ▸ unassignedFrom_size _
   exact UnassignedKept.of_data (same := rfl) _ epochedFrom
-
-/-- From Electra, an upgrade keeps the validators. -/
-private theorem upgradeNext_validators_of_electra {pre : ForkedBeaconState preset}
-    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (electra : .pectra ≤ pre.fork) (computed : upgradeNext config checks pre = .ok post) :
-    post.val.state.validators.data = pre.state.validators.data := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;> simp only at electra <;> first
-    | exact absurd electra (by decide)
-    | simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-        throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToFulu_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToGloas_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    exact (upgradeHezeFields_lists _).1
 
 /-- Block operations leave newly admitted validators with both epochs unassigned. -/
 theorem processOperations_new_validator_epochs_unassigned {body : BeaconBlockBody preset fork}
