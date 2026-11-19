@@ -1161,7 +1161,8 @@ private theorem deposit_bounds {fork : Fork} {s t : BeaconState preset fork}
     simpa only [early, ↓reduceIte, balanceCredits, balanceDebits, actualBalanceAt, site]
       using And.intro bounds.2 bounds.1.le
 
-theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
+/-- A sync aggregate credits and debits at most the committee size times a reward and its share. -/
+theorem sync_bounds_combined {fork : Fork} {s t : BeaconState preset fork}
     (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
     ∃ reward proposer,
@@ -1171,7 +1172,9 @@ theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
           (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))) = Except.ok proposer ∧
       balanceCredits s t ≤
         preset.SYNC_COMMITTEE_SIZE.toNat * (reward.toNat + proposer.toNat) ∧
-      balanceDebits s t ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat := by
+      balanceDebits s t ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat ∧
+      balanceCredits s t + balanceDebits s t ≤
+        preset.SYNC_COMMITTEE_SIZE.toNat * (reward.toNat + proposer.toNat) := by
   simp only [processSyncAggregate, bind_ok_iff] at ok
   obtain ⟨_, _, _, _, _, _, _, _, _, _, reward, rewardOk, proposer, proposerOk,
     members, membersOk, folded⟩ := ok
@@ -1181,7 +1184,8 @@ theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
       (ok : xs.foldlM (applySyncReward reward proposer proposerIndex) s = .ok t) :
       t.balances.data.size = s.balances.data.size ∧
       balanceCredits s t ≤ xs.length * (reward.toNat + proposer.toNat) ∧
-      balanceDebits s t ≤ xs.length * reward.toNat := by
+      balanceDebits s t ≤ xs.length * reward.toNat ∧
+      balanceCredits s t + balanceDebits s t ≤ xs.length * (reward.toNat + proposer.toNat) := by
     induction xs generalizing s with
     | nil => cases ok; simp [balanceCredits, balanceDebits]
     | cons x xs ih =>
@@ -1196,7 +1200,7 @@ theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
         · exact (sameSizes_decreaseBalance (liftAccessor_ok.mp one)).2
       have tail := ih u rest
       have triangle := And.intro (credits_triangle s u t tail.1) (debits_triangle s u t sizes.symm)
-      refine ⟨tail.1.trans sizes, ?_, ?_⟩ <;>
+      refine ⟨tail.1.trans sizes, ?_, ?_, ?_⟩ <;>
         simp only [List.length_cons, Nat.add_mul, Nat.one_mul] <;>
         split_ifs at bounds <;> omega
   have bounds := fold _ s t _ (by simpa only [← Array.foldlM_toList] using folded)
@@ -1205,7 +1209,23 @@ theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
     simp only [Array.length_toList, Array.size_zip]
     exact (Nat.min_le_right _ _).trans (by simp)
   exact ⟨bounds.2.1.trans (Nat.mul_le_mul_right _ length),
-    bounds.2.2.trans (Nat.mul_le_mul_right _ length)⟩
+    bounds.2.2.1.trans (Nat.mul_le_mul_right _ length),
+    bounds.2.2.2.trans (Nat.mul_le_mul_right _ length)⟩
+
+theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
+    (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
+    (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
+    ∃ reward proposer,
+      syncParticipantReward s = .ok reward ∧
+      liftAccessor (liftArith (do
+        Uint64.divChecked (← Uint64.mulChecked reward PROPOSER_WEIGHT)
+          (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))) = Except.ok proposer ∧
+      balanceCredits s t ≤
+        preset.SYNC_COMMITTEE_SIZE.toNat * (reward.toNat + proposer.toNat) ∧
+      balanceDebits s t ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat := by
+  obtain ⟨reward, proposer, rewardOk, proposerOk, credits, debits, -⟩ :=
+    sync_bounds_combined altair aggregate ok
+  exact ⟨reward, proposer, rewardOk, proposerOk, credits, debits⟩
 
 /-- A proposer slashing moves balances within the limits of its proposer. -/
 theorem proposer_slashing_bounds {fork : Fork} {s t : BeaconState preset fork}

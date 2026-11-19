@@ -106,6 +106,8 @@ Not yet released.
   The bound is the epoch of the start, plus one epoch and the seed lookahead.
   `DirectSafety.departureCharges_run_indices` shows that the departure charges of a run name each registry index at most once.
   The pin's drift bound reads it for its exit-queue terms.
+  `sync_bounds_combined` bounds a sync aggregate's credits plus debits by the committee size times a reward and its share.
+  PinDriftBound's sync-debit bound reads it.
   `DirectSafety.Apriori.Internal.replayRewards_passes` gives the four passes of deltas that the rewards replay runs from Altair, after the first epoch.
   `DirectSafety.Apriori.Internal.replayDeltas_flows` bounds what one pass of deltas debits and credits at one position.
   `DirectSafety.Apriori.Internal.rewardCredit` is the credit of one reward event at a position, the sibling of `penaltyDebit`.
