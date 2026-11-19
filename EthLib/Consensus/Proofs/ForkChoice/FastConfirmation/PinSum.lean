@@ -952,12 +952,15 @@ private def flowCredit (t : PinTerms preset) {x y : ForkedBeaconState preset}
 
 /-- The gain of a key's flows over the window, at eleven tenths in whole increments.
 
-It is one floor of all the flows; the closure splits it by kind in aggregate. -/
+It is one floor of all the flows; the closure splits it by kind in aggregate.
+
+Its rate is floored once, after the increments, as the gain of the credits is. -/
 private def flowGain (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : ℕ :=
   t.depth * (11 * flowCredit t tailC high eventsC events eventsF i /
-    (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * flagRate t)
+    (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * t.perIncrement *
+      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat)
 
 /-- The flow gain of a key whose rise is on its kept arm, or that R's registry does not hold.
 
@@ -6166,6 +6169,82 @@ private theorem gain_split_flat (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk :
       ≤ depth * ((a * P * F + b * P * F) / WD) := Nat.mul_le_mul_right _ hk
     _ ≤ depth * (a * P * F / WD + b * P * F / WD + 1) := Nat.mul_le_mul_left _ floor
     _ = depth * (b * P * F / WD) + (depth * (a * P * F / WD) + depth) := by ring
+
+/-- The gain on whole increments of a stake, at eleven tenths, is at most a tenth of the stake.
+
+The rate for each increment is the one that `rate_per_increment` bounds. -/
+private theorem gain_tenth (I WD F P D Zr : ℕ)
+    (key : 11 * D * (P * F) < WD * I) :
+    D * (11 * Zr / (10 * I) * P * F / WD) ≤ Zr / 10 := by
+  have rounded := Nat.mul_div_le (11 * Zr) (10 * I)
+  generalize 11 * Zr / (10 * I) = k at rounded ⊢
+  have swap : 10 * I * k = 10 * (I * k) := by ring
+  rw [Nat.le_div_iff_mul_le (by norm_num)]
+  rcases Nat.eq_zero_or_pos k with zero | pos
+  · subst zero
+    simp
+  · have := (gain_lt I WD F P D k pos key).le
+    omega
+
+/-- The gain at the base stake, with its tenth, is within `rise`'s gain slack. -/
+private theorem base_absorb (D Df q : ℕ) (hDf : D ≤ Df) :
+    D * q + D + (D * q + D) / 10 ≤ Df * ((11 * q + 9) / 10 + 3) := by
+  have step : 11 * q ≤ 10 * ((11 * q + 9) / 10) := by omega
+  have scaled := Nat.mul_le_mul_left D step
+  have left : D * (11 * q) = 11 * (D * q) := by ring
+  have right : D * (10 * ((11 * q + 9) / 10)) = 10 * (D * ((11 * q + 9) / 10)) := by ring
+  have widen := Nat.mul_le_mul_right ((11 * q + 9) / 10 + 3) hDf
+  have expand : D * ((11 * q + 9) / 10 + 3) = D * ((11 * q + 9) / 10) + 3 * D := by ring
+  omega
+
+/-- The gain of a key's flows and of the base stake is at most its flow gain, a unit and the base.
+
+The joint floor of the flows and the base stake splits by kind with one step.
+
+With no flow there is no step. -/
+private theorem flow_gain_split (I WD F P D Dt Df q Zk Z' : ℕ)
+    (key : 11 * D * (P * F) < WD * I) (hDt : D ≤ Dt) (hDf : D ≤ Df) (hZ : Zk ≤ Z') :
+    D * (11 * (Zk + (D * q + D)) / (10 * I) * P * F / WD) + (D * q + D) ≤
+      Dt * (11 * Z' / (10 * I) * P * F / WD) +
+        (if 0 < Z' then Dt * (P * F / WD + 2) else 0) + Df * ((11 * q + 9) / 10 + 3) := by
+  have tenth := gain_tenth I WD F P D (D * q + D) key
+  have absorb := base_absorb D Df q hDf
+  have monoGain : D * (11 * Zk / (10 * I) * P * F / WD) ≤
+      Dt * (11 * Z' / (10 * I) * P * F / WD) :=
+    Nat.mul_le_mul hDt (Nat.div_le_div_right (Nat.mul_le_mul_right F (Nat.mul_le_mul_right P
+      (Nat.div_le_div_right (Nat.mul_le_mul_left 11 hZ)))))
+  rcases Nat.eq_zero_or_pos Zk with zero | pos
+  · subst zero
+    simp only [Nat.zero_add]
+    split_ifs <;> omega
+  · have posZ : 0 < Z' := Nat.lt_of_lt_of_le pos hZ
+    have joint : 11 * (Zk + (D * q + D)) / (10 * I) ≤
+        11 * Zk / (10 * I) + 11 * (D * q + D) / (10 * I) + 1 := by
+      have := Nat.add_div_le_div_add_div_add_one (11 * Zk) (11 * (D * q + D)) (10 * I)
+      rwa [← Nat.mul_add] at this
+    have step : D * (11 * (Zk + (D * q + D)) / (10 * I) * P * F / WD) ≤
+        D * ((11 * Zk / (10 * I) + 11 * (D * q + D) / (10 * I) + 1) * P * F / WD) :=
+      Nat.mul_le_mul_left D (Nat.div_le_div_right (Nat.mul_le_mul_right F
+        (Nat.mul_le_mul_right P joint)))
+    have split : (11 * Zk / (10 * I) + 11 * (D * q + D) / (10 * I) + 1) * P * F =
+        11 * Zk / (10 * I) * P * F + 11 * (D * q + D) / (10 * I) * P * F + P * F := by ring
+    have floors : (11 * Zk / (10 * I) * P * F + 11 * (D * q + D) / (10 * I) * P * F + P * F) /
+        WD ≤ 11 * Zk / (10 * I) * P * F / WD + 11 * (D * q + D) / (10 * I) * P * F / WD +
+          P * F / WD + 2 := by
+      have one := Nat.add_div_le_div_add_div_add_one
+        (11 * Zk / (10 * I) * P * F + 11 * (D * q + D) / (10 * I) * P * F) (P * F) WD
+      have two := Nat.add_div_le_div_add_div_add_one (11 * Zk / (10 * I) * P * F)
+        (11 * (D * q + D) / (10 * I) * P * F) WD
+      omega
+    rw [split] at step
+    have wide := Nat.mul_le_mul_left D floors
+    have expand : ∀ A B C : ℕ, D * (A + B + C + 2) = D * A + D * B + D * C + 2 * D :=
+      fun A B C => by ring
+    rw [expand] at wide
+    have unit : D * (P * F / WD + 2) ≤ Dt * (P * F / WD + 2) := Nat.mul_le_mul_right _ hDt
+    have unitSplit : D * (P * F / WD + 2) = D * (P * F / WD) + 2 * D := by ring
+    simp only [posZ, ↓reduceIte]
+    omega
 
 /-- The closure test of the credit ceiling with the credits rounded down to increments.
 
