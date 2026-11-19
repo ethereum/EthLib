@@ -58,12 +58,10 @@ Every integer on the wire is big-endian, as in FIPS 205: the address words, the 
 ## Choices this module makes
 
 The secret key is `SK.seed`, and the exports of key generation and signing take it alone.
-So the signer rebuilds `PK.root`, which `H_msg` hashes, with the definition that key generation uses.
-It builds the top tree once for `PK.root` and once for the top key's path.
-It builds each lower tree once for its root and once for the path.
-It builds each FORS tree once for the FORS public key and once for the opening.
-A signer that keeps the levels of each tree builds it once.
-The values are the same, so the signatures are the same.
+So the signer rebuilds `PK.root`, which `H_msg` hashes, from the same secrets as key generation.
+It builds the top tree, the two lower trees on the index's path and each FORS tree once.
+Each build keeps every node, so it gives both the root and the path of a key.
+A proof shows that the signatures are those of a signer that computes each path and each root apart.
 
 The trees are built depth first by the shared Merkle definitions.
 A signer that builds them level by level computes the same nodes, and so the same outputs.
@@ -85,8 +83,7 @@ The order changes no value.
 The secret key is the 32-byte `SK.seed`, and everything else derives from it.
 So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
 `keyGen` builds the top tree, which means `2^10` one-time keys and 271,361 Keccak-f[1600] permutations.
-`sign` builds the top tree, the FORS instance and both lower trees, and searches three counters.
-Since it builds each tree twice, it makes about twice the permutations of a signer that builds each tree once.
+`sign` builds the top tree, the FORS instance and both lower trees once each, and searches three counters.
 `verify` makes 515 Keccak-f[1600] permutations.
 
 Never sign more than `2^30` messages with one key.
@@ -189,9 +186,10 @@ Definitions that derive a secret take the derivation function as an argument too
   So an EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
   Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
   Both signers stop at the same failing layer, and their counter searches and paths make the same number of calls.
-  Before the layers, EthLib makes 337636 calls: it expands the key, rebuilds the top tree, derives the randomizer, hashes the message and opens FORS.
+  Before the layers, EthLib makes 337925 calls: it expands the key, builds the top tree, derives the randomizer, hashes the message and opens FORS.
   The model makes 73709 calls there.
-  Below the top layer, the model recovers the layer's root from the signature with 74 calls, and EthLib computes each layer's message with at least 66047.
+  Below the top layer, the model recovers the layer's root from the signature with 74 calls, and EthLib builds the layer's tree with 66047.
+  The model computes the top path with 263924 calls, and EthLib reads it from the top tree it built before the layers.
   So a budget of `q` hash calls against EthLib is a budget of `q` against the model (`hasHashQueryBound_translate_self`).
 - Serialization (`Serialization.lean`).
   Decoding succeeds exactly on strings of the declared length, and encoding and decoding are inverse bijections there.

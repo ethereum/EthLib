@@ -25,7 +25,7 @@ Not yet released.
   XMSS bounds key generation and signing on every path: at most `13434881` and `8616804556` calls.
   Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
   leanSPHINCS counts the calls under a fixed answer function.
-  Key generation makes exactly `264193`, signing at most `12885841387`, and verification at most `491`, exactly `491` when it accepts.
+  Key generation makes exactly `264193`, signing at most `12885372483`, and verification at most `491`, exactly `491` when it accepts.
   `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
 - `Unforgeability.Bridge.unforgeable_adversary` bounds a SPHINCS forgery by the adversary's own hash calls ([#3336](https://github.com/ethereum/EthLib/issues/3336)).
   An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + schemeCalls r) / 2^127`.
@@ -38,6 +38,13 @@ Not yet released.
   `Merkle.build` computes every node under a position, with the calls of the node there, in the same order.
   The signing bound drops from `8630239231` to `8616804556` calls, and a request's bound `requestQueries` from `2^33 + 615 * 2^16` to `2^33 + 410 * 2^16 + 204`.
   `Cost.signCalls_eq`, `isQueryBoundP_signDerived`, `isQueryBoundP_signWith` and `lifetimeQueries_eq` state the new constants.
+
+- leanSPHINCS signing builds each tree once: the top tree, the two lower trees and the 24 FORS trees ([#3401](https://github.com/ethereum/EthLib/pull/3401)).
+  Each build gives both the path of a key and the root that the layer above signs.
+  `signWith_eq_recompute` proves that every signature stays the same, byte for byte, for every hash function.
+  `signDerived` now takes `PK.seed` and the built top tree, `signLayer` takes the key's built tree, and `forsSign` also returns the FORS public key.
+  The signing bound drops from `939499 + 3 * 2^32` to `470595 + 3 * 2^32` calls, and so does `signCalls` in `schemeCalls`.
+  `Cost.signCalls_eq` and `hashCalls_signWith_le` state the new constants, and `unforgeable_adversary` keeps its 127 bits.
 
 - `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
   An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
