@@ -75,15 +75,10 @@ def blockLoadBound (body : BeaconBlockBody preset fork) : Nat :=
 
 /-! ## Steps that keep the count -/
 
-/-- Unchanged sizes of the registry and the balances, and an unchanged queue, keep the count. -/
-private theorem loadKept_of_sameSizes (sizes : SameSizes state after)
-    (queue : after.pendingDeposits = state.pendingDeposits) : LoadKept state after :=
-  ⟨sizes.1, queue⟩
-
 /-- A write to a validator keeps the count. -/
 private theorem loadKept_setValidator {index : ValidatorIndex} {validator : Validator}
     (set : state.setValidator index validator = .ok after) : LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_setValidator set) ?_
+  refine ⟨(sameSizes_setValidator set).1, ?_⟩
   obtain ⟨_, rfl⟩ := setValidator_ok set
   rfl
 
@@ -107,10 +102,9 @@ private theorem loadKept_slashValidator {slashedIndex : ValidatorIndex}
 private theorem loadKept_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
     LoadKept state after := by
-  have sizes := sameSizes_processProposerSlashing computed
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
-  exact loadKept_of_sameSizes sizes (loadKept_slashValidator slashed).2
+  exact loadKept_slashValidator slashed
 
 /-- An attester slashing keeps the count. -/
 private theorem loadKept_processAttesterSlashing {slashing : AttesterSlashing preset fork}
@@ -120,7 +114,7 @@ private theorem loadKept_processAttesterSlashing {slashing : AttesterSlashing pr
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := computed
-  refine loadKept_of_sameSizes sizes ?_
+  refine ⟨sizes.1, ?_⟩
   refine foldlM_ok_invariant (fun step => step.1.pendingDeposits = state.pendingDeposits)
     (fun step _ next before ok => ?_)
     (show (state, false).1.pendingDeposits = state.pendingDeposits from rfl) folded
@@ -139,7 +133,7 @@ private theorem loadKept_processAttestation {attestation : Attestation preset fo
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_processAttestation computed) ?_
+  refine ⟨(sameSizes_processAttestation computed).1, ?_⟩
   unfold processAttestation at computed
   split at computed
   · unfold processAttestationAltair at computed
@@ -194,7 +188,7 @@ private theorem loadKept_requestPartialWithdrawal {electra : .pectra ≤ fork}
     (computed : requestPartialWithdrawal config state electra index validator amount owed =
       .ok after) :
     LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_requestPartialWithdrawal computed) ?_
+  refine ⟨(sameSizes_requestPartialWithdrawal computed).1, ?_⟩
   simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨_, _, _, _, computed⟩ := computed
   split at computed
@@ -209,7 +203,7 @@ private theorem loadKept_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_processWithdrawalRequest computed) ?_
+  refine ⟨(sameSizes_processWithdrawalRequest computed).1, ?_⟩
   rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact (loadKeptLaws.initiateValidatorExit exited).2
@@ -221,7 +215,7 @@ private theorem loadKept_queueConsolidation {electra : .pectra ≤ fork}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_queueConsolidation computed) ?_
+  refine ⟨(sameSizes_queueConsolidation computed).1, ?_⟩
   obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
   exact (loadKept_setValidator set).2.trans
     (loadKept_computeConsolidationEpochAndUpdateChurn churned).2
@@ -229,7 +223,7 @@ private theorem loadKept_queueConsolidation {electra : .pectra ≤ fork}
 /-- A withdrawal keeps the count. -/
 private theorem loadKept_applyWithdrawal {withdrawal : Withdrawal}
     (computed : applyWithdrawal state withdrawal = .ok after) : LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_applyWithdrawal computed) ?_
+  refine ⟨(sameSizes_applyWithdrawal computed).1, ?_⟩
   unfold applyWithdrawal at computed
   split at computed
   · simp only [bind_ok_iff] at computed
@@ -251,7 +245,7 @@ private theorem loadKept_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 private theorem loadKept_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) : LoadKept state after := by
-  refine loadKept_of_sameSizes (sameSizes_processWithdrawals computed) ?_
+  refine ⟨(sameSizes_processWithdrawals computed).1, ?_⟩
   unfold processWithdrawals at computed
   split at computed
   · split at computed
@@ -268,27 +262,15 @@ private theorem loadKept_processWithdrawals {capella : .shapella ≤ fork}
 private theorem loadKept_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    LoadKept state after := by
-  have payload {s t : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (ok : processExecutionPayload config engine s body execution = .ok t) : LoadKept s t := by
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-    exact LoadKept.of_validators
-  unfold processBlockExecution at computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, bid⟩ := computed
-    obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
-    exact (loadKept_processWithdrawals withdrawnOk).trans LoadKept.of_validators
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, withdrawnOk, paid⟩ := computed
-    exact (loadKept_processWithdrawals withdrawnOk).trans (payload paid)
-  · dsimp only at computed
-    split at computed
-    · exact payload computed
-    · cases computed
-      exact LoadKept.refl _
+    LoadKept state after :=
+  processBlockExecution_of LoadKept LoadKept.refl LoadKept.trans
+    (fun paid => by
+      obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
+      exact LoadKept.of_validators)
+    (fun bid => by
+      obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
+      exact LoadKept.of_validators)
+    loadKept_processWithdrawals computed
 
 /-! ## Steps that raise the count -/
 
@@ -680,66 +662,15 @@ private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Depo
   · simp [addValidatorToRegistry_validators_eq_push added]
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
-/-- A deposit request keeps the registry size. -/
-private theorem processDepositRequest_size {electra : .pectra ≤ fork}
-    {request : DepositRequest}
-    (computed : processDepositRequest state electra request = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  obtain ⟨-, validators, -, -⟩ := processDepositRequest_ok computed
-  rw [validators]
-
-/-- A fold whose every step keeps the registry size keeps it. -/
-private theorem foldlM_size_eq {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (each : ∀ s x s', step s x = .ok s' → s'.validators.data.size = s.validators.data.size)
-    {items : List α} (computed : items.foldlM step state = .ok after) :
-    after.validators.data.size = state.validators.data.size :=
-  foldlM_ok_invariant (fun s => s.validators.data.size = state.validators.data.size)
-    (fun _ _ _ before ok => (each _ _ _ ok).trans before) rfl computed
-
-/-- The requests of a payload in Electra and Fulu keep the registry size. -/
-private theorem processExecutionRequests_size {body : BeaconBlockBody preset fork}
-    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (computed : processExecutionRequests config state body electra = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
-  have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
-  have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
-    withdrawalsOk
-  have three := foldlM_size_eq (fun _ _ _ ok => (sameSizes_processConsolidationRequest ok).1)
-    consolidationsOk
-  omega
-
 /-- The parent payload from Gloas keeps the registry size. -/
 private theorem processParentExecutionPayload_size {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
-    after.validators.data.size = state.validators.data.size := by
-  rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
-    ⟨-, settled, _, _, _, _, exited, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
-      buildersOk, exitsOk, -, final⟩
-  · rfl
-  have zero : LoadKept state settled := by
-    rw [settleParentPayment_eq settledOk]
-    exact LoadKept.of_validators
-  have one := foldlM_size_eq (fun _ _ _ ok => processDepositRequest_size ok) depositsOk
-  have two := foldlM_size_eq (fun _ _ _ ok => (loadKept_processWithdrawalRequest ok).1)
-    withdrawalsOk
-  have three := foldlM_size_eq (fun _ _ _ ok => (sameSizes_processConsolidationRequest ok).1)
-    consolidationsOk
-  have four := foldlM_size_eq (fun _ _ _ ok => by
-    obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
-    rfl) buildersOk
-  have five := foldlM_size_eq (fun _ _ _ ok => by
-    obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
-    rfl) exitsOk
-  have six : LoadKept exited after := by
-    rw [final]
-    exact LoadKept.of_validators
-  have seven := zero.1
-  have eight := six.1
-  omega
+    after.validators.data.size = state.validators.data.size :=
+  processParentExecutionPayload_step_of (fun s t => t.validators.data.size = s.validators.data.size)
+    (fun _ => rfl) (fun one two => two.trans one) (fun _ same => by rw [same])
+    (fun ok => (sameSizes_processWithdrawalRequest ok).1)
+    (fun ok => (sameSizes_processConsolidationRequest ok).1) computed
 
 /-- The operations add at most one validator for each deposit, and none from Gloas. -/
 private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
@@ -755,7 +686,7 @@ private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
     foldlM_validators_size_le (fun _ _ _ ok => processDeposit_size_le ok) depositedOk
   have requested : after.validators.data.size = changed.validators.data.size := by
     split at requestsOk
-    · exact processExecutionRequests_size requestsOk
+    · exact (sameSizes_processExecutionRequests requestsOk).1
     · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
       subst requestsOk
       rfl
