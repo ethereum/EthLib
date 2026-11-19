@@ -336,8 +336,11 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- The window can include the call's previous period, which its state does not store.
   --
-  -- Both branches can credit and debit those seats, so they count twice.
-  let syncSeats := 3 * (2 * depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope)
+  -- Both branches can credit and debit those seats after the split, so they count twice there.
+  --
+  -- From the finalized block's state to the split the seats are shared, and they count once more.
+  let syncSeats := 3 * ((depth + depthFin) * slots * preset.SYNC_COMMITTEE_SIZE.toNat *
+    syncEnvelope)
   -- The credits are scaled by eleven tenths, rounded up, for the gains they compound.
   --
   -- The band of each credited key is not scaled.
