@@ -12604,7 +12604,16 @@ private theorem exited_not_proposer (h : Setting config checks g split fin pulle
     {i : ℕ} {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)
     (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex) :
-    u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := sorry
+    u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i := by
+  intro early proposer same
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨w0, foundFin, kept⟩ := exit_kept_of_le_fin h foundPulled exited
+  have inactive := inactive_of_exited h.twoSlots run foundFin (by rw [kept]; exact exited)
+  have look := Run.lookaheadActive h.facts.covers h.genesis (toFin.append run) early
+  have active := look.proposer_active
+    (Nat.le_trans h.fulu (fork_le_of_chainSteps run.chainSteps)) proposer
+  rw [same, inactive] at active
+  exact Bool.false_ne_true active
 
 /-- A key with a sync credit over the events of the shared segment has a gross credit on C's run.
 
