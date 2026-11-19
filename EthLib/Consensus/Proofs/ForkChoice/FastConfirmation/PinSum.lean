@@ -139,6 +139,7 @@ structure PinTerms (preset : Preset) where
   gainRate : ℕ → ℕ
   floorC : ℕ → ℕ
   drop : ℕ → ℕ
+  withdrawnRB : ℕ → Bool
 
 /-- `pinReserve` as the sum of its named terms, with the code's weights. -/
 def PinTerms.total (t : PinTerms preset) : ℕ :=
@@ -653,6 +654,8 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
     slashedR,
     slashedRB := fun i => decide (slashed i = true ∧ recentSlashing i = true),
+    withdrawnRB := fun i => (validator i).any fun v =>
+      decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1),
     tight, queueKeys,
     queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry,
     gainRateMax, exitFloor, lowKeys,
@@ -1078,11 +1081,31 @@ private def slashW (t : PinTerms preset) (i : ℕ) : ℕ :=
 
 /-- The leak a key's sync debits on R's run from the finalized block induce above `ebUp`.
 
-It is the leak at the largest effective balance on the run, less the leak at `ebUp`. -/
+It is the leak at the largest effective balance on the run, less the leak at `ebUp`.
+
+`inducedR` is 0 when the key's withdrawable epoch at R is at most R's epoch plus one.
+
+Such a key is swept by R, so the leak is not charged. -/
 private def inducedR (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (i : ℕ) : ℕ :=
-  t.depthFin * (t.leakAt ((tail.balancePath.map fun z => effectiveAt z i).foldl max 0) i -
-    t.leakAt (t.ebUp i) i)
+  if t.withdrawnRB i = true then 0
+  else
+    t.depthFin * (t.leakAt ((tail.balancePath.map fun z => effectiveAt z i).foldl max 0) i -
+      t.leakAt (t.ebUp i) i)
+
+/-- A key that R holds withdrawable by the next epoch has no induced leak. -/
+private theorem inducedR_of_withdrawn (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (i : ℕ) (withdrawn : t.withdrawnRB i = true) :
+    inducedR t tail i = 0 := by
+  simp [inducedR, withdrawn]
+
+/-- A key that R does not hold withdrawable is charged the leak at its largest balance. -/
+private theorem inducedR_of_not_withdrawn (t : PinTerms preset) {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (i : ℕ) (kept : t.withdrawnRB i = false) :
+    inducedR t tail i =
+      t.depthFin * (t.leakAt ((tail.balancePath.map fun z => effectiveAt z i).foldl max 0) i -
+        t.leakAt (t.ebUp i) i) := by
+  simp [inducedR, kept]
 
 /-- The flows that can raise a key's balance on C above R's base, besides its epoch rewards.
 
@@ -7513,7 +7536,11 @@ private theorem inducedR_le (config : Config) (pulled anc fin : BeaconState pres
     · exact .inr zero
     · exact .inl (Nat.mul_pos perPos pos)
   rw [Nat.mul_add, ← Nat.add_assoc] at mono
-  unfold inducedR slashLeak
+  by_cases withdrawn : (pinTerms config pulled anc fin).withdrawnRB i = true
+  · rw [inducedR_of_withdrawn _ tail i withdrawn]
+    exact Nat.zero_le _
+  rw [inducedR_of_not_withdrawn _ tail i (by simpa using withdrawn)]
+  unfold slashLeak
   rw [Nat.mul_left_comm s, ← Nat.mul_add]
   refine Nat.mul_le_mul_left _ ?_
   have three : 3 * (pinTerms config pulled anc fin).perIncrement * a =
@@ -15452,6 +15479,54 @@ private theorem credits_prefix_le (h : Setting config checks g split fin pulled 
   simp only [depPre, syncCr, consAmt, List.filter_append, List.map_append, List.sum_append] at *
   omega
 
+/-- A counted voter that R holds in its registry is not withdrawable at R's next epoch.
+
+An unslashed voter has its withdrawable epoch at its exit plus the delay, or both unset.
+
+Its exit is late, by `voter_late`.
+
+A voter that R slashes after the split has its withdrawable epoch a slashings vector past the split.
+
+The window of the guard is under half a vector. -/
+private theorem voter_not_withdrawn (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (v : ValidatorIndex) (voter : v ∈ Q counted) (inFin : v.toNat < fin.validators.data.size) :
+    (pinTerms config pulled anc fin).withdrawnRB v.toNat = false := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  have sizeFin := registryGrows_of_chainSteps fromFin.chainSteps
+  have sizeSplit := registryGrows_of_chainSteps tail.chainSteps
+  obtain ⟨uS, foundS⟩ : ∃ uS, split.validators.data[v.toNat]? = some uS :=
+    ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inFin sizeFin)⟩
+  obtain ⟨wP, foundP⟩ : ∃ wP, pulled.validators.data[v.toNat]? = some wP :=
+    ⟨_, Array.getElem?_eq_getElem
+      (Nat.lt_of_lt_of_le (Nat.lt_of_lt_of_le inFin sizeFin) sizeSplit)⟩
+  have cleanS : uS.slashed = false := by
+    simpa [foundS] using voter_unslashed h v voter
+  have late := voter_late h fromFin v voter wP foundP
+  have half := depthFin_lt_half h
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
+  have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  have beyond : (getCurrentEpoch pulled).toNat + 1 < wP.withdrawableEpoch.toNat := by
+    by_cases slashedP : wP.slashed = true
+    · have newly := (tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+        h.early h.delay v.toNat uS wP foundS foundP cleanS slashedP).2
+      have newly' : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+          wP.withdrawableEpoch.toNat := newly
+      omega
+    · have cleanP : wP.slashed = false := by simpa using slashedP
+      rcases Run.withdrawable_eq_exit_delay (shared.append (fromFin.append tail)) h.genesis
+        v.toNat wP foundP cleanP with ⟨exitFar, withdrawFar⟩ | eq
+      · have := congrArg UInt64.toNat withdrawFar
+        omega
+      · omega
+  show ((pulled.validators.data[v.toNat]?).any fun w =>
+    decide (w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)) = false
+  rw [foundP]
+  simpa using beyond
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
 
@@ -15477,7 +15552,8 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC events eventsF : List (BalanceEvent preset)} (v : ValidatorIndex)
-    (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) (P : ℕ)
+    (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true)
+    (notWithdrawn : (pinTerms config pulled anc fin).withdrawnRB v.toNat = false) (P : ℕ)
     (hP : P = ((getBaseRewardPerIncrement preset
       (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
@@ -15574,8 +15650,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   have induced : Df * (pinTerms config pulled anc fin).leakAt M v.toNat ≤
       Df * (pinTerms config pulled anc fin).leak v.toNat +
         inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat := by
-    unfold inducedR
-    rw [hdf, ← hM, ← Nat.mul_add]
+    rw [inducedR_of_not_withdrawn _ _ _ notWithdrawn, hdf, ← hM, ← Nat.mul_add]
     exact Nat.mul_le_mul_left _ (by
       have := (pinTerms config pulled anc fin).leak v.toNat
       show _ ≤ (pinTerms config pulled anc fin).leakAt ((pinTerms config pulled anc fin).ebUp
@@ -15673,7 +15748,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
             by unfold syncD; omega), Nat.mul_zero, Nat.add_zero] at e
       exact e
     have ind0 : inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat = 0 := by
-      unfold inducedR
+      rw [inducedR_of_not_withdrawn _ _ _ notWithdrawn]
       rw [← hM, Nat.sub_eq_zero_of_le (leakAt_mono config pulled anc fin v.toNat M0), Nat.mul_zero]
     have hZkW : Zk = slashW (pinTerms config pulled anc fin) v.toNat := by
       rw [hZk]
@@ -15985,7 +16060,9 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
       (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide)) v.toNat highC
       tailC
     omega
-  exact key_close h tail fromFin tailC highC v kept P hP Df D q gc Cr M Bc _ hDf hD hq hM hform hBc
+  exact key_close h tail fromFin tailC highC v kept
+    (voter_not_withdrawn h fromFin tail v voter inFin) P hP Df D q gc Cr M Bc _ hDf hD hq hM
+    hform hBc
     rateLow maxLe stay cappedC creditsLe noCredit
 
 /-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
