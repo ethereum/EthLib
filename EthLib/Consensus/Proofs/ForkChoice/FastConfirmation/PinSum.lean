@@ -1140,7 +1140,7 @@ private theorem credited_piece {g : ForkedBeaconState preset}
       rw [netScan_snoc] at pos
       have prior : 0 < netScan i high pre := by
         split at pos
-        · simpa using pos
+        · simpa [stepNet] using pos
         · exact pos
       rcases hB i prior with member | ⟨w, found, mem⟩
       · exact .inl member
@@ -1171,7 +1171,7 @@ private theorem credited_piece {g : ForkedBeaconState preset}
             actualBalanceAt (⟨f, s⟩ : ForkedBeaconState preset) i <
               actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i := by
           split at pos
-          · simp only [] at pos
+          · simp only [stepNet] at pos
             omega
           · exact .inl pos
         rcases either with prior | risen
@@ -1386,7 +1386,7 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
       · have prior : 0 < netScan i high pre := by
           rw [netScan_snoc] at first
           split at first
-          · simpa using first
+          · simpa [stepNet] using first
           · exact first
         rcases hB₁ i prior with member | ⟨w, found, mem⟩
         · exact .inl (Finset.mem_union_left _ member)

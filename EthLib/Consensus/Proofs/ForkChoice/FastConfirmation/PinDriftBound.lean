@@ -1146,6 +1146,14 @@ private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v hig
     · omega
     · exact ih
 
+/-- The net rise of a key in one step.
+
+A block step counts the rise of the key's balance across it, and a slot step counts nothing. -/
+private def stepNet (v : ℕ) {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
+  match step with
+  | .block .. => actualBalanceAt y v - actualBalanceAt x v
+  | .slot _ => 0
+
 /-- The net credits to the key in the block steps of a run.
 
 A block step counts the rise of the key's balance across the whole step.
@@ -1156,33 +1164,13 @@ The steps count from the one whose start epoch is at most `high + 1`, as in `Run
 private def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → ℕ
   | _, .nil => 0
-  | y, .snoc (middle := m) pre step =>
+  | _, .snoc (middle := m) pre step =>
     if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-      netScan v high pre + match step with
-        | .block .. => actualBalanceAt y v - actualBalanceAt m v
-        | .slot _ => 0
+      netScan v high pre + stepNet v step
     else netScan v high pre
 
 /-- The net credits to a key in the block steps of a run, after one more step. -/
 private theorem netScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
-    (pre : Run config checks x m) (step : Step config checks m y) :
-    netScan v high (pre.snoc step) =
-      if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-        netScan v high pre + (match step with
-          | .block .. => actualBalanceAt y v - actualBalanceAt m v
-          | .slot _ => 0)
-      else netScan v high pre := rfl
-
-/-- The net rise of a key in one step.
-
-A block step counts the rise of the key's balance across it, and a slot step counts nothing. -/
-private def stepNet (v : ℕ) {x y : ForkedBeaconState preset} (step : Step config checks x y) : ℕ :=
-  match step with
-  | .block .. => actualBalanceAt y v - actualBalanceAt x v
-  | .slot _ => 0
-
-/-- The net credits to a key in the block steps of a run, after one more step, by its net rise. -/
-private theorem netScan_snoc_stepNet (v high : ℕ) {x m y : ForkedBeaconState preset}
     (pre : Run config checks x m) (step : Step config checks m y) :
     netScan v high (pre.snoc step) =
       if (getCurrentEpoch m.state).toNat ≤ high + 1 then
@@ -2120,7 +2108,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have within : (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
       have scan := PinSplit.creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards))
         i high pre step
-      have net := PinSplit.netScan_snoc_stepNet i high pre step
+      have net := PinSplit.netScan_snoc i high pre step
       simp only [within, ↓reduceIte] at scan net
       have tailEq : creditBound (pre.snoc step) i high E P =
           creditBound pre i high E P +
