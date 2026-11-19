@@ -1403,7 +1403,10 @@ private theorem stages_lookahead (altair : .altair ≤ fork) {stages : List Epoc
     (trace : EpochTrace (EpochStage.action config checks) stages a b) :
     b.slot = a.slot ∧ b.proposerLookahead = a.proposerLookahead :=
   trace.transport (fun a b => b.slot = a.slot ∧ b.proposerLookahead = a.proposerLookahead)
-    (fun _ => ⟨rfl, rfl⟩) (fun ab bc => ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩)
+    (fun _ => ⟨rfl, rfl⟩)
+    (by
+      intro _ _ _ ab bc
+      exact ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩)
     (fun k member _ _ computed =>
       have edge := EpochStage.action_cases.mp computed
       ⟨edge.slot_eq,
