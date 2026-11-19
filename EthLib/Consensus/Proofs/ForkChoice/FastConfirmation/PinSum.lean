@@ -5285,25 +5285,39 @@ theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
         ((K5 counted V).filter fun v => (pinTerms config pulled anc fin).exitingB v.toNat = false))
     omega
 
-/-- The deposit credits of V keys, as events, fit any per-event bound on them. -/
+/-- The deposit credits of a set of keys, as events, fit any per-event bound on them.
+
+An event counts for a key only when `keep` holds there.
+
+The bound reads the credits of the keys that the event keeps. -/
 private theorem credDepR_sum_le (V : Finset ValidatorIndex) (events : List (BalanceEvent preset))
+    (keep : BalanceEvent preset → ℕ → Prop) [∀ e i, Decidable (keep e i)]
     (T : BalanceEvent preset → ℕ)
-    (each : ∀ e ∈ events, e.source = .deposits → ∑ v ∈ V, keyCredit v.toNat e ≤ T e) :
-    ∑ v ∈ V, credDepR events v.toNat ≤ (events.map T).sum := by
+    (each : ∀ e ∈ events, e.source = .deposits →
+      ∑ v ∈ V.filter fun v => keep e v.toNat, keyCredit v.toNat e ≤ T e) :
+    ∑ v ∈ V, ((events.filter fun e => e.source = .deposits ∧ keep e v.toNat).map
+      (keyCredit v.toNat)).sum ≤ (events.map T).sum := by
   induction events with
-  | nil => simp [credDepR]
+  | nil => simp
   | cons e rest ih =>
     have tail := ih fun e' member => each e' (List.mem_cons_of_mem _ member)
     by_cases dep : e.source = .deposits
     · have head := each e List.mem_cons_self dep
-      have split : ∑ v ∈ V, credDepR (e :: rest) v.toNat =
-          ∑ v ∈ V, keyCredit v.toNat e + ∑ v ∈ V, credDepR rest v.toNat := by
-        rw [← Finset.sum_add_distrib]
-        exact Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+      have split : ∑ v ∈ V, (((e :: rest).filter fun e => e.source = .deposits ∧
+            keep e v.toNat).map (keyCredit v.toNat)).sum =
+          ∑ v ∈ V.filter (fun v => keep e v.toNat), keyCredit v.toNat e +
+            ∑ v ∈ V, ((rest.filter fun e => e.source = .deposits ∧ keep e v.toNat).map
+              (keyCredit v.toNat)).sum := by
+        rw [Finset.sum_filter, ← Finset.sum_add_distrib]
+        refine Finset.sum_congr rfl fun v _ => ?_
+        by_cases kept : keep e v.toNat <;> simp [dep, kept]
       simp only [List.map_cons, List.sum_cons]
       omega
-    · have same : ∑ v ∈ V, credDepR (e :: rest) v.toNat = ∑ v ∈ V, credDepR rest v.toNat :=
-        Finset.sum_congr rfl fun v _ => by simp [credDepR, dep]
+    · have same : ∑ v ∈ V, (((e :: rest).filter fun e => e.source = .deposits ∧
+            keep e v.toNat).map (keyCredit v.toNat)).sum =
+          ∑ v ∈ V, ((rest.filter fun e => e.source = .deposits ∧ keep e v.toNat).map
+            (keyCredit v.toNat)).sum :=
+        Finset.sum_congr rfl fun v _ => by simp [dep]
       simp only [List.map_cons, List.sum_cons]
       omega
 
@@ -5362,7 +5376,10 @@ private theorem bud_deposits_of (h : Setting config checks g split fin pulled an
     (each : ∀ e ∈ events, e.source = .deposits →
       ∑ v ∈ V, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
     3 * (∑ v ∈ V, credDepR events v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
-  have sum := credDepR_sum_le V events DirectSafety.funding_deposit_credit each
+  have sum : ∑ v ∈ V, credDepR events v.toNat ≤
+      (events.map DirectSafety.funding_deposit_credit).sum := by
+    simpa [credDepR] using credDepR_sum_le V events (fun _ _ => True)
+      DirectSafety.funding_deposit_credit (by simpa using each)
   have capacity := deposit_events_le h tail (Nat.le_succ _) high endEpoch replayed
   omega
 
@@ -5387,82 +5404,51 @@ private theorem deposit_each_le (e : BalanceEvent preset) (S : Finset ValidatorI
   rw [Finset.sum_image inj] at image
   simpa [DirectSafety.funding_deposit_credit, dep, electra, keyCredit] using image
 
-/-- The deposits credited to a set of keys on C's run fit the window's deposit churn.
+/-- The deposits credited to two sets of keys on C's run fit the window's deposit churn.
 
-The credits are read as the scan of the deposit events.
+The first set's credits are read as the scan of the deposit events.
 
-Each deposit event credits the set at most its funding credit. -/
+The second set's are the deposits of events whose before-state does not hold the key slashed.
+
+Each deposit event credits both sets together at most its funding credit. -/
 private theorem deposits_scan_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (S : Finset ValidatorIndex)
+    (S P : Finset ValidatorIndex)
     (each : ∀ e ∈ eventsC, e.source = .deposits →
-      ∑ v ∈ S, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
-    3 * ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      tailC).1 ≤ (pinTerms config pulled anc fin).queueDep := by
+      ∑ v ∈ S, keyCredit v.toNat e +
+        ∑ v ∈ P.filter (fun v => ¬ slashedFlagAt e.before.state v.toNat = some true),
+          keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
+    3 * (∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      tailC).1 + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨X, hX⟩ : ∃ X : BalanceEvent preset → ℕ, ∀ e, X e =
+      ∑ v ∈ P.filter (fun v => ¬ slashedFlagAt e.before.state v.toNat = some true),
+        keyCredit v.toNat e := ⟨_, fun _ => rfl⟩
   have scan := creditScan_sum_le S (fun _ => false) (fun s => decide (s = .deposits)) highC
-    DirectSafety.funding_deposit_credit tailC replayedC fun e member selected =>
-      each e member (by simpa using selected)
+    (fun e => DirectSafety.funding_deposit_credit e - X e) tailC replayedC
+    fun e member selected => by
+      have := each e member (by simpa using selected)
+      have := hX e
+      omega
+  have pre := credDepR_sum_le P eventsC (fun e i => ¬ slashedFlagAt e.before.state i = some true)
+    (fun e => if e.source = .deposits then X e else 0) fun e _ dep => by simp [dep, hX e]
   have capacity := deposit_events_le h tailC h.near highC endEpochC replayedC
-  have chain : ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      tailC).1 ≤ (eventsC.map DirectSafety.funding_deposit_credit).sum :=
-    scan.trans (List.sum_le_sum fun e _ => by split <;> omega)
+  have chain : (eventsC.map fun e => if (false = true ∨ decide (e.source = .deposits) = true)
+        then DirectSafety.funding_deposit_credit e - X e else 0).sum +
+      (eventsC.map fun e => if e.source = .deposits then X e else 0).sum ≤
+        (eventsC.map DirectSafety.funding_deposit_credit).sum := by
+    rw [← List.sum_map_add]
+    refine List.sum_le_sum fun e member => ?_
+    by_cases dep : e.source = .deposits
+    · have := each e member dep
+      have := hX e
+      simp only [dep, decide_true, or_true, ↓reduceIte]
+      omega
+    · simp [dep]
+  have exchange : ∑ v ∈ P, depPre eventsC v.toNat ≤
+      (eventsC.map fun e => if e.source = .deposits then X e else 0).sum := pre
   omega
-
-/-- The deposits credited to keys that are active at C's end fit the window's deposit churn.
-
-A key that exits after C's epoch is not withdrawable at any deposit event of C's run.
-
-Its exit epoch is constant once set, and the exit epoch bounds the withdrawable epoch. -/
-private theorem deposits_active_le (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (S : Finset ValidatorIndex)
-    (active : ∀ v ∈ S, ∃ w, counted.validators.data[v.toNat]? = some w ∧
-      (getCurrentEpoch counted).toNat < w.exitEpoch.toNat) :
-    3 * ∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      tailC).1 ≤ (pinTerms config pulled anc fin).queueDep := by
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  refine deposits_scan_le h tailC highC endEpochC replayedC S fun e member dep => ?_
-  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tailC h.genesis
-    h.early h.delay replayedC e member).2.2
-  obtain ⟨-, life, life', ordered, matched, -, epoch⟩ := replay_event_provenance
-    (toFin.append fromFin) tailC h.genesis h.early highC endEpochC _ replayedC e member
-  refine deposit_each_le e S dep (Nat.le_trans (Nat.le_trans (by decide) h.fulu) forkLe) matched
-    fun v inS w found => ?_
-  obtain ⟨wC, foundC, late⟩ := active v inS
-  obtain ⟨u, foundU, lifeU⟩ := (life.trans life').validators v.toNat w found
-  obtain rfl : u = wC := Option.some.inj (foundU.symm.trans foundC)
-  have epoch' : (getCurrentEpoch e.before.state).toNat ≤ (getCurrentEpoch counted).toNat := epoch
-  have bound := UInt64.le_iff_toNat_le.mp (ordered w (Array.mem_of_getElem? found))
-  have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots e.before.state
-  by_cases unset : w.exitEpoch = FAR_FUTURE_EPOCH
-  · rw [unset] at bound
-    omega
-  · have same := congrArg UInt64.toNat (lifeU.exitEpoch unset)
-    omega
-
-/-- The deposits credited to the keys of `K4` and `K6` on C's run fit the window's deposit churn.
-
-The keys of both classes are active at C's end. -/
-private theorem deposits_K46_le (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    3 * ∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 ≤
-        (pinTerms config pulled anc fin).queueDep :=
-  deposits_active_le h tailC highC endEpochC replayedC _ fun v member => by
-    have counted_active : v ∈ AC counted := by
-      rcases Finset.mem_union.mp member with m | m
-      · exact (Finset.mem_filter.mp m).1
-      · exact (Finset.mem_filter.mp m).1
-    obtain ⟨w, found, active⟩ := active_of_activeVoters h.early counted_active
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-    exact ⟨w, found, active.2⟩
 
 /-- A key slashed at C and not slashed at the start of a deposit event is not withdrawable there.
 
@@ -5559,6 +5545,62 @@ private theorem slashed_deposit_held (h : Setting config checks g split fin pull
     have := congrArg UInt64.toNat eq1
     have := congrArg UInt64.toNat eq2
     omega
+
+/-- The deposits credited to keys active at C's end, and to keys slashed there, fit the churn.
+
+A key that exits after C's epoch is not withdrawable at any deposit event of C's run.
+
+Its exit epoch is constant once set, and the exit epoch bounds the withdrawable epoch.
+
+A key slashed at C counts only the deposits of events that do not hold it slashed.
+
+An event that raises no balance credits nothing. -/
+private theorem deposits_active_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (S P : Finset ValidatorIndex) (apart : Disjoint S P)
+    (active : ∀ v ∈ S, ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      (getCurrentEpoch counted).toNat < w.exitEpoch.toNat)
+    (slashedC : ∀ v ∈ P, ∃ b, counted.validators.data[v.toNat]? = some b ∧ b.slashed = true) :
+    3 * (∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      tailC).1 + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have located := run_located tailC (Nat.le_trans (by decide) h.fulu) h.early highC replayedC
+  refine deposits_scan_le h tailC highC endEpochC replayedC S P fun e member dep => ?_
+  rcases located e member dep with unconditional | ⟨u, w, ok, es, contained, replayedEs, inStep, -⟩
+  · have zero (i : ℕ) : keyCredit i e = 0 := by
+      have := unconditional i
+      simp only [keyCredit]
+      omega
+    simp [zero]
+  have forkLe := ((toFin.append fromFin).withdrawnConsolidationCredit_eq_zero tailC h.genesis
+    h.early h.delay replayedC e member).2.2
+  obtain ⟨-, life, life', ordered, matched, -, epoch⟩ := replay_event_provenance
+    (toFin.append fromFin) tailC h.genesis h.early highC endEpochC _ replayedC e member
+  have union := deposit_each_le e
+    (S ∪ P.filter fun v => ¬ slashedFlagAt e.before.state v.toNat = some true) dep
+    (Nat.le_trans (Nat.le_trans (by decide) h.fulu) forkLe) matched fun v inUnion a found => ?_
+  · rwa [Finset.sum_union (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) apart)]
+      at union
+  rcases Finset.mem_union.mp inUnion with inS | inP
+  · obtain ⟨wC, foundC, late⟩ := active v inS
+    obtain ⟨u, foundU, lifeU⟩ := (life.trans life').validators v.toNat a found
+    obtain rfl : u = wC := Option.some.inj (foundU.symm.trans foundC)
+    have epoch' : (getCurrentEpoch e.before.state).toNat ≤ (getCurrentEpoch counted).toNat := epoch
+    have bound := UInt64.le_iff_toNat_le.mp (ordered a (Array.mem_of_getElem? found))
+    have far := getCurrentEpoch_succ_lt_farFuture h.twoSlots e.before.state
+    by_cases unset : a.exitEpoch = FAR_FUTURE_EPOCH
+    · rw [unset] at bound
+      omega
+    · have same := congrArg UInt64.toNat (lifeU.exitEpoch unset)
+      omega
+  · obtain ⟨inP, clean⟩ := Finset.mem_filter.mp inP
+    simp only [slashedFlagAt, found, Option.map_some, Option.some.injEq,
+      Bool.not_eq_true] at clean
+    exact slashed_deposit_held h tailC ok contained replayedEs inStep dep ordered
+      (life.trans life') (slashedC v inP) found clean
 
 /-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
@@ -9840,6 +9882,42 @@ private theorem credits_budget (config : Config) (pulled anc fin : BeaconState p
         ck := by
   dsimp only [pinTerms]
   exact ⟨_, _, _, _, rfl, rfl, Nat.le_add_right _ _⟩
+
+/-- The deposits of the classes fit the deposit queue at weight three.
+
+The keys slashed at C, `SC` and `CS`, count the deposits of events that do not hold them slashed.
+
+The classes of C's quorum are apart from them. -/
+private theorem deposits_union_le (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    3 * ((∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1) +
+      (∑ v ∈ SC pulled counted split ∪ CS pulled counted, depPre eventsC v.toNat)) ≤
+      (pinTerms config pulled anc fin).queueDep := by
+  have quorum : K4 pulled counted V ∪ K6 pulled counted ⊆
+      K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted := fun v member => by
+    simp only [Finset.mem_union] at member ⊢
+    tauto
+  refine deposits_active_le h tailC highC endEpochC replayedC _ _ ?_ (fun v member => ?_)
+    fun v member => ?_
+  · rw [Finset.disjoint_union_right]
+    exact ⟨Finset.disjoint_of_subset_left quorum (sc_disjoint h).1,
+      Finset.disjoint_of_subset_left (fun v m => Finset.mem_union_left _ (quorum m))
+        (cs_disjoint h).1⟩
+  · have countedActive : v ∈ AC counted := by
+      rcases Finset.mem_union.mp member with m | m
+      · exact (Finset.mem_filter.mp m).1
+      · exact (Finset.mem_filter.mp m).1
+    obtain ⟨w, found, active⟩ := active_of_activeVoters h.early countedActive
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+    exact ⟨w, found, active.2⟩
+  · have flag : slashedFlagAt counted v.toNat = some true := by
+      rcases Finset.mem_union.mp member with m | m
+      · exact (Finset.mem_filter.mp m).2.1
+      · exact (Finset.mem_filter.mp m).2.2
+    simpa [slashedFlagAt, Option.map_eq_some_iff] using flag
 
 /-- D-7 (credits) from the proposer rewards, the deposits and the credited keys of its classes.
 
