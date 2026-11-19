@@ -16745,6 +16745,19 @@ private def whistleEnv (t : PinTerms preset) (pulled anc fin : BeaconState prese
     max (balanceAt pulled i + t.rise i) (max (t.bF i) (balanceAt fin i))
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
+/-- A balance within the finalized effective balance is within `whistleEnv`, plus any slack.
+
+The first two branches of `whistleEnv` hold the finalized effective balance.
+
+The third holds `ebUp`, which is at least that. -/
+private theorem short_end (h : Setting config checks g split fin pulled anc counted V) (i : ℕ)
+    {X : ℕ} (hfin : X ≤ balanceAt fin i) (slack : ℕ) :
+    X ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i + slack := by
+  have up : balanceAt fin i ≤ (pinTerms config pulled anc fin).ebUp i :=
+    effective_fin_le_ebUp h i
+  unfold whistleEnv
+  split_ifs <;> omega
+
 /-- The credits that raise the effective balance of a key of R's registry on C's branch.
 
 They are the key's credits at eleven tenths, rounded up, with the bands of credits and seat debits.
