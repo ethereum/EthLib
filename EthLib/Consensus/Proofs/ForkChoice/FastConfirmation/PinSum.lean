@@ -17023,6 +17023,14 @@ private theorem slashW_le (h : Setting config checks g split fin pulled anc coun
     exact (Nat.le_add_right _ _).trans h.facts.slashBand
   · exact Nat.zero_le _
 
+/-- A key that R holds withdrawable by the next epoch is a key with `withdrawnRB`. -/
+private theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
+    {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
+    (le : w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    (pinTerms config pulled anc fin).withdrawnRB i = true := by
+  simp only [pinTerms]
+  simp [found, le]
+
 /-- The leak induced by the sync debits of any keys fits `syncLeak` and the slashed keys' leak.
 
 A key withdrawn by R's horizon induces no leak.
@@ -17044,9 +17052,6 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
     (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (W : Finset ValidatorIndex)
-    (withdrawn : ∀ v ∈ W, ∀ w, pulled.validators.data[v.toNat]? = some w →
-      w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-      inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat = 0)
     (envelope : ∀ v ∈ W, (∀ w, pulled.validators.data[v.toNat]? = some w →
         (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) →
       ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
@@ -17088,7 +17093,7 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
         exact late fun w found => by
           by_contra notLate
           exact none ⟨w, found, by omega⟩
-      rw [withdrawn v member w found notLate]
+      rw [inducedR_of_withdrawn _ _ _ (withdrawnRB_of_le config pulled anc fin found notLate)]
       exact Nat.zero_le _
   rw [Finset.sum_add_distrib, ← Finset.mul_sum, Finset.sum_add_distrib, ← Finset.mul_sum,
     ← Finset.sum_mul] at total
@@ -17203,11 +17208,6 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
     simp only [SC, Finset.mem_filter] at member
     have flagS := member.2.2
     simp [slashedFlagAt, found, flag] at flagS
-  -- the keys that R withdraws by its horizon induce no leak
-  have withdrawn : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
-      SC pulled counted split ∪ Kc, ∀ w, pulled.validators.data[v.toNat]? = some w →
-      w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-      inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat = 0 := sorry
   -- the keys that the shared segment or R's run creates have their envelope from their start
   have created : ∀ v : ValidatorIndex, fin.validators.data.size ≤ v.toNat →
       v.toNat < pulled.validators.data.size →
@@ -17291,10 +17291,9 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
       · exact created v (by omega) (by omega) late z inPath
   have whole := syncLeak_of_envelope h perPos fromFin tail replayedF' replayed'
     (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪ Kc)
-    withdrawn envelope
+    envelope
   have scOnly := syncLeak_of_envelope h perPos fromFin tail replayedF' replayed'
     (SC pulled counted split)
-    (fun v member => withdrawn v (Finset.mem_union_left _ (Finset.mem_union_right _ member)))
     (fun v member => envelope v (Finset.mem_union_left _ (Finset.mem_union_right _ member)))
   have weights := weighted_le (fun v : ValidatorIndex =>
     inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) d45 d46 d56
