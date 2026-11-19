@@ -9966,9 +9966,18 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     _ ≤ β * (3 * seats) := scaled
     _ = 3 * (β * seats) := by ring
 
+/-- The flag reward of one increment is at most the reward of one increment. -/
+private theorem flagRate_le (t : PinTerms preset) : flagRate t ≤ t.perIncrement := by
+  have weights : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum ≤ WEIGHT_DENOMINATOR.toNat := by
+    decide
+  exact (Nat.div_le_div_right (Nat.mul_le_mul_left _ weights)).trans
+    (Nat.mul_div_cancel _ (by decide : 0 < WEIGHT_DENOMINATOR.toNat)).le
+
 /-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
 
-The slashed, proposer and rounding charges have weight three, as has the whistleblower charge. -/
+The slashed, proposer and rounding charges have weight three, as has the whistleblower charge.
+
+The slashed charge covers the flag gain of two windows, and `W` holds that and the unit gain. -/
 private theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     ∃ W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
@@ -9986,9 +9995,18 @@ private theorem branchR_split (config : Config)
                 (getCurrentEpoch finalizedState).toNat /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
-                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) := by
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
+      (pinTerms config state ancestor finalizedState).slashedR *
+          (2 * (pinTerms config state ancestor finalizedState).depthFin *
+            flagRate (pinTerms config state ancestor finalizedState)) +
+        (pinTerms config state ancestor finalizedState).unitGain *
+          (pinTerms config state ancestor finalizedState).slashedR ≤ W := by
   -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
-  obtain ⟨W, D, U, split⟩ : ∃ W D U : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+  have charge : ∀ d p x f : ℕ, f ≤ p → 2 * d * f ≤ d * (2 * (2 * p) + x + 1) := fun d p x f le =>
+    calc 2 * d * f = d * (2 * f) := by ring
+      _ ≤ d * (2 * (2 * p) + x + 1) := Nat.mul_le_mul_left _ (by omega)
+  obtain ⟨W, D, U, split, gain, unit⟩ : ∃ W D U : ℕ,
+      (pinTerms config state ancestor finalizedState).branchR =
       3 * (W + (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + D) *
           (pinTerms config state ancestor finalizedState).slashedR +
         U * (pinTerms config state ancestor finalizedState).slashedR +
@@ -10004,10 +10022,22 @@ private theorem branchR_split (config : Config)
                 (getCurrentEpoch finalizedState).toNat /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
                 (pinTerms config state ancestor finalizedState).depth /
-                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) :=
-    ⟨_, _, _, rfl⟩
-  exact ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR +
-    U * (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring⟩
+                  max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
+      2 * (pinTerms config state ancestor finalizedState).depthFin *
+          flagRate (pinTerms config state ancestor finalizedState) ≤ D ∧
+      U = (pinTerms config state ancestor finalizedState).unitGain := by
+    refine ⟨_, _, _, rfl, ?_, rfl⟩
+    exact charge _ _ _ _ (flagRate_le _)
+  subst unit
+  refine ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR +
+    (pinTerms config state ancestor finalizedState).unitGain *
+      (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring, ?_⟩
+  have step : (pinTerms config state ancestor finalizedState).slashedR *
+      (2 * (pinTerms config state ancestor finalizedState).depthFin *
+        flagRate (pinTerms config state ancestor finalizedState)) ≤
+      D * (pinTerms config state ancestor finalizedState).slashedR :=
+    (Nat.mul_comm _ _).le.trans (Nat.mul_le_mul_right _ gain)
+  omega
 
 /-- The sync part of the proposer credit is at most the proposer credit. -/
 private theorem syncProposer_le_credit (config : Config)
@@ -10021,6 +10051,8 @@ private theorem syncProposer_le_credit (config : Config)
 The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
 
 The sync part of the proposer credit fits the proposer credit of each epoch.
+
+The flag gain and the unit of each slashed key fit `W`, by `branchR_split`.
 
 The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`. -/
 private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
@@ -10040,7 +10072,11 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 +
               (pinTerms config pulled anc fin).depth /
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)))) :
-    3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
+    3 * ((pinTerms config pulled anc fin).slashedR *
+        (2 * (pinTerms config pulled anc fin).depthFin *
+          flagRate (pinTerms config pulled anc fin))) +
+      3 * ((pinTerms config pulled anc fin).unitGain * (pinTerms config pulled anc fin).slashedR) +
+      3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth *
           (pinTerms config pulled anc fin).syncProposer) +
         (∑ v ∈ (K4 pulled counted V),
@@ -10051,7 +10087,7 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   classical
-  obtain ⟨W, hW⟩ := branchR_split config pulled anc fin
+  obtain ⟨W, hW, gainW⟩ := branchR_split config pulled anc fin
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
   have slashes := weighted_le (A := K4 pulled counted V) (B := K5 counted V)
     (C := K6 pulled counted) (fun v => slashR (pinTerms config pulled anc fin) v.toNat) d45 d46
@@ -10075,6 +10111,10 @@ The keys of `K4` weigh one, and those of `K5` weigh three.
 `slashCharge`'s surplus pays `flow_split`'s slashed term.
 
 `branchR` also holds the unit of each key slashed on R's branch.
+
+The charge `slashCharge` is at least an increment and `2 * depthFin * flagRate`.
+
+The flag rate is at most the rate of an increment, and `slashCharge` has four of it for each epoch.
 
 The `syncProposer` part of `proposerCredit` is not used by `credR`, which leaves out sync events, so
 `bud_sync` takes it. -/
@@ -10100,7 +10140,26 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
-      (pinTerms config pulled anc fin).branchR := sorry
+      (pinTerms config pulled anc fin).branchR := by
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have nearC := h.near
+  have transport : ∀ {x y : ForkedBeaconState preset} (r : Run config checks x y) (a : ℕ),
+      a ≤ max high highC → ∀ {es : List (BalanceEvent preset)},
+      (getCurrentEpoch y.state).toNat ≤ a + 1 →
+      r.balanceEvents a = .ok es → r.balanceEvents (max high highC) = .ok es := by
+    intro x y r a le es endpoint ok
+    rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le r (localHigh := a)
+      (by omega) endpoint]
+    exact ok
+  have bands := bands_seats h fromFin tail tailC (max high highC)
+    (transport tail high (le_max_left _ _) endEpoch replayed)
+    (transport fromFin high (le_max_left _ _) (by simp only; omega) replayedF)
+    (transport tailC highC (le_max_right _ _) endEpochC replayedC)
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  refine bud_branchR_of h (le_trans bands ?_)
+  rw [depthEq]
+  exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ (Nat.le_add_left _ _))
 
 /-- The sync movement of a key is its sync credits plus its sync debits over the events. -/
 private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
