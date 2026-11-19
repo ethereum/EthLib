@@ -94,6 +94,51 @@ Not yet released.
   The churn call writes only the churn left and the earliest consolidation epoch.
   The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
 
+- `Execution.confirmedRoot_covers` covers the last confirmed root of consecutive calls of the fast confirmation rule by one honest validator ([#1458](https://github.com/ethereum/EthLib/issues/1458), Theorem 1).
+  That root is on every up-to-date honest head from the next slot to a horizon.
+  The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence: historical, cross-store direct-safety, cross-store justified and held-state finality.
+  It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
+  Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
+  `CallObligations` does not include the caller's head read at each rollover: `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` from the theorem's other premises.
+  `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
+  The run assumes `JustifiedPinned`, `ByzantineCountedStake`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
+  It derives `HeldStatesBeforeUpgrade` through `Execution.heldStatesBeforeUpgrade_of_bounded`, from its horizon and `HonestStoreEpochsBounded`, so it does not take it.
+  It takes `CapOrder` and `ActivationWithinMaxEffective`, which it passes to `Execution.quorumDriftWithin`.
+  Its proof is a private step: one call keeps the call invariant, given the invariant at every earlier call.
+  `CallAt` names one call in a run of calls by one validator.
+  `FastConfirmation/ConfirmedCalls.lean` holds the walk of a call and the call invariant; the helpers that the step reads are public in its `ConfirmedCalls` namespace.
+  `FastConfirmation/ConfirmedCallStep.lean` holds the step and the theorem.
+  The step reads these new or newly public lemmas:
+  - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
+  - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
+  - `Store.Reachable.finalized_known` gives the block of a reachable store's finalized checkpoint; steps of `RootViability.lean` and `RootHeld.lean` read it too.
+  - `Execution.walk_covers` covers a walk of roots from its start and a step, and `honestHeadsCover_mono` shrinks the interval of a coverage.
+  - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
+    Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
+  - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
+  - `Execution.currentSlot_le_of_time_le` orders the current slots of honest stores at ordered times; `Execution.previousSlot_le_of_time_le` keeps its statement and reads it.
+    Both are in `ForkChoice/VoteDelivery.lean`; `Execution.previousSlot_le_of_time_le` moves there from `FastConfirmation/HistoricalTransport.lean`.
+  - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
+    `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
+  - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
+  - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
+    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are now public, with their statements unchanged.
+  - `Execution.crossStoreFinality_or_evidence` puts one honest store's finalized checkpoint on another's justified chain at that epoch or later, or gives `CrossStoreDirectSafetyEvidence`.
+    `Execution.finalized_read_or_accountable` is its step for one pair of stores.
+  - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.
+  - `Store.getCheckpointForBlock_eq_ok_iff` reads the checkpoint of an epoch in a chain as that epoch and its checkpoint block.
+  - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch` and `Store.getCheckpointBlock_self` read the clock and the checkpoint reads of a store.
+  - `Store.Reachable.anchor_le_finalized`, `Store.ForwardReachable.block_epoch_le_current`, `Store.ForwardReachable.justified_before_current`, `Store.ForwardReachable.unrealizedJustification_epoch_le` and `Store.ForwardReachable.votingSource_epoch_le` bound the epochs that a store holds.
+  - `Execution.isAncestor_of_le` keeps an ancestor test at every later event, and `Execution.anchor_unrealized_le` bounds an honest store's unrealized justified epoch below by the anchor store's.
+    `Execution.getBlockEpoch_of_le` keeps the epoch read of a held block at every later event.
+  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` in `ForkChoice/AncestorRoots.lean` read a walk of roots.
+    Each root has the root before it as parent, or the terminal block; the head descends from it, and it descends from the terminal block.
+    `Store.isAncestor_parentRoot_of_isAncestor` passes descent from a known block to its parent.
+  - `Store.voteCountsFor_eq_false_of_slot_eq_current` and `Store.not_isOneConfirmed_of_slot_eq_current` show that, in a forward store, no vote counts for a block at the current slot, so it is not one-confirmed.
+  - `Store.unrealizedJustification_found` reads an unrealized justification as its stored entry.
+  - `isStartSlotAtEpoch_eq`, `isStartSlotAtEpoch_next_eq_false` and `computeStartSlotAtEpoch_of_isStartSlotAtEpoch` read the start test of a slot as its remainder by the epoch length.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
@@ -166,6 +211,21 @@ Not yet released.
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
 
+- `exitReserveNear` is the active source stake already scheduled to exit within three epochs of the source, the reach of a confirmation's near window.
+  `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
+  `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
+  `Preset.seedLookaheadAtLeastThree_mainnet` and `Preset.seedLookaheadAtLeastThree_minimal` show that both presets satisfy it.
+  Under it, no other source stake leaves by then, in any later state that keeps the source's fixed activity.
+  `exitReserve` keeps its value, and no theorem orders the two values.
+  `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
+  `SourceWindowReserve`, `WindowExitBound` and `ReceiverWindowExitsNear` are their instances at `exitReserve`, with their statements unchanged.
+  `Execution.isAncestor_getHead_of_historical_anchor_with` and `Execution.source_surplus_or_historical_evidence_with` take one reserve value for the window reserve and the exit bound.
+  The theorems without `_with` keep their statements and read them.
+
+- `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
+  The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
+  Each near receiver's head state keeps the source's activity three epochs ahead, so each full epoch of its window is bounded by `exitReserveNear`.
+
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 
 - `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
@@ -176,6 +236,15 @@ Not yet released.
   `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.
   It takes the premises of `source_safety`.
   When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
+
+- `Execution.honestTargetVotes_of_byzantineStakeAtMost` derives the honest target-vote count, `HonestTargetVotes`, from a bound on Byzantine stake ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It assumes `TargetCountBounds`, which is stated for the pulled-up state of the head.
+  That state has at most the threshold share of Byzantine stake in the committees of the epoch so far.
+  The honest validators of the slots still to come hold the share that the rule counts for them.
+  They hold a third of the margin on top of it.
+  For a head whose block is two or more epochs before the current epoch it also assumes `StaleHeadVotersInWindow`.
+  `HonestTargetVotes` and `quorum_of_no_conflicting_checkpoint` keep their statements.
+  `le_activityFixedEpoch` is now public, for `TargetCount.lean`.
 
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
@@ -291,6 +360,9 @@ Not yet released.
   Every result that offers the evidence as an alternative was then true without a conflict.
   `Execution.finalized_prefix_or_accountable`, `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` conclude the two new facts.
   A caller that takes the evidence apart has two more components after the time bound; a caller that passes it on is unchanged.
+
+- In Lean, `Store.held_of_isAncestor` now takes any ancestor node.
+  A caller that names the implicit `root` passes the node `⟨root, .pending⟩` as `ancestor`.
 
 - In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
   A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.

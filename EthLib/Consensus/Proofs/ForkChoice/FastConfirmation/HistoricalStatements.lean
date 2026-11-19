@@ -201,32 +201,68 @@ variable [DecidablePred (· ∈ J)]
 
 /-- Each nonempty window of the head between the two slots has little Byzantine stake.
 
+Its Byzantine stake plus half the reserve is within the threshold share of its active stake.
+
+Stakes are the source state's balances of the window's members active at the source.
+
+An assumption on the run: the rule does not check the Byzantine stake of later windows.
+
+It buys each later window's margin over its adversary, with the reserve as the charge for exits.
+
+At the near exit reserve a theorem bounds those exits, so they are not assumed.
+
+On minimal at the near exit reserve, it fails at full churn of exits, even with no adversary. -/
+def SourceWindowReserveWith (store : Store preset fork) (head : Root)
+    (source : BeaconState preset fork) (first last : Slot) (reserve : ℕ) : Prop :=
+  ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
+    store.getCommitteesBetweenSlots head low high = .ok participants →
+    100 * stake (fun v => balanceAt source v.toNat)
+        {v ∈ Store.activeMembers source participants | v ∉ J} +
+      50 * reserve ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
+        stake (fun v => balanceAt source v.toNat) (Store.activeMembers source participants)
+
+/-- Each nonempty window of the head between the two slots has little Byzantine stake.
+
 Its Byzantine stake plus half the exit reserve is within the threshold share of its active stake.
 
 Stakes are the source state's balances of the window's members active at the source. -/
 def SourceWindowReserve (store : Store preset fork) (head : Root)
     (source : BeaconState preset fork) (first last : Slot) : Prop :=
-  ∀ low high participants, first ≤ low → low ≤ high → high ≤ last →
-    store.getCommitteesBetweenSlots head low high = .ok participants →
-    100 * stake (fun v => balanceAt source v.toNat)
-        {v ∈ Store.activeMembers source participants | v ∉ J} +
-      50 * exitReserve config source ≤ config.CONFIRMATION_BYZANTINE_THRESHOLD.toNat *
-        stake (fun v => balanceAt source v.toNat) (Store.activeMembers source participants)
+  SourceWindowReserveWith (J := J) (config := config) store head source first last
+    (exitReserve config source)
 
-/-- Each full epoch in the window omits at most the exit reserve of active source stake. -/
-def WindowExitBound (store : Store preset fork) (source : BeaconState preset fork)
-    (head : Root) (first last : Slot) : Prop :=
+/-- Each full epoch in the window omits at most the reserve of active source stake. -/
+def WindowExitBoundWith (store : Store preset fork) (source : BeaconState preset fork)
+    (head : Root) (first last : Slot) (reserve : ℕ) : Prop :=
   ∀ epoch epochStart next epochEnd epochMembers,
     computeStartSlotAtEpoch preset epoch = .ok epochStart →
     addChecked epochStart preset.SLOTS_PER_EPOCH = .ok next →
     subChecked next 1 = .ok epochEnd → first ≤ epochStart → epochEnd ≤ last →
     store.getCommitteesBetweenSlots head epochStart epochEnd = .ok epochMembers →
     stake (fun v => balanceAt source v.toNat)
-      {v ∈ activeVoters source | v ∉ epochMembers} ≤ exitReserve config source
+      {v ∈ activeVoters source | v ∉ epochMembers} ≤ reserve
+
+/-- Each full epoch in the window omits at most the exit reserve of active source stake. -/
+def WindowExitBound (store : Store preset fork) (source : BeaconState preset fork)
+    (head : Root) (first last : Slot) : Prop :=
+  WindowExitBoundWith store source head first last (exitReserve config source)
 
 /-- All honest stores hold only blocks with nonzero state roots through the horizon. -/
 def HeldBlockStateRootsNonzero (last : Nat) : Prop :=
   ∀ w ∈ J, ∀ k, (e.world k).time ≤ last → HeldStateRootsNonzero ((e.world k).state w)
+
+omit [DecidablePred (· ∈ J)] in
+/-- An honest held copy of the anchor block has a nonzero state root. -/
+theorem Execution.anchor_stateRoot_nonzero {anchor : Store preset fork}
+    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (anchored : ∀ w ∈ J, e.start w = anchor) {last : Nat}
+    (roots : HeldBlockStateRootsNonzero (e := e) last)
+    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat} (inTime : (e.world n).time ≤ last) :
+    anchorBlock.stateRoot ≠ Vector.replicate 32 0 := by
+  obtain ⟨root, _, anchorFound⟩ := (e.forwardReachableWith
+    (fun w hw => (anchored w hw) ▸ Store.ForwardReachableWith.anchor anchorStore) n u
+      honest).reachable.anchor_known
+  exact roots u honest n inTime root anchorBlock anchorFound
 
 /-- Two honest stores collide on one root, by a time. -/
 def HonestCollision (time : ℕ) : Prop :=
@@ -273,6 +309,13 @@ def HonestHeadsCover (root : Root) (first last : Nat) : Prop :=
     UpToDate config checks sources (e.world i).time ((e.world i).view a) ((e.world i).state a) →
     ((e.world i).state a).getHead config = .ok hd →
     ((e.world i).state a).isAncestor hd ⟨root, .pending⟩ = .ok true
+
+omit [DecidablePred (· ∈ J)] in
+/-- Coverage over an interval covers every subinterval. -/
+theorem honestHeadsCover_mono {root : Root} {first first' last last' : ℕ}
+    (cover : HonestHeadsCover (e := e) root first last) (lower : first ≤ first')
+    (upper : last' ≤ last) : HonestHeadsCover (e := e) root first' last' :=
+  fun earlier low high => cover earlier (lower.trans low) (Nat.lt_of_lt_of_le high upper)
 
 /-- Every up-to-date honest store holds the root at every time of the interval. -/
 def HonestHoldsFrom (root : Root) (first last : Nat) : Prop :=
@@ -390,6 +433,24 @@ def ByzantineCountedStake (epoch : Epoch) (first last : Nat) : Prop :=
     3 * stake (fun v => balanceAt state v.toNat) {v ∈ quorumVoters state | v ∉ J} <
       2 * total.toNat
 
+/-- Each near honest head of the interval omits at most the reserve per full window epoch.
+
+A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
+
+The window starts at the given slot and ends at the slot before the store's current slot.
+
+Later receivers are covered by the duty-epoch step, which does not read it. -/
+def ReceiverWindowExitsNearWith (parentEpoch : Epoch) (source : BeaconState preset fork)
+    (firstSlot : Slot) (first last : Nat) (reserve : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),
+    first ≤ (e.world k).time → (e.world k).time ≤ last →
+    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
+    ((e.world k).state w).getHead config = .ok head →
+    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
+    ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch →
+    receiverEpoch.toNat ≤ parentEpoch.toNat + 2 →
+    WindowExitBoundWith ((e.world k).state w) source head.root firstSlot finish reserve
+
 /-- Each near honest head of the interval omits at most the exit reserve per full window epoch.
 
 A receiver is near when its store epoch is at most two epochs after `parentEpoch`.
@@ -399,14 +460,8 @@ The window starts at the given slot and ends at the slot before the store's curr
 Later receivers are covered by the duty-epoch step, which does not read it. -/
 def ReceiverWindowExitsNear (parentEpoch : Epoch) (source : BeaconState preset fork)
     (firstSlot : Slot) (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k (head : ForkChoiceNode) (current finish : Slot) (receiverEpoch : Epoch),
-    first ≤ (e.world k).time → (e.world k).time ≤ last →
-    UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ((e.world k).state w).getHead config = .ok head →
-    ((e.world k).state w).getCurrentSlot config = .ok current → subChecked current 1 = .ok finish →
-    ((e.world k).state w).getCurrentStoreEpoch config = .ok receiverEpoch →
-    receiverEpoch.toNat ≤ parentEpoch.toNat + 2 →
-    WindowExitBound (config := config) ((e.world k).state w) source head.root firstSlot finish
+  ReceiverWindowExitsNearWith (e := e) parentEpoch source firstSlot first last
+    (exitReserve config source)
 
 omit [DecidablePred (· ∈ J)] in
 open Classical in
@@ -598,5 +653,42 @@ def HeldStateFinalityEvidence {g : ForkedBeaconState preset}
           .ok ((e.world i).state a).finalizedCheckpoint.root ∧
       DirectSafety.AccountableOrHashEvidence pre left right
         stateB.currentJustifiedCheckpoint.epoch.toNat
+
+/-- Two honest stores have two runs from the anchor to held states that give direct-safety evidence.
+
+The two stores may be the same or different, at any events by the time.
+
+A terminal view of the first state has the first store's finalized checkpoint.
+
+A terminal view of the second state has the second store's justified checkpoint.
+
+The first store's finalized epoch is at most the second store's justified epoch.
+
+The second store's justified root does not read the first store's finalized root at that epoch.
+
+The evidence is the direct-safety stake inequality, or hash evidence on the two runs.
+
+It is relative to the anchor, and its drift counts from the anchor.
+
+With enough churn since the anchor, the stake inequality holds with no accountable key. -/
+def CrossStoreDirectSafetyEvidence {g : ForkedBeaconState preset}
+    (pre : Run config checks g ⟨fork, anchorState⟩) (time : Nat) : Prop :=
+  ∃ a ∈ J, ∃ b ∈ J, ∃ i j, (e.world i).time ≤ time ∧ (e.world j).time ≤ time ∧
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤
+      ((e.world j).state b).justifiedCheckpoint.epoch ∧
+    ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch ≠
+        .ok ((e.world i).state a).finalizedCheckpoint.root ∧
+    ∃ (stateA stateB : BeaconState preset fork)
+      (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+      (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+      (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+      (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+      (∃ r : Root, ((e.world i).state a).blockStates[r]? = some stateA) ∧
+      (∃ r : Root, ((e.world j).state b).blockStates[r]? = some stateB) ∧
+      va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+      vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
+      DirectSafety.AccountableOrHashEvidence pre left right
+        ((e.world j).state b).justifiedCheckpoint.epoch.toNat
 
 end EthLib.Consensus.Models.Network

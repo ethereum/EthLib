@@ -3,7 +3,10 @@ module
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Basic
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Committees
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.CheckpointConsistency
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedCalls
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedCallStep
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedRoot
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ConfirmedWalk
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutySupport
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.DutyWindows
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
@@ -17,10 +20,12 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDrift
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.ReceiverExits
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootHeld
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.RootViability
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Sets
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Supporters
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetCount
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.TargetVotes
 
 /-!
@@ -33,6 +38,10 @@ They cover the arithmetic of the rule, how it chooses the confirmed block and th
 Other proofs tie the stake tests of the rule to the supporters and the committees it reads.
 
 One module turns an assumed honest vote count into concrete voters when the one-third test passes.
+
+Another derives that count from a bound on the Byzantine stake.
+
+The bound is on the committees of the epoch so far and on the slots to come.
 
 Another shows that honest votes over a whole epoch keep the block on the head chain.
 
@@ -53,4 +62,10 @@ It retains committee agreement, historical coverage, drift and finality conditio
 When the two-thirds test on the current target passes, honest voters sign that target.
 
 Those voters hold two thirds of the active balance, given an honest count and coverage of the heads.
+
+Another module gives the coverage of a walk of roots from that of its start and a step per member.
+
+The last confirmed root of one honest validator's consecutive calls is on up-to-date honest heads.
+
+That holds from the slot after the last call to a horizon, unless stores collide or evidence holds.
 -/

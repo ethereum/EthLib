@@ -76,7 +76,7 @@ private theorem getCurrentEpoch_eq_of_start {slot start : Slot} {state : BeaconS
   · exact Nat.mul_div_cancel _ positive
 
 /-- An epoch at most one after the current epoch is within the fixed epoch of activity. -/
-private theorem le_activityFixedEpoch {state : BeaconState preset fork} {epoch : Epoch}
+theorem le_activityFixedEpoch {state : BeaconState preset fork} {epoch : Epoch}
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
     (near : epoch.toNat ≤ (getCurrentEpoch state).toNat + 1) :
     epoch ≤ activityFixedEpoch state := by

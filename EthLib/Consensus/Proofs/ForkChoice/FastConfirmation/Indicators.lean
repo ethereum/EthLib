@@ -870,7 +870,7 @@ So reaching two thirds implies the weaker test, for a nonzero balance increment.
 -/
 
 /-- The checkpoint of an epoch in a chain carries that epoch and its checkpoint block. -/
-private theorem getCheckpointForBlock_eq_ok_iff {root : Root} {epoch : Epoch}
+theorem getCheckpointForBlock_eq_ok_iff {root : Root} {epoch : Epoch}
     {checkpoint : Checkpoint} :
     store.getCheckpointForBlock root epoch = .ok checkpoint ↔
       ∃ block, store.getCheckpointBlock root epoch = .ok block ∧

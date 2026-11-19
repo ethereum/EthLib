@@ -24,6 +24,8 @@ A store pulls up the state of each block that it imports, by justification and f
 
 Once the clock passes the epoch of a held block, the justified epoch is at least its pull-up's.
 
+The unrealized justified epoch is at least that pull-up's once the block arrives.
+
 From Gloas, a vote of the payload committee and an envelope keep the checkpoints.
 
 From Heze, an inclusion list keeps them too.
@@ -78,6 +80,58 @@ theorem le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch {start slot first : Slo
   have mono := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
     (Nat.div_le_div_right (c := preset.SLOTS_PER_EPOCH.toNat) (UInt64.le_iff_toNat_le.mp le))
   exact UInt64.le_iff_toNat_le.mpr (by omega)
+
+/-- The start test of a slot is its remainder by the epoch length. -/
+theorem isStartSlotAtEpoch_eq (slot : Slot) :
+    isStartSlotAtEpoch preset slot =
+      .ok (decide (slot.toNat % preset.SLOTS_PER_EPOCH.toNat = 0)) := by
+  have rounded := (computeStartSlotAtEpoch_ok_iff.mp
+    (computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot)).2
+  rw [computeEpochAtSlot, UInt64.toNat_div] at rounded
+  have below := Nat.div_mul_le_self slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have le : slot / preset.SLOTS_PER_EPOCH * preset.SLOTS_PER_EPOCH ≤ slot :=
+    UInt64.le_iff_toNat_le.mpr (by omega)
+  have sub := UInt64.toNat_sub_of_le _ _ le
+  have modNat := Nat.mod_add_div slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  simp only [isStartSlotAtEpoch, computeSlotsSinceEpochStart,
+    computeStartSlotAtEpoch_computeEpochAtSlot, Except.mapError, bind, Except.bind, pure,
+    Except.pure, Except.ok.injEq]
+  apply Bool.eq_iff_iff.mpr
+  simp only [decide_eq_true_eq]
+  rw [Nat.mul_comm] at rounded
+  constructor
+  · intro zero
+    have := congrArg UInt64.toNat zero
+    rw [sub, UInt64.toNat_zero] at this
+    omega
+  · intro zero
+    apply UInt64.toNat_inj.mp
+    rw [sub, UInt64.toNat_zero]
+    omega
+
+/-- The slot after an epoch's first slot does not start an epoch. -/
+theorem isStartSlotAtEpoch_next_eq_false (long : 1 < preset.SLOTS_PER_EPOCH) {slot next : Slot}
+    (nextOk : addChecked slot 1 = .ok next)
+    (atStart : isStartSlotAtEpoch preset slot = .ok true) :
+    isStartSlotAtEpoch preset next = .ok false := by
+  rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_true_eq] at atStart
+  have value := (addChecked_ok_iff.mp nextOk).2
+  have P := UInt64.lt_iff_toNat_lt.mp long
+  simp only [UInt64.toNat_one] at value P
+  have one : (slot.toNat + 1) % preset.SLOTS_PER_EPOCH.toNat = 1 := by
+    rw [Nat.add_mod, atStart, Nat.zero_add, Nat.mod_mod, Nat.mod_eq_of_lt P]
+  rw [isStartSlotAtEpoch_eq, Except.ok.injEq, decide_eq_false_iff_not, value, one]
+  omega
+
+/-- A slot that starts an epoch is the first slot of its epoch. -/
+theorem computeStartSlotAtEpoch_of_isStartSlotAtEpoch (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    {slot : Slot} (atStart : isStartSlotAtEpoch preset slot = .ok true) :
+    computeStartSlotAtEpoch preset (computeEpochAtSlot preset slot) = .ok slot := by
+  have rounded := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) slot
+  have up := le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch atStart (UInt64.le_refl slot)
+    rounded
+  have down := (computeStartSlotAtEpoch_le_lt (UInt64.lt_iff_toNat_lt.mpr positive) rounded).1
+  rw [rounded, UInt64.le_antisymm (UInt64.le_iff_toNat_le.mpr down) up]
 
 namespace Store
 
@@ -557,11 +611,66 @@ private theorem CheckpointStatesFromBlocks.of_maps {allowed : SignatureChecks �
   exact holds found
 
 /-- Replacing the checkpoints keeps the unrealized justified checkpoint. -/
-private theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
+theorem updateCheckpoints_unrealizedJustifiedCheckpoint (justified finalized : Checkpoint) :
     (store.updateCheckpoints justified finalized).unrealizedJustifiedCheckpoint =
       store.unrealizedJustifiedCheckpoint := by
   unfold updateCheckpoints
   split <;> dsimp only <;> split <;> rfl
+
+/-- Replacing the checkpoints keeps the justified checkpoint, or adopts the given one. -/
+theorem updateCheckpoints_justifiedCheckpoint (s : Store preset fork) (j f : Checkpoint) :
+    (s.updateCheckpoints j f).justifiedCheckpoint = s.justifiedCheckpoint ∨
+      (s.updateCheckpoints j f).justifiedCheckpoint = j := by
+  unfold Store.updateCheckpoints
+  split <;> dsimp only <;> split
+  all_goals first | exact .inl rfl | exact .inr rfl
+
+/-- A tick within a slot keeps the unrealized justified checkpoint.
+
+It keeps the justified checkpoint, or adopts the unrealized one. -/
+private theorem onTickPerSlot_unrealized {a b : Store preset fork} {time : UInt64}
+    (step : a.onTickPerSlot config time = .ok b) :
+    b.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
+      (b.justifiedCheckpoint = a.justifiedCheckpoint ∨
+        b.justifiedCheckpoint = a.unrealizedJustifiedCheckpoint) := by
+  obtain ⟨-, -, -, -, -, moved, which, same, -⟩ := Store.onTickPerSlot_frame step
+  rw [same.unrealizedJustified, same.justified]
+  rcases which with rfl | rfl
+  · exact ⟨rfl, .inl rfl⟩
+  · exact ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _,
+      updateCheckpoints_justifiedCheckpoint _ _ _⟩
+
+/-- Any tick keeps the unrealized justified checkpoint.
+
+It keeps the justified checkpoint, or adopts the unrealized one.
+
+The tick need not move the clock forward. -/
+theorem onTick_unrealizedJustifiedCheckpoint {s t : Store preset fork} {time : UInt64}
+    (ticked : s.onTick config time = .ok t) :
+    t.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
+      (t.justifiedCheckpoint = s.justifiedCheckpoint ∨
+        t.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint) := by
+  have chain {a b c : Store preset fork}
+      (first : b.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
+        (b.justifiedCheckpoint = a.justifiedCheckpoint ∨
+          b.justifiedCheckpoint = a.unrealizedJustifiedCheckpoint))
+      (second : c.unrealizedJustifiedCheckpoint = b.unrealizedJustifiedCheckpoint ∧
+        (c.justifiedCheckpoint = b.justifiedCheckpoint ∨
+          c.justifiedCheckpoint = b.unrealizedJustifiedCheckpoint)) :
+      c.unrealizedJustifiedCheckpoint = a.unrealizedJustifiedCheckpoint ∧
+        (c.justifiedCheckpoint = a.justifiedCheckpoint ∨
+          c.justifiedCheckpoint = a.unrealizedJustifiedCheckpoint) := by
+    refine ⟨second.1.trans first.1, ?_⟩
+    rcases second.2 with eq | eq <;> rw [eq]
+    · exact first.2
+    · exact .inr first.1
+  obtain ⟨_, _, -, caughtUp, ticked⟩ := Store.onTick_ok ticked
+  have caught := Store.catchUp_preserves (P := fun c =>
+      c.unrealizedJustifiedCheckpoint = s.unrealizedJustifiedCheckpoint ∧
+        (c.justifiedCheckpoint = s.justifiedCheckpoint ∨
+          c.justifiedCheckpoint = s.unrealizedJustifiedCheckpoint))
+    (fun held step => chain held (onTickPerSlot_unrealized step)) ⟨rfl, .inl rfl⟩ caughtUp
+  exact chain caught (onTickPerSlot_unrealized ticked)
 
 /-! ### What a forward tick does to the two justified checkpoints -/
 
@@ -666,11 +775,9 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
     have cross := epoch_lt_of_offset_zero lt (mapError_ok_iff.mp offsetOk)
     split at tick <;>
     · cases Except.ok.inj tick
-      refine ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _, ?_,
+      exact ⟨updateCheckpoints_unrealizedJustifiedCheckpoint _ _,
+        (updateCheckpoints_justifiedCheckpoint _ _ _).imp id fun eq => ⟨eq, cross⟩,
         fun _ _ => justified_le_updateCheckpoints _ _⟩
-      simp only [Store.updateCheckpoints]
-      split <;> dsimp only <;> split
-      all_goals first | exact .inr ⟨rfl, cross⟩ | exact .inl rfl
   · rename_i kept
     split at tick <;>
     · cases Except.ok.inj tick
@@ -685,7 +792,7 @@ private theorem onTickPerSlot_realizes {s t : Store preset fork} {time : UInt64}
 It keeps the justified one, or adopts the unrealized one at a crossed epoch.
 
 It adopts it whenever it crosses an epoch. -/
-private theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
+theorem onTick_justifiedCheckpoint_of_unrealized {s t : Store preset fork} {time : UInt64}
     {old : Slot}
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
     (oldOk : s.getCurrentSlot config = .ok old) (forward : s.timeMs ≤ time)
@@ -749,6 +856,144 @@ private theorem unrealized_bounds (s : Store preset fork) (j f : Checkpoint) :
     | exact UInt64.le_of_lt ‹_›
     | exact UInt64.not_lt.mp ‹_›
 
+/-- A block that the store adds runs the pull-up of its state, on a store with its checkpoints.
+
+A known block leaves the store as it was.
+
+A new block enters the store at its root, with the state after it.
+
+The store before the pull-up has the justified checkpoints of the store before the block.
+
+On that store with the state's checkpoints, the pull-up records the block's pulled-up checkpoint.
+
+It then updates the unrealized checkpoints.
+
+It also updates the realized ones for a block of an earlier epoch. -/
+theorem onBlock_pulledUp {before after : Store preset fork} {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {signed : SignedBeaconBlock preset fork}
+    (added : before.onBlock config checks sources signed = .ok after) :
+    after = before ∨ ∃ (blockRoot : Root) (state pulled : BeaconState preset fork)
+        (base : Store preset fork) (epoch : Epoch),
+      SszType.hashTreeRoot signed.message = .ok blockRoot ∧ ¬ before.blocks.contains blockRoot ∧
+      after.blocks = before.blocks.insert blockRoot signed.message ∧
+      after.blockStates = before.blockStates.insert blockRoot state ∧
+      processJustificationAndFinalization state = .ok pulled ∧
+      before.getCurrentStoreEpoch config = .ok epoch ∧
+      (base.justifiedCheckpoint = before.justifiedCheckpoint ∨
+        base.justifiedCheckpoint = state.currentJustifiedCheckpoint) ∧
+      base.unrealizedJustifiedCheckpoint = before.unrealizedJustifiedCheckpoint ∧
+      ((computeEpochAtSlot preset signed.message.slot < epoch ∧
+          after = (base.updateUnrealizedCheckpoints pulled.currentJustifiedCheckpoint
+            pulled.finalizedCheckpoint).updateCheckpoints pulled.currentJustifiedCheckpoint
+              pulled.finalizedCheckpoint) ∨
+        (¬ computeEpochAtSlot preset signed.message.slot < epoch ∧
+          after = base.updateUnrealizedCheckpoints pulled.currentJustifiedCheckpoint
+            pulled.finalizedCheckpoint)) := by
+  have original := added
+  unfold Store.onBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨blockRoot, hashed, added⟩ := added
+  split at added
+  · cases added
+    exact .inl rfl
+  rename_i fresh
+  have hashed := mapError_ok_iff.mp hashed
+  obtain ⟨blockFields, -, state', -, -, stateFields⟩ := Store.onBlock_insert hashed fresh original
+  unfold Store.addBlock at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨state, transitioned, head, _, voted, vote, recorded, record, boosted, boost, added⟩ :=
+    added
+  obtain ⟨_, _, rfl⟩ := Store.recordBlockPtcVotes_onlyPtcVotes vote
+  obtain ⟨-, recordBlocks, recordStates, recordClock, recordSame, -⟩ :=
+    Store.recordBlockTimeliness_frame record
+  obtain ⟨-, boostBlocks, boostStates, boostClock, boostSame, -⟩ :=
+    Store.updateProposerBoostRoot_frame boost
+  have stateAt := stateFields
+  rw [(Store.computePulledUpTip_frame added).2.2.1, Store.updateCheckpoints_blockStates,
+    boostStates, recordStates] at stateAt
+  have same : state' = state := by
+    have := congrArg (·[blockRoot]?) stateAt
+    simpa using this.symm
+  subst state'
+  unfold Store.computePulledUpTip at added
+  simp only [bind_ok_iff] at added
+  obtain ⟨s, found, pulled, processed, block, blockOk, now, nowOk, added⟩ := added
+  have found := Store.blockState_ok_iff.mp found
+  rw [Store.updateCheckpoints_blockStates, boostStates, recordStates] at found
+  simp only [Std.TreeMap.getElem?_insert_self, Option.some.injEq] at found
+  subst s
+  have blockFound := Store.block_ok_iff.mp blockOk
+  rw [Store.updateUnrealizedCheckpoints_blocks, Store.updateCheckpoints_blocks, boostBlocks,
+    recordBlocks] at blockFound
+  simp only [Std.TreeMap.getElem?_insert_self, Option.some.injEq] at blockFound
+  subst block
+  have boostedClock := recordClock.trans boostClock
+  have clock : before.getCurrentStoreEpoch config = .ok now := by
+    simp only [Store.getCurrentStoreEpoch, Store.getCurrentSlot,
+      Store.updateUnrealizedCheckpoints_timeMs, Store.updateUnrealizedCheckpoints_genesisTimeMs,
+      Store.updateCheckpoints_timeMs, Store.updateCheckpoints_genesisTimeMs, boostedClock.1,
+      boostedClock.2] at nowOk
+    simpa [Store.getCurrentStoreEpoch, Store.getCurrentSlot] using nowOk
+  have justified := boosted.updateCheckpoints_justifiedCheckpoint state.currentJustifiedCheckpoint
+    state.finalizedCheckpoint
+  rw [boostSame.justified, recordSame.justified] at justified
+  refine .inr ⟨blockRoot, state, pulled,
+    { boosted.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint with
+      unrealizedJustifications := (boosted.updateCheckpoints state.currentJustifiedCheckpoint
+        state.finalizedCheckpoint).unrealizedJustifications.insert blockRoot
+          pulled.currentJustifiedCheckpoint }, now, hashed, fresh, blockFields, stateFields,
+    mapError_ok_iff.mp processed, clock, justified, ?_, ?_⟩
+  · show (boosted.updateCheckpoints _ _).unrealizedJustifiedCheckpoint = _
+    rw [updateCheckpoints_unrealizedJustifiedCheckpoint, boostSame.unrealizedJustified,
+      recordSame.unrealizedJustified]
+  · split at added
+    · exact .inl ⟨‹_›, (Except.ok.inj added).symm⟩
+    · exact .inr ⟨‹_›, (Except.ok.inj added).symm⟩
+
+/-- Importing a block lowers no unrealized justified epoch.
+
+A block that the store adds has a held state, whose pull-up is at most the new unrealized one.
+
+The justified checkpoint of the store stays, or becomes that of the state or of its pull-up. -/
+theorem onBlock_unrealized_epoch_le {before after : Store preset fork}
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork}
+    (added : before.onBlock config checks sources signed = .ok after) :
+    before.unrealizedJustifiedCheckpoint.epoch ≤ after.unrealizedJustifiedCheckpoint.epoch ∧
+      (after.justifiedCheckpoint = before.justifiedCheckpoint ∨
+        ∃ (root : Root) (state pulled : BeaconState preset fork),
+          after.blockStates[root]? = some state ∧
+          processJustificationAndFinalization state = .ok pulled ∧
+          pulled.currentJustifiedCheckpoint.epoch ≤ after.unrealizedJustifiedCheckpoint.epoch ∧
+          (after.justifiedCheckpoint = state.currentJustifiedCheckpoint ∨
+            after.justifiedCheckpoint = pulled.currentJustifiedCheckpoint)) := by
+  rcases onBlock_pulledUp added with rfl | ⟨blockRoot, state, pulled, base, epoch, -, -, -,
+      states, run, -, mid, baseU, moved⟩
+  · exact ⟨UInt64.le_refl _, .inl rfl⟩
+  have bounds := unrealized_bounds base pulled.currentJustifiedCheckpoint
+    pulled.finalizedCheckpoint
+  rw [baseU] at bounds
+  have stateHeld : after.blockStates[blockRoot]? = some state := by
+    rw [states]
+    exact Std.TreeMap.getElem?_insert_self
+  rcases moved with ⟨-, rfl⟩ | ⟨-, rfl⟩
+  · rw [updateCheckpoints_unrealizedJustifiedCheckpoint]
+    refine ⟨bounds.1, ?_⟩
+    rcases updateCheckpoints_justifiedCheckpoint _ pulled.currentJustifiedCheckpoint
+      pulled.finalizedCheckpoint with eq | eq
+    · rw [eq, Store.updateUnrealizedCheckpoints_justifiedCheckpoint]
+      rcases mid with eq' | eq'
+      · exact .inl eq'
+      · exact .inr ⟨blockRoot, state, pulled, stateHeld, run,
+          bounds.2, .inl eq'⟩
+    · exact .inr ⟨blockRoot, state, pulled, stateHeld, run,
+        bounds.2, .inr eq⟩
+  · refine ⟨bounds.1, ?_⟩
+    rw [Store.updateUnrealizedCheckpoints_justifiedCheckpoint]
+    rcases mid with eq | eq
+    · exact .inl eq
+    · exact .inr ⟨blockRoot, state, pulled, stateHeld, run, bounds.2, .inl eq⟩
+
 /-- Importing a block adopts its pull-up without losing those of the other blocks. -/
 private theorem adoption_block {before after : Store preset fork} {epoch : Epoch}
     {checks : SignatureChecks} {sources : BlockSources preset fork}
@@ -758,114 +1003,42 @@ private theorem adoption_block {before after : Store preset fork} {epoch : Epoch
     (added : before.onBlock config checks sources signed = .ok after) :
     Adoption after epoch := by
   have monotone := Store.onBlock_checkpointsAdvance added
-  unfold Store.onBlock at added
-  simp only [bind_ok_iff] at added
-  obtain ⟨blockRoot, _, added⟩ := added
-  split at added
-  · cases added
-    exact old
-  · unfold Store.addBlock at added
-    simp only [bind_ok_iff] at added
-    obtain ⟨state, transitioned, head, _, voted, vote, recorded, record, boosted, boost, added⟩ :=
-      added
-    obtain ⟨_, _, rfl⟩ := Store.recordBlockPtcVotes_onlyPtcVotes vote
-    have pendingRecord : recorded.unrealizedJustifiedCheckpoint =
-        before.unrealizedJustifiedCheckpoint :=
-      (Store.recordBlockTimeliness_frame record).2.2.2.2.1.unrealizedJustified
-    have pendingBoost : boosted.unrealizedJustifiedCheckpoint =
-        before.unrealizedJustifiedCheckpoint :=
-      (Store.updateProposerBoostRoot_frame boost).2.2.2.2.1.unrealizedJustified.trans pendingRecord
-    have maps := (Store.computePulledUpTip_frame added).2.2.1
-    have blockMaps := (Store.computePulledUpTip_frame added).2.1
-    have fields : after.blockStates = before.blockStates.insert blockRoot state := by
-      rw [maps, Store.updateCheckpoints_blockStates,
-        (Store.updateProposerBoostRoot_frame boost).2.2.1,
-        (Store.recordBlockTimeliness_frame record).2.2.1]
-    have blockMap := (Store.updateProposerBoostRoot_frame boost).2.1
-    rw [(Store.recordBlockTimeliness_frame record).2.1] at blockMap
-    have blockFields : after.blocks = before.blocks.insert blockRoot signed.message := by
-      rw [blockMaps, Store.updateCheckpoints_blocks, blockMap]
-    have boostedClock := (Store.recordBlockTimeliness_frame record).2.2.2.1.trans
-      (Store.updateProposerBoostRoot_frame boost).2.2.2.1
-    have epochClock : boosted.getCurrentStoreEpoch config = .ok epoch := by
-      unfold Store.getCurrentStoreEpoch
-      rw [boostedClock.getCurrentSlot]
-      exact clock
-    unfold Store.computePulledUpTip at added
-    simp only [bind_ok_iff] at added
-    obtain ⟨s, found, pulled, processed, block, blockOk, current, currentOk, added⟩ := added
-    have same : s = state := by
-      have found := Store.blockState_ok_iff.mp found
-      rw [Store.updateCheckpoints_blockStates,
-        (Store.updateProposerBoostRoot_frame boost).2.2.1,
-        (Store.recordBlockTimeliness_frame record).2.2.1] at found
-      simpa using found.symm
-    subst s
-    have sameBlock : block = signed.message := by
-      have found := Store.block_ok_iff.mp blockOk
-      rw [Store.updateUnrealizedCheckpoints_blocks, Store.updateCheckpoints_blocks,
-        blockMap] at found
-      simpa using found.symm
-    subst block
-    have epochEq : current = epoch := by
-      simp only [Store.getCurrentStoreEpoch, Store.getCurrentSlot] at epochClock
-      simpa only [Store.getCurrentStoreEpoch, Store.getCurrentSlot,
-        Store.updateUnrealizedCheckpoints_timeMs,
-        Store.updateUnrealizedCheckpoints_genesisTimeMs,
-        Store.updateCheckpoints_timeMs, Store.updateCheckpoints_genesisTimeMs,
-        epochClock, Except.ok.injEq] using currentOk.symm
-    subst current
-    have pending := unrealized_bounds
-      { (boosted.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint)
-        with unrealizedJustifications :=
-          (boosted.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint
-            ).unrealizedJustifications.insert blockRoot pulled.currentJustifiedCheckpoint }
-      pulled.currentJustifiedCheckpoint pulled.finalizedCheckpoint
-    have pendingOld : before.unrealizedJustifiedCheckpoint =
-        (boosted.updateCheckpoints state.currentJustifiedCheckpoint
-          state.finalizedCheckpoint).unrealizedJustifiedCheckpoint :=
-      pendingBoost.symm.trans (updateCheckpoints_unrealizedJustifiedCheckpoint _ _).symm
-    have finish (pendingOld : before.unrealizedJustifiedCheckpoint.epoch ≤
+  have raised := (onBlock_unrealized_epoch_le added).1
+  rcases onBlock_pulledUp added with rfl | ⟨blockRoot, state, pulled, base, now, -, -,
+      blockFields, fields, run, nowOk, -, -, moved⟩
+  · exact old
+  cases Except.ok.inj (nowOk.symm.trans clock)
+  have pending := unrealized_bounds base pulled.currentJustifiedCheckpoint
+    pulled.finalizedCheckpoint
+  have finish (pendingNew : pulled.currentJustifiedCheckpoint.epoch ≤
         after.unrealizedJustifiedCheckpoint.epoch)
-        (pendingNew : pulled.currentJustifiedCheckpoint.epoch ≤
-          after.unrealizedJustifiedCheckpoint.epoch)
-        (realized : computeEpochAtSlot preset signed.message.slot < epoch →
-          pulled.currentJustifiedCheckpoint.epoch ≤ after.justifiedCheckpoint.epoch) :
-        Adoption after epoch := by
-      intro r b s p known held run
-      rw [fields, Std.TreeMap.getElem?_insert] at held
-      rw [blockFields, Std.TreeMap.getElem?_insert] at known
-      split at held
-      · rename_i eq
-        simp only [eq, ↓reduceIte] at known
-        cases held
-        cases known
-        have eq := Except.ok.inj (processed.symm.trans (congrArg
-          (Except.mapError ForkChoiceError.transition) run))
-        subst p
-        exact ⟨pendingNew, realized⟩
-      · rename_i ne
-        simp only [ne, ↓reduceIte] at known
-        obtain ⟨a, b⟩ := old r b s p known held run
-        exact ⟨UInt64.le_trans a pendingOld,
-          fun earlier => UInt64.le_trans (b earlier) monotone.1.epoch_le⟩
-    split at added
-    · cases Except.ok.inj added
-      apply finish
-      · rw [updateCheckpoints_unrealizedJustifiedCheckpoint, pendingOld]
-        exact pending.1
-      · rw [updateCheckpoints_unrealizedJustifiedCheckpoint]
-        exact pending.2
-      · intro _
-        exact justified_le_updateCheckpoints _ _
-    · rename_i notEarlier
-      cases Except.ok.inj added
-      apply finish
-      · rw [pendingOld]
-        exact pending.1
-      · exact pending.2
-      · intro earlier
-        exact (notEarlier earlier).elim
+      (realized : computeEpochAtSlot preset signed.message.slot < epoch →
+        pulled.currentJustifiedCheckpoint.epoch ≤ after.justifiedCheckpoint.epoch) :
+      Adoption after epoch := by
+    intro r b s p known held runAt
+    rw [fields, Std.TreeMap.getElem?_insert] at held
+    rw [blockFields, Std.TreeMap.getElem?_insert] at known
+    split at held
+    · rename_i eq
+      simp only [eq, ↓reduceIte] at known
+      cases held
+      cases known
+      cases Except.ok.inj (run.symm.trans runAt)
+      exact ⟨pendingNew, realized⟩
+    · rename_i ne
+      simp only [ne, ↓reduceIte] at known
+      obtain ⟨a, b⟩ := old r b s p known held runAt
+      exact ⟨UInt64.le_trans a raised,
+        fun earlier => UInt64.le_trans (b earlier) monotone.1.epoch_le⟩
+  rcases moved with ⟨-, rfl⟩ | ⟨notEarlier, rfl⟩
+  · apply finish
+    · rw [updateCheckpoints_unrealizedJustifiedCheckpoint]
+      exact pending.2
+    · intro _
+      exact justified_le_updateCheckpoints _ _
+  · apply finish pending.2
+    intro earlier
+    exact (notEarlier earlier).elim
 
 end Store
 
@@ -1144,6 +1317,19 @@ theorem Store.ForwardReachable.justified_le_of_pulledUp (anchor : Invariant anch
   obtain ⟨now, nowOk, adopted⟩ := forward.adoption anchor positive slots
   cases Except.ok.inj (currentOk.symm.trans nowOk)
   exact (adopted root block state pulled known held run).2 earlier
+
+/-- The pull-up of each held block is at most the unrealized justified checkpoint of the store.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.pulledUp_le_unrealized (anchor : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {block : BeaconBlock preset fork} {state pulled : BeaconState preset fork}
+    (known : store.blocks[root]? = some block) (held : store.blockStates[root]? = some state)
+    (run : processJustificationAndFinalization state = .ok pulled) :
+    pulled.currentJustifiedCheckpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  obtain ⟨_, _, adopted⟩ := forward.adoption anchor positive slots
+  exact (adopted root block state pulled known held run).1
 
 /-- The state of a block of a reachable store, pulled up to the current epoch, keeps the invariant.
 

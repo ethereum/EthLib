@@ -16,6 +16,8 @@ So every voting source above a block is at least the block's realized justificat
 
 The store's realized finality is the anchor's, or strictly before its realized justification.
 
+The store's realized justification is at most its unrealized justification.
+
 Justification finalizes a checkpoint only below one it justifies at the same time.
 -/
 
@@ -528,5 +530,94 @@ theorem Store.ForwardReachable.votingSource_le_justified
       simp only [held, pure, Except.pure, Except.ok.injEq] at read
       subst source
       exact reached.justified_le_of_blockState sound held
+
+/-- The justified epoch of a reachable store is at most its unrealized justified epoch.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.Reachable.justified_epoch_le_unrealized {store : Store preset fork}
+    (anchor : Invariant anchorState)
+    (reachable : Store.Reachable config anchorState anchorBlock store) :
+    store.justifiedCheckpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  induction reachable with
+  | anchor made =>
+    obtain ⟨_, -, -, -, justified, -, pending, -⟩ := getForkchoiceStore_anchor made
+    rw [justified, pending]
+    exact UInt64.le_refl _
+  | tick _ ticked ih =>
+    obtain ⟨same, justified⟩ := Store.onTick_unrealizedJustifiedCheckpoint ticked
+    rw [same]
+    rcases justified with eq | eq <;> rw [eq]
+    · exact ih
+    · exact UInt64.le_refl _
+  | block previous added ih =>
+    obtain ⟨raised, justified⟩ := Store.onBlock_unrealized_epoch_le added
+    rcases justified with eq | ⟨root, state, pulled, held, run, pending, eq | eq⟩ <;> rw [eq]
+    · exact UInt64.le_trans ih raised
+    · exact UInt64.le_trans (processJustificationAndFinalization_currentJustified_mono
+        (((previous.block added).ordered anchor).2 held).settled run) pending
+    · exact pending
+  | attestation _ attested ih =>
+    obtain ⟨-, -, -, same, -⟩ := Store.onAttestation_frame attested
+    rw [same.justified, same.unrealizedJustified]
+    exact ih
+  | attesterSlashing _ slashed ih =>
+    obtain ⟨-, -, -, same, -⟩ := Store.onAttesterSlashing_frame slashed
+    rw [same.justified, same.unrealizedJustified]
+    exact ih
+  | payloadAttestation _ voted ih =>
+    obtain ⟨_, _, rfl⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes voted
+    exact ih
+  | envelope _ accepted ih =>
+    obtain ⟨_, _, _, _, _, record, rfl⟩ := Store.onExecutionPayloadEnvelope_ok accepted
+    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    exact ih
+  | inclusionList _ accepted ih =>
+    obtain ⟨_, _, rfl⟩ := Store.onInclusionList_ok _ accepted
+    exact ih
+
+/-- A stored unrealized justification is at most the store's unrealized justified checkpoint.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.unrealizedJustification_epoch_le {store : Store preset fork}
+    (sound : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {checkpoint : Checkpoint}
+    (found : store.unrealizedJustifications[root]? = some checkpoint) :
+    checkpoint.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  have reachable := forward.reachable
+  rcases reachable.unrealizedJustification_origin found with
+    ⟨epochEq, -⟩ | ⟨state, pulled, held, run, rfl⟩
+  · rw [epochEq]
+    exact UInt64.le_trans reachable.anchor_le_finalized (UInt64.le_trans
+      (reachable.finalized_le_justified sound)
+      (Store.Reachable.justified_epoch_le_unrealized sound reachable))
+  · obtain ⟨_, known⟩ := reachable.known_of_blockState held
+    exact forward.pulledUp_le_unrealized sound positive slots known held run
+
+/-- A voting source of a store is at most its unrealized justified checkpoint.
+
+The anchor state must keep the invariant of the state transition. -/
+theorem Store.ForwardReachable.votingSource_epoch_le {store : Store preset fork}
+    (sound : Invariant anchorState)
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (slots : 0 < config.SLOT_DURATION_MS)
+    {root : Root} {source : Checkpoint} (voted : store.getVotingSource config root = .ok source) :
+    source.epoch ≤ store.unrealizedJustifiedCheckpoint.epoch := by
+  unfold Store.getVotingSource at voted
+  simp only [bind_ok_iff] at voted
+  obtain ⟨_, -, _, -, voted⟩ := voted
+  split at voted
+  · split at voted
+    · rename_i checkpoint found
+      cases voted
+      exact forward.unrealizedJustification_epoch_le sound positive slots found
+    · cases voted
+  · split at voted
+    · rename_i state held
+      cases voted
+      exact UInt64.le_trans (forward.reachable.justified_le_of_blockState sound held)
+        (Store.Reachable.justified_epoch_le_unrealized sound forward.reachable)
+    · cases voted
 
 end EthLib.Consensus

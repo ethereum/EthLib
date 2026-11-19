@@ -1081,39 +1081,6 @@ private theorem registry_of_justified_window {anchor : Store preset fork}
   obtain ⟨validator, found⟩ := registry_of_runKept (runKept_lookahead advanced) active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
 
-/-- Honest stores at ordered times have ordered predecessor slots. -/
-public theorem Execution.previousSlot_le_of_time_le {anchor : Store preset fork}
-    (anchored : ∀ w ∈ J, e.start w = anchor)
-    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
-    (later : (e.world n).time ≤ (e.world k).time)
-    (updated : UpToDate config checks sources (e.world k).time
-      ((e.world k).view w) ((e.world k).state w))
-    {slot current oldLast last : Slot}
-    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
-    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current)
-    (callerLast : subChecked slot 1 = .ok oldLast)
-    (receiverLast : subChecked current 1 = .ok last) : oldLast ≤ last := by
-  have callerClock := e.clock_bounds u n
-  have receiverClock := e.clock_bounds w k
-  rw [anchored u callerHonest] at callerClock
-  rw [anchored w receiverHonest] at receiverClock
-  have clockLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
-    have initial := UInt64.le_iff_toNat_le.mp receiverClock.2.1
-    have now := updated.1
-    exact UInt64.le_iff_toNat_le.mpr (by omega)
-  have slots : slot ≤ current := by
-    have callerRead := mapError_ok_iff.mp callerSlot
-    have receiverRead := mapError_ok_iff.mp receiverSlot
-    change computeSlotAtTimeMs config _ _ = .ok slot at callerRead
-    change computeSlotAtTimeMs config _ _ = .ok current at receiverRead
-    rw [callerClock.1] at callerRead
-    rw [receiverClock.1] at receiverRead
-    exact computeSlotAtTimeMs_mono clockLe callerRead receiverRead
-  have := (subChecked_ok_iff.mp callerLast).2
-  have := (subChecked_ok_iff.mp receiverLast).2
-  have := UInt64.le_iff_toNat_le.mp slots
-  exact UInt64.le_iff_toNat_le.mpr (by omega)
-
 /-- Genesis finality supplies the actual head and cache walks through the anchor. -/
 private theorem registry_of_genesis_window {anchor : Store preset fork}
     (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
