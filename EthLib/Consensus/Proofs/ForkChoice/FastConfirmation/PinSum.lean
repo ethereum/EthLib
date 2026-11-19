@@ -6123,7 +6123,7 @@ private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run conf
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The slashing credits of C's run are paid for each key by its envelope or its charge.
 
-A key of R's registry is paid by the envelope on its effective balance.
+A key of the split's registry is paid by the envelope on its effective balance.
 
 A key beyond it is paid by the charge that its exit leaves. -/
 private theorem slashing_charge (h : Setting config checks g split fin pulled anc counted V)
@@ -6133,9 +6133,9 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (env cr : ℕ → ℕ)
     (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
-      tailC.Contains step → ∀ i, i < pulled.validators.data.size → effectiveAt a i ≤ env i)
+      tailC.Contains step → ∀ i, i < split.validators.data.size → effectiveAt a i ≤ env i)
     (created : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
-      tailC.Contains step → ∀ i, pulled.validators.data.size ≤ i →
+      tailC.Contains step → ∀ i, split.validators.data.size ≤ i →
         (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
           (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
         effectiveAt a i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ cr i) :
@@ -6143,7 +6143,7 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
       ∑ i ∈ (Finset.range counted.validators.data.size).filter (fun i =>
           (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
             (counted.validators.data[i]?.map (·.slashed)).getD false = true),
-        (if i < pulled.validators.data.size then
+        (if i < split.validators.data.size then
           env i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else cr i) := by
   classical
   obtain ⟨shared⟩ := h.toFin
@@ -6171,7 +6171,7 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
       simp [read, kept]
   refine ⟨Finset.mem_filter.mpr ⟨Finset.mem_range.mpr insideCounted, unslashedSplit,
     slashedCounted⟩, ?_⟩
-  by_cases registered : i < pulled.validators.data.size
+  by_cases registered : i < split.validators.data.size
   · simp only [registered, ↓reduceIte, sameFork]
     exact Nat.div_le_div_right (registry step member i registered)
   · simp only [registered, ↓reduceIte, sameFork]
@@ -6240,11 +6240,11 @@ private theorem created_charge (h : Setting config checks g split fin pulled anc
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (extra : ℕ → ℕ)
     (earlier : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
-      tailC.Contains step → ∀ (i : ℕ), pulled.validators.data.size ≤ i → ∀ (old : Validator),
+      tailC.Contains step → ∀ (i : ℕ), split.validators.data.size ≤ i → ∀ (old : Validator),
         a.state.validators.data[i]? = some old → old.exitEpoch ≠ FAR_FUTURE_EPOCH →
           effectiveAt a i ≤ chargeAmt tailC i + extra i)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
-    (i : ℕ) (created : pulled.validators.data.size ≤ i)
+    (i : ℕ) (created : split.validators.data.size ≤ i)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
       (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
     effectiveAt a i ≤ chargeAmt tailC i + extra i := by
@@ -13702,7 +13702,7 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
-    (i : ℕ) (created : pulled.validators.data.size ≤ i) (old : Validator)
+    (i : ℕ) (created : split.validators.data.size ≤ i) (old : Validator)
     (foundA : a.state.validators.data[i]? = some old)
     (assigned : old.exitEpoch ≠ FAR_FUTURE_EPOCH) :
     effectiveAt a i ≤ chargeAmt tailC i + (preset.upwardBand +
@@ -13711,14 +13711,11 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
   have aFork : a.fork ≤ fork :=
     Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)
   -- the key is absent at the split, so it has a charge on the run before `a`
-  have absent : split.validators.data.size ≤ i :=
-    Nat.le_trans toPulled.registryLifecycle.size_le created
   have unset : ∀ v, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[i]? =
       some v → v.exitEpoch = FAR_FUTURE_EPOCH := fun v found =>
     absurd (Array.getElem?_eq_some_iff.mp found).1 (by simp only; omega)
