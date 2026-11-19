@@ -54,7 +54,7 @@ def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
 
 It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
-  match Fr.fromBytesBE ⟨b.toArray⟩ with
+  match Fr.fromBytesBE b with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 

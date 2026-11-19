@@ -356,6 +356,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
+  `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
+  `Signatures.SecretKey.fromBytes` keeps its `ByteArray`, and reads 32 bytes of it with `exactBytes?`.
+  `Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
+  `Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
+  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
+  The new `SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+
 - In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   The root of an ancestor walk does not depend on the payload status of its start.
   So a read at an earlier epoch goes through the checkpoint of a later one.
