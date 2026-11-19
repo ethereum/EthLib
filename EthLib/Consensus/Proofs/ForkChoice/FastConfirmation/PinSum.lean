@@ -5100,37 +5100,15 @@ private theorem charge_activated {x y : ForkedBeaconState preset} (electra : .pe
           charge.amount = v.effectiveBalance.toNat ∧ charge.epoch = w.exitEpoch.toNat) :
     ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,
       ∃ post : Run config checks b y, (pre.snoc step).append post = tail ∧
-        ∃ v, a.state.validators.data[charge.index]? = some v ∧ v.exitEpoch = FAR_FUTURE_EPOCH ∧
-          v.activationEpoch ≤ getCurrentEpoch a.state ∧
-          charge.amount = v.effectiveBalance.toNat := by
-  obtain ⟨a, b, pre, step, post, split, v, w, found, later, unset, set, amount, -⟩ := site
-  exact ⟨a, b, pre, step, post, split, v, found, unset,
+        ∃ v w, a.state.validators.data[charge.index]? = some v ∧
+          b.state.validators.data[charge.index]? = some w ∧ v.exitEpoch = FAR_FUTURE_EPOCH ∧
+          w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧ v.activationEpoch ≤ getCurrentEpoch a.state ∧
+          charge.amount = v.effectiveBalance.toNat ∧ charge.epoch = w.exitEpoch.toNat := by
+  obtain ⟨a, b, pre, step, post, split, v, w, found, later, unset, set, amount, epoch⟩ := site
+  exact ⟨a, b, pre, step, post, split, v, w, found, later, unset, set,
     step.chainStep.exit_assigned_activated
       (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps))
-      found later unset set, amount⟩
-
-/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
-
-The key is missing at the finalized state, or its activation there is unassigned.
-
-It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
-balance less its sync debits, from `Run.new_key_effective_floor`.
-
-A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
-
-It has no partial withdrawals queued, since a request needs an active key. -/
-private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
-    {events : List (BalanceEvent preset)}
-    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
-    (v : ValidatorIndex) (member : v ∈ K5 counted V)
-    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
-    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
-    (fresh : fin.validators.data[v.toNat]? = none ∨
-      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
-    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum :=
-  sorry
+      found later unset set, amount, epoch⟩
 
 /-- A key of `K5` that is activated at the finalized state is active and not withdrawable at R.
 
@@ -5350,6 +5328,13 @@ private theorem partials_le_due (electra : .pectra ≤ fork) (v : ValidatorIndex
   funext entry
   simp [Bool.decide_and, UInt64.toNat_inj, Bool.and_comm]
 
+/-- A call's cutoff is within the withdrawal delay of the finalized state. -/
+private theorem window_short (h : Setting config checks g split fin pulled anc counted V) :
+    (getCurrentEpoch pulled).toNat + 1 <
+      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  have shallow := h.shallow
+  omega
+
 /-- The partials paid to a key over a run from the finalized state are at most those due.
 
 The run ends by the call's cutoff, which is within the withdrawal delay of the finalized state. -/
@@ -5360,18 +5345,9 @@ private theorem run_partials_le_due (h : Setting config checks g split fin pulle
     (replayed : whole.balanceEvents (getCurrentEpoch pulled).toNat = .ok events) :
     (events.map (floorPartialDebit v)).sum ≤
       (pinTerms config pulled anc fin).partialsDue v.toNat := by
-  obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have shallow := h.shallow
-  have nearC := h.near
-  simp only at finSplit called
-  have short : (getCurrentEpoch pulled).toNat + 1 <
-      (getCurrentEpoch fin).toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
-    omega
   exact (Run.partialDebit_le whole electra h.early (getCurrentEpoch pulled).toNat
-    ((getCurrentEpoch pulled).toNat + 1) near short v replayed).trans
+    ((getCurrentEpoch pulled).toNat + 1) near (window_short h) v replayed).trans
     (partials_le_due electra v)
 
 /-- The effective balance of a key at a state of the run from the finalized state, before its exit.
@@ -6106,6 +6082,180 @@ private theorem exitFloor_add_slack (h : Setting config checks g split fin pulle
   have slack : (pinTerms config pulled anc fin).newKeySlack =
       (pinTerms config pulled anc fin).newKeyFloor -
         (pinTerms config pulled anc fin).exitFloor := rfl
+  omega
+
+/-- From Fusaka and before Gloas, the parameters are those of Fusaka. -/
+private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
+    (early : fork < .glamsterdam) :
+    EthLib.Consensus.parameters preset fork = EthLib.Consensus.parameters preset .fusaka := by
+  cases fork <;> first
+    | rfl
+    | exact absurd fusaka (by decide)
+    | exact absurd early (by decide)
+
+/-- A key that is not yet activated at the finalized state and has a small charge loses seats.
+
+The key is missing at the finalized state, or its activation there is unassigned.
+
+It activates on the run from the finalized state, so it keeps at least `newKeyFloor` of effective
+balance less its sync debits, from `Run.new_key_effective_floor`.
+
+A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
+
+It has no partial withdrawals queued, since a request needs an active key. -/
+private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {events : List (BalanceEvent preset)}
+    (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (member : v ∈ K5 counted V)
+    (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
+    (small : exitQ tailC v.toNat < (pinTerms config pulled anc fin).exitFloor)
+    (fresh : fin.validators.data[v.toNat]? = none ∨
+      ∃ w, fin.validators.data[v.toNat]? = some w ∧ w.activationEpoch = FAR_FUTURE_EPOCH) :
+    (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
+  -- The charge splits C's run at the step that exits the key.
+  --
+  -- The key is activated there, by (I1).
+  --
+  -- The key is active at that state, so the floor of a new key reads its effective balance.
+  --
+  -- That balance is the charge, and the floor adds the key's sync debits and partial payments.
+  --
+  -- The partial payments are none, since no queued entry names the key at the finalized state.
+  --
+  -- An entry queued later is not due in the window.
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨c, cMember, cIndex⟩ := charged
+  obtain ⟨a, b, pre, step, post, split', vv, w, found, foundB, unset, set, activated, amount,
+    epoch⟩ := charge_activated (x := ⟨fork, split⟩) electra tailC c
+    (tailC.departure_charge_site c cMember)
+  rw [cIndex] at found foundB
+  -- the exit epoch of the charge is at most C's epoch, since the key is not active there
+  obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
+  have exitSame : wc.exitEpoch = w.exitEpoch := life.exitEpoch set
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
+  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
+    notActive (by simpa [AC, activeVoters] using now)
+  rcases listed with now | before
+  · exact absurd now notCurrent
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  obtain ⟨c', foundC', activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  have same : c' = wc := Option.some.inj (foundC'.symm.trans foundC)
+  subst same
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeBefore
+  have exitLe : c'.exitEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
+    by_contra late
+    refine notCurrent ((mem_getActiveValidatorIndices within).mpr ⟨c', foundC', ?_⟩)
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+    have low := UInt64.le_iff_toNat_le.mp activeBefore.1
+    have previous := getPreviousEpoch_toNat counted
+    exact ⟨UInt64.le_iff_toNat_le.mpr (by omega), UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
+  -- the charge counts, so `exitQ` is its amount
+  have exitQEq : exitQ tailC v.toNat = c.amount := by
+    have counts : c.epoch ≤ (getCurrentEpoch counted).toNat := by
+      have exitNat := congrArg UInt64.toNat exitSame
+      omega
+    rcases exitQ_cases tailC v.toNat with ⟨none, -⟩ | ⟨d, dMember, dIndex, -, dQ⟩
+    · exact absurd counts (none c cMember cIndex)
+    · rw [dQ, charge_unique tailC dMember cMember (dIndex.trans cIndex.symm)]
+  -- the run from the finalized state to the exit step, and its events, a prefix of the replay
+  have shape : fromFin.append ((pre.snoc step).append post) =
+      (fromFin.append pre).append ((Run.nil.snoc step).append post) := by
+    have snoc : pre.snoc step = pre.append (Run.nil.snoc step) := rfl
+    rw [snoc, ← Run.append_assoc pre (Run.nil.snoc step) post, Run.append_assoc]
+  rw [← split', shape] at replayed
+  obtain ⟨prior, priorOk, isPrefix⟩ := Run.balanceEvents_prefix (fromFin.append pre)
+    ((Run.nil.snoc step).append post) (getCurrentEpoch pulled).toNat events replayed
+  have aEpoch : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch counted).toNat :=
+    UInt64.le_iff_toNat_le.mp
+      (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+  have aInside : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+    have := h.near
+    omega
+  have aEarly : a.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
+      h.early
+  have finite : (getCurrentEpoch a.state).toNat < FAR_FUTURE_EPOCH.toNat := by
+    have ne := getCurrentEpoch_ne_farFuture h.twoSlots a.state
+    have := (getCurrentEpoch a.state).toNat_lt
+    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    have : (getCurrentEpoch a.state).toNat ≠ FAR_FUTURE_EPOCH.toNat := fun eq =>
+      ne (UInt64.toNat_inj.mp eq)
+    omega
+  have active : isActiveAt a.state (getCurrentEpoch a.state) v.toNat = true := by
+    refine isActiveAt_eq_true_iff.mpr ⟨vv, found, ?_⟩
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+    exact ⟨activated, by rw [unset]; exact UInt64.lt_iff_toNat_lt.mpr finite⟩
+  have pending : ∀ u, fin.validators.data[v.toNat]? = some u →
+      (getCurrentEpoch (⟨fork, fin⟩ : ForkedBeaconState preset).state).toNat + 1 <
+        u.activationEpoch.toNat := by
+    intro u foundFin
+    rcases fresh with none | ⟨u', foundFin', far⟩
+    · rw [none] at foundFin
+      cases foundFin
+    · obtain rfl := Option.some.inj (foundFin.symm.trans foundFin')
+      rw [far]
+      exact getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
+  have floor := PinSplit.Run.new_key_effective_floor toFin h.genesis h.parameters h.caps h.aligned
+    h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard (fromFin.append pre) aEarly
+    aInside h.window h.delay h.bands h.facts v.toNat pending active
+    (fun step fulu early crossing =>
+      DirectSafety.Apriori.Internal.hysteresis_of_crossing_slot
+        (DirectSafety.Apriori.Internal.slot_of_crossing step
+          (UInt64.lt_iff_toNat_lt.mp crossing)) h.bands fulu early
+        (UInt64.lt_iff_toNat_lt.mp crossing)) priorOk
+  -- no queued partial withdrawal names the key at the finalized state, which has no activation
+  have genesisPartials : Internal.AssignedPartials g.state := by
+    obtain ⟨_, _, _, initialized⟩ := h.genesis
+    have before := (initializeBeaconStateFromEth1_ok initialized).1
+    intro fork
+    exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
+  have finPartials : Internal.AssignedPartials fin :=
+    (Internal.CapStep.run toFin h.caps.activation h.caps.compounding h.early).2.1 genesisPartials
+  have noEntry : ((((fin.pendingPartialWithdrawals electra).data.toList.filter
+      fun entry => decide (entry.validatorIndex = v)).filter
+        (fun entry => entry.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).map
+          (·.amount.toNat)).sum = 0 := by
+    have none : (fin.pendingPartialWithdrawals electra).data.toList.filter
+        (fun entry => decide (entry.validatorIndex = v)) = [] := by
+      apply List.filter_eq_nil_iff.mpr
+      intro entry member same
+      obtain ⟨u, foundU, assignedU⟩ := finPartials electra entry member
+      rw [of_decide_eq_true same] at foundU
+      rcases fresh with absent | ⟨u', foundU', far⟩
+      · rw [absent] at foundU
+        cases foundU
+      · obtain rfl := Option.some.inj (foundU.symm.trans foundU')
+        exact assignedU far
+    rw [none]
+    rfl
+  have debits := Run.partialDebit_le (fromFin.append pre) electra aEarly
+    (getCurrentEpoch pulled).toNat ((getCurrentEpoch pulled).toNat + 1) aInside
+    (window_short h) v priorOk
+  have toUInt : v.toNat.toUInt64 = v := by simp
+  have partials : (prior.map (DirectSafety.Apriori.Internal.floorPartialDebit
+      v.toNat.toUInt64)).sum = 0 := by
+    rw [toUInt]
+    exact Nat.le_zero.mp (noEntry ▸ debits)
+  have order := exitFloor_add_slack h
+  have floorEq : (pinTerms config pulled anc fin).newKeyFloor =
+      2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
+        preset.MAX_EFFECTIVE_BALANCE.toNat /
+          (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+        preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat := rfl
+  rw [parameters_of_fusaka h.fulu h.early] at floorEq
+  have effective : effectiveAt a v.toNat = c.amount := by
+    simp only [effectiveAt, found, Option.map_some, Option.getD_some]
+    exact amount.symm
+  have prefixSum : (prior.map (syncDebit v.toNat)).sum ≤ (events.map (syncDebit v.toNat)).sum := by
+    obtain ⟨rest, rfl⟩ := isPrefix
+    simp only [List.map_append, List.sum_append]
+    omega
   omega
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
