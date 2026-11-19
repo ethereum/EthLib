@@ -780,6 +780,24 @@ def bandR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
   if 0 < ((events.filter (·.source = .sync)).map (keyDebit v)).sum then
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 else 0
 
+/-- A quantity of the sync events, summed over all events with the others at zero. -/
+private theorem sum_map_sync (events : List (BalanceEvent preset))
+    (k : BalanceEvent preset → ℕ) :
+    (events.map fun e => if e.source = .sync then k e else 0).sum =
+      ((events.filter (·.source = .sync)).map k).sum := by
+  induction events with
+  | nil => rfl
+  | cons e rest ih =>
+    by_cases sync : e.source = .sync
+    · simp [sync, ih]
+    · simp [sync, ih]
+
+/-- The sync debits of a key over a list of events are the debits of its sync events. -/
+private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
+    (events.map (syncDebit v)).sum =
+      ((events.filter (·.source = .sync)).map (keyDebit v)).sum :=
+  sum_map_sync events (keyDebit v)
+
 /-- The key's effective balance when its exit starts on a run, or 0.
 
 It is the amount of the key's departure charge, which reads the effective balance at the exit call.
@@ -1125,8 +1143,9 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
 
 /-- A state of the balance path of a run is the end of a prefix of the run.
 
-The state inside a slot step, after the epoch transition and before the upgrades, is the end of the
-step, since no fork upgrade runs when the fork does not rise. -/
+The state inside a slot step comes after the epoch transition and before the upgrades.
+
+It is the end of the step, since no fork upgrade runs when the fork does not rise. -/
 private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
     (rp : Run config checks x m) (rest : Run config checks m y) (back : y.fork ≤ x.fork)
     {p : ForkedBeaconState preset} (member : p ∈ rp.balancePath) :
@@ -1147,8 +1166,9 @@ private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
     exact ⟨rq.snoc (Step.slot ok), rest'.append rest, Run.append_assoc _ _ _⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The balance of a key at every state of a prefix of C's run from the finalized block is above
-`floor`, if `floor` is below what the potential floor gives.
+/-- The balance of a key at every prefix end of C's run is above `floor`.
+
+The run is C's from the finalized block, and `floor` is below what the potential floor gives.
 
 The potential floor is `FloorTrace.run_potential_floor`, read at the end of each prefix.
 
@@ -1156,12 +1176,15 @@ The guards are `floor_guards`, with the exit guard `retained` and the pass rate 
 
 The step `arith` is the arithmetic that fits the closed form of the potential floor to `floor`.
 
-It holds for each epoch count up to C's, and each debit that is at most the key's sync and partial
-debits over the whole run.
+It holds for each epoch count up to C's.
 
-The effective balance of the key at the end of the prefix is then at least the least of its
-effective balance at the finalized block, its cap there, and `floor` rounded down to an
-increment. -/
+It also holds for each debit that is at most the key's sync and partial debits over the run.
+
+The effective balance of the key at the end of a prefix is then at least a least value.
+
+That value is the least of its effective balance and its cap at the finalized block.
+
+And of `floor` rounded down to an increment. -/
 private theorem cfloor_endpoint (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -1273,33 +1296,26 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
       (forkEnd r2) i.toNat val initial
     simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
 
-/-- The sync debits of a key over a list of events are the debits of its sync events. -/
-private theorem sum_syncDebit_eq (events : List (BalanceEvent preset)) (v : ℕ) :
-    (events.map (syncDebit v)).sum =
-      ((events.filter (·.source = .sync)).map (keyDebit v)).sum := by
-  induction events with
-  | nil => rfl
-  | cons e rest ih =>
-    by_cases sync : e.source = .sync
-    · simp [sync, syncDebit, keyDebit, ih]
-    · simp [sync, syncDebit, ih]
-
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- C's effective balance of a key at a state of its run from the finalized block is above the
-floor of its fall, less its sync debits and their band.
+/-- A key's effective balance on C's run is above the floor of its fall.
+
+The run starts at the finalized block, and the bound holds at each state of it.
+
+It is above that floor less the key's sync debits and their band.
 
 The floor starts from the smaller of the key's balance and its cap at the finalized block.
 
 It falls by what `fall` charges, in `X`: the leak and the gain over the depth, and the partials.
 
-If the test of `fall` holds, the balance stays within a band of the envelope, and the effective
-balance stays at its finalized value, by `stay`.
+If the test of `fall` holds, the balance stays within a band of the envelope.
+
+Then the effective balance stays at its finalized value, by `stay`.
 
 Otherwise the floor is rounded down to an increment, by `cfloor_endpoint`.
 
-The step `margin` fits the closed form of the potential floor to the floor of the fall.
+The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
 
-It is the margin step, which waits for the spec of `fall`, and `stay` is the credit case. -/
+The hypothesis `stay` keeps the effective balance at its finalized value if the test holds. -/
 private theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -4600,17 +4616,9 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
 private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
     syncF events v = (events.map (syncCredit v)).sum +
       (events.map (syncDebit v)).sum := by
-  induction events with
-  | nil => simp [syncF]
-  | cons e rest ih =>
-    unfold syncF at ih ⊢
-    by_cases sync : e.source = .sync
-    · simp only [List.filter_cons, sync, decide_true, ↓reduceIte, List.map_cons, List.sum_cons,
-        syncCredit, syncDebit, keyCredit, keyDebit] at ih ⊢
-      omega
-    · simp only [List.filter_cons, sync, decide_false, Bool.false_eq_true, ↓reduceIte,
-        List.map_cons, List.sum_cons, syncCredit, syncDebit] at ih ⊢
-      omega
+  unfold syncF
+  rw [← sum_syncDebit_eq events v]
+  exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
 /-- S1 (syncSeats): every seat, weight 3 for V, K4 and K5 and 1 for K6.
 
