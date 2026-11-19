@@ -231,7 +231,9 @@ It is also charged where that key's effective balance can fall below what pays f
 
 Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
 
-Below 18 increments of total active balance the reserve exceeds any stake, so the pin is vacuous. -/
+The reserve grows as the total active balance shrinks.
+
+For small totals it exceeds all stake, so the pin is vacuous. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
