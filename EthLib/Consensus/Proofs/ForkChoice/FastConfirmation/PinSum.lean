@@ -1402,6 +1402,33 @@ private theorem step_events_bounded {g m n : ForkedBeaconState preset}
   cases foundOk
   exact fun e member => (bounded e member).1
 
+/-- The credits of a block step to a key are at most those of `credC`, `whistC` and sync. -/
+private theorem block_credit_le_sources {g m n : ForkedBeaconState preset}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (step : Step config checks m n) (notSlot : ∀ ok, step ≠ Step.slot ok)
+    (early : n.fork < .glamsterdam) (electra : .pectra ≤ m.fork) (i : ℕ)
+    {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events) :
+    stepCredit (fun _ => true) (fun _ => true) i step ≤
+      stepCredit (fun s => decide (s = .rewards ∨ s = .consolidations))
+        (fun s => decide (s = .consolidations ∨ s = .deposits)) i step +
+      stepCredit (fun s => decide (s = .slashings)) (fun _ => false) i step +
+      (events.map (syncCredit i)).sum := by
+  have bounded := step_events_bounded shared genesis step early replayed
+  cases step with
+  | block engine signed due ok =>
+    have each := block_event_credit shared genesis early electra i replayed bounded
+    have split : (events.map (keyCredit i)).sum ≤
+        ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
+          (keyCredit i)).sum +
+        ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
+        (events.map (syncCredit i)).sum := by
+      simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
+        (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
+        (fun e m _ => by simpa using each e m)
+    simp only [stepCredit, replayed, Except.toOption, Option.getD_some, List.filter_true] at split ⊢
+    exact split
+  | slot ok => exact absurd rfl (notSlot ok)
+
 /-- The credits of a step, net for a block step, are at most those of `credC`, `whistC` and sync. -/
 private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
@@ -1416,17 +1443,10 @@ private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
   have base := PinSplit2.step_balance_le_events step early i replayed
   cases step with
   | block engine signed due ok =>
-    have each := block_event_credit shared genesis early electra i replayed bounded
-    have split : (events.map (keyCredit i)).sum ≤
-        ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
-          (keyCredit i)).sum +
-        ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
-        (events.map (syncCredit i)).sum := by
-      simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
-        (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
-        (fun e m _ => by simpa using each e m)
+    have split := block_credit_le_sources shared genesis (Step.block engine signed due ok)
+      (by intro ok' h; cases h) early electra i replayed
     simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
-      sum_filter_none] at base ⊢
+      sum_filter_none, List.filter_true] at base split ⊢
     omega
   | slot ok =>
     have each := slot_event_credit shared genesis early i replayed bounded
@@ -12322,6 +12342,14 @@ private theorem otherGain_sum_le {ι : Type} (S : Finset ι) (w c : ι → ℕ)
         rw [Finset.mul_sum]
         exact Finset.sum_congr rfl fun i _ => by ring
     _ ≤ depth * (OC / inc * P * F / WD) := Nat.mul_le_mul_left _ outer
+
+/-- The cap along the balance path of a run is at most the cap at its end. -/
+private theorem capCeil_path {c e : ForkedBeaconState preset} (tail : Run config checks c e)
+    (caps : CapOrder preset) (early : e.fork < .glamsterdam) (back : e.fork ≤ c.fork) (i : ℕ) :
+    ∀ z ∈ tail.balancePath, PinSplit2.capAt z i ≤ PinSplit2.capAt e i := by
+  intro z member
+  obtain ⟨-, r2, -⟩ := balancePath_endpoint tail (Run.nil : Run config checks e e) back member
+  exact cap_le_cap_of_run caps r2 early i
 
 /-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch,
 weight 3, are paid by the slashed key's own slack, or charged. -/
