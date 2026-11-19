@@ -6240,10 +6240,11 @@ private theorem created_charge (h : Setting config checks g split fin pulled anc
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (extra : ℕ → ℕ)
     (earlier : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
-      tailC.Contains step → ∀ (i : ℕ) (old : Validator), a.state.validators.data[i]? = some old →
-        old.exitEpoch ≠ FAR_FUTURE_EPOCH → effectiveAt a i ≤ chargeAmt tailC i + extra i)
+      tailC.Contains step → ∀ (i : ℕ), pulled.validators.data.size ≤ i → ∀ (old : Validator),
+        a.state.validators.data[i]? = some old → old.exitEpoch ≠ FAR_FUTURE_EPOCH →
+          effectiveAt a i ≤ chargeAmt tailC i + extra i)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
-    (i : ℕ)
+    (i : ℕ) (created : pulled.validators.data.size ≤ i)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
       (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
     effectiveAt a i ≤ chargeAmt tailC i + extra i := by
@@ -6259,7 +6260,7 @@ private theorem created_charge (h : Setting config checks g split fin pulled anc
         have marked : new.slashed = true := by simpa [foundB] using slashedB
         exact (slash_exit_charge h fromFin tailC step member i old new foundA foundB unset
           marked).trans (Nat.le_add_right _ _)
-    · exact earlier step member i old foundA unset
+    · exact earlier step member i created old foundA unset
 
 /-- The keys whose exit is charged within the run's epochs pay at most the window of the queues.
 
