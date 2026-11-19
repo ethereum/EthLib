@@ -519,7 +519,7 @@ private theorem penaltyDebit_le_floor (i : ℕ) (events : List (BalanceEvent pre
   List.sum_le_sum fun e _ => by unfold floorPenaltyDebit; omega
 
 /-- At a state of a run from genesis, a key's effective balance is a whole number of increments. -/
-private theorem effective_aligned_at (run : Run config checks g x)
+theorem FloorTrace.effective_aligned (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
     (aligned : MaxEffectiveBalancesAligned preset) (i : ℕ) :
     effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
@@ -916,7 +916,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         · exact .inr ⟨k, head, rest.snoc step, by simp only [Run.append, split], kept.trans eq,
             below, whole⟩
       · exact .inr ⟨n, pre.snoc step, .nil, rfl, rfl, set,
-          effective_aligned_at (shared.append (pre.snoc step)) genesis aligned i.toNat⟩
+          FloorTrace.effective_aligned (shared.append (pre.snoc step)) genesis aligned i.toNat⟩
 
 /-- The per-key accounting trace of a branch, from a floor.
 
@@ -1078,11 +1078,7 @@ theorem FloorTrace.run_potential_floor
   unfold nonPassDebt
   omega
 
-/-- From Fusaka, a key's effective balance after a run is its start value, or an update set it.
-
-An update sets it at most to the balance at the last state where it changed.
-
-The run splits at that state, the effective balance stays constant after it, and it is aligned. -/
+/-- From Fusaka, a key's effective balance after a run is its start value or an update's. -/
 theorem FloorTrace.run_effective_origin
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
