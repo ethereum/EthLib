@@ -12660,17 +12660,41 @@ private theorem flagRate_le (t : PinTerms preset) : flagRate t ≤ t.perIncremen
   exact (Nat.div_le_div_right (Nat.mul_le_mul_left _ weights)).trans
     (Nat.mul_div_cancel _ (by decide : 0 < WEIGHT_DENOMINATOR.toNat)).le
 
+/-- The rewards of the keys of a set that a test marks fit a quotient.
+
+The quotient is of the sum over the positions that meet a stronger test.
+
+Each reward is a quotient of the key's value.
+
+A sum of quotients is at most the quotient of the sum. -/
+private theorem floor_aux {A : Finset ValidatorIndex} {S : Finset ℕ} {P : ℕ → Prop}
+    [DecidablePred P] {c q : ℕ} (f : ℕ → ℕ) (rb : ℕ → Bool)
+    (inside : ∀ v ∈ A, rb v.toNat = true → v.toNat ∈ S ∧ P v.toNat) :
+    ∑ v ∈ A.filter (fun v => rb v.toNat = true), f v.toNat / q ≤
+      (∑ i ∈ S.filter P, f i + c) / q :=
+  le_trans (DirectSafety.Apriori.Internal.sum_div_le (A.filter fun v => rb v.toNat = true)
+    (fun v : ValidatorIndex => f v.toNat) q)
+    (Nat.div_le_div_right (Nat.le_trans (sum_toNat_le f fun v hv =>
+      Finset.mem_filter.mpr (inside v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2))
+      (Nat.le_add_right _ _)))
+
 /-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
 
-The slashed, proposer and rounding charges have weight three, as has the whistleblower charge.
+The slashed, proposer and rounding charges have weight three.
+
+So has the whistleblower charge `Wh`.
 
 The slashed charge covers the flag gain of two windows and the leak of one increment.
 
-The remainder `W` holds those and the unit gain. -/
+The remainder `W` holds those and the unit gain.
+
+`Wh` pays the whistleblower reward of any set of keys that R's call reads as slashed on its branch.
+
+Each reward is at the key's effective balance and rise. -/
 private theorem branchR_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
-    ∃ W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
-      3 * (W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+    ∃ Wh W : ℕ, (pinTerms config state ancestor finalizedState).branchR =
+      3 * (Wh + W + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
           (pinTerms config state ancestor finalizedState).slashedR +
         (pinTerms config state ancestor finalizedState).depth *
           (pinTerms config state ancestor finalizedState).proposerCredit +
@@ -12691,7 +12715,12 @@ private theorem branchR_split (config : Config)
         (pinTerms config state ancestor finalizedState).slashedR *
           slashLeak config fork (pinTerms config state ancestor finalizedState) +
         (pinTerms config state ancestor finalizedState).unitGain *
-          (pinTerms config state ancestor finalizedState).slashedR ≤ W := by
+          (pinTerms config state ancestor finalizedState).slashedR ≤ W ∧
+      ∀ A : Finset ValidatorIndex,
+        ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
+          = true), (balanceAt state v.toNat +
+            (pinTerms config state ancestor finalizedState).rise v.toNat) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ Wh := by
   -- The slashed charge is an increment and the leak of the dropped balance; the leak joins `W`.
   have charge : ∀ d p a b Q f : ℕ, f ≤ p → a ≤ b →
       2 * d * f + d * (2 * p + a / Q + 1) ≤ d * (2 * (2 * p) + b / Q + 1) :=
@@ -12699,7 +12728,7 @@ private theorem branchR_split (config : Config)
       have floor := Nat.div_le_div_right (c := Q) ab
       calc 2 * d * f + d * (2 * p + a / Q + 1) = d * (2 * f + (2 * p + a / Q + 1)) := by ring
         _ ≤ d * (2 * (2 * p) + b / Q + 1) := Nat.mul_le_mul_left _ (by omega)
-  obtain ⟨W, D, U, split, gain, unit⟩ : ∃ W D U : ℕ,
+  obtain ⟨W, D, U, split, gain, unit, floorW⟩ : ∃ W D U : ℕ,
       (pinTerms config state ancestor finalizedState).branchR =
       3 * (W + (preset.EFFECTIVE_BALANCE_INCREMENT.toNat + D) *
           (pinTerms config state ancestor finalizedState).slashedR +
@@ -12720,14 +12749,26 @@ private theorem branchR_split (config : Config)
       2 * (pinTerms config state ancestor finalizedState).depthFin *
           flagRate (pinTerms config state ancestor finalizedState) +
         slashLeak config fork (pinTerms config state ancestor finalizedState) ≤ D ∧
-      U = (pinTerms config state ancestor finalizedState).unitGain := by
-    refine ⟨_, _, _, rfl, ?_, rfl⟩
-    exact charge _ _ _ _ _ _ (flagRate_le _)
-      (by rw [Nat.mul_assoc]; exact Nat.le_mul_of_pos_left _ (by norm_num))
+      U = (pinTerms config state ancestor finalizedState).unitGain ∧
+      ∀ A : Finset ValidatorIndex,
+        ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
+          = true), (balanceAt state v.toNat +
+            (pinTerms config state ancestor finalizedState).rise v.toNat) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ W := by
+    refine ⟨_, _, _, rfl, ?_, rfl, fun A => ?_⟩
+    · exact charge _ _ _ _ _ _ (flagRate_le _)
+        (by rw [Nat.mul_assoc]; exact Nat.le_mul_of_pos_left _ (by norm_num))
+    · -- The reward of a key is read at its position among the keys slashed on this branch.
+      refine floor_aux (A := A) (fun i => balanceAt state i +
+        (pinTerms config state ancestor finalizedState).rise i)
+        (fun i => (pinTerms config state ancestor finalizedState).slashedRB i) fun v _ flag => ?_
+      refine ⟨Finset.mem_range.mpr (slashedRB_lt config state ancestor finalizedState flag), ?_⟩
+      rw [slashedRB_eq] at flag
+      exact of_decide_eq_true flag
   subst unit
-  refine ⟨W + D * (pinTerms config state ancestor finalizedState).slashedR +
+  refine ⟨W, D * (pinTerms config state ancestor finalizedState).slashedR +
     (pinTerms config state ancestor finalizedState).unitGain *
-      (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring, ?_⟩
+      (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring, ?_, floorW⟩
   have step : (pinTerms config state ancestor finalizedState).slashedR *
       (2 * (pinTerms config state ancestor finalizedState).depthFin *
           flagRate (pinTerms config state ancestor finalizedState) +
@@ -12743,6 +12784,18 @@ private theorem syncProposer_le_credit (config : Config)
     (pinTerms config state ancestor finalizedState).syncProposer ≤
       (pinTerms config state ancestor finalizedState).proposerCredit :=
   Nat.le_add_left _ _
+
+/-- The quotient of a number rounded up is at most the number. -/
+private theorem ceil_div_le (c q : ℕ) : (c + q - 1) / q ≤ c := by
+  rcases Nat.eq_zero_or_pos q with rfl | pos
+  · simp
+  · obtain ⟨q', rfl⟩ : ∃ q', q = q' + 1 := ⟨q - 1, by omega⟩
+    rcases Nat.eq_zero_or_pos c with rfl | cpos
+    · exact (Nat.div_eq_of_lt (by omega)).le
+    · obtain ⟨c', rfl⟩ : ∃ c', c = c' + 1 := ⟨c - 1, by omega⟩
+      refine Nat.div_le_of_le_mul ?_
+      rw [show c' + 1 + (q' + 1) - 1 = c' + q' + 1 by omega]
+      nlinarith
 
 /-- R1 from the count of its rounding bands.
 
@@ -12784,16 +12837,58 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
         3 * (∑ v ∈ (K5 counted V),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) ≤
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
+        3 * (∑ v ∈ (SC pulled counted split).filter
+            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   classical
-  obtain ⟨W, hW, gainW⟩ := branchR_split config pulled anc fin
+  obtain ⟨Wh, W, hW, gainW, floorW⟩ := branchR_split config pulled anc fin
   obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  obtain ⟨dSC, -⟩ := sc_disjoint h
   have slashes := weighted_le (A := K4 pulled counted V) (B := K5 counted V)
     (C := K6 pulled counted) (fun v => slashR (pinTerms config pulled anc fin) v.toNat) d45 d46
     d56
+  -- A key of `SC` that R slashes takes an increment of `branchR`'s slashed keys.
+  --
+  -- A key of the classes takes one too, and the two sets are disjoint.
   have slashBound := slashR_le config pulled anc fin
-    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted)
+    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split)
+  rw [Finset.sum_union dSC] at slashBound
+  have scFloor := floorW (SC pulled counted split)
+  have scReward : ∑ v ∈ (SC pulled counted split).filter
+        (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+      ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+        (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
+      (∑ v ∈ (SC pulled counted split).filter
+          (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+        (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
+        ∑ v ∈ SC pulled counted split, slashR (pinTerms config pulled anc fin) v.toNat := by
+    have each : ∀ v ∈ (SC pulled counted split).filter
+        (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+        (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+          (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤
+        (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+        slashR (pinTerms config pulled anc fin) v.toNat := fun v hv => by
+      have flag := (Finset.mem_filter.mp hv).2
+      rw [show slashR (pinTerms config pulled anc fin) v.toNat =
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat by simp [slashR, flag]]
+      exact Nat.add_le_add_left (ceil_div_le _ _) _
+    refine (Finset.sum_le_sum each).trans ?_
+    rw [Finset.sum_add_distrib]
+    exact Nat.add_le_add_left (Finset.sum_le_sum_of_subset (Finset.filter_subset _ _)) _
   have credit := Nat.mul_le_mul_left (pinTerms config pulled anc fin).depth
     (syncProposer_le_credit config pulled anc fin)
   simp only [Finset.sum_add_distrib] at *
@@ -12816,8 +12911,19 @@ The charge `slashCharge` is at least an increment and `2 * depthFin * flagRate`.
 
 The flag rate is at most the rate of an increment, and `slashCharge` has four of it for each epoch.
 
-The `syncProposer` part of `proposerCredit` is not used by `credR`, which leaves out sync events, so
-`bud_sync` takes it. -/
+The `syncProposer` part of `proposerCredit` is not used by `credR`.
+
+`credR` leaves out sync events, so `bud_sync` takes it.
+
+The keys of `SC` that R slashes after the split also draw on `branchR`, at weight three.
+
+The reward of such a key on C's branch is read at its balance there.
+
+That balance is at most R's balance and its rise, plus one increment for R's initial penalty.
+
+`whistleblowerR` pays the quotient of the first two.
+
+The increment is one of the slashed keys' increments, which no class spends for a key of `SC`. -/
 theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -12841,7 +12947,14 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         3 * (∑ v ∈ (K5 counted V),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) ≤
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
+        3 * (∑ v ∈ (SC pulled counted split).filter
+            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have nearC := h.near
@@ -13307,7 +13420,15 @@ theorem bud_whistle (h : Setting config checks g split fin pulled anc counted V)
               consAmt eventsF v.toNat) +
           (∑ v ∈ SC pulled counted split with
             (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, bandX fin high v.toNat) :
-            ℕ) : ℤ) :=
+            ℕ) : ℤ) +
+      -- The keys that R slashes after the split are read at the bound that `bud_branchR` pays.
+      ((3 * (∑ v ∈ (SC pulled counted split).filter
+            (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+          ((balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+            (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
+                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) : ℕ) : ℤ) :=
   sorry
 
 /-- Glue: V keys are current at R, and distinct keys have distinct positions. -/
