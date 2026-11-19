@@ -1,0 +1,39 @@
+# Create and update the labels of the repository from .github/labels.yml.
+#
+# The sync never deletes a label: a label missing from the file stays on the repository.
+# It runs on master only, so it reads the file from a reviewed commit.
+
+name: labels-sync
+
+on:
+  push:
+    branches: [master]
+    paths: [.github/labels.yml]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: labels-sync
+  cancel-in-progress: false
+
+jobs:
+  labels-sync:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # check out labels.yml
+      issues: write # create and update labels
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/labels.yml
+          sparse-checkout-cone-mode: false
+
+      - uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          yaml-file: .github/labels.yml
+          skip-delete: true

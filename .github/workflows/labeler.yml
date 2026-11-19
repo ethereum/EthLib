@@ -1,0 +1,70 @@
+# Label each pull request by the paths it changes, as .github/labeler.yml maps them.
+#
+# pull_request_target runs this workflow from the base branch, with a token that can write labels,
+# also for pull requests from forks.
+# So no job checks out or runs code from the pull request: the labeler reads only the list of
+# changed files through the API, and its configuration from the base branch.
+#
+# A manual run labels every open pull request once, except those labelled leanVM.
+
+name: labeler
+
+on:
+  # Safe here: no job checks out or runs code from the pull request.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions: {}
+
+# A newer push to the same pull request replaces a run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || 'backfill' }}
+  cancel-in-progress: true
+
+jobs:
+  labeler:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # read the configuration from the base branch
+      pull-requests: write # set the labels of a pull request
+
+    steps:
+      # sync-labels also removes a label of the configuration once no changed path matches it.
+      # Labels that the configuration does not name, such as the types, stay as they are.
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true
+
+  backfill:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # read the configuration from the base branch
+      pull-requests: write # set the labels of a pull request
+
+    steps:
+      - name: List the open pull requests
+        id: open
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const numbers = pulls
+              .filter((pull) => !pull.labels.some((label) => label.name === 'leanVM'))
+              .map((pull) => pull.number);
+            core.info(`Labelling ${numbers.length} of ${pulls.length} open pull requests.`);
+            core.setOutput('numbers', numbers.join('\n'));
+
+      - if: steps.open.outputs.numbers != ''
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true
+          pr-number: ${{ steps.open.outputs.numbers }}
