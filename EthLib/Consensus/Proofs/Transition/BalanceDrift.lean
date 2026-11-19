@@ -506,6 +506,22 @@ theorem effectiveKept_withdrawalRequest {f : Fork} {s t : BeaconState preset f}
   · exact effectiveKept_exit exited
   · exact effectiveKept_partial withdrawn
 
+/-- The payload of the parent keeps the size of the registry and each effective balance in it. -/
+theorem effectiveKept_parentPayload {f : Fork} {s t : BeaconState preset f}
+    {gloas : .glamsterdam ≤ f} {body : BeaconBlockBody preset f}
+    (ok : processParentExecutionPayload config checks s gloas body = .ok t) :
+    EffectiveKept s t ∧ t.validators.data.size = s.validators.data.size :=
+  processParentExecutionPayload_step_of
+    (fun a b => EffectiveKept a b ∧ b.validators.data.size = a.validators.data.size)
+    (fun a => ⟨effectiveKept_refl a, rfl⟩)
+    (fun one two => ⟨effectiveKept_trans one.1 two.1 (Nat.le_of_eq one.2.symm),
+      two.2.trans one.2⟩)
+    (fun _ validators => ⟨effectiveKept_data (congrArg (·.data) validators), by rw [validators]⟩)
+    (fun requested => ⟨effectiveKept_withdrawalRequest requested,
+      (sameSizes_processWithdrawalRequest requested).1⟩)
+    (fun requested => ⟨effectiveKept_consolidationRequest requested,
+      (sameSizes_processConsolidationRequest requested).1⟩) ok
+
 theorem effectiveKept_depositRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : DepositRequest}
     (ok : processDepositRequest s electra request = .ok t) : EffectiveKept s t := by
