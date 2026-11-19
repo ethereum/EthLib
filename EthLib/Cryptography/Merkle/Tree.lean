@@ -27,6 +27,10 @@ The path of a leaf holds the sibling of each of its ancestors, from the leaf up.
 
 Climbing from the leaf with its path recomputes the root, so a path proves its leaf.
 
+A build computes every node under a position once, and keeps them all.
+
+So one build gives both the node at the position and the path of each leaf below it.
+
 Every definition runs in a monad `m`, so the hash may be an oracle.
 
 A pure tree runs in `Id`.
@@ -34,6 +38,7 @@ A pure tree runs in `Id`.
 The order of the hash calls is fixed, so a proof in the random oracle model can count them.
 
 - A node computes its left subtree, then its right subtree, then its own hash.
+- A build makes the calls of the node at its position, in the same order.
 - A path computes its siblings from the leaf up.
 - A climb hashes from the leaf up.
 -/
@@ -124,6 +129,47 @@ def node (leaves : Nat → m α) (p : Position) : m α :=
 /-- The root of the tree of height `h`: its node at level `h` and index 0. -/
 def root (leaves : Nat → m α) (h : Nat) : m α :=
   node hash leaves ⟨h, 0⟩
+
+/-! ## Built trees -/
+
+/-- A tree that holds the value of every node: a leaf, or a node above its two subtrees. -/
+inductive Built (β : Type) where
+  /-- A leaf, with its value. -/
+  | leaf (value : β)
+  /-- A node above the leaves, with its value, its left subtree and its right subtree. -/
+  | node (value : β) (left right : Built β)
+
+/-- The value of the top node of a built tree. -/
+def Built.value : Built α → α
+  | .leaf value => value
+  | .node value _ _ => value
+
+/-- Every node under a position, each computed once.
+
+It computes the node at the position with the same hash calls, in the same order.
+
+Each node also keeps its two subtrees. -/
+def build (leaves : Nat → m α) (p : Position) : m (Built α) :=
+  node
+    (fun q left right => do
+      let value ← hash q left.value right.value
+      return .node value left right)
+    (fun j => do
+      let value ← leaves j
+      return .leaf value)
+    p
+
+/-- The path of leaf `j`, read from a tree built `n` levels above it, from the leaf up.
+
+At height `k + 1`, bit `k` of `j` says which child holds the leaf, and the other child is a sibling.
+
+A build never holds a leaf above level 0; reading one there repeats its value. -/
+def Built.path : Built α → (n j : Nat) → Vector α n
+  | _, 0, _ => #v[]
+  | .node _ left right, n + 1, j =>
+    if j / 2 ^ n % 2 = 0 then (left.path n j).push right.value
+    else (right.path n j).push left.value
+  | .leaf value, n + 1, _ => Vector.replicate (n + 1) value
 
 /-! ## Paths -/
 

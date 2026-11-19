@@ -271,6 +271,7 @@ def EngineError.message : EngineError → String
   | .tooLargeRequest .. => "Too large request"
   | .invalidPayloadAttributes => "Invalid payload attributes"
   | .unknownPayload _ => "Unknown payload"
+  | .tooDeepReorg => "Too deep reorg"
 
 /-- The error object of an error: the negative of its code, its message, and `null` data.
 

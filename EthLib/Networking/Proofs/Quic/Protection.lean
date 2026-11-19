@@ -95,7 +95,6 @@ theorem sample_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.Pack
     have hpn : ¬(offset ≤ offset + 4 + i ∧
         offset + 4 + i < offset + (width.val + 1)) := by omega
     rw [maskByte, ite_eq_right hzero, dite_eq_right hpn, UInt8.xor_zero]
-    rfl
   · rfl
 
 private theorem and_xor (a b c : UInt8) :

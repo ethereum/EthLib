@@ -3,7 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Wots
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.Build
 
 /-!
 # Proofs: the leanXMSS algorithms commute with maps of monads
@@ -69,6 +69,14 @@ theorem node_map_monad (pp : PublicParam) (layer : Layer) (level j : Nat) :
     φ (node H pp prf layer level j) =
       node (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer level j := by
   simp only [node, Merkle.node_map _ φ map_bind, nodeHash, leaves,
+    th_map_monad φ map_pure map_bind, otsPublicLeaf_map_monad φ map_pure map_bind]
+  rfl
+
+/-- A build of a layer, over the images of `H` and of the seed function. -/
+theorem build_map_monad (pp : PublicParam) (layer : Layer) (level j : Nat) :
+    φ (build H pp prf layer level j) =
+      build (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer level j := by
+  simp only [build, Merkle.build_map _ φ map_pure map_bind, nodeHash, leaves,
     th_map_monad φ map_pure map_bind, otsPublicLeaf_map_monad φ map_pure map_bind]
   rfl
 
@@ -181,14 +189,14 @@ theorem signDerived_map_monad [LawfulMonad m] [LawfulMonad m']
     (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
     φ (signDerived H prf pp idx msg) =
       signDerived (fun x => φ (H x)) (fun pp a suffix => φ (prf pp a suffix)) pp idx msg := by
-  simp only [signDerived, map_bind, signLayer_map_monad φ map_pure map_bind H prf]
+  simp only [signDerived, map_bind, otsSign_map_monad φ map_pure map_bind H prf]
   refine bind_congr fun r => ?_
   cases r with
-  | error err => exact map_pure _
-  | ok bottom =>
-    simp only [map_bind, map_pure, node_map_monad φ map_pure map_bind,
+  | none => exact map_pure _
+  | some r =>
+    simp only [map_bind, build_map_monad φ map_pure map_bind,
       signLayer_map_monad φ map_pure map_bind H prf]
-    refine bind_congr fun _ => bind_congr fun _ => bind_congr fun r => ?_
+    refine bind_congr fun _ => bind_congr fun r => ?_
     cases r with
     | error err => exact map_pure _
     | ok top => simp only [map_bind, map_pure]

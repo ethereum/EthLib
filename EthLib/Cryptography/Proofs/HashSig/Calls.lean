@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.HashSig
 public import EthLib.Cryptography.Proofs.Wots
-public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.Build
 public import VCVio.OracleComp.QueryTracking.QueryBound
 
 /-!
@@ -16,6 +16,7 @@ Its length is the number of calls, and the calls of the shared loops add up as f
 - A chain walk of `s` steps makes `s` calls, when each step makes one.
 - A climb makes one call per sibling, when each node hash makes one.
 - A Merkle node of height `l` makes `(c + 1) * 2^l - 1` calls, when each leaf makes `c`.
+- A build queries the inputs of the node at its position, in the same order.
 -/
 
 @[expose] public section
@@ -157,6 +158,12 @@ theorem length_queriesWith_node {α : Type} (hash : Merkle.Position → α → �
       length_queriesWith_node hash leaves c hhash hleaf level, Nat.pow_succ, ← Nat.mul_assoc]
     have hpos : 1 ≤ (c + 1) * 2 ^ level := Nat.one_le_iff_ne_zero.2 (by positivity)
     omega
+
+/-- A build queries the inputs of the node at its position, in the same order. -/
+theorem queriesWith_build {α : Type} (hash : Merkle.Position → α → α → OracleComp spec α)
+    (leaves : Nat → OracleComp spec α) (p : Merkle.Position) :
+    queriesWith F (Merkle.build hash leaves p) = queriesWith F (Merkle.node hash leaves p) := by
+  rw [← Merkle.value_build, queriesWith_map]
 
 end Loops
 

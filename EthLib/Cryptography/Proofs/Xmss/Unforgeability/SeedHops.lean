@@ -459,8 +459,10 @@ instance : DecidablePred IsAdversaryRequest := fun t => by
 /-- Key generation: the scheme seed, the parameter, and the `2^16` keys of the top tree. -/
 def keyGenQueries : ℕ := 205 * 2 ^ 16 + 1
 
-/-- One request: the scheme seed, the parameter, two searches of `2^32` trials, and three trees. -/
-def requestQueries : ℕ := 2 ^ 33 + 615 * 2 ^ 16
+/-- One request: the scheme seed, the parameter, two one-time signatures, and two trees.
+
+Each one-time signature charges its search all `2^32` trials. -/
+def requestQueries : ℕ := 2 ^ 33 + 410 * 2 ^ 16 + 204
 
 /-- The verification of the forgery: two layers of a digest, 58 chains, a leaf and a path. -/
 def verifyQueries : ℕ := 384

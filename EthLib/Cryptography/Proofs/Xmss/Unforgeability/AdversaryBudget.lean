@@ -11,15 +11,15 @@ Here the budget is the adversary's own: at most `qH` calls of `H` and `r` signin
 
 Key generation, each request and the final verification make at most a fixed number of calls.
 
-The bounds are `205 * 2^16 + 1`, `2^33 + 615 * 2^16` and `384`.
+The bounds are `205 * 2^16 + 1`, `2^33 + 410 * 2^16 + 204` and `384`.
 
-So the game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384` calls.
+So the game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384` calls.
 
 The theorem then bounds a forgery by `Q / 2^127`.
 
 A key has `2^32` leaf indices.
 
-With at most `2^32` requests, `Q <= qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+With at most `2^32` requests, `Q <= qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
 
 A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
 
@@ -197,7 +197,7 @@ theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
 
 /-- With at most `qH` calls of `H` and `r` requests, a forgery has chance `<= Q / 2^127`.
 
-`Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384` counts the game's calls. -/
+`Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384` counts the game's calls. -/
 theorem forgeAdvantage_le_adversaryBudget (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
     forgeAdvantage adversary ≤ (gameQueries qH r : ℝ≥0∞) / ((2 ^ 127 : Nat) : ℝ≥0∞) :=
@@ -209,7 +209,9 @@ def lifetimeQueries : Nat := gameQueries 0 (2 ^ LOG_LIFETIME)
 
 /-- With at most `qH` calls of `H` and `2^32` requests, a forgery has chance `<= (qH + C) / 2^127`.
 
-`C = 2^65 + 615 * 2^48 + 205 * 2^16 + 385` covers key generation, the signer and the verifier. -/
+`C = 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
+
+It covers key generation, the signer and the verifier. -/
 theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) (hr : r ≤ 2 ^ LOG_LIFETIME) :
     forgeAdvantage adversary ≤
@@ -220,8 +222,9 @@ theorem forgeAdvantage_le_lifetime (adversary : Adversary) {qH r : Nat}
   have := Nat.mul_le_mul_right requestQueries hr
   omega
 
-/-- The constant of the lifetime bound is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`. -/
-theorem lifetimeQueries_eq : lifetimeQueries = 2 ^ 65 + 615 * 2 ^ 48 + 205 * 2 ^ 16 + 385 := by
+/-- The constant of the lifetime bound is `2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`. -/
+theorem lifetimeQueries_eq :
+    lifetimeQueries = 2 ^ 65 + 410 * 2 ^ 48 + 204 * 2 ^ 32 + 205 * 2 ^ 16 + 385 := by
   simp only [lifetimeQueries, gameQueries, keyGenQueries, requestQueries, verifyQueries,
     LOG_LIFETIME, LAYER_HEIGHT]
   norm_num

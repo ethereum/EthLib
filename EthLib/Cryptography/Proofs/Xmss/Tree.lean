@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.Types
 public import EthLib.Cryptography.Proofs.Merkle.Binding.SecondPreimage
+public import EthLib.Cryptography.Proofs.Merkle.Build
 
 /-!
 # Proofs: the leanXMSS trees
@@ -18,6 +19,8 @@ Another path that reaches the same root exposes a second preimage of `Th`, under
 The tree hashes only at levels 1 to 16, so no node address holds a level reduced modulo 17.
 
 Each statement specializes one proved for every Merkle tree.
+
+A build of bottom tree `b` holds its root and the path of each of its keys.
 
 The unfolding equations hold in every monad.
 
@@ -119,6 +122,26 @@ theorem fold_eq_of_agree (hash' : Merkle.Position → Digest → Digest → m Di
     agree q (by omega) (by simpa using h2)
 
 end Monad
+
+/-! ## A build holds the root and the paths -/
+
+section Build
+
+variable {H : ByteArray → Id (Vector UInt8 32)} {pp : PublicParam} {prf : SeedPrf Id}
+  {layer : Layer}
+
+/-- The top value of a build is the node it is built at. -/
+theorem value_build_run (level j : Nat) :
+    (build H pp prf layer level j).run.value = (node H pp prf layer level j).run :=
+  Merkle.value_build_run _ _ _
+
+/-- The path of key `e`, read from the build of its tree, is the key's path. -/
+theorem path_build_run (e : Nat) :
+    (build H pp prf layer LAYER_HEIGHT (e / 2 ^ LAYER_HEIGHT)).run.path LAYER_HEIGHT e =
+      (path H pp prf layer e).run :=
+  Merkle.path_build_run _ _ _ _
+
+end Build
 
 /-! ## The path reaches the root -/
 

@@ -255,6 +255,11 @@ def get_client_version(
     return _native.engine_get_client_version(code, name, version, commit, request)
 
 
+def error_object(code: int) -> str:
+    """The JSON text of the error object of the Engine API error with a code, such as 38006."""
+    return _native.engine_error_object(code)
+
+
 def rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     # The writer writes lowercase hex and quantities without leading zeros.
@@ -430,6 +435,7 @@ __all__ = [
     "exchange_transition_configuration",
     "exchange_capabilities",
     "get_client_version",
+    "error_object",
     "WithdrawalEntry",
     "prepare_execution_payload",
     "prepare_execution_payload_gloas",

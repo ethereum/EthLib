@@ -83,7 +83,7 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 It says nothing about unforgeability.
 
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
-Key generation makes at most `13434881` calls and signing at most `8630239231`.
+Key generation makes at most `13434881` calls and signing at most `8616804556`.
 Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
@@ -102,9 +102,9 @@ Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash 
 The budget `q` counts the calls of key generation, the signer and the final verification too.
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
-It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
 The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
-With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
+With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
 The library proves no smaller bound on the calls of a request.
 
@@ -422,7 +422,7 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
 The hash calls of each algorithm, under a fixed answer function, are in `Proofs/Sphincs/Cost.lean`, when each call of `H` makes exactly one query.
-Key generation makes exactly `264193` calls, and signing at most `12885841387`.
+Key generation makes exactly `264193` calls, and signing at most `12885372483`.
 Verification makes at most `491` calls, and exactly `491` when it accepts.
 
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
@@ -451,11 +451,11 @@ So the adversary's budget of `q` hash calls carries over unchanged, and the mode
 
 A second theorem, `Unforgeability.Bridge.unforgeable_adversary`, counts only the adversary's own hash calls.
 Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
-It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (939499 + 3 * 2^32) + 491`.
+It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (470595 + 3 * 2^32) + 491`.
 At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`.
 At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 `r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
-Key generation makes 264193 calls, and a signing request at most `939499 + 3 * 2^32`, when every counter search tries all `2^32` counters.
+Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
 The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
 
@@ -6555,12 +6555,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 523 operations and 51 size constants.
-The Python extension calls 523 of the operations and 51 of the constants.
+Lean exports 524 operations and 51 size constants.
+The Python extension calls 524 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11776 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1584), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (821), `x25519.c` (21), `xmss.c` (134).
+11787 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1585), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (822), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
