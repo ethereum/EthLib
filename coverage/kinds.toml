@@ -52,4 +52,6 @@ refinement = [
   # The Keccak permutation and sponge of the specification against the model over bit vectors.
   "EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation",
   "EthLib.Cryptography.Proofs.Hash.Keccak.BitsSponge",
+  # The Keccak-f[1600] export against the model over bit vectors.
+  "EthLib.Cryptography.Proofs.Exports.Keccak",
 ]
