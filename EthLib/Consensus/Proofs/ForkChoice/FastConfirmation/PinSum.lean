@@ -3545,6 +3545,15 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   exact key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed stays
     retained
 
+/-- From Fusaka and before Gloas, the parameters are those of Fusaka. -/
+private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
+    (early : fork < .glamsterdam) :
+    EthLib.Consensus.parameters preset fork = EthLib.Consensus.parameters preset .fusaka := by
+  cases fork <;> first
+    | rfl
+    | exact absurd fusaka (by decide)
+    | exact absurd early (by decide)
+
 /-- The floor debit of a replay is its penalties plus its sync debits. -/
 private theorem floorPenaltyDebit_sum (i : ℕ) (events : List (BalanceEvent preset)) :
     (events.map (DirectSafety.Apriori.Internal.floorPenaltyDebit i)).sum =
@@ -3552,6 +3561,21 @@ private theorem floorPenaltyDebit_sum (i : ℕ) (events : List (BalanceEvent pre
         (events.map (syncDebit i)).sum := by
   rw [← List.sum_map_add]
   rfl
+
+/-- The debit that a segment's potential floor leaves is at most the debits of the whole run.
+
+The run's events are the segment's, then the rest.
+
+The debits are the sync debits and the partial withdrawals. -/
+private theorem prefix_debit_le (i : ValidatorIndex) (before rest : List (BalanceEvent preset))
+    (D : ℕ) (split : D + (before.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum =
+      (before.map (DirectSafety.Apriori.Internal.floorPenaltyDebit i.toNat)).sum +
+        (before.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum) :
+    D ≤ ((before ++ rest).map (syncDebit i.toNat)).sum +
+      ((before ++ rest).map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum := by
+  have splitDebit := floorPenaltyDebit_sum i.toNat before
+  simp only [List.map_append, List.sum_append]
+  omega
 
 /-- A run's debit events and one slashing penalty bound the fall of a key's balance.
 
@@ -3908,18 +3932,11 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
     (fun before' step after cut' evs ok => pass before' step (after.append r2)
       (by rw [Run.append_assoc, cut', whole]) evs ok)
     beforeOk
-  have splitDebit := floorPenaltyDebit_sum i.toNat before
   obtain ⟨rest', rfl⟩ := isPrefix
-  have syncSum : ((before ++ rest').map (syncDebit i.toNat)).sum =
-      (before.map (syncDebit i.toNat)).sum + (rest'.map (syncDebit i.toNat)).sum := by
-    simp only [List.map_append, List.sum_append]
-  have partialSum : ((before ++ rest').map (floorPartialDebit i)).sum =
-      (before.map (floorPartialDebit i)).sum + (rest'.map (floorPartialDebit i)).sum := by
-    simp only [List.map_append, List.sum_append]
   have window : (getCurrentEpoch pState).toNat - (getCurrentEpoch fin).toNat ≤
       (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat :=
     Nat.sub_le_sub_right order _
-  exact arith _ D _ window (by omega) closed
+  exact arith _ D _ window (prefix_debit_le i before rest' D split) closed
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`, less `loss`.
@@ -10401,15 +10418,6 @@ private theorem exitFloor_add_slack (h : Setting config checks g split fin pulle
       (pinTerms config pulled anc fin).newKeyFloor -
         (pinTerms config pulled anc fin).exitFloor := rfl
   omega
-
-/-- From Fusaka and before Gloas, the parameters are those of Fusaka. -/
-private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
-    (early : fork < .glamsterdam) :
-    EthLib.Consensus.parameters preset fork = EthLib.Consensus.parameters preset .fusaka := by
-  cases fork <;> first
-    | rfl
-    | exact absurd fusaka (by decide)
-    | exact absurd early (by decide)
 
 /-- A key that is not yet activated at the finalized state and has a small charge loses seats.
 
