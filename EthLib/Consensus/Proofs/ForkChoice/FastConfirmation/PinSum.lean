@@ -333,23 +333,38 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (inc - 1)
   -- The window's proposer rewards are read at every key that can attest in it.
   --
-  -- Such a key is activated by the next epoch and exits no earlier than the finalized epoch.
+  -- Such a key exits no earlier than the finalized epoch.
+  --
+  -- It can activate on the other branch while it is still pending here.
   --
   -- Its effective balance on either branch is at most its effective balance here plus its rise.
   let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
-      decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
-        decide (finalized ≤ v.exitEpoch.toNat)),
+      decide (finalized ≤ v.exitEpoch.toNat)),
     (effective i + rise i) / inc * perIncrement
+  -- Each key the call's branch credits or debits can move by a rounding step and a band.
+  --
+  -- The keys are the window's proposers and deposit recipients.
+  --
+  -- They also hold the sync seats of each period from the finalized epoch to the next epoch.
+  --
+  -- Each period crossing adds one more set of seats.
+  let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
+    preset.SYNC_COMMITTEE_SIZE.toNat *
+      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
+        depth / period)
   -- The other branch's credits can raise its attesters' effective balances above that read.
   --
   -- Each increment they add is counted, with one rounding step per credited key or seat key.
   --
   -- Each deposit the window can apply to a new key counts at the largest effective balance.
+  --
+  -- A key this branch debits keeps one more rounding step, and the leak its sync debits induce.
   let attesterExcess := (depositCarry + depthFin * depositChurn + consolidationsX +
       depth * proposerBase + depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
         inc +
     creditedKeys + seatExcess +
-    depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * (capMax / inc)
+    depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * (capMax / inc) +
+    roundedKeys + syncLeak / inc
   -- This follows `syncProposerReward` on natural numbers, at the envelope.
   --
   -- It is a bound on the reward, not a read.
@@ -398,17 +413,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (11 * (depth * proposerCredit + depositCarry + depthFin * depositChurn +
       whistleblowerExtra) + 9) / 10 +
       creditedKeys * preset.upwardBand
-  -- Each key the call's branch credits or debits can move by a rounding step and a band.
-  --
-  -- The keys are the window's proposers and deposit recipients.
-  --
-  -- They also hold the sync seats of each period from the finalized epoch to the next epoch.
-  --
-  -- Each period crossing adds one more set of seats.
-  let roundedKeys := depth * slots + depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat +
-    preset.SYNC_COMMITTEE_SIZE.toNat *
-      (((epoch.toNat + 1) / period - (getCurrentEpoch finalizedState).toNat / period + 1) +
-        depth / period)
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
   let branchR := 3 * (whistleblowerR + inc * slashedR + depth * proposerCredit +
     (inc + preset.downwardBand - 1) * roundedKeys)
