@@ -609,12 +609,9 @@ theorem effectiveKept_processBlock {f : Fork} {s t : BeaconState preset f}
   obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput ok
   have head : Kept s input :=
     started.step_of Kept refl trans
-      (fun _ paid => processParentExecutionPayload_step_of Kept refl trans
-        (fun _ validators => same validators)
-        (fun requested => ⟨effectiveKept_withdrawalRequest requested,
-          (registryLifecycle_processWithdrawalRequest requested).size_le⟩)
-        (fun requested => ⟨effectiveKept_consolidationRequest requested,
-          (registryLifecycle_processConsolidationRequest requested).size_le⟩) paid)
+      (fun _ paid => by
+        obtain ⟨kept, size⟩ := effectiveKept_parentPayload paid
+        exact ⟨kept, Nat.le_of_eq size.symm⟩)
       (fun headed => by
         obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed
         exact same rfl)
