@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.Exports.PyValue
 public import EthLib.Base.Hex
+public import EthLib.Cryptography.Exports.Secp256k1
 public import EthLib.Networking.Enr.Consensus
 public import EthLib.Networking.Enr.Eth
 public import EthLib.Networking.Enr.V4
@@ -98,9 +99,8 @@ def nodeIdExport (record : ByteArray) : Result ByteArray := do
 
 /-- A private key of 32 big-endian bytes, below the group order. -/
 def privateKeyOf (bytes : ByteArray) : Result Cryptography.Secp256k1.Fn :=
-  let k := Base.bytesToNat bytes.data.toList
-  if bytes.size = 32 ∧ k < Cryptography.Secp256k1.Fn.modulus then pure (Fin.ofNat _ k)
-  else throw (0, "private key is not 32 bytes below the group order")
+  let bad := (0, "private key is not 32 bytes below the group order")
+  Cryptography.Secp256k1.Exports.readPrivateKey bytes (fun _ => bad) bad
 
 /-- The bytes of a record, signed again with a private key by the "v4" scheme.
 

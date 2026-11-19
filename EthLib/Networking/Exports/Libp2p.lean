@@ -329,8 +329,9 @@ A value at least the group order gives the private-key error; the functions that
 
 The secret key must stay private, and this function makes no constant-time claim. -/
 def secretOfBytes (bytes : Vector UInt8 32) : Except IdentityError Fn :=
-  let n := EthLib.Base.bytesToNat bytes.toList
-  if h : n < Fn.modulus then .ok ⟨n, h⟩ else .error .privateKey
+  match Cryptography.Secp256k1.Fn.ofBytes? bytes.toList with
+  | some d => .ok d
+  | none => .error .privateKey
 
 /-- The public-key protobuf of a 32-byte big-endian secp256k1 secret in [1, n).
 
