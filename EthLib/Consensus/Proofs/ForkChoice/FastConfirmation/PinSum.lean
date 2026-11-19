@@ -3381,17 +3381,16 @@ private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
     exact ⟨rq.snoc (Step.slot ok), rest'.append rest, Run.append_assoc _ _ _⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The guards of the floor trace of a segment of C's run, with the end of the segment unslashed.
+/-- The guards of the floor trace of a segment of C's run.
 
 The segment runs from `wS` to `pS`, and a run to the end `e` of C's run follows it.
 
 The guards are `floor_guards`, with the exit guard `retained` of the segment.
 
-The slashing quotient is positive, and the segment ends by the call's cutoff. -/
+The slashing quotient is the fork's, and the segment ends by the call's cutoff. -/
 private theorem segment_guards (h : Setting config checks g split fin pulled anc counted V)
     {e : BeaconState preset fork}
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (i : ValidatorIndex)
-    (clean : ∀ w, e.validators.data[i.toNat]? = some w → w.slashed = false)
     {wS pS : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, wS⟩)
     (seg : Run config checks ⟨fork, wS⟩ ⟨fork, pS⟩) (rest : Run config checks ⟨fork, pS⟩ ⟨fork, e⟩)
     (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
@@ -3402,8 +3401,8 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat)) :
     (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 ∧
-      (∀ w, pS.validators.data[i.toNat]? = some w → w.slashed = false) ∧
       ∃ quotient : ℕ, 0 < quotient ∧
+        quotient = (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
         ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
           (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
           (before.snoc step).append after = seg → ∀ w,
@@ -3421,9 +3420,11 @@ private theorem segment_guards (h : Setting config checks g split fin pulled anc
   simp only at order
   have endEpoch : (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
   obtain ⟨positive, guards⟩ := floor_guards h (zs := wS) (y := pS) pre endEpoch
-  refine ⟨endEpoch, fun w found => ?_, _, positive, fun before step after cut w found =>
-    ⟨retained before step after cut w found, guards before step after⟩⟩
-  exact unslashed_of_run rest found clean
+  exact ⟨endEpoch, _, positive,
+    slashing_quotient_of_electra (high := (getCurrentEpoch pulled).toNat)
+      (Run.nil : Run config checks ⟨fork, wS⟩ ⟨fork, wS⟩) (Nat.le_trans (by decide) h.fulu),
+    fun before step after cut w found =>
+      ⟨retained before step after cut w found, guards before step after⟩⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The potential floor of a segment of C's run, read at the state where the segment starts.
@@ -3473,11 +3474,12 @@ private theorem segment_potential (h : Setting config checks g split fin pulled 
   obtain ⟨toFin⟩ := h.toFin
   have early : (⟨fork, pS⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) h.early
-  obtain ⟨endEpoch, cleanP, quotient, positive, guards⟩ :=
-    segment_guards h near i clean pre seg rest retained
+  obtain ⟨endEpoch, quotient, positive, -, guards⟩ :=
+    segment_guards h near i pre seg rest retained
   exact FloorTrace.run_potential_floor_once (toFin.append pre) seg h.genesis h.caps h.delay early
-    h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW cleanP quotient positive
-    guards segOk slack ρn ρd start pass
+    h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW
+    (fun w found => unslashed_of_run rest found clean) quotient positive guards segOk slack ρn ρd
+    start pass
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`.
@@ -3596,11 +3598,12 @@ private theorem cfloor_origin (h : Setting config checks g split fin pulled anc 
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
   obtain ⟨before, beforeOk, -⟩ := Run.balanceEvents_prefix r1 r2
     (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
-  obtain ⟨endEpoch, cleanP, quotient, positive, guards⟩ := segment_guards h near i clean
+  obtain ⟨endEpoch, quotient, positive, -, guards⟩ := segment_guards h near i
     Run.nil r1 r2 (fun before' step after cut' w found => retained before' step (after.append r2)
       (by rw [Run.append_assoc, cut', whole]) w found)
   exact FloorTrace.run_effective_origin toFin r1 h.genesis h.caps h.delay early h.fulu h.aligned
-    (getCurrentEpoch pulled).toNat endEpoch i val initial cleanP quotient positive guards beforeOk
+    (getCurrentEpoch pulled).toNat endEpoch i val initial (fun w found => unslashed_of_run r2 found
+      clean) quotient positive guards beforeOk
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value.
