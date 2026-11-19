@@ -428,16 +428,16 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     else 0
   -- Each sync seat of the window debits at most its envelope on each branch.
   --
-  -- A key whose sync debits exceed an increment less one has at least that many seats' worth.
+  -- A key whose sync debits can lower its effective balance has debits of at least an increment.
   --
-  -- So the keys whose effective balance their sync debits can lower are at most this many.
+  -- So there are at most the total seat debits over `inc - 1` such keys.
   let seatExcess := 2 * (depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
     (inc - 1)
   -- The window's proposer rewards are read at every key that can attest in it.
   --
   -- Such a key is activated by the next epoch and exits no earlier than the finalized epoch.
   --
-  -- Its effective balance on either branch is at most its effective balance here and its rise.
+  -- Its effective balance on either branch is at most its effective balance here plus its rise.
   let proposerBase := ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
         decide (finalized ≤ v.exitEpoch.toNat)),
