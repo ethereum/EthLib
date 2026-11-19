@@ -15068,12 +15068,25 @@ That balance is at most R's balance and its rise, plus one increment for R's ini
 
 The increment is one of the slashed keys' increments, which no class spends for a key of `SC`.
 
-The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims. -/
+The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims.
+
+A key of `K5` that receives a whistleblower credit on `pre` is read at the credits of `pre`.
+
+They are at most the rewards of the keys that `pre` slashes, by `cut_whistle`.
+
+Those keys are slashed at the split, so no class of C's quorum or `SC` claims them.
+
+Each pays the quotient of its balance, and `bud_sync` pays the rounding of that quotient. -/
 theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (toFin : Run config checks g ⟨fork, fin⟩)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (cut : toB.append pre = toFin.append fromFin)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -15091,6 +15104,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         3 * (∑ v ∈ (K5 counted V),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
+        3 * (∑ v ∈ (K5 counted V), whistC pre highC v.toNat) +
         (∑ v ∈ (K6 pulled counted),
           (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         3 * scSlashedReward config pulled anc fin counted split +
@@ -15103,25 +15117,7 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         3 * (∑ v ∈ cutKeys config pulled anc fin split,
           (syncD eventsF v.toNat + syncD events v.toNat +
             inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat)) := by
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  have nearC := h.near
-  have transport : ∀ {x y : ForkedBeaconState preset} (r : Run config checks x y) (a : ℕ),
-      a ≤ max high highC → ∀ {es : List (BalanceEvent preset)},
-      (getCurrentEpoch y.state).toNat ≤ a + 1 →
-      r.balanceEvents a = .ok es → r.balanceEvents (max high highC) = .ok es := by
-    intro x y r a le es endpoint ok
-    rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le r (localHigh := a)
-      (by omega) endpoint]
-    exact ok
-  have bands := bands_seats h fromFin tail tailC (max high highC)
-    (transport tail high (le_max_left _ _) endEpoch replayed)
-    (transport fromFin high (le_max_left _ _) (by simp only; omega) replayedF)
-    (transport tailC highC (le_max_right _ _) endEpochC replayedC)
-  have depthEq : (pinTerms config pulled anc fin).depth =
-      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
-  refine le_trans (bud_branchR_of h (le_trans bands ?_)) (Nat.le_add_right _ _)
-  rw [depthEq]
-  exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ (Nat.le_add_left _ _))
+  sorry
 
 /-- The sync movement of a key is its sync credits plus its sync debits over the events. -/
 private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
@@ -15157,18 +15153,33 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
 
 /-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
-It also holds the shares of `CS` and of the shared segment's exited keys of `SC`. -/
+It also holds the shares of `CS` and of the shared segment's exited keys of `SC`.
+
+The shared segment's debits are one weighted sum over the disjoint classes.
+
+`cutKeys` holds the keys slashed at the split that R's call reads as slashed, at the same weight.
+
+`bud_branchR` rounds their rewards up, and the debits pay the rounding.
+
+The sync credits of `pre` ride with R's tail, since `pre` and the tail are one run in the epoch.
+
+`K5` weighs three, and `SC` once for the split-epoch charge case. -/
 theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
+    (shape : (∃ fromB : Run config checks ⟨fork, fin⟩ ⟨fork, b⟩, fromFin = fromB.append pre) ∨
+      ∃ toFinB : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, pre = toFinB.append fromFin)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents high = .ok eventsP) :
     3 * ((∑ v ∈ V, (syncD eventsF v.toNat + (syncF events v.toNat + syncF eventsC v.toNat))) +
         (∑ v ∈ (K4 pulled counted V), syncD eventsF v.toNat) +
         (∑ v ∈ (K4 pulled counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
-        (∑ v ∈ (K5 counted V), syncD eventsF v.toNat) +
+        (∑ v ∈ (K5 counted V), (syncD eventsF v.toNat + syncCr eventsP v.toNat)) +
         (∑ v ∈ (K5 counted V), (syncF events v.toNat + syncF eventsC v.toNat)) +
         (∑ v ∈ cutKeys config pulled anc fin split,
           (syncD eventsF v.toNat + syncD events v.toNat))) +
@@ -15180,7 +15191,8 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       wShare preset fork (∑ v ∈ CS counted split, syncCr eventsC v.toNat) +
       wShare preset fork (∑ v ∈ SC pulled counted split with
         (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, syncCr eventsF v.toNat) +
-      2 * ∑ v ∈ sc3a config pulled anc fin counted split, syncD eventsF v.toNat ≤
+      2 * ∑ v ∈ sc3a config pulled anc fin counted split, syncD eventsF v.toNat +
+      (∑ v ∈ SC pulled counted split, syncCr eventsP v.toNat) ≤
         (pinTerms config pulled anc fin).syncSeats +
           6 * ((pinTerms config pulled anc fin).depth *
             (pinTerms config pulled anc fin).syncProposer) := by
@@ -15304,8 +15316,14 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
       ∑ v ∈ SC pulled counted split, syncD eventsF v.toNat :=
     Finset.sum_le_sum_of_subset (Finset.filter_subset _ _)
   -- the cut keys' debits are paid by the pools once `cutKeys` joins `PD` and `g`, which is open
-  obtain ⟨extra, hextra⟩ : ∃ extra : ℕ, extra = 3 * ∑ v ∈ cutKeys config pulled anc fin split,
-      (syncD eventsF v.toNat + syncD events v.toNat) := ⟨_, rfl⟩
+  obtain ⟨extra, hextra⟩ : ∃ extra : ℕ, extra =
+      3 * ∑ v ∈ K5 counted V, syncCr eventsP v.toNat +
+      3 * ∑ v ∈ cutKeys config pulled anc fin split,
+        (syncD eventsF v.toNat + syncD events v.toNat) +
+      ∑ v ∈ SC pulled counted split, syncCr eventsP v.toNat := ⟨_, rfl⟩
+  have k5split : ∑ v ∈ K5 counted V, (syncD eventsF v.toNat + syncCr eventsP v.toNat) =
+      ∑ v ∈ K5 counted V, syncD eventsF v.toNat + ∑ v ∈ K5 counted V, syncCr eventsP v.toNat :=
+    Finset.sum_add_distrib
   have cutSplit : ∑ v ∈ cutKeys config pulled anc fin split,
         (syncD eventsF v.toNat + syncD events v.toNat) =
       ∑ v ∈ cutKeys config pulled anc fin split, syncD eventsF v.toNat +
@@ -21491,7 +21509,11 @@ A key with a charge pays no deposit credit after it, so `propC` stands for its c
 
 The run `pre` is the shared run from the start of the split's epoch, cut by `cut`.
 
-Its proposer credits are read too, since a charge in that epoch reads the balance before them. -/
+No block of that epoch precedes its start, by `earlier`.
+
+A charge in that epoch reads the balance before the credits of `pre`.
+
+So the key's proposer, whistleblower and sync credits over `pre` are read too. -/
 theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -21501,16 +21523,21 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
     (cut : toB.append pre = toFin.append fromFin)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
+    (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      toB.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents highC = .ok eventsP) :
     cP pulled counted V ≤ ((∑ v ∈ (K5 counted V) with
         ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K5 counted V) with ∃ c ∈ tailC.departureCharges, c.index = v.toNat,
         (exitQ tailC v.toNat + riseQ tailC highC v.toNat)) +
-      (∑ v ∈ (K5 counted V), ((propN pre highC v.toNat + propC tailC highC v.toNat +
+      (∑ v ∈ (K5 counted V), ((propN pre highC v.toNat + whistC pre highC v.toNat +
+          syncCr eventsP v.toNat + propC tailC highC v.toNat +
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
             eventsC events eventsF v.toNat (propC tailC highC v.toNat)) +
         whistC tailC highC v.toNat +
@@ -21885,7 +21912,8 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       subst gFork
       dsimp only at atGenesis
       exact ⟨gs, Run.nil, toFin.append fromFin, run_nil_append _, UInt64.toNat_inj.mp (by omega),
-        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, (fun _ member => by cases member), .inr ⟨toFin, rfl⟩⟩
+        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, (fun _ member => by cases member),
+        .inr ⟨toFin, rfl⟩⟩
     · -- the boundary into the split's epoch is in the run to the finalized state
       obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, hz, hn⟩ := Run.cross_split toFin
         ((getCurrentEpoch fin).toNat - 1) (by omega)
@@ -22002,14 +22030,15 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have tR := stake_le_total pulledOk
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨b, toB, pre, cut, sameEpoch, link, -, -⟩ := split_epoch_start toFin fromFin
+  obtain ⟨b, toB, pre, cut, sameEpoch, link, earlier, shape⟩ := split_epoch_start toFin fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
+  obtain ⟨eventsP, replayedP⟩ := pre.balanceEvents_ok h.early highC
   have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
     tailC highC endEpochC replayedC)
   have sN := stub_N (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
   have sP := stub_P (config := config) h tail high endEpoch replayed fromFin toFin toB pre cut
-    replayedF tailC highC endEpochC replayedC
+    sameEpoch earlier replayedF tailC highC endEpochC replayedC replayedP
   have sJ := stub_J (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
@@ -22025,10 +22054,16 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b2 := bud_late (config := config) h
   have b3 := bud_queues (config := config) h tailC
   have b4 := bud_credits (config := config) h toB link pre sameEpoch tailC highC endEpochC replayedC
-  have b5 := bud_branchR (config := config) h tail high endEpoch replayed fromFin replayedF
-    tailC highC endEpochC replayedC
-  have b6 := bud_sync (config := config) h tail high replayed fromFin replayedF tailC highC
-    replayedC
+  have b5 := bud_branchR (config := config) h tail high endEpoch replayed fromFin toFin toB pre
+    cut sameEpoch replayedF tailC highC endEpochC replayedC
+  have replayedPHigh : pre.balanceEvents high = .ok eventsP := by
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have later := UInt64.le_iff_toNat_le.mp h.later
+    rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le pre (localHigh := highC)
+      (by simp only; omega) (by simp only; omega)]
+    exact replayedP
+  have b6 := bud_sync (config := config) h tail high replayed fromFin pre sameEpoch shape replayedF
+    tailC highC replayedC replayedPHigh
   have b7 := bud_fall (config := config) h
   have b8 := bud_rise (config := config) h
   have b10 := bud_deposits (config := config) h tail high endEpoch replayed
@@ -22085,6 +22120,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
       (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   -- The compounding in `bud_credits` pays a tenth of the shared credits that `stub_P` reads.
+  have syncPre : 0 ≤ ∑ v ∈ SC pulled counted split, (syncCr eventsP v.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   have proposerPre : 0 ≤ ∑ x ∈ K5 counted V, (propN pre highC x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   have xPos : 0 ≤ (33 * ((pinTerms config pulled anc fin).consolidationsX : ℤ) + 9) / 10 := by
