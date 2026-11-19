@@ -197,6 +197,8 @@ private theorem slashed_waits {g : ForkedBeaconState preset}
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (pre.snoc step).chainSteps)
     omega
 
+open DirectSafety DirectSafety.Apriori.Internal
+
 /-- The rate at which one rewards pass can debit a key, read at the last state of the epoch.
 
 It reads the total active balance, the key's effective balance and its score there.
