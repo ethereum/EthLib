@@ -2025,7 +2025,7 @@ private theorem replay_electra_deposit_epoch {g x y : ForkedBeaconState preset}
 Before that step the validator has no exit epoch, and after it the charged one.
 
 The charge holds the effective balance before the step. -/
-private theorem _root_.EthLib.Consensus.Run.departure_charge_site {x y : ForkedBeaconState preset}
+theorem _root_.EthLib.Consensus.Run.departure_charge_site {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (charge : DepartureCharge)
     (member : charge ∈ tail.departureCharges) :
     ∃ a b, ∃ pre : Run config checks x a, ∃ step : Step config checks a b,

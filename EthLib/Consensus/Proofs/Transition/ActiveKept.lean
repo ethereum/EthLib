@@ -25,6 +25,8 @@ So each step of a chain keeps which validators are active in each epoch up to th
 
 That holds at every fork, for slots, epochs, blocks and upgrades.
 
+From Electra, a step also assigns an exit only to a validator that is already activated.
+
 The current epoch never decreases along a chain.
 
 So that bound never decreases either.
@@ -75,6 +77,96 @@ theorem StepKeeps.of_validators
   ⟨Nat.le_of_eq (congrArg Array.size validators).symm,
     ActiveStep.of_validators validators slot⟩
 
+/-! ## Exits start from activity -/
+
+/-- Each exit that a step assigns is of a validator whose activation epoch has come at its start. -/
+private def ExitsStart {f g : Fork} (state : BeaconState preset f) (after : BeaconState preset g) :
+    Prop :=
+  ∀ (i : Nat) (v w : Validator), state.validators.data[i]? = some v →
+    after.validators.data[i]? = some w → v.exitEpoch = FAR_FUTURE_EPOCH →
+      w.exitEpoch ≠ FAR_FUTURE_EPOCH → v.activationEpoch ≤ getCurrentEpoch state
+
+private theorem ExitsStart.of_data {f g : Fork} {state : BeaconState preset f}
+    {after : BeaconState preset g}
+    (same : after.validators.data = state.validators.data := by rfl) : ExitsStart state after := by
+  intro i v w found read far assigned
+  rw [same] at read
+  obtain rfl := Option.some.inj (found.symm.trans read)
+  exact absurd far assigned
+
+/-- A step that keeps the slot, and activity up to the fixed epoch.
+
+From Electra it also starts exits only of activated validators. -/
+private def BlockKeeps (state after : BeaconState preset fork) : Prop :=
+  StepKeeps state after ∧ (Fork.pectra ≤ fork → ExitsStart state after)
+
+private theorem BlockKeeps.refl (state : BeaconState preset fork) : BlockKeeps state state :=
+  ⟨StepKeeps.refl state, fun _ => ExitsStart.of_data⟩
+
+private theorem BlockKeeps.trans {first second third : BeaconState preset fork}
+    (one : BlockKeeps first second) (two : BlockKeeps second third) : BlockKeeps first third := by
+  refine ⟨one.1.trans two.1, fun electra i v w found read far assigned => ?_⟩
+  have inside : i < second.validators.data.size :=
+    Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp found).1 one.1.1
+  obtain ⟨z, middle⟩ : ∃ z, second.validators.data[i]? = some z :=
+    ⟨_, Array.getElem?_eq_some_iff.mpr ⟨inside, rfl⟩⟩
+  by_cases still : z.exitEpoch = FAR_FUTURE_EPOCH
+  · have activated := two.2 electra i z w middle read still assigned
+    have epoch : getCurrentEpoch second = getCurrentEpoch first := by
+      simp only [getCurrentEpoch, one.1.2.1]
+    rw [epoch] at activated
+    by_cases late : getCurrentEpoch first = FAR_FUTURE_EPOCH
+    · rw [late]
+      exact UInt64.le_iff_toNat_le.mpr (by
+        have := v.activationEpoch.toNat_lt
+        change _ ≤ 18446744073709551615
+        omega)
+    · have bound := one.1.2.2 (getCurrentEpoch first) (getCurrentEpoch_le_activityFixedEpoch first)
+        i
+      have secondActive : isActiveAt second (getCurrentEpoch first) i = true := by
+        refine isActiveAt_eq_true_iff.mpr ⟨z, middle, ?_⟩
+        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+        refine ⟨activated, ?_⟩
+        rw [still, UInt64.lt_iff_toNat_lt]
+        have := UInt64.toNat_lt (getCurrentEpoch first)
+        have ne : (getCurrentEpoch first).toNat ≠ FAR_FUTURE_EPOCH.toNat := fun eq =>
+          late (UInt64.toNat_inj.mp eq)
+        change _ < 18446744073709551615
+        change _ ≠ 18446744073709551615 at ne
+        omega
+      rw [bound] at secondActive
+      obtain ⟨u, found', active⟩ := isActiveAt_eq_true_iff.mp secondActive
+      obtain rfl := Option.some.inj (found.symm.trans found')
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+      exact active.1
+  · exact one.2 electra i v z found middle far still
+
+private theorem activationLe_of_active {v : Validator} {e : Epoch}
+    (active : isActiveValidator v e = true) : v.activationEpoch ≤ e := by
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+  exact active.1
+
+private theorem activationLe_of_slashable {v : Validator} {e : Epoch}
+    (slashable : isSlashableValidator v e = true) : v.activationEpoch ≤ e := by
+  simp only [isSlashableValidator, Bool.and_eq_true, decide_eq_true_eq] at slashable
+  exact slashable.1.2
+
+private theorem BlockKeeps.foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
+    (keeps : ∀ s x s', step s x = .ok s' → BlockKeeps s s') {items : List α}
+    (computed : items.foldlM step state = .ok after) : BlockKeeps state after :=
+  foldlM_ok_invariant (BlockKeeps state) (fun _ _ _ before ok => before.trans (keeps _ _ _ ok))
+    (BlockKeeps.refl state) computed
+
+private theorem BlockKeeps.of_step (grows : state.validators.data.size ≤ after.validators.data.size)
+    (step : ActiveStep state after) (validators : after.validators.data = state.validators.data) :
+    BlockKeeps state after :=
+  ⟨StepKeeps.of_step grows step, fun _ => ExitsStart.of_data validators⟩
+
+private theorem BlockKeeps.of_validators
+    (validators : after.validators.data = state.validators.data := by rfl)
+    (slot : after.slot = state.slot := by rfl) : BlockKeeps state after :=
+  ⟨StepKeeps.of_validators validators slot, fun _ => ExitsStart.of_data validators⟩
+
 /-! ## Mutators -/
 
 private theorem stepKeeps_setValidatorAt {index : Nat} {validator old : Validator}
@@ -122,32 +214,143 @@ private theorem stepKeeps_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSP
   StepKeeps.of_step (by rw [addValidatorToRegistry_validators_eq_push computed]; simp)
     (activeStep_addValidatorToRegistry computed)
 
+private theorem ExitsStart.setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (starts : old.exitEpoch = FAR_FUTURE_EPOCH → validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      old.activationEpoch ≤ getCurrentEpoch state)
+    (set : state.setValidatorAt index validator = .ok after) : ExitsStart state after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have oldEq : state.validators.data[index] = old := by simpa [getValidatorAt, inside] using found
+  intro j v w read later far assigned
+  by_cases same : j = index
+  · subst same
+    obtain rfl : v = old := by simpa [Array.getElem?_eq_getElem inside, oldEq] using read.symm
+    obtain rfl : w = validator := by
+      simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set, inside] using
+        later.symm
+    exact starts far assigned
+  · simp only [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+      Array.getElem?_set, Ne.symm same, ↓reduceIte] at later
+    obtain rfl := Option.some.inj (read.symm.trans later)
+    exact absurd far assigned
+
+private theorem blockKeeps_setValidatorAt {index : Nat} {validator old : Validator}
+    (found : getValidatorAt state index = .ok old)
+    (set : state.setValidatorAt index validator = .ok after)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (starts : old.exitEpoch = FAR_FUTURE_EPOCH → validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      old.activationEpoch ≤ getCurrentEpoch state) : BlockKeeps state after :=
+  ⟨stepKeeps_setValidatorAt found same set, fun _ => ExitsStart.setValidatorAt found starts set⟩
+
+private theorem blockKeeps_setValidator {index : ValidatorIndex} {validator old : Validator}
+    (found : getValidator state index = .ok old)
+    (set : state.setValidator index validator = .ok after)
+    (same : ∀ epoch ≤ activityFixedEpoch state,
+      isActiveValidator validator epoch = isActiveValidator old epoch)
+    (starts : old.exitEpoch = FAR_FUTURE_EPOCH → validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      old.activationEpoch ≤ getCurrentEpoch state) : BlockKeeps state after :=
+  blockKeeps_setValidatorAt (by rwa [← getValidator_eq_getValidatorAt])
+    (by rwa [← setValidator_eq_setValidatorAt]) same starts
+
+private theorem blockKeeps_increaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) : BlockKeeps state after :=
+  ⟨stepKeeps_increaseBalance computed,
+    fun _ => ExitsStart.of_data (congrArg (·.data) (increaseBalance_validators computed))⟩
+
+private theorem blockKeeps_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
+    (computed : decreaseBalance state index delta = .ok after) : BlockKeeps state after :=
+  ⟨stepKeeps_decreaseBalance computed,
+    fun _ => ExitsStart.of_data (congrArg (·.data) (decreaseBalance_validators computed))⟩
+
+/-- The exit of a validator that has not started to exit starts at an activated validator. -/
+private theorem blockKeeps_initiateValidatorExit {index : ValidatorIndex}
+    (active : ∀ v, getValidator state index = .ok v → v.exitEpoch = FAR_FUTURE_EPOCH →
+      v.activationEpoch ≤ getCurrentEpoch state)
+    (computed : initiateValidatorExit config state index = .ok after) : BlockKeeps state after := by
+  refine ⟨stepKeeps_initiateValidatorExit computed, fun _ => ?_⟩
+  obtain ⟨old, read, unchanged | ⟨far, queued, exitEpoch, withdrawable, queue, summed, set⟩⟩ :=
+    initiateValidatorExit_ok computed
+  · rw [unchanged.2]
+    exact ExitsStart.of_data
+  · have same := (exitQueue_validators queue).1
+    have found : getValidatorAt queued index.toNat = .ok old := by
+      rw [← getValidator_eq_getValidatorAt]
+      exact (getValidator_of_validators_eq same index).trans read
+    rw [setValidator_eq_setValidatorAt] at set
+    have epoch : getCurrentEpoch queued = getCurrentEpoch state := by
+      simp only [getCurrentEpoch, (frame_exitQueue queue).slot]
+    have starts := ExitsStart.setValidatorAt (state := queued) found
+      (fun _ _ => epoch ▸ active old read far) set
+    intro j v w before after far' assigned
+    have moved : queued.validators.data[j]? = some v := by rw [same]; exact before
+    rw [← epoch]
+    exact starts j v w moved after far' assigned
+
+private theorem ExitsStart.append {validator : Validator}
+    (added : after.validators.data = state.validators.data.push validator) :
+    ExitsStart state after := by
+  intro j a b before later far assigned
+  rw [added] at later
+  have inside := (Array.getElem?_eq_some_iff.mp before).1
+  rw [Array.getElem?_push_lt inside, ← Array.getElem?_eq_getElem inside] at later
+  obtain rfl := Option.some.inj (before.symm.trans later)
+  exact absurd far assigned
+
+private theorem blockKeeps_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    BlockKeeps state after :=
+  ⟨stepKeeps_addValidatorToRegistry computed,
+    fun _ => ExitsStart.append (addValidatorToRegistry_validators_eq_push computed)⟩
+
+/-- Slashing a validator that has not started to exit starts its exit at an activated validator. -/
+private theorem blockKeeps_slashValidator {slashedIndex : ValidatorIndex}
+    {whistleblowerIndex : Option ValidatorIndex}
+    (active : ∀ v, getValidator state slashedIndex = .ok v → v.exitEpoch = FAR_FUTURE_EPOCH →
+      v.activationEpoch ≤ getCurrentEpoch state)
+    (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
+    BlockKeeps state after := by
+  obtain ⟨exited, validator, _, marked, _, _, slashings, lowered, _, _, raised, last, exitedOk,
+    found, _, markedOk, _, _, _, loweredOk, _, _, raisedOk, lastOk, done⟩ :=
+    slashValidator_ok computed
+  -- Marking the validator slashed keeps its activation and exit epochs.
+  refine (blockKeeps_initiateValidatorExit active exitedOk).trans <|
+    (blockKeeps_setValidator
+      (validator := { validator with slashed := true, withdrawableEpoch := _ })
+      found markedOk (fun _ _ => rfl) (fun far assigned => absurd far assigned)).trans <|
+    (BlockKeeps.of_validators : BlockKeeps marked { marked with slashings }).trans <|
+    (blockKeeps_decreaseBalance loweredOk).trans <| (blockKeeps_increaseBalance raisedOk).trans <|
+    (blockKeeps_increaseBalance lastOk).trans ?_
+  subst done
+  split <;> exact BlockKeeps.refl _
+
 /-! ## Deposits -/
 
-private theorem stepKeeps_applyPendingDeposit {deposit : PendingDeposit}
+private theorem blockKeeps_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold applyPendingDeposit at computed
   split at computed
   · split at computed
     · cases computed
-      exact StepKeeps.refl _
+      exact BlockKeeps.refl _
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
-    · exact stepKeeps_addValidatorToRegistry computed
+    · exact blockKeeps_addValidatorToRegistry computed
     · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ StepKeeps.refl _
+      exact computed ▸ BlockKeeps.refl _
   · simp only [liftAccessor_ok, bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
-    exact stepKeeps_increaseBalance computed
+    exact blockKeeps_increaseBalance computed
 
-private theorem stepKeeps_applyDepositElectra {electra : .pectra ≤ fork}
+private theorem blockKeeps_applyDepositElectra {electra : .pectra ≤ fork}
     {pubkey : Cryptography.Bls.BLSPubkey} {withdrawalCredentials : Bytes32} {amount : Gwei}
     {signature : Cryptography.Bls.BLSSignature}
     (computed : applyDepositElectra config checks state electra pubkey withdrawalCredentials
       amount signature = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold applyDepositElectra at computed
   split at computed
   · simp only [bind_ok_iff] at computed
@@ -156,80 +359,105 @@ private theorem stepKeeps_applyDepositElectra {electra : .pectra ≤ fork}
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
       obtain ⟨_, added, pushed⟩ := computed
       obtain ⟨_, rfl⟩ := addPendingDeposit_eq pushed
-      exact (stepKeeps_addValidatorToRegistry added).trans StepKeeps.of_validators
+      exact (blockKeeps_addValidatorToRegistry added).trans BlockKeeps.of_validators
     · cases computed
-      exact StepKeeps.refl _
+      exact BlockKeeps.refl _
   · obtain ⟨_, rfl⟩ := addPendingDeposit_eq (liftAccessor_ok.mp computed)
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
 
-theorem stepKeeps_processDeposit {before : fork < .hegota} {deposit : Deposit}
+private theorem blockKeeps_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  refine (StepKeeps.of_validators (state := state)
+  refine (BlockKeeps.of_validators (state := state)
     (after := { state with eth1DepositIndex := fun _ => next })).trans ?_
   unfold applyDeposit at applied
   split at applied
-  · exact stepKeeps_applyDepositElectra applied
-  · exact stepKeeps_applyPendingDeposit applied
+  · exact blockKeeps_applyDepositElectra applied
+  · exact blockKeeps_applyPendingDeposit applied
+
+theorem stepKeeps_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    StepKeeps state after :=
+  (blockKeeps_processDeposit computed).1
 
 /-! ## Requests of the execution layer -/
 
-private theorem stepKeeps_processDepositRequest {electra : .pectra ≤ fork}
+private theorem blockKeeps_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok computed
-  exact StepKeeps.of_validators
+  exact BlockKeeps.of_validators
 
-private theorem stepKeeps_requestPartialWithdrawal {electra : .pectra ≤ fork}
+private theorem blockKeeps_requestPartialWithdrawal {electra : .pectra ≤ fork}
     {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
     (computed : requestPartialWithdrawal config state electra index validator amount owed =
       .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨_, _, _, _, computed⟩ := computed
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok, Except.ok.injEq] at computed
     obtain ⟨⟨_, _⟩, churned, _, _, _, _, rfl⟩ := computed
     obtain ⟨-, validators, -⟩ := computeExitEpochAndUpdateChurn_earliest churned
-    exact StepKeeps.of_validators (by rw [validators])
+    exact BlockKeeps.of_validators (by rw [validators])
       (frame_computeExitEpochAndUpdateChurn churned).slot
   · cases computed
-    exact StepKeeps.refl _
+    exact BlockKeeps.refl _
 
-private theorem stepKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
+private theorem blockKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
-    StepKeeps state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
-  · exact StepKeeps.refl _
-  · exact stepKeeps_initiateValidatorExit exited
-  · exact stepKeeps_requestPartialWithdrawal withdrawn
+    BlockKeeps state after := by
+  unfold processWithdrawalRequest at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat' split at computed
+  all_goals first
+    | (cases computed; done)
+    | (cases computed; exact BlockKeeps.refl _)
+    | exact blockKeeps_requestPartialWithdrawal computed
+    | (apply blockKeeps_initiateValidatorExit ?_ (liftAccessor_ok.mp computed)
+       rename_i position _ _ _ _ _ _ _ _ _ _ _ _ _ _
+       intro v read _
+       rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)] at read
+       obtain rfl := Except.ok.inj read
+       -- The request is accepted only for a validator that is active.
+       have accepted : canRequest config state state.validators.data[position] = .ok true := by
+         simp_all
+       unfold canRequest at accepted
+       dsimp only at accepted
+       split at accepted
+       · cases accepted
+       · rename_i active
+         apply activationLe_of_active
+         simp at active
+         exact active.1)
 
-private theorem stepKeeps_queueExcessActiveBalance {electra : .pectra ≤ fork}
+private theorem blockKeeps_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : queueExcessActiveBalance state electra index = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   simp only [queueExcessActiveBalance, bind_ok_iff] at computed
   obtain ⟨_, _, computed⟩ := computed
   split at computed
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, _, set, rfl⟩ := computed
     obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
   · cases computed
-    exact StepKeeps.refl _
+    exact BlockKeeps.refl _
 
 /-- Compounding credentials keep the activation and the exit epoch. -/
-private theorem stepKeeps_switchToCompoundingValidator {electra : .pectra ≤ fork}
+private theorem blockKeeps_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : switchToCompoundingValidator state electra index = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   simp only [switchToCompoundingValidator, bind_ok_iff] at computed
   obtain ⟨validator, found, _, set, queued⟩ := computed
-  exact (stepKeeps_setValidator found (fun _ _ => by rfl) set).trans
-    (stepKeeps_queueExcessActiveBalance queued)
+  exact (blockKeeps_setValidator found set (fun _ _ => by rfl)
+    (fun far assigned => absurd far assigned)).trans
+    (blockKeeps_queueExcessActiveBalance queued)
 
 /-- A consolidation from Electra takes effect after the current epoch plus `MAX_SEED_LOOKAHEAD`. -/
 private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gwei}
@@ -250,315 +478,378 @@ private theorem consolidationEpoch_lt {electra : .pectra ≤ fork} {balance : Gw
 /-- The source of a consolidation had not started to exit, and exits after the fixed epoch.
 
 It must be the validator at its index. -/
-private theorem stepKeeps_queueConsolidation {electra : .pectra ≤ fork}
+private theorem blockKeeps_queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (found : state.validators.data[sourceIndex.toNat]? = some source)
     (far : source.exitEpoch = FAR_FUTURE_EPOCH)
+    (active : isActiveValidator source (getCurrentEpoch state) = true)
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   obtain ⟨_, _, _, _, _, churned, _, set, _, rfl⟩ := queueConsolidation_steps computed
   have later := consolidationEpoch_lt churned
-  refine StepKeeps.trans StepKeeps.of_validators ((stepKeeps_setValidator
-    (by exact getValidator_eq_ok_iff.mpr found) (fun _ le => ?_) set).trans StepKeeps.of_validators)
+  refine BlockKeeps.trans BlockKeeps.of_validators ((blockKeeps_setValidator
+    (by exact getValidator_eq_ok_iff.mpr found) set (fun _ le => ?_)
+    (fun _ _ => activationLe_of_active active)).trans BlockKeeps.of_validators)
   exact isActiveValidator_eq_of_exit rfl far (activityFixedEpoch_lt_of_toNat_lt later) le
 
-private theorem stepKeeps_processConsolidationRequest {electra : .pectra ≤ fork}
+private theorem blockKeeps_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   rcases consolidationRequest_cases computed with
     rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, accepted, queued⟩
-  · exact StepKeeps.refl _
-  · exact stepKeeps_switchToCompoundingValidator switched
+  · exact BlockKeeps.refl _
+  · exact blockKeeps_switchToCompoundingValidator switched
   -- The source had not started to exit.
-  · exact stepKeeps_queueConsolidation accepted.sourceAt accepted.sourceStays queued
+  · exact blockKeeps_queueConsolidation accepted.sourceAt accepted.sourceStays
+      accepted.sourceActive queued
+
+private theorem blockKeeps_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config state body electra = .ok after) :
+    BlockKeeps state after := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+  exact (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processDepositRequest ok)
+    depositsOk).trans <|
+    (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processWithdrawalRequest ok)
+      withdrawalsOk).trans <|
+    BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processConsolidationRequest ok) consolidationsOk
 
 theorem stepKeeps_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
     (computed : processExecutionRequests config state body electra = .ok after) :
-    StepKeeps state after := by
-  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
-  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
-  exact (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processDepositRequest ok) depositsOk).trans <|
-    (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processWithdrawalRequest ok)
-      withdrawalsOk).trans <|
-    StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processConsolidationRequest ok) consolidationsOk
+    StepKeeps state after :=
+  (blockKeeps_processExecutionRequests computed).1
 
 /-! ## Withdrawals and the execution part of a block -/
 
-private theorem stepKeeps_applyWithdrawal {withdrawal : Withdrawal}
-    (computed : applyWithdrawal state withdrawal = .ok after) : StepKeeps state after := by
+private theorem blockKeeps_applyWithdrawal {withdrawal : Withdrawal}
+    (computed : applyWithdrawal state withdrawal = .ok after) : BlockKeeps state after := by
   unfold applyWithdrawal at computed
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, set⟩ := computed
     obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact StepKeeps.of_validators
-  · exact stepKeeps_decreaseBalance computed
+    exact BlockKeeps.of_validators
+  · exact blockKeeps_decreaseBalance computed
 
-private theorem stepKeeps_applyExpectedWithdrawals {capella : .shapella ≤ fork}
+private theorem blockKeeps_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
-    StepKeeps state after := by
-  exact applyExpectedWithdrawals_of StepKeeps StepKeeps.refl (fun one two => one.trans two)
-    (fun ok => stepKeeps_applyWithdrawal ok)
-    (fun frame validators => StepKeeps.of_validators (congrArg (·.data) validators) frame.slot)
+    BlockKeeps state after := by
+  exact applyExpectedWithdrawals_of BlockKeeps BlockKeeps.refl (fun one two => one.trans two)
+    (fun ok => blockKeeps_applyWithdrawal ok)
+    (fun frame validators => BlockKeeps.of_validators (congrArg (·.data) validators) frame.slot)
     computed
 
-private theorem stepKeeps_processWithdrawals {capella : .shapella ≤ fork}
+private theorem blockKeeps_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) : StepKeeps state after := by
+    (computed : processWithdrawals state capella payload = .ok after) : BlockKeeps state after := by
   unfold processWithdrawals at computed
   split at computed
   · split at computed
     · simp only [bind_ok_iff, liftAccessor_ok] at computed
       obtain ⟨_, _, applied⟩ := computed
-      exact stepKeeps_applyExpectedWithdrawals applied
+      exact blockKeeps_applyExpectedWithdrawals applied
     · cases computed
-      exact StepKeeps.refl _
+      exact BlockKeeps.refl _
   · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, applied⟩ := computed
-    exact stepKeeps_applyExpectedWithdrawals applied
+    exact blockKeeps_applyExpectedWithdrawals applied
+
+private theorem blockKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (computed : processBlsToExecutionChange config checks state signed = .ok after) :
+    BlockKeeps state after := by
+  obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
+  exact blockKeeps_setValidator found set (fun _ _ => by simp only [isActiveValidator])
+    (fun far assigned => absurd far assigned)
 
 theorem stepKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
-    StepKeeps state after := by
-  obtain ⟨_, found, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
-  exact stepKeeps_setValidator found (fun _ _ => by simp only [isActiveValidator]) set
+    StepKeeps state after :=
+  (blockKeeps_processBlsToExecutionChange computed).1
 
-private theorem stepKeeps_processExecutionPayload {body : BeaconBlockBody preset fork}
+private theorem blockKeeps_processExecutionPayload {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork ∧ fork < .glamsterdam}
     (computed : processExecutionPayload config engine state body bellatrix = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok computed
-  exact StepKeeps.of_validators
+  exact BlockKeeps.of_validators
 
-private theorem stepKeeps_processBuilderDepositRequest {gloas : .glamsterdam ≤ fork}
+private theorem blockKeeps_processBuilderDepositRequest {gloas : .glamsterdam ≤ fork}
     {request : BuilderDepositRequest}
     (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processBuilderDepositRequest addBuilderToRegistry at computed
   simp only [bind, Except.bind, pure, Except.pure] at computed
   repeat' split at computed
   all_goals first
     | (cases computed; done)
-    | (cases computed; exact StepKeeps.of_validators)
+    | (cases computed; exact BlockKeeps.of_validators)
 
-private theorem stepKeeps_processBuilderExitRequest {gloas : .glamsterdam ≤ fork}
+private theorem blockKeeps_processBuilderExitRequest {gloas : .glamsterdam ≤ fork}
     {request : BuilderExitRequest}
     (computed : processBuilderExitRequest config state gloas request = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   rcases processBuilderExitRequest_cases computed with rfl | ⟨_, _, _, _, _, exited⟩
-  · exact StepKeeps.refl _
+  · exact BlockKeeps.refl _
   · simp only [initiateBuilderExit, bind_ok_iff] at exited
     obtain ⟨_, _, _, _, set⟩ := exited
     obtain ⟨_, rfl⟩ := setBuilder_ok set
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
 
-private theorem stepKeeps_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
+private theorem blockKeeps_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
     ⟨-, settled, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk,
       buildersOk, exitsOk, -, rfl⟩
-  · exact StepKeeps.refl _
-  · have settledStep : StepKeeps state settled := by
+  · exact BlockKeeps.refl _
+  · have settledStep : BlockKeeps state settled := by
       rw [settleParentPayment_eq settledOk]
-      exact StepKeeps.of_validators
+      exact BlockKeeps.of_validators
     exact settledStep.trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processDepositRequest ok) depositsOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processWithdrawalRequest ok)
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processDepositRequest ok) depositsOk).trans <|
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processWithdrawalRequest ok)
         withdrawalsOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processConsolidationRequest ok)
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processConsolidationRequest ok)
         consolidationsOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processBuilderDepositRequest ok)
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processBuilderDepositRequest ok)
         buildersOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processBuilderExitRequest ok) exitsOk).trans
-        StepKeeps.of_validators
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processBuilderExitRequest ok) exitsOk).trans
+        BlockKeeps.of_validators
 
-private theorem stepKeeps_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
+private theorem blockKeeps_processExecutionPayloadBid {gloas : .glamsterdam ≤ fork}
     {signed : SignedExecutionPayloadBid preset fork}
     (computed : processExecutionPayloadBid config checks state gloas signed = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   obtain ⟨_, recorded, recordedOk, rfl⟩ := processExecutionPayloadBid_ok computed
   by_cases paid : 0 < signed.message.value
   · obtain ⟨_, _, _, _, rfl⟩ := recordBidPayment_of_pos paid recordedOk
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
   · simp only [recordBidPayment, paid, ↓reduceIte, pure, Except.pure, Except.ok.injEq]
       at recordedOk
     subst recordedOk
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
 
-theorem stepKeeps_processBlockExecution {body : BeaconBlockBody preset fork}
+private theorem blockKeeps_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processBlockExecution at computed
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, withdrawnOk, bid⟩ := computed
-    exact (stepKeeps_processWithdrawals withdrawnOk).trans
-      (stepKeeps_processExecutionPayloadBid bid)
+    exact (blockKeeps_processWithdrawals withdrawnOk).trans
+      (blockKeeps_processExecutionPayloadBid bid)
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, withdrawnOk, paid⟩ := computed
-    exact (stepKeeps_processWithdrawals withdrawnOk).trans (stepKeeps_processExecutionPayload paid)
+    exact (blockKeeps_processWithdrawals withdrawnOk).trans
+      (blockKeeps_processExecutionPayload paid)
   · dsimp only at computed
     split at computed
-    · exact stepKeeps_processExecutionPayload computed
+    · exact blockKeeps_processExecutionPayload computed
     · cases computed
-      exact StepKeeps.refl _
+      exact BlockKeeps.refl _
 
-theorem stepKeeps_processSyncAggregate {altair : .altair ≤ fork}
+theorem stepKeeps_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    StepKeeps state after :=
+  (blockKeeps_processBlockExecution computed).1
+
+private theorem blockKeeps_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processSyncAggregate at computed
   simp only [bind_ok_iff] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
   rw [← Array.foldlM_toList] at folded
-  refine StepKeeps.foldlM (fun _ _ _ ok => ?_) folded
+  refine BlockKeeps.foldlM (fun _ _ _ ok => ?_) folded
   unfold applySyncReward at ok
   split at ok
   · simp only [bind_ok_iff, liftAccessor_ok] at ok
     obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (stepKeeps_increaseBalance raised).trans (stepKeeps_increaseBalance paid)
-  · exact stepKeeps_decreaseBalance (liftAccessor_ok.mp ok)
+    exact (blockKeeps_increaseBalance raised).trans (blockKeeps_increaseBalance paid)
+  · exact blockKeeps_decreaseBalance (liftAccessor_ok.mp ok)
+
+theorem stepKeeps_processSyncAggregate {altair : .altair ≤ fork}
+    {aggregate : SyncAggregate preset}
+    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
+    StepKeeps state after :=
+  (blockKeeps_processSyncAggregate computed).1
 
 /-! ## The other steps of a block -/
 
-private theorem stepKeeps_processBlockHeader {block : BeaconBlock preset fork}
-    (computed : processBlockHeader state block = .ok after) : StepKeeps state after := by
+private theorem blockKeeps_processBlockHeader {block : BeaconBlock preset fork}
+    (computed : processBlockHeader state block = .ok after) : BlockKeeps state after := by
   obtain ⟨_, _, rfl⟩ := processBlockHeader_eq computed
-  exact StepKeeps.of_validators
+  exact BlockKeeps.of_validators
 
-private theorem stepKeeps_processRandao {body : BeaconBlockBody preset fork}
-    (computed : processRandao config checks state body = .ok after) : StepKeeps state after := by
+private theorem blockKeeps_processRandao {body : BeaconBlockBody preset fork}
+    (computed : processRandao config checks state body = .ok after) : BlockKeeps state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq computed
-  exact StepKeeps.of_validators
+  exact BlockKeeps.of_validators
+
+private theorem blockKeeps_processEth1Data {before : fork < .hegota}
+    {body : BeaconBlockBody preset fork}
+    (computed : processEth1Data before state body = .ok after) : BlockKeeps state after := by
+  obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
+  rw [← rest]
+  exact BlockKeeps.of_validators
 
 theorem stepKeeps_processEth1Data {before : fork < .hegota}
     {body : BeaconBlockBody preset fork}
-    (computed : processEth1Data before state body = .ok after) : StepKeeps state after := by
-  obtain ⟨_, _, rest⟩ := processEth1Data_eq computed
-  rw [← rest]
-  exact StepKeeps.of_validators
+    (computed : processEth1Data before state body = .ok after) : StepKeeps state after :=
+  (blockKeeps_processEth1Data computed).1
+
+private theorem blockKeeps_processProposerSlashing {slashing : ProposerSlashing}
+    (computed : processProposerSlashing config checks state slashing = .ok after) :
+    BlockKeeps state after := by
+  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, v, found, _, slashable, _, _, _, _, slashed⟩ := computed
+  exact blockKeeps_slashValidator (fun _ read _ => by
+    obtain rfl := Except.ok.inj (found.symm.trans read)
+    exact activationLe_of_slashable slashable) slashed
 
 theorem stepKeeps_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
-    StepKeeps state after := by
-  simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
-  exact stepKeeps_slashValidator slashed
+    StepKeeps state after :=
+  (blockKeeps_processProposerSlashing computed).1
 
-theorem stepKeeps_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+private theorem blockKeeps_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (computed : processAttesterSlashing config checks state slashing = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := computed
-  refine foldlM_ok_invariant (fun step => StepKeeps state step.1)
+  refine foldlM_ok_invariant (fun step => BlockKeeps state step.1)
     (fun step _ next before ok => before.trans ?_)
-    (show StepKeeps state (state, false).1 from StepKeeps.refl state) folded
+    (show BlockKeeps state (state, false).1 from BlockKeeps.refl state) folded
   obtain ⟨middle, slashedAny⟩ := step
   simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, ok⟩ := ok
+  obtain ⟨v, found, ok⟩ := ok
   split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
+  · rename_i slashable
+    simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, slashed, rfl⟩ := ok
-    exact stepKeeps_slashValidator slashed
+    exact blockKeeps_slashValidator (fun _ read _ => by
+      obtain rfl := Except.ok.inj (found.symm.trans read)
+      exact activationLe_of_slashable slashable) slashed
   · simp only [pure, Except.pure, Except.ok.injEq] at ok
-    exact ok ▸ StepKeeps.refl _
+    exact ok ▸ BlockKeeps.refl _
+
+theorem stepKeeps_processAttesterSlashing {slashing : AttesterSlashing preset fork}
+    (computed : processAttesterSlashing config checks state slashing = .ok after) :
+    StepKeeps state after :=
+  (blockKeeps_processAttesterSlashing computed).1
+
+private theorem blockKeeps_processAttestation {attestation : Attestation preset fork}
+    {parentSlot : Slot}
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    BlockKeeps state after :=
+  BlockKeeps.of_validators (by rw [(processAttestation_registry computed).1])
+    (frame_processAttestation computed).slot
 
 theorem stepKeeps_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     StepKeeps state after :=
-  StepKeeps.of_validators (by rw [(processAttestation_registry computed).1])
-    (frame_processAttestation computed).slot
+  (blockKeeps_processAttestation computed).1
+
+private theorem blockKeeps_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (computed : processVoluntaryExit config checks state signed = .ok after) :
+    BlockKeeps state after := by
+  unfold processVoluntaryExit at computed
+  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
+  obtain ⟨v, found, _, active, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
+  exact blockKeeps_initiateValidatorExit (fun _ read _ => by
+    obtain rfl := Except.ok.inj (found.symm.trans read)
+    exact activationLe_of_active active) exited
 
 theorem stepKeeps_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    StepKeeps state after := by
-  unfold processVoluntaryExit at computed
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
-  exact stepKeeps_initiateValidatorExit exited
+    StepKeeps state after :=
+  (blockKeeps_processVoluntaryExit computed).1
 
 /-! ## Blocks -/
 
-private theorem stepKeeps_processOperations {body : BeaconBlockBody preset fork}
+private theorem blockKeeps_processOperations {body : BeaconBlockBody preset fork}
     {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processOperations at computed
   split at computed
   · unfold processOperationsGloas at computed
     simp only [bind_ok_iff, ← Array.foldlM_toList] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
       attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
-    exact (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processProposerSlashing ok)
+    exact (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processProposerSlashing ok)
       proposersOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processAttesterSlashing ok) attestersOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processAttestation ok) attestedOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processVoluntaryExit ok) exitsOk).trans <|
-      (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processBlsToExecutionChange ok)
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processAttesterSlashing ok)
+        attestersOk).trans <|
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processAttestation ok) attestedOk).trans <|
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processVoluntaryExit ok) exitsOk).trans <|
+      (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processBlsToExecutionChange ok)
         changesOk).trans <|
-      StepKeeps.foldlM (fun _ _ _ ok => by
+      BlockKeeps.foldlM (fun _ _ _ ok => by
         rw [processPayloadAttestation_eq ok]
-        exact StepKeeps.refl _) paid
+        exact BlockKeeps.refl _) paid
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
     exitsOk, changed, changesOk, requestsOk⟩ := computed
-  have changes : StepKeeps exited changed := by
+  have changes : BlockKeeps exited changed := by
     unfold processBlsToExecutionChanges at changesOk
     split at changesOk
     · rw [← Array.foldlM_toList] at changesOk
-      exact StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processBlsToExecutionChange ok) changesOk
+      exact BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processBlsToExecutionChange ok) changesOk
     · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ StepKeeps.refl _
-  have requests : StepKeeps changed after := by
+      exact changesOk ▸ BlockKeeps.refl _
+  have requests : BlockKeeps changed after := by
     split at requestsOk
-    · exact stepKeeps_processExecutionRequests requestsOk
+    · exact blockKeeps_processExecutionRequests requestsOk
     · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
-      exact requestsOk ▸ StepKeeps.refl _
-  exact (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processProposerSlashing ok)
+      exact requestsOk ▸ BlockKeeps.refl _
+  exact (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processProposerSlashing ok)
     proposersOk).trans <|
-    (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processAttesterSlashing ok) attestersOk).trans <|
-    (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processAttestation ok) attestedOk).trans <|
-    (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processDeposit ok) depositedOk).trans <|
-    (StepKeeps.foldlM (fun _ _ _ ok => stepKeeps_processVoluntaryExit ok) exitsOk).trans <|
+    (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processAttesterSlashing ok) attestersOk).trans <|
+    (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processAttestation ok) attestedOk).trans <|
+    (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processDeposit ok) depositedOk).trans <|
+    (BlockKeeps.foldlM (fun _ _ _ ok => blockKeeps_processVoluntaryExit ok) exitsOk).trans <|
     changes.trans requests
 
-theorem stepKeeps_processBlock {block : BeaconBlock preset fork}
+private theorem blockKeeps_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processBlock at computed
   split at computed
   · unfold processBlockAltair at computed
     simp only [stateBeforeOperations, bind_assoc, bind_ok_iff] at computed
     obtain ⟨paid, paidOk, headed, headedOk, executed, executedOk, revealed, revealedOk, voted,
       votedOk, _, operatedOk, synced⟩ := computed
-    have paidStep : StepKeeps state paid := by
+    have paidStep : BlockKeeps state paid := by
       split at paidOk
-      · exact stepKeeps_processParentExecutionPayload paidOk
+      · exact blockKeeps_processParentExecutionPayload paidOk
       · cases paidOk
-        exact StepKeeps.refl _
-    have executedStep : StepKeeps headed executed := by
+        exact BlockKeeps.refl _
+    have executedStep : BlockKeeps headed executed := by
       split at executedOk
-      · exact stepKeeps_processBlockExecution executedOk
+      · exact blockKeeps_processBlockExecution executedOk
       · cases executedOk
-        exact StepKeeps.refl _
-    have votedStep : StepKeeps revealed voted := by
+        exact BlockKeeps.refl _
+    have votedStep : BlockKeeps revealed voted := by
       split at votedOk
-      · exact stepKeeps_processEth1Data votedOk
+      · exact blockKeeps_processEth1Data votedOk
       · cases votedOk
-        exact StepKeeps.refl _
-    exact paidStep.trans <| (stepKeeps_processBlockHeader headedOk).trans <|
-      executedStep.trans <| (stepKeeps_processRandao revealedOk).trans <| votedStep.trans <|
-      (stepKeeps_processOperations operatedOk).trans (stepKeeps_processSyncAggregate synced)
+        exact BlockKeeps.refl _
+    exact paidStep.trans <| (blockKeeps_processBlockHeader headedOk).trans <|
+      executedStep.trans <| (blockKeeps_processRandao revealedOk).trans <| votedStep.trans <|
+      (blockKeeps_processOperations operatedOk).trans (blockKeeps_processSyncAggregate synced)
   rename_i notAltair
   have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
   have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
@@ -566,61 +857,77 @@ theorem stepKeeps_processBlock {block : BeaconBlock preset fork}
   simp only [stateBeforeOperations, notGloas', notBellatrix', early', ↓reduceDIte, pure_bind,
     bind_assoc, bind_ok_iff] at computed
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
-  exact (stepKeeps_processBlockHeader headerOk).trans <| (stepKeeps_processRandao randaoOk).trans <|
-    (stepKeeps_processEth1Data eth1Ok).trans (stepKeeps_processOperations operationsOk)
+  exact (blockKeeps_processBlockHeader headerOk).trans <|
+    (blockKeeps_processRandao randaoOk).trans <|
+    (blockKeeps_processEth1Data eth1Ok).trans (blockKeeps_processOperations operationsOk)
+
+
+
+theorem stepKeeps_processBlock {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    StepKeeps state after :=
+  (blockKeeps_processBlock computed).1
 
 /-! ## The steps of an epoch -/
 
-private theorem stepKeeps_processJustificationAndFinalization
+private theorem blockKeeps_processJustificationAndFinalization
     (computed : processJustificationAndFinalization state = .ok after) :
-    StepKeeps state after :=
-  StepKeeps.of_step
+    BlockKeeps state after :=
+  BlockKeeps.of_step
     (by rw [(processJustificationAndFinalization_keeps computed).2.2.2.2.2.1]; exact Nat.le_refl _)
     (activeStep_processJustificationAndFinalization computed)
+    (congrArg (·.data) (processJustificationAndFinalization_keeps computed).2.2.2.2.2.1)
 
-private theorem stepKeeps_processInactivityUpdates {altair : .altair ≤ fork}
+private theorem blockKeeps_processInactivityUpdates {altair : .altair ≤ fork}
     (computed : processInactivityUpdates config state altair = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   unfold processInactivityUpdates at computed
   split at computed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ StepKeeps.refl _
+    exact computed ▸ BlockKeeps.refl _
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
     obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
 
 /-- From Electra, the registry updates of one validator keep activity up to the fixed epoch.
 
 An activation goes to an epoch after the fixed epoch, and only from the far future. -/
-private theorem stepKeeps_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
+private theorem blockKeeps_updateRegistryEntryElectra {activationEpoch : Epoch} {index : Nat}
     (later :
       (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat < activationEpoch.toNat)
     (computed : updateRegistryEntryElectra config activationEpoch state index = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨validator, found, computed⟩ := computed
   split at computed
   · simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, set⟩ := computed
-    exact stepKeeps_setValidatorAt found (fun _ _ => by simp only [isActiveValidator]) set
+    exact blockKeeps_setValidatorAt found set (fun _ _ => by simp only [isActiveValidator])
+      (fun far assigned => absurd far assigned)
   split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, exited⟩ := computed
-    exact stepKeeps_initiateValidatorExit exited
+  · rename_i active
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨i, converted, exited⟩ := computed
+    have indexEq : i.toNat = index := (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp converted)).2
+    refine blockKeeps_initiateValidatorExit (fun v read _ => ?_) exited
+    have same : getValidator state i = .ok validator := by
+      simpa [getValidator_eq_getValidatorAt, indexEq] using found
+    obtain rfl := Except.ok.inj (read.symm.trans same)
+    simp only [Bool.and_eq_true] at active
+    exact activationLe_of_active active.1
   split at computed
   · rename_i eligible
     simp only [isEligibleForActivation, Bool.and_eq_true, beq_iff_eq] at eligible
     -- Neither the far-future epoch nor the new one is at or before the fixed epoch.
-    exact stepKeeps_setValidatorAt found (fun _ le => isActiveValidator_eq_of_activation
-      (.inl eligible.2) (activityFixedEpoch_lt_of_toNat_lt later) le) (liftAccessor_ok.mp computed)
+    exact blockKeeps_setValidatorAt found (liftAccessor_ok.mp computed)
+      (fun _ le => isActiveValidator_eq_of_activation
+        (.inl eligible.2) (activityFixedEpoch_lt_of_toNat_lt later) le)
+      (fun far assigned => absurd far assigned)
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ StepKeeps.refl _
+    exact computed ▸ BlockKeeps.refl _
 
-/-- Registry updates keep the slot and activity through the fixed epoch.
-
-They do not shrink the registry. -/
-theorem stepKeeps_processRegistryUpdates
-    (computed : processRegistryUpdates config state = .ok after) : StepKeeps state after := by
+private theorem blockKeeps_processRegistryUpdates
+    (computed : processRegistryUpdates config state = .ok after) : BlockKeeps state after := by
   have grows := (frame_processRegistryUpdates computed).registryGrows
   by_cases electra : Fork.pectra ≤ fork
   · unfold processRegistryUpdates at computed
@@ -629,93 +936,152 @@ theorem stepKeeps_processRegistryUpdates
     obtain ⟨activationEpoch, activationOk, computed⟩ := computed
     have activationEq := (computeActivationExitEpoch_ok_iff.mp activationOk).2
     -- Each step keeps the slot, so the activation epoch stays after the fixed epoch.
-    refine (foldlM_ok_invariant (fun middle => StepKeeps state middle ∧ middle.slot = state.slot)
+    refine (foldlM_ok_invariant (fun middle => BlockKeeps state middle ∧ middle.slot = state.slot)
       (fun middle _ next before ok => ⟨before.1.trans
-        (stepKeeps_updateRegistryEntryElectra ?_ ok),
+        (blockKeeps_updateRegistryEntryElectra ?_ ok),
         (frame_updateRegistryEntryElectra ok).slot.trans before.2⟩)
-      ⟨StepKeeps.refl state, rfl⟩ computed).1
+      ⟨BlockKeeps.refl state, rfl⟩ computed).1
     have epoch : getCurrentEpoch middle = getCurrentEpoch state := by
       simp only [getCurrentEpoch, before.2]
     rw [epoch, activationEq]
     omega
-  · exact StepKeeps.of_step grows
-      (activeStep_processRegistryUpdates (Nat.lt_of_not_le electra) computed)
+  · exact ⟨StepKeeps.of_step grows
+      (activeStep_processRegistryUpdates (Nat.lt_of_not_le electra) computed),
+      fun h => absurd h electra⟩
 
-private theorem stepKeeps_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+/-- Registry updates keep the slot and activity through the fixed epoch.
+
+They do not shrink the registry. -/
+theorem stepKeeps_processRegistryUpdates
+    (computed : processRegistryUpdates config state = .ok after) : StepKeeps state after :=
+  (blockKeeps_processRegistryUpdates computed).1
+
+/-- Each validator of the later state has the exit epoch of the one at its index before. -/
+private def ExitsSame {f g : Fork} (state : BeaconState preset f) (after : BeaconState preset g) :
+    Prop :=
+  ∀ (j : Nat) (w : Validator), after.validators.data[j]? = some w →
+    ∃ v, state.validators.data[j]? = some v ∧ w.exitEpoch = v.exitEpoch
+
+private theorem ExitsStart.of_same {f g : Fork} {state : BeaconState preset f}
+    {after : BeaconState preset g} (same : ExitsSame state after) : ExitsStart state after := by
+  intro i v w found read far assigned
+  obtain ⟨v', found', equal⟩ := same i w read
+  obtain rfl := Option.some.inj (found.symm.trans found')
+  exact absurd (equal.trans far) assigned
+
+private theorem ExitsSame.setValidatorAt {state current after : BeaconState preset fork}
+    {i : Nat} {old v : Validator} (kept : ExitsSame state current)
+    (found : getValidatorAt current i = .ok old) (set : current.setValidatorAt i v = .ok after)
+    (same : v.exitEpoch = old.exitEpoch) : ExitsSame state after := by
+  obtain ⟨inside, rfl⟩ := setValidatorAt_ok set
+  have oldEq : current.validators.data[i] = old := by simpa [getValidatorAt, inside] using found
+  intro j w read
+  by_cases here : j = i
+  · subst here
+    obtain rfl : w = v := by
+      simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set, inside] using
+        read.symm
+    obtain ⟨v₀, found₀, equal⟩ := kept j old (by simp [Array.getElem?_eq_getElem inside, oldEq])
+    exact ⟨v₀, found₀, same.trans equal⟩
+  · refine kept j w ?_
+    simpa [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set,
+      Array.getElem?_set, here, Ne.symm here] using read
+
+/-- The update of the effective balances writes validators that keep their exit epochs. -/
+private theorem exitsSame_processEffectiveBalanceUpdates
+    (computed : processEffectiveBalanceUpdates state = .ok after) : ExitsSame state after := by
+  unfold processEffectiveBalanceUpdates at computed
+  refine foldlM_ok_invariant (ExitsSame state) (fun current _ next kept step => ?_)
+    (fun _ w read => ⟨w, read, rfl⟩) computed
+  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at step
+  obtain ⟨_, found, _, _, _, _, set⟩ := step
+  exact kept.setValidatorAt found set rfl
+
+private theorem blockKeeps_processEffectiveBalanceUpdates
+    (computed : processEffectiveBalanceUpdates state = .ok after) : BlockKeeps state after :=
+  ⟨StepKeeps.of_step (frame_processEffectiveBalanceUpdates computed).registryGrows
+    (activeStep_processEffectiveBalanceUpdates computed),
+    fun _ => ExitsStart.of_same (exitsSame_processEffectiveBalanceUpdates computed)⟩
+
+private theorem blockKeeps_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
     {available : Gwei} :
     ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
       {count : Nat} {postponed : Array PendingDeposit} {pass},
       passPendingDeposits config checks stop nextEpoch available state processed count postponed
         deposits = .ok pass →
-      StepKeeps state pass.1.state
-  := fun computed => passPendingDeposits_of StepKeeps StepKeeps.refl
-    (fun one two => one.trans two) (fun ok => stepKeeps_applyPendingDeposit ok) computed
+      BlockKeeps state pass.1.state
+  := fun computed => passPendingDeposits_of BlockKeeps BlockKeeps.refl
+    (fun one two => one.trans two) (fun ok => blockKeeps_applyPendingDeposit ok) computed
 
-private theorem stepKeeps_processEpochAltair {altair : .altair ≤ fork}
+private theorem blockKeeps_processEpochAltair {altair : .altair ≤ fork}
     (computed : processEpochAltair config checks state altair = .ok after) :
-    StepKeeps state after := by
+    BlockKeeps state after := by
   rw [processEpochAltair_eq_run] at computed
-  apply (EpochTrace.run_ok_iff.mp computed).transport StepKeeps StepKeeps.refl
+  apply (EpochTrace.run_ok_iff.mp computed).transport BlockKeeps BlockKeeps.refl
     (fun a b => a.trans b)
   intro k _ a b ok
   have edge := EpochStage.action_cases.mp ok
   cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-  · exact stepKeeps_processJustificationAndFinalization edge
-  · exact stepKeeps_processInactivityUpdates edge
-  · exact StepKeeps.of_step (frame_processRewardsAndPenalties edge).registryGrows
+  · exact blockKeeps_processJustificationAndFinalization edge
+  · exact blockKeeps_processInactivityUpdates edge
+  · exact BlockKeeps.of_step (frame_processRewardsAndPenalties edge).registryGrows
       (activeStep_processRewardsAndPenalties edge)
-  · exact stepKeeps_processRegistryUpdates edge
-  · exact StepKeeps.of_step (frame_processSlashings edge).registryGrows
+      (congrArg (·.validators.data) (processRewardsAndPenalties_frame edge))
+  · exact blockKeeps_processRegistryUpdates edge
+  · exact BlockKeeps.of_step (frame_processSlashings edge).registryGrows
       (activeStep_processSlashings edge)
+      (congrArg (·.validators.data) (processSlashings_frame edge))
   · split at edge
-    · exact StepKeeps.of_step (frame_processEth1DataReset edge).registryGrows
+    · exact BlockKeeps.of_step (frame_processEth1DataReset edge).registryGrows
         (activeStep_processEth1DataReset edge)
-    · exact edge ▸ StepKeeps.refl _
+        (congrArg (·.validators.data) (processEth1DataReset_frame edge))
+    · exact edge ▸ BlockKeeps.refl _
   · split at edge
     · unfold processPendingDeposits at edge
       simp only [bind, Except.bind, pure, Except.pure] at edge
       repeat' (split at edge <;> try cases edge)
-      all_goals exact (stepKeeps_passPendingDeposits ‹_›).trans StepKeeps.of_validators
-    · exact edge ▸ StepKeeps.refl _
+      all_goals exact (blockKeeps_passPendingDeposits ‹_›).trans BlockKeeps.of_validators
+    · exact edge ▸ BlockKeeps.refl _
   · split at edge
-    · exact StepKeeps.of_validators
+    · exact BlockKeeps.of_validators
         (by rw [(processPendingConsolidations_kept edge).1])
         (frame_processPendingConsolidations edge).slot
-    · exact edge ▸ StepKeeps.refl _
+    · exact edge ▸ BlockKeeps.refl _
   · split at edge
     · rw [processBuilderPendingPayments_eq edge]
-      exact StepKeeps.of_validators
-    · exact edge ▸ StepKeeps.refl _
-  · exact StepKeeps.of_step (frame_processEffectiveBalanceUpdates edge).registryGrows
-      (activeStep_processEffectiveBalanceUpdates edge)
-  · exact StepKeeps.of_step (frame_processSlashingsReset edge).registryGrows
-      (activeStep_processSlashingsReset edge)
+      exact BlockKeeps.of_validators
+    · exact edge ▸ BlockKeeps.refl _
+  · exact blockKeeps_processEffectiveBalanceUpdates edge
+  · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
+    exact BlockKeeps.of_validators
   · obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq edge
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
   · split at edge
     · unfold processHistoricalSummariesUpdate at edge
       simp only [bind, Except.bind, pure, Except.pure] at edge
       repeat' (split at edge <;> try cases edge)
-      all_goals exact StepKeeps.refl _
-    · exact StepKeeps.of_step (frame_processHistoricalRootsUpdate edge).registryGrows
-        (activeStep_processHistoricalRootsUpdate edge)
+      all_goals exact BlockKeeps.refl _
+    · rename_i early
+      exact ⟨StepKeeps.of_step (frame_processHistoricalRootsUpdate edge).registryGrows
+        (activeStep_processHistoricalRootsUpdate edge),
+        fun electra => absurd (Nat.le_trans (by decide) electra) early⟩
   · subst b
-    exact StepKeeps.of_validators
+    exact BlockKeeps.of_validators
   · unfold processSyncCommitteeUpdates at edge
     simp only [bind, Except.bind, pure, Except.pure] at edge
     repeat' (split at edge <;> try cases edge)
-    all_goals exact StepKeeps.refl _
+    all_goals exact BlockKeeps.refl _
   · split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact StepKeeps.of_validators
-    · exact edge ▸ StepKeeps.refl _
+      exact BlockKeeps.of_validators
+    · exact edge ▸ BlockKeeps.refl _
   · split at edge
     · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
       obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact StepKeeps.of_validators
-    · exact edge ▸ StepKeeps.refl _
+      exact BlockKeeps.of_validators
+    · exact edge ▸ BlockKeeps.refl _
 
 /-- The epoch step keeps activity up to the current epoch plus `MAX_SEED_LOOKAHEAD`.
 
@@ -725,7 +1091,7 @@ theorem activeKept_processEpoch
     ActiveKept (activityFixedEpoch state) state after := by
   by_cases altair : Fork.altair ≤ fork
   · simp only [processEpoch, altair, ↓reduceDIte] at computed
-    exact (stepKeeps_processEpochAltair computed).2.2
+    exact (blockKeeps_processEpochAltair computed).1.2.2
   · exact activeKept_processEpoch_of_lt_altair (Nat.lt_of_not_le altair) computed
 
 /-- The epoch step never shrinks the registry. -/
@@ -785,7 +1151,7 @@ private theorem stepKeeps_queueCompoundingExcess {electra : .pectra ≤ fork} {i
   unfold queueCompoundingExcess at computed
   split at computed
   · split at computed
-    · exact stepKeeps_queueExcessActiveBalance (liftAccessor_ok.mp computed)
+    · exact (blockKeeps_queueExcessActiveBalance (liftAccessor_ok.mp computed)).1
     · cases computed
       exact StepKeeps.refl _
   · cases computed
@@ -860,13 +1226,14 @@ private theorem beforeVotes_processAttesterSlashing {slashing : AttesterSlashing
 /-- The header step is a step before votes. -/
 private theorem beforeVotes_processBlockHeader {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) : BeforeVotes state after :=
-  BeforeVotes.of_mixes (frame_processBlockHeader computed) (stepKeeps_processBlockHeader computed)
+  BeforeVotes.of_mixes (frame_processBlockHeader computed)
+    (blockKeeps_processBlockHeader computed).1
     (payloadInputs_processBlockHeader computed).randaoMixes
 
 /-- The RANDAO step is a step before votes. -/
 private theorem beforeVotes_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) : BeforeVotes state after :=
-  ⟨frame_processRandao computed, stepKeeps_processRandao computed,
+  ⟨frame_processRandao computed, (blockKeeps_processRandao computed).1,
     mixesKeptBut_processRandao computed⟩
 
 /-- The vote on the deposit contract is a step before votes. -/
@@ -929,7 +1296,7 @@ private theorem beforeVotes_attestationsStart {engine : ExecutionEngine preset f
     BeforeVotes state first :=
   (started.step_of BeforeVotes BeforeVotes.refl BeforeVotes.trans
     (fun _ ok => BeforeVotes.of_mixes (frame_processParentExecutionPayload ok)
-      (stepKeeps_processParentExecutionPayload ok)
+      ((blockKeeps_processParentExecutionPayload ok).1)
       (payloadInputs_processParentExecutionPayload ok).randaoMixes)
     beforeVotes_processBlockHeader
     (fun _ ok => BeforeVotes.of_mixes (frame_processBlockExecution ok)
@@ -1126,12 +1493,88 @@ theorem registryGrows_of_chainSteps {first last : ForkedBeaconState preset}
     first.state.validators.data.size ≤ last.state.validators.data.size :=
   (chainSteps_kept steps).1
 
+/-! ## Exits start from activity at every chain step -/
+
+private theorem ExitsStart.of_data_right {f g h : Fork} {state : BeaconState preset f}
+    {middle : BeaconState preset g} {after : BeaconState preset h}
+    (starts : ExitsStart state middle)
+    (same : after.validators.data = middle.validators.data := by rfl) : ExitsStart state after := by
+  intro i v w found read far assigned
+  rw [same] at read
+  exact starts i v w found read far assigned
+
+/-- One slot starts exits only of activated validators, from Electra. -/
+private theorem exitsStart_advanceSlot (electra : .pectra ≤ fork)
+    (computed : advanceSlot config checks state = .ok after) : ExitsStart state after := by
+  obtain ⟨next, cached, epoched, -, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok computed
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  have first : BlockKeeps state cached :=
+    BlockKeeps.of_validators (by rw [cachedEq]) (by rw [cachedEq])
+  unfold epochIfLast at epochedOk
+  split at epochedOk
+  · have altair : .altair ≤ fork := Nat.le_trans (by decide) electra
+    simp only [processEpoch, altair, ↓reduceDIte] at epochedOk
+    exact ExitsStart.of_data_right
+      ((first.trans (blockKeeps_processEpochAltair epochedOk)).2 electra)
+  · simp only [pure, Except.pure, Except.ok.injEq] at epochedOk
+    subst epochedOk
+    exact ExitsStart.of_data_right (first.2 electra)
+
+/-- From Electra, an upgrade keeps the validators as the same sequence. -/
+theorem upgradeNext_validators_of_electra {pre : ForkedBeaconState preset}
+    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
+    (electra : .pectra ≤ pre.fork) (computed : upgradeNext config checks pre = .ok post) :
+    post.val.state.validators.data = pre.state.validators.data := by
+  obtain ⟨fork, state⟩ := pre
+  change .pectra ≤ fork at electra
+  cases fork
+  case phase0 | altair | bellatrix | shapella | dencun => exact absurd electra (by decide)
+  case pectra =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToFulu_spec upgraded).1
+  case fusaka =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    exact (upgradeToGloas_spec upgraded).1
+  case glamsterdam =>
+    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, upgraded, rfl⟩ := computed
+    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
+    exact (upgradeHezeFields_lists _).1
+  all_goals
+    simp only [upgradeNext] at computed
+    cases computed
+
+/-- From Electra, a chain step assigns an exit only to a validator activated by its start epoch. -/
+theorem ChainStep.exit_assigned_activated {forked after : ForkedBeaconState preset}
+    (electra : .pectra ≤ forked.fork) (step : ChainStep config checks forked after)
+    {i : Nat} {v w : Validator} (before : forked.state.validators.data[i]? = some v)
+    (later : after.state.validators.data[i]? = some w) (unset : v.exitEpoch = FAR_FUTURE_EPOCH)
+    (set : w.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    v.activationEpoch ≤ getCurrentEpoch forked.state := by
+  have starts : ExitsStart forked.state after.state := by
+    cases step with
+    | slot computed =>
+      obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp computed
+      have same := processUpgrades_induction
+        (property := fun upgraded => .pectra ≤ upgraded.fork ∧
+          upgraded.state.validators.data = advanced.validators.data)
+        (fun {pre post} ⟨kept, validators⟩ stepOk => ⟨Nat.le_trans kept (Nat.le_of_lt post.2),
+          (upgradeNext_validators_of_electra kept stepOk).trans validators⟩)
+        (forked := (⟨_, advanced⟩ : ForkedBeaconState preset)) ⟨electra, rfl⟩ upgraded
+      exact ExitsStart.of_data_right (exitsStart_advanceSlot electra advancedOk) same.2
+    | block engine signed validateResult computed =>
+      obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok computed
+      exact (blockKeeps_processBlock blockOk).2 electra
+  exact starts i v w before later unset set
+
 /-! ## Activity through block operations -/
 
 /-- The block header keeps the slot and activity. -/
 theorem activeStep_processBlockHeader {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) : ActiveStep state after :=
-  (stepKeeps_processBlockHeader computed).2
+  ((blockKeeps_processBlockHeader computed).1).2
 
 /-- The execution part of a block keeps the slot and activity. -/
 theorem activeStep_processBlockExecution {body : BeaconBlockBody preset fork}
@@ -1143,7 +1586,7 @@ theorem activeStep_processBlockExecution {body : BeaconBlockBody preset fork}
 /-- The RANDAO reveal keeps the slot and activity. -/
 theorem activeStep_processRandao {body : BeaconBlockBody preset fork}
     (computed : processRandao config checks state body = .ok after) : ActiveStep state after :=
-  (stepKeeps_processRandao computed).2
+  (blockKeeps_processRandao computed).1.2
 
 /-- The vote on the deposit contract keeps the slot and activity. -/
 theorem activeStep_processEth1Data {before : fork < .hegota}
@@ -1193,20 +1636,20 @@ theorem activeStep_processDepositRequest {electra : .pectra ≤ fork}
     {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
     ActiveStep state after :=
-  (stepKeeps_processDepositRequest computed).2
+  (blockKeeps_processDepositRequest computed).1.2
 
 /-- A withdrawal request keeps the slot and activity. -/
 theorem activeStep_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     ActiveStep state after :=
-  (stepKeeps_processWithdrawalRequest computed).2
+  (blockKeeps_processWithdrawalRequest computed).1.2
 
 /-- A consolidation request keeps the slot and activity. -/
 theorem activeStep_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     ActiveStep state after :=
-  (stepKeeps_processConsolidationRequest computed).2
+  (blockKeeps_processConsolidationRequest computed).1.2
 
 end EthLib.Consensus

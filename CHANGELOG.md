@@ -35,6 +35,14 @@ Not yet released.
   Its balance plus the sync and partial debits stays above a closed form that loses a pass rate of the effective balance each epoch.
   The pin's low-balance floor and its fall floor read it.
 
+- `FloorTrace.run_effective_origin` says where a key's effective balance after a run from Fusaka comes from.
+  It is its value at the start, or an update set it at most to the balance at the last state where it changed.
+  The run splits at that state, with the effective balance constant after it and aligned.
+  The stay step of the pin's C-floor reads it.
+
+- `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
+  The pin's drift bound reads it.
+
 - `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
   `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
   The pin's claim about the keys that are pending at the start of an epoch reads them.
@@ -48,6 +56,9 @@ Not yet released.
   The key keeps the withdrawable epoch it had at the start of the step, or has one set after the next epoch.
   It takes a step with a positive withdrawal delay.
   The pin's drift bound reads it for the source of a pending consolidation.
+
+- `Run.departure_charge_site` splits a run at the step that assigns the exit of a departure charge, with the validator before and after that step.
+  The pin's drift bound reads it for the activation of a key whose exit a counting state charges.
 
 - `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
   The pin's drift bound reads it.
@@ -67,8 +78,11 @@ Not yet released.
   `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
   `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
   Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
+  `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period` makes the keys of the current committee, one period later, the keys of the next committee at the start.
+  The pin's seat count reads it to bound the debited sync-committee seats of the two branches.
   `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
-  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes.
+  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes and ordered exits.
+  The registry of that state keeps its assigned epochs to the end of the slot.
   The slot ends an epoch, and it records at most one deposit event.
   Their reader is the count of the keys that a branch credits, in the pin reserve bound.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
@@ -275,6 +289,12 @@ Not yet released.
   `Store.mem_getCommitteesBetweenSlots_of_active`, `Store.ForwardReachableWith.active_or_newlyActive_of_voteOrigin` and `Store.ForwardReachableWith.epoch_le_of_checkpointState` are the general steps.
   `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
+
+- `ChainStep.exit_assigned_activated` states that, from Electra, a chain step assigns an exit only to a validator that is activated at the step's start epoch.
+  The pin's drift bound reads it to show that a key whose exit starts on a run was activated before its exit.
+
+- `upgradeNext_validators_of_electra` states that, from Electra, an upgrade keeps the validators as the same sequence.
+  The pin's drift bound reads it for the registry along a slot step, and `ChainStep.exit_assigned_activated` reads it for the upgrades of a slot.
 
 ### Changes that break callers
 

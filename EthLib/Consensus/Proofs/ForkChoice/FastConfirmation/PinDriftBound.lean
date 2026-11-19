@@ -228,7 +228,8 @@ private theorem penaltyDebit_sum_zero {events : List (BalanceEvent preset)}
 
 This holds if the segment ends an epoch, and the penalties are zero otherwise.
 
-The rate is asked only at the last pass state, and only when it has a total active balance.
+The rate is asked only at the last pass state, and only when it reads a total active balance
+and a base reward per increment.
 
 Every step of the segment starts at the epoch of its start `m`.
 
@@ -246,7 +247,9 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     (rate : ∀ {z : ForkedBeaconState preset} (pre : Run config checks m z)
       (ok : advanceSlotAcross config checks z = .ok n), mid = pre.snoc (Step.slot ok) →
       (getCurrentEpoch z.state).toNat < (getCurrentEpoch n.state).toNat →
-      (∃ total, getTotalActiveBalance z.state = .ok total) → passPenaltyRate config z v ≤ pen)
+      (∃ total perIncrement, getTotalActiveBalance z.state = .ok total ∧
+        getBaseRewardPerIncrement preset total = .ok perIncrement) →
+      passPenaltyRate config z v ≤ pen)
     {found : List (BalanceEvent preset)} (replayed : mid.balanceEvents high = .ok found) :
     (found.map (penaltyDebit v)).sum ≤
       if getCurrentEpoch m.state < getCurrentEpoch n.state then pen else 0 := by
@@ -315,7 +318,7 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
   have insidePass : v < pass.validators.data.size := by rw [validators]; omega
   rcases replayRewards_penalty_scalar_cases altairU (pass.validators.bound uEarly) rewardedOk {v}
       (fun j member => by rw [Finset.mem_singleton.mp member]; exact insidePass) with
-    ⟨total, -, passTotal, -⟩ | quiet
+    ⟨total, perIncrement, passTotal, perOk⟩ | quiet
   swap
   · simp only [Finset.sum_singleton] at quiet
     rw [quiet]
@@ -335,7 +338,7 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     simpa only [getTotalActiveBalance, getActiveValidatorIndicesChecked, getTotalBalance,
       validators, passEpoch] using passTotal
   refine bound.trans (le_trans ?_ (rate inner boundary rfl
-    (UInt64.lt_iff_toNat_lt.mp crossing) ⟨total, totalU⟩))
+    (UInt64.lt_iff_toNat_lt.mp crossing) ⟨total, perIncrement, totalU, perOk⟩))
   -- The pass's reads are those of `u`.
   have weight : eligibleWeight pass v ≤ effectiveAt u v := by
     unfold eligibleWeight
@@ -906,25 +909,31 @@ private structure PinPresetFacts (preset : Preset) : Prop where
       preset.MAX_EFFECTIVE_BALANCE.toNat /
         (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) At every fork the whistleblower quotient is at least two. -/
+  /-- (preset fact) At every fork the whistleblower quotient is at least thirty. -/
   whistleblower : ∀ fork : Fork,
-    2 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+    30 ≤ (EthLib.Consensus.parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   /-- (preset fact) The increment times the base reward factor is `2 ^ 35` or more, never small. -/
   rewardScale : 2 ^ 35 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) An increment is at least `10 ^ 8` gwei, which rules out a small increment. -/
   incrementSize : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) The preset's divisors, a sync committee period among them, are positive. -/
+  divisors : preset.DivisorsPositive
+  /-- (preset fact) Four downward bands fit in an increment. -/
+  quarterBand : 4 * preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
+    by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide⟩
+    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
+    by decide⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
@@ -2823,24 +2832,6 @@ private theorem kept_processEpoch {fork : Fork} {s t : BeaconState preset fork}
     (fun one two => one.trans two)
     (fun _ _ _ _ computed => kept_stage electra (EpochStage.action_cases.mp computed))
 
-/-- From Electra, an upgrade keeps the validators as the same sequence. -/
-private theorem upgradeNext_validators {pre : ForkedBeaconState preset}
-    {post : {post : ForkedBeaconState preset // pre.fork < post.fork}}
-    (electra : .pectra ≤ pre.fork) (computed : upgradeNext config checks pre = .ok post) :
-    post.val.state.validators.data = pre.state.validators.data := by
-  obtain ⟨fork, state⟩ := pre
-  cases fork <;>
-    simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
-      throwThe, MonadExceptOf.throw, reduceCtorEq] at computed
-  all_goals try (dsimp only at electra; exact absurd electra (by decide))
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToFulu_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    exact (upgradeToGloas_spec upgraded).1
-  · obtain ⟨_, upgraded, rfl⟩ := computed
-    obtain ⟨-, rfl⟩ := upgradeToHeze_ok_iff.mp upgraded
-    exact (upgradeHezeFields_lists _).1
-
 /-- From Electra, a slot of a run keeps the registry. -/
 private theorem kept_slot {u w : ForkedBeaconState preset} (electra : .pectra ≤ u.fork)
     (ok : advanceSlotAcross config checks u = .ok w) : Kept u.state w.state := by
@@ -2861,7 +2852,7 @@ private theorem kept_slot {u w : ForkedBeaconState preset} (electra : .pectra �
   exact (processUpgrades_induction (forked := ⟨u.fork, advanced⟩)
     (property := fun z => .pectra ≤ z.fork ∧ Kept u.state z.state)
     (fun {_ post} held more => ⟨Nat.le_trans held.1 (Nat.le_of_lt post.property),
-      held.2.trans (Kept.of_data (upgradeNext_validators held.1 more))⟩)
+      held.2.trans (Kept.of_data (upgradeNext_validators_of_electra held.1 more))⟩)
     ⟨electra, advancedKept⟩ upgrades).2
 
 /-- From Fulu and before Gloas, a block keeps the registry. -/
@@ -4777,7 +4768,7 @@ private theorem ExitFarFrom.of_chainStep {a b : ForkedBeaconState preset}
       (property := fun post => ExitFarFrom a.state.validators.data.size post.state ∧
         .pectra ≤ post.fork)
       (fun {pre post} kept ok =>
-        ⟨kept.1.of_data (PinSplit4.upgradeNext_validators kept.2 ok),
+        ⟨kept.1.of_data (upgradeNext_validators_of_electra kept.2 ok),
           Nat.le_trans kept.2 (Nat.le_of_lt post.property)⟩)
       ⟨atAdvanced, electra⟩ upgrades).1
   | block engine signed validate ok =>
@@ -5635,8 +5626,10 @@ private theorem lastPass_debit_le {m z n : ForkedBeaconState preset} (pre : Run 
     (if ∃ total, getTotalActiveBalance z.state = .ok total then passPenaltyRate config z i
       else 0)
     (fun {z'} pre' ok' split before found => by
+      obtain ⟨total, -, totalOk, -⟩ := found
+      have hasTotal : ∃ total, getTotalActiveBalance z'.state = .ok total := ⟨total, totalOk⟩
       cases split
-      simp [found])
+      simp [hasTotal])
     replayed
   rwa [ite_eq_left (by rw [same] at crossed; exact UInt64.lt_iff_toNat_lt.mpr crossed)] at bound
 
@@ -6135,11 +6128,14 @@ private theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run con
 
 /-- Right after a slot step that moves the epoch on, the effective balances lie within the bands.
 
-The step ran the epoch transition, and its upgrades keep the bands. -/
+The step ran the epoch transition, and its upgrades keep the bands.
+
+That holds from Fusaka and before Gloas, where the upgrades leave the state as it is. -/
 private def EpochStartHysteresis (preset : Preset) (config : Config)
     (checks : SignatureChecks) : Prop :=
-  ∀ {a b : ForkedBeaconState preset} (_step : Step config checks a b),
-    getCurrentEpoch a.state < getCurrentEpoch b.state → Hysteresis b.state
+  ∀ {a b : ForkedBeaconState preset} (_step : Step config checks a b), .fusaka ≤ a.fork →
+    b.fork < .glamsterdam → getCurrentEpoch a.state < getCurrentEpoch b.state →
+      Hysteresis b.state
 
 /-! ## The pass rate against the floor path -/
 
@@ -6950,8 +6946,10 @@ private theorem Ctx.inv_step {g x z y q p' m : ForkedBeaconState preset} {high :
     i v0 found0
   have lt : getCurrentEpoch q.state < getCurrentEpoch p'.state :=
     UInt64.lt_iff_toNat_lt.mpr (by omega)
+  have fuluQ : .fusaka ≤ q.fork :=
+    Nat.le_trans c.fulu (fork_le_of_chainSteps (hz.append (rm.append ins)).chainSteps)
   exact ⟨claim', Ctx.hyst_start c (hz.append (rm.append (ins.snoc (Step.slot ok))))
-    (c.hysteresis (Step.slot ok) lt) found'⟩
+    (c.hysteresis (Step.slot ok) fuluQ pEarly lt) found'⟩
 
 /-- The potential claim holds at the start of the epoch of every state of the climb.
 
