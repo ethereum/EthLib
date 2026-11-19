@@ -1623,7 +1623,9 @@ private theorem credits_le_sources {g x y : ForkedBeaconState preset}
       simp only [netScan_snoc, creditScan_snoc_fst, selected, ↓reduceIte]
       exact ⟨previous, previousNet, previousSlot⟩
 
-/-- The credits of a switch step, whole, and of the runs around it are at most the sources. -/
+/-- The credits of a switch step, whole, and of the runs around it are at most the sources.
+
+The credits before the step are read net, and then gross. -/
 private theorem flip_credits_le_sources {g x s s' y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis config checks g)
     (pre : Run config checks x s) (step : Step config checks s s') (post : Run config checks s' y)
@@ -1631,11 +1633,16 @@ private theorem flip_credits_le_sources {g x s s' y : ForkedBeaconState preset}
     (electra : .pectra ≤ x.fork) (i high : ℕ) (inside : (getCurrentEpoch s.state).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)}
     (replayed : ((pre.snoc step).append post).balanceEvents high = .ok events) :
-    netScan i high pre + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+    (netScan i high pre + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
         pre).1 + stepCredit (fun _ => true) (fun _ => true) i step +
       (netScan i high post + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
         post).1) ≤ credC ((pre.snoc step).append post) high i +
-      whistC ((pre.snoc step).append post) high i + (events.map (syncCredit i)).sum := by
+      whistC ((pre.snoc step).append post) high i + (events.map (syncCredit i)).sum) ∧
+    (grossScan i high pre + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+        pre).1 + stepCredit (fun _ => true) (fun _ => true) i step +
+      (netScan i high post + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+        post).1) ≤ credC ((pre.snoc step).append post) high i +
+      whistC ((pre.snoc step).append post) high i + (events.map (syncCredit i)).sum) := by
   have s'Early : s'.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
   have sEarly : s.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le s'Early
@@ -1659,7 +1666,7 @@ private theorem flip_credits_le_sources {g x s s' y : ForkedBeaconState preset}
   simp only [inside, ↓reduceIte]
   unfold credC whistC at first last
   simp only [List.map_append, List.sum_append] at first last ⊢
-  omega
+  exact ⟨by omega, by omega⟩
 
 /-- The key's effective balance when its exit starts on a run, or 0.
 
@@ -5296,6 +5303,37 @@ private theorem exit_charged (h : Setting config checks g split fin pulled anc c
         exact inherited ⟨w, hw, far⟩) u foundU assignedC
     exact ⟨c, member, index⟩
 
+/-- A key of `K5` is unslashed in C's state. -/
+private theorem K5_unslashed {v : ValidatorIndex} (member : v ∈ K5 counted V) :
+    ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by
+  intro w found
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨-, flag⟩, -, -⟩ := inK5
+  simpa [slashedFlagAt, found] using flag
+
+/-- A key of `K5` is a validator of C's registry that was active before C's epoch and is not now.
+
+It is unslashed. -/
+private theorem K5_previous_only (h : Setting config checks g split fin pulled anc counted V)
+    {v : ValidatorIndex} (member : v ∈ K5 counted V) :
+    ∃ u, counted.validators.data[v.toNat]? = some u ∧
+      isActiveValidator u (getPreviousEpoch counted) = true ∧
+      isActiveValidator u (getCurrentEpoch counted) = false := by
+  have within := BeaconState.registryWithinLimit_of_lt h.early counted
+  have inK5 := Finset.mem_filter.mp member
+  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
+  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
+  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
+    notActive (by simpa [AC, activeVoters] using now)
+  rcases listed with now | before
+  · exact absurd now notCurrent
+  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  refine ⟨u, foundU, activeBefore, ?_⟩
+  cases now : isActiveValidator u (getCurrentEpoch counted)
+  · rfl
+  · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
+
 /-- A key of `K5` that R does not read as exiting has a departure charge on C's run. -/
 private theorem K5_charged (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
@@ -5304,25 +5342,14 @@ private theorem K5_charged (h : Setting config checks g split fin pulled anc cou
   obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  have within := BeaconState.registryWithinLimit_of_lt h.early counted
-  have inK5 := Finset.mem_filter.mp member
-  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
-  obtain ⟨⟨listed, unslashedC⟩, notActive, -⟩ := inK5
-  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
-    notActive (by simpa [AC, activeVoters] using now)
-  rcases listed with now | before
-  · exact absurd now notCurrent
-  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
-  have notNow : isActiveValidator u (getCurrentEpoch counted) = false := by
-    cases now : isActiveValidator u (getCurrentEpoch counted)
-    · rfl
-    · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := K5_previous_only h member
+  have unslashedC := K5_unslashed member u foundU
   have exitC := (previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩
   have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
   have assignedC : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
     notFar (UInt64.toNat_inj.mp (by rw [← exitC.2, far]))
-  refine exit_charged h tailC foundU assignedC (Nat.le_of_eq exitC.2) (by simpa [foundU] using
-    unslashedC) (fun w foundW sameExit => ?_) flag
+  refine exit_charged h tailC foundU assignedC (Nat.le_of_eq exitC.2) unslashedC
+    (fun w foundW sameExit => ?_) flag
   have gap := ((shared.append fromFin).append toPulled).exit_activation_gap h.genesis v.toNat w
     foundW (sameExit ▸ assignedC)
   have exitW : w.exitEpoch.toNat = (getCurrentEpoch counted).toNat := by
@@ -8474,22 +8501,34 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
   exact Nat.le_trans ceiling (max_le_max (Nat.le_refl _)
     (Nat.le_trans (Nat.min_le_left _ _) (Nat.le_trans mono split)))
 
-/-- A step that charges a key has it in the registry at its start. -/
-private theorem charge_inside {m n : ForkedBeaconState preset} (step : Step config checks m n)
+/-- A step that charges a key has it without an exit at its start and with one at its end. -/
+private theorem charge_exits {m n : ForkedBeaconState preset} (step : Step config checks m n)
     {v : ℕ} (charged : step.departureCharges.any (·.index == v) = true) :
-    v < m.state.validators.data.size := by
+    ∃ u w, m.state.validators.data[v]? = some u ∧ n.state.validators.data[v]? = some w ∧
+      u.exitEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
   obtain ⟨c, member, same⟩ := List.any_eq_true.mp charged
   obtain ⟨⟨u, j⟩, found, picked⟩ := List.mem_filterMap.mp member
-  have inside := (Array.getElem?_eq_some_iff.mp (by simpa only [List.mem_zipIdx_iff_getElem?,
-    Array.getElem?_toList] using found : m.state.validators.data[j]? = some u)).1
+  have found : m.state.validators.data[j]? = some u := by
+    simpa only [List.mem_zipIdx_iff_getElem?, Array.getElem?_toList] using found
   dsimp only at picked
   split at picked
   · cases picked
-  · split at picked
-    · cases Option.some.inj picked
+  · rename_i w located
+    split at picked
+    · rename_i assigned
+      cases Option.some.inj picked
+      simp only [Bool.and_eq_true, beq_iff_eq, bne_iff_ne] at assigned
       have : j = v := by simpa using same
-      exact this ▸ inside
+      subst this
+      exact ⟨u, w, found, located, assigned.1, assigned.2⟩
     · cases picked
+
+/-- A step that charges a key has it in the registry at its start. -/
+private theorem charge_inside {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    {v : ℕ} (charged : step.departureCharges.any (·.index == v) = true) :
+    v < m.state.validators.data.size :=
+  let ⟨_, _, found, _⟩ := charge_exits step charged
+  (Array.getElem?_eq_some_iff.mp found).1
 
 /-- The epoch rewards of a key over a run are at most the rate for each epoch of the run.
 
@@ -8597,15 +8636,6 @@ private theorem lowB_intro (config : Config) (state ancestor finalizedState : Be
       (pinTerms config state ancestor finalizedState).newKeyFloor) :
     (pinTerms config state ancestor finalizedState).lowB i = true :=
   decide_eq_true ⟨first, low⟩
-
-/-- A key of `K5` is unslashed in C's state. -/
-private theorem K5_unslashed {v : ValidatorIndex} (member : v ∈ K5 counted V) :
-    ∀ w, counted.validators.data[v.toNat]? = some w → w.slashed = false := by
-  intro w found
-  have inK5 := Finset.mem_filter.mp member
-  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
-  obtain ⟨⟨-, flag⟩, -, -⟩ := inK5
-  simpa [slashedFlagAt, found] using flag
 
 /-- A key whose exit starts on a run is activated at the start of the step that starts it.
 
@@ -16202,19 +16232,7 @@ private theorem K5_charge_site (h : Setting config checks g split fin pulled anc
   -- the key exits at C's epoch, so the charge counts
   obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
   have exitSame := life.exitEpoch set
-  have within := BeaconState.registryWithinLimit_of_lt h.early counted
-  have inK5 := Finset.mem_filter.mp member
-  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
-  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
-  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
-    notActive (by simpa [AC, activeVoters] using now)
-  rcases listed with now | before
-  · exact absurd now notCurrent
-  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
-  have notNow : isActiveValidator u (getCurrentEpoch counted) = false := by
-    cases now : isActiveValidator u (getCurrentEpoch counted)
-    · rfl
-    · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := K5_previous_only h member
   have exitC := ((previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩).2
   have same : u = wc := Option.some.inj (foundU.symm.trans foundC)
   have counts : c.epoch ≤ (getCurrentEpoch counted).toNat := by
@@ -16463,12 +16481,6 @@ private theorem charge_flip (h : Setting config checks g split fin pulled anc co
   rw [capA]
   omega
 
-/-- The net credits of a run are at most its gross credits. -/
-private theorem netScan_le_grossScan {g x y : ForkedBeaconState preset}
-    (shared : Run config checks g x) (genesis : Genesis config checks g)
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam) (electra : .pectra ≤ x.fork)
-    (i high : ℕ) : netScan i high tail ≤ grossScan i high tail := sorry
-
 /-- The exact rise fold: from a run that has the key's charge, its balance rises by the steps after.
 
 Each step adds its epoch rewards, which `riseScan` sums once the charge is seen.
@@ -16691,7 +16703,121 @@ private theorem charge_credits (h : Setting config checks g split fin pulled anc
         v.toNat highC r).1 + stepCredit (fun _ => true) (fun _ => true) v.toNat step +
       (netScan v.toNat highC post +
         (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post).1) ≤
-      propC tailC highC v.toNat + whistC tailC highC v.toNat + syncF eventsC v.toNat) := sorry
+      propC tailC highC v.toNat + whistC tailC highC v.toNat + syncF eventsC v.toNat) := by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  subst site
+  subst cut
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have cFork : c.fork = fork :=
+    fork_eq_of_run before (r.append ((Run.nil.snoc step).append post)) (Nat.le_refl _)
+  have aFork : a.fork = fork :=
+    fork_eq_of_run (before.append r) ((Run.nil.snoc step).append post) (Nat.le_refl _)
+  have bFork : b.fork = fork := fork_eq_of_run ((before.append r).snoc step) post (Nat.le_refl _)
+  have cEarly : c.fork < .glamsterdam := by rw [cFork]; exact h.early
+  have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
+  have bEarly : b.fork < .glamsterdam := by rw [bFork]; exact h.early
+  have cElectra : .pectra ≤ c.fork := by rw [cFork]; exact electra
+  have aElectra : .pectra ≤ a.fork := by rw [aFork]; exact electra
+  have aEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1 :=
+    Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
+      ((Run.nil.snoc step).append post).chainSteps)) endEpochC
+  obtain ⟨e0, h0⟩ := before.balanceEvents_ok cEarly highC
+  obtain ⟨er, hr⟩ := r.balanceEvents_ok aEarly highC
+  obtain ⟨es, hs⟩ := step.balanceEvents_ok bEarly
+  obtain ⟨ep, hp⟩ := post.balanceEvents_ok h.early highC
+  have one : (Run.nil.snoc step : Run config checks a b).balanceEvents highC = .ok es := by
+    simp [Run.balanceEvents, aEpoch, hs, pure, Except.pure]
+    rfl
+  have hR := DirectSafety.Apriori.Internal.balanceEvents_append _ post highC one hp
+  have hX := DirectSafety.Apriori.Internal.balanceEvents_append r _ highC hr hR
+  have eqX : r.append ((Run.nil.snoc step).append post) = (r.snoc step).append post :=
+    Run.append_assoc r (Run.nil.snoc step) post
+  have eqTail : ((before.append r).snoc step).append post =
+      before.append (r.append ((Run.nil.snoc step).append post)) := by
+    rw [Run.append_assoc, Run.append_assoc]
+    rfl
+  rw [eqTail, DirectSafety.Apriori.Internal.balanceEvents_append _ _ highC h0 hX] at replayedC
+  obtain rfl := Except.ok.inj replayedC
+  rw [eqTail]
+  -- the key has no deposit credit from the epoch's start to C
+  obtain ⟨u0, w, foundA, foundB, unset, set⟩ := charge_exits step charged
+  have inside : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA).1
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := K5_previous_only h member
+  have exitU := ((previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩).2
+  have kept := PinSplit4.kept_run (shared.append (fromFin.append ((before.append r).snoc step)))
+    h.genesis (by rw [bFork]; exact h.fulu) post h.early
+  obtain ⟨x, foundX, life⟩ := kept.life.validators v.toNat w foundB
+  obtain rfl : x = u := Option.some.inj (foundX.symm.trans foundU)
+  have exitX := congrArg UInt64.toNat (life.exitEpoch set)
+  obtain ⟨-, wdEq⟩ := kept.withdrawable v.toNat w x foundB foundX set
+  have wdSame : x.withdrawableEpoch = w.withdrawableEpoch := by
+    rcases wdEq with slashed | same
+    · exact absurd slashed (by simp [K5_unslashed member x foundU])
+    · exact same
+  have delayed := (shared.append (fromFin.append
+    (((before.append r).snoc step).append post))).exit_withdrawable_delay h.genesis v.toNat x
+    foundU (by rw [life.exitEpoch set]; exact set)
+  have held : (getCurrentEpoch counted).toNat < w.withdrawableEpoch.toNat := by
+    rw [← wdSame]
+    have := h.delay
+    omega
+  have exited : w.exitEpoch.toNat < 2 ^ 64 - 1 := by
+    have lt := w.exitEpoch.toNat_lt
+    by_contra no
+    exact set (UInt64.toNat_inj.mp (by
+      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega))
+  have depR : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC r).1 =
+      0 := by
+    refine Nat.le_zero.mp
+      ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
+        (by intro s; simp) r highC v hr).trans (Nat.le_of_eq ?_))
+    refine PinSplit.Run.exiting_deposit_credit_zero_of_exited r cElectra aEarly highC hr v.toNat ?_
+    intro u' w' ok contains es' replayedEs e inStep sourceEq
+    exfalso
+    obtain ⟨pre', post', -⟩ := Run.contains_split r (Step.slot ok) contains
+    have fuluU : .fusaka ≤ u'.fork := Nat.le_trans (by rw [cFork]; exact h.fulu)
+      (fork_le_of_chainSteps pre'.chainSteps)
+    have earlyW : w'.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps post'.chainSteps) aEarly
+    have strict :=
+      (PinSplit4.Step.deposit_input ok fuluU earlyW replayedEs e inStep sourceEq).2.2.2.2
+    have e1 := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre'.chainSteps)
+    have e2 := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post'.chainSteps)
+    have eq := congrArg UInt64.toNat same
+    omega
+  have depR' : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+      ((Run.nil.snoc step).append post)).1 = 0 := by
+    refine Nat.le_zero.mp
+      ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
+        (by intro s; simp) _ highC v hR).trans (Nat.le_of_eq ?_))
+    exact PinSplit.Run.charge_deposit_credit_zero (shared.append (fromFin.append (before.append r)))
+      h.genesis step post (by rw [aFork]; exact h.fulu) h.early highC aEpoch hR v.toNat inside w
+      foundB exited held
+  -- the credits of the run from the epoch's start, by source
+  have gross := credits_le_sources (shared.append (fromFin.append before)) h.genesis
+    (r.append ((Run.nil.snoc step).append post)) h.early cElectra v.toNat highC hX
+  have netR := (credits_le_sources (shared.append (fromFin.append (before.append r))) h.genesis
+    ((Run.nil.snoc step).append post) h.early aElectra v.toNat highC hR).2.1
+  have split := credC_split (r.append ((Run.nil.snoc step).append post)) highC v.toNat
+  have splitN := credN_split (r.append ((Run.nil.snoc step).append post)) highC v.toNat
+  have splitP := propC_split (r.append ((Run.nil.snoc step).append post)) highC v.toNat
+  have sync := syncF_eq (e0 ++ (er ++ (es ++ ep))) v.toNat
+  simp only [List.map_append, List.sum_append] at sync gross
+  unfold propC whistC
+  unfold propC at splitP
+  unfold whistC at gross
+  simp only [creditScan_append, grossScan_append, netScan_append] at gross netR split splitN splitP
+  simp only [creditScan_append, netScan_append] at depR' ⊢
+  refine ⟨by omega, fun notSlot => ?_⟩
+  have flip := (flip_credits_le_sources (shared.append (fromFin.append before)) h.genesis r step
+    post notSlot h.early cElectra v.toNat highC aEpoch (events := er ++ (es ++ ep))
+    (by rw [← eqX]; exact hX)).2
+  rw [← eqX] at flip
+  unfold whistC at flip
+  simp only [List.map_append, List.sum_append, creditScan_append] at flip
+  omega
 
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
@@ -16750,7 +16876,61 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
         whistC tailC highC v.toNat +
         (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat) := sorry
+        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat) := by
+  obtain ⟨shared⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := K5_previous_only h member
+  have exitU := ((previous_only_iff_exit counted u).mp ⟨activeBefore, notNow⟩).2
+  have notFar := getCurrentEpoch_ne_farFuture h.twoSlots counted
+  have assignedU : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far =>
+    notFar (UInt64.toNat_inj.mp (by rw [← exitU, far]))
+  -- every exit is a charge, so the key's exit was assigned before the split
+  have insideSplit : v.toNat < split.validators.data.size := by
+    by_contra out
+    obtain ⟨c, listed, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
+      (fun w hw => absurd (Array.getElem?_eq_some_iff.mp hw).1 out) u foundU assignedU
+    exact none ⟨c, listed, index⟩
+  obtain ⟨v0, found0⟩ : ∃ w, split.validators.data[v.toNat]? = some w :=
+    ⟨_, Array.getElem?_eq_getElem insideSplit⟩
+  have assigned0 : v0.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
+    obtain ⟨c, listed, index, -⟩ := PinSplit.Run.charge_of_exit tailC electra h.early v.toNat
+      (fun w hw => by
+        obtain rfl := Option.some.inj (found0.symm.trans hw)
+        exact far) u foundU assignedU
+    exact none ⟨c, listed, index⟩
+  obtain ⟨x, foundX, life⟩ := tailC.registryLifecycle.validators v.toNat v0 found0
+  obtain rfl : x = u := Option.some.inj (foundX.symm.trans foundU)
+  have exit0 := congrArg UInt64.toNat (life.exitEpoch assigned0)
+  have delayed := (shared.append fromFin).exit_withdrawable_delay h.genesis v.toNat v0 found0
+    assigned0
+  have held : (getCurrentEpoch counted).toNat < v0.withdrawableEpoch.toNat := by
+    have := h.delay
+    omega
+  have exited : v0.exitEpoch.toNat < 2 ^ 64 - 1 := by
+    have lt := v0.exitEpoch.toNat_lt
+    by_contra no
+    exact assigned0 (UInt64.toNat_inj.mp (by
+      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega))
+  have dep : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 =
+      0 := by
+    refine Nat.le_zero.mp
+      ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
+        (by intro s; simp) tailC highC v replayedC).trans (Nat.le_of_eq ?_))
+    exact PinSplit.Run.exiting_deposit_credit_zero (shared.append fromFin) h.genesis tailC h.fulu
+      h.early highC replayedC v.toNat v0 found0 exited held
+  have credEq : credC tailC highC v.toNat = propC tailC highC v.toNat := by
+    have split := credC_split tailC highC v.toNat
+    have splitN := credN_split tailC highC v.toNat
+    have splitP := propC_split tailC highC v.toNat
+    omega
+  have core := key_core h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
+    replayedC v.toNat (Nat.lt_of_lt_of_le insideSplit tail.registryLifecycle.size_le)
+    (by rw [UInt64.ofNat_toNat]; exact (Finset.mem_filter.mp member).1)
+  unfold keyCeiling at core
+  rw [credEq] at core
+  simp only [eC, eR]
+  omega
 
 /-- D-4 (+ D-8 exits): other keys previous-epoch-only in C.
 
@@ -16813,8 +16993,9 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
     subst cut
     have cFork : c.fork = fork := fork_eq_of_run before
       (r.append ((Run.nil.snoc step).append post)) (Nat.le_refl _)
-    have netLe := netScan_le_grossScan (shared.append (fromFin.append before)) h.genesis r
-      (aFork ▸ h.early) (cFork ▸ electra) v.toNat highC
+    obtain ⟨er, hr⟩ := r.balanceEvents_ok (aFork ▸ h.early) highC
+    have netLe := (credits_le_sources (shared.append (fromFin.append before)) h.genesis r
+      (aFork ▸ h.early) (cFork ▸ electra) v.toNat highC hr).2.1
     have start : min (actualBalanceAt a v.toNat) (PinSplit2.capAt a v.toNat) ≤
         effectiveAt a v.toNat + preset.upwardBand + (grossScan v.toNat highC r +
           (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r).1) := by
