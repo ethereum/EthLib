@@ -1855,72 +1855,30 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
         exact Nat.zero_le _
       · exact reward_sum_le _ _ _ _ P scaled none small
 
-/-- The balances at the two ends of a chain of events rise by at most the credits of the events. -/
-private theorem chain_credit_le (i : ℕ) :
-    ∀ (L : List (BalanceEvent preset)) (a b : ℕ),
-    L.IsChain (fun e e' => ∀ j, actualBalanceAt e.after j = actualBalanceAt e'.before j) →
-    (∀ e ∈ L.head?, actualBalanceAt e.before i = a) →
-    (∀ e ∈ L.getLast?, actualBalanceAt e.after i = b) →
-    (L = [] → b = a) → b ≤ a + (L.map (keyCredit i)).sum := by
-  intro L
-  induction L with
+/-- The balance at the end of a path of states rises by at most the increases between its states. -/
+private theorem balance_le_pathCredits (i : ℕ) :
+    ∀ (path : List (ForkedBeaconState preset)) (x y : ForkedBeaconState preset),
+    path.head? = some x → path.getLast? = some y →
+    actualBalanceAt y i ≤ actualBalanceAt x i + pathCredits i path := by
+  intro path
+  induction path with
   | nil =>
-    intro a b _ _ _ empty
-    have same := empty rfl
-    simp only [List.map_nil, List.sum_nil]
-    omega
-  | cons e rest ih =>
-    intro a b link head last _
-    have first : actualBalanceAt e.before i = a := head e (by simp)
+    intro x y hx
+    simp at hx
+  | cons a rest ih =>
+    intro x y hx hy
+    simp only [List.head?_cons, Option.some.injEq] at hx
+    subst hx
     cases rest with
     | nil =>
-      have final : actualBalanceAt e.after i = b := last e (by simp)
-      simp only [List.map_cons, List.map_nil, List.sum_cons, List.sum_nil, keyCredit]
-      omega
-    | cons e' rest' =>
-      have linked := List.isChain_cons_cons.mp link
-      have next := ih (actualBalanceAt e'.before i) b linked.2
-        (fun f hf => by
-          simp only [List.head?_cons, Option.mem_def, Option.some.injEq] at hf
-          subst hf
-          rfl)
-        (fun f hf => last f (by rw [List.getLast?_cons_cons]; exact hf))
-        (fun h => absurd h (List.cons_ne_nil _ _))
-      have joined := linked.1 i
-      have expand : ((e :: e' :: rest').map (keyCredit i)).sum =
-          keyCredit i e + ((e' :: rest').map (keyCredit i)).sum := by simp
-      have credit : keyCredit i e = actualBalanceAt e.after i - actualBalanceAt e.before i := rfl
-      rw [expand]
-      omega
-
-/-- A step raises the balance of a key by at most the credits of its events. -/
-private theorem step_balance_le_credits {x y : ForkedBeaconState preset}
-    (step : Step config checks x y) (early : y.fork < .glamsterdam)
-    {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events) (i : ℕ) :
-    actualBalanceAt y i ≤ actualBalanceAt x i + (events.map (keyCredit i)).sum := by
-  obtain ⟨p, first, second, -, split, firstEmpty, head1, last1, link1, secondEmpty, head2, last2,
-    link2, -⟩ := step.balanceChain early replayed
-  subst split
-  have one := chain_credit_le i first (actualBalanceAt x i) (actualBalanceAt p i) link1
-    (fun e he => head1 e he i) (fun e he => last1 e he i) (fun h => firstEmpty h i)
-  have two := chain_credit_le i second (actualBalanceAt p i) (actualBalanceAt y i) link2
-    (fun e he => head2 e he i) (fun e he => last2 e he i) (fun h => secondEmpty h i)
-  rw [List.map_append, List.sum_append]
-  omega
-
-/-- A sum over a list splits over a test and its complement. -/
-private theorem sum_filter_split {α : Type} (L : List α) (p : α → Bool) (f : α → ℕ) :
-    (L.map f).sum = ((L.filter p).map f).sum + ((L.filter fun a => !p a).map f).sum := by
-  induction L with
-  | nil => rfl
-  | cons a rest ih =>
-    by_cases hp : p a = true
-    · simp only [List.filter_cons, hp, ↓reduceIte, List.map_cons, List.sum_cons, Bool.not_true,
-        Bool.false_eq_true]
-      omega
-    · have hp' : p a = false := by simpa using hp
-      simp only [List.filter_cons, hp', Bool.false_eq_true, ↓reduceIte, List.map_cons,
-        List.sum_cons, Bool.not_false]
+      simp only [List.getLast?_singleton, Option.some.injEq] at hy
+      subst hy
+      simp [pathCredits]
+    | cons b rest' =>
+      have last : (b :: rest').getLast? = some y := by
+        rwa [List.getLast?_cons_cons] at hy
+      have next := ih b y (by simp) last
+      simp only [pathCredits]
       omega
 
 /-- A step raises the balance of a key by at most its epoch rewards and its other credits. -/
@@ -1929,7 +1887,18 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
     actualBalanceAt n i ≤ actualBalanceAt m i + epochRewards i step +
       stepCredit (fun _ => true) (fun s => decide (s ≠ .rewards)) i step := by
   obtain ⟨events, ok⟩ := step.balanceEvents_ok early
-  have base := step_balance_le_credits step early ok i
+  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
+    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+  have run : (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
+    simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
+      (getCurrentEpoch n.state).toNat + 1 by omega, ok]
+  have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
+    (Nat.le_succ _) run false i
+  have ends := Run.balancePath_ends (Run.nil.snoc step)
+  have rise := balance_le_pathCredits i _ m n ends.1 ends.2
+  simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
+  have base : actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum :=
+    le_trans rise (Nat.add_le_add_left cover _)
   cases step with
   | block engine signed due okb =>
     simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some,
@@ -1937,11 +1906,9 @@ private theorem step_balance_le {m n : ForkedBeaconState preset} (step : Step co
     omega
   | slot oks =>
     simp only [epochRewards, stepCredit, ok, Except.toOption, Option.getD_some] at base ⊢
-    have split := sum_filter_split events (fun e => decide (e.source = .rewards)) (keyCredit i)
-    have same : (events.filter fun e => !decide (e.source = .rewards)) =
-        events.filter fun e => decide (e.source ≠ .rewards) := by
-      congr 1
-    rw [same] at split
+    have split := List.sum_map_filter_add_sum_map_filter_not
+      (fun e : BalanceEvent preset => e.source = .rewards) (keyCredit i) events
+    simp only [ne_eq] at split ⊢
     omega
 
 /-- The bound on a key's balance along a run: its start, the epoch rewards, and its other credits.
