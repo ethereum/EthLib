@@ -1021,7 +1021,7 @@ private theorem sum_credits_split (events : List (BalanceEvent preset))
   by_cases hr : r e.source = true
   · simp only [hr, ↓reduceIte]
     exact each e member hr
-  · simp only [hr, ↓reduceIte]
+  · simp only [hr]
     exact Nat.zero_le _
 
 /-- A bound for each event of a list gives the bound for the sum of all its credits. -/
@@ -1041,7 +1041,7 @@ private theorem sum_filter_none (events : List (BalanceEvent preset))
     ((events.filter fun _ => false).map f).sum = 0 := by
   induction events with
   | nil => rfl
-  | cons e rest ih => simp [List.filter_cons]
+  | cons e rest ih => simp
 
 /-- The events of a step are within their credit limits. -/
 private theorem step_events_bounded {g m n : ForkedBeaconState preset}
