@@ -1103,23 +1103,18 @@ public theorem _root_.EthLib.Consensus.Store.ForwardReachableWith.registered_of_
       (isActiveAt_eq_true_iff.mpr ⟨validator, registered, active⟩)
     exact (Array.getElem?_eq_some_iff.mp inside).1
   · -- A source block before the epoch's start is the checkpoint block itself.
-    obtain ⟨-, checkpointBlock, -, checkpointFound, -, -⟩ :=
-      Store.isAncestor_of_getCheckpointBlock sourceWalk
-    obtain ⟨boundaryBase, boundaryBaseFound, -, -⟩ :=
-      reached.reachable.blockStatesFromParents checkpointFound
     have rootEq : sourceRoot = checkpoint.root := by
       simpa [Store.getCheckpointBlock, startOk, Except.mapError,
         Store.getAncestor_of_le (node := ⟨sourceRoot, .pending⟩) sourceBlockFound
           (UInt64.le_of_lt (UInt64.not_le.mp atBlock)),
         bind, Except.bind, pure, Except.pure] using sourceWalk
-    rw [rootEq, boundaryBaseFound, Option.some.injEq] at sourceFound
-    subst sourceFound
+    rw [rootEq] at sourceFound
     obtain ⟨boundary, boundaryRun, receiverRun⟩ := relation_of_checkpoint_lookahead
       RunKept RunKept.refl (fun one two => one.trans two)
       (fun ok => runKept_stateTransition ok)
       (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
       (fun ok => runKept_processSlots ok)
-      anchorSlot reached walk found startOk bound boundaryBaseFound baseFound advanced
+      anchorSlot reached walk found startOk bound sourceFound baseFound advanced
     exact Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp registered).1
       ((runKept_lookahead boundaryRun).grows.trans receiverRun.grows)
 
