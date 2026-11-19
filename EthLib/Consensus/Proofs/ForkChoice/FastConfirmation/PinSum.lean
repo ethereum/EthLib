@@ -494,7 +494,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (effective i + rise i)
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let otherCredits := 3 * (2 * ((∑ i ∈ positions, ebUp i) +
+  let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
         depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
         consolidationsX + depth * proposerCredit +
         depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
