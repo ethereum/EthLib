@@ -9002,6 +9002,21 @@ private theorem dueList_sum_mono (X : BeaconState preset fork) (electra : .pectr
     exact ⟨hb.1, by omega⟩
   exact (sub.map f).sum_le_sum fun _ _ => Nat.zero_le _
 
+/-- A later horizon keeps at least the entries of an earlier one. -/
+private theorem dueList_length_mono (X : BeaconState preset fork) (electra : .pectra ≤ fork)
+    {high high' : ℕ} (later : high ≤ high') (T : Finset ValidatorIndex) :
+    (dueList X electra high T).length ≤ (dueList X electra high' T).length := by
+  simpa using dueList_sum_mono X electra later T fun _ => 1
+
+/-- More targets keep at least the entries of fewer. -/
+private theorem dueList_length_subset (X : BeaconState preset fork) (electra : .pectra ≤ fork)
+    (high : ℕ) {A B : Finset ValidatorIndex} (sub : A ⊆ B) :
+    (dueList X electra high A).length ≤ (dueList X electra high B).length := by
+  unfold dueList
+  refine (((List.monotone_filter_right _ fun c hc => ?_).filterMap _).filter _).length_le
+  simp only [decide_eq_true_eq] at hc ⊢
+  exact sub hc
+
 /-- The due entries of any targets have at most the stake of all entries read at that horizon. -/
 private theorem dueList_sum_le_all (X : BeaconState preset fork) (electra : .pectra ≤ fork)
     (high : ℕ) (T : Finset ValidatorIndex) (f : Validator → ℕ) :
@@ -9658,6 +9673,7 @@ private theorem bud_consolidations_base
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -9671,7 +9687,12 @@ private theorem bud_consolidations_base
       wShare preset fork (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat) +
       (∑ v ∈ SC pulled counted split, bandX fin highC v.toNat) +
       wShare preset fork (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) +
-      (∑ v ∈ CS pulled counted, bandX fin highC v.toNat)) +
+      (∑ v ∈ CS pulled counted, bandX fin highC v.toNat) +
+      wShare preset fork (∑ v ∈ SC pulled counted split with
+        (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true,
+          consAmt eventsF v.toNat) +
+      (∑ v ∈ SC pulled counted split with
+        (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, bandX fin high v.toNat)) +
       preset.upwardBand * (dueAt fin highC (K4 pulled counted V) +
         dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
         3 * dueAt fin high V) ≤
@@ -9691,9 +9712,17 @@ private theorem bud_consolidations_base
   have withinR : high + 2 ≤ (getCurrentEpoch fin).toNat +
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by omega
   obtain ⟨eventsFin, replayedFin⟩ := fromFin.balanceEvents_ok early highC
-  obtain ⟨eventsFinR, replayedFinR⟩ := fromFin.balanceEvents_ok early high
+  have sameF : eventsFin = eventsF := by
+    have splitC := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tailC.chainSteps)
+    simp only at splitC
+    have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le fromFin
+      (high := highC) (localHigh := high)
+      (by simp only; omega) (by simp only; omega)
+    rw [same, replayedF] at replayedFin
+    exact (Except.ok.inj replayedFin).symm
+  subst sameF
   have wholeC := Apriori.Internal.balanceEvents_append fromFin tailC highC replayedFin replayedC
-  have wholeR := Apriori.Internal.balanceEvents_append fromFin tail high replayedFinR replayed
+  have wholeR := Apriori.Internal.balanceEvents_append fromFin tail high replayedF replayed
   obtain ⟨Kall, hKall⟩ : ∃ K : Finset ValidatorIndex,
       K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
         CS pulled counted := ⟨_, rfl⟩
@@ -9705,14 +9734,26 @@ private theorem bud_consolidations_base
     endEpoch withinR delay (V.image UInt64.toNat)
   have injective : Function.Injective UInt64.toNat := fun _ _ same => UInt64.toNat_inj.mp same
   simp only [injective.mem_finset_image] at boundC boundR
-  have amountC : (∑ v ∈ Kall, consAmt eventsC v.toNat) ≤
+  -- The shared segment's amounts of the keys of `SC` that exited before the finalized epoch.
+  set S' := (SC pulled counted split).filter fun v =>
+    (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true with hS'
+  have subS : S' ⊆ Kall := fun v hv => by
+    rw [hKall]
+    exact Finset.mem_union_left _ (Finset.mem_union_right _ (Finset.mem_filter.mp hv).1)
+  have amountC : (∑ v ∈ Kall, consAmt eventsC v.toNat) + (∑ v ∈ S', consAmt eventsFin v.toNat) ≤
       ((dueList fin electra highC Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
-    rw [← Finset.sum_image (f := fun i => consAmt eventsC i)
-      (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
-    refine le_trans (Finset.sum_le_sum fun i _ => ?_) boundC
+    have into : ∑ v ∈ S', consAmt eventsFin v.toNat =
+        ∑ v ∈ Kall, if v ∈ S' then consAmt eventsFin v.toNat else 0 := by
+      rw [Finset.sum_ite_mem, Finset.inter_eq_right.mpr subS]
+    rw [into, ← Finset.sum_add_distrib]
+    calc _ = ∑ i ∈ Kall.image UInt64.toNat, (consAmt eventsC i +
+          if i ∈ S'.image UInt64.toNat then consAmt eventsFin i else 0) := by
+          rw [Finset.sum_image (fun _ _ _ _ e => UInt64.toNat_inj.mp e)]
+          simp [injective.mem_finset_image]
+      _ ≤ _ := le_trans (Finset.sum_le_sum fun i _ => ?_) boundC
     simp only [consAmt, List.filter_append, List.map_append, List.sum_append]
-    exact Nat.le_add_left _ _
+    split_ifs <;> omega
   have amountR : (∑ v ∈ V, consAmt events v.toNat) ≤
       ((dueList fin electra high V).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
@@ -9749,15 +9790,14 @@ private theorem bud_consolidations_base
         (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) := by
     rw [hKall, Finset.sum_union dC, Finset.sum_union dS, Finset.sum_union d456,
       Finset.sum_union d45]
-  have splitEntries : (dueList fin electra highC Kall).length =
-      (dueList fin electra highC (K4 pulled counted V)).length +
-        (dueList fin electra highC (K5 counted V)).length +
-        (dueList fin electra highC (K6 pulled counted)).length +
-        (dueList fin electra highC (SC pulled counted split)).length +
-        (dueList fin electra highC (CS pulled counted)).length := by
-    rw [hKall, dueList_length_union fin electra highC dC,
-      dueList_length_union fin electra highC dS,
-      dueList_length_union fin electra highC d456, dueList_length_union fin electra highC d45]
+  have splitEntries (H : ℕ) : (dueList fin electra H Kall).length =
+      (dueList fin electra H (K4 pulled counted V)).length +
+        (dueList fin electra H (K5 counted V)).length +
+        (dueList fin electra H (K6 pulled counted)).length +
+        (dueList fin electra H (SC pulled counted split)).length +
+        (dueList fin electra H (CS pulled counted)).length := by
+    rw [hKall, dueList_length_union fin electra H dC, dueList_length_union fin electra H dS,
+      dueList_length_union fin electra H d456, dueList_length_union fin electra H d45]
   -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
   have floorOf (l : List Validator) : preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
       (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
@@ -9769,10 +9809,10 @@ private theorem bud_consolidations_base
         exact UInt64.le_iff_toNat_le.mp
           (Internal.minimum_cap h.caps.activation h.caps.compounding v))
     simpa [smul_eq_mul, Nat.mul_comm] using this
-  have floorC := floorOf (dueList fin electra highC Kall)
+  have floorC := floorOf (dueList fin electra (getCurrentEpoch pulled).toNat Kall)
   have floorR := floorOf (dueList fin electra high V)
   -- Both runs charge entries of X's queue, at most those that `consolidationsX` counts.
-  have total : ((dueList fin electra highC Kall).map fun v =>
+  have total : ((dueList fin electra (getCurrentEpoch pulled).toNat Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum +
       ((dueList fin electra high V).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum ≤
@@ -9786,8 +9826,6 @@ private theorem bud_consolidations_base
       unfold pinTerms
       dsimp only
       simp only [shallow, electra, ↓reduceIte, ↓reduceDIte]
-    have laterC := dueList_sum_mono fin electra highLe Kall
-      (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
     have laterR := dueList_sum_mono fin electra highLeR V
       (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
     have union := dueList_sum_union fin electra (getCurrentEpoch pulled).toNat dKV
@@ -9796,14 +9834,35 @@ private theorem bud_consolidations_base
       (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
     rw [hcX]
     omega
+  have laterC := dueList_sum_mono fin electra highLe Kall
+    (fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+  have bandLen : (dueList fin electra highC (SC pulled counted split)).length +
+      (dueList fin electra highC (CS pulled counted)).length +
+      (dueList fin electra highC (K4 pulled counted V)).length +
+      (dueList fin electra highC (K6 pulled counted)).length +
+      3 * (dueList fin electra highC (K5 counted V)).length +
+      (dueList fin electra high S').length ≤
+        3 * (dueList fin electra (getCurrentEpoch pulled).toNat Kall).length := by
+    have union := splitEntries (getCurrentEpoch pulled).toNat
+    have m4 := dueList_length_mono fin electra highLe (K4 pulled counted V)
+    have m5 := dueList_length_mono fin electra highLe (K5 counted V)
+    have m6 := dueList_length_mono fin electra highLe (K6 pulled counted)
+    have mS := dueList_length_mono fin electra highLe (SC pulled counted split)
+    have mC := dueList_length_mono fin electra highLe (CS pulled counted)
+    have mF := (dueList_length_mono fin electra highLeR S').trans
+      (dueList_length_subset fin electra (getCurrentEpoch pulled).toNat
+        (Finset.filter_subset _ _ : S' ⊆ SC pulled counted split))
+    omega
+  have shareF := wShare_le (fork := fork) h.facts (∑ v ∈ S', consAmt eventsFin v.toNat)
   have shareS := wShare_le (fork := fork) h.facts
     (∑ v ∈ SC pulled counted split, consAmt eventsC v.toNat)
   have shareC := wShare_le (fork := fork) h.facts
     (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat)
   rw [bandX_sum fin electra highC (SC pulled counted split),
-    bandX_sum fin electra highC (CS pulled counted)]
+    bandX_sum fin electra highC (CS pulled counted), bandX_sum fin electra high S']
   rw [dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra highC,
-    dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra high]
+    dueAt_eq fin electra highC, dueAt_eq fin electra highC, dueAt_eq fin electra high,
+    dueAt_eq fin electra high]
   rw [Nat.le_div_iff_mul_le (by norm_num)]
   generalize (dueList fin electra highC (K4 pulled counted V)).length = d4 at *
   generalize (dueList fin electra highC (K5 counted V)).length = d5 at *
@@ -9814,19 +9873,25 @@ private theorem bud_consolidations_base
   generalize wShare preset fork aS = wS at *
   generalize (∑ v ∈ CS pulled counted, consAmt eventsC v.toNat) = aC at *
   generalize wShare preset fork aC = wC at *
-  generalize (dueList fin electra highC Kall).length = dK at *
+  generalize (dueList fin electra high S').length = dF at *
+  generalize (∑ v ∈ S', consAmt eventsFin v.toNat) = aF at *
+  generalize wShare preset fork aF = wF at *
+  generalize (dueList fin electra (getCurrentEpoch pulled).toNat Kall).length = dK at *
   generalize (dueList fin electra high V).length = dV at *
   generalize ((dueList fin electra highC Kall).map fun v =>
+    (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PK' at *
+  generalize ((dueList fin electra (getCurrentEpoch pulled).toNat Kall).map fun v =>
     (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PK at *
   generalize ((dueList fin electra high V).map fun v =>
     (withdrawalMaxEffectiveBalance preset fork v).toNat).sum = PV at *
   generalize (pinTerms config pulled anc fin).consolidationsX = cX at *
   have bandsK : preset.upwardBand * dS' + preset.upwardBand * dC' +
-      preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (preset.upwardBand * (dK + dV)) := by
-    have : dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV) ≤ 3 * (dK + dV) := by omega
+      preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) + preset.upwardBand * dF ≤
+        3 * (preset.upwardBand * (dK + dV)) := by
+    have : dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV) + dF ≤ 3 * (dK + dV) := by omega
     calc preset.upwardBand * dS' + preset.upwardBand * dC' +
-          preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV)
-        = preset.upwardBand * (dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV)) := by ring
+          preset.upwardBand * (d4 + d6 + 3 * d5 + 3 * dV) + preset.upwardBand * dF
+        = preset.upwardBand * (dS' + dC' + (d4 + d6 + 3 * d5 + 3 * dV) + dF) := by ring
       _ ≤ preset.upwardBand * (3 * (dK + dV)) := Nat.mul_le_mul_left _ this
       _ = 3 * (preset.upwardBand * (dK + dV)) := by ring
   have bandsM : 10 * (preset.upwardBand * (dK + dV)) ≤
@@ -9870,9 +9935,8 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
         dueAt fin highC (K6 pulled counted) + 3 * dueAt fin highC (K5 counted V) +
         3 * dueAt fin high V) ≤
         (33 * (pinTerms config pulled anc fin).consolidationsX + 9) / 10 := by
-  have := bud_consolidations_base h fromFin tail high endEpoch replayed highLeR tailC highC
+  exact bud_consolidations_base h fromFin tail high endEpoch replayed replayedF highLeR tailC highC
     endEpochC replayedC highLe band
-  sorry
 
 /-- L10: the keys whose exit started on R's branch after the split, in `K6`. -/
 theorem bud_exitedR :
