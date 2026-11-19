@@ -9182,36 +9182,6 @@ private theorem credit_slots_le (h : Setting config checks g split fin pulled an
       (Nat.add_le_add exitingLe chargedLe))
   omega
 
-/-- The consolidation credits that a scan reads from a run are at most the sum over its events. -/
-private theorem scan_cons_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (high v : ℕ) {events : List (BalanceEvent preset)}
-    (replayed : tail.balanceEvents high = .ok events) :
-    (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v high tail).1 ≤
-      consAmt events v := by
-  induction tail generalizing events with
-  | nil => simp [creditScan_nil_fst]
-  | @snoc middle last pre step ih =>
-    simp only [Run.balanceEvents, bind_ok_iff] at replayed
-    obtain ⟨prior, priorOk, rest⟩ := replayed
-    have previous := ih priorOk
-    by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
-    · simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
-      obtain ⟨added, addedOk, rfl⟩ := rest
-      have one : stepCredit (fun _ => false) (fun s => decide (s = .consolidations)) v step ≤
-          consAmt added v := by
-        cases step with
-        | block engine signed due ok => simp [stepCredit]
-        | slot ok => simp [stepCredit, addedOk, consAmt, Except.toOption, Option.getD_some]
-      rw [creditScan_snoc_fst]
-      simp only [selected, ↓reduceIte, consAmt, List.filter_append, List.map_append,
-        List.sum_append] at one previous ⊢
-      omega
-    · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
-      subst rest
-      rw [creditScan_snoc_fst]
-      simp only [selected, ↓reduceIte]
-      exact previous
-
 /-- The events of the sources of consolidations and deposits are at most those of each source. -/
 private theorem sum_filter_cons_dep_le (events : List (BalanceEvent preset))
     (f : BalanceEvent preset → ℕ) :
@@ -9383,7 +9353,18 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
         0 := by
     simp only [creditedKey, decide_eq_true_eq, not_lt, Nat.le_zero] at notFlag
     omega
-  have consScan := scan_cons_le tailC highC v.toNat replayedC
+  have consScan : (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat
+      highC tailC).1 ≤ consAmt eventsC v.toNat := by
+    have scan := creditScan_sum_le {v} (fun _ => false) (fun s => decide (s = .consolidations))
+      highC (fun e => keyCredit v.toNat e) tailC replayedC (fun e _ _ => by simp)
+    have only : (eventsC.map fun e => if (false = true ∨ decide (e.source = .consolidations) = true)
+        then keyCredit v.toNat e else 0).sum = consAmt eventsC v.toNat := by
+      simp only [Bool.false_eq_true, false_or, decide_eq_true_eq, consAmt]
+      rw [List.sum_map_ite (fun e : BalanceEvent preset => e.source = .consolidations)
+        (keyCredit v.toNat) (fun _ => 0)]
+      simp
+    rw [Finset.sum_singleton] at scan
+    exact le_of_le_of_eq scan only
   rw [consZero] at consScan
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
