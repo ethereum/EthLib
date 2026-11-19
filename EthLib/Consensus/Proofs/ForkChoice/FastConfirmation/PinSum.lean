@@ -603,7 +603,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         -- The units of the keys whose only flows are seat debits, and the leak that those induce.
         creditUnits + syncLeak +
         -- The units and the leak of the keys that only a consolidation or a slashing on R moves.
-        unitGain * (consolidationsXCount + slashedR) +
+        unitGain * (consolidationsXCount + 2 * slashedR) +
         slashedR * (depthFin * (2 * perIncrement +
           inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
             (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1))) /
