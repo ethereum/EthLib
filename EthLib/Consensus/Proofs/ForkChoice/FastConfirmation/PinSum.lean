@@ -9878,6 +9878,17 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
   exact (fun (B X S q a dn : ℕ) (le : dn ≤ X) (b : B - (X - dn) - S ≤ a + q + dn) =>
     show B - X - S ≤ a + q by omega) _ _ _ _ _ _ downLe bound
 
+/-- The drop of `lowEB` and the fall `X` of the margin leave the rounded floor above `lowEB`.
+
+The drop has the increment where the fall has the partials due.
+
+A key whose bound is zero needs no floor. -/
+private theorem slash_low_arith (R pd dropV X base0 m sy G r inc A P dn : ℕ)
+    (hX : X = A + P + dn + pd) (hD : dropV = A + P + dn + inc)
+    (hR : 0 < R → R + pd ≤ base0) (hG : base0 - X - sy - m = G) (hr : r < inc) :
+    R - dropV - m - sy ≤ G - r := by
+  omega
+
 /-- The effective balance of a key at C is above its `lowEB`, less the slash's share.
 
 The sync debits of the key are added to it.
@@ -9906,8 +9917,106 @@ private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc 
           (max (balanceAt fin i.toNat) ((pinTerms config pulled anc fin).base0 i.toNat) +
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat) /
         (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ≤
-      balanceAt counted i.toNat + (events.map (syncDebit i.toNat)).sum :=
-  sorry
+      balanceAt counted i.toNat + (events.map (syncDebit i.toNat)).sum := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  have incPos := h.bands.1
+  obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin incPos i.toNat
+  have capped : effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
+      (withdrawalMaxEffectiveBalance preset fork val).toNat :=
+    DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax shared h.genesis h.caps h.early
+      initial
+  have finEq : balanceAt fin i.toNat =
+      effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat := rfl
+  have base0Eq : (pinTerms config pulled anc fin).base0 i.toNat =
+      min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    rfl
+  have dropEq : (pinTerms config pulled anc fin).drop i.toNat =
+      ((pinTerms config pulled anc fin).leakAt
+          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          ((pinTerms config pulled anc fin).leakAt
+            ((pinTerms config pulled anc fin).base0 i.toNat +
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    rfl
+  obtain ⟨X, hX⟩ : ∃ X, X = ((pinTerms config pulled anc fin).leakAt
+          (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
+            actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          ((pinTerms config pulled anc fin).leakAt
+            ((pinTerms config pulled anc fin).base0 i.toNat +
+              preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
+        preset.downwardBand + (pinTerms config pulled anc fin).partialsDue i.toNat := ⟨_, rfl⟩
+  obtain ⟨Xs, hXsEq⟩ : ∃ Xs, Xs = max ((pinTerms config pulled anc fin).ebUp i.toNat)
+      (max (balanceAt fin i.toNat) ((pinTerms config pulled anc fin).base0 i.toNat) +
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := ⟨_, rfl⟩
+  obtain ⟨slack, start, pass, arithS⟩ := floorC_margin_slash h fromFin tailC replayed i val initial
+    ρn ρd positive leaky above ((pinTerms config pulled anc fin).base0 i.toNat) X
+    ((pinTerms config pulled anc fin).base0 i.toNat - X) Xs
+    (by rw [hXsEq]; exact Nat.le_max_right _ _) base0Eq rfl (by omega)
+  have endpoint := cfloor_endpoint_slash h counted (fromFin.append tailC) h.near replayed i val
+    initial unslashed retained slack ρn ρd
+    ((pinTerms config pulled anc fin).base0 i.toNat - X -
+      (events.map (syncDebit i.toNat)).sum)
+    (Xs / (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat) start pass
+    arithS (fromFin.append tailC) (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) rfl
+  have actEq : ((fin.balances.data[i.toNat]?).map (·.toNat)).getD 0 =
+      actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat := rfl
+  rw [lowEB_unfold, actEq]
+  have effC : balanceAt counted i.toNat =
+      effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) i.toNat := rfl
+  rw [effC, ← hXsEq]
+  obtain ⟨m1, hm1⟩ : ∃ m1, m1 = min (min (balanceAt pulled i.toNat) (balanceAt fin i.toNat))
+      (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat) := ⟨_, rfl⟩
+  rw [← hm1]
+  have m1Eff : m1 ≤ balanceAt fin i.toNat := by
+    rw [hm1]
+    exact Nat.le_trans (Nat.min_le_left _ _) (Nat.min_le_right _ _)
+  have m1Act : m1 ≤ actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat := by
+    rw [hm1]
+    exact Nat.min_le_right _ _
+  obtain ⟨R, hR⟩ : ∃ R, R = min (m1 - (pinTerms config pulled anc fin).partialsDue i.toNat)
+      preset.MIN_ACTIVATION_BALANCE.toNat := ⟨_, rfl⟩
+  rw [← hR]
+  have hRle : R ≤ m1 - (pinTerms config pulled anc fin).partialsDue i.toNat := by
+    rw [hR]
+    exact Nat.min_le_left _ _
+  have capped' : balanceAt fin i.toNat ≤ (withdrawalMaxEffectiveBalance preset fork val).toNat := by
+    rw [finEq]
+    exact capped
+  have baseLe : 0 < R → R + (pinTerms config pulled anc fin).partialsDue i.toNat ≤
+      (pinTerms config pulled anc fin).base0 i.toNat := fun positive => by
+    rw [base0Eq]
+    exact Nat.le_min.mpr ⟨by omega, by omega⟩
+  have underM : R ≤ m1 := Nat.le_trans hRle (Nat.sub_le _ _)
+  generalize hG : (pinTerms config pulled anc fin).base0 i.toNat - X -
+    (events.map (syncDebit i.toNat)).sum - Xs /
+      (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat = G at endpoint
+  have modLt := Nat.mod_lt G incPos
+  generalize G % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = r at endpoint modLt
+  rw [← finEq] at endpoint
+  have bounded : R - (pinTerms config pulled anc fin).drop i.toNat -
+      Xs / (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+        (events.map (syncDebit i.toNat)).sum ≤ G - r :=
+    slash_low_arith _ _ _ _ _ _ _ _ _ _ _ _ _ hX dropEq baseLe hG modLt
+  have atMin : R - (pinTerms config pulled anc fin).drop i.toNat -
+      Xs / (EthLib.Consensus.parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
+        (events.map (syncDebit i.toNat)).sum ≤
+      min (balanceAt fin i.toNat) (min (withdrawalMaxEffectiveBalance preset fork val).toNat
+        (G - r)) :=
+    Nat.le_min.mpr ⟨Nat.le_trans (Nat.sub_le _ _) (Nat.le_trans (Nat.sub_le _ _)
+      (Nat.le_trans (Nat.sub_le _ _) (Nat.le_trans underM m1Eff))),
+      Nat.le_min.mpr ⟨Nat.le_trans (Nat.sub_le _ _) (Nat.le_trans (Nat.sub_le _ _)
+        (Nat.le_trans (Nat.sub_le _ _) (Nat.le_trans underM (Nat.le_trans m1Eff capped')))),
+        bounded⟩⟩
+  omega
 
 /-- Two different whole numbers of increments differ by at least an increment. -/
 private theorem aligned_gap {E M inc : ℕ} (e : E % inc = 0) (m : M % inc = 0) (lt : M < E) :
