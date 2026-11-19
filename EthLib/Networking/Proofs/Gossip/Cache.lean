@@ -182,13 +182,13 @@ theorem expire_insert (cache : SeenCache) {t now ttlMs : Nat} (id : MessageId)
 /-- The bytes of a message ID read back as that ID. -/
 theorem ofBytes?_toBytes (id : MessageId) : MessageId.ofBytes? id.toBytes = some id := by
   have h : id.toBytes.size = 20 := id.size_toArray
-  simp only [MessageId.ofBytes?, h, ↓reduceDIte]
+  simp only [MessageId.ofBytes?, Base.exactBytes?, h, ↓reduceDIte]
   rfl
 
 /-- Bytes that read as a message ID are the bytes of that ID. -/
 theorem toBytes_of_ofBytes? {bytes : ByteArray} {id : MessageId}
     (h : MessageId.ofBytes? bytes = some id) : id.toBytes = bytes := by
-  unfold MessageId.ofBytes? at h
+  unfold MessageId.ofBytes? Base.exactBytes? at h
   split at h
   · cases h
     rfl

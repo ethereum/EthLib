@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Networking.Gossip.Rpc
 
 /-!
@@ -43,7 +44,7 @@ def MessageId.toBytes (id : MessageId) : ByteArray :=
 
 /-- The message ID of some bytes, if there are exactly 20 of them. -/
 def MessageId.ofBytes? (bytes : ByteArray) : Option MessageId :=
-  if h : bytes.size = 20 then some ⟨bytes.data, h⟩ else none
+  Base.exactBytes? 20 bytes
 
 /-- The message cache: its history windows, the newest first, each with its messages and IDs. -/
 structure MessageCache where

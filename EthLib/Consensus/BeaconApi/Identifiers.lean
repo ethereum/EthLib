@@ -82,7 +82,7 @@ def parseUInt64 (text : String) : Option UInt64 :=
 The digits may be in either case. -/
 def parseHexBytes (count : Nat) (text : String) : Option (Vector UInt8 count) :=
   match ofHex text with
-  | .ok data => if size : data.size = count then some ⟨data, size⟩ else none
+  | .ok data => Base.exactBytes? count ⟨data⟩
   | .error _ => none
 
 /-- The error of a text that names nothing, with code 400. -/
