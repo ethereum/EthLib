@@ -193,7 +193,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let consolidationCarry := max (if electra : .pectra ≤ fork then
       (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
   let exitCarry := max capMax depositChurn
-  let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
+  let depthFin := max depth (epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat)
   let depositCarry := if electra : .pectra ≤ fork then
       (finalizedState.depositBalanceToConsume electra).toNat else 0
   let queueDep := 3 * (depthFin * depositChurn + depositCarry)
@@ -256,24 +256,30 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let base0 (i : ℕ) := min (actualFin i) (capFin i)
   let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
   let floorC (i : ℕ) :=
-    let low := base0 i - (carry i + depthFin * (leakAt (base0 i + inc) i + gainRate i + 1) +
+    let low := base0 i - (carry i +
+      depthFin * (leakAt (base0 i + preset.downwardBand + inc) i + gainRate i + 1) +
       partialsDue i)
     if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
       else min (finEB i) (low - low % inc)
   let fall (i : ℕ) := if depthFin ≤ partialDelay then effective i - floorC i else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   let gainScaled (i : ℕ) := (11 * gainRate i + 9) / 10
+  -- A key's rate is low when its gain over the depth stays below one increment.
+  --
+  -- Eleven times its gain plus one over the depth must also stay within its bound.
+  let lowRate (i : ℕ) : Bool :=
+    decide (depth * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
-    if depth * gainScaled i < inc ∧ 11 * depth * gainRate i < ebUp i then cap i else capMax
+    if lowRate i then cap i else capMax
   let rise (i : ℕ) :=
     let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
     --
-    -- It is too once eleven times the gain over the depth reaches that bound on the key's balance.
+    -- It is too once eleven times the gain plus one over the depth exceeds that bound.
     if depthFin ≤ partialDelay then
-      if 11 * depth * gainRate i ≥ ebUp i then capFor i - effective i
+      if ¬ (11 * depth * (gainRate i + 1) ≤ ebUp i) then capFor i - effective i
       else
         let kept := high + preset.downwardBand
         min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
@@ -499,14 +505,18 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let otherCredits := 3 * (2 * ((∑ i ∈ positions, max (ebUp i) (effective i + rise i)) +
-        depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
-        consolidationsX + depth * proposerCredit +
-        depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) /
+        (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
+          consolidationsX + depth * proposerCredit +
+          -- C's seat rewards.
+          depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
+          -- The shared segment's and R's seat debits.
+          depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) + 9) / 10 +
+        creditedKeys * inc) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let creditGain := if 11 * depth * gainRateMax < capMax
+  let creditGain := if 11 * depth * (gainRateMax + 1) ≤ capMax
     then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
   let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
@@ -520,7 +530,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
     proposerCredit, exitingBands, pendingR, creditGain, creditUnits,
-    gainHigh := !decide (11 * depth * gainRateMax < capMax),
+    gainHigh := !decide (11 * depth * (gainRateMax + 1) ≤ capMax),
     pendingRB := fun i => (validator i).any (fun v =>
       decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
         v.activationEpoch == FAR_FUTURE_EPOCH),
