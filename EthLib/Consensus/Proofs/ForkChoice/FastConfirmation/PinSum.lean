@@ -2310,6 +2310,51 @@ private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
     exact ⟨rq.snoc (Step.slot ok), rest'.append rest, Run.append_assoc _ _ _⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The guards of the floor trace of a segment of C's run, with the end of the segment unslashed.
+
+The segment runs from `wS` to `pS`, and a run to the end `e` of C's run follows it.
+
+The guards are `floor_guards`, with the exit guard `retained` of the segment.
+
+The slashing quotient is positive, and the segment ends by the call's cutoff. -/
+private theorem segment_guards (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork}
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (i : ValidatorIndex)
+    (clean : ∀ w, e.validators.data[i.toNat]? = some w → w.slashed = false)
+    {wS pS : BeaconState preset fork} (pre : Run config checks ⟨fork, fin⟩ ⟨fork, wS⟩)
+    (seg : Run config checks ⟨fork, wS⟩ ⟨fork, pS⟩) (rest : Run config checks ⟨fork, pS⟩ ⟨fork, e⟩)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
+      (before.snoc step).append after = seg → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat) :
+    (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 ∧
+      (∀ w, pS.validators.data[i.toNat]? = some w → w.slashed = false) ∧
+      ∃ quotient : ℕ, 0 < quotient ∧
+        ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, wS⟩ m)
+          (step : Step config checks m n) (after : Run config checks n ⟨fork, pS⟩),
+          (before.snoc step).append after = seg → ∀ w,
+          n.state.validators.data[i.toNat]? = some w →
+          (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∧
+          (getCurrentEpoch m.state).toNat < (getCurrentEpoch wS).toNat +
+            preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
+              (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
+          quotient ≤
+            (EthLib.Consensus.parameters preset m.fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat ∧
+          ∀ events, step.balanceEvents = .ok events → ∀ e ∈ events, e.source ≠ .crossing := by
+  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
+  simp only at order
+  have endEpoch : (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
+  obtain ⟨positive, guards⟩ := floor_guards h (zs := wS) (y := pS) pre endEpoch
+  refine ⟨endEpoch, fun w found => ?_, _, positive, fun before step after cut w found =>
+    ⟨retained before step after cut w found, guards before step after⟩⟩
+  cases flag : w.slashed
+  · rfl
+  · obtain ⟨u, foundU, marked⟩ := rest.slashedPersistence i.toNat w found flag
+    have := clean u foundU
+    simp [marked] at this
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The potential floor of a segment of C's run, read at the state where the segment starts.
 
 The segment runs from `wS` to `pS`.
@@ -2355,22 +2400,11 @@ private theorem segment_potential (h : Setting config checks g split fin pulled 
   obtain ⟨toFin⟩ := h.toFin
   have early : (⟨fork, pS⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) h.early
-  have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
-  simp only at order
-  have endEpoch : (getCurrentEpoch pS).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
-  obtain ⟨positive, guards⟩ := floor_guards h (zs := wS) (y := pS) pre endEpoch
-  have cleanP : ∀ w, pS.validators.data[i.toNat]? = some w → w.slashed = false := by
-    intro w found
-    cases flag : w.slashed
-    · rfl
-    · obtain ⟨u, foundU, marked⟩ := rest.slashedPersistence i.toNat w found flag
-      have := clean u foundU
-      simp [marked] at this
+  obtain ⟨endEpoch, cleanP, quotient, positive, guards⟩ :=
+    segment_guards h near i clean pre seg rest retained
   exact FloorTrace.run_potential_floor_once (toFin.append pre) seg h.genesis h.caps h.delay early
-    h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW cleanP _ positive
-    (fun before step after cut w found =>
-      ⟨retained before step after cut w found, guards before step after⟩)
-    segOk slack ρn ρd start pass
+    h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW cleanP quotient positive
+    guards segOk slack ρn ρd start pass
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`.
@@ -2452,6 +2486,47 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
       (getCurrentEpoch e).toNat - (getCurrentEpoch fin).toNat :=
     Nat.sub_le_sub_right order _
   exact arith _ D _ window (by omega) closed
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a key at a prefix end of C's run is the finalized one or an update's.
+
+An update is at a state of the prefix.
+
+There the effective balance is aligned and at most the balance. -/
+private theorem cfloor_origin (h : Setting config checks g split fin pulled anc counted V)
+    (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {events : List (BalanceEvent preset)}
+    (replayed : wholeRun.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (clean : ∀ w, e.validators.data[i.toNat]? = some w → w.slashed = false)
+    (retained : ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, e⟩),
+      (before.snoc step).append after = wholeRun → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
+    {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+    (r2 : Run config checks p ⟨fork, e⟩) (whole : r1.append r2 = wholeRun) :
+    effectiveAt p i.toNat = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ∨
+      ∃ (w : ForkedBeaconState preset) (pre : Run config checks ⟨fork, fin⟩ w)
+          (post : Run config checks w p),
+        pre.append post = r1 ∧ effectiveAt p i.toNat = effectiveAt w i.toNat ∧
+          effectiveAt w i.toNat ≤ actualBalanceAt w i.toNat ∧
+          effectiveAt w i.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨pFork, pState⟩ := p
+  have sameFork : pFork = fork := Fork.ctorIdx_injective
+    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps) (fork_le_of_chainSteps r1.chainSteps))
+  obtain rfl : fork = pFork := sameFork.symm
+  have early : (⟨fork, pState⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+  obtain ⟨before, beforeOk, -⟩ := Run.balanceEvents_prefix r1 r2
+    (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
+  obtain ⟨endEpoch, cleanP, quotient, positive, guards⟩ := segment_guards h near i clean
+    Run.nil r1 r2 (fun before' step after cut' w found => retained before' step (after.append r2)
+      (by rw [Run.append_assoc, cut', whole]) w found)
+  exact FloorTrace.run_effective_origin toFin r1 h.genesis h.caps h.delay early h.fulu h.aligned
+    (getCurrentEpoch pulled).toNat endEpoch i val initial cleanP quotient positive guards beforeOk
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value.
@@ -5526,7 +5601,55 @@ private theorem margin_arith (ρn ρd K depth B band s L1 L2 pd sync D a X : ℕ
   have cancel := Nat.le_of_mul_le_mul_left total positive
   omega
 
-/-- The margin of the floor of a key on C's run, from the rate of its leak.
+/-- The arithmetic of the stay of the effective balance of a key on C's run.
+
+The key has no sync debits, and the test of its floor holds.
+
+An effective balance above the finalized one is at least an increment above it.
+
+A segment of the run from a state with that effective balance ends at a balance of at least M.
+
+Here `M` is the finalized effective balance.
+
+The segment loses the rate of the leak for each epoch and the partials due.
+
+The rate bounds the base with the band by the leak, and the test bounds the fall by the band.
+
+A quarter of an increment bounds the band, as the preset requires. -/
+private theorem stay_arith (ρn ρd K k inc band B M Bw X pd D bal : ℕ)
+    (positive : 0 < ρd) (incPos : 0 < inc) (quarter : 4 * band ≤ inc) (big : inc ≤ M)
+    (testB : M ≤ B + band)
+    (fallX : X ≤ band) (rate : ρn * K * (B + band) + ρd * pd ≤ ρd * X) (epochs : k ≤ K)
+    (start : M + inc ≤ Bw) (debit : D ≤ pd)
+    (closed : (ρd - ρn * k) * (Bw + band) ≤ ρd * (bal + D + band)) : M ≤ bal := by
+  have yPos : 0 < B + band := by omega
+  have bound : ρn * K * (B + band) ≤ ρd * (B + band) :=
+    calc ρn * K * (B + band) ≤ ρd * X := by omega
+      _ ≤ ρd * band := Nat.mul_le_mul_left _ fallX
+      _ ≤ ρd * (B + band) := Nat.mul_le_mul_left _ (by omega)
+  have under : ρn * K ≤ ρd := Nat.le_of_mul_le_mul_right bound yPos
+  have fewer : ρn * k ≤ ρd := Nat.le_trans (Nat.mul_le_mul_left ρn epochs) under
+  have mono : (ρd - ρn * k) * (M + inc + band) ≤ (ρd - ρn * k) * (Bw + band) :=
+    Nat.mul_le_mul_left _ (by omega)
+  have split : ρd * (M + inc + band) =
+      (ρd - ρn * k) * (M + inc + band) + ρn * k * (M + inc + band) :=
+    calc ρd * (M + inc + band) = ((ρd - ρn * k) + ρn * k) * (M + inc + band) := by
+          rw [Nat.sub_add_cancel fewer]
+      _ = _ := by ring
+  have loss : ρn * k * (M + inc + band) ≤ 3 * (ρn * K * (B + band)) :=
+    calc ρn * k * (M + inc + band) ≤ ρn * K * (M + inc + band) :=
+          Nat.mul_le_mul_right _ (Nat.mul_le_mul_left ρn epochs)
+      _ ≤ ρn * K * (3 * (B + band)) := Nat.mul_le_mul_left _ (by omega)
+      _ = 3 * (ρn * K * (B + band)) := by ring
+  have left : ρd * (M + inc + band + 3 * pd) = ρd * (M + inc + band) + 3 * (ρd * pd) := by ring
+  have right : ρd * (bal + D + band + 3 * X) = ρd * (bal + D + band) + 3 * (ρd * X) := by ring
+  have total : ρd * (M + inc + band + 3 * pd) ≤ ρd * (bal + D + band + 3 * X) := by omega
+  have cancel := Nat.le_of_mul_le_mul_left total positive
+  omega
+
+/-- The margin of the floor of a key on C's run, from a rate of its leak.
+
+The rate is `leak_rate`'s for the key.
 
 The balance of the key from the finalized block is above the closed form of the potential floor.
 
@@ -5549,6 +5672,11 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
     {events : List (BalanceEvent preset)}
     (replayed : (fromFin.append tailC).balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
     (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (ρn ρd : ℕ) (positive : 0 < ρd)
+    (leaky : ∀ eb : ℕ, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ eb →
+      (pinTerms config pulled anc fin).leakAt eb i.toNat ≤ ρn * eb / ρd)
+    (above : ∀ x : ℕ, ρn * x ≤ ρd * ((pinTerms config pulled anc fin).leakAt
+      (x + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1))
     (base0 X low : ℕ)
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
@@ -5561,7 +5689,7 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
           ((pinTerms config pulled anc fin).leakAt
             (base0 + preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
         (pinTerms config pulled anc fin).partialsDue i.toNat ≤ X) :
-    ∃ slack ρn ρd : ℕ,
+    ∃ slack : ℕ,
       effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat ≤
         actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat +
           (preset.downwardBand + slack) ∧
@@ -5576,11 +5704,10 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
             (withdrawalMaxEffectiveBalance preset fork val).toNat +
           preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
         low - (events.map (syncDebit i.toNat)).sum ≤ a := by
-  obtain ⟨ρn, ρd, positive, leaky, above⟩ := leak_rate config pulled anc fin h.bands.1 i.toNat
   have nearC := h.near
   have partialLe := run_partials_le_due h (fromFin.append tailC) nearC i replayed
   refine ⟨effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
-    actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, ρn, ρd, by omega,
+    actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat, by omega,
     pass_of_leak h (fromFin.append tailC) nearC i ⟨val, initial⟩ ρn ρd leaky,
     fun a D k hk hD closed => ?_⟩
   rw [← hbase0] at closed
