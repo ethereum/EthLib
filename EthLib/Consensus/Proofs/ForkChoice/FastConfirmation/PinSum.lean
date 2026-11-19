@@ -21852,6 +21852,8 @@ The run from `b` to the split, `pre`, is the end of the shared run.
 
 The state `b` comes after the finalized state, or before it in its epoch.
 
+No step of the run to `b` starts in the epoch of `b`, so no block of that epoch precedes it.
+
 No genesis fact is read.
 
 If the finalized state and genesis are in the split's epoch, then `b` is genesis. -/
@@ -21862,7 +21864,9 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       toB.append pre = toFin.append fromFin ∧ getCurrentEpoch split = getCurrentEpoch b ∧
       (Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
         ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩,
-          getCurrentEpoch fin = getCurrentEpoch b) := by
+          getCurrentEpoch fin = getCurrentEpoch b) ∧
+      ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w), toB.Contains step →
+        (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat := by
   have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   have gFin : (getCurrentEpoch g.state).toNat ≤ (getCurrentEpoch fin).toNat :=
@@ -21875,33 +21879,49 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       subst gFork
       dsimp only at atGenesis
       exact ⟨gs, Run.nil, toFin.append fromFin, run_nil_append _, UInt64.toNat_inj.mp (by omega),
-        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩⟩
+        .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, fun _ member => by cases member⟩
     · -- the boundary into the split's epoch is in the run to the finalized state
-      obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, -, hn⟩ := Run.cross_split toFin
+      obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, hz, hn⟩ := Run.cross_split toFin
         ((getCurrentEpoch fin).toNat - 1) (by omega)
         (by change _ < (getCurrentEpoch fin).toNat; omega)
-      dsimp only at hn
+      dsimp only at hz hn
       have nEpoch : getCurrentEpoch fin = getCurrentEpoch ns :=
         UInt64.toNat_inj.mp (by omega)
       have nFork := Run.fork_eq_of_same_epoch rest nEpoch
       dsimp only at nFork
       subst nFork
       subst cut
-      exact ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin, Run.append_assoc _ _ _,
-        UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩⟩
+      refine ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin, Run.append_assoc _ _ _,
+        UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩, fun {u w} step member => ?_⟩
+      cases member with
+      | last => omega
+      | earlier inner =>
+        have := steps_before_end pre0 step inner
+        simp only [ix] at this
+        omega
   · -- the boundary into the split's epoch is in the run from the finalized state
-    obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, -, hn⟩ := Run.cross_split fromFin
+    obtain ⟨z, ⟨nf, ns⟩, pre0, ok, rest, cut, hz, hn⟩ := Run.cross_split fromFin
       ((getCurrentEpoch split).toNat - 1) (by change (getCurrentEpoch fin).toNat ≤ _; omega)
       (by change _ < (getCurrentEpoch split).toNat; omega)
-    dsimp only at hn
+    dsimp only at hz hn
     have nEpoch : getCurrentEpoch split = getCurrentEpoch ns :=
       UInt64.toNat_inj.mp (by omega)
     have nFork := Run.fork_eq_of_same_epoch rest nEpoch
     dsimp only at nFork
     subst nFork
     subst cut
-    exact ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest, (Run.append_assoc _ _ _).symm,
-      nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩⟩
+    refine ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest, (Run.append_assoc _ _ _).symm,
+      nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩, fun {u w} step member => ?_⟩
+    rcases (Run.contains_append _ _ _).mp member with early | late
+    · have := steps_before_end toFin step early
+      simp only [ix] at this
+      omega
+    · cases late with
+      | last => omega
+      | earlier inner =>
+        have := steps_before_end pre0 step inner
+        simp only [ix] at this
+        omega
 
 private theorem sum_eq_U {S W : Finset ValidatorIndex} (sub : S ⊆ W) (f : ValidatorIndex → ℤ) :
     ∑ v ∈ S, f v = ∑ v ∈ W, if v ∈ S then f v else 0 := by
@@ -21974,7 +21994,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have tR := stake_le_total pulledOk
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨b, toB, pre, cut, sameEpoch, link⟩ := split_epoch_start toFin fromFin
+  obtain ⟨b, toB, pre, cut, sameEpoch, link, -⟩ := split_epoch_start toFin fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
   have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
     tailC highC endEpochC replayedC)
