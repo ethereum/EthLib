@@ -18,7 +18,7 @@ Not yet released.
 
 - `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
   An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
-  `gameQueries qH r` adds the worst cases of key generation, of `r` requests and of the verification.
+  `gameQueries qH r` adds upper bounds on the calls of key generation, of `r` requests and of the verification.
   `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
   `unforgeable` is unchanged.
 

@@ -104,10 +104,10 @@ The budget `q` counts the calls of key generation, the signer and the final veri
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`.
-The constants are the worst cases of key generation, of one signing request, and of the verification.
+The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385) / 2^127`.
-A request's worst case is two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-No theorem charges the signer less than its worst case.
+A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
+No theorem charges the signer less than this bound.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.

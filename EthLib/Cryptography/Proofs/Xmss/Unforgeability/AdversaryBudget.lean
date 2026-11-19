@@ -11,17 +11,19 @@ Here the budget is the adversary's own: at most `qH` calls of `H` and `r` signin
 
 Key generation, each request and the final verification make at most a fixed number of calls.
 
-Those are `205 * 2^16 + 1`, `2^33 + 615 * 2^16` and `384`.
+The bounds are `205 * 2^16 + 1`, `2^33 + 615 * 2^16` and `384`.
 
 So the game makes at most `Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384` calls.
 
 The theorem then bounds a forgery by `Q / 2^127`.
 
-With at most `2^32` requests, one per leaf index, `Q <= qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
+A key has `2^32` leaf indices.
 
-The signer's worst case is the cost of its two searches of `2^32` trials, which rarely run long.
+With at most `2^32` requests, `Q <= qH + 2^65 + 615 * 2^48 + 205 * 2^16 + 385`.
 
-The bound still charges it, so it is above `2^-62` for an adversary that requests every leaf.
+A request's bound includes two searches of `2^32` trials each, and the theorem charges all of it.
+
+So the bound is above `2^-62` for an adversary that requests every leaf.
 -/
 
 @[expose] public section
@@ -55,7 +57,7 @@ theorem isQueryBoundP_liftM_prob {α : Type} (oa : ProbComp α) :
     IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall 0 :=
   isQueryBoundP_liftM_isRight oa
 
-/-- A computation of `n` hash queries makes `n` hash calls among the game's queries. -/
+/-- A computation of at most `n` hash queries makes at most `n` hash calls among the game's. -/
 theorem isQueryBoundP_liftM_hash {α : Type} {n : Nat} :
     ∀ (oa : OracleComp HashSpec α), IsQueryBoundP oa (fun _ => True) n →
       IsQueryBoundP (liftM oa : OracleComp OracleWorld α) IsHashCall n := by
@@ -101,7 +103,7 @@ theorem isQueryBoundP_signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message
   simp only [requestQueries]
   omega
 
-/-- The adversary's run costs a call per hash query and a request's worst case per request. -/
+/-- The adversary's run costs a call per hash query and a request's bound per request. -/
 theorem isQueryBoundP_run_signingOracle (sk : SecretKey) {α : Type}
     (oa : OracleComp (OracleWorld + SigningSpec) α) {qH r : Nat}
     (hh : IsQueryBoundP oa IsAdversaryHash qH) (hr : IsQueryBoundP oa IsAdversaryRequest r) :
