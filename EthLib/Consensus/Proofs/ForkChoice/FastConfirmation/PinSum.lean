@@ -4849,7 +4849,7 @@ private theorem find?_eq_some_of_unique {α : Type} (p : α → Bool) (c : α) :
       exact find?_eq_some_of_unique p c rest inRest pc
         (fun e he => only e (List.mem_cons_of_mem _ he))
 
-/-- Two elements of a list that have the same image, in a list whose images are distinct, are equal. -/
+/-- Elements of a list with the same image are equal, if the images of the list are distinct. -/
 private theorem eq_of_nodup_map {α β : Type} (f : α → β) :
     ∀ L : List α, (L.map f).Nodup → ∀ x ∈ L, ∀ y ∈ L, f x = f y → x = y
   | [], _, x, hx, _, _, _ => absurd hx (by simp)
@@ -4872,8 +4872,9 @@ private theorem parameters_of_fusaka {fork : Fork} (fusaka : .fusaka ≤ fork)
     | exact absurd fusaka (by decide)
     | exact absurd early (by decide)
 
-/-- A key of `K5` that is not activated at the finalized state loses seats, from the floor of a new
-key.
+/-- A key of `K5` that is not activated at the finalized state loses seats.
+
+The loss is read from the floor of a new key.
 
 Its charge splits C's run at the step that exits it, and the key is activated there, by (I1).
 
@@ -4920,8 +4921,7 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
   obtain ⟨c, cMember, cIndex⟩ := charged
   obtain ⟨a, b, pre, step, post, split', vv, w, found, foundB, unset, set, activated, amount,
     epoch⟩ := charge_activated (x := ⟨fork, split⟩) electra tailC c (site c cMember)
-  subst split'
-  rw [cIndex] at found foundB amount epoch
+  rw [cIndex] at found foundB
   -- the exit epoch of the charge is at most C's epoch, since the key is not active there
   obtain ⟨wc, foundC, life⟩ := post.registryLifecycle.validators v.toNat w foundB
   have exitSame : wc.exitEpoch = w.exitEpoch := life.exitEpoch set
@@ -4965,7 +4965,7 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
       (fromFin.append pre).append ((Run.nil.snoc step).append post) := by
     have snoc : pre.snoc step = pre.append (Run.nil.snoc step) := rfl
     rw [snoc, ← Run.append_assoc pre (Run.nil.snoc step) post, Run.append_assoc]
-  rw [shape] at replayed
+  rw [← split', shape] at replayed
   obtain ⟨prior, priorOk, isPrefix⟩ := Run.balanceEvents_prefix (fromFin.append pre)
     ((Run.nil.snoc step).append post) (getCurrentEpoch pulled).toNat events replayed
   have aEpoch := UInt64.le_iff_toNat_le.mp
