@@ -810,7 +810,12 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
         (depthFin / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat *
           (inc + preset.downwardBand) +
         -- The units of the keys whose only flows are seat debits, and the leak that those induce.
-        creditUnits + syncLeak) /
+        creditUnits + syncLeak +
+        -- The units and the leak of the keys that only a consolidation or a slashing on R moves.
+        unitGain * (consolidationsXCount + slashedR) +
+        slashedR * (depthFin * (2 * perIncrement +
+          inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+            (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1))) /
           -- The credits include the keys' own whistleblower credits, so two quotient steps go.
           (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) +
       -- C's seat flows, and R's and the shared segment's seat debits.
