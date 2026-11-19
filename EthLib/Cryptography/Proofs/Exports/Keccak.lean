@@ -99,8 +99,8 @@ private theorem bytesOfLanes_eq (B : Keccak.State) :
   · intro i h₁ h₂
     have hi : i < 200 := by simpa using h₂
     simp only [List.getElem_toArray, Vector.getElem_toArray, squeezeBytes, Vector.getElem_ofFn]
-    rw [getElem_flatMap_eight _ (fun _ => rfl) _ i (by simp only [List.length_cons,
-      List.length_nil]; omega), outputByte_ofLanes B hi]
+    have hlen : i < 8 * 25 := by omega
+    rw [getElem_flatMap_eight _ (fun _ => rfl) _ i hlen, outputByte_ofLanes B hi]
     -- Group `i / 8` is lane `((i / 8) % 5, i / 40)`, the lane at index `i / 8`.
     have lane : [B.a0, B.a1, B.a2, B.a3, B.a4, B.a5, B.a6, B.a7, B.a8, B.a9, B.a10, B.a11, B.a12,
         B.a13, B.a14, B.a15, B.a16, B.a17, B.a18, B.a19, B.a20, B.a21, B.a22, B.a23,
