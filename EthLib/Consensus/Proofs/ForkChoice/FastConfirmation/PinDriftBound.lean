@@ -5403,11 +5403,14 @@ private theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run con
 
 /-- Right after a slot step that moves the epoch on, the effective balances lie within the bands.
 
-The step ran the epoch transition, and its upgrades keep the bands. -/
+The step ran the epoch transition, and its upgrades keep the bands.
+
+That holds from Fusaka and before Gloas, where the upgrades leave the state as it is. -/
 private def EpochStartHysteresis (preset : Preset) (config : Config)
     (checks : SignatureChecks) : Prop :=
-  ∀ {a b : ForkedBeaconState preset} (_step : Step config checks a b),
-    getCurrentEpoch a.state < getCurrentEpoch b.state → Hysteresis b.state
+  ∀ {a b : ForkedBeaconState preset} (_step : Step config checks a b), .fusaka ≤ a.fork →
+    b.fork < .glamsterdam → getCurrentEpoch a.state < getCurrentEpoch b.state →
+      Hysteresis b.state
 
 /-! ## The pass rate against the floor path -/
 
@@ -6218,8 +6221,10 @@ private theorem Ctx.inv_step {g x z y q p' m : ForkedBeaconState preset} {high :
     i v0 found0
   have lt : getCurrentEpoch q.state < getCurrentEpoch p'.state :=
     UInt64.lt_iff_toNat_lt.mpr (by omega)
+  have fuluQ : .fusaka ≤ q.fork :=
+    Nat.le_trans c.fulu (fork_le_of_chainSteps (hz.append (rm.append ins)).chainSteps)
   exact ⟨claim', Ctx.hyst_start c (hz.append (rm.append (ins.snoc (Step.slot ok))))
-    (c.hysteresis (Step.slot ok) lt) found'⟩
+    (c.hysteresis (Step.slot ok) fuluQ pEarly lt) found'⟩
 
 /-- The potential claim holds at the start of the epoch of every state of the climb.
 
