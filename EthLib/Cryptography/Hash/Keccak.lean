@@ -373,7 +373,7 @@ where
 
 /-! ## The sponge
 
-FIPS 202 §5.2 defines the Keccak family on byte strings `M` and output lengths `d`:
+FIPS 202 §5.2 defines the Keccak family on bit strings `M` and output lengths `d`:
 
 ```text
     Keccak[c](M, d) = SPONGE[Keccak-p[1600, 24], pad10*1, 1600 - c](M, d)
@@ -382,7 +382,13 @@ FIPS 202 §5.2 defines the Keccak family on byte strings `M` and output lengths 
 - Keccak-256 is `Keccak[512](M, 256)`,
 - Keccak-512 is `Keccak[1024](M, 512)`.
 
-In bytes, the first padding byte is `0x01` for Keccak-256 and `0x06` for SHA3-256.
+This library takes `M` as a byte string, so the padding fills whole bytes.
+
+SHA3-256 pads with `0x06`, zero bytes and `0x80`, or with `0x86` alone (FIPS 202 Table 6).
+
+Keccak-256 and Keccak-512 add no `01` suffix, so they pad with `0x01`, zero bytes and `0x80`.
+
+When the padding is a single byte, both bits fall in it, and it is `0x81`.
 
 The Keccak reference, version 3.0, calls Keccak-256 Keccak[r = 1088, c = 512].
 

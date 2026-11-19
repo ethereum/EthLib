@@ -205,17 +205,19 @@ def squeezeBytes (outBytes : Nat) (a : State) : Vector UInt8 outBytes :=
 
 /-- The sponge of FIPS 202 section 4, Algorithm 8, when `outBytes` fits in one rate block.
 
-FIPS 202 section 4 requires a rate below the 1600-bit width, so the capacity is positive. -/
-def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hb : rateBits < 1600)
-    (_hout : 8 * outBytes ≤ rateBits) (msg : ByteArray) : Vector UInt8 outBytes :=
+FIPS 202 section 4 asks for a rate below the 1600-bit width.
+
+At a larger rate, absorbing drops the block bits past 1600. -/
+def sponge {rateBits outBytes : Nat} (hr : 0 < rateBits) (_hout : 8 * outBytes ≤ rateBits)
+    (msg : ByteArray) : Vector UInt8 outBytes :=
   squeezeBytes outBytes (absorbAll hr msg)
 
 /-- Original Keccak-256, FIPS 202 sections 4 and 5.2, at the 1088-bit rate. -/
 def keccak256 (msg : ByteArray) : Vector UInt8 32 :=
-  sponge (rateBits := 1088) (by decide) (by decide) (by decide) msg
+  sponge (rateBits := 1088) (by decide) (by decide) msg
 
 /-- Original Keccak-512, FIPS 202 sections 4 and 5.2, at the 576-bit rate. -/
 def keccak512 (msg : ByteArray) : Vector UInt8 64 :=
-  sponge (rateBits := 576) (by decide) (by decide) (by decide) msg
+  sponge (rateBits := 576) (by decide) (by decide) msg
 
 end EthLib.Cryptography.Models.KeccakBits
