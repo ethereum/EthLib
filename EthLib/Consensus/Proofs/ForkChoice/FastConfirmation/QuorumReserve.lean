@@ -798,7 +798,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
           depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
           -- The shared segment's and R's seat debits.
           depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) + 9) / 10 +
-        creditedKeys * inc) /
+        creditedKeys * inc +
+        -- The bands of the keys that hold a seat on the shared segment or on R's run.
+        (depthFin / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat *
+          (inc + preset.downwardBand)) /
           -- The credits include the keys' own whistleblower credits, so two quotient steps go.
           (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) +
       -- C's seat flows, and R's and the shared segment's seat debits.
