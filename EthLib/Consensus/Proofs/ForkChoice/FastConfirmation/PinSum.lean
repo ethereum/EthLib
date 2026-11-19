@@ -12746,6 +12746,32 @@ private theorem slashed_withdrawable_of_clean
   have finalizedNat := UInt64.le_iff_toNat_le.mp finalized
   omega
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key unslashed at the split that R holds slashed is slashed on R's branch for the pin.
+
+Its slashing is after the split.
+
+So its withdrawable epoch is a slashings vector past the split's epoch.
+
+That epoch is at or after the finalized epoch. -/
+private theorem slashedRB_of_slashed (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) {i : ℕ}
+    (inside : i < split.validators.data.size)
+    (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
+    {w : Validator} (found : pulled.validators.data[i]? = some w) (slashed : w.slashed = true) :
+    (pinTerms config pulled anc fin).slashedRB i = true := by
+  have limit := BeaconState.registryWithinLimit_of_lt h.early split
+  have index : i.toUInt64.toNat = i := toNat_toUInt64_of_lt limit inside
+  have vector := slashed_withdrawable_of_clean h tail i.toUInt64
+    (fun u read => by
+      rw [index] at read
+      simpa [read] using unslashed)
+    (by rw [index]; exact inside) h.finalized
+  have recent := vector w (by rw [index]; exact found) slashed
+  simp only [pinTerms]
+  simp [found, slashed]
+  exact recent
+
 /-- Under the guard, the window from the finalized epoch through R's horizon is under half a vector.
 
 It is the short window of the guard, read at R's horizon. -/
