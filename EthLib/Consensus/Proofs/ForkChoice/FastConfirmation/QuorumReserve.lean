@@ -687,7 +687,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- They are read at every key slashable there, its credits, and the seats.
   --
-  -- A key's whistleblower base is the larger of its envelope and its effective balance plus its rise.
+  -- A key's whistleblower base is the larger of its envelope and its effective balance plus rise.
   --
   -- Past that bound, `rise`'s headroom pays a consolidation target's.
   --
