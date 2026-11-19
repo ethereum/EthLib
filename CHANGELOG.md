@@ -28,7 +28,7 @@ Not yet released.
 
 - `DirectSafety.selected_deposit_le` says that a balance event credits a set of keys, none of them withdrawable before it, at most the gains of the keys that are not withdrawable.
   For a deposit event from Electra, that sum is its funding credit.
-  The pin's deposit bound for the slashed keys of C's run reads it.
+  The pin's bound on the deposits credited to the active keys of C's run reads it, in `deposit_each_le`.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
   `FloorTrace.step_general` and `FloorTrace.run_of_le_cap` are the activated cases.
