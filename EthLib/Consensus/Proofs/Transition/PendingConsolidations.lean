@@ -722,7 +722,7 @@ private theorem unassigned_exit {i : ValidatorIndex}
 
 So they keep every assigned exit's withdrawable epoch exactly.
 
-They give each newly assigned exit a withdrawable epoch after the current epoch. -/
+They give each newly assigned exit a withdrawable epoch past the seed lookahead and the delay. -/
 private theorem registry_unassigned (electra : .pectra ≤ fork)
     (ok : processRegistryUpdates config state = .ok after) :
     WithdrawalKept state after ∧ WithdrawalExact state after ∧
@@ -1839,9 +1839,7 @@ theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState pr
   subst found
   exact ⟨UInt64.le_of_eq same.symm, .inr same⟩
 
-/-- From Electra, registry updates keep an unassigned exit's withdrawable epoch, or set it late.
-
-Late is after the current epoch, the seed lookahead and the withdrawal delay. -/
+/-- From Electra, registry updates keep an unassigned exit's withdrawable epoch or set it later. -/
 theorem processRegistryUpdates_withdrawableEpoch_of_unassigned_late
     {preset : Preset} {fork : Fork} {config : Config}
     {state after : BeaconState preset fork}
@@ -1866,12 +1864,10 @@ theorem processRegistryUpdates_withdrawableEpoch_of_unassigned
     (i : Nat) (v : Validator) (found : state.validators.data[i]? = some v)
     (unassigned : v.exitEpoch = FAR_FUTURE_EPOCH) :
     ∃ w : Validator, after.validators.data[i]? = some w ∧
-      (w.withdrawableEpoch = v.withdrawableEpoch ∨
-        getCurrentEpoch state < w.withdrawableEpoch) := by
-  obtain ⟨w, found', kept | late⟩ :=
-    processRegistryUpdates_withdrawableEpoch_of_unassigned_late electra ok i v found unassigned
-  · exact ⟨w, found', .inl kept⟩
-  · exact ⟨w, found', .inr (UInt64.lt_iff_toNat_lt.mpr (by omega))⟩
+      (w.withdrawableEpoch = v.withdrawableEpoch ∨ getCurrentEpoch state < w.withdrawableEpoch) :=
+  (processRegistryUpdates_withdrawableEpoch_of_unassigned_late electra ok i v found unassigned).imp
+    fun _ ⟨found', moved⟩ => ⟨found', moved.imp id fun late =>
+      UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
 
 /-! ## The pending consolidations inside one epoch -/
 
