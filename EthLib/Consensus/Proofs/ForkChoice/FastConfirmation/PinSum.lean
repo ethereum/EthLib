@@ -6459,6 +6459,20 @@ theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V
   rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at credited
   exact credited
 
+/-- A step with a key that has no exit at its start and one at its end charges that key.
+
+It is the converse of `charge_exits`. -/
+private theorem step_charges_of_exits {m n : ForkedBeaconState preset}
+    (step : Step config checks m n) {i : ℕ} {u w : Validator}
+    (foundM : m.state.validators.data[i]? = some u)
+    (foundN : n.state.validators.data[i]? = some w) (unset : u.exitEpoch = FAR_FUTURE_EPOCH)
+    (assigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    step.departureCharges.any (·.index == i) = true := by
+  obtain ⟨d, dMember, dIndex, -⟩ :=
+    (Run.nil.snoc step).departure_charge_of_assigned i u w foundM foundN unset assigned
+  exact List.any_eq_true.mpr
+    ⟨d, by simpa [Run.departureCharges] using dMember, by simpa using dIndex⟩
+
 /-- Two charges of a run at one position are the same charge. -/
 private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     {c d : DepartureCharge} (hc : c ∈ tail.departureCharges) (hd : d ∈ tail.departureCharges)
