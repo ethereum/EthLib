@@ -15182,29 +15182,99 @@ private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
   rw [← sum_syncDebit_eq events v]
   exact congrArg (· + ((events.map (syncDebit v)).sum)) (sum_map_sync events (keyCredit v)).symm
 
-/-- The sync movement of keys on a run from the split, within a call's reach, is within an envelope.
+/-- The sync movement of keys on a run within a call's reach is within an envelope.
 
-The envelope is the seats' one, read at the pulled state's total. -/
+The run is the tail from the split, after `pre`, the shared run from the start of the split's epoch.
+
+The envelope is the seats' one, read at the pulled state's total.
+
+`shape` ties `pre` to the run from the finalized state, so each of its steps has a guarded total.
+
+A step before the finalized state is in its epoch, where the active stake is the finalized one. -/
 private theorem syncF_run_le (h : Setting config checks g split fin pulled anc counted V)
     (pulledTotal : Gwei) (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
+    (shape : (∃ fromB : Run config checks ⟨fork, fin⟩ ⟨fork, b⟩, fromFin = fromB.append pre) ∨
+      ∃ toFinB : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩, pre = toFinB.append fromFin)
     {e : BeaconState preset fork} (t : Run config checks ⟨fork, split⟩ ⟨fork, e⟩)
     (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
-    (highE : ℕ) {evs : List (BalanceEvent preset)} (replayed : t.balanceEvents highE = .ok evs)
-    (keys : Finset ℕ) :
+    (highE : ℕ) {evs : List (BalanceEvent preset)}
+    (replayed : (pre.append t).balanceEvents highE = .ok evs) (keys : Finset ℕ) :
     ∑ i ∈ keys, syncF evs i ≤
       ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch split).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           PinSplit5.syncSeatEnvelope preset pulledTotal.toNat := by
-  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitB := congrArg UInt64.toNat sameEpoch
+  have guarded : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      (fromFin.append t).Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat := fun step member T read =>
+    step_band_of_guard h (fromFin.append t) within pulledOk step member T read
   have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      t.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+      (pre.append t).Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
         2 * T.toNat ≤ 3 * pulledTotal.toNat := by
     intro u w step member T read
-    exact step_band_of_guard h (fromFin.append t) within pulledOk step
-      ((Run.contains_append _ _ _).mpr (.inr member)) T read
-  have moves := (PinSplit5.Run.syncDebits_le t h.fulu h.early highE replayed pulledTotal.toNat
-    band keys).2.1
-  exact (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans moves
+    rcases (Run.contains_append _ _ _).mp member with inPre | inTail
+    · rcases shape with ⟨fromB, rfl⟩ | ⟨toFinB, rfl⟩
+      · exact guarded step ((Run.contains_append _ _ _).mpr (.inl
+          ((Run.contains_append _ _ _).mpr (.inr inPre)))) T read
+      · rcases (Run.contains_append _ _ _).mp inPre with before | inFin
+        · -- a step before the finalized state shares its epoch, so its stake is the finalized one
+          obtain ⟨front, back, -⟩ := toFinB.contains_split step before
+          have startW : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch w.state).toNat :=
+            UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+              (currentEpoch_le_of_chainSteps front.chainSteps) step.chainStep.currentEpoch_le)
+          have endW : (getCurrentEpoch w.state).toNat ≤ (getCurrentEpoch fin).toNat :=
+            UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps back.chainSteps)
+          have sameEp : getCurrentEpoch fin = getCurrentEpoch w.state :=
+            UInt64.toNat_inj.mp (by omega)
+          have wFork := Run.fork_eq_of_same_epoch back sameEp
+          obtain ⟨wf, ws⟩ := w
+          dsimp only at wFork sameEp read
+          subst wFork
+          have sums := DirectSafety.Apriori.Internal.activeStake_eq_of_same_epoch back h.early
+            sameEp (getCurrentEpoch ws) (UInt64.le_refl _)
+          have okW := getTotalActiveBalance_ok read
+          obtain ⟨-, ltW, valW⟩ := getTotalBalance_ok_iff_stake.mp okW
+          rw [← sameEp] at ltW valW
+          have sameStake : stake (fun index => balanceAt fin index.toNat)
+              (getActiveValidatorIndices fin (getCurrentEpoch fin)).toFinset =
+              stake (fun index => balanceAt ws index.toNat)
+                (getActiveValidatorIndices ws (getCurrentEpoch fin)).toFinset := by
+            rw [← sameEp] at sums
+            exact sums
+          have checked : getActiveValidatorIndicesChecked fin (getCurrentEpoch fin) =
+              .ok (getActiveValidatorIndices fin (getCurrentEpoch fin)) := by
+            rw [getActiveValidatorIndicesChecked_eq_ok_iff]
+            intro position inside _
+            have within := BeaconState.registryWithinLimit_of_lt h.early fin
+            have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+            unfold BeaconState.RegistryWithinLimit at within
+            omega
+          have okFin : getTotalActiveBalance fin = .ok T := by
+            unfold getTotalActiveBalance
+            rw [checked]
+            exact getTotalBalance_ok_iff_stake.mpr
+              ⟨fun i m => lt_size_of_mem_getActiveValidatorIndices m, sameStake ▸ ltW,
+                by rw [valW, sameStake]⟩
+          exact total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+            electra h.guard (fromFin.append toPulled) h.early (Nat.le_succ _)
+            (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) h.early
+            (by dsimp only; omega) pulledOk okFin
+        · exact guarded step ((Run.contains_append _ _ _).mpr (.inl inFin)) T read
+    · exact guarded step ((Run.contains_append _ _ _).mpr (.inr inTail)) T read
+  have moves := (PinSplit5.Run.syncDebits_le (pre.append t) h.fulu h.early highE replayed
+    pulledTotal.toNat band keys).2.1
+  refine (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans (moves.trans (le_of_eq ?_))
+  dsimp only
+  rw [sameEpoch]
 
 /-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
@@ -15455,9 +15525,11 @@ theorem bud_sync (h : Setting config checks g split fin pulled anc counted V)
     (Finset.sum_congr rfl fun v _ => hg v).le.trans (sum_toNat_le (S := U)
       (P := U.image fun v : ValidatorIndex => v.toNat) (fun i => syncF events i + syncF eventsC i)
       fun v member => Finset.mem_image_of_mem _ member)
-  have first := syncF_run_le h pulledTotal pulledOk tail (Nat.le_succ _) high replayed
+  have first := syncF_run_le h pulledTotal pulledOk fromFin Run.nil rfl (.inl ⟨fromFin, rfl⟩) tail
+    (Nat.le_succ _) high (by rw [run_nil_append]; exact replayed)
     (U.image fun v : ValidatorIndex => v.toNat)
-  have second := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC
+  have second := syncF_run_le h pulledTotal pulledOk fromFin Run.nil rfl (.inl ⟨fromFin, rfl⟩) tailC
+    near highC (by rw [run_nil_append]; exact replayedC)
     (U.image fun v : ValidatorIndex => v.toNat)
   generalize U.image (fun v : ValidatorIndex => v.toNat) = P at toPositions first second
   have splitP : ∑ i ∈ P, (syncF events i + syncF eventsC i) =
@@ -15547,7 +15619,10 @@ private theorem syncCredits_le (h : Setting config checks g split fin pulled anc
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
   have called := UInt64.le_iff_toNat_le.mp h.called
   have near := h.near
-  have run := syncF_run_le h pulledTotal pulledOk tailC near highC replayedC keys
+  obtain ⟨fromFin⟩ := h.fromFin
+  have run := syncF_run_le h pulledTotal pulledOk fromFin Run.nil rfl
+    (.inl ⟨fromFin, rfl⟩) tailC near highC
+    (by rw [run_nil_append]; exact replayedC) keys
   have credits : ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤ ∑ i ∈ keys, syncF eventsC i :=
     Finset.sum_le_sum fun i _ => (Nat.le_add_right _ _).trans (syncF_eq eventsC i).ge
   have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
