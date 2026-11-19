@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.EcdsaSignature
+public import EthLib.Cryptography.Ecdsa.Encoding
 import EthLib.Base.Proofs.BigEndian
 import EthLib.Base.Proofs.Bytes
 
@@ -16,7 +16,7 @@ Writing two integers and reading them back gives each one modulo `2^256`.
 
 @[expose] public section
 
-namespace EthLib.Cryptography.EcdsaSignature
+namespace EthLib.Cryptography.Ecdsa
 
 /-- A buffer reads as a signature exactly when it has the length of one.
 
@@ -52,4 +52,4 @@ theorem read?_eq (b : ByteArray) :
     (toRecoverableBytes r s odd)[SIGNATURE_LEN] = if odd then 1 else 0 :=
   Vector.getElem_push_eq
 
-end EthLib.Cryptography.EcdsaSignature
+end EthLib.Cryptography.Ecdsa

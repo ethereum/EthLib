@@ -5,7 +5,7 @@ public import EthLib.Cryptography.Proofs.Hash.Hkdf
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Networking.Discv5.Identity
-public import EthLib.Cryptography.Proofs.EcdsaSignature
+public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 
 /-!
 # `Networking.Proofs.Discv5.Identity`
@@ -112,8 +112,8 @@ theorem idVerify_idSign {sk : Fn} {challengeData ephemeralPubkey signature : Byt
     simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq] at h
     subst h
     have hv := Ecdsa.verify_sign_rfc6979 hs
-    simp only [idVerify, Cryptography.EcdsaSignature.read?_packBytes,
-      Cryptography.EcdsaSignature.toNats_toBytes]
+    simp only [idVerify, Cryptography.Ecdsa.read?_packBytes,
+      Cryptography.Ecdsa.toNats_toBytes]
     rw [Nat.mod_eq_of_lt (Nat.lt_trans r.isLt (by decide)),
       Nat.mod_eq_of_lt (Nat.lt_trans s.isLt (by decide))]
     exact hv

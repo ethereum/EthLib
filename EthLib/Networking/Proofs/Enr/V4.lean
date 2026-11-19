@@ -4,7 +4,7 @@ public import EthLib.Networking.Enr.V4
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Cryptography.Proofs.Secp256k1.Encoding
 public import EthLib.Networking.Proofs.Enr.Record
-public import EthLib.Cryptography.Proofs.EcdsaSignature
+public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 
 /-!
 # Proofs: the "v4" identity scheme
@@ -62,7 +62,7 @@ theorem verifyV4_eq_true_iff {r : Enr} :
         (Base.bytesToNat (r.signature.data.toList.take 32))
         (Base.bytesToNat (r.signature.data.toList.drop 32)) = true := by
   unfold verifyV4
-  rw [EcdsaSignature.read?_eq, EcdsaSignature.SIGNATURE_LEN]
+  rw [Cryptography.Ecdsa.read?_eq, Cryptography.Ecdsa.SIGNATURE_LEN]
   constructor
   · intro h
     split at h
@@ -114,10 +114,10 @@ theorem verifyV4_of_verify {r : Enr} {q : Point} {rr ss : Fn} {content : ByteArr
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
   -- The signature is the written form of `(r, s)`, so it reads back as `(r, s)`.
-  have hsig' : r.signature = Base.packBytes (EcdsaSignature.toBytes rr.val ss.val) := hsig
+  have hsig' : r.signature = Base.packBytes (Cryptography.Ecdsa.toBytes rr.val ss.val) := hsig
   unfold verifyV4
-  simp only [publicKeyV4_of_get hcurve hinf hid hkey, hc, hsig', EcdsaSignature.read?_packBytes,
-    EcdsaSignature.toNats_toBytes, hmod]
+  simp only [publicKeyV4_of_get hcurve hinf hid hkey, hc, hsig', Cryptography.Ecdsa.read?_packBytes,
+    Cryptography.Ecdsa.toNats_toBytes, hmod]
   exact hv
 
 /-- A record verifies when its signature is the deterministic one from its private key `sk`.
