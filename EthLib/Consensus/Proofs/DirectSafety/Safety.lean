@@ -688,7 +688,7 @@ def VerifiedConflict {g a b : ForkedBeaconState preset} (left : Run config check
 /-- A slashing that a block of one run applied gives two checks of its own.
 
 They are two checks of attestations that conflict, or two checks of conflicting headers. -/
-private theorem checked_of_slashingEvidence {g a : ForkedBeaconState preset}
+theorem checked_of_slashingEvidence {g a : ForkedBeaconState preset}
     {run : Run config checks g a} {key : BLSPubkey} (evidence : run.SlashingEvidence key) :
     (∃ one two : AttestationCheck run key,
       isSlashableAttestationData one.indexed.data two.indexed.data = true) ∨
