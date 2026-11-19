@@ -20730,6 +20730,21 @@ private theorem rise_fold (i high : ℕ) {x m : ForkedBeaconState preset}
     rw [net, credit]
     exact ⟨by omega, by omega⟩
 
+/-- A key with an assigned exit has no larger cap at the end of a run than at its start.
+
+Compounding needs an unset exit, so the run cannot switch the key to it. -/
+private theorem capAt_le_of_exit {x z : ForkedBeaconState preset} (r : Run config checks x z)
+    (caps : CapOrder preset) (electraX : .pectra ≤ x.fork) (electraZ : .pectra ≤ z.fork)
+    (early : z.fork < .glamsterdam) (i : ℕ) {w : Validator}
+    (found : x.state.validators.data[i]? = some w) (assigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    PinSplit2.capAt z i ≤ PinSplit2.capAt x i := by
+  obtain ⟨wz, foundZ, kept⟩ := r.compounding_of_exit_assigned caps.activation caps.compounding
+    early i w found assigned
+  rw [capAt_of_found electraZ foundZ, capAt_of_found electraX found]
+  have order := UInt64.le_iff_toNat_le.mp caps.compounding
+  cases hz : hasCompoundingWithdrawalCredential wz <;>
+    cases hb : hasCompoundingWithdrawalCredential w <;> simp_all
+
 /-- The exact rise of a charged key's balance after its charge.
 
 The cap is fixed from the state `b` after the step that starts the exit.
@@ -20798,14 +20813,9 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
     intro z hz
     obtain ⟨r1, r2, -⟩ := splitPost z hz
     have zFork : z.fork = fork := fork_eq_of_run ((pre.snoc step).append r1) r2 yBack
-    have electraZ : .pectra ≤ z.fork := by rw [zFork]; exact Nat.le_trans (by decide) h.fulu
-    have electraB : .pectra ≤ b.fork := by rw [bFork]; exact Nat.le_trans (by decide) h.fulu
-    obtain ⟨wz, foundZ, kept⟩ := r1.compounding_of_exit_assigned h.caps.activation
-      h.caps.compounding (by rw [zFork]; exact h.early) i w foundB assigned
-    rw [capAt_of_found electraZ foundZ, capAt_of_found electraB foundB]
-    have order := UInt64.le_iff_toNat_le.mp h.caps.compounding
-    cases hz : hasCompoundingWithdrawalCredential wz <;>
-      cases hb : hasCompoundingWithdrawalCredential w <;> simp_all
+    exact capAt_le_of_exit r1 h.caps (by rw [bFork]; exact Nat.le_trans (by decide) h.fulu)
+      (by rw [zFork]; exact Nat.le_trans (by decide) h.fulu) (by rw [zFork]; exact h.early) i
+      foundB assigned
   -- the fold from `b`, through the charged prefix
   have seen : (riseScan i highC (pre.snoc step)).1 = true := by
     simp [riseScan, charged]
