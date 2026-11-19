@@ -51,6 +51,7 @@ extern lean_object* eth_engine_read_get_blobs_result(lean_object* args);
 extern lean_object* eth_engine_exchange_transition_configuration(lean_object* args);
 extern lean_object* eth_engine_exchange_capabilities(lean_object* args);
 extern lean_object* eth_engine_get_client_version(lean_object* args);
+extern lean_object* eth_engine_error_object(lean_object* args);
 
 /* ---- Wrappers --------------------------------------------------------- */
 
@@ -204,4 +205,12 @@ py_engine_get_client_version(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_engine_get_client_version, args, 5, ENGINE_ERROR);
+}
+
+PyObject*
+py_engine_error_object(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_engine_error_object, args, 1, ENGINE_ERROR);
 }

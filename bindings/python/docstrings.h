@@ -1526,6 +1526,9 @@
 #define DOC_engine_get_client_version \
   "The answer to an `engine_getClientVersionV1` request, from a version object."
 
+#define DOC_engine_error_object \
+  "The error object of the Engine API error with a code: its negative code, message and data."
+
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."
 

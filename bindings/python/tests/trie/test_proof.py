@@ -160,3 +160,40 @@ def test_rejects_unused_node() -> None:
     ) as error:
         trie.verify_proof(_LEAF_ROOT, _KEY, [_LEAF, _LEAF], secured=False)
     assert error.value.code == 108
+
+
+# The root of the empty trie: keccak256(0x80), the hash of the encoding of b"".
+_EMPTY_ROOT = bytes.fromhex("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
+
+
+def test_empty_root() -> None:
+    """The root of the empty trie is the hash of 0x80, and the trie gives it."""
+    assert _EMPTY_ROOT == keccak256(rlp.encode(b"")) == trie.root([]) == trie.root([], secured=True)
+
+
+@pytest.mark.parametrize("proof", [[], [b"\x80"]], ids=["no_node", "encoding"])
+@pytest.mark.parametrize("key", [b"", _KEY, bytes(32), b"\xff" * 32], ids=["0", "1", "32", "ff"])
+@pytest.mark.parametrize("secured", [False, True])
+def test_empty_trie(proof: list[bytes], key: bytes, secured: bool) -> None:
+    """The empty trie has no node, so no node and its encoding 0x80 both show any key not set."""
+    assert trie.verify_proof(_EMPTY_ROOT, key, proof, secured=secured) is None
+
+
+def test_no_node_other_root() -> None:
+    """A proof of no nodes against another root lacks the root node."""
+    with raises(
+        TrieError,
+        "proof does not verify: EthLib.Execution.Trie.ProofError.missingNode "
+        f"(hash := some 0x{_LEAF_ROOT.hex()})",
+    ) as error:
+        trie.verify_proof(_LEAF_ROOT, _KEY, [], secured=False)
+    assert error.value.code == 101
+
+
+def test_empty_trie_extra_node() -> None:
+    """A node after the encoding of the empty trie is not read, so the proof is rejected."""
+    with raises(
+        TrieError,
+        "proof does not verify: EthLib.Execution.Trie.ProofError.unusedNodes (count := 1)",
+    ):
+        trie.verify_proof(_EMPTY_ROOT, _KEY, [b"\x80", _LEAF], secured=False)

@@ -2044,6 +2044,10 @@ def engine_get_client_version(code: str, name: str, version: str, commit: bytes,
     """The answer to an `engine_getClientVersionV1` request, from a version object."""
     ...
 
+def engine_error_object(code: int) -> str:
+    """The error object of the Engine API error with a code: its negative code, message and data."""
+    ...
+
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:
     """The parameters of an Engine API request, read by the decoder and written by the writer."""
     ...

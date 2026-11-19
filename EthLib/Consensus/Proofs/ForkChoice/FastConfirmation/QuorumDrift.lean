@@ -413,7 +413,7 @@ private theorem runs_of_call
     Store.getCurrentTarget_eq_ok_iff.mp targetOk
   dsimp only at held read later ⊢
   obtain ⟨boundary, aBlock, boundaryOk, aFound, aLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock early checkpointOk
+    Store.isAncestor_of_getCheckpointBlock checkpointOk
   have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
   have atStart : boundary % preset.SLOTS_PER_EPOCH = 0 := by
     apply UInt64.toNat_inj.mp
@@ -476,7 +476,7 @@ private theorem runs_of_call
     epochBoundaryOk pulled.slot (by rw [← getCurrentEpoch_toNat, pulledEpoch])
   obtain ⟨tail⟩ := toPulled.2 pulledBefore
   -- The receiver holds the same target state, and its state runs on from the middle state.
-  obtain ⟨-, aBlockW, -, aFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock early read
+  obtain ⟨-, aBlockW, -, aFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨ancW, heldW, -⟩ := (forward w receiver k).reachable.blockStatesFromParents aFoundW
   obtain rfl : anc = ancW := e.blockStates_eq anchored caller receiver (start u caller)
     (start w receiver) (agree u caller w receiver n k callTime receiveTime) held heldW

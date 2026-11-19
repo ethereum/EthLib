@@ -323,3 +323,67 @@ def test_slot_not_rlp_word() -> None:
     ) as error:
         trie.verify_account_proof(root, answer)
     assert error.value.code == 505
+
+
+def test_absent_account_no_node() -> None:
+    """The empty state has no node, so an account proof of no nodes shows the address absent."""
+    assert trie.verify_account_proof(_EMPTY_ROOT, dict(_ABSENT, accountProof=[])) is None
+
+
+# A state of one account, with nonce 1, a balance of 16 wei, no code and no storage.
+# Its trie is one leaf: the path of the hash of the address, and the account.
+# The path has 64 nibbles, an even number, so its hex-prefix encoding is 0x20 then the hash.
+_OWNER = bytes.fromhex(_WITH_STORAGE["address"][2:])
+_ACCOUNT = rlp.encode([b"\x01", b"\x10", _EMPTY_ROOT, keccak256(b"")])
+_LEAF = rlp.encode([b"\x20" + keccak256(_OWNER), _ACCOUNT])
+_ONE_ACCOUNT_ROOT = keccak256(_LEAF)
+
+_NO_STORAGE = {
+    "address": _WITH_STORAGE["address"],
+    "nonce": "0x1",
+    "balance": "0x10",
+    "codeHash": "0x" + keccak256(b"").hex(),
+    "storageHash": "0x" + _EMPTY_ROOT.hex(),
+    "accountProof": ["0x" + _LEAF.hex()],
+    "storageProof": [],
+}
+
+
+def test_one_account_root() -> None:
+    """The state root of the one account is the hash of its leaf, whose storage root is empty."""
+    assert trie.root([(_OWNER, _ACCOUNT)], secured=True) == _ONE_ACCOUNT_ROOT
+    assert _EMPTY_ROOT.hex() == "56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+
+
+def test_account_without_storage() -> None:
+    """A slot of an account with no storage is not set, with no proof node or with 0x80."""
+    slots = [
+        {"key": "0x1", "value": "0x0", "proof": []},
+        {"key": "0x2", "value": "0x0", "proof": ["0x80"]},
+    ]
+    answer = dict(_NO_STORAGE, storageProof=slots)
+    assert trie.verify_account_proof(_ONE_ACCOUNT_ROOT, answer) == [False, False]
+
+
+def test_account_without_storage_nonzero() -> None:
+    """A slot of an account with no storage and a word other than 0 does not hold."""
+    slot = {"key": "0x1", "value": "0x5", "proof": []}
+    with raises(
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slotMismatch "
+        "(index := 0) (expected := 0) (actual := 5)",
+    ) as error:
+        trie.verify_account_proof(_ONE_ACCOUNT_ROOT, dict(_NO_STORAGE, storageProof=[slot]))
+    assert error.value.code == 506
+
+
+def test_slot_no_node_with_storage() -> None:
+    """A slot proof of no nodes against a storage root other than the empty one fails."""
+    slot = {"key": "0x6", "value": "0x0", "proof": []}
+    storage_root = _WITH_STORAGE["storageHash"]
+    with raises(
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.slot (index := 0) "
+        f"(EthLib.Execution.Trie.ProofError.missingNode (hash := some {storage_root}))",
+    ):
+        trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, storageProof=[slot]))

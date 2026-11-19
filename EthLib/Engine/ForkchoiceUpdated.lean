@@ -146,6 +146,10 @@ When the update applies no valid head, no build begins, so the attributes change
 
 The consensus layer writes the forkchoice state, the payload attributes and the parameters as JSON.
 
+This model leaves out step 6, since the source lets each client set the deepest reorg it takes.
+
+Past that depth, step 6 returns `-38006`.
+
 The method specifications state these rules, at commit `3284ee8` of execution-apis:
 
 - [`engine_forkchoiceUpdatedV1`][v1], steps 2 to 5, 7, 8 and 9

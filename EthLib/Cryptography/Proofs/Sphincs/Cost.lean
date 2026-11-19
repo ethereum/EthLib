@@ -11,7 +11,7 @@ The calls are counted under a fixed answer function, as in the signing cost of t
 Each call of `H` makes exactly one query under that function, as the game's hash does.
 
 - Key generation makes exactly `264193` calls.
-- Signing makes at most `939499 + 3 * 2^32 = 12885841387` calls.
+- Signing makes at most `470595 + 3 * 2^32 = 12885372483` calls.
 - Verification makes at most `491` calls, and exactly `491` when it accepts.
 
 The counter search of a layer tries at most `2^32` counters, one call each.
@@ -43,8 +43,8 @@ theorem hashCalls_eq_length_queriesWith {α : Type} (oa : OracleComp HashSpec α
     rw [SphincsSecurity.Security.queriedInputs_query_bind, List.length_cons]
     exact congrArg (· + 1) (ih (f input))
 
-/-- The bound `939499 + 3 * 2^32` of signing is `12885841387`. -/
-theorem signCalls_eq : 939499 + 3 * MAX_COUNTER_TRIALS = 12885841387 := by
+/-- The bound `470595 + 3 * 2^32` of signing is `12885372483`. -/
+theorem signCalls_eq : 470595 + 3 * MAX_COUNTER_TRIALS = 12885372483 := by
   decide
 
 variable (H : ByteArray → OracleComp HashSpec (Vector UInt8 32))
@@ -63,20 +63,19 @@ theorem hashCalls_findCounter_le (pkSeed : PkSeed) (key : OtsKey) (msg : Digest)
   rw [Bridge.hashCalls_findCounter f H hH]
   exact searchCalls_le _ 0 _
 
-/-- Signing makes at most `939499 + 3 * 2^32` calls, whatever the answers.
+/-- Signing makes at most `470595 + 3 * 2^32` calls, whatever the answers.
 
 It bounds the calls of one signing request, with a hash of one oracle call as in the game. -/
 theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
-    hashCalls f (signWith H sk msg) ≤ 939499 + 3 * MAX_COUNTER_TRIALS := by
+    hashCalls f (signWith H sk msg) ≤ 470595 + 3 * MAX_COUNTER_TRIALS := by
   let key := evalWithAnswerFn f (expandKey H sk.seed)
-  let pk := evalWithAnswerFn f (publicKeyOf H key.pkSeed (prf H key.pkSeed sk.seed))
+  let top := evalWithAnswerFn f (buildTree H key.pkSeed (prf H key.pkSeed sk.seed) .top 0)
   let rho := evalWithAnswerFn f (prfMsg H key.skPrf key.pkSeed msg)
-  let idx := digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed pk.root msg))
+  let idx := digestIndex (evalWithAnswerFn f (hMsg H rho key.pkSeed top.value msg))
   have hsecrets : ∀ adrs, hashCalls f (prf H key.pkSeed sk.seed adrs) = 1 :=
     hashCalls_prf f H hH _ _
-  -- A layer makes at most its message, all counters, its chains and its path.
-  let bound : Layer → Nat := fun layer =>
-    messageCalls layer + MAX_COUNTER_TRIALS + (V + TARGET_SUM + pathCalls 257 layer.height)
+  -- A layer makes at most its build, all counters and its chains.
+  let bound : Layer → Nat := fun layer => buildCalls layer + MAX_COUNTER_TRIALS + (V + TARGET_SUM)
   have hlayer : ∀ layer, layerCalls f H (prf H key.pkSeed sk.seed) key.pkSeed idx layer ≤
       bound layer := by
     intro layer
@@ -92,11 +91,10 @@ theorem hashCalls_signWith_le (sk : SecretKey) (msg : Message) :
     · split <;> omega
     · omega
   have hcost := (layersCost_le _ hlayer).trans hsum
-  rw [hashCalls_signWith_layers f H hH sk msg key pk rho idx rfl rfl rfl rfl, signPrefixCalls_eq]
-  obtain ⟨hb, hm, ht⟩ := messageCalls_eq
-  obtain ⟨pb, pm, pt⟩ := pathCalls_layers
+  rw [hashCalls_signWith_layers f H hH sk msg key top rho idx rfl rfl rfl rfl, signPrefixCalls_eq]
+  obtain ⟨hb, hm, ht⟩ := buildCalls_eq
   have hchains : V + TARGET_SUM = 192 := by decide
-  simp only [bound, hb, hm, ht, pb, pm, pt, hchains] at hcost
+  simp only [bound, hb, hm, ht, hchains] at hcost
   omega
 
 omit hH in
