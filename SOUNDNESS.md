@@ -1317,10 +1317,13 @@ Their §4 shows that the composition fails for multi-stage games.
 Let each hash call cost at least 1.
 `isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
 `Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
-Its bound is the closed form of equation (6) of Bertoni et al., which bounds the exact term of their Theorem 2.
-EthLib does not prove that the closed form bounds the exact term.
+Its bound is the closed form of equation (6) of Bertoni et al.
 For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
-EthLib does not prove this hypothesis, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+Their Theorem 2 rests on the exact term of their Lemma 5, `spongeExact`.
+Their equation (6) approximates that term by the closed form, for `N` well below `2^512`.
+`spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
+So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
+EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
 The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
 Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
 The distinguisher here asks only for 256-bit outputs of byte strings.
