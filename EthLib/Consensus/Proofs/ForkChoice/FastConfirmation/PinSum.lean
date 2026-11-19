@@ -5728,8 +5728,9 @@ private theorem pin_rate_exists (h : Setting config checks g split fin pulled an
       absurd ⟨total, perIncrement, perOk⟩ anyOk⟩
     simp
 
-/-- A state between two runs, whose end is not of a later fork than the start, is of the fork of
-the start.
+/-- A state between two runs is of the fork of the start.
+
+The end of the runs must not be of a later fork than the start.
 
 A run never moves the fork back. -/
 private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config checks x m)
