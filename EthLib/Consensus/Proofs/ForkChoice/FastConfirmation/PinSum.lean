@@ -5053,11 +5053,7 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
                 (pinTerms config pulled anc fin).partialsDue v.toNat) %
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt sd v.toNat := by
-  obtain ⟨fromFin'⟩ := h.fromFin
   have cleanC := K5_unslashed member
-  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin'.chainSteps)
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have shallow := h.shallow
   have nearC := h.near
   obtain ⟨sf, se⟩ := sd
   have above : fork ≤ sf := Nat.le_trans (le_refl _) (fork_le_of_chainSteps pre.chainSteps)
@@ -5065,7 +5061,7 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
   have same : fork = sf := (Fork.ctorIdx_injective (Nat.le_antisymm below above)).symm
   subst same
   have toCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
-  simp only at toCounted finSplit called
+  simp only at toCounted
   have near : (getCurrentEpoch se).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
   obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix pre post
     (getCurrentEpoch pulled).toNat events (by rw [cut]; exact replayed)
