@@ -461,12 +461,12 @@ private def WithdrawalExact {f g : Fork} (s : BeaconState preset f)
 /-- Each validator without an assigned exit keeps its withdrawable epoch.
 
 Otherwise it gets one after `bound`. -/
-private def WithdrawalUnassigned {f g : Fork} (bound : Epoch) (s : BeaconState preset f)
+private def WithdrawalUnassigned {f g : Fork} (bound : Nat) (s : BeaconState preset f)
     (t : BeaconState preset g) : Prop :=
   ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v →
     v.exitEpoch = FAR_FUTURE_EPOCH →
     ∃ w : Validator, t.validators.data[i]? = some w ∧
-      (w.withdrawableEpoch = v.withdrawableEpoch ∨ bound < w.withdrawableEpoch)
+      (w.withdrawableEpoch = v.withdrawableEpoch ∨ bound < w.withdrawableEpoch.toNat)
 
 namespace WithdrawalKept
 
@@ -653,13 +653,13 @@ private theorem compounding {electra : .pectra ≤ fork} {index : ValidatorIndex
     (.setValidator found written ⟨fun _ => rfl, fun _ => rfl⟩)
 
 /-- A later state with the same validators keeps every unassigned withdrawable epoch. -/
-private theorem unassigned_of_data {f g : Fork} {bound : Epoch} {s : BeaconState preset f}
+private theorem unassigned_of_data {f g : Fork} {bound : Nat} {s : BeaconState preset f}
     {t : BeaconState preset g} (same : t.validators.data = s.validators.data := by rfl) :
     WithdrawalUnassigned bound s t :=
   fun _ v found _ => ⟨v, by rw [same]; exact found, .inl rfl⟩
 
 /-- An unassigned exit stays so or gets an exact one, so the two relations compose. -/
-private theorem unassigned_trans {f g h : Fork} {bound : Epoch} {s : BeaconState preset f}
+private theorem unassigned_trans {f g h : Fork} {bound : Nat} {s : BeaconState preset f}
     {t : BeaconState preset g} {u : BeaconState preset h}
     (one : WithdrawalUnassigned bound s t) (exact : WithdrawalExact t u)
     (two : WithdrawalUnassigned bound t u) : WithdrawalUnassigned bound s u := by
@@ -678,22 +678,23 @@ private theorem unassigned_trans {f g h : Fork} {bound : Epoch} {s : BeaconState
 /-- Take a write that keeps an unassigned exit's withdrawable epoch, or sets it after `bound`.
 
 It relates every validator so. -/
-private theorem unassigned_setAt {bound : Epoch} {i : Nat} {old v : Validator}
+private theorem unassigned_setAt {bound : Nat} {i : Nat} {old v : Validator}
     (found : getValidatorAt state i = .ok old) (set : state.setValidatorAt i v = .ok after)
     (kept : old.exitEpoch = FAR_FUTURE_EPOCH →
-      v.withdrawableEpoch = old.withdrawableEpoch ∨ bound < v.withdrawableEpoch) :
+      v.withdrawableEpoch = old.withdrawableEpoch ∨ bound < v.withdrawableEpoch.toNat) :
     WithdrawalUnassigned bound state after := fun j w read far => by
   obtain ⟨w', located, related⟩ := setAt_transport (fun a b => a.exitEpoch = FAR_FUTURE_EPOCH →
-      b.withdrawableEpoch = a.withdrawableEpoch ∨ bound < b.withdrawableEpoch)
+      b.withdrawableEpoch = a.withdrawableEpoch ∨ bound < b.withdrawableEpoch.toNat)
     (fun _ _ => .inl rfl) found set kept j w read
   exact ⟨w', located, related far⟩
 
-/-- Starting an exit sets the withdrawable epoch after the current epoch.
+/-- Starting an exit sets the withdrawable epoch after the current epoch and both delays.
 
-The exit queue gives an exit after the current epoch, and the delay only adds to it. -/
+The exit queue gives an exit after the seed lookahead, and the withdrawal delay adds to it. -/
 private theorem unassigned_exit {i : ValidatorIndex}
     (ok : initiateValidatorExit config state i = .ok after) :
-    WithdrawalUnassigned (getCurrentEpoch state) state after := by
+    WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
   obtain ⟨v, found, ⟨_, rfl⟩ | ⟨_, queued, exitEpoch, withdrawable, queue, summed, written⟩⟩ :=
     initiateValidatorExit_ok ok
   · exact unassigned_of_data
@@ -702,16 +703,18 @@ private theorem unassigned_exit {i : ValidatorIndex}
       rw [← getValidator_eq_getValidatorAt]
       exact (getValidator_of_validators_eq same i).trans found
     rw [setValidator_eq_setValidatorAt] at written
-    have late : getCurrentEpoch state < withdrawable := by
+    have late : (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < withdrawable.toNat := by
       have after := exitQueue_lt queue
       have sum := (Uint64.addChecked_ok_iff.mp summed).2
-      rw [UInt64.lt_iff_toNat_lt]
       omega
     intro j w read' far
     have moved : queued.validators.data[j]? = some w := by rw [same]; exact read'
     obtain ⟨w', located, related⟩ := setAt_transport (fun a b =>
         a.exitEpoch = FAR_FUTURE_EPOCH →
-          b.withdrawableEpoch = a.withdrawableEpoch ∨ getCurrentEpoch state < b.withdrawableEpoch)
+          b.withdrawableEpoch = a.withdrawableEpoch ∨
+            (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+              config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < b.withdrawableEpoch.toNat)
       (fun _ _ => .inl rfl) read written (fun _ => .inr late) j w moved
     exact ⟨w', located, related far⟩
 
@@ -719,18 +722,20 @@ private theorem unassigned_exit {i : ValidatorIndex}
 
 So they keep every assigned exit's withdrawable epoch exactly.
 
-They give each newly assigned exit a withdrawable epoch after the current epoch. -/
+They give each newly assigned exit a withdrawable epoch past the seed lookahead and the delay. -/
 private theorem registry_unassigned (electra : .pectra ≤ fork)
     (ok : processRegistryUpdates config state = .ok after) :
     WithdrawalKept state after ∧ WithdrawalExact state after ∧
-      WithdrawalUnassigned (getCurrentEpoch state) state after := by
+      WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
   unfold processRegistryUpdates at ok
   rw [ite_eq_left electra] at ok
   simp only [bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, ok⟩ := ok
   have all := foldlM_ok_invariant
     (fun s => WithdrawalKept state s ∧ WithdrawalExact state s ∧ RegistryLifecycle state s ∧
-      WithdrawalUnassigned (getCurrentEpoch state) state s ∧ s.slot = state.slot)
+      WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state s ∧ s.slot = state.slot)
     (fun a _ b prior ok => by
       have life : RegistryLifecycle a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
@@ -750,7 +755,8 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
               fun _ => rfl⟩
         · cases ok; exact .refl _
       have step : WithdrawalKept a b ∧ WithdrawalExact a b ∧
-          WithdrawalUnassigned (getCurrentEpoch a) a b := by
+          WithdrawalUnassigned ((getCurrentEpoch a).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+            config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨v, found, ok⟩ := ok
         split at ok
@@ -771,7 +777,8 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
       have epoch : getCurrentEpoch a = getCurrentEpoch state := by
         simp only [getCurrentEpoch, prior.2.2.2.2]
       exact ⟨prior.1.trans step.1 prior.2.2.1, exact_trans prior.2.1 step.2.1 prior.2.2.1,
-        prior.2.2.1.trans life, unassigned_trans prior.2.2.2.1 step.2.1 (epoch ▸ step.2.2),
+        prior.2.2.1.trans life,
+        unassigned_trans prior.2.2.2.1 step.2.1 (by rw [← epoch]; exact step.2.2),
         slot.trans prior.2.2.2.2⟩)
     ⟨of_data, exact_of_data, RegistryLifecycle.refl _, unassigned_of_data, rfl⟩ ok
   exact ⟨all.1, all.2.1, all.2.2.2.1⟩
@@ -1832,6 +1839,20 @@ theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState pr
   subst found
   exact ⟨UInt64.le_of_eq same.symm, .inr same⟩
 
+/-- From Electra, registry updates keep an unassigned exit's withdrawable epoch or set it later. -/
+theorem processRegistryUpdates_withdrawableEpoch_of_unassigned_late
+    {preset : Preset} {fork : Fork} {config : Config}
+    {state after : BeaconState preset fork}
+    (electra : .pectra ≤ fork)
+    (ok : processRegistryUpdates config state = .ok after)
+    (i : Nat) (v : Validator) (found : state.validators.data[i]? = some v)
+    (unassigned : v.exitEpoch = FAR_FUTURE_EPOCH) :
+    ∃ w : Validator, after.validators.data[i]? = some w ∧
+      (w.withdrawableEpoch = v.withdrawableEpoch ∨
+        (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+          config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < w.withdrawableEpoch.toNat) :=
+  (WithdrawalKept.registry_unassigned electra ok).2.2 i v found unassigned
+
 /-- From Electra, registry updates keep the withdrawable epoch of an unassigned exit.
 
 Otherwise they give it one after the current epoch. -/
@@ -1844,7 +1865,9 @@ theorem processRegistryUpdates_withdrawableEpoch_of_unassigned
     (unassigned : v.exitEpoch = FAR_FUTURE_EPOCH) :
     ∃ w : Validator, after.validators.data[i]? = some w ∧
       (w.withdrawableEpoch = v.withdrawableEpoch ∨ getCurrentEpoch state < w.withdrawableEpoch) :=
-  (WithdrawalKept.registry_unassigned electra ok).2.2 i v found unassigned
+  (processRegistryUpdates_withdrawableEpoch_of_unassigned_late electra ok i v found unassigned).imp
+    fun _ ⟨found', moved⟩ => ⟨found', moved.imp id fun late =>
+      UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
 
 /-! ## The pending consolidations inside one epoch -/
 
