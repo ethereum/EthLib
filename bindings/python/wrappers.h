@@ -743,6 +743,7 @@ PyObject* py_engine_read_get_blobs_result                (PyObject* self, PyObje
 PyObject* py_engine_exchange_transition_configuration     (PyObject* self, PyObject* args);
 PyObject* py_engine_exchange_capabilities                (PyObject* self, PyObject* args);
 PyObject* py_engine_get_client_version                   (PyObject* self, PyObject* args);
+PyObject* py_engine_error_object                         (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);
