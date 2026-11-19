@@ -6545,13 +6545,11 @@ private theorem rounded_add_ceil_le (I x C : ℕ) (hI : 0 < I) :
 private theorem capAt_le_capMax {z : ForkedBeaconState preset} (caps : CapOrder preset)
     (electra : .pectra ≤ z.fork) (i : ℕ) :
     PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-  unfold PinSplit2.capAt
   cases found : z.state.validators.data[i]? with
-  | none => simp
+  | none => simp [PinSplit2.capAt, found]
   | some w =>
     have compounding := UInt64.le_iff_toNat_le.mp caps.compounding
-    simp only [Option.map_some, Option.getD_some, withdrawalMaxEffectiveBalance, electra,
-      ↓reduceIte, getMaxEffectiveBalance]
+    rw [capAt_of_found electra found]
     split <;> omega
 
 /-- A key that exited before the finalized epoch stays within its finalized balance and credits.
