@@ -18,6 +18,8 @@ Each step before Gloas keeps it, and a slashed validator stays slashed.
 
 Its withdrawable epoch never decreases.
 
+A slashed validator with an assigned exit keeps its withdrawable epoch.
+
 A newly slashed validator withdraws at least a slashings vector after the slashing.
 -/
 
@@ -249,7 +251,7 @@ theorem EpochTrace.slashed_withdrawableEpoch_mono
           obtain ⟨last, located, life⟩ :=
             (registryLifecycle_processRegistryUpdates ok).validators i v atRegistry
           obtain rfl : last = w := Option.some.inj (located.symm.trans after)
-          exact ⟨kept.1, life.exitEpoch assigned, kept.2.2⟩
+          exact ⟨kept.1, life.exitEpoch assigned, by rw [kept.2.2]; exact UInt64.le_refl _⟩
 
 /-- A slashed validator with an assigned exit stays slashed, with an assigned exit.
 
@@ -276,7 +278,26 @@ theorem Run.slashed_withdrawableEpoch_mono_epoch
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
     exact CapStep.data
   have span := (runStep.trans cacheStep).trans (CapStep.epochTrace trace)
-  exact (span.withdrawal i v w before after).1 slashed assigned
+  obtain ⟨flag, exit, same⟩ := (span.withdrawal i v w before after).1 slashed assigned
+  exact ⟨flag, exit, by rw [same]; exact UInt64.le_refl _⟩
+
+/-- A slashed validator with an assigned exit keeps its withdrawable epoch along a run.
+
+It stays slashed.
+
+A slashing sets the withdrawable epoch once, so a validator that is already slashed keeps it. -/
+theorem Run.slashed_withdrawable_eq {x y : ForkedBeaconState preset}
+    (run : Run config checks x y)
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (early : y.fork < .glamsterdam) (i : Nat) (v w : Validator)
+    (before : x.state.validators.data[i]? = some v)
+    (after : y.state.validators.data[i]? = some w)
+    (slashed : v.slashed = true) (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    w.slashed = true ∧ w.withdrawableEpoch = v.withdrawableEpoch := by
+  obtain ⟨flag, -, same⟩ := ((CapStep.run run activation compounding early).1.withdrawal i v w
+    before after).1 slashed assigned
+  exact ⟨flag, same⟩
 
 /-- A slot step keeps the slashed flag at each registry position. -/
 private theorem slot_slashedFlag {m n : ForkedBeaconState preset}
