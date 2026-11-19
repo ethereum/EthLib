@@ -2568,13 +2568,6 @@ private theorem key_capped {g : ForkedBeaconState preset}
     exact le_trans capped
       (UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen))
 
-/-- The floor of a sum is at most the sum of the floors, plus one. -/
-private theorem div_add_le_one (a b c : ℕ) : (a + b) / c ≤ a / c + b / c + 1 := by
-  rcases Nat.eq_zero_or_pos c with rfl | hc
-  · simp
-  · rw [Nat.add_div hc]
-    split <;> omega
-
 /-- The gain at the stake `e0 + C + I` over `k` epochs splits into three parts.
 
 They are the gain on the credits, the gain at the base stake `e0`, and one increment's gain.
@@ -2603,8 +2596,9 @@ private theorem gain_split (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk : k �
       e0 / I * P * F + (C + I - 1) / I * P * F + P * F := by ring
   have floors : (e0 / I * P * F + (C + I - 1) / I * P * F + P * F) / WD ≤
       e0 / I * P * F / WD + (C + I - 1) / I * P * F / WD + P * F / WD + 2 := by
-    have one := div_add_le_one (e0 / I * P * F + (C + I - 1) / I * P * F) (P * F) WD
-    have two := div_add_le_one (e0 / I * P * F) ((C + I - 1) / I * P * F) WD
+    have one := Nat.add_div_le_div_add_div_add_one
+      (e0 / I * P * F + (C + I - 1) / I * P * F) (P * F) WD
+    have two := Nat.add_div_le_div_add_div_add_one (e0 / I * P * F) ((C + I - 1) / I * P * F) WD
     omega
   rw [split3] at step
   calc k * ((e0 + C + I) / I * P * F / WD)
@@ -2618,8 +2612,9 @@ private theorem gain_split (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk : k �
 
 The run starts at a state where the key's effective balance is within the largest one.
 
-K2 bounds the balance at every state by `creditBound`, given `E` at least the effective balances
-that the bound allows.
+K2 bounds the balance at every state by `creditBound`, given the right `E`.
+
+`E` is at least the effective balances that the bound allows.
 
 Then the update of the effective balances reads that bound as its ceiling. -/
 private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
@@ -2650,8 +2645,9 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
   exact (third _ aligned startCap
     (fun z member => Nat.le_trans (Nat.min_le_left _ _) (balances z member)) capCeil).1
 
-/-- The effective balance of a key whose credentials switch on C's branch is at most its balance
-at the switch, its credits and their gain.
+/-- A key that switches on C's branch has an effective balance within its switch balance and gain.
+
+Its credits count too.
 
 The key is within `MIN_ACTIVATION_BALANCE` when it switches, and its balance there is within `B0`.
 
