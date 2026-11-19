@@ -1197,6 +1197,20 @@ private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v hig
     · omega
     · exact ih
 
+/-- The credits that a scan reads are 0 if each step of the run credits 0. -/
+private theorem creditScan_eq_zero_of_steps (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (zero : ∀ {m n : ForkedBeaconState preset} (step : Step config checks m n),
+      tail.Contains step → stepCredit blockP slotP v step = 0) :
+    (creditScan blockP slotP v high tail).1 = 0 := by
+  induction tail with
+  | nil => rfl
+  | @snoc m n pre step ih =>
+    have prior := ih fun inner member => zero inner (.earlier member step)
+    have here := zero step (.last pre step)
+    rw [creditScan_snoc_fst]
+    split <;> omega
+
 /-- The sync credits of a list of events are at most the credits of its events of a source set.
 
 The source set holds the sync source. -/
