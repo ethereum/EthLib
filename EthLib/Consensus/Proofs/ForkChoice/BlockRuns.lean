@@ -425,7 +425,7 @@ theorem Store.Reachable.validators_size_le_of_gloas (gloas : .glamsterdam ≤ fo
   · obtain ⟨second, two⟩ := processSlots_validators_size_le slots
     exact growth_trans first second one two
 
-/-- An assumption on the run: the anchor's registry leaves room in the registry limit.
+/-- An assumption on the anchor and the horizon: the anchor's registry leaves room in the limit.
 
 The room covers one epoch of pending deposits for each epoch from the anchor to the horizon.
 

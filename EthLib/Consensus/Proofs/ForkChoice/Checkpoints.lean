@@ -625,6 +625,14 @@ theorem updateCheckpoints_justifiedCheckpoint (s : Store preset fork) (j f : Che
   split <;> dsimp only <;> split
   all_goals first | exact .inl rfl | exact .inr rfl
 
+/-- Replacing the checkpoints keeps the finalized checkpoint, or adopts the given one. -/
+theorem updateCheckpoints_finalizedCheckpoint (s : Store preset fork) (j f : Checkpoint) :
+    (s.updateCheckpoints j f).finalizedCheckpoint = s.finalizedCheckpoint ∨
+      (s.updateCheckpoints j f).finalizedCheckpoint = f := by
+  unfold Store.updateCheckpoints
+  split <;> dsimp only <;> split
+  all_goals first | exact .inl rfl | exact .inr rfl
+
 /-- A tick within a slot keeps the unrealized justified checkpoint.
 
 It keeps the justified checkpoint, or adopts the unrealized one. -/
@@ -947,9 +955,7 @@ theorem onBlock_pulledUp {before after : Store preset fork} {checks : SignatureC
         state.finalizedCheckpoint).finalizedCheckpoint = state.finalizedCheckpoint := by
     have same : boosted.finalizedCheckpoint = before.finalizedCheckpoint := by
       rw [boostSame.finalized, recordSame.finalized]
-    unfold Store.updateCheckpoints
-    split <;> dsimp only <;> split
-    all_goals first | exact .inl same | exact .inr rfl
+    exact (boosted.updateCheckpoints_finalizedCheckpoint _ _).imp_left (·.trans same)
   refine .inr ⟨blockRoot, state, pulled,
     { boosted.updateCheckpoints state.currentJustifiedCheckpoint state.finalizedCheckpoint with
       unrealizedJustifications := (boosted.updateCheckpoints state.currentJustifiedCheckpoint

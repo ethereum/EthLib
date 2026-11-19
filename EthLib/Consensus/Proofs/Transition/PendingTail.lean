@@ -524,7 +524,7 @@ private theorem pendingTail_processOperations {config : Config} {checks : Signat
 
 /-- A block transports its input pending tail.
 
-From Gloas the requests of the parent payload run first.
+From Gloas the requests of the parent payload run first, and they keep the pending tail.
 
 The rest of the execution prefix and the sync aggregate keep the registry.
 

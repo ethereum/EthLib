@@ -13,7 +13,7 @@ import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 /-!
 # Proofs: up-to-date honest stores have a head
 
-Before Gloas, an up-to-date honest store can compute its head.
+At every fork, an up-to-date honest store can compute its head.
 
 The exceptions are a collision of bounded honest stores, and direct-safety evidence from a store.
 
@@ -31,7 +31,9 @@ A checkpoint state, once stored, stays.
 
 So the store holds the state, and the head follows from the stake ceiling and the boost's fit.
 
-This is part of [#2060][issue], for the forks before Gloas.
+From Gloas the head also needs room in the anchor's registry and a cap on each justified stake.
+
+This is part of [#2060][issue].
 
 [issue]: https://github.com/ethereum/EthLib/issues/2060
 -/
@@ -672,7 +674,6 @@ private theorem Execution.honestRegistries_of_room (slots : 0 < config.SLOT_DURA
     (computeStartSlotAtEpoch_ok_iff.mp startOk).2]
   exact Nat.le_trans (Nat.div_le_of_le_mul (Nat.le_of_eq (Nat.mul_comm _ _))) justifiedLe
 
-
 /-! ## From Gloas: active equivocators are registered or evidence holds -/
 
 /-- A held block reads the store's finalized checkpoint when it comes from the block's state.
@@ -782,9 +783,8 @@ private theorem Execution.heldFinalized_read {anchor : Store preset fork}
         have adopted : ((e.world (n + 1)).state w).finalizedCheckpoint = base.finalizedCheckpoint ∨
             ((e.world (n + 1)).state w).finalizedCheckpoint = pulled.finalizedCheckpoint := by
           rcases moved with ⟨-, eq⟩ | ⟨-, eq⟩ <;> rw [eq]
-          · unfold Store.updateCheckpoints
-            split <;> dsimp only <;> split
-            all_goals first | exact .inr rfl | exact .inl (by simp)
+          · exact (Store.updateCheckpoints_finalizedCheckpoint _ _ _).imp_left
+              (·.trans (by simp))
           · exact .inl (by simp)
         have own := finalized_read_of_held reached sound anchorSlot boundary
           (unknown (n + 1) le_rfl) positive window nonzero held
@@ -899,7 +899,7 @@ private theorem Execution.activeEquivocatorsRegistered_or_evidence {anchor : Sto
 
 /-! ## From Gloas: up-to-date honest stores have a head -/
 
-/-- Honest justified states read by `last` have effective balances that add up to at most `cap`.
+/-- Honest justified states up to time `last` have effective balances that add up to at most `cap`.
 
 An assumption on the run: the supply of ether bounds the stake of the whole registry. -/
 def CheckpointRegistryStakeCeiling (cap last : ℕ) : Prop :=

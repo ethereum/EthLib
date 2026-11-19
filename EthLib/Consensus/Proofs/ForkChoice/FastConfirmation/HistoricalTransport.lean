@@ -1051,7 +1051,7 @@ private theorem registry_of_runKept {state after : BeaconState preset fork}
   have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 run.grows
   exact ⟨after.validators.data[position], Array.getElem?_eq_getElem inside⟩
 
-/-- A validator active in a held block state at its block's epoch is in a later checkpoint state.
+/-- A validator active in a held block's state at its epoch has its index in a checkpoint state.
 
 The store is built with one setting of the checks.
 

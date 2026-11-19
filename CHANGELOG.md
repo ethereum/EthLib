@@ -18,8 +18,9 @@ Not yet released.
 - The Gloas head endpoint adds these facts.
   `Store.Reachable.validators_size_le_of_gloas` bounds the registry of each held block state and checkpoint state from Gloas by the anchor's registry and the epochs since the anchor.
   `advanceSlots_validators_size_le`, `processSlots_validators_size_le` and `stateTransition_validators_size_le` bound the validators that runs of slots and a block from Gloas add.
-  `Store.ForwardReachableWith.registered_of_shared_checkpoint` puts each validator active in a held block state into a later checkpoint state.
+  `Store.ForwardReachableWith.registered_of_shared_checkpoint` gives each validator active in a held block state an index in a state processed to a checkpoint that both blocks read.
   Both blocks must read one checkpoint at or past that state's finality.
+  `Store.updateCheckpoints_finalizedCheckpoint` states that replacing the checkpoints keeps the finalized checkpoint or adopts the given one.
 
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
