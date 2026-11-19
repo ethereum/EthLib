@@ -5062,7 +5062,8 @@ private theorem bud_deposits_of (h : Setting config checks g split fin pulled an
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   -- Every step of the run starts within the epochs of `pulled`, so `high` can be that epoch.
-  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch (Nat.le_succ _)
+  have same := DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail endEpoch
+    (Nat.le_succ _)
   have tailOk : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
     rw [← same]
     exact replayed
