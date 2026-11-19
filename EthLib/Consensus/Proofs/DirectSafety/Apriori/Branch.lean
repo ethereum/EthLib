@@ -495,7 +495,7 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
           (run_justified_separated shared genesis).1.balancesMatch
       have exitsOrd : ExitsOrdered cached :=
         (frame_processSlot cachedOk).exitsOrdered
-          (Run.invariant genesis.invariant shared).exitsOrdered
+          (run_justified_separated shared genesis).1.exitsOrdered
       have toEnd : RegistryLifecycle middle y.state := by
         simp only [pure, Except.pure, Except.ok.injEq] at advancedEq
         have epochedKept : RegistryLifecycle updated epoched :=
