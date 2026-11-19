@@ -72,8 +72,7 @@ instance {n : Nat} : FromJson (Vector UInt8 n) where
   fromJson? json := do
     let text ← json.getStr?
     let bytes ← (Serialization.Ssz.ofHex text).mapError fun e => s!"{text}: {reprStr e}"
-    if h : bytes.size = n then return ⟨bytes, h⟩
-    else throw s!"{text} does not hold {n} bytes"
+    Base.exactBytes n ⟨bytes⟩ fun _ => s!"{text} does not hold {n} bytes"
 
 /-- A 256-bit integer, from a number or from decimal digits. -/
 instance : FromJson U256 where

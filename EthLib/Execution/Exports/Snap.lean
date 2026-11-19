@@ -71,8 +71,7 @@ def accessListsAnswerExport (request response : ByteArray) (expected : Array Byt
   let req ← run (SnapMessage.decode .snap2 0x08 request)
   let resp ← run (SnapMessage.decode .snap2 0x09 response)
   let hashes ← expected.toList.mapM fun b =>
-    if h : b.size = 32 then pure (⟨b.data, h⟩ : Base.Hash32)
-    else throw (0, "an access list hash is not 32 bytes")
+    Base.exactBytes 32 b fun _ => (0, "an access list hash is not 32 bytes")
   match resp with
   | .blockAccessLists _ lists =>
     return SnapMessage.answers req resp && accessListsAnswer hashes lists
@@ -152,8 +151,8 @@ def verifyStorageRangesOf
       List ByteArray) : Result (Option Bool) := do
   let (roots, start, slots, proof) := args
   let start ← if start.size = 0 then pure (Vector.replicate 32 0)
-    else if h : start.size = 32 then pure ⟨start.data, h⟩
-    else throw (0, s!"bad start size: {start.size}, expected 0 or 32")
+    else Base.exactBytes 32 start fun size =>
+      (0, s!"bad start size: {size}, expected 0 or 32")
   runRange (verifyStorageRanges roots start (slots.map (·.map toRangeEntry)) proof)
 
 /-- Check the ranges of a StorageRanges answer, against the storage roots of the request.

@@ -40,8 +40,7 @@ def interchangeText (interchange : Interchange) : ByteArray :=
 
 /-- Bytes of a fixed length, or code 0 with a message that names them. -/
 def fixedBytesOf (what : String) (size : Nat) (bytes : ByteArray) : Result (Vector UInt8 size) :=
-  if sized : bytes.size = size then return ⟨bytes.data, sized⟩
-  else throw (0, s!"{what} is {size} bytes, not {bytes.size}")
+  Base.exactBytes size bytes fun actual => (0, s!"{what} is {size} bytes, not {actual}")
 
 /-- An interchange file as the format writes it again, from its JSON text. -/
 @[export eth_consensus_read_slashing_interchange]

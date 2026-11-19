@@ -82,6 +82,16 @@ theorem packBytes_injective {n : Nat} :
   rw [exactBytes?, dite_eq_left (size_packBytes v)]
   rfl
 
+/-- A buffer of the wanted length reads as its own bytes. -/
+theorem exactBytes_of_size_eq {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat → ε)
+    (h : b.size = n) : exactBytes n b bad = .ok ⟨b.data, h⟩ := by
+  simp [exactBytes, exactBytes?, h]
+
+/-- A buffer of any other length gives the error built from its length. -/
+theorem exactBytes_of_size_ne {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat → ε)
+    (h : b.size ≠ n) : exactBytes n b bad = .error (bad b.size) := by
+  simp [exactBytes, exactBytes?, h]
+
 /-- An object read from a buffer has the bytes of that buffer. -/
 theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
     (h : exactBytes? n b = some v) : packBytes v = b := by

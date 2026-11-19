@@ -39,7 +39,7 @@ def runSecp256k1 {α : Type} (act : Except Secp256k1Error α) : Result α :=
 
 /-- A 32-byte hash, or an error for any other length. -/
 def readHash (bytes : ByteArray) : Except Secp256k1Error (Vector UInt8 32) :=
-  if h : bytes.size = HASH_LEN then .ok ⟨bytes.data, h⟩ else .error (.badHashSize bytes.size)
+  Base.exactBytes HASH_LEN bytes .badHashSize
 
 /-- A 32-byte big-endian private key below `n`, or an error.
 
