@@ -540,7 +540,15 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
 
 Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
-The evidence is relative to the anchor. -/
+The evidence is relative to the anchor.
+
+Two steps of a checked call assume this read.
+
+With it, an accepted current-target test has its honest signers up to these alternatives.
+
+A confirmed root stays in the filtered tree up to these alternatives and that step's own evidence.
+
+That evidence is held-state finality evidence or cross-store justified evidence. -/
 theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
     (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
