@@ -570,11 +570,17 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- A late key is charged three times its effective balance here, and its rise once.
+  --
+  -- A key active by the finalized state can have a larger balance there, and its reward is charged.
+  --
+  -- The margin check prices that term at zero on every row (f1f20b0f8, section 33).
   let late := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
         decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
-      (3 * effective i + rise i)
+      (3 * effective i + rise i +
+        3 * ((finEB i - effective i - rise i + (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
+          p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat))
   -- Every seat of every sync committee in the window counts, at the seat's envelope.
   --
   -- The window can include the call's previous period, which its state does not store.
