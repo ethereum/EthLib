@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Operations
+import EthLib.Consensus.Proofs.Transition.EpochParticipation
 
 /-!
 # Proofs: what the checks of a payload and of a bid read
@@ -161,32 +162,17 @@ theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubke
 theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
     (computed : applyPendingDeposit config checks state deposit = .ok after) :
     PayloadInputs state after := by
-  unfold applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact PayloadInputs.refl _
-    simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    split at computed
-    · exact payloadInputs_addValidatorToRegistry computed
-    · simp only [pure, Except.pure, Except.ok.injEq] at computed
-      exact computed ▸ PayloadInputs.refl _
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    exact payloadInputs_increaseBalance computed
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨-, added⟩
+  · exact PayloadInputs.refl _
+  · exact payloadInputs_increaseBalance raised
+  · exact payloadInputs_addValidatorToRegistry added
 
 /-- The inactivity updates keep the inputs of a payload. -/
 theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
     (computed : processInactivityUpdates config state altair = .ok after) :
     PayloadInputs state after := by
-  unfold processInactivityUpdates at computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ PayloadInputs.refl _
-  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  rw [processInactivityUpdates_frame computed]
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- The registry updates keep the inputs of a payload. -/
 theorem payloadInputs_processRegistryUpdates
@@ -243,38 +229,24 @@ theorem payloadInputs_passPendingConsolidations {nextEpoch : Epoch} :
     ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
       {result : BeaconState preset fork × Nat},
       passPendingConsolidations nextEpoch state consolidations = .ok result →
-      PayloadInputs state result.1
-  | [], _, _, computed => by
-    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    exact PayloadInputs.refl _
-  | consolidation :: rest, state, result, computed => by
-    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨source, _, computed⟩ := computed
-    split at computed
-    · simp only [bind_ok_iff] at computed
-      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
-      cases computed
-      exact payloadInputs_passPendingConsolidations (result := (passed, read)) passedOk
-    split at computed
-    · cases computed
-      exact PayloadInputs.refl _
-    simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
-      computed
-    cases computed
-    exact ((payloadInputs_decreaseBalance loweredOk).trans
-      (payloadInputs_increaseBalance raisedOk)).trans
-      (payloadInputs_passPendingConsolidations (result := (passed, read)) passedOk)
+      PayloadInputs state result.1 :=
+  fun computed => (passPendingConsolidations_of PayloadInputs PayloadInputs.refl
+    (fun one two => one.trans two) (fun _ => True)
+    (fun _ _ _ lowered raised =>
+      (payloadInputs_decreaseBalance lowered).trans (payloadInputs_increaseBalance raised))
+    (fun _ _ => trivial) computed).2
 
 /-- The historical summaries update keeps the inputs of a payload. -/
 theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
     (computed : processHistoricalSummariesUpdate state capella = .ok after) :
     PayloadInputs state after := by
-  unfold processHistoricalSummariesUpdate at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat (split at computed <;> try cases computed)
-  all_goals exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  obtain ⟨-, rest⟩ := processHistoricalSummariesUpdate_eq computed
+  split at rest
+  · obtain ⟨_, _, _, _, _, same⟩ := rest
+    rw [← same]
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · subst rest
+    exact PayloadInputs.refl _
 
 /-- Slashing a validator keeps the inputs of a payload. -/
 theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}

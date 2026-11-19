@@ -329,7 +329,6 @@ Not yet released.
 - `processEpoch_registryCut` splits an epoch at its registry updates: the three stages before them, the registry updates, then the rest of the epoch.
 
 - Six epoch and deposit steps keep the inputs of a payload: `payloadInputs_applyPendingDeposit`, `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations` and `payloadInputs_processHistoricalSummariesUpdate`.
-  `payloadInputs_addValidatorToRegistry` moves up the file unchanged.
 
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
