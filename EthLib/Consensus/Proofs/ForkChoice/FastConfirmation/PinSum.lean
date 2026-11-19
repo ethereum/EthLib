@@ -15698,7 +15698,9 @@ A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes
 
 A key credited only by a consolidation of X takes row H's unit.
 
-A key slashed only on R's branch takes its unit in `branchR`. -/
+A key slashed only on R's branch takes its unit in `branchR`.
+
+The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave. -/
 private theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -15713,6 +15715,10 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
           unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
             (propC tailC highC v.toNat)) +
       (∑ v ∈ (K6 pulled counted),
+          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
+      (∑ v ∈ SC pulled counted split,
+          unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
+      (∑ v ∈ CS counted split,
           unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) ≤
       (pinTerms config pulled anc fin).creditUnits +
         3 * (pinTerms config pulled anc fin).unitGain *
@@ -15722,6 +15728,8 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
   classical
   obtain ⟨N, units, slots⟩ := creditUnits_eq config pulled anc fin
   obtain ⟨d45, d46, d56, -⟩ := classes_disjoint h
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  obtain ⟨dCS, -⟩ := cs_disjoint h
   have credited := credited_classes_le h tailC highC
   have five := card_K5_le h tailC
   -- The consolidation counts read the pulled epoch as their horizon.
@@ -15739,6 +15747,12 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
   set G6 := (K6 pulled counted).filter fun v => 0 < flowCredit
     (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
     (credC tailC highC v.toNat)
+  set Gsc := (SC pulled counted split).filter fun v => 0 < flowCredit
+    (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+    (credC tailC highC v.toNat)
+  set Gcs := (CS counted split).filter fun v => 0 < flowCredit
+    (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
+    (credC tailC highC v.toNat)
   have s4 : ∑ v ∈ K4 pulled counted V,
       unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
         (pinTerms config pulled anc fin).unitGain * G4.card :=
@@ -15752,7 +15766,16 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
       unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
         (pinTerms config pulled anc fin).unitGain * G6.card :=
     sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat
-  set All := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted
+  have ssc : ∑ v ∈ SC pulled counted split,
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
+        (pinTerms config pulled anc fin).unitGain * Gsc.card :=
+    sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat
+  have scs : ∑ v ∈ CS counted split,
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
+        (pinTerms config pulled anc fin).unitGain * Gcs.card :=
+    sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat
+  set All := K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
+    CS counted split
   set Co := All.filter fun v => 0 < consAmt eventsC v.toNat
   set A := All.filter fun v => 0 < syncD eventsF v.toNat
   set B := All.filter fun v => 0 < syncD events v.toNat
@@ -15760,6 +15783,8 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
   set Cr4 := (K4 pulled counted V).filter fun v => creditedKey tailC highC v = true
   set Cr5 := (K5 counted V).filter fun v => creditedKey tailC highC v = true
   set Cr6 := (K6 pulled counted).filter fun v => creditedKey tailC highC v = true
+  set Crsc := (SC pulled counted split).filter fun v => creditedKey tailC highC v = true
+  set Crcs := (CS counted split).filter fun v => creditedKey tailC highC v = true
   -- A key with a unit is credited, or a consolidation, a seat debit or a slashing takes it.
   have route : ∀ (v : ValidatorIndex) (cred : ℕ), v ∈ All →
       (cred = credC tailC highC v.toNat ∨ cred = propC tailC highC v.toNat) →
@@ -15777,40 +15802,67 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
     · exact .inr (Finset.mem_union_left _ (Finset.mem_union_right _
         (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, debitR⟩))))
     · exact .inr (Finset.mem_union_right _ (Finset.mem_filter.mpr ⟨inAll, slashed⟩))
-  have cover : G4 ∪ G5 ∪ G6 ⊆ (Cr4 ∪ Cr5 ∪ Cr6) ∪ (Co ∪ (A ∪ B) ∪ Sl) := by
+  have inAll : ∀ v, v ∈ K4 pulled counted V ∨ v ∈ K5 counted V ∨ v ∈ K6 pulled counted ∨
+      v ∈ SC pulled counted split ∨ v ∈ CS counted split → v ∈ All := fun v member => by
+    simp only [All, Finset.mem_union]
+    tauto
+  have cover : G4 ∪ G5 ∪ G6 ∪ Gsc ∪ Gcs ⊆
+      (Cr4 ∪ Cr5 ∪ Cr6 ∪ Crsc ∪ Crcs) ∪ (Co ∪ (A ∪ B) ∪ Sl) := by
     intro v member
-    rcases Finset.mem_union.mp member with m45 | m6
-    · rcases Finset.mem_union.mp m45 with m4 | m5
-      · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m4
-        rcases route v _ (Finset.mem_union_left _ (Finset.mem_union_left _ inK)) (.inl rfl)
-          positive with credit | rest
-        · exact Finset.mem_union_left _ (Finset.mem_union_left _ (Finset.mem_union_left _
-            (Finset.mem_filter.mpr ⟨inK, credit⟩)))
-        · exact Finset.mem_union_right _ rest
-      · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m5
-        rcases route v _ (Finset.mem_union_left _ (Finset.mem_union_right _ inK)) (.inr rfl)
-          positive with credit | rest
-        · exact Finset.mem_union_left _ (Finset.mem_union_left _ (Finset.mem_union_right _
-            (Finset.mem_filter.mpr ⟨inK, credit⟩)))
-        · exact Finset.mem_union_right _ rest
-    · obtain ⟨inK, positive⟩ := Finset.mem_filter.mp m6
-      rcases route v _ (Finset.mem_union_right _ inK) (.inl rfl) positive with credit | rest
-      · exact Finset.mem_union_left _ (Finset.mem_union_right _
-          (Finset.mem_filter.mpr ⟨inK, credit⟩))
-      · exact Finset.mem_union_right _ rest
+    simp only [G4, G5, G6, Gsc, Gcs, Cr4, Cr5, Cr6, Crsc, Crcs, Finset.mem_union,
+      Finset.mem_filter] at member ⊢
+    rcases member with (((⟨i4, p4⟩ | ⟨i5, p5⟩) | ⟨i6, p6⟩) | ⟨isc, psc⟩) | ⟨ics, pcs⟩
+    · rcases route v _ (inAll v (.inl i4)) (.inl rfl) p4 with c | r
+      · exact .inl (.inl (.inl (.inl (.inl ⟨i4, c⟩))))
+      · simp only [Finset.mem_union] at r
+        exact .inr r
+    · rcases route v _ (inAll v (.inr (.inl i5))) (.inr rfl) p5 with c | r
+      · exact .inl (.inl (.inl (.inl (.inr ⟨i5, c⟩))))
+      · simp only [Finset.mem_union] at r
+        exact .inr r
+    · rcases route v _ (inAll v (.inr (.inr (.inl i6)))) (.inl rfl) p6 with c | r
+      · exact .inl (.inl (.inl (.inr ⟨i6, c⟩)))
+      · simp only [Finset.mem_union] at r
+        exact .inr r
+    · rcases route v _ (inAll v (.inr (.inr (.inr (.inl isc))))) (.inl rfl) psc with c | r
+      · exact .inl (.inl (.inr ⟨isc, c⟩))
+      · simp only [Finset.mem_union] at r
+        exact .inr r
+    · rcases route v _ (inAll v (.inr (.inr (.inr (.inr ics))))) (.inl rfl) pcs with c | r
+      · exact .inl (.inr ⟨ics, c⟩)
+      · simp only [Finset.mem_union] at r
+        exact .inr r
   have apart45 : Disjoint G4 G5 := Finset.disjoint_left.mpr fun v a b =>
     Finset.disjoint_left.mp d45 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
   have apart456 : Disjoint (G4 ∪ G5) G6 := Finset.disjoint_left.mpr fun v a b => by
     rcases Finset.mem_union.mp a with a | a
     · exact Finset.disjoint_left.mp d46 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
     · exact Finset.disjoint_left.mp d56 (Finset.mem_filter.mp a).1 (Finset.mem_filter.mp b).1
+  have inK3 : ∀ v, v ∈ G4 ∪ G5 ∪ G6 → v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted :=
+    fun v hv => by
+      rcases Finset.mem_union.mp hv with hv | hv
+      · rcases Finset.mem_union.mp hv with hv | hv
+        · exact Finset.mem_union_left _ (Finset.mem_union_left _ (Finset.mem_filter.mp hv).1)
+        · exact Finset.mem_union_left _ (Finset.mem_union_right _ (Finset.mem_filter.mp hv).1)
+      · exact Finset.mem_union_right _ (Finset.mem_filter.mp hv).1
+  have apartSC : Disjoint (G4 ∪ G5 ∪ G6) Gsc := Finset.disjoint_left.mpr fun v a b =>
+    Finset.disjoint_left.mp dSC (inK3 v a) (Finset.mem_filter.mp b).1
+  have apartCS : Disjoint (G4 ∪ G5 ∪ G6 ∪ Gsc) Gcs := Finset.disjoint_left.mpr fun v a b => by
+    rcases Finset.mem_union.mp a with a | a
+    · exact Finset.disjoint_left.mp dCS (Finset.mem_union_left _ (inK3 v a))
+        (Finset.mem_filter.mp b).1
+    · exact Finset.disjoint_left.mp dCS (Finset.mem_union_right _ (Finset.mem_filter.mp a).1)
+        (Finset.mem_filter.mp b).1
   have total := Finset.card_le_card cover
-  rw [Finset.card_union_of_disjoint apart456, Finset.card_union_of_disjoint apart45] at total
-  have union1 := Finset.card_union_le (Cr4 ∪ Cr5 ∪ Cr6) (Co ∪ (A ∪ B) ∪ Sl)
-  have union2 := Finset.card_union_le (Cr4 ∪ Cr5) Cr6
-  have union3 := Finset.card_union_le Cr4 Cr5
-  have union4 := Finset.card_union_le (Co ∪ (A ∪ B)) Sl
-  have union5 := Finset.card_union_le Co (A ∪ B)
+  rw [Finset.card_union_of_disjoint apartCS, Finset.card_union_of_disjoint apartSC,
+    Finset.card_union_of_disjoint apart456, Finset.card_union_of_disjoint apart45] at total
+  have union1 := Finset.card_union_le (Cr4 ∪ Cr5 ∪ Cr6 ∪ Crsc ∪ Crcs) (Co ∪ (A ∪ B) ∪ Sl)
+  have union2 := Finset.card_union_le (Cr4 ∪ Cr5 ∪ Cr6 ∪ Crsc) Crcs
+  have union3 := Finset.card_union_le (Cr4 ∪ Cr5 ∪ Cr6) Crsc
+  have union4 := Finset.card_union_le (Cr4 ∪ Cr5) Cr6
+  have union5 := Finset.card_union_le Cr4 Cr5
+  have union6 := Finset.card_union_le (Co ∪ (A ∪ B)) Sl
+  have union7 := Finset.card_union_le Co (A ∪ B)
   -- The counts of the credited keys, the consolidations, the seat debits and the slashings.
   have consolidations := cons_keys_le h fromFin tailC (getCurrentEpoch pulled).toNat h.near
     (Nat.le_refl _) replayedF' replayedC' Co fun v hv => (Finset.mem_filter.mp hv).2
@@ -15819,18 +15871,21 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
   have slashed : Sl.card ≤ (pinTerms config pulled anc fin).slashedR :=
     slashedRB_card_le config pulled anc fin All
   have inFive : G5.card ≤ (K5 counted V).card := Finset.card_le_card (Finset.filter_subset _ _)
-  have key : G4.card + G6.card + 3 * G5.card ≤ N +
+  have key : G4.card + G6.card + 3 * G5.card + Gsc.card + Gcs.card ≤ N +
       2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
         (pinTerms config pulled anc fin).exitingB i = true).card +
           (pinTerms config pulled anc fin).queueKeys)) +
       3 * (pinTerms config pulled anc fin).consolidationsXCount +
       3 * (pinTerms config pulled anc fin).slashedR := by
     omega
-  rw [s4, s5, s6, units]
+  rw [s4, s5, s6, ssc, scs, units]
   calc (pinTerms config pulled anc fin).unitGain * G4.card +
         3 * ((pinTerms config pulled anc fin).unitGain * G5.card) +
-        (pinTerms config pulled anc fin).unitGain * G6.card
-      = (pinTerms config pulled anc fin).unitGain * (G4.card + G6.card + 3 * G5.card) := by ring
+        (pinTerms config pulled anc fin).unitGain * G6.card +
+        (pinTerms config pulled anc fin).unitGain * Gsc.card +
+        (pinTerms config pulled anc fin).unitGain * Gcs.card
+      = (pinTerms config pulled anc fin).unitGain *
+          (G4.card + G6.card + 3 * G5.card + Gsc.card + Gcs.card) := by ring
     _ ≤ (pinTerms config pulled anc fin).unitGain * (N +
         2 * ((((pinTerms config pulled anc fin).positions.filter fun i =>
           (pinTerms config pulled anc fin).exitingB i = true).card +
@@ -19357,6 +19412,13 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   -- `bud_sync` weighs the shared segment's debits of `K4` three times, and `stub_N` once.
   have syncPosF : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncD eventsF x.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+  -- `bud_units` also weighs the units of `SC` and `CS`, which the drift does not read.
+  have unitPosSC : 0 ≤ ∑ x ∈ SC pulled counted split,
+      (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+  have unitPosCS : 0 ≤ ∑ x ∈ CS counted split,
+      (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
     Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   have xPos : 0 ≤ (33 * ((pinTerms config pulled anc fin).consolidationsX : ℤ) + 9) / 10 := by
     positivity
