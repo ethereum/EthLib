@@ -2800,11 +2800,13 @@ private theorem floorPenaltyDebit_sum (i : ℕ) (events : List (BalanceEvent pre
 
 /-- A run's debit events and one slashing penalty bound the fall of a key's balance.
 
-The run is from the split and ends within one epoch after the call.
+The run starts at a state `zs` of R's run from the finalized block.
 
-The floor starts from the smaller of the key's balance at the split and its largest balance.
+It ends within one epoch after the call.
 
-The key is unslashed at the split, and its effective balance stays at most `top` along the run.
+The floor starts from the smaller of the key's balance at `zs` and its largest balance.
+
+The key is unslashed at `zs`, and its effective balance stays at most `top` along the run.
 
 The slashing penalty is then at most `top` over the slashing quotient, whenever the run slashes it.
 
@@ -2816,21 +2818,22 @@ A step may assign the key's exit within the window, if its withdrawable epoch is
 
 No upgrade runs from Fulu, so no step records a crossing. -/
 private theorem slashed_floor (h : Setting config checks g split fin pulled anc counted V)
-    {e : BeaconState preset fork}
+    {zs e : BeaconState preset fork}
+    (toZ : Run config checks ⟨fork, fin⟩ ⟨fork, zs⟩)
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, e⟩) (high : ℕ)
+    (tail : Run config checks ⟨fork, zs⟩ ⟨fork, e⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch e).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (i : ValidatorIndex) (val : Validator)
-    (initial : split.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
+    (initial : zs.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
     (top : ℕ)
     (envelope : ∀ z ∈ tail.balancePath, effectiveAt z i.toNat ≤ top)
-    (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
+    (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
       high + 1 < w.exitEpoch.toNat ∨
         ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) :
-    min (actualBalanceAt ⟨fork, split⟩ i.toNat)
+    min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
       actualBalanceAt ⟨fork, e⟩ i.toNat +
         (events.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
@@ -2838,10 +2841,9 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
         (events.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum +
         top / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
   obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨positive, guards⟩ := floor_guards h fromFin (y := e) near
-  have member : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
+  obtain ⟨positive, guards⟩ := floor_guards h toZ (y := e) near
+  have member : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, zs⟩ m)
       (step : Step config checks m n) (post : Run config checks n ⟨fork, e⟩),
       (pre.snoc step).append post = tail → m ∈ tail.balancePath := by
     intro m n pre step post cut
@@ -2850,13 +2852,13 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
     rw [cut] at path
     rw [path]
     simp [Run.balancePath, atEnd]
-  have start : effectiveAt ⟨fork, split⟩ i.toNat ≤ top := by
+  have start : effectiveAt ⟨fork, zs⟩ i.toNat ≤ top := by
     obtain ⟨rest, atHead⟩ := Run.balancePath_head tail
     exact envelope _ (by rw [atHead]; exact List.mem_cons_self)
   obtain ⟨last, trace, balance, debt, -, w, final, -, -, -, ceiling, -⟩ :=
-    DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append fromFin) tail
+    DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append toZ) tail
       h.genesis h.caps h.delay h.early high endEpoch i val initial (Or.inr h.fulu)
-      (min (actualBalanceAt ⟨fork, split⟩ i.toNat)
+      (min (actualBalanceAt ⟨fork, zs⟩ i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat) top _
       (Nat.min_le_right _ _) positive
       (fun pre step post cut w found =>
@@ -2870,10 +2872,10 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
     (by simp)
   have penalty : last.slashedHigh.elim 0 (fun s =>
       top / DirectSafety.Apriori.minSlashingPenaltyQuotient preset
-        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
+        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩
           (getCurrentEpoch pulled).toNat) + (s - top)) ≤
       top / DirectSafety.Apriori.minSlashingPenaltyQuotient preset
-        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
+        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩
           (getCurrentEpoch pulled).toNat) := by
     cases flag : last.slashedHigh with
     | none => exact Nat.zero_le _
@@ -2883,11 +2885,11 @@ private theorem slashed_floor (h : Setting config checks g split fin pulled anc 
       omega
   rw [balance, debt, floorPenaltyDebit_sum] at floor
   have same : DirectSafety.Apriori.minSlashingPenaltyQuotient preset
-      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩ (getCurrentEpoch pulled).toNat) =
+      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, zs⟩ (getCurrentEpoch pulled).toNat) =
         (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat :=
     DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
       (checks := checks) (high := (getCurrentEpoch pulled).toNat)
-      (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) electra
+      (Run.nil : Run config checks ⟨fork, zs⟩ ⟨fork, zs⟩) electra
   rw [← same]
   omega
 
