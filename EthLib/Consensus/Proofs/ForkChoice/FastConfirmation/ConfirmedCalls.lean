@@ -3234,7 +3234,6 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) limit)
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
     (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
-    (heldEarly : HeldStatesBeforeUpgrade (e := e) limit)
     (enough : HeldRunStakeFloor (e := e) pre horizon limit)
     (terminal : HeldTerminalStakeFloor (e := e) horizon limit)
     (absent : AnchorParentAbsent (e := e) limit)
@@ -3285,6 +3284,9 @@ theorem Execution.confirmedRoot_covers [DecidablePred (· ∈ J)] {Δ : ℕ} {an
       CrossStoreDirectSafetyEvidence (e := e) pre limit ∨
       CrossStoreJustifiedEvidence (e := e) pre limit ∨
         HeldStateFinalityEvidence (e := e) pre limit := by
+  -- Honest stores hold only states before the next fork, from the horizon.
+  have heldEarly := e.heldStatesBeforeUpgrade_of_bounded anchored start anchorSlot slots
+    fit.positive forkWindow bounded
   -- Honest validators sign each justified checkpoint after the anchor's epoch.
   have afterAnchor : getCurrentEpoch anchorState ≤ anchorEpoch := by
     obtain ⟨_, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored

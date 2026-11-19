@@ -3303,7 +3303,7 @@ The theorem bounds the drift by the reserve, but whether the reserve is small en
 `Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
 A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
 `Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
-`Execution.confirmedRoot_covers` below discharges it the same way, so it does not take `QuorumDriftWithin` as a premise.
+`Execution.confirmedRoot_covers` below discharges both the same way, so it takes neither `QuorumDriftWithin` nor `HeldStatesBeforeUpgrade` as a premise.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.
@@ -3342,6 +3342,7 @@ So the endpoint takes neither as a premise.
 In their place it takes the parameter facts that the drift bound reads, except for the seed lookahead.
 For it the endpoint takes `Preset.SeedLookaheadAtLeastThree`, a lookahead of at least three epochs.
 The drift bound needs a lookahead of one epoch, and the near exit bound below needs three.
+The endpoint derives `HeldStatesBeforeUpgrade` itself, with `Execution.heldStatesBeforeUpgrade_of_bounded`, and does not take it either.
 
 The endpoint assumes `CallObligations` of each call.
 They apply when a call walks from its head to the start it selected.
