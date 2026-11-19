@@ -380,8 +380,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let partialsDue (i : ℕ) := max (partialsX i) (partialsR i)
   -- Deeper than `partialDelay` from the finalized block's state, a key can fall to nothing.
   --
-  -- A partial requested after that state can then be paid on a branch and sit in no queue read
-  -- here, so its whole balance is charged.
+  -- A partial requested after that state can then be paid on a branch and sit in no queue here.
+  --
+  -- So its whole balance is charged.
   --
   -- The floor reads the finalized block's balance.
   --
@@ -432,6 +433,11 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     decide (depthFin * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
     if lowRate i then cap i else capMax
+  -- A key keeps its own path when its gain stays within its bound and partials stay queued.
+  --
+  -- Its rise is then its rounded balance; otherwise it is its whole headroom.
+  let keptArm (i : ℕ) : Bool :=
+    decide (depthFin ≤ partialDelay) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
     let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
@@ -440,16 +446,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     -- So the rise is the key's whole headroom.
     --
     -- It is too once eleven times the gain plus one over the depth exceeds that bound.
-    if depthFin ≤ partialDelay then
-      if ¬ (11 * depth * (gainRate i + 1) ≤ ebUp i) then capFor i - effective i
+    if keptArm i then
       -- On another branch the key can keep an effective balance that this branch's update lowered.
       --
       -- It is at most the balance at that update plus the downward band, rounded down.
       --
       -- It is also its effective balance at the finalized block's state or a rounded balance since.
-      else
-        let kept := high + preset.downwardBand
-        min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
+      let kept := high + preset.downwardBand
+      min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
     else capFor i - effective i
   let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   let due := if electra : .pectra ≤ fork then
@@ -460,14 +464,17 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let depositRecipients := preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
   let creditedKeys := depth * slots + (depth / period + 2) * preset.SYNC_COMMITTEE_SIZE.toNat +
     depth * depositRecipients + due.length
-  -- A due consolidation can be applied on one branch and not the other: its source can be slashed
-  -- on one branch only, which drops it there.
+  -- A due consolidation can be applied on one branch and not the other.
   --
-  -- Within `partialDelay` of the finalized block's state, every consolidation applied in the window
-  -- is in that state's queue, with an unslashed source withdrawable by the next epoch.
+  -- Its source can be slashed on one branch only, which drops it there.
   --
-  -- Each moves at most the source's effective balance, which stays within its cap there: an exited
-  -- key cannot switch to compounding.
+  -- Within `partialDelay` of the finalized block's state, the window applies only queued entries.
+  --
+  -- Each is in that state's queue, with an unslashed source withdrawable by the next epoch.
+  --
+  -- Each moves at most the source's effective balance, which stays within its cap there.
+  --
+  -- An exited key cannot switch to compounding.
   --
   -- Deeper, the charge is moot: `fall` charges every key's whole effective balance at this depth.
   let consolidationsX := if depthFin ≤ partialDelay then
@@ -585,9 +592,18 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let slashCharge := inc + depthFin * (2 * (2 * perIncrement) +
     2 * inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
       (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
+  -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
+  --
+  -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
+  --
+  -- Each credited key pays it once, and a key pays two more if the call reads its exit.
+  let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+    WEIGHT_DENOMINATOR.toNat + 2)
+  -- A key slashed on this branch can also take one more increment, which earns `unitGain`.
+  --
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
-  let branchR := 3 * (whistleblowerR + slashCharge * slashedR + depth * proposerCredit +
-    (inc + preset.downwardBand - 1) * roundedKeys)
+  let branchR := 3 * (whistleblowerR + slashCharge * slashedR + unitGain * slashedR +
+    depth * proposerCredit + (inc + preset.downwardBand - 1) * roundedKeys)
   -- A key previous-epoch-only in a counting state weighs three times there, at its balance there.
   --
   -- `exiting` reads it here, so its rise since the split also weighs three times.
@@ -634,11 +650,13 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Its exit here is not its exit there.
   --
-  -- A key not active by this epoch here, or created on the other branch, activates there only
-  -- with at least the activation balance, which it keeps until then.
+  -- A key not active by this epoch here, or created on the other branch, activates there late.
   --
-  -- No lemma here proves yet that it keeps at least `newKeyFloor` from its activation, less its
-  -- own sync-seat debits and pending partial payments.
+  -- It activates only with at least the activation balance, which it keeps until then.
+  --
+  -- No lemma here proves yet that it keeps at least `newKeyFloor` from its activation.
+  --
+  -- That floor is less its own sync-seat debits and pending partial payments.
   let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
     preset.MAX_EFFECTIVE_BALANCE.toNat / p.MIN_SLASHING_PENALTY_QUOTIENT.toNat -
       preset.downwardBand - inc
@@ -659,15 +677,17 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- `lowKeys` adds every key whose `lowEB` is below `newKeyFloor`.
   --
-  -- A key not active by this epoch here, or created there, keeps at least `newKeyFloor` from its
-  -- activation, less its own sync-seat debits and pending partial payments in the window.
+  -- A key not active by this epoch here, or created there, keeps `newKeyFloor` from its activation.
+  --
+  -- That floor is less its own sync-seat debits and pending partial payments in the window.
   --
   -- One whose effective balance ends below `exitFloor` has those debits above `newKeySlack`.
   --
   -- So has an existing key whose `lowEB` is at least `newKeyFloor`.
   --
-  -- The seats of the window debit at most `depthFin·slots·SIZE·syncEnvelope` in all, so
-  -- `newKeySeats` counts the keys that sync debits can bring below.
+  -- The seats of the window debit at most `depthFin·slots·SIZE·syncEnvelope` in all.
+  --
+  -- So `newKeySeats` counts the keys that sync debits can bring below.
   --
   -- Within `partialDelay`, a key not active by this epoch is paid no pending partial in the window.
   --
@@ -729,8 +749,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- With an exit epoch before this one it is inactive here, but active in the other quorum.
   --
-  -- Its exit was set here after the split, at the finalized epoch, so it lands at the earliest
-  -- `MAX_SEED_LOOKAHEAD + 1` epochs later; the tight window has none.
+  -- Its exit was set here after the split, at the finalized epoch.
+  --
+  -- So it lands at the earliest `MAX_SEED_LOOKAHEAD + 1` epochs later; the tight window has none.
   --
   -- Its effective balance there is at most its effective balance here and its rise.
   let exitedR := ∑ i ∈ positions with (validator i).any (fun v =>
@@ -741,7 +762,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- While eleven gains over the depth stay below the cap, `credits`' eleven tenths pay a new key's.
   --
-  -- There a K5 key whose exit the call reads has its consolidation credit's gains charged thrice.
+  -- A consolidation credit's gains are charged at weight three, for every target.
   --
   -- Every key's whistleblower and sync credits on the other branch are charged their gains too.
   --
@@ -754,6 +775,8 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- Its seat debits from the finalized block's state count as a second seat term.
   --
   -- A key whose own gain stays low compounds past that bound too, so its gains count in both.
+  --
+  -- One floor of all a key's flows bounds its gains, and each split by kind costs an increment's.
   --
   -- Past that bound, each deposit the window can apply to a new key is also charged up to the cap.
   --
@@ -770,21 +793,24 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
           depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope) + 9) / 10 +
         creditedKeys * inc) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
-      depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
+      -- C's seat flows, and R's and the shared segment's seat debits.
+      (depth + depthFin) * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope +
+        depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let creditGain :=
-    (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10 +
+    (33 * depth * consolidationGain + 11 * depth * otherGain +
+      30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10 +
       (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
         else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
-  -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
+  -- A key whose only flows are seat debits pays a unit too.
   --
-  -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
+  -- Its seats are those of the call's branch beyond the two shared at the split.
   --
-  -- Each credited key pays it once, and a key pays two more if the call reads its exit.
-  let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-    WEIGHT_DENOMINATOR.toNat + 2)
-  let creditUnits := (creditedKeys + 2 * (exitingCount + queueKeys)) * unitGain
+  -- They are also those of the shared segment.
+  let seatUnits := (depth / period + (depthFin / period + 2)) * preset.SYNC_COMMITTEE_SIZE.toNat
+  let creditUnits := (creditedKeys + seatUnits + 2 * (exitingCount + queueKeys)) * unitGain
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
   -- It can then become eligible there and activate deep in the window, while inactive here.
