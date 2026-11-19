@@ -903,6 +903,80 @@ def bandC {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
       (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail).1 then
     preset.upwardBand else 0
 
+/-- The credits of events from two apart sources are the credits of each source. -/
+private theorem sum_filter_or (L : List (BalanceEvent preset)) (p q : BalanceSource → Bool)
+    (apart : ∀ s, ¬ (p s = true ∧ q s = true)) (f : BalanceEvent preset → ℕ) :
+    ((L.filter fun e => p e.source || q e.source).map f).sum =
+      ((L.filter fun e => p e.source).map f).sum + ((L.filter fun e => q e.source).map f).sum := by
+  induction L with
+  | nil => simp
+  | cons a rest ih =>
+    by_cases hp : p a.source = true
+    · have hq : q a.source = false := by
+        cases h : q a.source
+        · rfl
+        · exact absurd ⟨hp, h⟩ (apart a.source)
+      simp [hp, hq, ih]; omega
+    · by_cases hq : q a.source = true
+      · simp [hp, hq, ih]; omega
+      · simp [hp, hq, ih]
+
+/-- The credits of a run that a scan reads add over two apart sets of sources.
+
+The block sources of the scan and the slot sources are each the union of two apart sources. -/
+private theorem creditScan_or (blockP slotP b₁ b₂ s₁ s₂ : BalanceSource → Bool)
+    (hb : ∀ s, blockP s = (b₁ s || b₂ s)) (hs : ∀ s, slotP s = (s₁ s || s₂ s))
+    (apartB : ∀ s, ¬ (b₁ s = true ∧ b₂ s = true)) (apartS : ∀ s, ¬ (s₁ s = true ∧ s₂ s = true))
+    (v high : ℕ) {x y : ForkedBeaconState preset} (tail : Run config checks x y) :
+    (creditScan blockP slotP v high tail).1 =
+      (creditScan b₁ s₁ v high tail).1 + (creditScan b₂ s₂ v high tail).1 := by
+  obtain rfl : blockP = fun s => b₁ s || b₂ s := funext hb
+  obtain rfl : slotP = fun s => s₁ s || s₂ s := funext hs
+  induction tail with
+  | nil => rfl
+  | @snoc middle last pre step ih =>
+    have split : stepCredit (fun s => b₁ s || b₂ s) (fun s => s₁ s || s₂ s) v step =
+        stepCredit b₁ s₁ v step + stepCredit b₂ s₂ v step := by
+      cases step with
+      | slot ok => simp only [stepCredit]; exact sum_filter_or _ _ _ apartS _
+      | block engine signed due ok => simp only [stepCredit]; exact sum_filter_or _ _ _ apartB _
+    rw [creditScan_snoc_fst, creditScan_snoc_fst, creditScan_snoc_fst, split]
+    split_ifs <;> omega
+
+/-- The credits of a key on C's branch are its proposer credits and the deposits it is credited. -/
+private theorem credN_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) :
+    credN tail high v = propN tail high v +
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail).1 :=
+  creditScan_or _ _ (fun s => decide (s = .rewards)) (fun _ => false) (fun _ => false)
+    (fun s => decide (s = .deposits)) (fun s => by cases s <;> decide)
+    (fun s => by cases s <;> decide)
+    (fun s h => by simp at h) (fun s h => by simp at h) v high tail
+
+/-- The credits of a key with the consolidations are its `credN` and its consolidation credits. -/
+private theorem credC_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) :
+    credC tail high v = credN tail high v +
+      (creditScan (fun s => decide (s = .consolidations))
+        (fun s => decide (s = .consolidations)) v high tail).1 :=
+  creditScan_or _ _ (fun s => decide (s = .rewards)) (fun s => decide (s = .consolidations))
+    (fun s => decide (s = .deposits)) (fun s => decide (s = .consolidations))
+    (fun s => by cases s <;> decide) (fun s => by cases s <;> decide)
+    (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide))
+    (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide)) v high tail
+
+/-- The proposer credits with the consolidations are `propN` and the consolidation credits. -/
+private theorem propC_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) :
+    propC tail high v = propN tail high v +
+      (creditScan (fun s => decide (s = .consolidations))
+        (fun s => decide (s = .consolidations)) v high tail).1 :=
+  creditScan_or _ _ (fun s => decide (s = .rewards)) (fun s => decide (s = .consolidations))
+    (fun _ => false) (fun s => decide (s = .consolidations))
+    (fun s => by cases s <;> decide) (fun s => by cases s <;> decide)
+    (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide))
+    (fun s h => by simp at h) v high tail
+
 /-- The gain of `C` credited gwei over `depth` epochs, at the reward rate `P`.
 
 The credits count in whole increments rounded up, and each epoch's gain is rounded down. -/
@@ -9486,20 +9560,18 @@ private theorem sum_filter_cons_dep_le (events : List (BalanceEvent preset))
         f).sum ≤
       ((events.filter fun e => decide (e.source = .deposits)).map f).sum +
         ((events.filter fun e => decide (e.source = .consolidations)).map f).sum := by
-  induction events with
-  | nil => simp
-  | cons e rest ih =>
-    by_cases deposit : e.source = .deposits
-    · simp only [List.filter_cons, deposit, reduceCtorEq, decide_true, decide_false, or_true,
-        ↓reduceIte, Bool.false_eq_true, List.map_cons, List.sum_cons]
-      omega
-    · by_cases consolidation : e.source = .consolidations
-      · simp only [List.filter_cons, consolidation, reduceCtorEq, decide_true, decide_false,
-          true_or, ↓reduceIte, Bool.false_eq_true, List.map_cons, List.sum_cons]
-        omega
-      · simp only [List.filter_cons, consolidation, deposit, decide_false, or_self,
-          Bool.false_eq_true, ↓reduceIte]
-        exact ih
+  have same : (fun e : BalanceEvent preset =>
+      decide (e.source = .consolidations ∨ e.source = .deposits)) =
+        fun e => decide (e.source = .deposits) || decide (e.source = .consolidations) := by
+    funext e
+    cases e.source <;> decide
+  rw [same]
+  have apart : ∀ s : BalanceSource, ¬ (decide (s = .deposits) = true ∧
+      decide (s = .consolidations) = true) := fun s h => by
+    simp at h
+    exact absurd (h.1.symm.trans h.2) (by decide)
+  exact (sum_filter_or events (fun s => decide (s = .deposits))
+    (fun s => decide (s = .consolidations)) apart f).le
 
 /-- A slot step raises the balance of a key that is idle in the previous epoch by its credits.
 
