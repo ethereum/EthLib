@@ -23,6 +23,8 @@ So in a reachable store each known block has them, with that one exception.
 The late test then answers for each known head other than the anchor before Gloas.
 
 The test on justification answers for any two known blocks.
+
+From Heze, each verified payload of a reachable store has an answer on its inclusion lists.
 -/
 
 @[expose] public section

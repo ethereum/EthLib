@@ -36,13 +36,15 @@ A held child sits at a later slot than its held parent, so the walk descends and
 
 From Gloas, the boost also asks whether the parent of the boosted block is weak.
 
+It asks only when that parent is from the slot just before the boosted block.
+
 That test adds the equivocators of the parent's committees to its votes.
 
 So the effective balances of the justified state's whole registry must add up to at most the cap.
 
 It must also hold each equivocator that is active in a held block's state, at that block's epoch.
 
-The committees must read, so each held state has its registry within the limit.
+Each held state must have its registry within the limit, so that its committees can be read.
 
 An empty tree of viable nodes gives the empty node of the justified block.
 
@@ -601,7 +603,7 @@ private theorem nextSlot_of_held {anchorState : BeaconState preset fork}
     omega
   exact ⟨current, currentOk, below, addChecked_of_lt fits⟩
 
-/-- From Gloas, the decision on the payload of a held node can be computed. -/
+/-- The decision on the payload of a held node can be computed. -/
 private theorem isPreviousSlotPayloadDecision_ok {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork}
     (forward : ForwardReachable config anchorState anchorBlock store)

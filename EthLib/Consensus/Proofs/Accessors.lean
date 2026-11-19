@@ -1139,7 +1139,9 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
 
 /-- A beacon committee has no repeated member.
 
-Its index is below the count of its slot, and the bounds of its epoch fit in 64 bits. -/
+Its index must be below the count of its slot, and the registry must stay within its limit.
+
+The bounds of its epoch must fit in 64 bits. -/
 private theorem getBeaconCommittee_nodup {state : BeaconState preset fork}
     (within : state.RegistryWithinLimit) {slot : Slot} {index : CommitteeIndex}
     (below : index < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot))
@@ -1191,6 +1193,8 @@ private theorem getBeaconCommittee_nodup {state : BeaconState preset fork}
     ((List.take_sublist _ _).trans (List.drop_sublist _ _))
 
 /-- The committees of one slot together have no repeated member.
+
+The registry must stay within its limit.
 
 The bounds of the epoch of the slot must fit in 64 bits. -/
 theorem getBeaconCommittees_nodup {state : BeaconState preset fork}
