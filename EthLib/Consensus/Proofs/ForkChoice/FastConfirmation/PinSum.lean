@@ -5217,38 +5217,6 @@ private theorem pendingR_eq (config : Config) (pulled anc fin : BeaconState pres
           (pinTerms config pulled anc fin).pendingRB i = true,
           (balanceAt pulled i + (pinTerms config pulled anc fin).rise i) := rfl
 
-/-- K6 keys of R's registry that are not yet eligible at R: their stake at R and their rise. -/
-private theorem pending_base (h : Setting config checks g split fin pulled anc counted V) :
-    (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
-      (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
-        (pinTerms config pulled anc fin).pendingR := by
-  classical
-  rw [pendingR_eq]
-  by_cases tight : (pinTerms config pulled anc fin).tight = true
-  · -- Tight: no key of K6 is pending, since activity near the split is shared.
-    rw [ite_eq_left tight]
-    have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
-    have called := UInt64.le_iff_toNat_le.mp h.called
-    have bound := (tight_iff config pulled anc fin).mp tight
-    have near : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := h.near
-    apply Nat.le_of_eq
-    apply Finset.sum_eq_zero
-    intro v hv
-    exfalso
-    have hv' := Finset.mem_filter.mp hv
-    obtain ⟨w, found, -, far⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp hv'.2
-    have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv'.1).1 found
-    have farNat : w.activationEpoch.toNat = 2 ^ 64 - 1 := by rw [far]; rfl
-    have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots counted
-    have farValue : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    omega
-  · rw [ite_eq_right tight]
-    refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
-      fun v hv => ?_
-    have flag := (Finset.mem_filter.mp hv).2
-    obtain ⟨w, found, -⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp flag
-    exact mem_positions_filter config pulled anc fin found flag
-
 /-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
 private theorem sum_le_exiting (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
@@ -14034,9 +14002,7 @@ private theorem bud_late (h : Setting config checks g split fin pulled anc count
 
 /-- K6 keys and `SC` keys of R's registry that are not yet eligible at R: their stake and rise.
 
-In the tight window `pendingR` is 0, and the sum over `SC` is empty, since its guard is false.
-
-`pending_base` is the part for K6. -/
+In the tight window `pendingR` is 0, and the sum over `SC` is empty, since its guard is false. -/
 private theorem bud_pendingR (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
@@ -14044,7 +14010,54 @@ private theorem bud_pendingR (h : Setting config checks g split fin pulled anc c
         ((pinTerms config pulled anc fin).tight = false ∧
           (pinTerms config pulled anc fin).pendingRB v.toNat = true),
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
-      (pinTerms config pulled anc fin).pendingR := sorry
+      (pinTerms config pulled anc fin).pendingR := by
+  classical
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  rw [pendingR_eq]
+  by_cases tight : (pinTerms config pulled anc fin).tight = true
+  · rw [ite_eq_left tight]
+    have baseTight : (∑ v ∈ (K6 pulled counted) with
+        (pinTerms config pulled anc fin).pendingRB v.toNat = true,
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤ 0 := by
+      have fin_le := UInt64.le_iff_toNat_le.mp h.finalized
+      have called := UInt64.le_iff_toNat_le.mp h.called
+      have bound := (tight_iff config pulled anc fin).mp tight
+      have near : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := h.near
+      apply Nat.le_of_eq
+      apply Finset.sum_eq_zero
+      intro v hv
+      exfalso
+      have hv' := Finset.mem_filter.mp hv
+      obtain ⟨w, found, -, far⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp hv'.2
+      have le := activation_le_of_active h (by omega) (Finset.mem_filter.mp hv'.1).1 found
+      have farNat : w.activationEpoch.toNat = 2 ^ 64 - 1 := by rw [far]; rfl
+      have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots counted
+      have farValue : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega
+    have empty : ∑ v ∈ (sc3a config pulled anc fin counted split) with
+        ((pinTerms config pulled anc fin).tight = false ∧
+          (pinTerms config pulled anc fin).pendingRB v.toNat = true),
+        (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) = 0 := by
+      refine Finset.sum_eq_zero fun v hv => ?_
+      have := (Finset.mem_filter.mp hv).2.1
+      rw [tight] at this
+      cases this
+    omega
+  · rw [ite_eq_right tight]
+    have loose : (pinTerms config pulled anc fin).tight = false := by simpa using tight
+    have apart : Disjoint (K6 pulled counted) (sc3a config pulled anc fin counted split) :=
+      Finset.disjoint_of_subset_left Finset.subset_union_right
+        (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) dSC)
+    rw [← Finset.sum_union (Finset.disjoint_of_subset_left (Finset.filter_subset _ _)
+      (Finset.disjoint_of_subset_right (Finset.filter_subset _ _) apart))]
+    refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+      fun v hv => ?_
+    have flag : (pinTerms config pulled anc fin).pendingRB v.toNat = true := by
+      rcases Finset.mem_union.mp hv with member | member
+      · exact (Finset.mem_filter.mp member).2
+      · exact (Finset.mem_filter.mp member).2.2
+    obtain ⟨w, found, -⟩ := (pendingRB_iff config pulled anc fin v.toNat).mp flag
+    exact mem_positions_filter config pulled anc fin found flag
 
 /-- No key of the split's registry is slashed on C's branch and withdrawable at R.
 
