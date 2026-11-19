@@ -192,7 +192,7 @@ theorem payloadInputs_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     PayloadInputs state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact PayloadInputs.refl _
   · exact payloadInputs_initiateValidatorExit exited
   · exact payloadInputs_requestPartialWithdrawal withdrawn

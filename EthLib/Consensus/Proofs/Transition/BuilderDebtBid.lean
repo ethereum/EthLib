@@ -211,7 +211,7 @@ theorem builderFrame_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BuilderFrame state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact BuilderFrame.refl _
   · exact builderFrame_initiateValidatorExit exited
   · exact builderFrame_requestPartialWithdrawal withdrawn

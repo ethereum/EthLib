@@ -1975,7 +1975,7 @@ private theorem QuietStep.withdrawalRequest {fork : Fork} {electra : .pectra ≤
     (ok : processWithdrawalRequest config s electra request = .ok t)
     (ordered : ExitsOrdered s) (finite : getCurrentEpoch s < FAR_FUTURE_EPOCH) :
     QuietStep electra s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨index, exited⟩ | ⟨index, v, owed, paid⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨index, _, _, exited⟩ | ⟨index, v, owed, _, paid⟩
   · exact .refl ordered
   · exact .initiateValidatorExit exited ordered finite
   · simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure,

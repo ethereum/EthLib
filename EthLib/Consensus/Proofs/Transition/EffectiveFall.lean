@@ -1107,7 +1107,8 @@ private theorem partialWithdrawal_queueAppend {fork : Fork} {s t : BeaconState p
 private theorem withdrawalRequest_queueAppend {fork : Fork} {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : QueueAppend s t := by
-  rcases withdrawalRequest_cases ok with same | ⟨index, exited⟩ | ⟨index, v, owed, withdrawn⟩
+  rcases withdrawalRequest_cases ok with same | ⟨index, _, _, exited⟩ |
+    ⟨index, v, owed, _, withdrawn⟩
   · subst t
     exact .of_same (PartialsSame.refl s)
   · exact .of_same (partialsSame_initiateValidatorExit exited)

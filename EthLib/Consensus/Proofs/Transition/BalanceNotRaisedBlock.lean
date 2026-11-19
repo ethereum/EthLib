@@ -177,7 +177,7 @@ private theorem down_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) (index : Nat) :
     BalanceDown index state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact BalanceDown.refl _ _
   · exact down_initiateValidatorExit exited index
   · exact down_requestPartialWithdrawal withdrawn index
@@ -453,7 +453,7 @@ private theorem fixed_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BlockFixed state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact BlockFixed.refl _
   · exact fixed_initiateValidatorExit exited
   · exact fixed_requestPartialWithdrawal withdrawn

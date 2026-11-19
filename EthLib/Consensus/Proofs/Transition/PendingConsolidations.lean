@@ -257,7 +257,7 @@ private theorem partialWithdrawal {electra : .pectra ≤ fork} {index : Validato
 private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     QueueKept state after := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact exit exited
   · exact partialWithdrawal withdrawn
@@ -884,7 +884,7 @@ private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRe
 private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     WithdrawalKept state after := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact of_data
   · exact exit exited
   · exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1)

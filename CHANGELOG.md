@@ -223,6 +223,12 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
+  The index is the first with the key of the request.
+  The validator there has execution credentials from the address of the request, and it may make a request.
+  `isActiveValidator_of_canRequest` gives that a validator that may make a request is active.
+  A caller that matched the cases as `⟨index, exited⟩` and `⟨index, v, owed, withdrawn⟩` writes `⟨index, v, accepted, exited⟩` and `⟨index, v, owed, accepted, withdrawn⟩`.
+
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
   A caller that matched the case as `⟨index, switched⟩` writes `⟨index, validator, accepted, switched⟩`.

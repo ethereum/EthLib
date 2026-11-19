@@ -272,27 +272,12 @@ private theorem switchToCompoundingValidator {electra : .pectra ≤ fork} {index
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     Kept config state after := by
-  unfold Consensus.processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept ok).1)
-    | (apply initiateValidatorExit (config := config)
-         (by rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)])
-         ?_ (liftAccessor_ok.mp ok)
-       rename_i position _ _ _ _ _ _ _ _ _ _ _ _ _ _
-       have accepted : canRequest config state state.validators.data[position] = .ok true := by
-         simp_all
-       unfold canRequest at accepted
-       dsimp only at accepted
-       split at accepted
-       · cases accepted
-       · rename_i active
-         apply active_le
-         simp at active
-         exact active.1)
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, accepted, exited⟩ |
+    ⟨_, _, _, _, withdrawn⟩
+  · exact refl _
+  · exact initiateValidatorExit (config := config) (getValidator_eq_ok_iff.mpr accepted.found)
+      (active_le (isActiveValidator_of_canRequest accepted.allowed)) exited
+  · exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1)
 
 private theorem queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}

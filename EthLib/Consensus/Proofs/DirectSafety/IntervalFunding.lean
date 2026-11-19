@@ -2052,7 +2052,7 @@ theorem coverage_withdrawal_request {fork : Fork} {s t : BeaconState preset fork
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
     t.balances = s.balances := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact (initiateValidatorExit_balances_eq_and_pendingConsolidations_eq exited).1
   · exact (requestPartialWithdrawal_kept withdrawn).2.1
