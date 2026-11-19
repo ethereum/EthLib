@@ -32,6 +32,14 @@ Not yet released.
   Its balance plus the sync and partial debits stays above a closed form that loses a pass rate of the effective balance each epoch.
   The pin's low-balance floor and its fall floor read it.
 
+- `FloorTrace.run_effective_origin` says where a key's effective balance after a run from Fusaka comes from.
+  It is its value at the start, or an update set it at most to the balance at the last state where it changed.
+  The run splits at that state, with the effective balance constant after it and aligned.
+  The stay step of the pin's C-floor reads it.
+
+- `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
+  The pin's drift bound reads it.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
