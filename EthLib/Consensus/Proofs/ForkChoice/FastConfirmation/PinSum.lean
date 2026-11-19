@@ -5241,6 +5241,27 @@ private theorem bud_deposits_of (h : Setting config checks g split fin pulled an
   have capacity := deposit_events_le h tail (Nat.le_succ _) high endEpoch replayed
   omega
 
+/-- A deposit event credits a set of keys at most its funding credit, when none is withdrawable.
+
+Each key of the set that is present before the event must not be withdrawable there.
+
+A key absent before the event has no balance after it either, since its balances match. -/
+private theorem deposit_each_le (e : BalanceEvent preset) (S : Finset ValidatorIndex)
+    (dep : e.source = .deposits) (electra : .pectra ≤ e.before.fork)
+    (matched : BalancesMatch e.after.state)
+    (held : ∀ v ∈ S, ∀ w, e.before.state.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch e.before.state).toNat < w.withdrawableEpoch.toNat) :
+    ∑ v ∈ S, keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e := by
+  have inj : Set.InjOn (fun v : ValidatorIndex => v.toNat) S := fun a _ b _ same =>
+    UInt64.toNat_inj.mp same
+  have image := selected_deposit_le (S.image fun v => v.toNat) e matched fun i member => by
+    obtain ⟨v, inS, rfl⟩ := Finset.mem_image.mp member
+    cases found : e.before.state.validators.data[v.toNat]? with
+    | none => rfl
+    | some w => simpa using held v inS w found
+  rw [Finset.sum_image inj] at image
+  simpa [DirectSafety.funding_deposit_credit, dep, electra, keyCredit] using image
+
 /-- The deposits credited to a set of keys on C's run fit the window's deposit churn.
 
 The credits are read as the scan of the deposit events.
