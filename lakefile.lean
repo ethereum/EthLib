@@ -36,6 +36,17 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 -- VCVio's release tag for this Lean version, built against the same Mathlib.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @ "v4.36.0"
 
+-- Coding theory for the leanVM proofs: the Johnson bound and the affine combiners of
+-- Chiesa, Weissenberg, Yogev and Zheng.
+--
+-- The library code never imports it; only the proofs do, through the bridges of
+-- `EthLib/Cryptography/Proofs/Bridge/`.
+--
+-- ArkLib's release tag for this Lean version, built against the same Mathlib.
+--
+-- It pins a later VCVio commit; Lake keeps the VCVio above, which this package requires itself.
+require Arklib from git "https://github.com/Verified-zkEVM/ArkLib.git" @ "v4.36.0"
+
 @[default_target]
 lean_lib «EthLib» where
   -- Lean v4.36.0, Source Files and Modules, section 5.4.

@@ -6570,6 +6570,7 @@ Keystore decryption does this itself with a model of the cost, against limits th
 
 <!-- generated: pins -->
 The specification requires no package.
+The package requires ArkLib, at `v4.36.0`, commit `608f550`.
 The package requires Mathlib, at `v4.36.0`, commit `fc4f59e`.
 The package requires VCVio, at `v4.36.0`, commit `8781bec`.
 Only the proofs import them.

@@ -82,7 +82,7 @@ The Python conversion core and its law proofs form `PythonConversions`, which bo
 Its law module lives under `Base/Proofs/Exports/` and enters the exports through `meta import`, so its object does not link into the Python extension.
 
 These four libraries form one package, `EthLib`.
-A property or a model may import Mathlib, Batteries or VCVio, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
+A property or a model may import Mathlib, Batteries, VCVio or ArkLib, and it goes in `EthLib/<Domain>/Proofs/<Module>/` like any other property.
 Among the properties, only a refinement module imports a model directly, as [`ARCHITECTURE.md`](ARCHITECTURE.md#three-kinds-of-content) explains.
 The specification and the exports import nothing beyond the Lean toolchain.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#packages) describes the package.

@@ -222,7 +222,7 @@ def c_lines(root: Path) -> str:
 
 
 # How the document names a required package; any other package keeps its Lake name.
-PACKAGE_NAMES = {"mathlib": "Mathlib"}
+PACKAGE_NAMES = {"mathlib": "Mathlib", "Arklib": "ArkLib"}
 
 
 def pins(root: Path) -> str:
