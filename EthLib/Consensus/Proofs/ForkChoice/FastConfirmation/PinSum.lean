@@ -4203,8 +4203,12 @@ private theorem cfloor_endpoint_slash (h : Setting config checks g split fin pul
     min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
         (min (withdrawalMaxEffectiveBalance preset fork val).toNat
           ((floor - loss) - (floor - loss) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
-      effectiveAt z i.toNat :=
-  sorry
+      effectiveAt z i.toNat := by
+  refine cfloor_endpoint_of h e wholeRun i val initial (floor - loss) (fun r1 r2 whole => ?_)
+    rp rest cut
+  have := cfloor_balance_slash h e wholeRun near replayed i val initial unslashed retained slack
+    ρn ρd floor loss start pass arithS r1 r2 whole
+  omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key's effective balance on C's run is above the floor of its fall.
