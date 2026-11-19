@@ -17355,6 +17355,125 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
   unfold keyExtra
   omega
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key that the shared segment created has a state before the split.
+
+At that state its effective balance is within the floor of its balance.
+
+It is the state where the key is scheduled for activation, or the split if that comes first.
+
+There the key is unassigned or scheduled, so it holds its effective balance within its balance.
+
+The effective balance is aligned, so it is within the floor. -/
+private theorem created_shared_start (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {v : ValidatorIndex} (active : v ∈ activeVoters counted)
+    (created : fin.validators.data.size ≤ v.toNat)
+    (inside : v.toNat < split.validators.data.size) :
+    ∃ (c : BeaconState preset fork) (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+      (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩), toC.append fromC = fromFin ∧
+      v.toNat < c.validators.data.size ∧
+      effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
+          actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨w, foundC, activeC⟩ := active_of_activeVoters h.early active
+  have activeAt : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
+    isActiveAt_eq_true_iff.mpr ⟨w, foundC, activeC⟩
+  have finAbsent : fin.validators.data[v.toNat]? = none := Array.getElem?_eq_none created
+  obtain ⟨z, pre, post, v0, vy, splitEq, found0, -, sameAct, actEq, actLe, exitGt⟩ :=
+    PinSplit.Run.start_state (fromFin.append tailC) h.window v.toNat
+      (fun u found => by simp only [finAbsent] at found; cases found) activeAt
+  have farToNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have exitBound := vy.exitEpoch.toNat_lt
+  have actNeFar : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := fun same => by
+    rw [sameAct] at same
+    have := congrArg UInt64.toNat same
+    omega
+  have sameActNat := congrArg UInt64.toNat sameAct
+  -- the effective balance of a key within its balance is within the floor of the balance
+  have floor : ∀ {c : BeaconState preset fork} (run : Run config checks g ⟨fork, c⟩)
+      {u : Validator} {b : Gwei}, c.validators.data[v.toNat]? = some u →
+      c.balances.data[v.toNat]? = some b → u.effectiveBalance ≤ b →
+      effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat -
+          actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat %
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    intro c run u b foundU foundB le
+    have aligned := FloorTrace.effective_aligned run h.genesis h.aligned v.toNat
+    have within : effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
+        actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat := by
+      simp only [effectiveAt, actualBalanceAt, foundU, foundB, Option.map_some, Option.getD_some]
+      exact UInt64.le_iff_toNat_le.mp le
+    have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat within
+    rw [aligned] at rounded
+    simpa using rounded
+  rcases Run.prefix_total pre post fromFin tailC splitEq.symm rfl with ⟨rest, cut⟩ | ⟨rest, cut⟩
+  · -- the key is scheduled before the split, at `z`
+    have same : fork = z.fork := (fork_eq_of_run pre rest (Nat.le_refl _)).symm
+    obtain ⟨zf, zs⟩ := z
+    subst same
+    simp only at actEq actLe exitGt
+    have finite : getCurrentEpoch zs < FAR_FUTURE_EPOCH :=
+      UInt64.lt_iff_toNat_lt.mpr (by omega)
+    obtain ⟨funded, -, -⟩ := (EthLib.Consensus.Internal.run_eligible_balance (toFin.append pre)
+      h.genesis h.caps.activation h.caps.compounding h.aligned h.early finite).2 electra v.toNat v0
+      found0 (Or.inl actNeFar) (UInt64.lt_iff_toNat_lt.mpr (by simp only; omega))
+    obtain ⟨b, foundB, le⟩ := funded (by simp only; omega)
+    exact ⟨zs, pre, rest, cut, (Array.getElem?_eq_some_iff.mp found0).1,
+      floor (toFin.append pre) found0 foundB le⟩
+  · -- the key is unscheduled or scheduled at the split
+    have same : fork = z.fork := (fork_eq_of_run rest post (Nat.le_refl _)).symm
+    obtain ⟨zf, zs⟩ := z
+    subst same
+    simp only at actEq actLe exitGt
+    have splitZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
+    obtain ⟨vs, foundS⟩ : ∃ vs, split.validators.data[v.toNat]? = some vs :=
+      ⟨_, Array.getElem?_eq_getElem inside⟩
+    obtain ⟨later, foundLater, life⟩ := rest.registryLifecycle.validators v.toNat vs foundS
+    have sameLater : later = v0 := Option.some.inj (foundLater.symm.trans found0)
+    subst sameLater
+    have finite : getCurrentEpoch split < FAR_FUTURE_EPOCH :=
+      UInt64.lt_iff_toNat_lt.mpr (by simp only at splitZ ⊢; omega)
+    obtain ⟨unassigned, scheduled⟩ := EthLib.Consensus.Internal.run_eligible_balance
+      (toFin.append fromFin) h.genesis h.caps.activation h.caps.compounding h.aligned h.early
+      finite
+    refine ⟨split, fromFin, Run.nil, rfl, inside, ?_⟩
+    by_cases far : vs.activationEpoch = FAR_FUTURE_EPOCH
+    · obtain ⟨⟨b, foundB, le⟩, -, -⟩ := unassigned v.toNat vs foundS far
+      exact floor (toFin.append fromFin) foundS foundB le
+    · have act := life.activationEpoch far
+      obtain ⟨funded, -, -⟩ := scheduled electra v.toNat vs foundS (Or.inl far)
+        (UInt64.lt_iff_toNat_lt.mpr (by
+          have := congrArg UInt64.toNat act
+          simp only at splitZ ⊢
+          omega))
+      obtain ⟨b, foundB, le⟩ := funded (by
+        have := congrArg UInt64.toNat act
+        simp only at splitZ ⊢
+        omega)
+      exact floor (toFin.append fromFin) foundS foundB le
+
+/-- The exit of a key that the finalized state does not hold is late for the whole run.
+
+An exit from the finalized epoch on would be an exit of the finalized registry. -/
+private theorem created_late (h : Setting config checks g split fin pulled anc counted V)
+    {v : ValidatorIndex} (created : fin.validators.data.size ≤ v.toNat) :
+    ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 <
+        w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  intro w found
+  have short := window_short h
+  by_cases exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat
+  · obtain ⟨u, foundFin, -⟩ := exit_kept_of_le_fin h found exited
+    have := (Array.getElem?_eq_some_iff.mp foundFin).1
+    omega
+  · omega
+
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
 R's registry holds the key beyond the finalized registry.
