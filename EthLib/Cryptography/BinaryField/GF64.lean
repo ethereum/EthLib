@@ -64,8 +64,7 @@ The low word takes `a <<< i`, and the high word takes the top `i` bits of `a`. -
 def clmul (a b : UInt64) : UInt64 × UInt64 :=
   (List.range 64).foldl (fun (hi, lo) i =>
     if (b >>> i.toUInt64) &&& 1 = 1 then
-      (if i = 0 then hi else hi ^^^ (a >>> (64 - i).toUInt64),
-        lo ^^^ (a <<< i.toUInt64))
+      (if i = 0 then hi else hi ^^^ (a >>> (64 - i).toUInt64), lo ^^^ (a <<< i.toUInt64))
     else (hi, lo)) (0, 0)
 
 /-- Reduce a carry-less product `hi * x^64 + lo` modulo `x^64 + x^4 + x^3 + x + 1`.
