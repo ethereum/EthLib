@@ -10650,9 +10650,9 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (replayedC : tailC.balanceEvents high = .ok eventsC) :
     3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
-        (∑ v ∈ K4 pulled counted V, bandR events v.toNat) +
-        3 * (∑ v ∈ K5 counted V, bandR events v.toNat) +
-        (∑ v ∈ K6 pulled counted, bandR events v.toNat) ≤
+        (∑ v ∈ K4 pulled counted V, bandR (eventsF ++ events) v.toNat) +
+        3 * (∑ v ∈ K5 counted V, bandR (eventsF ++ events) v.toNat) +
+        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) ≤
       3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
         (preset.SYNC_COMMITTEE_SIZE.toNat *
           (((getCurrentEpoch pulled).toNat + 1) /
@@ -10670,11 +10670,12 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
     ((getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat) /
       max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) = seats
   set fV := V.filter fun v => 0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum with hfV
-  set f4 := (K4 pulled counted V).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum
-    with hf4
-  set f5 := (K5 counted V).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum with hf5
-  set f6 := (K6 pulled counted).filter fun v => 0 < (events.map (syncDebit v.toNat)).sum
-    with hf6
+  set f4 := (K4 pulled counted V).filter fun v =>
+    0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hf4
+  set f5 := (K5 counted V).filter fun v =>
+    0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hf5
+  set f6 := (K6 pulled counted).filter fun v =>
+    0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum with hf6
   have d45' : Disjoint f4 f5 := d45.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have d46' : Disjoint f4 f6 := d46.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have d56' : Disjoint f5 f6 := d56.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
@@ -10683,27 +10684,48 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
   have d6f : Disjoint fV f6 := d6v.mono (Finset.filter_subset _ _) (Finset.filter_subset _ _)
   have inj : Function.Injective fun v : ValidatorIndex => v.toNat := fun a b same =>
     UInt64.toNat_inj.mp same
+  -- A key debited on the shared segment is debited on C's run, and any other on R's tail.
   have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
-    (fV.image fun v => v.toNat) ((f4 ∪ f5 ∪ f6).image fun v => v.toNat)
+    (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+      0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum).image fun v => v.toNat)
+    (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+      0 < (events.map (syncDebit v.toNat)).sum).image fun v => v.toNat)
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       exact (Finset.mem_filter.mp hv).2)
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
-      rcases Finset.mem_union.mp hv with hv | hv
-      · rcases Finset.mem_union.mp hv with hv | hv
-        · exact (Finset.mem_filter.mp hv).2
-        · exact (Finset.mem_filter.mp hv).2
-      · exact (Finset.mem_filter.mp hv).2)
+      exact (Finset.mem_filter.mp hv).2)
   rw [hSeats] at union
-  have disjoint : Disjoint (fV.image fun v => v.toNat) ((f4 ∪ f5 ∪ f6).image fun v => v.toNat) := by
-    rw [Finset.disjoint_image inj]
+  have cover : ((fV ∪ (f4 ∪ f5 ∪ f6)).image fun v => v.toNat) ⊆
+      (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+        0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum).image fun v => v.toNat) ∪
+      (((fV ∪ (f4 ∪ f5 ∪ f6)).filter fun v =>
+        0 < (events.map (syncDebit v.toNat)).sum).image fun v => v.toNat) := by
+    intro i hi
+    obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
+    have debited : 0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum ∨
+        0 < (events.map (syncDebit v.toNat)).sum := by
+      rcases Finset.mem_union.mp hv with hv | hv
+      · exact .inl (Finset.mem_filter.mp hv).2
+      · have pos : 0 < ((eventsF ++ events).map (syncDebit v.toNat)).sum := by
+          rcases Finset.mem_union.mp hv with hv | hv
+          · rcases Finset.mem_union.mp hv with hv | hv
+            · exact (Finset.mem_filter.mp hv).2
+            · exact (Finset.mem_filter.mp hv).2
+          · exact (Finset.mem_filter.mp hv).2
+        simp only [List.map_append, List.sum_append] at pos ⊢
+        omega
+    rcases debited with c | r
+    · exact Finset.mem_union_left _ (Finset.mem_image.mpr ⟨v, Finset.mem_filter.mpr ⟨hv, c⟩, rfl⟩)
+    · exact Finset.mem_union_right _ (Finset.mem_image.mpr ⟨v, Finset.mem_filter.mpr ⟨hv, r⟩, rfl⟩)
+  have union' := (Finset.card_le_card cover).trans union
+  have disjoint : Disjoint fV (f4 ∪ f5 ∪ f6) := by
     rw [Finset.disjoint_union_right, Finset.disjoint_union_right]
     exact ⟨⟨d4f, d5f⟩, d6f⟩
-  rw [Finset.card_union_of_disjoint disjoint, Finset.card_image_of_injective _ inj,
-    Finset.card_image_of_injective _ inj,
+  rw [Finset.card_image_of_injective _ inj, Finset.card_union_of_disjoint disjoint,
     Finset.card_union_of_disjoint (Finset.disjoint_union_left.mpr ⟨d46', d56'⟩),
-    Finset.card_union_of_disjoint d45'] at union
+    Finset.card_union_of_disjoint d45'] at union'
   have linear : 3 * fV.card + f4.card + 3 * f5.card + f6.card ≤ 3 * seats := by omega
   have scaled := Nat.mul_le_mul_left β linear
   calc 3 * (β * fV.card) + β * f4.card + 3 * (β * f5.card) + β * f6.card
@@ -10814,9 +10836,9 @@ The bands of the classes fit the rounded keys of `branchR`, which is the hypothe
 private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
     {events eventsF eventsC : List (BalanceEvent preset)}
     (bands : 3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
-        (∑ v ∈ K4 pulled counted V, bandR events v.toNat) +
-        3 * (∑ v ∈ K5 counted V, bandR events v.toNat) +
-        (∑ v ∈ K6 pulled counted, bandR events v.toNat) ≤
+        (∑ v ∈ K4 pulled counted V, bandR (eventsF ++ events) v.toNat) +
+        3 * (∑ v ∈ K5 counted V, bandR (eventsF ++ events) v.toNat) +
+        (∑ v ∈ K6 pulled counted, bandR (eventsF ++ events) v.toNat) ≤
       3 * ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1) *
         ((pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat +
           (pinTerms config pulled anc fin).depth *
@@ -10838,11 +10860,11 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
         3 * ((pinTerms config pulled anc fin).depth *
           (pinTerms config pulled anc fin).syncProposer) +
         (∑ v ∈ (K4 pulled counted V),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         3 * (∑ v ∈ (K5 counted V),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   classical
   obtain ⟨W, hW, gainW⟩ := branchR_split config pulled anc fin
@@ -10895,11 +10917,11 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         3 * ((pinTerms config pulled anc fin).depth *
           (pinTerms config pulled anc fin).syncProposer) +
         (∑ v ∈ (K4 pulled counted V),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         3 * (∑ v ∈ (K5 counted V),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) +
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) +
         (∑ v ∈ (K6 pulled counted),
-          (slashR (pinTerms config pulled anc fin) v.toNat + bandR events v.toNat)) ≤
+          (slashR (pinTerms config pulled anc fin) v.toNat + bandR (eventsF ++ events) v.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have nearC := h.near
@@ -11477,6 +11499,30 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
           slashLeak config fork (pinTerms config pulled anc fin)) :=
   sorry
 
+/-- A counted key's balance at C is at most its balance at R plus its rise and its flows.
+
+It adds the rise of the key and the credits, flows and slacks that `rise` does not read.
+
+The slacks are one increment for a slashing on R's branch.
+
+They are one rounding step for a credit on C's branch.
+
+They are one rounding step for a sync debit on R's branch or on its shared segment with C's.
+
+The key's flows also compound, which `keyExtra` charges with its unit and its induced leak.
+
+The start's rounding is `prefix_envelope`'s floor form. -/
+private def keyCeiling (anc : BeaconState preset fork)
+    (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : Prop :=
+  balanceAt counted i ≤ balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
+    (credC tailC highC i +
+      keyExtra (pinTerms config pulled anc fin) run tailC highC eventsC events eventsF i) +
+    whistC tailC highC i + (syncF events i + syncF eventsC i) +
+    slashR (pinTerms config pulled anc fin) i + bandC tailC highC i +
+    bandR (eventsF ++ events) i + bandX fin highC i
+
 /-- The per-key core of the rise for a counted voter of R's finalized registry with a frozen cap.
 
 The key keeps its cap from the finalized state to R and C, and its rise is on the kept arm.
@@ -11501,14 +11547,7 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
     (frozenC : PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
       PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
-      (pinTerms config pulled anc fin).rise v.toNat +
-      (credC tailC highC v.toNat +
-          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
-            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
-      (syncF events v.toNat + syncF eventsC v.toNat) +
-      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat + bandX fin highC v.toNat :=
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
   sorry
 
 /-- The per-key core of the rise for a counted voter of R's finalized registry whose cap moves.
@@ -11535,14 +11574,7 @@ private theorem key_core_flip (h : Setting config checks g split fin pulled anc 
       PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat ≤
         PinSplit2.capAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat))
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
-      (pinTerms config pulled anc fin).rise v.toNat +
-      (credC tailC highC v.toNat +
-          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
-            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
-      (syncF events v.toNat + syncF eventsC v.toNat) +
-      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat + bandX fin highC v.toNat :=
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
   sorry
 
 /-- The per-key core of the rise for a key on the headroom arm.
@@ -11562,14 +11594,7 @@ private theorem key_core_headroom (h : Setting config checks g split fin pulled 
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ValidatorIndex)
     (notKept : ¬ (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
-      (pinTerms config pulled anc fin).rise v.toNat +
-      (credC tailC highC v.toNat +
-          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
-            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
-      (syncF events v.toNat + syncF eventsC v.toNat) +
-      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat + bandX fin highC v.toNat :=
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
   sorry
 
 /-- The per-key core of the rise for a counted voter created after the finalized state.
@@ -11591,14 +11616,7 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
     (inside : v.toNat < pulled.validators.data.size)
     (created : fin.validators.data.size ≤ v.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
-    balanceAt counted v.toNat ≤ balanceAt pulled v.toNat +
-      (pinTerms config pulled anc fin).rise v.toNat +
-      (credC tailC highC v.toNat +
-          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
-            eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
-      (syncF events v.toNat + syncF eventsC v.toNat) +
-      slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat + bandX fin highC v.toNat :=
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF v.toNat :=
   sorry
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
@@ -11628,12 +11646,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (i : ℕ) (inside : i < pulled.validators.data.size)
     (voter : (UInt64.ofNat i : ValidatorIndex) ∈ Q counted) :
-    balanceAt counted i ≤ balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
-      (credC tailC highC i +
-          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
-            eventsC events eventsF i) + whistC tailC highC i +
-      (syncF events i + syncF eventsC i) + slashR (pinTerms config pulled anc fin) i +
-      bandC tailC highC i + bandR events i + bandX fin highC i := by
+    keyCeiling anc (fromFin.append tail) tailC highC eventsC events eventsF i := by
   classical
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   -- the replays are read at R's epoch
@@ -11686,7 +11699,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
             eventsC events eventsF v.toNat) + whistC tailC highC v.toNat +
       (syncF events v.toNat + syncF eventsC v.toNat) +
       slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-      bandR events v.toNat + bandX fin highC v.toNat)) : ℕ) := by
+      bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat)) : ℕ) := by
   have early := h.early
   have term : ∀ v ∈ K4 pulled counted V, ((eC counted v : ℤ) - eR pulled v) ≤
       (((pinTerms config pulled anc fin).rise v.toNat +
@@ -11695,7 +11708,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
               eventsC events eventsF v.toNat) +
         whistC tailC highC v.toNat + (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR events v.toNat + bandX fin highC v.toNat : ℕ) : ℤ) := by
+        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat : ℕ) : ℤ) := by
     intro v member
     have active : v ∈ AR pulled := (Finset.mem_filter.mp member).2.1
     obtain ⟨w, found, -⟩ := active_of_activeVoters early (s := pulled) active
@@ -11704,6 +11717,7 @@ theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
       (by rw [UInt64.ofNat_toNat]; exact (Finset.mem_filter.mp member).2.2.1)
     simp only [eC, eR]
     push_cast
+    unfold keyCeiling at core
     zify at core
     omega
   have eq : cN pulled counted V =
@@ -11742,7 +11756,7 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
         whistC tailC highC v.toNat +
         (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR events v.toNat + bandX fin highC v.toNat)) : ℕ) := sorry
+        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat)) : ℕ) := sorry
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
@@ -11770,7 +11784,7 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR events v.toNat))) +
+            bandR (eventsF ++ events) v.toNat))) +
         (pinTerms config pulled anc fin).creditCap := sorry
 
 /-- D-8 (activations): keys counted in C and not active at R.
@@ -11803,7 +11817,7 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
       (∑ v ∈ (K6 pulled counted), (syncF events v.toNat + syncF eventsC v.toNat)) +
       (∑ v ∈ (K6 pulled counted),
         (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-          bandR events v.toNat)) +
+          bandR (eventsF ++ events) v.toNat)) +
       (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat = true,
         (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) +
       (∑ v ∈ (K6 pulled counted), bandX fin highC v.toNat) +
@@ -11832,12 +11846,13 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR events v.toNat)) := by
+            bandR (eventsF ++ events) v.toNat)) := by
     intro v hv hin
     have := key_core (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
       endEpochC replayedC v.toNat hin
       (by rw [UInt64.ofNat_toNat]; exact (Finset.mem_filter.mp hv).2.1)
     unfold eC eR
+    unfold keyCeiling at this
     omega
   have classes : ∀ v ∈ K6 pulled counted, v.toNat < pulled.validators.data.size →
       eR pulled v + (pinTerms config pulled anc fin).rise v.toNat ≤
@@ -11880,7 +11895,7 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR events v.toNat)))) :=
+            bandR (eventsF ++ events) v.toNat)))) :=
     Finset.sum_le_sum fun v hv =>
       core v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2
   rw [Finset.sum_add_distrib] at insideSum
@@ -11954,7 +11969,7 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR events v.toNat)))
+            bandR (eventsF ++ events) v.toNat)))
   rw [notInside, ← hInside] at bounds
   have boundSplit : ∑ v ∈ K6 pulled counted,
       (((credC tailC highC v.toNat +
@@ -11963,14 +11978,14 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR events v.toNat)) =
+            bandR (eventsF ++ events) v.toNat)) =
       (∑ v ∈ K6 pulled counted, ((credC tailC highC v.toNat +
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
             eventsC events eventsF v.toNat) +
         whistC tailC highC v.toNat)) +
       (∑ v ∈ K6 pulled counted, (syncF events v.toNat + syncF eventsC v.toNat)) +
       ∑ v ∈ K6 pulled counted, (slashR (pinTerms config pulled anc fin) v.toNat +
-        bandC tailC highC v.toNat + bandR events v.toNat) := by
+        bandC tailC highC v.toNat + bandR (eventsF ++ events) v.toNat) := by
     simp only [Finset.sum_add_distrib]
   omega
 
