@@ -388,7 +388,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- It starts at the finalized block's state, which lies on every branch, and at most this one's.
   --
-  -- Leak over the depth from there, partials, the band and one increment of rounding are drops.
+  -- The start is also at most the finalized block's balance.
+  --
+  -- The carry, the leak over the depth, partials, the band and one increment of rounding are drops.
   --
   -- A partial in that state's own epoch can be paid before it, but leaves the activation balance.
   let drop (i : ℕ) := carry i + depthFin * (leakAt (base0 i + inc) i + 1) +
