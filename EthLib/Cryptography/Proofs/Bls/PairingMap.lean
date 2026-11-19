@@ -78,41 +78,35 @@ theorem map_pairing (f : Hom F G) (P : G1 F) (Q : G2 F) :
     Fp12.map_one, map_finalExponentiation, Fp12.map_conjugate, map_millerLoop,
     G1.map_toAffine, G2.map_toAffine]
 
-/-- The loop of the pairing check commutes with the map. -/
-private theorem map_forIn (f : Hom F G) (l : List (G1 F × G2 F)) (acc : Fp12 F) :
-    (forIn (m := Id) l acc fun x r =>
-        match x with
-        | (p, q) =>
-          if (p.isInfinity || q.isInfinity) = true then pure (ForInStep.yield r)
-          else pure (ForInStep.yield (r * (millerLoop blsX q.toAffine p.toAffine).conjugate))
-      : Fp12 F).map f =
-    (forIn (m := Id) (l.map (Prod.map (G1.map f) (G2.map f))) (acc.map f) fun x r =>
-        match x with
-        | (p, q) =>
-          if (p.isInfinity || q.isInfinity) = true then pure (ForInStep.yield r)
-          else pure (ForInStep.yield (r * (millerLoop blsX q.toAffine p.toAffine).conjugate))
-      : Fp12 G) := by
+/-- The factor of a pair commutes with the map. -/
+private theorem map_pairFactor (f : Hom F G) (pq : G1 F × G2 F) :
+    (pairFactor pq).map (Fp12.map f) = pairFactor (Prod.map (G1.map f) (G2.map f) pq) := by
+  obtain ⟨p, q⟩ := pq
+  unfold pairFactor
+  simp only [Prod.map, G1.map_isInfinity, G2.map_isInfinity]
+  split
+  · rfl
+  · rw [Option.map_some, ← G1.map_toAffine, ← G2.map_toAffine, ← map_millerLoop,
+      ← Fp12.map_conjugate]
+
+/-- The product of the factors commutes with the map. -/
+private theorem map_foldl_pairFactor (f : Hom F G) (l : List (G1 F × G2 F)) (acc : Fp12 F) :
+    ((l.filterMap pairFactor).foldl (· * ·) acc).map f =
+      ((l.map (Prod.map (G1.map f) (G2.map f))).filterMap pairFactor).foldl (· * ·)
+        (acc.map f) := by
   induction l generalizing acc with
   | nil => rfl
   | cons pq l ih =>
-    obtain ⟨p, q⟩ := pq
-    rw [List.map_cons, List.forIn_cons, List.forIn_cons]
-    simp only [Prod.map, G1.map_isInfinity, G2.map_isInfinity]
-    by_cases h : (p.isInfinity || q.isInfinity) = true
-    · simp only [h, ↓reduceIte]
-      exact ih acc
-    · simp only [h, Bool.false_eq_true, ↓reduceIte]
-      rw [← G1.map_toAffine, ← G2.map_toAffine, ← map_millerLoop, ← Fp12.map_conjugate,
-        ← Fp12.map_mul]
-      exact ih _
+    rw [List.map_cons, List.filterMap_cons, List.filterMap_cons, ← map_pairFactor]
+    cases pairFactor pq with
+    | none => exact ih acc
+    | some x => rw [Option.map_some, List.foldl_cons, List.foldl_cons, ih, Fp12.map_mul]
 
 theorem map_pairingCheck (f : Hom F G) (pairs : Array (G1 F × G2 F)) :
     pairingCheck (pairs.map (Prod.map (G1.map f) (G2.map f))) = pairingCheck pairs := by
   unfold pairingCheck
-  dsimp only
-  rw [← Array.forIn_toList, ← Array.forIn_toList, Array.toList_map, ← Fp12.map_one f,
-    ← map_forIn]
-  show (finalExponentiation (Fp12.map f _)).isOne = (finalExponentiation _).isOne
-  rw [← map_finalExponentiation, Fp12.map_isOne]
+  rw [← Array.foldl_toList, Array.toList_filterMap, ← Array.foldl_toList, Array.toList_filterMap,
+    Array.toList_map, ← Fp12.map_one f, ← map_foldl_pairFactor, ← map_finalExponentiation,
+    Fp12.map_isOne]
 
 end EthLib.Cryptography.Bls
