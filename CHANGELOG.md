@@ -35,6 +35,10 @@ Not yet released.
   Its balance plus the sync and partial debits stays above a closed form that loses a pass rate of the effective balance each epoch.
   The pin's low-balance floor and its fall floor read it.
 
+- `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
+  `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
+  The pin's claim about the keys that are pending at the start of an epoch reads them.
+
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
   The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.

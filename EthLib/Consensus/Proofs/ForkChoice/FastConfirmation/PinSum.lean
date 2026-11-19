@@ -23,6 +23,7 @@ import EthLib.Consensus.Proofs.DirectSafety.Apriori.Whistleblower
 import EthLib.Consensus.Proofs.DirectSafety.BalanceSources
 import EthLib.Consensus.Proofs.Mutators
 import EthLib.Consensus.Proofs.Transition.Trace
+import Mathlib.Data.Nat.ModEq
 import Mathlib.Data.Nat.Notation
 import EthLib.Consensus.Proofs.Transition.EpochUpdates
 import EthLib.Consensus.Proofs.Transition.ForkBoundary
@@ -762,6 +763,14 @@ def bandC {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
   if 0 < netScan v high tail +
       (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail).1 then
     preset.upwardBand else 0
+
+/-- The gain of `C` credited gwei over `depth` epochs, at the reward rate `P`.
+
+The credits count in whole increments rounded up, and each epoch's gain is rounded down. -/
+private def gainOn (preset : Preset) (depth P C : ℕ) : ℕ :=
+  depth * ((((C + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) /
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) / WEIGHT_DENOMINATOR.toNat)
 
 /-- The rounding slack of a key whose balance on R's branch took a sync debit that `high` omits.
 
@@ -2846,6 +2855,137 @@ private theorem key_capped {g : ForkedBeaconState preset}
     rw [low]
     exact le_trans capped
       (UInt64.le_iff_toNat_le.mp (PinSplit.withdrawalMax_le electra electra caps frozen))
+
+/-- The gain at the stake `e0 + C + I` over `k` epochs splits into three parts.
+
+They are the gain on the credits, the gain at the base stake `e0`, and one increment's gain.
+
+The floors cost two units per epoch. -/
+private theorem gain_split (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk : k ≤ depth) :
+    k * ((e0 + C + I) / I * P * F / WD) ≤
+      depth * ((C + I - 1) / I * P * F / WD) +
+        (depth * (e0 / I * P * F / WD) + depth * (P * F / WD + 2)) := by
+  have hq : (e0 + C + I) / I ≤ e0 / I + (C + I - 1) / I + 1 := by
+    rw [← Nat.lt_succ_iff, Nat.div_lt_iff_lt_mul hI]
+    have h1 := Nat.div_add_mod e0 I
+    have h2 := Nat.mod_lt e0 hI
+    have h3 := Nat.div_add_mod (C + I - 1) I
+    have h4 := Nat.mod_lt (C + I - 1) hI
+    have e : (e0 / I + (C + I - 1) / I + 1).succ * I =
+        I * (e0 / I) + I * ((C + I - 1) / I) + 2 * I := by
+      simp only [Nat.succ_eq_add_one]
+      ring
+    rw [e]
+    omega
+  have step : k * ((e0 + C + I) / I * P * F / WD) ≤
+      depth * ((e0 / I + (C + I - 1) / I + 1) * P * F / WD) :=
+    Nat.mul_le_mul hk (Nat.div_le_div_right (Nat.mul_le_mul_right F (Nat.mul_le_mul_right P hq)))
+  have split3 : (e0 / I + (C + I - 1) / I + 1) * P * F =
+      e0 / I * P * F + (C + I - 1) / I * P * F + P * F := by ring
+  have floors : (e0 / I * P * F + (C + I - 1) / I * P * F + P * F) / WD ≤
+      e0 / I * P * F / WD + (C + I - 1) / I * P * F / WD + P * F / WD + 2 := by
+    have one := Nat.add_div_le_div_add_div_add_one
+      (e0 / I * P * F + (C + I - 1) / I * P * F) (P * F) WD
+    have two := Nat.add_div_le_div_add_div_add_one (e0 / I * P * F) ((C + I - 1) / I * P * F) WD
+    omega
+  rw [split3] at step
+  calc k * ((e0 + C + I) / I * P * F / WD)
+      ≤ depth * ((e0 / I * P * F + (C + I - 1) / I * P * F + P * F) / WD) := step
+    _ ≤ depth * (e0 / I * P * F / WD + (C + I - 1) / I * P * F / WD + P * F / WD + 2) :=
+        Nat.mul_le_mul_left _ floors
+    _ = depth * ((C + I - 1) / I * P * F / WD) +
+        (depth * (e0 / I * P * F / WD) + depth * (P * F / WD + 2)) := by ring
+
+/-- The effective balance at the end of a run is at most the rounded bound on its balance.
+
+The run starts at a state where the key's effective balance is within the largest one.
+
+K2 bounds the balance at every state by `creditBound`, given the right `E`.
+
+`E` is at least the effective balances that the bound allows.
+
+Then the update of the effective balances reads that bound as its ceiling. -/
+private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
+    (post : Run config checks n y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ n.fork)
+    (i : ℕ) (inside : i < n.state.validators.data.size) (high P E : ℕ)
+    (aligned : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startCap : effectiveAt n i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (capCeil : ∀ z ∈ post.balancePath,
+      PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (rate : ∀ z ∈ post.balancePath, ∀ total perIncrement : Gwei,
+      getTotalActiveBalance z.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+      (PinSplit2.creditBound post i high E P -
+        PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E) :
+    effectiveAt y i ≤ max (effectiveAt n i) (min (PinSplit2.creditBound post i high E P -
+      PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
+  obtain ⟨-, -, third, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat high E P
+  have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
+  exact (third _ aligned startCap
+    (fun z member => Nat.le_trans (Nat.min_le_left _ _) (balances z member)) capCeil).1
+
+/-- A key that switches on C's branch has an effective balance within its switch balance and gain.
+
+Its credits count too.
+
+The key is within `MIN_ACTIVATION_BALANCE` when it switches, and its balance there is within `B0`.
+
+The slack is the gain at the base stake, and one increment's gain with the rounding units. -/
+private theorem key_capped_credits {n y : ForkedBeaconState preset}
+    (post : Run config checks n y) (early : y.fork < .glamsterdam) (fulu : .fusaka ≤ n.fork)
+    (i : ℕ) (inside : i < n.state.validators.data.size) (high P E : ℕ)
+    (aligned : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0)
+    (startEB : effectiveAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat)
+    (startCap : effectiveAt n i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (capCeil : ∀ z ∈ post.balancePath,
+      PinSplit2.capAt z i ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    (rate : ∀ z ∈ post.balancePath, ∀ total perIncrement : Gwei,
+      getTotalActiveBalance z.state = .ok total →
+      getBaseRewardPerIncrement preset total = .ok perIncrement →
+      perIncrement.toNat * ((∑ j ∈ (getActiveValidatorIndices z.state
+        (getPreviousEpoch z.state)).toFinset, effectiveAt z j.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) ≤
+        P * (total.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
+    (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+      (PinSplit2.creditBound post i high E P -
+        PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E)
+    (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (depth Cr e0 U1 U2 B0 : ℕ) (floor : preset.MIN_ACTIVATION_BALANCE.toNat ≤ B0)
+    (startBal : actualBalanceAt n i ≤ B0)
+    (hE : E = e0 + Cr + preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (epochs : (getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat ≤ depth)
+    (credits : PinSplit2.creditBound post i high E P ≤ actualBalanceAt n i + Cr +
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat) *
+        (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat))
+    (base : depth * (e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ≤ U1)
+    (unit : depth * (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+      WEIGHT_DENOMINATOR.toNat + 2) ≤ U2) :
+    effectiveAt y i ≤ B0 + Cr + gainOn preset depth P Cr + (U1 + U2) := by
+  have ceiling := key_credit_ceiling post early fulu i inside high P E aligned startCap capCeil
+    rate endEpoch fixpoint
+  have split := gain_split preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
+    (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P e0 Cr
+    ((getCurrentEpoch y.state).toNat - (getCurrentEpoch n.state).toNat) depth incPos epochs
+  rw [← hE] at split
+  have rounded : PinSplit2.creditBound post i high E P -
+      PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+        PinSplit2.creditBound post i high E P := Nat.sub_le _ _
+  unfold gainOn
+  refine Nat.le_trans ceiling (max_le (by omega) (Nat.le_trans (Nat.min_le_left _ _) ?_))
+  omega
 
 /-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
 private theorem key_rise_main {g : ForkedBeaconState preset}
