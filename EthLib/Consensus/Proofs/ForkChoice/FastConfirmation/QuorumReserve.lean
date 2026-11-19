@@ -753,9 +753,9 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- Its seat debits from the finalized block's state count as a second seat term.
   --
-  -- Past that bound, `rise`'s headroom pays a consolidation target's.
+  -- A key whose own gain stays low compounds past that bound too, so its gains count in both.
   --
-  -- There each deposit the window can apply to a new key is charged up to the cap.
+  -- Past that bound, each deposit the window can apply to a new key is also charged up to the cap.
   --
   -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
@@ -773,9 +773,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
       depth * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope + depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let creditGain := if 11 * depth * (gainRateMax + 1) ≤ capMax
-    then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
-    else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  let creditGain :=
+    (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10 +
+      (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
+        else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
   -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
   --
   -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
