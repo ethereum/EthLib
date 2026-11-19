@@ -431,11 +431,11 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have targetRead := vote.data_target anchored anchorSlot anchorBoundary start hv
     (roots v hv n nBound)
   obtain ⟨targetBoundary, targetBlock, targetBoundaryOk, targetKnown, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   have chainRead := chain w hw arrival k arrivalLe hk
   rw [← targetEq] at chainRead
   obtain ⟨finalBoundary, finalBlock, finalBoundaryOk, finalKnown, finalLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas chainRead
+    Store.isAncestor_of_getCheckpointBlock chainRead
   have aboveAnchor : anchorBlock.slot ≤ finalBoundary := UInt64.le_trans
     ((forward w hw k).reachable.anchorSlot_le (UInt64.le_of_eq anchorSlot) finalKnown) finalLe
   have voterRead := Store.getCheckpointBlock_of_same_blocks (forward v hv n).reachable
@@ -449,11 +449,11 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have headCheckpoint : ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
       ((e.world arrival).state w).finalizedCheckpoint.epoch =
         .ok ((e.world arrival).state w).finalizedCheckpoint.root := by
-    rw [Store.getCheckpointBlock_trans preGloas targetRead finalLeTarget]
+    rw [Store.getCheckpointBlock_trans targetRead finalLeTarget]
     exact voterRead
   -- So the head reaches the receiver by arrival, with its checkpoint blocks.
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ := Store.isAncestor_of_getCheckpointBlock
-    preGloas (chain w hw arrival arrival (le_refl _) arrivalBound)
+    (chain w hw arrival arrival (le_refl _) arrivalBound)
   rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchored start hv hw
       (by simpa using late) arrivalBound arrivalCurrent ⟨finalized, finalizedKnown⟩
       (dataRoot ▸ headKnown) headCheckpoint with ⟨votedKnown, transport⟩ | collision

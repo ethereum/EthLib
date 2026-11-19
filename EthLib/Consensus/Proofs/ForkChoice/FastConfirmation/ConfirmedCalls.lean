@@ -655,7 +655,7 @@ private theorem finalized_recent (ctx : CallsCtx (e := e) anchor u events firstS
   · exfalso
     obtain ⟨root, r⟩ := finalized_read reached ctx.sound (UInt64.le_of_eq ctx.anchorSlot)
       ctx.positive ctx.window nonzero lt
-    obtain ⟨b, bFound, bLe, -⟩ := Store.getCheckpointBlock_self ctx.preGloas ctx.positive r
+    obtain ⟨b, bFound, bLe, -⟩ := Store.getCheckpointBlock_self ctx.positive r
     obtain ⟨b', bFound', rfl⟩ := found_of_blockEpoch beOk
     obtain rfl : b' = b := Option.some.inj (bFound'.symm.trans bFound)
     rcases forward.finalized_add_two_le_or_anchor ctx.sound ctx.slots epochOk with lag | lag
@@ -833,7 +833,7 @@ private theorem start_recent (ctx : CallsCtx (e := e) anchor u events firstSlot 
             (Store.unrealizedJustification_found ujHead) lt with
           ⟨read, -⟩ | zero
         · obtain ⟨b, bFound, bLe, self⟩ :=
-            Store.getCheckpointBlock_self ctx.preGloas ctx.positive read
+            Store.getCheckpointBlock_self ctx.positive read
           obtain ⟨b', bFound', rfl⟩ := found_of_blockEpoch beOk
           obtain rfl : b' = b := Option.some.inj (bFound'.symm.trans bFound)
           have := UInt64.le_iff_toNat_le.mp (forward.unrealizedJustification_epoch_le ctx.sound
