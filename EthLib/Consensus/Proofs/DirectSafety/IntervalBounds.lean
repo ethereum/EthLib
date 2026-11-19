@@ -4029,7 +4029,7 @@ theorem _root_.EthLib.Consensus.Run.deposit_credit_le_funding {g x y : ForkedBea
       exact Finset.mem_filter.mpr
         ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, active⟩
     exact (Finset.sum_le_sum_of_subset subset).trans
-      (selected.trans (le_of_eq (if_pos ⟨deposit, electra⟩).symm))
+      (selected.trans (le_of_eq (ite_eq_left ⟨deposit, electra⟩).symm))
 
 private theorem intervalGain_events_bounded {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
