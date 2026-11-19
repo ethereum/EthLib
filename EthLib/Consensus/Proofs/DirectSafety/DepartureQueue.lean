@@ -5886,7 +5886,9 @@ private theorem partial_queue_telescope_due
     (removed remaining initial added : List PendingPartialWithdrawal)
     (cutoff : Nat) (queue : removed ++ remaining = initial ++ added)
     (due : ∀ entry ∈ removed, entry.withdrawableEpoch.toNat ≤ cutoff) :
-    (removed.map (·.amount.toNat)).sum ≤
+    (removed.map (·.amount.toNat)).sum +
+      ((remaining.filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
+            (·.amount.toNat)).sum ≤
       ((initial.filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
             (·.amount.toNat)).sum +
         ((added.filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
@@ -6250,7 +6252,11 @@ private theorem run_partial_queue_due_of
         (y.state.pendingPartialWithdrawals
           (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))).data.toList =
       (x.state.pendingPartialWithdrawals electra).data.toList ++ added) :
-    (events.map cost).sum ≤
+    (events.map cost).sum +
+      ((((y.state.pendingPartialWithdrawals
+        (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))).data.toList.filter
+          keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
+            (·.amount.toNat)).sum ≤
       ((((x.state.pendingPartialWithdrawals electra).data.toList.filter keep).filter
         (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum +
       (((added.filter keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
@@ -6258,7 +6264,7 @@ private theorem run_partial_queue_due_of
   have replay := run_partial_sum charged tail electra early replayed
   have kept := congrArg (List.filter keep) queue
   simp only [List.filter_append] at kept
-  exact replay.1.trans (partial_queue_telescope_due _ _ _ _ cutoff kept
+  exact (Nat.add_le_add_right replay.1 _).trans (partial_queue_telescope_due _ _ _ _ cutoff kept
     (fun entry member => (UInt64.le_iff_toNat_le.mp
       (replay.2 entry (List.mem_of_mem_filter member))).trans endpoint))
 include slot_zero in
@@ -6308,9 +6314,11 @@ private theorem run_partial_queue_due
         (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum +
       ((added.filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
         (·.amount.toNat)).sum := by
-  simpa only [List.filter_true] using run_partial_queue_due_of
+  have net := run_partial_queue_due_of
     (partialCost_all slot_zero partialDebit_eq) tail electra early replayed cutoff endpoint
     added queue
+  simp only [List.filter_true] at net
+  exact Nat.le_of_add_right_le net
 private theorem partials_entries_due_sum (calls : List (IndexedDepartureCall preset config))
     (cutoff : Nat) :
     (((calls.filterMap (·.entry)).filter
@@ -6831,6 +6839,51 @@ theorem run_partial_queue_trace
   rw [partials_entries_due_sum] at partials
   exact ⟨calls, trace, firsts, rates, partials⟩
 
+/-- The partial cost of a branch, plus its kept entries queued at the end, fits the kept entries.
+
+An entry is kept when `keep` selects it.
+
+Every entry counted is due by the cutoff.
+
+The kept entries are those of the queue at the start, and those appended along the branch.
+
+Each appended entry is due no earlier than the withdrawal delay after the start. -/
+theorem run_partial_queue_net {cost : BalanceEvent preset → Nat}
+    {keep : PendingPartialWithdrawal → Bool}
+    (charged : PartialCost (config := config) (checks := checks) cost keep) (high cutoff : Nat)
+    (electra : .pectra ≤ x.fork) {y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff) :
+    ∃ added : List PendingPartialWithdrawal,
+      (∀ entry ∈ added, (getCurrentEpoch x.state).toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ entry.withdrawableEpoch.toNat) ∧
+      (events.map cost).sum +
+        ((((y.state.pendingPartialWithdrawals
+          (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))).data.toList.filter
+            keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
+              (·.amount.toNat)).sum ≤
+        ((((x.state.pendingPartialWithdrawals electra).data.toList.filter keep).filter
+          (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum +
+        (((added.filter keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
+          (·.amount.toNat)).sum := by
+  obtain ⟨calls, _, _, _, queue, _, _, _, _, firsts, _⟩ :=
+    run_exit_rates (ceilingValue := fun _ => 2 ^ 64) (exitEnvelope := fun _ => 2 ^ 64)
+      (callRate := by intros; exact (UInt64.toNat_lt _).le)
+      (consEnvelope := fun _ => 2 ^ 64)
+      (consRate := by intros; exact (UInt64.toNat_lt _).le)
+      (consMono := monotone_const)
+      electra tail early (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))
+      (fun _ _ total _ => (UInt64.toNat_lt total).le)
+  refine ⟨calls.filterMap (·.entry), ?_,
+    run_partial_queue_due_of charged tail electra early replayed cutoff endpoint _ queue⟩
+  intro entry member
+  obtain ⟨called, present, found⟩ := List.mem_filterMap.mp member
+  have pushed := (called.pushed entry found).2
+  have spent := called.call.epoch_ge.2
+  have first := firsts called present
+  omega
+
 /-- A cost of the partial payments of a branch fits the queued entries that it selects.
 
 They are the entries of the queue at the start, and those appended along the branch.
@@ -6857,22 +6910,9 @@ theorem run_partial_queue_kept {cost : BalanceEvent preset → Nat}
           (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum +
         (((added.filter keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
           (·.amount.toNat)).sum := by
-  obtain ⟨calls, _, _, _, queue, _, _, _, _, firsts, _⟩ :=
-    run_exit_rates (ceilingValue := fun _ => 2 ^ 64) (exitEnvelope := fun _ => 2 ^ 64)
-      (callRate := by intros; exact (UInt64.toNat_lt _).le)
-      (consEnvelope := fun _ => 2 ^ 64)
-      (consRate := by intros; exact (UInt64.toNat_lt _).le)
-      (consMono := monotone_const)
-      electra tail early (Nat.le_trans electra (fork_le_of_chainSteps tail.chainSteps))
-      (fun _ _ total _ => (UInt64.toNat_lt total).le)
-  refine ⟨calls.filterMap (·.entry), ?_,
-    run_partial_queue_due_of charged tail electra early replayed cutoff endpoint _ queue⟩
-  intro entry member
-  obtain ⟨called, present, found⟩ := List.mem_filterMap.mp member
-  have pushed := (called.pushed entry found).2
-  have spent := called.call.epoch_ge.2
-  have first := firsts called present
-  omega
+  obtain ⟨added, late, net⟩ := run_partial_queue_net charged high cutoff electra tail early
+    replayed endpoint
+  exact ⟨added, late, Nat.le_of_add_right_le net⟩
 
 end
 end EthLib.Consensus.DirectSafety
