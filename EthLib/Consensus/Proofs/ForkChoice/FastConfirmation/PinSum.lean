@@ -16994,6 +16994,97 @@ private theorem floor_add_ceil_le (a b Q : ℕ) (pos : 0 < Q) :
   rw [this]
   omega
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key that C slashes after the split, and that R neither slashes nor exits, keeps its exit late.
+
+The exit guard of its run from the finalized block holds along the run.
+
+Its exit at C is after R's cutoff less the delay.
+
+The exit is assigned on C's run, so it is a departure charge there, after the split.
+
+Or it is assigned by the split, and then it is kept, and so it is R's exit.
+
+R's exit is then after the cutoff.
+
+Or R holds the key withdrawable by the finalized epoch, which `sc3a_unwithdrawn` excludes. -/
+private theorem slashedC_retained (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (i : ValidatorIndex)
+    (slashedC : i.toNat ∈ slashedOnC split counted)
+    (inside : i.toNat < split.validators.data.size)
+    (notR : ¬ (pinTerms config pulled anc fin).slashedRB i.toNat = true)
+    (notExit : ¬ exitedSlashable anc pulled i.toNat = true) :
+    ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
+      (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
+      (before.snoc step).append after = fromFin.append tailC → ∀ w,
+      n.state.validators.data[i.toNat]? = some w →
+      ((getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u →
+          (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨hLt, hSplit, hCount⟩ : i.toNat < counted.validators.data.size ∧
+      (split.validators.data[i.toNat]?.map (·.slashed)).getD false = false ∧
+      (counted.validators.data[i.toNat]?.map (·.slashed)).getD false = true := by
+    simpa [slashedOnC] using slashedC
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨vS, foundS⟩ : ∃ v, split.validators.data[i.toNat]? = some v :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  obtain ⟨wC, foundC⟩ : ∃ w, counted.validators.data[i.toNat]? = some w :=
+    ⟨_, Array.getElem?_eq_getElem hLt⟩
+  have unslashedS : vS.slashed = false := by simpa [foundS] using hSplit
+  have slashedAtC : wC.slashed = true := by simpa [foundC] using hCount
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  simp only at finSplit
+  have shallow := h.shallow
+  have slashC := tailC.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+    h.early h.delay i.toNat vS wC foundS foundC unslashedS slashedAtC
+  have late : (getCurrentEpoch pulled).toNat + 1 <
+      wC.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+    by_cases unset : vS.exitEpoch = FAR_FUTURE_EPOCH
+    · obtain ⟨c, mem, -, epoch⟩ := PinSplit.Run.charge_of_exit tailC electra h.early i.toNat
+        (fun v found => by
+          rw [foundS] at found
+          cases found
+          exact unset) wC foundC slashC.1
+      have start := Run.departureCharges_epoch_ge_start tailC electra h.early c mem
+      simp only at start
+      omega
+    · obtain ⟨wL, foundL, kept⟩ := tailC.registryLifecycle.validators i.toNat vS foundS
+      obtain rfl : wL = wC := Option.some.inj (foundL.symm.trans foundC)
+      have exitC := congrArg UInt64.toNat (kept.exitEpoch unset)
+      obtain ⟨wR, foundR, keptR⟩ := tail.registryLifecycle.validators i.toNat vS foundS
+      have exitR := congrArg UInt64.toNat (keptR.exitEpoch unset)
+      by_cases far : (getCurrentEpoch pulled).toNat + 1 < wR.exitEpoch.toNat
+      · omega
+      have unslashedR : wR.slashed = false := by
+        by_contra marked
+        have slashedR : wR.slashed = true := by simpa using marked
+        have waited := tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
+          h.early h.delay i.toNat vS wR foundS foundR unslashedS slashedR
+        simp only at waited
+        apply notR
+        rw [slashedRB_eq]
+        simp only [foundR, Option.map_some, Option.getD_some, Option.any_some, slashedR,
+          decide_eq_true_eq]
+        refine ⟨trivial, ?_⟩
+        have := waited.2
+        omega
+      exfalso
+      refine sc3a_unwithdrawn h foundS foundR foundC unslashedS slashedAtC unslashedR ?_
+      by_contra waiting
+      have reached : wR.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
+      have lt := Nat.lt_of_not_le waiting
+      apply notExit
+      simp [exitedSlashable, foundR, unslashedR, reached, lt]
+  intro m n before step after cut w found
+  exact retained_of_exit h fromFin tailC _ (Nat.le_refl _) i foundC late before step after cut w
+    found
+
 /-- (W-S) The slack and the rounding of the slashed keys' rewards are paid by the shares and bands.
 
 A key of the split's registry is read at its bound and the slack that `registry` adds.
