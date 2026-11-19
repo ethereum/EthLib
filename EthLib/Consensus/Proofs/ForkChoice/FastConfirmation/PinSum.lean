@@ -18317,6 +18317,126 @@ theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
       replayedC member none
   omega
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key of `K6` beyond R's registry rises by its credits and their gains, when the rate is low.
+
+The key's stake is its credits on C's branch.
+
+Its effective balance is within the ceiling of a created key.
+
+Its flows hold the credits, and the key's gain over the depth of the window is the flow gain.
+
+The key is not in R's registry, so its flow gain is charged when the largest rate is low.
+
+The unit pays the joint floor, and the band is an upward band at least. -/
+private theorem beyond_key (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)}
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (low : 11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)
+    {v : ValidatorIndex} (member : v ∈ K6 pulled counted)
+    (created : pulled.validators.data.size ≤ v.toNat) :
+    balanceAt counted v.toNat ≤
+      (((credC tailC highC v.toNat +
+          keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
+            eventsC events eventsF v.toNat) +
+          whistC tailC highC v.toNat) +
+        (syncF events v.toNat + syncF eventsC v.toNat) +
+        (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
+          bandR (eventsF ++ events) v.toNat)) + bandX fin highC v.toNat := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFinRun⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have incPos := h.bands.1
+  have alignedMax := (cap_values_aligned h.aligned).2
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  -- the rate premise of the ceiling, at the depth of the window
+  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
+  have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
+    (pinTerms config pulled anc fin).perIncrement
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat (pinTerms config pulled anc fin).depth incPos
+    (by decide) alignedMax (by rw [← gainMax]; exact low)
+  have key : 11 * (min (pinTerms config pulled anc fin).depth
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+        ((pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+      WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+    Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _))) wide
+  -- the credits of the run are in the flows
+  obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
+    syncCr eventsC v.toNat := ⟨_, rfl⟩
+  have flows : grossScan v.toNat highC tailC +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
+    hZ ▸ (credits_le_sources (shared.append fromFinRun) h.genesis tailC h.early
+      (by simpa using electra) v.toNat highC replayedC).1
+  obtain ⟨z, pre, post, -, positive, bound⟩ := created_ceiling h tailC highC endEpochC
+    (Finset.mem_filter.mp member).1 (Nat.le_trans grows created)
+    (pinTerms config pulled anc fin).perIncrement rfl key flows
+  have atEnd : (⟨fork, counted⟩ : ForkedBeaconState preset) ∈ post.balancePath := by
+    obtain ⟨front, eq⟩ := Run.balancePath_last post
+    rw [eq]
+    simp
+  have ceiling := bound _ atEnd
+  have effective : effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat =
+      balanceAt counted v.toNat := rfl
+  -- the key is beyond R's registry, so its flow gain is charged while the rate is low
+  have notPosition : v.toNat ∉ (pinTerms config pulled anc fin).positions := by
+    show v.toNat ∉ Finset.range pulled.validators.data.size
+    rw [Finset.mem_range]
+    omega
+  have lowGain : (pinTerms config pulled anc fin).gainHigh = false := by
+    show (!decide (11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = false
+    simp [low]
+  have flowEq : flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
+      v.toNat = flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
+        v.toNat := by
+    unfold flowK
+    rw [ite_eq_left (Or.inr ⟨notPosition, lowGain⟩)]
+  have credit : Z ≤ flowCredit (pinTerms config pulled anc fin) tailC highC eventsC events eventsF
+      v.toNat := by
+    unfold flowCredit
+    omega
+  have gain : min (pinTerms config pulled anc fin).depth
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+      (11 * Z / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+        (pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) ≤
+      flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat :=
+    Nat.mul_le_mul_left _ (Nat.div_le_div_right (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _
+      (Nat.div_le_div_right (Nat.mul_le_mul_left 11 credit)))))
+  have unit : min (pinTerms config pulled anc fin).depth
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+      ((pinTerms config pulled anc fin).perIncrement *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) ≤
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
+    unfold unitK
+    rw [ite_eq_left (Nat.lt_of_lt_of_le positive credit)]
+    exact Nat.mul_le_mul_right _ (Nat.min_le_left _ _)
+  have band := created_band h fromFin high endEpoch replayedF tailC highC endEpochC replayedC
+    member created
+  have below := h.facts.below
+  have upward := h.bands.2
+  have sync := syncF_eq eventsC v.toNat
+  have credits : syncCr eventsC v.toNat = (eventsC.map (syncCredit v.toNat)).sum := rfl
+  unfold keyExtra
+  omega
+
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
 In the high regime they are also paid by `creditCap`.
@@ -18343,8 +18463,17 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
             whistC tailC highC v.toNat) +
           (syncF events v.toNat + syncF eventsC v.toNat) +
           (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-            bandR (eventsF ++ events) v.toNat))) +
-        (pinTerms config pulled anc fin).creditCap := sorry
+            bandR (eventsF ++ events) v.toNat) + bandX fin highC v.toNat)) +
+        (pinTerms config pulled anc fin).creditCap := by
+  classical
+  by_cases low : 11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+  · refine Nat.le_trans (Finset.sum_le_sum fun v member => ?_) (Nat.le_add_right _ _)
+    obtain ⟨inK6, beyond⟩ := Finset.mem_filter.mp member
+    exact beyond_key h tail high endEpoch fromFin replayedF tailC highC endEpochC replayedC low
+      inK6 beyond
+  · sorry
 
 /-- D-8 (activations): keys counted in C and not active at R.
 
@@ -18463,9 +18592,14 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
         bandX fin highC v.toNat) =
       ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) +
         ∑ v ∈ inside, bandX fin highC v.toNat := Finset.sum_add_distrib
-  have bandIn : ∑ v ∈ inside, bandX fin highC v.toNat ≤
-      ∑ v ∈ K6 pulled counted, bandX fin highC v.toNat :=
-    Finset.sum_le_sum_of_subset (Finset.filter_subset _ _)
+  have bandAll : ∑ v ∈ K6 pulled counted, bandX fin highC v.toNat =
+      ∑ v ∈ inside, bandX fin highC v.toNat +
+        ∑ v ∈ (K6 pulled counted) with pulled.validators.data.size ≤ v.toNat,
+          bandX fin highC v.toNat := by
+    have split := Finset.sum_filter_add_sum_filter_not (K6 pulled counted)
+      (fun v => v.toNat < pulled.validators.data.size) (fun v => bandX fin highC v.toNat)
+    rw [notInside] at split
+    exact split.symm
   have classSum : ∑ v ∈ inside, (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat) ≤
       (∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
           isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true),
@@ -18546,6 +18680,7 @@ theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
       ∑ v ∈ K6 pulled counted, (slashR (pinTerms config pulled anc fin) v.toNat +
         bandC tailC highC v.toNat + bandR (eventsF ++ events) v.toNat) := by
     simp only [Finset.sum_add_distrib]
+  rw [Finset.sum_add_distrib] at beyond
   omega
 
 end Stubs
