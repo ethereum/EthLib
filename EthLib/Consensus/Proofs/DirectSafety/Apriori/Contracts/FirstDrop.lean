@@ -862,7 +862,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
             cases flag : v.slashed
             · exact .inl ⟨rfl, window.1 flag⟩
             · exact .inr ⟨rfl, window.2 flag⟩)
-          high endEpoch retained (noCrossing added addedOk)
+          high endEpoch (retained.imp_right (· u middle)) (noCrossing added addedOk)
           (low := min (actualBalanceAt m i.toNat)
             (withdrawalMaxEffectiveBalance preset m.fork u).toNat)
           (base := base) (quotient := quotient) (a := fresh) (b := fresh) .nil rfl
