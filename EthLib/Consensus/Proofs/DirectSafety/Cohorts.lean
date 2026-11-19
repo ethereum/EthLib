@@ -467,13 +467,7 @@ private theorem cohorts_epoch (early : fork < .pectra)
       before.slot = state.slot ∧ before.validators.data.size = state.validators.data.size ∧
       registered.validators.data.size ≤ after.validators.data.size ∧
       before.validators = state.validators := by
-  have trace := processEpoch_trace ok
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ (.registry ::
-    ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-      EpochStage.middleStages ++ EpochStage.tailStages))) _ _ at trace
-  obtain ⟨before, head, tail⟩ := EpochTrace.append_iff.mp trace
-  cases tail
-  rename_i registered registeredOk tail
+  obtain ⟨before, registered, head, registeredOk, tail⟩ := processEpoch_registryCut ok
   have first : before.validators = state.validators ∧ before.slot = state.slot := by
     refine EpochTrace.transport
       (R := fun a b : BeaconState preset fork => b.validators = a.validators ∧ b.slot = a.slot)
@@ -520,7 +514,7 @@ private theorem cohorts_epoch (early : fork < .pectra)
       have same := edge.validators_eq ⟨nofun, nofun, nofun⟩
       exact ⟨.of_data (congrArg (·.data) same), Nat.le_of_eq (congrArg (·.data.size) same).symm⟩
   exact ⟨before, registered, .of_data (congrArg (·.data) first.1),
-    EpochStage.action_cases.mp registeredOk, last.1, first.2, congrArg (·.data.size) first.1,
+    registeredOk, last.1, first.2, congrArg (·.data.size) first.1,
     last.2, first.1⟩
 
 private theorem activationScheduled_of_counts {s t : BeaconState preset fork} {bound : Nat}

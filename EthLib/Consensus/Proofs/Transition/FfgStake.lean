@@ -124,9 +124,7 @@ theorem getTotalActiveBalance_exists {state : BeaconState preset fork}
   rw [getActiveValidatorIndicesChecked_of_within within]
   apply getTotalBalance_ok_iff_stake.mpr
   refine ⟨?_, bounded, UInt64.toNat_ofNat_of_lt' fits⟩
-  intro v member
-  obtain ⟨validator, found, _⟩ := (mem_getActiveValidatorIndices within).mp member
-  exact (Array.getElem?_eq_some_iff.mp found).1
+  exact fun v member => lt_size_of_mem_getActiveValidatorIndices member
 
 /-- A successful total also bounds a subset, without bounding inactive balances. -/
 theorem getTotalBalance_exists_of_subset {state : BeaconState preset fork}

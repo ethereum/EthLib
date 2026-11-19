@@ -211,7 +211,7 @@ private theorem Kept.partialWithdrawal {electra : .pectra ≤ fork} {index : Val
 
 private theorem Kept.withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Kept s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact Kept.refl _
   · exact Kept.exit exited
   · exact Kept.partialWithdrawal withdrawn

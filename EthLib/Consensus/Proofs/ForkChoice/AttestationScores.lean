@@ -400,22 +400,25 @@ theorem getAttestationScore_checked {node : ForkChoiceNode} {state : BeaconState
     | error e => simp [supported, check, bind, Except.bind] at step
     | ok descends => exact ⟨descends, by simp [check, bind, Except.bind]⟩
 
-/-- A computed score of a node is the sum of the balances of the validators whose vote counts.
+/-- When the check of each counted vote can be computed, the score of a node is a sum.
+
+It is the sum of the balances whose vote counts, or an overflow.
 
 The validators are those active and not slashed in the given state. -/
-theorem getAttestationScore_toNat_eq_sum {node : ForkChoiceNode}
-    {state : BeaconState preset fork} {score : Gwei}
-    (computed : store.getAttestationScore node state = .ok score) :
-    score.toNat = ((unslashedActiveBalances state).map fun entry =>
-      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
-  have checked := store.getAttestationScore_checked computed
-  rw [getAttestationScore_eq_fold, bind_ok_iff] at computed
-  obtain ⟨total, fold, bound⟩ := computed
+theorem getAttestationScore_eq_of_checked {node : ForkChoiceNode}
+    {state : BeaconState preset fork}
+    (checked : ∀ entry ∈ unslashedActiveBalances state, ∀ message,
+      store.latestMessages[entry.1]? = some message →
+      store.equivocatingIndices.contains entry.1 = false →
+      ∃ descends, (store.getSupportedNode message >>= (store.isAncestor · node)) = .ok descends) :
+    store.getAttestationScore node state =
+      let total := ((unslashedActiveBalances state).map fun entry =>
+        if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum
+      if 2 ^ 64 ≤ total then .error (.arith .overflow) else .ok total.toUInt64 := by
   -- Each step adds the balance exactly when the vote counts.
-  rw [foldlM_eq_ok_foldl (L := unslashedActiveBalances state)
+  rw [getAttestationScore_eq_fold, foldlM_eq_ok_foldl (L := unslashedActiveBalances state)
     (step := fun (total : Nat) (entry : ValidatorIndex × Gwei) =>
-      total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) ?steps 0,
-    Except.ok.injEq] at fold
+      total + if store.voteCountsFor node entry.1 then entry.2.toNat else 0) ?steps 0]
   case steps =>
     rintro acc ⟨index, balance⟩ mem
     cases latest : store.latestMessages[index]? with
@@ -446,16 +449,26 @@ theorem getAttestationScore_toNat_eq_sum {node : ForkChoiceNode}
       intro start
       rw [List.foldl_cons, ih, List.map_cons, List.sum_cons]
       omega
-  rw [sum, Nat.zero_add] at fold
-  subst fold
-  by_cases big : 2 ^ 64 ≤ ((unslashedActiveBalances state).map fun entry =>
-      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum
-  · have big' : 18446744073709551616 ≤ ((unslashedActiveBalances state).map
-        fun entry => if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := big
-    simp [big', throw, throwThe, MonadExceptOf.throw, Functor.map, Except.map] at bound
-  simp only [big, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at bound
-  subst bound
-  exact UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega)
+  rw [sum, Nat.zero_add]
+  simp only [bind, Except.bind, pure, Except.pure]
+  split <;> rfl
+
+/-- A computed score of a node is the sum of the balances of the validators whose vote counts.
+
+The validators are those active and not slashed in the given state. -/
+theorem getAttestationScore_toNat_eq_sum {node : ForkChoiceNode}
+    {state : BeaconState preset fork} {score : Gwei}
+    (computed : store.getAttestationScore node state = .ok score) :
+    score.toNat = ((unslashedActiveBalances state).map fun entry =>
+      if store.voteCountsFor node entry.1 then entry.2.toNat else 0).sum := by
+  rw [store.getAttestationScore_eq_of_checked (store.getAttestationScore_checked computed)]
+    at computed
+  dsimp only at computed
+  split at computed
+  · cases computed
+  · rw [Except.ok.injEq] at computed
+    subst computed
+    exact UInt64.toNat_ofNat_of_lt' (by simp only [UInt64.size]; omega)
 
 end Store
 

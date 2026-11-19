@@ -410,29 +410,15 @@ private theorem blockKeeps_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     BlockKeeps state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact BlockKeeps.refl _)
-    | exact blockKeeps_requestPartialWithdrawal computed
-    | (apply blockKeeps_initiateValidatorExit ?_ (liftAccessor_ok.mp computed)
-       rename_i position _ _ _ _ _ _ _ _ _ _ _ _ _ _
-       intro v read _
-       rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)] at read
-       obtain rfl := Except.ok.inj read
-       -- The request is accepted only for a validator that is active.
-       have accepted : canRequest config state state.validators.data[position] = .ok true := by
-         simp_all
-       unfold canRequest at accepted
-       dsimp only at accepted
-       split at accepted
-       · cases accepted
-       · rename_i active
-         apply activationLe_of_active
-         simp at active
-         exact active.1)
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, accepted, exited⟩ |
+    ⟨_, _, _, _, withdrawn⟩
+  · exact BlockKeeps.refl _
+  · refine blockKeeps_initiateValidatorExit (fun v read _ => ?_) exited
+    rw [getValidator_eq_ok_iff.mpr accepted.found] at read
+    obtain rfl := Except.ok.inj read
+    -- The request is accepted only for a validator that is active.
+    exact activationLe_of_active (isActiveValidator_of_canRequest accepted.allowed)
+  · exact blockKeeps_requestPartialWithdrawal withdrawn
 
 private theorem blockKeeps_queueExcessActiveBalance {electra : .pectra ≤ fork}
     {index : ValidatorIndex}

@@ -608,7 +608,7 @@ theorem registryLifecycle_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     RegistryLifecycle state after := by
-  rcases withdrawalRequest_cases computed with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact .refl _
   · exact registryLifecycle_initiateValidatorExit exited
   · exact registryLifecycle_requestPartialWithdrawal withdrawn
@@ -1341,26 +1341,16 @@ private theorem requestPartialWithdrawal {electra : .pectra ≤ fork}
     exact (of_data (by rw [same])).trans of_data
   · cases ok; exact refl _
 
-private theorem cannotRequest {v : Validator} (pending : Unassigned v) :
-    canRequest config state v = .ok false := by
-  simp [canRequest, inactive pending, pure, Except.pure]
-
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     UnassignedKept state after := by
-  unfold Consensus.processWithdrawalRequest at ok
-  simp only [bind, Except.bind, pure, Except.pure] at ok
-  repeat' split at ok
-  all_goals first
-    | (cases ok; done)
-    | (cases ok; exact refl _)
-    | exact requestPartialWithdrawal ok
-    | (apply initiateValidatorExit (config := config)
-         (by rw [getValidator, getElem?_toNat_of_ofNatChecked (by assumption)])
-         ?_ (liftAccessor_ok.mp ok)
-       intro pending
-       have rejected := cannotRequest (config := config) (state := state) pending
-       simp_all)
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, accepted, exited⟩ |
+    ⟨_, _, _, _, withdrawn⟩
+  · exact refl _
+  · exact initiateValidatorExit (config := config) (getValidator_eq_ok_iff.mpr accepted.found)
+      (fun pending => Bool.false_ne_true ((inactive pending _).symm.trans
+        (isActiveValidator_of_canRequest accepted.allowed))) exited
+  · exact requestPartialWithdrawal withdrawn
 
 private theorem queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}

@@ -124,7 +124,7 @@ private theorem same_withdrawalRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
     t.slashings = s.slashings := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact same_exit exited
   · exact same_partialWithdrawal withdrawn

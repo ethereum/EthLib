@@ -1628,7 +1628,8 @@ private theorem withdrawal_request_exit_site {fork : Fork} {s t : BeaconState pr
       DepartureCoverage s t calls ∧ PartialsAppended electra s t calls ∧
       ∀ called ∈ calls, exitChurnLimit config s = .ok called.call.rate ∧
         computeActivationExitEpoch preset (getCurrentEpoch s) = .ok called.call.first := by
-  rcases withdrawalRequest_cases ok with same | ⟨index, exited⟩ | ⟨index, v, owed, withdrawn⟩
+  rcases withdrawalRequest_cases ok with same | ⟨index, _, _, exited⟩ |
+    ⟨index, v, owed, _, withdrawn⟩
   · subst t
     exact ⟨[], .nil _ _, .of_data rfl, .of_kept rfl, by simp⟩
   · obtain ⟨calls, trace, appended, sites, covered⟩ := initiate_exit_site electra exited
@@ -1745,18 +1746,7 @@ private theorem epoch_registry_cut {fork : Fork} {s t : BeaconState preset fork}
           (calls.map (·.call)) (t.earliestExitEpoch electra) (t.exitBalanceToConsume electra) ∧
         DepartureCoverage s t calls ∧ PartialsAppended electra s t calls := by
   -- Cut the schedule at registry updates, the only stage that calls the exit queue.
-  have trace := processEpoch_trace ok
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ .registry ::
-    ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-      EpochStage.middleStages ++ EpochStage.tailStages)) _ _ at trace
-  obtain ⟨rewarded, head, rest⟩ := EpochTrace.append_iff.mp trace
-  obtain ⟨registered, registeredOk, tail⟩ : ∃ registered,
-      EpochStage.action config checks .registry rewarded = .ok registered ∧
-      EpochTrace (EpochStage.action config checks)
-        ([.slashings, .eth1Reset, .pendingDeposits, .pendingConsolidations] ++
-          EpochStage.middleStages ++ EpochStage.tailStages) registered t := by
-    cases rest with
-    | cons first rest => exact ⟨_, first, rest⟩
+  obtain ⟨rewarded, registered, head, entriesOk, tail⟩ := processEpoch_registryCut ok
   -- The stages before registry updates keep the slot, the registry and both queues.
   have headKept : rewarded.slot = s.slot ∧ rewarded.validators = s.validators ∧
       departureQueues electra rewarded = departureQueues electra s := by
@@ -1786,8 +1776,6 @@ private theorem epoch_registry_cut {fork : Fork} {s t : BeaconState preset fork}
       rintro rfl
       simp [EpochStage.middleStages, EpochStage.tailStages] at member
     exact ⟨epochStage_departureQueues electra early edge other, epochStage_coverage edge other⟩
-  have entriesOk : processRegistryUpdates config rewarded = .ok registered :=
-    EpochStage.action_cases.mp registeredOk
   have registryLife := registryLifecycle_processRegistryUpdates entriesOk
   refine ⟨rewarded, registered, entriesOk, headKept.1, headKept.2.1, ?_⟩
   intro calls queued covered appended
@@ -2684,7 +2672,7 @@ private theorem withdrawalRequest_consolidationFrame {fork : Fork}
     (ok : processWithdrawalRequest config s electra request = .ok t) :
     ((departureQueues electra t).2.2.1, (departureQueues electra t).2.2.2.1) =
       ((departureQueues electra s).2.2.1, (departureQueues electra s).2.2.2.1) := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨index, initiated⟩ | ⟨index, v, owed, paid⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨index, _, _, initiated⟩ | ⟨index, v, owed, _, paid⟩
   · rfl
   · have frame := initiateExit_consolidationFrame electra initiated
     rw [frame]

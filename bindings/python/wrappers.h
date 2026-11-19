@@ -797,6 +797,7 @@ PyObject* py_quic_header_encode(PyObject* self, PyObject* args);
 PyObject* py_quic_header_decode(PyObject* self, PyObject* args);
 PyObject* py_quic_frame_encode(PyObject* self, PyObject* args);
 PyObject* py_quic_frame_decode(PyObject* self, PyObject* args);
+PyObject* py_quic_packet_number_width(PyObject* self, PyObject* args);
 PyObject* py_quic_packet_number_encode(PyObject* self, PyObject* args);
 PyObject* py_quic_packet_number_decode(PyObject* self, PyObject* args);
 PyObject* py_tls_certificate_read(PyObject* self, PyObject* args);

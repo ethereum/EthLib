@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
+import EthLib.Consensus.Proofs.Time
 
 /-!
 # Proofs: stores whose clock never goes back
@@ -221,6 +222,22 @@ theorem ForwardReachable.exists_getCurrentSlot
     simpa only [(onExecutionPayloadEnvelope_sameClock step).getCurrentSlot] using holds
   | inclusionList _ step holds =>
     simpa only [(onInclusionList_sameClock step).getCurrentSlot] using holds
+
+open Uint64 in
+/-- The slot after one before a store's current slot exists, and starts by the store's clock.
+
+The store must follow the model's time of genesis. -/
+theorem nextSlotStart_le_clock {config : Config} {genesisTimeMs : UInt64}
+    {store : Store preset fork}
+    (genesisEq : store.genesisTimeMs = genesisTimeMs) {current slot : Slot}
+    (currentOk : store.getCurrentSlot config = .ok current) (before : slot < current) :
+    addChecked slot 1 = .ok (slot + 1) ∧ ∃ following,
+      computeTimeAtSlotMs config genesisTimeMs (slot + 1) = .ok following ∧
+      following.toNat ≤ store.timeMs.toNat := by
+  have read := mapError_ok_iff.mp currentOk
+  change computeSlotAtTimeMs config _ _ = .ok current at read
+  rw [genesisEq] at read
+  exact nextSlotStart_le_of_slotAtTime read before
 
 end Store
 

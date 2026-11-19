@@ -223,7 +223,7 @@ private theorem requestPartialWithdrawal {electra : .pectra ≤ fork} {index : V
 private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : Consensus.processWithdrawalRequest config state electra request = .ok after) :
     SameSyncCommittees state after := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact .refl _
   · exact initiateValidatorExit exited
   · exact requestPartialWithdrawal withdrawn

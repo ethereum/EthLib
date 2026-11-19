@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Proofs.Hash.Crc
+public import EthLib.Cryptography.Proofs.Hash.Crc.Basic
 public import Mathlib.Algebra.Polynomial.Div
 public import Mathlib.Data.ZMod.Basic
 public import Mathlib.Tactic.LinearCombination

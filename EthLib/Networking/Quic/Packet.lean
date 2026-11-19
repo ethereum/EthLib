@@ -32,9 +32,59 @@ def widthOfFirst (first : UInt8) : PacketNumberLength :=
 /-- The number of bytes selected by the packet-number length bits. -/
 def numberLength (width : PacketNumberLength) : Nat := width.val + 1
 
+/-- Reasons a sender cannot select a packet-number width under RFC 9000 §17.1. -/
+inductive WidthError where
+  /-- The largest acknowledged number is not earlier than the number being sent. -/
+  | acknowledgedNotEarlier (number largestAcked : Nat)
+  /-- The full number or twice the acknowledged gap needs more than four bytes.
+
+  The fields retain the full number and the optional largest acknowledged number. -/
+  | rangeTooLarge (number : Nat) (largestAcked : Option Nat)
+  deriving Repr, DecidableEq
+
+/-- The stable local code of a width-selection failure, after those of the wire errors. -/
+def WidthError.code : WidthError → UInt32
+  | .acknowledgedNotEarlier .. => 10
+  | .rangeTooLarge .. => 11
+
+/-- Select the shortest packet-number width permitted by [RFC 9000 §17.1][encoding].
+
+Any acknowledgement must be for this sender in the same connection and packet-number space.
+
+Before any acknowledgement, the full number must fit in the selected bytes.
+
+After an acknowledgement, the byte window must exceed twice the gap from the acknowledged number.
+
+[Verified erratum 9281][erratum] corrects Appendix A.2 to this strict bound.
+
+An acknowledged number at or above the new number, or a range needing more than four bytes, fails.
+
+[Appendix A.2][sample] also doubles the range before any acknowledgement, and counts one more.
+
+It may therefore choose a longer field.
+
+§17.1 only requires the full number, and leaves reordering headroom to the caller.
+
+[encoding]: https://www.rfc-editor.org/rfc/rfc9000#section-17.1
+[erratum]: https://www.rfc-editor.org/errata/eid9281
+[sample]: https://www.rfc-editor.org/rfc/rfc9000#appendix-A.2
+-/
+def packetNumberWidth (number : Varint) (largestAcked : Option Varint) :
+    Except WidthError PacketNumberLength := do
+  if let some ack := largestAcked then
+    if number.val ≤ ack.val then throw (.acknowledgedNotEarlier number.val ack.val)
+  let range := match largestAcked with
+    | none => number.val
+    | some ack => 2 * (number.val - ack.val)
+  if range < 256 then return 0
+  else if range < 256 ^ 2 then return 1
+  else if range < 256 ^ 3 then return 2
+  else if range < 256 ^ 4 then return 3
+  else throw (.rangeTooLarge number.val (largestAcked.map (·.val)))
+
 /-- Keep the low packet-number bytes of the chosen width (§17.1).
 
-The sender chooses a width that covers more than twice its unacknowledged range (§17.1). -/
+The sender selects the width from the largest acknowledged number, if any. -/
 def encodePacketNumberList (width : PacketNumberLength) (number : Varint) : List UInt8 :=
   Base.natToBytes (numberLength width) number.val
 

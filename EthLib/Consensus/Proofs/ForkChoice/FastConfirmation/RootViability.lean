@@ -1124,13 +1124,11 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
     realizedHead root rootMem _ callerBlock callEpochOk callerFound previous
   obtain ⟨headBlock, headKnown, -⟩ := Store.slot_le_of_isAncestor callerFound headAbove
   -- The receiver's slot starts more than one delay after the call.
-  have genesisOf (v : ValidatorIndex) (hv : v ∈ J) (i : ℕ) :
-      ((e.world i).state v).genesisTimeMs = genesisTimeMs := by
-    have clock := (e.clock_bounds v i).1
-    rw [anchored v hv] at clock
-    exact clock.trans anchorClock
+  have genesisOf := e.genesisTimeMs_eq_of_honest anchored (i := 0) receiver
+    (by simpa [Execution.world_zero, World.initial, anchored w receiver] using anchorClock)
+    receiver
   obtain ⟨currentBegin, currentBeginOk, currentBeginLe⟩ :=
-    slotStart_le_clock (genesisOf w receiver k) currentOk (UInt64.le_refl _)
+    slotStart_le_clock (genesisOf k) currentOk (UInt64.le_refl _)
   rw [ready.1] at currentBeginLe
   obtain ⟨callSlot', callBegin, callSlotOk', callBeginOk, atCall⟩ := atSlot
   have slotEq := Except.ok.inj (callSlotOk'.symm.trans callSlotOk)
@@ -1374,9 +1372,9 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   -- The call's slot and the next epoch's boundary start before the receiver's time.
   obtain ⟨callSlot', callBegin, callSlotOk', callBeginOk, atCall⟩ := id atSlot
   cases Except.ok.inj (callSlotOk'.symm.trans callSlotOk)
-  have genesisK : ((e.world k).state w).genesisTimeMs = genesisTimeMs := by
-    rw [(e.clock_bounds w k).1, anchored w receiver]
-    exact (getForkchoiceStore_timeMs anchorStore).1.trans anchorGenesis
+  have genesisK := e.genesisTimeMs_eq_of_honest anchored (i := 0) receiver
+    (by simpa [Execution.world_zero, World.initial, anchored w receiver] using
+      (getForkchoiceStore_timeMs anchorStore).1.trans anchorGenesis) receiver k
   obtain ⟨currentBegin, currentBeginOk, currentBeginLe⟩ :=
     slotStart_le_clock genesisK currentOk (UInt64.le_refl _)
   rw [ready.1, atTime] at currentBeginLe

@@ -123,10 +123,10 @@
   "SHA-256 of a byte string shorter than 2^61 bytes, the bound of FIPS 180-4 §1."
 
 #define DOC_keccak256 \
-  "Keccak-256 of a byte string: `Keccak[512](M, 256)` of FIPS 202 §5.2."
+  "Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:"
 
 #define DOC_keccak512 \
-  "Keccak-512 of a byte string: `Keccak[1024](M, 512)` of FIPS 202 §5.2."
+  "Keccak-512 of a byte string, `KECCAK[1024](N, 512)` of FIPS 202 §5.2:"
 
 #define DOC_ethash_cache_size \
   "The bytes in the cache of the epoch of a block: `c_size` of the Yellow Paper, J.2."
@@ -1291,6 +1291,9 @@
 
 #define DOC_quic_frame_decode \
   "Read one frame allowed in the given packet type (RFC 9000 §12.4)."
+
+#define DOC_quic_packet_number_width \
+  "Select the shortest packet-number length bits, zero through three, under RFC 9000 §17.1."
 
 #define DOC_quic_packet_number_encode \
   "Write the low packet-number bytes (RFC 9000 §17.1)."

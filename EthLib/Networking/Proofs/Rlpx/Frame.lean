@@ -2,7 +2,7 @@ module
 
 public import EthLib.Networking.Rlpx.Frame
 public import EthLib.Networking.Proofs.Rlpx.Handshake
-public import EthLib.Cryptography.Proofs.Hash.KeccakHasher
+public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
 
 /-!
 # Proofs: RLPx frames
@@ -45,7 +45,7 @@ theorem readSize_header {size : Nat} (h : size < 2 ^ 24) :
   simp [readSize, header, HEADER_DATA]
   omega
 
-theorem size_macBytes (h : Hasher) : (macBytes h).size = BLOCK_SIZE := by
+theorem size_macBytes (h : Hasher256) : (macBytes h).size = BLOCK_SIZE := by
   simp [macBytes, ByteArray.size, BLOCK_SIZE]
 
 theorem le_paddedSize (size : Nat) : size ≤ paddedSize size := by
@@ -99,7 +99,7 @@ theorem readFrame_writeFrame {st st' : FrameState} {frameData frame : ByteArray}
     rw [Array.length_toList]; exact (size_crypt _ _ _).trans (size_header frameData.size)
   have hFs : F.data.toList.length = paddedSize frameData.size := by
     rw [Array.length_toList]; exact (size_crypt _ _ _).trans hpad
-  have hM (h : Hasher) : (macBytes h).data.toList.length = BLOCK_SIZE := by
+  have hM (h : Hasher256) : (macBytes h).data.toList.length = BLOCK_SIZE := by
     rw [Array.length_toList]; exact size_macBytes h
   obtain ⟨s1, s2, s3, s4, s5, s6⟩ := split_frame H.data.toList (macBytes h1).data.toList
     F.data.toList (macBytes h2).data.toList rest.data.toList hHs (hM h1) (hM h2)
@@ -194,13 +194,13 @@ The bytes that the header MAC of the frame `f` hashes, after the bytes `t`.
 The MAC state after `t` absorbs the seed of the header ciphertext.
 -/
 def headerMacInput (macKey : Aes.Key .aes256) (t : ByteArray) (f : List UInt8) : ByteArray :=
-  t ++ macSeed macKey (Hasher.empty.absorb t) (f.take BLOCK_SIZE)
+  t ++ macSeed macKey (Hasher256.empty.absorb t) (f.take BLOCK_SIZE)
 
 /-- The bytes that the frame MAC of the frame `f` hashes, for a frame ciphertext of `n` bytes. -/
 def frameMacInput (macKey : Aes.Key .aes256) (t : ByteArray) (n : Nat) (f : List UInt8) :
     ByteArray :=
   let u := headerMacInput macKey t f ++ ⟨((f.drop (2 * BLOCK_SIZE)).take n).toArray⟩
-  u ++ macSeed macKey (Hasher.empty.absorb u) (macDigest (Hasher.empty.absorb u)).toList
+  u ++ macSeed macKey (Hasher256.empty.absorb u) (macDigest (Hasher256.empty.absorb u)).toList
 
 /--
 The MAC collision behind the frame `f'`, offered in place of the frame `f`.
@@ -237,7 +237,7 @@ theorem findMacCollision_self (macKey : Aes.Key .aes256) (t f : ByteArray) :
 
 /-- The MAC of the state after `u` is the first 16 bytes of `keccak256 u`. -/
 theorem macDigest_absorb (u : ByteArray) :
-    (macDigest (Hasher.empty.absorb u)).toList = macOf u := by
+    (macDigest (Hasher256.empty.absorb u)).toList = macOf u := by
   rw [macOf, ← digest_absorb_empty]
   apply List.ext_getElem
   · simp only [Vector.length_toList, List.length_take, BLOCK_SIZE]
@@ -247,16 +247,16 @@ theorem macDigest_absorb (u : ByteArray) :
 
 /-- A MAC step from the state after `t` gives the state after `t`, then the seed. -/
 theorem macStep_absorb (macKey : Aes.Key .aes256) (t : ByteArray) (f : List UInt8) :
-    macStep macKey (Hasher.empty.absorb t) (f.take BLOCK_SIZE) =
-      Hasher.empty.absorb (headerMacInput macKey t f) := by
+    macStep macKey (Hasher256.empty.absorb t) (f.take BLOCK_SIZE) =
+      Hasher256.empty.absorb (headerMacInput macKey t f) := by
   rw [macStep, absorb_absorb, headerMacInput]
 
 /-- The frame MAC step after the header MAC step absorbs the frame MAC input. -/
 theorem frameMacStep_absorb (macKey : Aes.Key .aes256) (t : ByteArray) (n : Nat)
     (f : List UInt8) :
-    frameMacStep macKey (Hasher.empty.absorb (headerMacInput macKey t f))
+    frameMacStep macKey (Hasher256.empty.absorb (headerMacInput macKey t f))
         ⟨((f.drop (2 * BLOCK_SIZE)).take n).toArray⟩ =
-      Hasher.empty.absorb (frameMacInput macKey t n f) := by
+      Hasher256.empty.absorb (frameMacInput macKey t n f) := by
   simp only [frameMacStep, macStep, absorb_absorb, frameMacInput]
 
 /-- XOR with one key stream is injective on values of its length. -/
@@ -299,7 +299,7 @@ The changed frame keeps the length and the two MACs of the honest frame.
 -/
 theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
     (hw : writeFrame st frameData = .ok (f, st')) {t : ByteArray}
-    (ht : st.mac = Hasher.empty.absorb t) {f' rest : ByteArray}
+    (ht : st.mac = Hasher256.empty.absorb t) {f' rest : ByteArray}
     {out : ByteArray × FrameState × ByteArray} (hsize : f'.size = f.size)
     (hmac1 : (f'.data.toList.drop BLOCK_SIZE).take BLOCK_SIZE =
       (f.data.toList.drop BLOCK_SIZE).take BLOCK_SIZE)
@@ -315,7 +315,7 @@ theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
   have hlist : l = H.data.toList ++ (macDigest h1).toList ++ F.data.toList ++
       (macDigest h2).toList := by
     simp [hl, macBytes, ByteArray.data_append, Vector.toList]
-  have hM (h : Hasher) : (macDigest h).toList.length = BLOCK_SIZE := by simp [BLOCK_SIZE]
+  have hM (h : Hasher256) : (macDigest h).toList.length = BLOCK_SIZE := by simp [BLOCK_SIZE]
   have hlen : l.length = 3 * BLOCK_SIZE + n := by
     rw [hlist]; simp only [List.length_append, hH, hF, hM]; omega
   have hfsize : (H ++ macBytes h1 ++ F ++ macBytes h2).size = 3 * BLOCK_SIZE + n := by
@@ -396,7 +396,7 @@ theorem readFrame_changed {st st' : FrameState} {frameData f : ByteArray}
     have hs := congrArg (fun b : ByteArray => b.data.toList) hy
     simp only [frameMacInput, ByteArray.data_append, Array.toList_append] at hs
     have hseed (u : ByteArray) (v : List UInt8) :
-        (macSeed st.macKey (Hasher.empty.absorb u) v).data.toList.length = min 16 v.length := by
+        (macSeed st.macKey (Hasher256.empty.absorb u) v).data.toList.length = min 16 v.length := by
       simp [macSeed]
     obtain ⟨hu, -⟩ := List.append_inj' hs (by simp only [hseed, Vector.length_toList])
     rw [hx] at hu

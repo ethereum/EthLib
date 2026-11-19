@@ -258,9 +258,9 @@ structure Secrets where
   /-- `mac-secret`, the key of the frame MAC. -/
   macSecret : Vector UInt8 32
   /-- `egress-mac`, the Keccak-256 state of the bytes this side sends. -/
-  egressMac : Hash.Keccak.Hasher
+  egressMac : Hash.Keccak.Hasher256
   /-- `ingress-mac`, the Keccak-256 state of the bytes this side receives. -/
-  ingressMac : Hash.Keccak.Hasher
+  ingressMac : Hash.Keccak.Hasher256
 
 /--
 The secrets of the session, from `ephemeral-key`, the two nonces and the two packets.
@@ -278,7 +278,7 @@ def deriveSecrets (initiator : Bool) (ephemeralKey initiatorNonce recipientNonce
   let aesSecret := keccak ephemeralKey sharedSecret
   let macSecret := keccak ephemeralKey aesSecret
   let start (nonce : Vector UInt8 32) (packet : ByteArray) :=
-    Hash.Keccak.Hasher.empty.absorb (⟨(xorBytes macSecret nonce).toArray⟩ ++ packet)
+    Hash.Keccak.Hasher256.empty.absorb (⟨(xorBytes macSecret nonce).toArray⟩ ++ packet)
   let authMac := start recipientNonce auth
   let ackMac := start initiatorNonce ack
   if initiator then ⟨aesSecret, macSecret, authMac, ackMac⟩

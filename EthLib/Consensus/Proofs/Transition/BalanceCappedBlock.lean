@@ -439,18 +439,6 @@ private theorem findValidatorByPubkey_ne {key : Cryptography.Bls.BLSPubkey}
   rw [show state.validators.data[position] = validator from atIndex] at keyed
   exact other (beq_iff_eq.mp keyed).symm
 
-/-- The position of a request from another key is not that of a validator with this key. -/
-private theorem position_ne {key : Cryptography.Bls.BLSPubkey}
-    {position : Fin state.validators.data.size}
-    (located : findValidatorByPubkey state key = some position) {converted : UInt64}
-    (conv : liftAccessor (liftArith (Uint64.ofNatChecked position.val)) =
-      (Except.ok converted : Except TransitionError UInt64))
-    {index : Nat} {validator : Validator} (found : state.validators.data[index]? = some validator)
-    (other : key ≠ validator.pubkey) : converted.toNat ≠ index := by
-  simp only [liftAccessor_ok, liftArith, mapError_ok_iff] at conv
-  rw [(Uint64.ofNatChecked_ok_iff.mp conv).2]
-  exact findValidatorByPubkey_ne located found other
-
 /-- The index of the first validator with a key is not that of a validator with another key. -/
 private theorem first_ne {key : Cryptography.Bls.BLSPubkey} {position : ValidatorIndex}
     (located : (findValidatorByPubkey state key).map (·.val) = some position.toNat)
@@ -517,16 +505,11 @@ private theorem still_processWithdrawalRequest {electra : .pectra ≤ fork}
     (computed : processWithdrawalRequest config state electra request = .ok after) {index : Nat}
     {validator : Validator} (found : state.validators.data[index]? = some validator)
     (other : request.validatorPubkey ≠ validator.pubkey) : Still index state after := by
-  unfold processWithdrawalRequest at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' split at computed
-  all_goals first
-    | (cases computed; done)
-    | (cases computed; exact Still.refl _ _)
-    | (with_reducible refine still_initiateValidatorExit (liftAccessor_ok.mp computed) ?_
-       with_reducible exact position_ne ‹_› ‹_› found other)
-    | (with_reducible refine still_requestPartialWithdrawal computed ?_
-       with_reducible exact position_ne ‹_› ‹_› found other)
+  rcases withdrawalRequest_cases computed with rfl | ⟨_, _, accepted, exited⟩ |
+    ⟨_, _, _, accepted, withdrawn⟩
+  · exact Still.refl _ _
+  · exact still_initiateValidatorExit exited (first_ne accepted.first found other)
+  · exact still_requestPartialWithdrawal withdrawn (first_ne accepted.first found other)
 
 /-- A switch of another validator to compounding keeps the balance and validator at this one. -/
 private theorem still_switchToCompoundingValidator {electra : .pectra ≤ fork}

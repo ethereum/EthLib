@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Hash
+public import EthLib.Cryptography.Proofs.Exports.Keccak
 public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
@@ -35,6 +36,7 @@ public import EthLib.Cryptography.Proofs.Secp256k1
 public import EthLib.Cryptography.Proofs.AltBn128
 public import EthLib.Cryptography.Proofs.Secp256r1
 public import EthLib.Cryptography.Proofs.Aes
+public import EthLib.Cryptography.Proofs.BinaryField
 public import EthLib.Cryptography.Proofs.Ethash
 public import EthLib.Cryptography.Proofs.Montgomery
 public import EthLib.Cryptography.Proofs.Montgomery.Fin

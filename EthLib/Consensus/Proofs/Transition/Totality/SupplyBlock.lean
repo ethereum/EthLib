@@ -316,7 +316,7 @@ private theorem fixed_partialWithdrawal {s t : BeaconState preset fork}
 private theorem fixed_withdrawalRequest {s t : BeaconState preset fork}
     {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : Fixed s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact Fixed.refl _
   · exact fixed_exit exited
   · exact fixed_partialWithdrawal withdrawn
@@ -2316,28 +2316,6 @@ def blockRewardBound (preset : Preset) (budget : Nat) : Nat :=
     preset.SYNC_COMMITTEE_SIZE.toNat * (participant + participant * PROPOSER_WEIGHT.toNat /
       (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat))
 
-/-- A total active balance is at least one increment.
-
-It is at most the larger of one increment and the sum of the effective balances. -/
-private theorem totalActiveBalance_bounds {state : BeaconState preset fork} {total : Gwei}
-    (computed : getTotalActiveBalance state = .ok total) :
-    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat ∧
-      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
-  have ok := getTotalActiveBalance_ok computed
-  have low := UInt64.le_iff_toNat_le.mp (le_getTotalBalance ok)
-  refine ⟨low, ?_⟩
-  obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp ok
-  have marked : sumMarked state.validators.data (markIndices state.validators.data.size
-      (getActiveValidatorIndices state (getCurrentEpoch state))) ≤ effectiveBalanceSum state := by
-    rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
-    refine sum_map_le_sum_map fun j _ => ?_
-    split <;> omega
-  rw [UInt64.max_def]
-  split
-  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
-    omega
-  · omega
-
 /-- A base reward of one increment at a total of at least one increment is at most its largest.
 
 That largest value is the one at a total of exactly one increment. -/
@@ -2378,7 +2356,7 @@ theorem blockRewardCap_le {state : BeaconState preset fork} {budget : Nat}
     cases totalState : getTotalActiveBalance state with
     | error => simp
     | ok total =>
-      obtain ⟨low, high⟩ := totalActiveBalance_bounds totalState
+      obtain ⟨low, high⟩ := getTotalActiveBalance_bounds totalState
       have totalLe : total.toNat ≤ budget := le_trans high (max_le incLe sumLe)
       cases perState : getBaseRewardPerIncrement preset total with
       | error => simp only [perState]; omega

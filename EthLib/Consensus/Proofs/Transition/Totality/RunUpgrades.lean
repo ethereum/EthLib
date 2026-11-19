@@ -234,22 +234,6 @@ private theorem electraStep_queueCompoundingExcess {fork : Fork}
   · cases computed
     exact .refl _
 
-/-- The total active balance is at most one increment plus the sum of the effective balances. -/
-private theorem getTotalActiveBalance_le {fork : Fork} {state : BeaconState preset fork}
-    {total : Gwei} (computed : getTotalActiveBalance state = .ok total) :
-    total.toNat ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat + effectiveBalanceSum state := by
-  obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp (getTotalActiveBalance_ok computed)
-  have marked : sumMarked state.validators.data (markIndices state.validators.data.size
-      (getActiveValidatorIndices state (getCurrentEpoch state))) ≤ effectiveBalanceSum state := by
-    rw [sumMarked_eq_sum, effectiveBalanceSum_eq_sum_range]
-    refine sum_map_le_sum_map fun j _ => ?_
-    split <;> omega
-  rw [UInt64.max_def]
-  split
-  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
-    omega
-  · omega
-
 /-- The activation exit churn is within the bound of one exit churn. -/
 private theorem getActivationExitChurnLimit_le {fork : Fork} {state : BeaconState preset fork}
     {churn : Gwei} (computed : getActivationExitChurnLimit config state = .ok churn) :
@@ -257,7 +241,7 @@ private theorem getActivationExitChurnLimit_le {fork : Fork} {state : BeaconStat
   simp only [getActivationExitChurnLimit, getBalanceChurnLimit, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, ⟨total, totalOk, rfl⟩, rfl⟩ := computed
-  have totalLe := getTotalActiveBalance_le totalOk
+  have totalLe := (getTotalActiveBalance_bounds totalOk).2
   have remainder : ∀ amount : Gwei, amount % preset.EFFECTIVE_BALANCE_INCREMENT ≤ amount :=
     fun amount => by
       rw [UInt64.le_iff_toNat_le, UInt64.toNat_mod]

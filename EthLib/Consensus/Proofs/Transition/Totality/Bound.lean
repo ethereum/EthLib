@@ -206,9 +206,7 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
       (total = preset.EFFECTIVE_BALANCE_INCREMENT ∨ total.toNat ≤ effectiveBalanceSum state) := by
   have inside : ∀ i ∈ getActiveValidatorIndices state (getCurrentEpoch state),
       i.toNat < state.validators.data.size := by
-    intro i member
-    obtain ⟨_, found, -⟩ := (mem_getActiveValidatorIndices within).mp member
-    exact (Array.getElem?_eq_some_iff.mp found).1
+    exact fun i member => lt_size_of_mem_getActiveValidatorIndices member
   have lt := Nat.lt_of_le_of_lt (sumMarked_le_effectiveBalanceSum (state := state)
     (markIndices state.validators.data.size
       (getActiveValidatorIndices state (getCurrentEpoch state)))) summed
@@ -224,6 +222,25 @@ theorem getTotalActiveBalance_exists_ok {state : BeaconState preset fork}
     rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt lt]
     exact sumMarked_le_effectiveBalanceSum _
   · exact .inl rfl
+
+/-- A total active balance is at least one increment.
+
+It is at most the larger of one increment and the sum of the effective balances. -/
+theorem getTotalActiveBalance_bounds {state : BeaconState preset fork} {total : Gwei}
+    (computed : getTotalActiveBalance state = .ok total) :
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ total.toNat ∧
+      total.toNat ≤ max preset.EFFECTIVE_BALANCE_INCREMENT.toNat (effectiveBalanceSum state) := by
+  have ok := getTotalActiveBalance_ok computed
+  refine ⟨UInt64.le_iff_toNat_le.mp (le_getTotalBalance ok), ?_⟩
+  obtain ⟨-, fits, rfl⟩ := getTotalBalance_ok_iff.mp ok
+  have marked := sumMarked_le_effectiveBalanceSum (state := state)
+    (markIndices state.validators.data.size
+      (getActiveValidatorIndices state (getCurrentEpoch state)))
+  rw [UInt64.max_def]
+  split
+  · rw [Nat.toUInt64_eq, UInt64.toNat_ofNat', Nat.mod_eq_of_lt fits]
+    omega
+  · omega
 
 /-- The total balance of indices of the registry succeeds when the effective balances fit.
 

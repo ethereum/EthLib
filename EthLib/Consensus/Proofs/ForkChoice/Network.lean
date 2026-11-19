@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Containers.State
 public import EthLib.Consensus.Proofs.ForkChoice.ForwardClock
 public import EthLib.Consensus.Proofs.Models.Network.Model
+import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 
 /-!
 # Proofs: honest validators that run the fork choice over the network
@@ -156,6 +157,39 @@ theorem Handles.reachable {checks : SignatureChecks} {sources : BlockSources pre
   | payloadAttestation _ voted => exact reachable.payloadAttestation voted
   | envelope _ accepted => exact reachable.envelope accepted
   | inclusionList _ accepted => exact reachable.inclusionList accepted
+
+/-- A move of the store keeps the state of each checkpoint, at every fork.
+
+Only an attestation adds a state, and no move removes one. -/
+theorem Handles.checkpointStates_of_found {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {time : ℕ} {view : Set (Message preset fork)}
+    {store after : Store preset fork}
+    (handles : Handles config checks sources time view store after)
+    {checkpoint : Checkpoint} {state : BeaconState preset fork}
+    (found : store.checkpointStates[checkpoint]? = some state) :
+    after.checkpointStates[checkpoint]? = some state := by
+  cases handles with
+  | tick _ _ step => exact (Store.onTick_checkpointStates_latestMessages step).1 ▸ found
+  | block _ step => exact (Store.onBlock_checkpointStates_latestMessages step).1 ▸ found
+  | blockAttestation _ _ _ _ step => exact Store.onAttestation_checkpointStates_of_found step found
+  | blockAttesterSlashing _ _ _ _ step =>
+    exact (Store.onAttesterSlashing_checkpointStates_latestMessages step).1 ▸ found
+  | attestation _ step => exact Store.onAttestation_checkpointStates_of_found step found
+  | attesterSlashing _ step =>
+    exact (Store.onAttesterSlashing_checkpointStates_latestMessages step).1 ▸ found
+  | payloadAttestation _ step =>
+    obtain ⟨_, _, same⟩ := Store.onPayloadAttestationMessage_onlyPtcVotes step
+    rw [same]
+    exact found
+  | envelope _ step =>
+    obtain ⟨_, _, _, _, _, record, same⟩ := Store.onExecutionPayloadEnvelope_ok step
+    rw [same]
+    obtain ⟨_, rfl⟩ := Store.recordEnvelope_frame record
+    exact found
+  | inclusionList _ step =>
+    obtain ⟨_, _, same⟩ := Store.onInclusionList_ok ‹_› step
+    rw [same]
+    exact found
 
 /-- Once a store admits a block, every later event retains it. -/
 theorem Execution.blocks_of_le {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}

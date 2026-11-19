@@ -320,66 +320,60 @@ theorem processEpoch_exits_of_electra {config : Config} {checks : SignatureCheck
     ExitsAtMost electra (ceiling + exitCost preset state) after ∧
       (after.exitBalanceToConsume electra).toNat ≤
         max (state.exitBalanceToConsume electra).toNat (exitChurnCeiling config state) := by
-  have trace := processEpoch_trace computed
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ (.registry :: [.slashings,
-    .eth1Reset, .pendingDeposits, .pendingConsolidations, .payments, .effectiveBalances,
-    .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
-    .proposerLookahead, .ptcWindow])) _ _ at trace
-  obtain ⟨before, head, rest⟩ := append_iff.mp trace
-  cases rest with
-  | cons registryOk tail =>
-    -- The steps before the registry updates keep the validators, the slot and the exit queue.
-    obtain ⟨validators, slot, epoch, carry⟩ := head.transport
-      (fun (first second : BeaconState preset fork) =>
-        second.validators = first.validators ∧ second.slot = first.slot ∧
-          second.earliestExitEpoch = first.earliestExitEpoch ∧
-          second.exitBalanceToConsume = first.exitBalanceToConsume)
-      (fun _ => ⟨rfl, rfl, rfl, rfl⟩)
-      (fun one two => ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
-        two.2.2.2.trans one.2.2.2⟩)
-      fun stage member _ _ ok => by
-        have edge := action_cases.mp ok
-        have queue := edge.exitQueue (by rintro rfl; simp at member)
-        refine ⟨edge.validators_eq ⟨by rintro rfl; simp at member,
-          by rintro rfl; simp at member, by rintro rfl; simp at member⟩, ?_, queue.1, queue.2⟩
-        by_cases rewards : stage = .rewards
-        · subst rewards
-          rw [processRewardsAndPenalties_frame edge]
-        · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
-            by rintro rfl; simp at member, by rintro rfl; simp at member,
-            by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
-    have costSame : exitCost preset before = exitCost preset state := by
-      unfold exitCost
-      rw [validators]
-    have sumSame : effectiveBalanceSum before = effectiveBalanceSum state := by
-      unfold effectiveBalanceSum
-      rw [validators]
-    have churnSame : exitChurnCeiling config before = exitChurnCeiling config state := by
-      unfold exitChurnCeiling
-      rw [sumSame]
-    have epochSame : getCurrentEpoch before = getCurrentEpoch state := by
-      simp only [getCurrentEpoch, slot]
-    -- The registry updates move the exit queue by at most the cost owed.
-    obtain ⟨registered, registeredOk, queued, exits, carried', -⟩ :=
-      processRegistryUpdates_total_of_electra (config := config) before electra
-        (by unfold BeaconState.RegistryWithinLimit; rw [validators]; exact within)
-        (by rw [sumSame]; exact summed) increment minimum maximum ceiling
-        (by rw [epochSame]; exact first) (by rw [epoch]; exact bounded.1)
-        (by rw [validators]; exact bounded.2) (by rw [costSame]; exact room)
-        (by rw [churnSame, carry]; exact carried)
-    obtain rfl : registered = _ :=
-      Except.ok.inj (registeredOk.symm.trans (action_cases.mp registryOk))
-    rw [costSame] at queued exits
-    rw [churnSame, carry] at carried'
-    have middle : ExitsAtMost electra (ceiling + exitCost preset state) registered :=
-      ⟨by omega, fun validator member set => by have := exits validator member set; omega⟩
-    -- The steps after the registry updates keep the exit queue and each exit epoch that is set.
-    have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
-      fun stage member _ _ ok =>
-        ExitsKept.of_edge (action_cases.mp ok) (by rintro rfl; simp at member)
-    refine ⟨middle.of_kept kept, ?_⟩
-    rw [kept.2.1]
-    exact carried'
+  obtain ⟨before, next, head, registryOk, tail⟩ := processEpoch_registryCut computed
+  -- The steps before the registry updates keep the validators, the slot and the exit queue.
+  obtain ⟨validators, slot, epoch, carry⟩ := head.transport
+    (fun (first second : BeaconState preset fork) =>
+      second.validators = first.validators ∧ second.slot = first.slot ∧
+        second.earliestExitEpoch = first.earliestExitEpoch ∧
+        second.exitBalanceToConsume = first.exitBalanceToConsume)
+    (fun _ => ⟨rfl, rfl, rfl, rfl⟩)
+    (fun one two => ⟨two.1.trans one.1, two.2.1.trans one.2.1, two.2.2.1.trans one.2.2.1,
+      two.2.2.2.trans one.2.2.2⟩)
+    fun stage member _ _ ok => by
+      have edge := action_cases.mp ok
+      have queue := edge.exitQueue (by rintro rfl; simp at member)
+      refine ⟨edge.validators_eq ⟨by rintro rfl; simp at member,
+        by rintro rfl; simp at member, by rintro rfl; simp at member⟩, ?_, queue.1, queue.2⟩
+      by_cases rewards : stage = .rewards
+      · subst rewards
+        rw [processRewardsAndPenalties_frame edge]
+      · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
+          by rintro rfl; simp at member, by rintro rfl; simp at member,
+          by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
+  have costSame : exitCost preset before = exitCost preset state := by
+    unfold exitCost
+    rw [validators]
+  have sumSame : effectiveBalanceSum before = effectiveBalanceSum state := by
+    unfold effectiveBalanceSum
+    rw [validators]
+  have churnSame : exitChurnCeiling config before = exitChurnCeiling config state := by
+    unfold exitChurnCeiling
+    rw [sumSame]
+  have epochSame : getCurrentEpoch before = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, slot]
+  -- The registry updates move the exit queue by at most the cost owed.
+  obtain ⟨registered, registeredOk, queued, exits, carried', -⟩ :=
+    processRegistryUpdates_total_of_electra (config := config) before electra
+      (by unfold BeaconState.RegistryWithinLimit; rw [validators]; exact within)
+      (by rw [sumSame]; exact summed) increment minimum maximum ceiling
+      (by rw [epochSame]; exact first) (by rw [epoch]; exact bounded.1)
+      (by rw [validators]; exact bounded.2) (by rw [costSame]; exact room)
+      (by rw [churnSame, carry]; exact carried)
+  obtain rfl : registered = _ :=
+    Except.ok.inj (registeredOk.symm.trans registryOk)
+  rw [costSame] at queued exits
+  rw [churnSame, carry] at carried'
+  have middle : ExitsAtMost electra (ceiling + exitCost preset state) registered :=
+    ⟨by omega, fun validator member set => by have := exits validator member set; omega⟩
+  -- The steps after the registry updates keep the exit queue and each exit epoch that is set.
+  have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
+    fun stage member _ _ ok =>
+      ExitsKept.of_edge (action_cases.mp ok)
+          (by rintro rfl; simp [middleStages, tailStages] at member)
+  refine ⟨middle.of_kept kept, ?_⟩
+  rw [kept.2.1]
+  exact carried'
 
 /-- Before Electra, one epoch keeps a ceiling on the exit epochs, raised by the registry size.
 
@@ -406,49 +400,43 @@ theorem processEpoch_exits_of_lt_electra {config : Config} {checks : SignatureCh
       config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < 2 ^ 64) :
     ∀ validator ∈ after.validators.data, validator.exitEpoch ≠ FAR_FUTURE_EPOCH →
       validator.exitEpoch.toNat ≤ ceiling + state.validators.data.size := by
-  have trace := processEpoch_trace computed
-  change EpochTrace _ ([.justification, .inactivity, .rewards] ++ (.registry :: [.slashings,
-    .eth1Reset, .pendingDeposits, .pendingConsolidations, .payments, .effectiveBalances,
-    .slashingsReset, .randaoReset, .history, .participation, .syncCommittees,
-    .proposerLookahead, .ptcWindow])) _ _ at trace
-  obtain ⟨middle, head, rest⟩ := append_iff.mp trace
-  cases rest with
-  | cons registryOk tail =>
-    -- The steps before the registry updates keep the validators and the slot.
-    obtain ⟨validators, slot⟩ := head.transport
-      (fun (first second : BeaconState preset fork) =>
-        second.validators = first.validators ∧ second.slot = first.slot)
-      (fun _ => ⟨rfl, rfl⟩)
-      (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩)
-      fun stage member _ _ ok => by
-        have edge := action_cases.mp ok
-        refine ⟨edge.validators_eq ⟨by rintro rfl; simp at member,
-          by rintro rfl; simp at member, by rintro rfl; simp at member⟩, ?_⟩
-        by_cases rewards : stage = .rewards
-        · subst rewards
-          rw [processRewardsAndPenalties_frame edge]
-        · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
-            by rintro rfl; simp at member, by rintro rfl; simp at member,
-            by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
-    have sizeSame : middle.validators.data.size = state.validators.data.size := by
-      rw [validators]
-    have epochSame : getCurrentEpoch middle = getCurrentEpoch state := by
-      simp only [getCurrentEpoch, slot]
-    -- The registry updates set each exit epoch to at most the ceiling plus the registry size.
-    obtain ⟨registered, registeredOk, bounded⟩ :=
-      processRegistryUpdates_total_of_lt_electra (config := config) middle before ceiling
-        (by rw [epochSame]; exact first) (by rw [validators]; exact exits)
-        (by rw [sizeSame]; exact room)
-    obtain rfl : registered = _ :=
-      Except.ok.inj (registeredOk.symm.trans (action_cases.mp registryOk))
-    rw [sizeSame] at bounded
-    -- The steps after the registry updates set no new exit epoch.
-    have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
-      fun stage member _ _ ok =>
-        ExitsKept.of_edge (action_cases.mp ok) (by rintro rfl; simp at member)
-    intro validator member set
-    obtain ⟨old, oldMember, same⟩ := kept.2.2 validator member set
-    rw [← same] at set ⊢
-    exact bounded old oldMember set
+  obtain ⟨middle, next, head, registryOk, tail⟩ := processEpoch_registryCut computed
+  -- The steps before the registry updates keep the validators and the slot.
+  obtain ⟨validators, slot⟩ := head.transport
+    (fun (first second : BeaconState preset fork) =>
+      second.validators = first.validators ∧ second.slot = first.slot)
+    (fun _ => ⟨rfl, rfl⟩)
+    (fun one two => ⟨two.1.trans one.1, two.2.trans one.2⟩)
+    fun stage member _ _ ok => by
+      have edge := action_cases.mp ok
+      refine ⟨edge.validators_eq ⟨by rintro rfl; simp at member,
+        by rintro rfl; simp at member, by rintro rfl; simp at member⟩, ?_⟩
+      by_cases rewards : stage = .rewards
+      · subst rewards
+        rw [processRewardsAndPenalties_frame edge]
+      · exact (edge.records ⟨rewards, by rintro rfl; simp at member,
+          by rintro rfl; simp at member, by rintro rfl; simp at member,
+          by rintro rfl; simp at member, by rintro rfl; simp at member⟩).2.2.2.2
+  have sizeSame : middle.validators.data.size = state.validators.data.size := by
+    rw [validators]
+  have epochSame : getCurrentEpoch middle = getCurrentEpoch state := by
+    simp only [getCurrentEpoch, slot]
+  -- The registry updates set each exit epoch to at most the ceiling plus the registry size.
+  obtain ⟨registered, registeredOk, bounded⟩ :=
+    processRegistryUpdates_total_of_lt_electra (config := config) middle before ceiling
+      (by rw [epochSame]; exact first) (by rw [validators]; exact exits)
+      (by rw [sizeSame]; exact room)
+  obtain rfl : registered = _ :=
+    Except.ok.inj (registeredOk.symm.trans registryOk)
+  rw [sizeSame] at bounded
+  -- The steps after the registry updates set no new exit epoch.
+  have kept := tail.transport ExitsKept ExitsKept.refl (fun one two => one.trans two)
+    fun stage member _ _ ok =>
+      ExitsKept.of_edge (action_cases.mp ok)
+          (by rintro rfl; simp [middleStages, tailStages] at member)
+  intro validator member set
+  obtain ⟨old, oldMember, same⟩ := kept.2.2 validator member set
+  rw [← same] at set ⊢
+  exact bounded old oldMember set
 
 end EthLib.Consensus

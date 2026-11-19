@@ -501,7 +501,7 @@ private theorem effectiveKept_partial {f : Fork} {s t : BeaconState preset f}
 theorem effectiveKept_withdrawalRequest {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config s electra request = .ok t) : EffectiveKept s t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact effectiveKept_refl _
   · exact effectiveKept_exit exited
   · exact effectiveKept_partial withdrawn
@@ -1688,7 +1688,7 @@ private theorem admissionFunded_withdrawalRequest {f : Fork} {s t : BeaconState 
     {n : Nat} {electra : .pectra ≤ f} {request : WithdrawalRequest}
     (holds : AdmissionFunded n s)
     (ok : processWithdrawalRequest config s electra request = .ok t) : AdmissionFunded n t := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact holds
   · exact admissionFunded_exit holds exited
   · exact admissionFunded_partial holds withdrawn

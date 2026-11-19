@@ -298,6 +298,39 @@ theorem Execution.exists_duty_boundaries {Δ : ℕ}
   obtain ⟨k, atTime, current⟩ := preboundary startedBefore
   exact ⟨⟨k, atTime, by omega, current⟩, boundary⟩
 
+/-- Every honest store runs on the genesis time of any one honest store.
+
+All honest stores start from the same anchor, and no move changes the genesis time. -/
+theorem Execution.genesisTimeMs_eq_of_honest {anchor : Store preset fork}
+    (start : ∀ u ∈ J, e.start u = anchor)
+    {v : ValidatorIndex} (honest : v ∈ J) {i : ℕ}
+    (genesis : ((e.world i).state v).genesisTimeMs = genesisTimeMs)
+    {w : ValidatorIndex} (receiver : w ∈ J) :
+    ∀ j, ((e.world j).state w).genesisTimeMs = genesisTimeMs := by
+  intro j
+  have left := (e.clock_bounds v i).1
+  have right := (e.clock_bounds w j).1
+  rw [start v honest] at left
+  rw [start w receiver] at right
+  exact right.trans (left.symm.trans genesis)
+
+/-- A store that is up to date at the start of a slot is at that slot.
+
+It must run on the genesis time of the slot's start, and a slot must have a duration. -/
+theorem Execution.getCurrentSlot_of_slot_start (slots : 0 < config.SLOT_DURATION_MS)
+    {w : ValidatorIndex} {j : ℕ} {slot : Slot} {begin : UInt64}
+    (genesis : ((e.world j).state w).genesisTimeMs = genesisTimeMs)
+    (beginOk : computeTimeAtSlotMs config genesisTimeMs slot = .ok begin)
+    (atTime : (e.world j).time = begin.toNat)
+    (upToDate : UpToDate config checks sources (e.world j).time ((e.world j).view w)
+      ((e.world j).state w)) :
+    ((e.world j).state w).getCurrentSlot config = .ok slot := by
+  unfold Store.getCurrentSlot
+  rw [genesis]
+  have clock : ((e.world j).state w).timeMs = begin := UInt64.toNat_inj.mp (upToDate.1.trans atTime)
+  rw [clock]
+  exact mapError_ok_iff.mpr (computeSlotAtTimeMs_computeTimeAtSlotMs slots beginOk)
+
 /-- A duty inside a complete slot interval has a valid committee vote before the delivery cutoff.
 
 Each vote it assumes also passes the committee check in its target state. -/
@@ -349,6 +382,29 @@ theorem Execution.exists_voteAt_of_duty_interval {Δ : ℕ} {first time : ℕ}
     nextOk, startOk, followingOk, deadline, firstLe,
     fits.before_boundary nextOk startOk followingOk deadline, by omega, vote, committees⟩
 
+/-- An accepted attestation stores its target state and records the votes of its indexed form.
+
+The store that holds the target state is the one that the reads of the attestation name. -/
+theorem Store.onAttestation_eq_of_reads {store after : Store preset fork}
+    {attestation : Attestation preset fork} {isFromBlock : Bool}
+    {indexed : IndexedAttestation preset fork}
+    (accepted : store.onAttestation config checks attestation isFromBlock = .ok after)
+    (reads : ReadsAttestation config checks store attestation indexed) :
+    ∃ withTarget, store.storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget ∧
+      after = withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation := by
+  obtain ⟨withTarget, targetState, stored, found, indexedOk, signed⟩ := reads
+  refine ⟨withTarget, stored, ?_⟩
+  unfold Store.onAttestation at accepted
+  cases valid : store.validateOnAttestation config attestation isFromBlock with
+  | error err => simp [valid, bind, Except.bind] at accepted
+  | ok value =>
+    cases value
+    simp only [valid, stored, found, indexedOk, signed, bind, Except.bind, Except.mapError,
+      ↓reduceIte] at accepted
+    cases committees : checkAttestationCommittees targetState attestation <;>
+      simp_all [pure, Except.pure]
+
 /-- An up-to-date store holds a vote for each non-equivocating signer of an accepted attestation.
 
 The attestation is in its view, and the latest vote has at least the attestation's rank. -/
@@ -363,18 +419,7 @@ theorem UpToDate.recorded {time : ℕ} {view : Set (Message preset fork)}
     ∃ m, store.latestMessages[v]? = some m ∧
       (LatestMessage.ofAttestation attestation).rank ≤ m.rank := by
   have fixed : after = store := upToDate.2 after (.attestation seen accepted)
-  obtain ⟨withTarget, targetState, stored, found, indexedOk, signed⟩ := reads
-  have result : after =
-      withTarget.updateLatestMessages indexed.attestingIndices.data.toList attestation := by
-    unfold Store.onAttestation at accepted
-    cases valid : store.validateOnAttestation config attestation false with
-    | error err => simp [valid, bind, Except.bind] at accepted
-    | ok value =>
-      cases value
-      simp only [valid, stored, found, indexedOk, signed, bind, Except.bind, Except.mapError,
-        ↓reduceIte] at accepted
-      cases committees : checkAttestationCommittees targetState attestation <;>
-        simp_all [pure, Except.pure]
+  obtain ⟨withTarget, -, result⟩ := Store.onAttestation_eq_of_reads accepted reads
   have counted' : v ∉ withTarget.equivocatingIndices := by
     simpa [← fixed, result, Store.updateLatestMessages] using counted
   have voted := Store.foldl_recordVote indexed.attestingIndices.data.toList
@@ -574,6 +619,55 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
   simp [EthLib.Consensus.Store.onAttestation, valid, stored, read, committees, indexedOk, signed,
     bind, Except.bind, Except.mapError, pure, Except.pure]
 
+/-- A held duty vote is accepted at the next slot, or bounded honest stores name a collision.
+
+The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.
+
+The vote's event and the receiver's event are bounded by the same time. -/
+theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    {slot next : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (committees : ∀ withTarget targetState,
+      ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget →
+      withTarget.checkpointState attestation.data.target = .ok targetState →
+      checkAttestationCommittees targetState attestation = .ok ())
+    (dataSlot : attestation.data.slot = slot)
+    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
+    (nextOk : addChecked slot 1 = .ok next)
+    (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
+    (arrivalBound : (e.world arrival).time ≤ last) (nBound : (e.world n).time ≤ last)
+    {voted : BeaconBlock preset fork}
+    (votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
+      some voted)
+    (notFuture : voted.slot ≤ slot)
+    (checkpoint : ((e.world arrival).state w).getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root) :
+    ((∃ after, ((e.world arrival).state w).onAttestation config checks attestation false =
+        .ok after) ∧
+      ReadsAttestation config checks ((e.world arrival).state w) attestation indexed) ∨
+    ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
+      ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
+        ((e.world m).state v) [root] = some collision := by
+  obtain ⟨_, target, _, targetKnown, _, _⟩ :=
+    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
+  have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
+    have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
+    simp only [UInt64.toNat_one] at sum
+    omega)
+  have valid := validateOnAttestation_of_facts currentOk
+    ((epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm) ▸
+      epoch_recent_at_next_slot (dataSlot ▸ nextOk))
+    (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
+    targetKnown votedKnown (dataSlot ▸ notFuture)
+    (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint past
+  exact vote.accepted_of_target_known anchored start honest receiver committees
+    nBound arrivalBound targetKnown valid
+
 /-- A delivered duty is recorded and retained, or bounded honest stores name a collision. -/
 theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     (preGloas : fork < .glamsterdam) {anchor : Store preset fork}
@@ -608,21 +702,9 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
-  obtain ⟨_, target, _, targetKnown, _, _⟩ :=
-    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
-  have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
-    have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
-    simp only [UInt64.toNat_one] at sum
-    omega)
-  have valid := validateOnAttestation_of_facts currentOk
-    ((epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm) ▸
-      epoch_recent_at_next_slot (dataSlot ▸ nextOk))
-    (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
-    targetKnown votedKnown (dataSlot ▸ notFuture)
-    (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint past
-  rcases vote.accepted_of_target_known anchored start honest receiver committees
-      (by have := vote.atTime; omega) arrivalBound targetKnown valid with
-    ⟨⟨after, accepted⟩, reads⟩ | collision
+  rcases vote.accepted_at_next_slot preGloas anchored start honest receiver committees dataSlot
+      epoch nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
+      checkpoint with ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact .inr collision
   obtain ⟨message, latest, rank⟩ := vote.recorded_of_le sync honest receiver late upToDate

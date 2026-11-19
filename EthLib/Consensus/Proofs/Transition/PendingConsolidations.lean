@@ -257,7 +257,7 @@ private theorem partialWithdrawal {electra : .pectra ≤ fork} {index : Validato
 private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     QueueKept state after := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · rfl
   · exact exit exited
   · exact partialWithdrawal withdrawn
@@ -891,7 +891,7 @@ private theorem depositRequest {electra : .pectra ≤ fork} {request : DepositRe
 private theorem withdrawalRequest {electra : .pectra ≤ fork} {request : WithdrawalRequest}
     (ok : processWithdrawalRequest config state electra request = .ok after) :
     WithdrawalKept state after := by
-  rcases withdrawalRequest_cases ok with rfl | ⟨_, exited⟩ | ⟨_, _, _, withdrawn⟩
+  rcases withdrawalRequest_cases ok with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
   · exact of_data
   · exact exit exited
   · exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1)
@@ -929,18 +929,10 @@ theorem queueConsolidation_queued {electra : .pectra ≤ fork}
       after.validators = written.validators ∧
       (after.pendingConsolidations electra).data.toList =
         (state.pendingConsolidations electra).data.toList ++ [⟨sourceIndex, targetIndex⟩] := by
-  simp only [queueConsolidation, bind_ok_iff, liftAccessor_ok, liftArith, mapError_ok_iff,
-    pure, Except.pure] at ok
-  obtain ⟨⟨churned, epoch⟩, churnOk, withdrawal, added, written, set, pending, appended, final⟩ :=
-    ok
-  cases final
-  have churnQueue : churned.pendingConsolidations = state.pendingConsolidations := by
-    simp only [computeConsolidationEpochAndUpdateChurn, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at churnOk
-    obtain ⟨_, _, _, _, _, _, final⟩ := churnOk
-    cases final; rfl
+  obtain ⟨epoch, withdrawal, _, written, pending, churnOk, added, set, appended, rfl⟩ :=
+    queueConsolidation_steps ok
   have queueEq := (QueueKept.setValidator set).queue
-  change written.pendingConsolidations = churned.pendingConsolidations at queueEq
+  change written.pendingConsolidations = state.pendingConsolidations at queueEq
   have sum := (Uint64.addChecked_ok_iff.mp added).2
   -- The churn places the exit no earlier than the first epoch an exit may take.
   have later : getCurrentEpoch state < epoch := by
@@ -954,14 +946,14 @@ theorem queueConsolidation_queued {electra : .pectra ≤ fork}
         (computeConsolidationEpochAndUpdateChurn_first first churnOk).1
       have firstEq := (computeActivationExitEpoch_ok_iff.mp first).2
       omega
-  refine ⟨churned, written, epoch, withdrawal, churnOk, fun eq => ?_, later, sum, set, rfl, ?_⟩
+  refine ⟨_, written, epoch, withdrawal, churnOk, fun eq => ?_, later, sum, set, rfl, ?_⟩
   · have bound := withdrawal.toNat_lt
     rw [eq] at sum
     have farNat : FAR_FUTURE_EPOCH.toNat = 18446744073709551615 := rfl
     rw [farNat] at sum
     omega
   · show pending.data.toList = _
-    rw [appendWithinLimit_data appended, queueEq, churnQueue, Array.toList_push]
+    rw [appendWithinLimit_data appended, queueEq, Array.toList_push]
 
 /-- The steps of an epoch keep the earliest consolidation epoch.
 
