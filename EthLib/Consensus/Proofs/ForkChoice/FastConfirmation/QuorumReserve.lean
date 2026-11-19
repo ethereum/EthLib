@@ -229,7 +229,9 @@ The whistleblower reward of a key slashed on another branch is charged where tha
 
 It is also charged where that key's effective balance can fall below what pays for it in the count.
 
-Inactivity scores and the queue of partial withdrawals are read at the finalized block's state. -/
+Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
+
+Below 18 increments of total active balance the reserve exceeds any stake, so the pin is vacuous. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -707,6 +709,14 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let creditGain := if 11 * depth * gainRateMax < capMax
     then (33 * depth * consolidationGain + 11 * depth * otherGain + 9) / 10
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  -- A credit can raise a key's effective balance by one more increment than its amount rounds to.
+  --
+  -- That increment earns the flag rewards over the depth, plus a unit per epoch for the floors.
+  --
+  -- Each credited key pays it once, and a key whose exit the call reads pays it three times.
+  let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+    WEIGHT_DENOMINATOR.toNat + 2)
+  let creditUnits := (creditedKeys + 2 * (exitingCount + queueKeys)) * unitGain
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
   -- It can then become eligible there and activate deep in the window, while inactive here.
@@ -725,7 +735,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    creditGain)
+    creditGain + creditUnits)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
