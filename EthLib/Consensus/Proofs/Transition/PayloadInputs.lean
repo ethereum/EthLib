@@ -141,6 +141,141 @@ theorem payloadInputs_initiateValidatorExit {index : ValidatorIndex}
   · exact PayloadInputs.refl _
   · exact (payloadInputs_exitQueue queue).trans (payloadInputs_setValidator set)
 
+/-- Adding a validator keeps the inputs of a payload. -/
+theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    PayloadInputs state after := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  split at computed
+  · cases computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · cases computed
+
+/-- A pending deposit keeps the inputs of a payload. -/
+theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    PayloadInputs state after := by
+  unfold applyPendingDeposit at computed
+  split at computed
+  · split at computed
+    · cases computed
+      exact PayloadInputs.refl _
+    simp only [bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    split at computed
+    · exact payloadInputs_addValidatorToRegistry computed
+    · simp only [pure, Except.pure, Except.ok.injEq] at computed
+      exact computed ▸ PayloadInputs.refl _
+  · simp only [liftAccessor_ok, bind_ok_iff] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    exact payloadInputs_increaseBalance computed
+
+/-- The inactivity updates keep the inputs of a payload. -/
+theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
+    (computed : processInactivityUpdates config state altair = .ok after) :
+    PayloadInputs state after := by
+  unfold processInactivityUpdates at computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ PayloadInputs.refl _
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The registry updates keep the inputs of a payload. -/
+theorem payloadInputs_processRegistryUpdates
+    (computed : processRegistryUpdates config state = .ok after) : PayloadInputs state after := by
+  unfold processRegistryUpdates at computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    refine PayloadInputs.foldlM (fun _ _ _ ok => ?_) computed
+    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, set⟩ := ok
+      exact payloadInputs_setValidatorAt set
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact payloadInputs_initiateValidatorExit exited
+    split at ok
+    · exact payloadInputs_setValidatorAt (liftAccessor_ok.mp ok)
+    · simp only [pure, Except.pure, Except.ok.injEq] at ok
+      exact ok ▸ PayloadInputs.refl _
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, updatedOk, activated⟩ := computed
+  refine (PayloadInputs.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
+    (PayloadInputs.foldlM (fun _ _ _ ok => ?_) activated)
+  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
+    have set := payloadInputs_setValidatorAt markedOk
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact set.trans (payloadInputs_initiateValidatorExit exited)
+    · simp only [pure, Except.pure, Except.ok.injEq] at ok
+      exact ok ▸ set
+  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, set⟩ := ok
+    exact payloadInputs_setValidator set
+
+/-- A pass over the pending deposits keeps the inputs of a payload. -/
+theorem payloadInputs_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} :
+    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+      {count : Nat} {postponed : Array PendingDeposit} {pass},
+      passPendingDeposits config checks stop nextEpoch available state processed count postponed
+        deposits = .ok pass →
+      PayloadInputs state pass.1.state :=
+  fun computed => passPendingDeposits_of PayloadInputs PayloadInputs.refl
+    (fun one two => one.trans two) (fun ok => payloadInputs_applyPendingDeposit ok) computed
+
+/-- A pass over the pending consolidations keeps the inputs of a payload. -/
+theorem payloadInputs_passPendingConsolidations {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
+      {result : BeaconState preset fork × Nat},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      PayloadInputs state result.1
+  | [], _, _, computed => by
+    simp only [passPendingConsolidations, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    exact PayloadInputs.refl _
+  | consolidation :: rest, state, result, computed => by
+    simp only [passPendingConsolidations, bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨source, _, computed⟩ := computed
+    split at computed
+    · simp only [bind_ok_iff] at computed
+      obtain ⟨⟨passed, read⟩, passedOk, computed⟩ := computed
+      cases computed
+      exact payloadInputs_passPendingConsolidations (result := (passed, read)) passedOk
+    split at computed
+    · cases computed
+      exact PayloadInputs.refl _
+    simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, lowered, loweredOk, raised, raisedOk, ⟨passed, read⟩, passedOk, computed⟩ :=
+      computed
+    cases computed
+    exact ((payloadInputs_decreaseBalance loweredOk).trans
+      (payloadInputs_increaseBalance raisedOk)).trans
+      (payloadInputs_passPendingConsolidations (result := (passed, read)) passedOk)
+
+/-- The historical summaries update keeps the inputs of a payload. -/
+theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
+    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
+    PayloadInputs state after := by
+  unfold processHistoricalSummariesUpdate at computed
+  simp only [bind, Except.bind, pure, Except.pure] at computed
+  repeat (split at computed <;> try cases computed)
+  all_goals exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 /-- Slashing a validator keeps the inputs of a payload. -/
 theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
@@ -866,22 +1001,6 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
-
-/-- Adding a validator keeps the inputs of a payload. -/
-theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
-    {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
-    PayloadInputs state after := by
-  unfold addValidatorToRegistry at computed
-  split at computed
-  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  split at computed
-  · cases computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · cases computed
 
 /-- From Electra, a deposit keeps the inputs of a payload. -/
 theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
