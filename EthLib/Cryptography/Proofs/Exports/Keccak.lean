@@ -100,15 +100,27 @@ private theorem bytesOfLanes_eq (B : Keccak.State) :
     have hi : i < 200 := by simpa using h₂
     simp only [List.getElem_toArray, Vector.getElem_toArray, squeezeBytes, Vector.getElem_ofFn]
     have hlen : i < 8 * 25 := by omega
-    rw [getElem_flatMap_eight _ (fun _ => rfl) _ i hlen, outputByte_ofLanes B hi]
+    have group := getElem_flatMap_eight Keccak.Internal.bytesOfLane (fun _ => rfl)
+      [B.a0, B.a1, B.a2, B.a3, B.a4, B.a5, B.a6, B.a7, B.a8, B.a9, B.a10, B.a11, B.a12, B.a13,
+        B.a14, B.a15, B.a16, B.a17, B.a18, B.a19, B.a20, B.a21, B.a22, B.a23, B.a24] i hlen
+    rw [group, outputByte_ofLanes B hi]
     -- Group `i / 8` is lane `((i / 8) % 5, i / 40)`, the lane at index `i / 8`.
     have lane : [B.a0, B.a1, B.a2, B.a3, B.a4, B.a5, B.a6, B.a7, B.a8, B.a9, B.a10, B.a11, B.a12,
         B.a13, B.a14, B.a15, B.a16, B.a17, B.a18, B.a19, B.a20, B.a21, B.a22, B.a23,
         B.a24][i / 8]'(by simp only [List.length_cons, List.length_nil]; omega) =
         B.lane ⟨(i / 8) % 5, by omega⟩ ⟨i / 40, by omega⟩ := by
-      simp only [Keccak.State.lane, show (i / 8) % 5 + 5 * (i / 40) = i / 8 by omega]
-      exact (getElem!_pos _ (i / 8) (by simp only [List.length_cons, List.length_nil]; omega)).symm
-    simp only [lane]
+      have h8 : i / 8 < 25 := by omega
+      rw [Keccak.State.lane]
+      try dsimp only
+      rw [show (i / 8) % 5 + 5 * (i / 40) = i / 8 by omega]
+      first
+        | exact (getElem!_pos _ (i / 8) h8).symm
+        | simp [h8]
+    first
+      | simp only [lane]
+      | exact congrArg (fun v => (Keccak.Internal.bytesOfLane v)[i % 8]'(by
+          simp only [Keccak.Internal.bytesOfLane, List.length_cons, List.length_nil]
+          omega)) lane
 
 /-- For every 200-byte state, the export returns Keccak-f[1600] of the bit model.
 
