@@ -1199,8 +1199,8 @@ private theorem no_charge_of_settled {g : ForkedBeaconState preset}
       omega
     obtain ⟨c, member, -, epoch⟩ := rp.departure_charge_of_assigned i _ w oldFound found unset
       wAssigned
-    have late := rp.departureCharges_epoch_ge_start (Nat.le_trans (by decide) h.fulu) h.early c
-      member
+    have late := DirectSafety.Run.departureCharges_epoch_ge_start rp
+      (Nat.le_trans (by decide) h.fulu) h.early c member
     omega
   intro c member
   exact tailC.departure_charge_ne_of_assigned i _ oldFound assigned c member
