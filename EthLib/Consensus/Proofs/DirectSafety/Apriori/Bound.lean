@@ -468,6 +468,17 @@ def exitedSlashableCount (x : ForkedBeaconState preset) : Nat :=
     !v.slashed && decide (v.exitEpoch ≤ getCurrentEpoch x.state) &&
       decide (getCurrentEpoch x.state < v.withdrawableEpoch)
 
+/-- `W`: the balance base of the validators that a window from `x` can still slash.
+
+These are the validators that are unslashed at `x` and not yet withdrawable at its epoch.
+
+Each counts at the larger of its effective and actual balance. -/
+def slashableBase (x : ForkedBeaconState preset) : Nat :=
+  ∑ i ∈ Finset.range x.state.validators.data.size,
+    (x.state.validators.data[i]?.map fun v =>
+      if !v.slashed && decide (getCurrentEpoch x.state < v.withdrawableEpoch) then
+        max (effectiveAt x i) (actualBalanceAt x i) else 0).getD 0
+
 /-- The effective stake at `x` of the validators active at the previous epoch but not at `x`.
 
 Slashed validators count too.
@@ -604,12 +615,6 @@ def exitCohortGrowth (x : ForkedBeaconState preset) (high : Nat) : Nat :=
         (withdrawalMaxEffectiveBalance preset x.fork v).toNat - 2 * v.effectiveBalance.toNat
       else 0).sum).foldl max 0
 
-/-- The whistleblower allowance of the window, read at `x`. -/
-abbrev whistleblowerAllowanceAt (x : ForkedBeaconState preset) (high : Nat) :=
-  whistleblowerAllowance preset config (referenceCount x) (scheduledActivationCount x)
-      (unassignedPreStake x) (fundingCarry x)
-    (exitedSlashableCount x) (driftHorizon x high) (preElectraEpochs config x high)
-
 /-- The departures that the queues admit in the window, read at `x`. -/
 abbrev departureBudgetAt (x : ForkedBeaconState preset) (high : Nat) :=
   departureBudget preset config (referenceCount x) (scheduledActivationCount x)
@@ -656,6 +661,24 @@ def activationBudget (x : ForkedBeaconState preset) (high : Nat) :=
       ((List.range (driftHorizon x high + 1)).map (exitFlowAt (config := config) x high)).sum +
     if 0 < preElectraEpochs config x high then preset.MIN_ACTIVATION_BALANCE.toNat *
         referenceCount x - referenceStake x else 0
+
+/-- The whistleblower allowance of the window, read at `x`.
+
+Before the fork it is `Omega`.
+
+From Electra, when `WQ` is at least 2, it is also at most a bound over `WQ - 1`.
+
+That bound is the base `W`, plus the issuance envelope and the deposit funding of the window. -/
+abbrev whistleblowerAllowanceAt (x : ForkedBeaconState preset) (high : Nat) :=
+  let omega := whistleblowerAllowance preset config (referenceCount x)
+    (scheduledActivationCount x) (unassignedPreStake x) (fundingCarry x)
+    (exitedSlashableCount x) (driftHorizon x high) (preElectraEpochs config x high)
+  if 0 < preElectraEpochs config x high then omega
+  else if 2 ≤ preset.WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA.toNat then
+    min omega ((slashableBase x + windowIssuance (config := config) x high + fundingCarry x +
+        ((List.range (driftHorizon x high + 1)).map (exitFlowAt (config := config) x high)).sum) /
+      (preset.WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA.toNat - 1))
+  else omega
 
 /-- The credits of the window.
 

@@ -323,6 +323,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `DirectSafety.Apriori.whistleblowerAllowanceAt` charges the whistleblower allowance at the slashable balance at the reference state plus the window's issuance and deposit funding, over `WQ − 1`, not at `MAX_EFFECTIVE_BALANCE_ELECTRA` (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  From Electra, when `WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA` is at least 2, it is the smaller of `whistleblowerAllowance` and a new bound.
+  The new bound is the new `slashableBase`, plus `windowIssuance`, the deposit carry and the exit flow of the window, over one less than that quotient.
+  `slashableBase` sums the larger of the effective and the actual balance over the validators that are unslashed and not yet withdrawable at the reference state.
+  `creditBudget`, `gainBudget` and `drift` read the allowance, so each is at most its former value.
+  `accountable_safety_apriori` keeps its statement, with that smaller drift, so it implies the former statement.
+  A caller that unfolded `whistleblowerAllowanceAt` to `whistleblowerAllowance` now gets the `if` form.
+  The new `Apriori.Internal.otherCredit_le_allowanceAt_electra` bounds the other funding credits of a branch by the allowance.
+  The new `DirectSafety.replayRewards_sources` (DirectSafety/IntervalFunding.lean) states that the rewards pass records only reward, penalty and inactivity events; `epochReplay_events` and the allowance proof read it.
+
 - The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
   Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
   The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.

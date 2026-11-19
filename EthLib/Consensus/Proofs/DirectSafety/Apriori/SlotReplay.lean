@@ -1535,13 +1535,13 @@ private theorem selectedReleaseProducer_of_run {g x y : ForkedBeaconState preset
     history.release_rounding ledger (allocations := pairs.map Prod.snd) ⟨payEq, rfl, tagEq⟩
       chosen
   obtain ⟨initialEq, creditBound, releasesEq, total⟩ := ownership_counts initial history
+  have deposited := deposits shared tail high supported twoSlots electra events replayed
+  have issued := issuance_electra shared tail high supported twoSlots electra replayed
   have funding : CumulativeFunding (config := config) x y high events selected
       (pairs.map Prod.snd) before after :=
-    ⟨initialEq, creditBound, releasesEq,
-      deposits shared tail high supported twoSlots electra events replayed,
-      issuance_electra shared tail high supported twoSlots electra replayed,
-      otherCredit_le_allowance_electra shared genesis tail caps aligned electra early twoSlots
-        high endEpoch guard replayed,
+    ⟨initialEq, creditBound, releasesEq, deposited, issued,
+      otherCredit_le_allowanceAt_electra shared genesis tail caps aligned electra early twoSlots
+        high endEpoch guard replayed issued (Nat.le_of_add_right_le deposited),
       capacity shared tail high supported twoSlots events replayed electra selected payments tags
         actual chosen queue consumed runCalls ⟨allPayments, coverReplay, tagsEq, paymentsEq⟩
         freshTags,
