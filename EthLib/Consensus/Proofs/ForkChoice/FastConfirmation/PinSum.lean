@@ -6275,7 +6275,7 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
       subst same
       have nEarly : n.fork < .glamsterdam :=
         Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
-      exact PinSplit2.epochRewards_le step altair nEarly v inside
+      exact PinSplit2.epochRewards_le step altair nEarly v (Or.inl inside)
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat P
         (PinSplit5.effectiveAt_le_capMax (shared.append (fromFin.append pre)) h.genesis h.caps
           mEarly v)
