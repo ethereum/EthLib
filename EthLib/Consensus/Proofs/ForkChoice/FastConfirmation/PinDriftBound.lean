@@ -911,6 +911,18 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   slashBand : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
       preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat + preset.downwardBand ≤
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) Twice the largest slashing penalty is at most an increment.
+
+  It rules out a penalty above half an increment.
+
+  So one extra step per key suffices for the sync debits that follow a slashing.
+
+  It holds with equality on both presets.
+
+  A preset that raises the largest effective balance, or lowers the slashing quotient, breaks it. -/
+  slashHalf : 2 * (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+      preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat) ≤
+    preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) At every fork the floor of a new key is at least an increment. -/
   newKey : ∀ fork : Fork, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
     2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
@@ -954,14 +966,14 @@ private structure PinPresetFacts (preset : Preset) : Prop where
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
     by decide, by decide, by decide, by decide, by decide, by decide⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
     by decide, by decide, by decide, by decide, by decide, by decide⟩
 
