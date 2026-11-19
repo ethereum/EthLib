@@ -872,156 +872,6 @@ private theorem processSyncCommitteeUpdates_eq_of_inside {altair : .altair ≤ f
   Except.ok.inj (ok.symm.trans
     (processSyncCommitteeUpdates_inside (processSyncCommitteeUpdates_epoch ok) inside))
 
-/-- An epoch keeps committee provenance and the slot.
-
-It keeps both committees unless the epoch ahead starts a period.
-
-Every stage but the committee update keeps both committees and the key prefix of the registry. -/
-private theorem processEpochStep
-    (ok : Consensus.processEpoch config checks state = .ok after) : CommitteeStep state after := by
-  -- Before Altair there are no sync committees, so the provenance holds.
-  by_cases altair : Fork.altair ≤ fork
-  case neg =>
-    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame ok
-    exact ⟨fun _ altair' => absurd altair' altair,
-      frame.slot.trans (processJustificationAndFinalization_slot justifiedOk),
-      fun _ => ⟨funext fun altair' => absurd altair' altair,
-        funext fun altair' => absurd altair' altair⟩⟩
-  refine (processEpoch_trace ok).transport (fun s t => CommitteeStep s t) CommitteeStep.refl
-    (fun one two => one.trans two) ?_
-  intro k _ a b computed
-  have edge := EpochStage.action_cases.mp computed
-  have life := edge.registryLifecycle
-  have slot := edge.slot_eq
-  have forward : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch b).toNat := by
-    simp only [getCurrentEpoch, slot, Nat.le_refl]
-  cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-  case justification =>
-    refine ⟨fun held => ?_, slot,
-      fun _ => (SameSyncCommittees.processJustificationAndFinalization edge).keeps⟩
-    exact held.transfer (And.imp_right And.left
-      (SameSyncCommittees.processJustificationAndFinalization edge))
-      (by
-        simp only [validatorKeys, (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]
-        exact List.prefix_refl _) life
-  case inactivity =>
-    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processInactivityUpdates edge).keeps⟩
-    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processInactivityUpdates edge))
-      (frame_processInactivityUpdates edge).pubkeysPrefix life
-  case rewards =>
-    refine ⟨fun held => ?_, slot,
-      fun _ => (SameSyncCommittees.processRewardsAndPenalties edge).keeps⟩
-    exact held.transfer (And.imp_right And.left
-      (SameSyncCommittees.processRewardsAndPenalties edge))
-      (frame_processRewardsAndPenalties edge).pubkeysPrefix life
-  case registry =>
-    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processRegistryUpdates edge).keeps⟩
-    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRegistryUpdates edge))
-      (frame_processRegistryUpdates edge).pubkeysPrefix life
-  case slashings =>
-    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processSlashings edge).keeps⟩
-    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashings edge))
-      (frame_processSlashings edge).pubkeysPrefix life
-  case eth1Reset =>
-    split at edge
-    · refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processEth1DataReset edge).keeps⟩
-      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processEth1DataReset edge))
-        (frame_processEth1DataReset edge).pubkeysPrefix life
-    · subst edge
-      exact CommitteeStep.refl _
-  case pendingDeposits =>
-    split at edge
-    · refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processPendingDeposits edge).keeps⟩
-      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processPendingDeposits edge))
-        (frame_processPendingDeposits edge).pubkeysPrefix life
-    · subst edge
-      exact CommitteeStep.refl _
-  case pendingConsolidations =>
-    split at edge
-    · refine ⟨fun held => ?_, slot,
-        fun _ => (SameSyncCommittees.processPendingConsolidations edge).keeps⟩
-      exact held.transfer (And.imp_right And.left
-        (SameSyncCommittees.processPendingConsolidations edge))
-        (frame_processPendingConsolidations edge).pubkeysPrefix life
-    · subst edge
-      exact CommitteeStep.refl _
-  case payments =>
-    split at edge
-    · rw [processBuilderPendingPayments_eq edge]
-      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl), rfl,
-        fun _ => ⟨rfl, rfl⟩⟩
-    · subst edge
-      exact CommitteeStep.refl _
-  case effectiveBalances =>
-    refine ⟨fun held => ?_, slot,
-      fun _ => (SameSyncCommittees.processEffectiveBalanceUpdates edge).keeps⟩
-    exact held.transfer (And.imp_right And.left
-      (SameSyncCommittees.processEffectiveBalanceUpdates edge))
-      (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix life
-  case slashingsReset =>
-    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processSlashingsReset edge).keeps⟩
-    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashingsReset edge))
-      (frame_processSlashingsReset edge).pubkeysPrefix life
-  case randaoReset =>
-    refine ⟨fun held => ?_, slot, fun _ => (SameSyncCommittees.processRandaoMixesReset edge).keeps⟩
-    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRandaoMixesReset edge))
-      (frame_processRandaoMixesReset edge).pubkeysPrefix life
-  case history =>
-    split at edge
-    · refine ⟨fun held => ?_, slot,
-        fun _ => (SameSyncCommittees.processHistoricalSummariesUpdate edge).keeps⟩
-      exact held.transfer (And.imp_right And.left
-        (SameSyncCommittees.processHistoricalSummariesUpdate edge))
-        (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix life
-    · refine ⟨fun held => ?_, slot,
-        fun _ => (SameSyncCommittees.processHistoricalRootsUpdate edge).keeps⟩
-      exact held.transfer (And.imp_right And.left
-        (SameSyncCommittees.processHistoricalRootsUpdate edge))
-        (frame_processHistoricalRootsUpdate edge).pubkeysPrefix life
-  case participation =>
-    subst edge
-    exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
-      fun _ => ⟨rfl, rfl⟩⟩
-  case syncCommittees =>
-    exact ⟨fun held => processSyncCommitteeUpdates held edge, slot,
-      fun inside => by
-        rw [processSyncCommitteeUpdates_eq_of_inside inside edge]
-        exact ⟨rfl, rfl⟩⟩
-  case proposerLookahead =>
-    split at edge
-    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
-        Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
-      fun _ => ⟨rfl, rfl⟩⟩
-    · subst edge
-      exact CommitteeStep.refl _
-  case ptcWindow =>
-    split at edge
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
-      obtain ⟨_, _, _, _, rfl⟩ := edge
-      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
-      fun _ => ⟨rfl, rfl⟩⟩
-    · subst edge
-      exact CommitteeStep.refl _
-
-/-- An epoch keeps committee provenance through registry changes, rotation and the new draw.
-
-Every stage but the committee update keeps both committees and the key prefix of the registry. -/
-private theorem processEpoch (holds : SyncCommitteeKeys state)
-    (ok : Consensus.processEpoch config checks state = .ok after) : SyncCommitteeKeys after :=
-  (processEpochStep ok).1 holds
-
-/-- A remainder of an epoch is zero exactly when it is zero for the integers. -/
-private theorem epoch_mod_iff (epoch period : UInt64) :
-    epoch % period = 0 ↔ epoch.toNat % period.toNat = 0 := by
-  constructor
-  · intro zero
-    simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using congrArg UInt64.toNat zero
-  · intro zero
-    apply UInt64.toNat_inj.mp
-    simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using zero
-
 /-- Every epoch stage but the committee update keeps both committees. -/
 private theorem stage_keeps (altair : .altair ≤ fork) {k : EpochStage}
     (other : k ≠ .syncCommittees) {a b : BeaconState preset fork}
@@ -1079,6 +929,152 @@ private theorem stage_keeps (altair : .altair ≤ fork) {k : EpochStage}
       exact ⟨rfl, rfl⟩
     · subst edge
       exact ⟨rfl, rfl⟩
+
+/-- An epoch keeps committee provenance and the slot.
+
+It keeps both committees unless the epoch ahead starts a period.
+
+Every stage but the committee update keeps both committees and the key prefix of the registry. -/
+private theorem processEpochStep
+    (ok : Consensus.processEpoch config checks state = .ok after) : CommitteeStep state after := by
+  -- Before Altair there are no sync committees, so the provenance holds.
+  by_cases altair : Fork.altair ≤ fork
+  case neg =>
+    obtain ⟨justified, justifiedOk, frame⟩ := processEpoch_frame ok
+    exact ⟨fun _ altair' => absurd altair' altair,
+      frame.slot.trans (processJustificationAndFinalization_slot justifiedOk),
+      fun _ => ⟨funext fun altair' => absurd altair' altair,
+        funext fun altair' => absurd altair' altair⟩⟩
+  refine (processEpoch_trace ok).transport (fun s t => CommitteeStep s t) CommitteeStep.refl
+    (fun one two => one.trans two) ?_
+  intro k _ a b computed
+  have edge := EpochStage.action_cases.mp computed
+  have life := edge.registryLifecycle
+  have slot := edge.slot_eq
+  have keeps : k ≠ .syncCommittees → KeepsCommittees a b := fun other =>
+    stage_keeps altair other edge
+  have forward : (getCurrentEpoch a).toNat ≤ (getCurrentEpoch b).toNat := by
+    simp only [getCurrentEpoch, slot, Nat.le_refl]
+  cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+  case justification =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processJustificationAndFinalization edge))
+      (by
+        simp only [validatorKeys, (processJustificationAndFinalization_keeps edge).2.2.2.2.2.1]
+        exact List.prefix_refl _) life
+  case inactivity =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processInactivityUpdates edge))
+      (frame_processInactivityUpdates edge).pubkeysPrefix life
+  case rewards =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processRewardsAndPenalties edge))
+      (frame_processRewardsAndPenalties edge).pubkeysPrefix life
+  case registry =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRegistryUpdates edge))
+      (frame_processRegistryUpdates edge).pubkeysPrefix life
+  case slashings =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashings edge))
+      (frame_processSlashings edge).pubkeysPrefix life
+  case eth1Reset =>
+    split at edge
+    · refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processEth1DataReset edge))
+        (frame_processEth1DataReset edge).pubkeysPrefix life
+    · subst edge
+      exact CommitteeStep.refl _
+  case pendingDeposits =>
+    split at edge
+    · refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+      exact held.transfer (And.imp_right And.left (SameSyncCommittees.processPendingDeposits edge))
+        (frame_processPendingDeposits edge).pubkeysPrefix life
+    · subst edge
+      exact CommitteeStep.refl _
+  case pendingConsolidations =>
+    split at edge
+    · refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+      exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processPendingConsolidations edge))
+        (frame_processPendingConsolidations edge).pubkeysPrefix life
+    · subst edge
+      exact CommitteeStep.refl _
+  case payments =>
+    split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) (.of_data rfl), rfl,
+        fun _ => keeps nofun⟩
+    · subst edge
+      exact CommitteeStep.refl _
+  case effectiveBalances =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left
+      (SameSyncCommittees.processEffectiveBalanceUpdates edge))
+      (frame_processEffectiveBalanceUpdates edge).pubkeysPrefix life
+  case slashingsReset =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processSlashingsReset edge))
+      (frame_processSlashingsReset edge).pubkeysPrefix life
+  case randaoReset =>
+    refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+    exact held.transfer (And.imp_right And.left (SameSyncCommittees.processRandaoMixesReset edge))
+      (frame_processRandaoMixesReset edge).pubkeysPrefix life
+  case history =>
+    split at edge
+    · refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+      exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processHistoricalSummariesUpdate edge))
+        (frame_processHistoricalSummariesUpdate edge).pubkeysPrefix life
+    · refine ⟨fun held => ?_, slot, fun _ => keeps nofun⟩
+      exact held.transfer (And.imp_right And.left
+        (SameSyncCommittees.processHistoricalRootsUpdate edge))
+        (frame_processHistoricalRootsUpdate edge).pubkeysPrefix life
+  case participation =>
+    subst edge
+    exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
+      fun _ => keeps nofun⟩
+  case syncCommittees =>
+    exact ⟨fun held => processSyncCommitteeUpdates held edge, slot,
+      fun inside => by
+        rw [processSyncCommitteeUpdates_eq_of_inside inside edge]
+        exact ⟨rfl, rfl⟩⟩
+  case proposerLookahead =>
+    split at edge
+    · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
+        Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
+        fun _ => keeps nofun⟩
+    · subst edge
+      exact CommitteeStep.refl _
+  case ptcWindow =>
+    split at edge
+    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at edge
+      obtain ⟨_, _, _, _, rfl⟩ := edge
+      exact ⟨fun held => held.transfer ⟨rfl, rfl⟩ (List.prefix_refl _) life, slot,
+        fun _ => keeps nofun⟩
+    · subst edge
+      exact CommitteeStep.refl _
+
+/-- An epoch keeps committee provenance through registry changes, rotation and the new draw.
+
+Every stage but the committee update keeps both committees and the key prefix of the registry. -/
+private theorem processEpoch (holds : SyncCommitteeKeys state)
+    (ok : Consensus.processEpoch config checks state = .ok after) : SyncCommitteeKeys after :=
+  (processEpochStep ok).1 holds
+
+/-- A remainder of an epoch is zero exactly when it is zero for the integers. -/
+private theorem epoch_mod_iff (epoch period : UInt64) :
+    epoch % period = 0 ↔ epoch.toNat % period.toNat = 0 := by
+  constructor
+  · intro zero
+    simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using congrArg UInt64.toNat zero
+  · intro zero
+    apply UInt64.toNat_inj.mp
+    simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using zero
 
 /-- A run of epoch stages without the committee update keeps both committees and the slot. -/
 private theorem stages_keep (altair : .altair ≤ fork) {stages : List EpochStage}
@@ -1163,9 +1159,7 @@ private theorem advanceSlotStep (ok : Consensus.advanceSlot config checks state 
     unfold epochIfLast at epochedOk
     split at epochedOk
     · rename_i last
-      have remainder : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
-        simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using congrArg UInt64.toNat last
-      have divides := Nat.dvd_of_mod_eq_zero remainder
+      have divides := Nat.dvd_of_mod_eq_zero ((epoch_mod_iff _ _).mp last)
       have nextEpoch : (getCurrentEpoch
           ({ epoched with slot := next } : BeaconState preset fork)).toNat =
             (getCurrentEpoch state).toNat + 1 := by
@@ -1192,11 +1186,8 @@ private theorem advanceSlotStep (ok : Consensus.advanceSlot config checks state 
     · rename_i notLast
       cases epochedOk
       refine .inl ⟨?_, cachedKeeps⟩
-      have remainder : ¬ next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := fun zero => notLast (by
-        apply UInt64.toNat_inj.mp
-        simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using zero)
       have indivisible : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat := fun divides =>
-        remainder (Nat.mod_eq_zero_of_dvd divides)
+        notLast ((epoch_mod_iff _ _).mpr (Nat.mod_eq_zero_of_dvd divides))
       rw [getCurrentEpoch_toNat, stateEpoch]
       show next.toNat / _ = _
       rw [nextVal]
