@@ -9,6 +9,18 @@ Not yet released.
 
 ### Proof additions
 
+- `Store.getHead_exists_of_gloas` shows that from Gloas the head of a store that the handlers build can be computed ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It is the Gloas twin of `Store.getHead_exists`.
+  The store must hold its justified state, whose effective balances add up to at most `2 * 10^17` Gwei (`effectiveBalanceSum`).
+  `HeldRegistriesWithinLimit` asks each held block state to have its registry within the limit.
+  `ActiveEquivocatorsRegistered` asks each equivocator active in a held block's state, at that block's epoch, to have a place in the justified state.
+  `Config.HeadWeightsFit` bundles the slot length and the reorg threshold that the head reads need, and `Config.headWeightsFit_mainnet` and `Config.headWeightsFit_minimal` prove it.
+
+- The Gloas head adds these facts.
+  `Store.Reachable.payloadInclusionListSatisfaction_isSome` gives, from Heze, the inclusion-list answer of each verified payload of a reachable store.
+  `getBeaconCommittees_nodup` shows that the committees of one slot together repeat no member.
+  `advanceSlot_validators_size_le` bounds the validators that one slot adds, and `foldlM_validators_size_le` the validators that a fold adds.
+
 - `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
   XMSS bounds key generation and signing on every path: at most `13434881` and `8616804556` calls.
   Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
