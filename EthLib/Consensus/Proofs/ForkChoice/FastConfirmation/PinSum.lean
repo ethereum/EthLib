@@ -13962,15 +13962,29 @@ It is the key's effective balance, its rise and one increment, if R's branch sla
 
 `branchR` pays that bound for such a key, and its increment covers the drop of R's penalty.
 
-Otherwise it is also at least the key's bound `ebUp` and its balance `bF` at the finalized state. -/
-private def whistleEnv (t : PinTerms preset) (pulled : BeaconState preset fork) (i : ℕ) : ℕ :=
+A key that `exitedSlashable` charges is read at its balance and rise, or `bF`.
+
+It is read without `ebUp`, which can exceed them.
+
+Otherwise it is also at least the key's bound `ebUp`. -/
+private def whistleEnv (t : PinTerms preset) (pulled anc : BeaconState preset fork) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then
     balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  else if (pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
+      ((pulled.validators.data[i]?.map fun v =>
+        decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true) ∧
+      ((pulled.validators.data[i]?).any fun v =>
+        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true then
+    max (balanceAt pulled i + t.rise i) (t.bF i)
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
 /-- The credits that raise the effective balance of a key of R's registry on C's branch.
 
-They are the key's credits at eleven tenths, rounded up, and the bands of its credits.
+They are the key's credits at eleven tenths, rounded up, with the bands of credits and seat debits.
+
+The credits hold the key's own whistleblower credits.
+
+`bud_whistle` pays them with the sets that it counts.
 
 The seat debits are those of the two runs that R shares with C.
 
@@ -13979,8 +13993,9 @@ private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (highC high : ℕ)
     (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
     (i : ℕ) : ℕ :=
-  (11 * (propN tail highC i + depPre eventsC i + syncCr eventsC i + consAmt eventsC i +
-    syncD eventsF i + syncD events i) + 9) / 10 + bandC tail highC i + bandX fin highC i +
+  (11 * (propN tail highC i + depPre eventsC i + whistC tail highC i + syncCr eventsC i +
+    consAmt eventsC i + syncD eventsF i + syncD events i) + 9) / 10 + bandC tail highC i +
+    bandX fin highC i + bandR (eventsF ++ events) i +
   if t.exitBeforeFin i = true then
     (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i
   else 0
@@ -14069,13 +14084,13 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     (registry : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
       tailC.Contains step → ∀ i, i < split.validators.data.size →
         (split.validators.data[i]?.map (·.slashed)).getD false = false →
-          effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled i +
+          effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc i +
             whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
               fin i)
     (S : Finset ValidatorIndex) :
     ∑ v ∈ S, whistC tailC highC v.toNat ≤
       (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
-        min (whistleEnv (pinTerms config pulled anc fin) pulled i +
+        min (whistleEnv (pinTerms config pulled anc fin) pulled anc i +
           whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
             fin i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) +
@@ -14097,7 +14112,7 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     replayedC S
   obtain ⟨E, hE⟩ : ∃ E : ℕ → ℕ, ∀ i, E i =
       if (split.validators.data[i]?.map (·.slashed)).getD false = false then
-        min (whistleEnv (pinTerms config pulled anc fin) pulled i +
+        min (whistleEnv (pinTerms config pulled anc fin) pulled anc i +
           whistleSlack (pinTerms config pulled anc fin) tailC highC high eventsC eventsF events
             fin i) preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
       else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := ⟨_, fun _ => rfl⟩
@@ -15895,7 +15910,7 @@ private theorem registry_headroom (h : Setting config checks g split fin pulled 
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
     (i : ℕ) (notKept : ¬ (pinTerms config pulled anc fin).keptArm i = true) (slack : ℕ) :
-    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled i + slack := by
+    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc i + slack := by
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
@@ -15903,7 +15918,7 @@ private theorem registry_headroom (h : Setting config checks g split fin pulled 
     h.caps aEarly i
   have headroom := rise_of_notKept h i notKept
   unfold whistleEnv
-  split <;> omega
+  split_ifs <;> omega
 
 /-- The per-key core of the rise for a key on the headroom arm.
 
