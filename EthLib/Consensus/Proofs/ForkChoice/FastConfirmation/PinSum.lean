@@ -4070,6 +4070,47 @@ private theorem cfloor_origin (h : Setting config checks g split fin pulled anc 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value.
 
+The balance of the key at every prefix end is above `floor`, as `endpointFloor` says.
+
+That value is the least of its effective balance and its cap at the finalized block.
+
+And of `floor` rounded down to an increment. -/
+private theorem cfloor_endpoint_of (h : Setting config checks g split fin pulled anc counted V)
+    (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (i : ValidatorIndex) (val : Validator) (initial : fin.validators.data[i.toNat]? = some val)
+    (floor : ℕ)
+    (endpointFloor : ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
+      (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
+      floor ≤ actualBalanceAt p i.toNat)
+    {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
+    (rest : Run config checks z ⟨fork, e⟩) (cut : rp.append rest = wholeRun) :
+    min (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
+        (min (withdrawalMaxEffectiveBalance preset fork val).toNat
+          (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
+      effectiveAt z i.toNat := by
+  have forkEnd : ∀ {p : ForkedBeaconState preset} (r2 : Run config checks p ⟨fork, e⟩),
+      p.fork < .glamsterdam := fun r2 =>
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+  have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
+      ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, e⟩),
+        r1.append r2 = wholeRun := fun member => by
+    obtain ⟨r1, r2, whole⟩ := balancePath_endpoint rp rest (Nat.le_refl _) member
+    exact ⟨r1, r2, whole.trans cut⟩
+  have inside : i.toNat < fin.validators.data.size := (Array.getElem?_eq_some_iff.mp initial).1
+  refine PinSplit2.Run.effective_floor_rounded rp (forkEnd rest) h.fulu i.toNat inside floor
+    (withdrawalMaxEffectiveBalance preset fork val).toNat ?_ ?_
+  · intro p member
+    obtain ⟨r1, r2, whole⟩ := pathEndpoint member
+    exact endpointFloor r1 r2 whole
+  · intro p member
+    obtain ⟨r1, r2, -⟩ := pathEndpoint member
+    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
+      (forkEnd r2) i.toNat val initial
+    simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a key at a state of C's run is above a least value.
+
 The balance of the key at every prefix end is above `floor`, by `cfloor_balance`.
 
 The effective balance of the key at the end of a prefix is then at least a least value.
@@ -4113,31 +4154,9 @@ private theorem cfloor_endpoint (h : Setting config checks g split fin pulled an
         (min (withdrawalMaxEffectiveBalance preset fork val).toNat
           (floor - floor % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt z i.toNat := by
-  have forkEnd : ∀ {p : ForkedBeaconState preset} (r2 : Run config checks p ⟨fork, e⟩),
-      p.fork < .glamsterdam := fun r2 =>
-    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
-  -- the balance at the end of each prefix of the run is above `floor`
-  have endpointFloor : ∀ {p : ForkedBeaconState preset} (r1 : Run config checks ⟨fork, fin⟩ p)
-      (r2 : Run config checks p ⟨fork, e⟩), r1.append r2 = wholeRun →
-      floor ≤ actualBalanceAt p i.toNat := fun r1 r2 whole =>
-    cfloor_balance h e wholeRun near replayed i val initial clean retained slack ρn ρd floor start
-      pass arith r1 r2 whole
-  have pathEndpoint : ∀ {p : ForkedBeaconState preset}, p ∈ rp.balancePath →
-      ∃ (r1 : Run config checks ⟨fork, fin⟩ p) (r2 : Run config checks p ⟨fork, e⟩),
-        r1.append r2 = wholeRun := fun member => by
-    obtain ⟨r1, r2, whole⟩ := balancePath_endpoint rp rest (Nat.le_refl _) member
-    exact ⟨r1, r2, whole.trans cut⟩
-  have inside : i.toNat < fin.validators.data.size := (Array.getElem?_eq_some_iff.mp initial).1
-  refine PinSplit2.Run.effective_floor_rounded rp (forkEnd rest) h.fulu i.toNat inside floor
-    (withdrawalMaxEffectiveBalance preset fork val).toNat ?_ ?_
-  · intro p member
-    obtain ⟨r1, r2, whole⟩ := pathEndpoint member
-    exact endpointFloor r1 r2 whole
-  · intro p member
-    obtain ⟨r1, r2, -⟩ := pathEndpoint member
-    obtain ⟨w, found, mono⟩ := r1.validatorCap_mono h.caps.activation h.caps.compounding
-      (forkEnd r2) i.toNat val initial
-    simpa [PinSplit2.capAt, found] using UInt64.le_iff_toNat_le.mp mono
+  exact cfloor_endpoint_of h e wholeRun i val initial floor
+    (fun r1 r2 whole => cfloor_balance h e wholeRun near replayed i val initial clean retained
+      slack ρn ρd floor start pass arith r1 r2 whole) rp rest cut
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value, for a slashed key.
