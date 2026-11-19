@@ -720,6 +720,21 @@ Rules for every body:
 Read the body aloud before you post it.
 If it sounds like a report, cut it.
 
+### Labels
+
+Workflows label issues and pull requests, so you do not need to set these labels yourself.
+
+- The paths that a pull request changes give its area labels, such as `crypto` and `crypto: keccak`.
+  [`.github/labeler.yml`](.github/labeler.yml) maps the paths to the labels.
+  After each push, the workflow also removes an area label whose paths the pull request no longer changes.
+- The type of a [title](#titles) gives a label such as `type: proof`, and a `!` before the colon gives `statement-change`.
+  On an issue, the scope also gives the area labels, since an issue changes no paths.
+  [`.github/workflows/title-labels.yml`](.github/workflows/title-labels.yml) holds the table of scopes.
+- [`.github/labels.yml`](.github/labels.yml) defines each label with its color and description.
+  A change to it on `master` creates or updates labels, and never deletes one.
+
+Other labels, such as `leanVM` and `bug`, stay manual.
+
 ## leanVM work
 
 The leanVM specification is large, and people review it one small pull request at a time.

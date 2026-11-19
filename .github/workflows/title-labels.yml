@@ -1,0 +1,164 @@
+# Label each pull request and issue by its conventional title, `type(scope)!: summary`.
+#
+# The type gives a `type:` label, and `!` gives `statement-change`.
+# On an issue, the scope also gives area labels, since an issue changes no paths.
+# On a pull request, labeler.yml sets the area labels from the changed paths instead.
+# A title that does not parse, or whose type is not one of CONTRIBUTING.md, gets no label.
+#
+# The workflow adds only the labels of the tables below.
+# It removes only a `type:` label of the table or `statement-change`, once the title no longer
+# gives it, and leaves every other label alone.
+#
+# The title comes from the author, so the script reads it from the event payload as data.
+# No `${{ }}` expression reaches the script, and no job checks out or runs code from a pull
+# request.
+#
+# A manual run labels every open issue and pull request once, except those labelled leanVM.
+
+name: title-labels
+
+on:
+  # Safe here: no job checks out or runs code from the pull request.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, edited, reopened]
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+
+permissions: {}
+
+# A newer edit of the same title replaces a run in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || 'backfill' }}
+  cancel-in-progress: true
+
+jobs:
+  title-labels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: write # label issues
+      pull-requests: write # label pull requests
+
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The types that CONTRIBUTING.md lists.
+            const TYPES = ['feat', 'fix', 'proof', 'perf', 'refactor', 'test', 'docs', 'build', 'ci', 'chore'];
+            const BREAKING = 'statement-change';
+
+            // The area labels of a scope, for issues; every label here is in labels.yml.
+            // gossip and reqresp are absent: both consensus and networking define them.
+            const crypto = (child) => ['crypto', `crypto: ${child}`];
+            const consensus = (child) => ['consensus', `consensus: ${child}`];
+            const execution = (child) => ['execution', `execution: ${child}`];
+            const networking = (child) => ['networking', `networking: ${child}`];
+            const serialization = (child) => ['serialization', `serialization: ${child}`];
+            const SCOPES = {
+              crypto: ['crypto'],
+              cryptography: ['crypto'],
+              aes: crypto('aes'),
+              alt_bn128: crypto('alt_bn128'),
+              'alt-bn128': crypto('alt_bn128'),
+              altbn128: crypto('alt_bn128'),
+              bls: crypto('bls'),
+              ethash: crypto('ethash'),
+              hash: crypto('hash'),
+              keccak: crypto('keccak'),
+              kzg: crypto('kzg'),
+              merkle: crypto('merkle'),
+              secp256k1: crypto('secp256k1'),
+              secp256r1: crypto('secp256r1'),
+              sphincs: crypto('sphincs'),
+              vrf: crypto('vrf'),
+              xmss: crypto('xmss'),
+              consensus: ['consensus'],
+              containers: consensus('containers'),
+              'data-availability': consensus('data-availability'),
+              forkchoice: consensus('forkchoice'),
+              'fork-choice': consensus('forkchoice'),
+              'light-client': consensus('light-client'),
+              transition: consensus('transition'),
+              execution: ['execution'],
+              blocks: execution('blocks'),
+              evm: execution('evm'),
+              precompiles: execution('evm'),
+              fees: execution('fees'),
+              state: execution('state'),
+              transactions: execution('transactions'),
+              trie: execution('trie'),
+              networking: ['networking'],
+              devp2p: networking('devp2p'),
+              discv4: networking('discv4'),
+              discv5: networking('discv5'),
+              enr: networking('enr'),
+              rlpx: networking('rlpx'),
+              snappy: networking('snappy'),
+              serialization: ['serialization'],
+              rlp: serialization('rlp'),
+              ssz: serialization('ssz'),
+              engine: ['engine'],
+              base: ['base'],
+              bindings: ['bindings'],
+              tests: ['tests'],
+              ci: ['ci'],
+              proofs: ['proofs'],
+            };
+
+            // type, then an optional (scope), then an optional !, then a colon and a space.
+            const TITLE = /^([a-z]+)(?:\(([^()]*)\))?(!)?: /;
+            const OWN = new Set([...TYPES.map((type) => `type: ${type}`), BREAKING]);
+
+            function labelsFor(title, isIssue) {
+              const match = TITLE.exec(title);
+              if (!match || !TYPES.includes(match[1])) return [];
+              const [, type, scope, bang] = match;
+              const labels = [`type: ${type}`];
+              if (bang) labels.push(BREAKING);
+              if (isIssue && scope) {
+                for (const part of scope.split(',')) labels.push(...(SCOPES[part.trim()] ?? []));
+              }
+              return [...new Set(labels)];
+            }
+
+            async function label(item, isIssue) {
+              const have = item.labels.map((l) => l.name);
+              const want = labelsFor(item.title, isIssue);
+              const add = want.filter((name) => !have.includes(name));
+              const remove = have.filter((name) => OWN.has(name) && !want.includes(name));
+              const target = { ...context.repo, issue_number: item.number };
+              if (add.length) await github.rest.issues.addLabels({ ...target, labels: add });
+              for (const name of remove) {
+                try {
+                  await github.rest.issues.removeLabel({ ...target, name });
+                } catch (error) {
+                  // Someone removed it since the event; that is the state wanted.
+                  if (error.status !== 404) throw error;
+                }
+              }
+              core.info(`#${item.number}: add [${add.join(', ')}], remove [${remove.join(', ')}]`);
+              return add.length + remove.length > 0;
+            }
+
+            if (context.eventName === 'workflow_dispatch') {
+              const items = await github.paginate(github.rest.issues.listForRepo, {
+                ...context.repo,
+                state: 'open',
+                per_page: 100,
+              });
+              let changed = 0;
+              let skipped = 0;
+              for (const item of items) {
+                if (item.labels.some((l) => l.name === 'leanVM')) {
+                  skipped += 1;
+                  continue;
+                }
+                if (await label(item, !item.pull_request)) changed += 1;
+              }
+              core.info(`${items.length} open, ${skipped} skipped as leanVM, ${changed} changed.`);
+            } else if (context.eventName === 'pull_request_target') {
+              await label(context.payload.pull_request, false);
+            } else {
+              await label(context.payload.issue, true);
+            }
