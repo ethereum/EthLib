@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
 public import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
+import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
 # Proofs: each proposer of the lookahead is active in its epoch along a run
@@ -80,9 +81,9 @@ private theorem LookaheadActive.processBlock
 
 /-- The upgrade to Fulu draws the lookahead from its own registry, so it starts the invariant. -/
 private theorem LookaheadActive.upgradeToFulu {pre : BeaconState preset .pectra}
-    {post : BeaconState preset .fusaka} (ok : upgradeToFulu config pre = .ok post) :
+    {post : BeaconState preset .fusaka} (ok : Consensus.upgradeToFulu config pre = .ok post) :
     LookaheadActive post := by
-  simp only [upgradeToFulu, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
+  simp only [Consensus.upgradeToFulu, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at ok
   obtain ⟨lookahead, drawn, rfl⟩ := ok
   simp only [initializeProposerLookahead, bind_ok_iff, pure, Except.pure,
@@ -125,8 +126,12 @@ private theorem epoch_next {slot next : Slot} (sum : next.toNat = slot.toNat + 1
       preset.SLOTS_PER_EPOCH.toNat + if preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat then 1 else 0 := by
     rw [sum]
     exact Nat.succ_div
-  exact ⟨fun zero => by rw [step, if_pos (divides.mp zero)],
-    fun nonzero => by rw [step, if_neg (fun dvd => nonzero (divides.mpr dvd))]; rfl⟩
+  exact ⟨fun zero => by rw [step]; simp [divides.mp zero],
+    fun nonzero => by
+      have not : ¬preset.SLOTS_PER_EPOCH.toNat ∣ next.toNat := fun dvd =>
+        nonzero (divides.mpr dvd)
+      rw [step]
+      simp [not]⟩
 
 /-- A slot keeps the invariant. -/
 private theorem LookaheadActive.advanceSlot
@@ -195,12 +200,12 @@ private theorem LookaheadActive.upgradeNext {pre : ForkedBeaconState preset}
       | (obtain ⟨_, upgraded, rfl⟩ := ok
          first
            | exact LookaheadActive.upgradeToFulu upgraded
-           | exact fun fulu => absurd fulu (by decide)
-           | exact absurd early (by decide))
+           | exact fun fulu => absurd fulu (by dsimp only; decide)
+           | exact absurd early (by dsimp only; decide))
       | (subst ok
          first
-           | exact fun fulu => absurd fulu (by decide)
-           | exact absurd early (by decide))
+           | exact fun fulu => absurd fulu (by dsimp only; decide)
+           | exact absurd early (by dsimp only; decide))
 
 /-- A step of a chain keeps the invariant. -/
 private theorem LookaheadActive.chainStep
@@ -211,7 +216,7 @@ private theorem LookaheadActive.chainStep
   | slot ok =>
     obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
     exact processUpgrades_induction (config := config) (checks := checks)
-      (property := fun u => u.fork < .glamsterdam → LookaheadActive u.state)
+      (forked := ⟨x.fork, advanced⟩) (property := fun u => u.fork < .glamsterdam → LookaheadActive u.state)
       (fun _ stepOk later => LookaheadActive.upgradeNext stepOk later)
       (fun _ => h.advanceSlot covers advancedOk) upgraded early
   | block engine signed validated ok =>
@@ -247,7 +252,7 @@ theorem LookaheadActive.proposer_active {state : BeaconState preset fork}
   · rename_i nonzero
     simp only [pure, Except.pure, Except.ok.injEq] at ok
     subst ok
-    have small := toNat_mod_lt nonzero (x := state.slot)
+    have small := toNat_mod_lt (i := state.slot) nonzero
     exact h fulu _ (Nat.lt_of_lt_of_le small (Nat.le_mul_of_pos_left _ (Nat.succ_pos _)))
       _ (by rw [Nat.div_eq_of_lt small]; rfl)
 
