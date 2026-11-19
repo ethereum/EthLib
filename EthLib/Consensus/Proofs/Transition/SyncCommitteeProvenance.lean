@@ -930,7 +930,7 @@ private theorem stage_keeps (altair : .altair ≤ fork) {k : EpochStage}
     (edge : EpochStage.Edge config checks k a b) : KeepsCommittees a b := by
   by_cases look : k = .proposerLookahead
   · subst look
-    simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
+    simp only [EpochStage.Edge] at edge
     split at edge
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at edge
@@ -1407,7 +1407,7 @@ private theorem stages_lookahead (altair : .altair ≤ fork) {stages : List Epoc
     (fun k member _ _ computed =>
       have edge := EpochStage.action_cases.mp computed
       ⟨edge.slot_eq,
-        stage_lookahead altair (fun same => absurd (by rw [← same]; exact member) absent) edge⟩)
+        SyncCommitteeKeys.stage_lookahead altair (fun same => absurd (by rw [← same]; exact member) absent) edge⟩)
 
 /-- From Fulu, an epoch draws its new last epoch of proposers from a state just before the draw.
 
