@@ -790,7 +790,9 @@ def propC {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
 
 /-- Proposer credits to the key on C's branch since the split, without the consolidation credits.
 
-A credited stake compounds by at most a tenth, which the stubs charge as `propN / 10`.
+A credited stake compounds by at most a tenth.
+
+The stubs charge an exact tenth of the keys' total, at ten times their terms.
 
 The consolidation credits are under `consolidationsX`, so their compounding is not charged here. -/
 def propN {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high v : ℕ) : ℕ :=
@@ -800,9 +802,9 @@ def propN {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high 
 
 They are `credC` without its consolidation credits.
 
-A credited stake compounds by at most a tenth, which the stubs charge as `credN / 10`.
+A credited stake compounds by at most a tenth.
 
-The tenth is rounded down, so that the tenths of several keys add up to at most the tenth of their sum. -/
+The stubs charge an exact tenth of the keys' total, at ten times their terms. -/
 def credN {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high v : ℕ) : ℕ :=
   (creditScan (fun s => decide (s = .rewards)) (fun s => decide (s = .deposits)) v high tail).1
 
@@ -8820,15 +8822,15 @@ The `syncProposer` part of the bound is not here: `bud_sync` uses it.
 
 The bound is scaled by ten, to take the eleven tenths and the rounding of `exitingCredits`.
 
-The compounding of the credits, a tenth of each key's amount rounded down, is in the bound.
+The compounding of the credits, an exact tenth of the keys' total, is in the bound.
 
 The two further bands of each credited K5 key are in `bud_exitingBands`. -/
 theorem bud_exitingCredits (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    10 * (2 * ((∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
-      (∑ v ∈ (K5 counted V), propN tailC highC v.toNat / 10))) +
+    10 * (2 * (∑ v ∈ (K5 counted V), propC tailC highC v.toNat)) +
+      2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat) +
         22 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).exitingCredits +
         20 * (∑ v ∈ (K5 counted V), consAmt eventsC v.toNat) := sorry
@@ -8841,7 +8843,7 @@ The `syncProposer` part of `credits` is not here: `bud_sync` uses it.
 
 The bound is scaled by ten, to take the eleven tenths and the rounding of `credits`.
 
-The compounding of the credits, a tenth of each key's amount rounded down, is in the bound.
+The compounding of the credits, an exact tenth of the keys' total, is in the bound.
 
 The rounding slacks of the credited keys of `K4` and `K5` are paid by `creditedKeys`. -/
 theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
@@ -8851,9 +8853,6 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
     10 * ((∑ v ∈ (K4 pulled counted V), credC tailC highC v.toNat) +
       (∑ v ∈ (K6 pulled counted), credC tailC highC v.toNat) +
       (∑ v ∈ (K5 counted V), propC tailC highC v.toNat) +
-      (∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat / 10) +
-      (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat / 10) +
-      (∑ v ∈ (K5 counted V), propN tailC highC v.toNat / 10) +
       (∑ v ∈ (K4 pulled counted V), bandC tailC highC v.toNat) +
       (∑ v ∈ (K5 counted V), bandC tailC highC v.toNat) +
       (∑ v ∈ (K6 pulled counted), bandC tailC highC v.toNat) +
@@ -8863,6 +8862,9 @@ theorem bud_credits (h : Setting config checks g split fin pulled anc counted V)
       wShare preset fork ((∑ v ∈ CS pulled counted, propN tailC highC v.toNat) +
         ∑ v ∈ CS pulled counted, depPre eventsC v.toNat) +
       (∑ v ∈ CS pulled counted, bandC tailC highC v.toNat)) +
+      ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
+        (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
+        (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
         11 * ((pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer) ≤
       10 * (pinTerms config pulled anc fin).credits +
         10 * ((∑ v ∈ (K4 pulled counted V), consAmt eventsC v.toNat) +
@@ -10927,7 +10929,9 @@ theorem bud_joining : (pinTerms config pulled anc fin).joining ≤ (pinTerms con
 
 /-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
 
-They also take `slashCharge`'s surplus over R's slashed keys and a tenth of each key's own credits.
+They also take `slashCharge`'s surplus over R's slashed keys and a tenth of the keys' credits.
+
+The bound is scaled by ten, so the tenth is exact.
 
 One floor of all of a key's flows bounds its gain, and each split by kind costs one step. -/
 private theorem flow_split (h : Setting config checks g split fin pulled anc counted V)
@@ -10939,19 +10943,20 @@ private theorem flow_split (h : Setting config checks g split fin pulled anc cou
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    (∑ v ∈ (K4 pulled counted V),
+    10 * ((∑ v ∈ (K4 pulled counted V),
         flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
       3 * (∑ v ∈ (K5 counted V),
           flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
       (∑ v ∈ (K6 pulled counted),
-          flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) ≤
-      (pinTerms config pulled anc fin).creditLow +
+          flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat)) ≤
+      10 * ((pinTerms config pulled anc fin).creditLow +
         3 * ((pinTerms config pulled anc fin).slashedR *
           (2 * (pinTerms config pulled anc fin).depthFin *
-            flagRate (pinTerms config pulled anc fin))) +
-        ((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat / 10) +
-          3 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat / 10) +
-          (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat / 10)) :=
+            flagRate (pinTerms config pulled anc fin)))) +
+        (((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
+          (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
+          (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
+          2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) :=
   sorry
 
 /-- The units of the counted keys, at their weights, fit the unit terms of `pinReserve`.
