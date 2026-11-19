@@ -7416,6 +7416,67 @@ private theorem leakAt_add_le (config : Config) (pulled anc fin : BeaconState pr
   generalize inc * m * (M + B) / Q = z at *
   omega
 
+/-- The leak that a rise above `ebUp` by `a` increments of debits and `s` of a penalty induces.
+
+The debits cost the leak of their increments at the key's reward, and the penalty one increment.
+
+A debited key pays one more for the rounding, which the reward of an increment covers. -/
+private theorem inducedR_le (config : Config) (pulled anc fin : BeaconState preset fork)
+    (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    (perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement)
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y) (i a s : ℕ) (slack : s ≤ 1)
+    (envelope : ∀ z ∈ tail.balancePath, effectiveAt z i ≤
+      (pinTerms config pulled anc fin).ebUp i +
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (a + s)) :
+    inducedR (pinTerms config pulled anc fin) tail i ≤
+      (pinTerms config pulled anc fin).depthFin *
+          (3 * (pinTerms config pulled anc fin).perIncrement * a +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat * a *
+              ((pinTerms config pulled anc fin).scoreMaxFin +
+                (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+              (config.INACTIVITY_SCORE_BIAS.toNat *
+                (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) +
+        s * slashLeak config fork (pinTerms config pulled anc fin) := by
+  have fold : ∀ (l : List ℕ) (b c : ℕ), b ≤ c → (∀ x ∈ l, x ≤ c) → l.foldl max b ≤ c := by
+    intro l
+    induction l with
+    | nil => exact fun _ _ le _ => le
+    | cons x xs ih =>
+      exact fun b c le all => ih _ c (max_le le (all x List.mem_cons_self))
+        fun y m => all y (List.mem_cons_of_mem _ m)
+  have mono := leakAt_mono config pulled anc fin i (fold _ 0 _ (Nat.zero_le _) fun v member => by
+    obtain ⟨z, inPath, rfl⟩ := List.mem_map.mp member
+    exact envelope z inPath)
+  have first := leakAt_add_le config pulled anc fin incPos i
+    ((pinTerms config pulled anc fin).ebUp i) a
+  have second := leakAt_add_le config pulled anc fin incPos i
+    ((pinTerms config pulled anc fin).ebUp i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat * a) s
+  have rate : (pinTerms config pulled anc fin).perIncrement * a ≥ 1 ∨ a = 0 := by
+    rcases Nat.eq_zero_or_pos a with zero | pos
+    · exact .inr zero
+    · exact .inl (Nat.mul_pos perPos pos)
+  rw [Nat.mul_add, ← Nat.add_assoc] at mono
+  unfold inducedR slashLeak
+  rw [Nat.mul_left_comm s, ← Nat.mul_add]
+  refine Nat.mul_le_mul_left _ ?_
+  have three : 3 * (pinTerms config pulled anc fin).perIncrement * a =
+      3 * ((pinTerms config pulled anc fin).perIncrement * a) := by ring
+  have n1 := Nat.zero_le (preset.EFFECTIVE_BALANCE_INCREMENT.toNat * a *
+    ((pinTerms config pulled anc fin).scoreMaxFin +
+      (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+    (config.INACTIVITY_SCORE_BIAS.toNat *
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat))
+  have n2 := Nat.zero_le (preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+    ((pinTerms config pulled anc fin).scoreMaxFin +
+      (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+    (config.INACTIVITY_SCORE_BIAS.toNat *
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat))
+  rcases Nat.le_one_iff_eq_zero_or_eq_one.mp slack with rfl | rfl <;>
+    rcases rate with rate | rfl <;>
+    simp only [Nat.add_zero, Nat.zero_add, Nat.mul_zero, Nat.zero_mul, Nat.mul_one, Nat.one_mul,
+      Nat.zero_div] at mono first second three n1 ⊢ <;>
+    omega
+
 /-- A key's cap does not fall along a run. -/
 private theorem cap_le_cap_of_run (caps : CapOrder preset) {z y : ForkedBeaconState preset}
     (post : Run config checks z y) (early : y.fork < .glamsterdam) (i : ℕ) :
@@ -10142,6 +10203,31 @@ private theorem step_band_of_guard (h : Setting config checks g split fin pulled
     h.guard (fromFin.append toPulled) h.early (Nat.le_succ _) (pre.snoc step) wEarly
     (by omega) pulledOk read
 
+/-- The sync debits of any keys over a run from the finalized block fit the window's envelope.
+
+The run ends within one epoch of R's, and its events are read at R's epoch.
+
+The seats of the window debit at most its slots' envelopes, one for each epoch to the run's end. -/
+private theorem syncDebits_window_le (h : Setting config checks g split fin pulled anc counted V)
+    {e : BeaconState preset fork} (run : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
+    (within : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {events : List (BalanceEvent preset)}
+    (replayed : run.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (S : Finset ValidatorIndex) :
+    ∑ v ∈ S, (events.map (syncDebit v.toNat)).sum ≤
+      ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch fin).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+          PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat := by
+  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      run.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
+        2 * T.toNat ≤ 3 * pulledTotal.toNat :=
+    step_band_of_guard h run within pulledOk
+  have debits := (PinSplit5.Run.syncDebits_le run h.fulu h.early (getCurrentEpoch pulled).toNat
+    replayed pulledTotal.toNat band (S.image fun v : ValidatorIndex => v.toNat)).1
+  rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at debits
+  rwa [pulledOk]
+
 /-- The keys whose sync debits from the finalized state exceed `newKeySlack` are at most the seats.
 
 The sync debits of any keys over the run from the finalized state to C's state fit one envelope.
@@ -10161,18 +10247,7 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
       (events.map (syncDebit v.toNat)).sum) :
     B.card ≤ (pinTerms config pulled anc fin).newKeySeats := by
   classical
-  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
-  have near := h.near
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      (fromFin.append tailC).Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
-        2 * T.toNat ≤ 3 * pulledTotal.toNat :=
-    step_band_of_guard h (fromFin.append tailC) near pulledOk
-  have debits := (PinSplit5.Run.syncDebits_le (fromFin.append tailC) h.fulu h.early
-    (getCurrentEpoch pulled).toNat replayed pulledTotal.toNat band
-    (B.image fun v : ValidatorIndex => v.toNat)).1
-  have covered := sum_toNat_le (S := B) (P := B.image fun v : ValidatorIndex => v.toNat)
-    (fun i => (events.map (syncDebit i)).sum) fun v member => Finset.mem_image_of_mem _ member
+  have debits := syncDebits_window_le h (fromFin.append tailC) h.near replayed B
   have each : B.card * ((pinTerms config pulled anc fin).newKeySlack + 1) ≤
       ∑ v ∈ B, (events.map (syncDebit v.toNat)).sum := by
     have := Finset.card_nsmul_le_sum B
@@ -10184,13 +10259,11 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
           PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat /
             max 1 (pinTerms config pulled anc fin).newKeySlack := rfl
-  have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
-    rw [pulledOk]
-    rfl
-  rw [seatsEq, totalEq, Nat.le_div_iff_mul_le (lt_max_of_lt_left Nat.one_pos)]
+  rw [seatsEq, Nat.le_div_iff_mul_le (lt_max_of_lt_left Nat.one_pos)]
   have epochs : (getCurrentEpoch counted).toNat + 1 - (getCurrentEpoch fin).toNat ≤
-      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
-  have window := Nat.mul_le_mul_right (PinSplit5.syncEnvelope preset pulledTotal.toNat)
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by have := h.near; omega
+  have window := Nat.mul_le_mul_right
+    (PinSplit5.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat)
     (Nat.mul_le_mul_right preset.SYNC_COMMITTEE_SIZE.toNat
       (Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat epochs))
   have unit : max 1 (pinTerms config pulled anc fin).newKeySlack ≤
@@ -10198,7 +10271,6 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
   calc B.card * max 1 (pinTerms config pulled anc fin).newKeySlack
       ≤ B.card * ((pinTerms config pulled anc fin).newKeySlack + 1) := Nat.mul_le_mul_left _ unit
     _ ≤ _ := each
-    _ ≤ _ := covered
     _ ≤ _ := debits
     _ ≤ _ := by simpa [Nat.mul_assoc, Nat.mul_comm, Nat.mul_left_comm] using window
 
@@ -14320,6 +14392,127 @@ private theorem bud_units (h : Setting config checks g split fin pulled anc coun
         3 * (pinTerms config pulled anc fin).consolidationsXCount +
         3 * (pinTerms config pulled anc fin).slashedR) := Nat.mul_le_mul_left _ key
     _ = _ := by ring
+
+/-- The arithmetic of the sync leak: the debited increments `A` of all keys fit `D` at `inc` each.
+
+Three increments of a key fit two of the window's, since `D / (inc - 1)` bounds them.
+
+The floors of the keys add up to at most the floor of their sum. -/
+private theorem leak_arith (dF P X Q D inc A F S R SL Sig : ℕ) (hinc : 1 < inc)
+    (debits : inc * A ≤ D) (floors : F ≤ inc * A * X / Q) (count : S ≤ R)
+    (keys : Sig ≤ dF * (3 * P * A + F) + S * SL) :
+    3 * Sig ≤ 3 * dF * (2 * P * (2 * D / (inc - 1) + 1) + 2 * D * X / Q + 1) + 3 * (R * SL) := by
+  have within : A ≤ D / (inc - 1) := (Nat.le_div_iff_mul_le (by omega)).mpr
+    (le_trans (Nat.mul_le_mul_left _ (Nat.sub_le _ _)) (by rw [Nat.mul_comm]; exact debits))
+  have double := Nat.mul_div_le_mul_div_assoc 2 D (inc - 1)
+  have three : 3 * P * A ≤ 2 * P * (2 * D / (inc - 1) + 1) :=
+    calc 3 * P * A = P * (3 * A) := by ring
+      _ ≤ P * (2 * (2 * D / (inc - 1) + 1)) := Nat.mul_le_mul_left _ (by omega)
+      _ = _ := by ring
+  have rounded : F ≤ 2 * D * X / Q := floors.trans (Nat.div_le_div_right (by
+    calc inc * A * X ≤ D * X := Nat.mul_le_mul_right _ debits
+      _ ≤ 2 * D * X := Nat.mul_le_mul_right _ (by omega)))
+  have := Nat.mul_le_mul_left dF (Nat.add_le_add_right (Nat.add_le_add three rounded) 1)
+  have := Nat.mul_le_mul_right SL count
+  nlinarith
+
+/-- A key's penalty on R's branch is at most one increment, and only a slashed key has one. -/
+private theorem slashW_le (h : Setting config checks g split fin pulled anc counted V) (i : ℕ) :
+    slashW (pinTerms config pulled anc fin) i ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+      (if (pinTerms config pulled anc fin).slashedRB i = true then 1 else 0) := by
+  unfold slashW
+  split_ifs
+  · rw [Nat.mul_one]
+    exact (Nat.le_add_right _ _).trans h.facts.slashBand
+  · exact Nat.zero_le _
+
+/-- The leak induced by the counted keys' sync debits fits `syncLeak` and the slashed keys' leak.
+
+The envelope of a counted key reads its debits and penalty in whole increments.
+
+A key's induced leak is that of its debited increments and of its penalty's increment.
+
+The weights are at most three, and the debited increments of all keys fit the window's envelope.
+
+The keys that R slashed after the finalized epoch are at most `slashedR`. -/
+private theorem syncLeak_of_envelope (h : Setting config checks g split fin pulled anc counted V)
+    (perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (envelope : ∀ v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted,
+      ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+        (pinTerms config pulled anc fin).ebUp v.toNat + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+          ((syncD eventsF v.toNat + syncD events v.toNat +
+              slashW (pinTerms config pulled anc fin) v.toNat) /
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :
+    (∑ v ∈ (K4 pulled counted V), inducedR (pinTerms config pulled anc fin) (fromFin.append tail)
+          v.toNat) +
+      3 * (∑ v ∈ (K5 counted V), inducedR (pinTerms config pulled anc fin) (fromFin.append tail)
+          v.toNat) +
+      (∑ v ∈ (K6 pulled counted), inducedR (pinTerms config pulled anc fin) (fromFin.append tail)
+          v.toNat) ≤
+      (pinTerms config pulled anc fin).syncLeak +
+        3 * ((pinTerms config pulled anc fin).slashedR *
+          slashLeak config fork (pinTerms config pulled anc fin)) := by
+  classical
+  obtain ⟨d45, d46, d56, -, -, -⟩ := classes_disjoint h
+  have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    have := h.facts.incrementSize
+    omega
+  -- the abbreviations of the pin's terms
+  obtain ⟨K, hK⟩ : ∃ K, K = K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted := ⟨_, rfl⟩
+  obtain ⟨a, ha⟩ : ∃ a : ValidatorIndex → ℕ, ∀ v, a v = (syncD eventsF v.toNat +
+    syncD events v.toNat) / preset.EFFECTIVE_BALANCE_INCREMENT.toNat := ⟨_, fun _ => rfl⟩
+  obtain ⟨s, hs⟩ : ∃ s : ValidatorIndex → ℕ, ∀ v, s v =
+    if (pinTerms config pulled anc fin).slashedRB v.toNat = true then 1 else 0 := ⟨_, fun _ => rfl⟩
+  have weights := weighted_le (fun v : ValidatorIndex =>
+    inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) d45 d46 d56
+  rw [← hK] at weights
+  have total := Finset.sum_le_sum fun v (member : v ∈ K) => by
+    refine inducedR_le config pulled anc fin incPos perPos _ v.toNat (a v) (s v)
+      (by rw [hs]; split_ifs <;> omega) fun z inPath => (envelope v (hK ▸ member) z inPath).trans ?_
+    refine Nat.add_le_add_left (Nat.mul_le_mul_left _ ?_) _
+    have within := slashW_le h v.toNat
+    rw [← hs] at within
+    calc _ ≤ (syncD eventsF v.toNat + syncD events v.toNat +
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat * s v) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
+          Nat.div_le_div_right (Nat.add_le_add_left within _)
+      _ = a v + s v := by
+          rw [Nat.add_mul_div_left _ _ incPos, ha]
+  rw [Finset.sum_add_distrib, ← Finset.mul_sum, Finset.sum_add_distrib, ← Finset.mul_sum,
+    ← Finset.sum_mul] at total
+  have appended := DirectSafety.Apriori.Internal.balanceEvents_append fromFin tail _ replayedF
+    replayed
+  have epochs : (getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch fin).toNat ≤
+      (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
+  have hA := (show preset.EFFECTIVE_BALANCE_INCREMENT.toNat * ∑ v ∈ K, a v ≤
+      ∑ v ∈ K, ((eventsF ++ events).map (syncDebit v.toNat)).sum by
+    rw [Finset.mul_sum]
+    refine Finset.sum_le_sum fun v _ => ?_
+    rw [ha, List.map_append, List.sum_append]
+    exact Nat.mul_div_le _ _).trans
+    ((syncDebits_window_le h (fromFin.append tail) (Nat.le_succ _) appended K).trans
+      (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ epochs))))
+  have hS : ∑ v ∈ K, s v ≤ (pinTerms config pulled anc fin).slashedR := by
+    refine Nat.le_of_mul_le_mul_left (le_trans (le_of_eq ?_)
+      (slashR_le config pulled anc fin K)) incPos
+    rw [Finset.mul_sum]
+    exact Finset.sum_congr rfl fun v _ => by unfold slashR; rw [hs]; split_ifs <;> simp
+  have floors := (DirectSafety.Apriori.Internal.sum_div_le K
+    (fun v => preset.EFFECTIVE_BALANCE_INCREMENT.toNat * a v *
+    ((pinTerms config pulled anc fin).scoreMaxFin +
+      (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat))
+    (config.INACTIVITY_SCORE_BIAS.toNat *
+      (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)).trans
+    (Nat.div_le_div_right (le_of_eq (by rw [← Finset.sum_mul, ← Finset.mul_sum])))
+  have hc : 1 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    have := h.facts.incrementSize
+    omega
+  exact weights.trans (leak_arith _ _ _ _ _ _ _ _ _ _ _ _ hc hA floors hS total)
 
 /-- The leak that the counted keys' sync debits on R's branch induce, at their weights.
 
