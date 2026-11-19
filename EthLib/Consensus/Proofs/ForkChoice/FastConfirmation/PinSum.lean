@@ -30,6 +30,7 @@ import EthLib.Consensus.Proofs.Transition.StateTransition
 import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
+import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.FirstDrop
 import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
@@ -2925,18 +2926,6 @@ private theorem key_stay {fin pulled counted : BeaconState preset fork}
   · have after : (getCurrentEpoch fin).toNat < (getCurrentEpoch counted).toNat := by omega
     exact .inr ⟨afterC after, ceilC⟩
 
-/-- At a state of a run from genesis, a key's effective balance is a whole number of increments. -/
-private theorem effective_aligned {g x : ForkedBeaconState preset}
-    (run : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
-    (aligned : MaxEffectiveBalancesAligned preset) (i : ℕ) :
-    effectiveAt x i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-  have whole := (run.invariant genesis.invariant).aligned aligned
-  cases found : x.state.validators.data[i]? with
-  | none => simp [effectiveAt, found]
-  | some v =>
-    have := congrArg UInt64.toNat (whole v (Array.mem_of_getElem? found))
-    simpa [effectiveAt, found, UInt64.toNat_mod] using this
-
 /-- A key's effective balance on C's branch is at most the cap that `capFor` reads. -/
 private theorem key_capped {g : ForkedBeaconState preset}
     {counted : BeaconState preset fork} (run : Run config checks g ⟨fork, counted⟩)
@@ -2987,7 +2976,9 @@ private theorem key_rise_main {g : ForkedBeaconState preset}
           effectiveAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i) + S + U :=
   rise_arith incPos
     (key_stay rC rR early fulu later i inside Bc capHigh Bp capP balanceC capC balanceR capR)
-    (effective_aligned (shared.append rC) genesis maxAligned i) capped ceiling slack
+    (DirectSafety.Apriori.Internal.FloorTrace.effective_aligned (shared.append rC) genesis
+      maxAligned i)
+    capped ceiling slack
 
 /-- The penalty rate of a rewards pass at a state of a run from the finalized state is at most the
 pin's leak rate at the key's effective balance there. -/
@@ -3012,7 +3003,9 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
   have toP := fromFin.append toPulled
   have aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣
       effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) v :=
-    Nat.dvd_of_mod_eq_zero (effective_aligned (shared.append toM) h.genesis h.aligned v)
+    Nat.dvd_of_mod_eq_zero
+      (DirectSafety.Apriori.Internal.FloorTrace.effective_aligned (shared.append toM) h.genesis
+        h.aligned v)
   have bandTotal := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
     electra h.guard toM h.early inside toP h.early (Nat.le_succ _) totalOk pulledOk
   have band : 2 * T.toNat ≤ 3 * activeBalanceTotal m := by
