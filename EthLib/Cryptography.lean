@@ -18,6 +18,8 @@ public import EthLib.Cryptography.Ethash
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Montgomery.Fin
 public import EthLib.Cryptography.BaseField
+public import EthLib.Cryptography.BinaryField
+public import EthLib.Cryptography.AdditiveCode
 public import EthLib.Cryptography.X25519
 public import EthLib.Cryptography.ChaCha20Poly1305
 public import EthLib.Cryptography.Keystore
