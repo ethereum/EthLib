@@ -4577,15 +4577,18 @@ private theorem slot_noSync {x y : ForkedBeaconState preset} (electra : .pectra 
       (fun _ member _ _ computed => replay_stage_noSync member computed)
     exact quiet (fun _ member => by cases member)
 
-/-- A slot step debits no key for the sync committee. -/
+/-- A slot step neither debits nor credits a key for the sync committee. -/
 private theorem slot_syncDebit_zero {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok : Step config checks x y).balanceEvents = .ok events) (i : ℕ) :
-    (events.map (syncDebit i)).sum = 0 :=
-  List.sum_eq_zero fun v member => by
-    obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
-    simp [syncDebit, slot_noSync electra ok early replayed e inside]
+    (events.map (syncDebit i)).sum = 0 ∧ (events.map (syncCredit i)).sum = 0 :=
+  ⟨List.sum_eq_zero fun v member => by
+      obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
+      simp [syncDebit, slot_noSync electra ok early replayed e inside],
+    List.sum_eq_zero fun v member => by
+      obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
+      simp [syncCredit, slot_noSync electra ok early replayed e inside]⟩
 
 /-- The sync debits of a run fit the committee size times the envelope for each block of the run. -/
 private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
@@ -4618,7 +4621,8 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
       simp only [List.map_append, List.sum_append, Finset.sum_add_distrib]
       cases step with
       | slot ok =>
-        have zero := slot_syncDebit_zero (Nat.le_trans (by decide) fuluMiddle) ok early addedOk
+        have zero i :=
+          (slot_syncDebit_zero (Nat.le_trans (by decide) fuluMiddle) ok early addedOk i).1
         simpa [zero, Run.blockCount] using priorBound
       | @block fork before after engine signed due ok =>
         have altair : Fork.altair ≤ fork :=
