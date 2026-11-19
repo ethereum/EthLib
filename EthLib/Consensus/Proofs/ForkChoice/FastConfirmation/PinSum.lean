@@ -1870,13 +1870,15 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
   simp only [pulledOk] at pqOk
   rw [pqOk]
   simp only [Except.toOption, Option.getD_some] at pqOk ⊢
-  rw [toNat_getBaseRewardPerIncrement pqOk]
   have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
       if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
       else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
     split <;> simp [UInt64.toNat_div]
-  simp only [quarter, Nat.le_refl]
+  have perIncrement := toNat_getBaseRewardPerIncrement pqOk
+  rw [quarter] at perIncrement
+  refine Nat.le_of_eq ?_
+  rw [perIncrement]
 
 /-- The per-key core of the rise.
 
