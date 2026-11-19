@@ -10481,7 +10481,7 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       exact slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle |>.trans
         (by omega)
 
-/-- A key of `K6` beyond R's registry holds the activation reserve at a state of C's run.
+/-- A key active at C and absent at the split holds the activation reserve at a state of C's run.
 
 The run from the split reaches that state first, and then C.
 
@@ -10495,12 +10495,13 @@ The key is idle before that state, so its balance is at most the credits that th
 private theorem created_start (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {v : ValidatorIndex} (member : v ∈ K6 pulled counted)
-    (created : pulled.validators.data.size ≤ v.toNat) :
+    {v : ValidatorIndex} (member : v ∈ activeVoters counted)
+    (absent : split.validators.data.size ≤ v.toNat) :
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧
       z.fork < .glamsterdam ∧ z.fork ≤ fork ∧
       (getCurrentEpoch z.state).toNat ≤ (getCurrentEpoch counted).toNat ∧
+      v.toNat < z.state.validators.data.size ∧
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤ actualBalanceAt z v.toNat ∧
       effectiveAt z v.toNat ≤ actualBalanceAt z v.toNat + preset.downwardBand ∧
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z v.toNat ∧
@@ -10511,17 +10512,14 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
   classical
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   -- The key is active at C and absent at the split.
-  obtain ⟨w, foundC, activeC⟩ := active_of_activeVoters h.early (Finset.mem_filter.mp member).1
+  obtain ⟨w, foundC, activeC⟩ := active_of_activeVoters h.early member
   have activeAt : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
     isActiveAt_eq_true_iff.mpr ⟨w, foundC, activeC⟩
-  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
-    registryGrows_of_chainSteps toPulled.chainSteps
   have splitAbsent : split.validators.data[v.toNat]? = none :=
-    Array.getElem?_eq_none (by omega)
+    Array.getElem?_eq_none absent
   have pending : ∀ u, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[v.toNat]? =
       some u → (getCurrentEpoch (⟨fork, split⟩ : ForkedBeaconState preset).state).toNat + 1 <
         u.activationEpoch.toNat := fun u found => by
@@ -10555,7 +10553,8 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
     simp only [actualBalanceAt, Array.getElem?_eq_none (show
       split.balances.data.size ≤ v.toNat by omega), Option.map_none,
       Option.getD_none]
-  refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, funded, hysteresis, reserve, ?_⟩
+  refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted,
+    (Array.getElem?_eq_some_iff.mp found0).1, funded, hysteresis, reserve, ?_⟩
   exact key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega)
     (fun m run w found assigned => by
       obtain ⟨later, foundLater, life⟩ := run.registryLifecycle.validators v.toNat w found
@@ -10596,8 +10595,11 @@ private theorem created_credited (h : Setting config checks g split fin pulled a
       highC tailC).1 ≤ consAmt eventsC v.toNat :=
     scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC
   rw [consZero] at consScan
-  obtain ⟨z, pre, post, splitEq, -, -, -, funded, -, -, walk⟩ :=
-    created_start h tailC highC endEpochC member created
+  obtain ⟨toPulled⟩ := h.toPulled
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  obtain ⟨z, pre, post, splitEq, -, -, -, -, funded, -, -, walk⟩ :=
+    created_start h tailC highC endEpochC (Finset.mem_filter.mp member).1 (by omega)
   have positive : 0 < preset.MAX_EFFECTIVE_BALANCE.toNat := by
     have newKey := h.facts.newKey .fusaka
     have size := h.facts.incrementSize
