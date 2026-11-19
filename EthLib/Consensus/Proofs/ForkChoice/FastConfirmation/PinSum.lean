@@ -1123,6 +1123,97 @@ private theorem key_floorR (h : Setting config checks g split fin pulled anc cou
   exact key_floorR_from h fromFin tail high endEpoch replayed i val initial unslashed stays
     retained
 
+/-- C's balance of a key that C may slash falls only by its debit events and one slashing penalty.
+
+The floor starts from the smaller of the key's balance at the split and its largest balance.
+
+The key is unslashed at the split, and its effective balance stays at most `top` along C's run.
+
+The slashing penalty is then at most `top` over the slashing quotient, whenever C slashes the key.
+
+The guards of the floor trace are `floor_guards`, from the setting's guard at the finalized block.
+
+Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed.
+
+No upgrade runs from Fulu, so no step records a crossing. -/
+private theorem slashed_floorC (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (i : ValidatorIndex) (val : Validator)
+    (initial : split.validators.data[i.toNat]? = some val) (unslashed : val.slashed = false)
+    (activated : val.activationEpoch ≠ FAR_FUTURE_EPOCH) (top : ℕ)
+    (envelope : ∀ z ∈ tailC.balancePath, effectiveAt z i.toNat ≤ top)
+    (retained : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
+      (step : Step config checks m n) (post : Run config checks n ⟨fork, counted⟩),
+      (pre.snoc step).append post = tailC → ∀ w, n.state.validators.data[i.toNat]? = some w →
+      highC + 1 < w.exitEpoch.toNat) :
+    min (actualBalanceAt ⟨fork, split⟩ i.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat ≤
+      actualBalanceAt ⟨fork, counted⟩ i.toNat +
+        (eventsC.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (eventsC.map (syncDebit i.toNat)).sum +
+        (eventsC.map (DirectSafety.Apriori.Internal.floorPartialDebit i)).sum +
+        top / (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨positive, guards⟩ := floor_guards h fromFin (y := counted) h.near
+  have member : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m)
+      (step : Step config checks m n) (post : Run config checks n ⟨fork, counted⟩),
+      (pre.snoc step).append post = tailC → m ∈ tailC.balancePath := by
+    intro m n pre step post cut
+    obtain ⟨front, atEnd⟩ := Run.balancePath_last pre
+    have path := Run.balancePath_append (pre.snoc step) post
+    rw [cut] at path
+    rw [path]
+    simp [Run.balancePath, atEnd]
+  have start : effectiveAt ⟨fork, split⟩ i.toNat ≤ top := by
+    obtain ⟨rest, atHead⟩ := Run.balancePath_head tailC
+    exact envelope _ (by rw [atHead]; exact List.mem_cons_self)
+  obtain ⟨last, trace, balance, debt, -, w, final, -, -, -, ceiling, -⟩ :=
+    DirectSafety.Apriori.Internal.FloorTrace.run_of_le_cap_general (toFin.append fromFin) tailC
+      h.genesis h.caps h.delay h.early highC endEpochC i val initial activated
+      (min (actualBalanceAt ⟨fork, split⟩ i.toNat)
+        (withdrawalMaxEffectiveBalance preset fork val).toNat) top _
+      (Nat.min_le_right _ _) positive
+      (fun pre step post cut w found =>
+        ⟨retained pre step post cut w found,
+          ⟨fun _ => (guards pre step post).1, fun s => absurd s (by simp [unslashed])⟩,
+          (guards pre step post).2⟩)
+      replayedC
+  obtain ⟨-, below⟩ := ceiling top start fun pre step post cut =>
+    envelope _ (member pre step post cut)
+  have floor := DirectSafety.Apriori.Internal.FloorTrace.balance_floor_general trace
+    (by simp)
+  have penalty : last.slashedHigh.elim 0 (fun s =>
+      top / DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
+          (getCurrentEpoch pulled).toNat) + (s - top)) ≤
+      top / DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+        (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩
+          (getCurrentEpoch pulled).toNat) := by
+    cases flag : last.slashedHigh with
+    | none => exact Nat.zero_le _
+    | some s =>
+      have capped := below s flag
+      simp only [Option.elim]
+      omega
+  have splitDebit : (eventsC.map (DirectSafety.Apriori.Internal.floorPenaltyDebit i.toNat)).sum =
+      (eventsC.map (DirectSafety.Apriori.Internal.penaltyDebit i.toNat)).sum +
+        (eventsC.map (syncDebit i.toNat)).sum := by
+    rw [← List.sum_map_add]
+    rfl
+  rw [balance, debt, splitDebit] at floor
+  have same : DirectSafety.Apriori.minSlashingPenaltyQuotient preset
+      (DirectSafety.Apriori.preElectraEpochs config ⟨fork, split⟩ (getCurrentEpoch pulled).toNat) =
+        (parameters preset fork).MIN_SLASHING_PENALTY_QUOTIENT.toNat :=
+    DirectSafety.Apriori.Internal.slashing_quotient_of_electra (config := config)
+      (checks := checks) (high := (getCurrentEpoch pulled).toNat)
+      (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) electra
+  rw [← same]
+  omega
+
 /-! ### One key's reward in an epoch pass -/
 
 /-- The reward credits of a list of events are those of the events, read at one position. -/
