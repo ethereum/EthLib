@@ -263,61 +263,75 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
     (holds : PendingConsolidationsOrdered config (getCurrentEpoch s).toNat s)
     (ok : epochBalanceReplay (config := config) (checks := checks) s = .ok post) :
     (∀ e ∈ post.2, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
-    (BalancesMatch s → ∀ e ∈ post.2, e.source = .deposits →
+    (BalancesMatch s → ExitsOrdered s → ∀ e ∈ post.2, e.source = .deposits →
       ∃ (electra : .pectra ≤ fork) (u v : BeaconState preset fork),
-        BalancesMatch u ∧ processPendingDeposits config checks u electra = .ok v ∧
+        BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u post.1 ∧
+          processPendingDeposits config checks u electra = .ok v ∧
           e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩) := by
   let Settled (pre : BalanceReplay preset fork) : Prop :=
     PendingConsolidationsOrdered config (getCurrentEpoch pre.1).toNat pre.1 ∧
       (∀ e ∈ pre.2, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
-      (BalancesMatch s → BalancesMatch pre.1 ∧ ∀ e ∈ pre.2, e.source = .deposits →
-        ∃ (electra : .pectra ≤ fork) (u v : BeaconState preset fork),
-          BalancesMatch u ∧ processPendingDeposits config checks u electra = .ok v ∧
-            e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩)
+      (BalancesMatch s → ExitsOrdered s → BalancesMatch pre.1 ∧ ExitsOrdered pre.1 ∧
+        ∀ e ∈ pre.2, e.source = .deposits →
+          ∃ (electra : .pectra ≤ fork) (u v : BeaconState preset fork),
+            BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u pre.1 ∧
+              processPendingDeposits config checks u electra = .ok v ∧
+              e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩)
   -- A stage moves the state along its edge and records events that are not deposits.
   have moved {k : EpochStage} {pre : BalanceReplay preset fork} {u : BeaconState preset fork}
       (added : List (BalanceEvent preset)) (held : Settled pre)
       (edge : EpochStage.Edge config checks k pre.1 u)
       (keeps : BalancesMatch pre.1 → BalancesMatch u)
+      (ord : ExitsOrdered pre.1 → ExitsOrdered u)
       (quiet : ∀ e ∈ added, e.source ≠ .deposits) : Settled (u, pre.2 ++ added) := by
-    refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_, fun matched => ?_⟩
+    refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_,
+      fun matched ordered => ?_⟩
     · rcases List.mem_append.mp mem with mem | mem
       · exact held.2.1 e mem deposit
       · exact absurd deposit (quiet e mem)
-    · obtain ⟨before, sites⟩ := held.2.2 matched
-      refine ⟨keeps before, fun e mem deposit => ?_⟩
+    · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+      refine ⟨keeps before, ord beforeOrd, fun e mem deposit => ?_⟩
       rcases List.mem_append.mp mem with mem | mem
-      · exact sites e mem deposit
+      · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+        exact ⟨electra, a, b, ma, oa, la.trans edge.registryLifecycle, rest⟩
       · exact absurd deposit (quiet e mem)
   -- A carried stage moves the state along its edge and records nothing.
   have carried {k : EpochStage} {action : BeaconState preset fork → Except TransitionError _}
       {pre next : BalanceReplay preset fork} (held : Settled pre)
       (edge : ∀ {u}, action pre.1 = .ok u → EpochStage.Edge config checks k pre.1 u)
       (keeps : ∀ {u}, action pre.1 = .ok u → BalancesMatch pre.1 → BalancesMatch u)
+      (ord : ∀ {u}, action pre.1 = .ok u → ExitsOrdered pre.1 → ExitsOrdered u)
       (step : carryBalance action pre = .ok next) : Settled next := by
     simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
     obtain ⟨u, computed, rfl⟩ := step
-    have settled := moved [] held (edge computed) (keeps computed) (fun _ mem => by cases mem)
+    have settled := moved [] held (edge computed) (keeps computed) (ord computed)
+      (fun _ mem => by cases mem)
     rwa [List.append_nil] at settled
   have done : Settled post := by
     refine (epochBalanceReplay_trace ok).transport (fun a b => Settled a → Settled b)
       (fun _ => id) (fun one two => two ∘ one) ?_
-      ⟨holds, fun _ mem => (by cases mem), fun matched => ⟨matched, fun _ mem => (by cases mem)⟩⟩
+      ⟨holds, fun _ mem => (by cases mem),
+        fun matched ordered => ⟨matched, ordered, fun _ mem => (by cases mem)⟩⟩
     intro k member pre next step held
     cases k <;> simp only [epochReplayAction] at step
     case justification =>
       exact carried (k := .justification) held id
         (fun ok => balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization ok))
+        (fun ok o => by
+          simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps ok).2.2.2.2.2.1]
+            using o)
         step
     case registry =>
       exact carried (k := .registry) held id
-        (fun ok => (frame_processRegistryUpdates ok).balancesMatch) step
+        (fun ok => (frame_processRegistryUpdates ok).balancesMatch)
+        (fun ok o => (frame_processRegistryUpdates ok).exitsOrdered o) step
     case inactivity =>
       split at step
       · rename_i present
         exact carried (k := .inactivity) held (fun computed => by
           simp only [EpochStage.Edge, present, ↓reduceDIte]
-          exact computed) (fun ok => (frame_processInactivityUpdates ok).balancesMatch) step
+          exact computed) (fun ok => (frame_processInactivityUpdates ok).balancesMatch)
+          (fun ok o => (frame_processInactivityUpdates ok).exitsOrdered o) step
       · cases step
         exact held
     case eth1Reset =>
@@ -325,7 +339,8 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
       · rename_i present
         exact carried (k := .eth1Reset) held (fun computed => by
           simp only [EpochStage.Edge, present, ↓reduceDIte]
-          exact computed) (fun ok => (frame_processEth1DataReset ok).balancesMatch) step
+          exact computed) (fun ok => (frame_processEth1DataReset ok).balancesMatch)
+          (fun ok o => (frame_processEth1DataReset ok).exitsOrdered o) step
       · cases step
         exact held
     case rewards =>
@@ -337,15 +352,16 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
         have sizes := sameSizes_increaseBalance raised
         obtain ⟨_, set⟩ := increaseBalance_ok raised
         obtain ⟨_, rfl⟩ := setBalance_ok set
-        refine ⟨held.1, fun e mem deposit => ?_, fun matched => ?_⟩
+        refine ⟨held.1, fun e mem deposit => ?_, fun matched ordered => ?_⟩
         · rcases List.mem_append.mp mem with mem | mem
           · exact held.2.1 e mem deposit
           · rw [List.mem_singleton.mp mem] at deposit
             cases deposit
-        · obtain ⟨before, sites⟩ := held.2.2 matched
-          refine ⟨balancesMatch_of_sameSizes sizes before, fun e mem deposit => ?_⟩
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+          refine ⟨balancesMatch_of_sameSizes sizes before, beforeOrd, fun e mem deposit => ?_⟩
           rcases List.mem_append.mp mem with mem | mem
-          · exact sites e mem deposit
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans (.of_data rfl), rest⟩
           · rw [List.mem_singleton.mp mem] at deposit
             cases deposit
       · simp only [recordBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
@@ -353,22 +369,24 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
         obtain ⟨_, _, u, lowered, rfl⟩ := ok
         have sizes := sameSizes_decreaseBalance lowered
         obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        refine ⟨held.1, fun e mem deposit => ?_, fun matched => ?_⟩
+        refine ⟨held.1, fun e mem deposit => ?_, fun matched ordered => ?_⟩
         · rcases List.mem_append.mp mem with mem | mem
           · exact held.2.1 e mem deposit
           · rw [List.mem_singleton.mp mem] at deposit
             rcases penalty with rfl | rfl <;> cases deposit
-        · obtain ⟨before, sites⟩ := held.2.2 matched
-          refine ⟨balancesMatch_of_sameSizes sizes before, fun e mem deposit => ?_⟩
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+          refine ⟨balancesMatch_of_sameSizes sizes before, beforeOrd, fun e mem deposit => ?_⟩
           rcases List.mem_append.mp mem with mem | mem
-          · exact sites e mem deposit
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans (.of_data rfl), rest⟩
           · rw [List.mem_singleton.mp mem] at deposit
             rcases penalty with rfl | rfl <;> cases deposit
     case slashings =>
       simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
       obtain ⟨_, _, u, slashed, rfl⟩ := step
       exact moved (k := .slashings) _ held slashed
-        (fun matched => (frame_processSlashings slashed).balancesMatch matched) (by simp)
+        (fun matched => (frame_processSlashings slashed).balancesMatch matched)
+        (fun o => (frame_processSlashings slashed).exitsOrdered o) (by simp)
     case pendingDeposits =>
       split at step
       · rename_i electra
@@ -378,18 +396,21 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
           simp only [EpochStage.Edge, electra, ↓reduceDIte]
           exact deposited
         refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_,
-          fun matched => ?_⟩
+          fun matched ordered => ?_⟩
         · rcases List.mem_append.mp mem with mem | mem
           · exact held.2.1 e mem deposit
           · rw [List.mem_singleton.mp mem]
             exact withdrawnConsolidationCredit_eq_zero_of_ordered held.1
-        · obtain ⟨before, sites⟩ := held.2.2 matched
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
           refine ⟨(frame_processPendingDeposits deposited).balancesMatch before,
+            (frame_processPendingDeposits deposited).exitsOrdered beforeOrd,
             fun e mem deposit => ?_⟩
           rcases List.mem_append.mp mem with mem | mem
-          · exact sites e mem deposit
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans edge.registryLifecycle, rest⟩
           · rw [List.mem_singleton.mp mem]
-            exact ⟨electra, pre.1, u, before, deposited, rfl, rfl⟩
+            exact ⟨electra, pre.1, u, before, beforeOrd, edge.registryLifecycle, deposited,
+              rfl, rfl⟩
       · cases step
         exact held
     case pendingConsolidations =>
@@ -400,11 +421,11 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
         exact moved (k := .pendingConsolidations) _ held
           (by simp only [EpochStage.Edge, electra, ↓reduceDIte]; exact consolidated)
           (fun matched => (frame_processPendingConsolidations consolidated).balancesMatch matched)
-          (by simp)
+          (fun o => (frame_processPendingConsolidations consolidated).exitsOrdered o) (by simp)
       · cases step
         exact held
     all_goals simp [EpochStage.prefixStages] at member
-  exact ⟨done.2.1, fun matched => (done.2.2 matched).2⟩
+  exact ⟨done.2.1, fun matched ordered => (done.2.2 matched ordered).2.2⟩
 
 /-- The epoch replay of an ordered state credits no withdrawable pending source.
 
@@ -422,7 +443,9 @@ A block deposit has no credit limit from Electra, and its credits are within tha
 
 A slot runs the epoch replay from an ordered state, and its upgrades record no deposit.
 
-A deposit event of a slot is the pending-deposit pass at a state with matching sizes. -/
+A deposit event of a slot is the pending-deposit pass at an ordered state with matching sizes.
+
+The registry of that state keeps its assigned epochs to the end of the slot. -/
 private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     {g x y : ForkedBeaconState preset} (shared : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g) (step : Step config checks x y)
@@ -434,7 +457,8 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     ∀ (across : advanceSlotAcross config checks x = .ok y), step = Step.slot across →
       (∀ e ∈ events, e.source = .deposits →
         ∃ (electra : .pectra ≤ x.fork) (u v : BeaconState preset x.fork),
-          BalancesMatch u ∧ processPendingDeposits config checks u electra = .ok v ∧
+          BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u y.state ∧
+            processPendingDeposits config checks u electra = .ok v ∧
             e.before = ⟨x.fork, u⟩ ∧ e.after = ⟨x.fork, v⟩) ∧
       ((∃ e ∈ events, e.source = .deposits) →
         (getCurrentEpoch y.state).toNat = (getCurrentEpoch x.state).toNat + 1) ∧
@@ -461,7 +485,7 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
     have crossed : ∀ e ∈ crossings, e.source ≠ .deposits := fun e mem deposit =>
       absurd ((upgradeBalanceReplay_crossing crossingOk e mem).symm.trans deposit) (by decide)
     obtain ⟨last, epochedOk⟩ | ⟨last, rfl⟩ := epochIfLast_cases epochedOk
-    · obtain ⟨_, _, epochEvents, replayOk, -⟩ :=
+    · obtain ⟨middle, updated, epochEvents, replayOk, updateOk, updatedValidators, -⟩ :=
         epochBalanceReplay_result cached epoched sourceEarly epochedOk
       rw [Step.balanceEvents_epoch_slot across cachedOk nextOk last replayOk advanceOk
         crossingOk] at ok
@@ -469,6 +493,23 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
       have matched : BalancesMatch cached :=
         (frame_processSlot cachedOk).balancesMatch
           (run_justified_separated shared genesis).1.balancesMatch
+      have exitsOrd : ExitsOrdered cached :=
+        (frame_processSlot cachedOk).exitsOrdered
+          (run_justified_separated shared genesis).1.exitsOrdered
+      have toEnd : RegistryLifecycle middle y.state := by
+        simp only [pure, Except.pure, Except.ok.injEq] at advancedEq
+        have epochedKept : RegistryLifecycle updated epoched :=
+          .of_data (congrArg (·.data) updatedValidators.symm)
+        have advancedKept : RegistryLifecycle epoched advanced := by
+          rw [← advancedEq]
+          exact .of_data rfl
+        have upgraded := processUpgrades_induction
+          (property := fun post => RegistryLifecycle advanced post.state)
+          (fun before ok => before.trans (registryLifecycle_upgradeNext ok)) (.refl advanced)
+          upgrades
+        exact (EpochStage.Edge.registryLifecycle (config := config) (checks := checks)
+          (k := .effectiveBalances) updateOk).trans
+          (epochedKept.trans (advancedKept.trans upgraded))
       have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
           cached := by
         obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
@@ -479,7 +520,9 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
         · exact (epochBalanceReplay_deposits ordered replayOk).1 e mem deposit
         · exact absurd deposit (crossed e mem)
       · rcases List.mem_append.mp mem with mem | mem
-        · exact (epochBalanceReplay_deposits ordered replayOk).2 matched e mem deposit
+        · obtain ⟨electra, a, b, ma, oa, la, rest⟩ :=
+            (epochBalanceReplay_deposits ordered replayOk).2 matched exitsOrd e mem deposit
+          exact ⟨electra, a, b, ma, oa, la.trans toEnd, rest⟩
         · exact absurd deposit (crossed e mem)
       · -- The epoch replay runs at the last slot of an epoch, which the slot then leaves.
         have remainder : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
@@ -503,8 +546,8 @@ private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
         rw [List.filter_append, List.length_append, none, Nat.add_zero]
         by_cases any : ∃ e ∈ epochEvents, e.source = .deposits
         · obtain ⟨e, mem, deposit⟩ := any
-          obtain ⟨electra, -⟩ := (epochBalanceReplay_deposits ordered replayOk).2 matched e mem
-            deposit
+          obtain ⟨electra, -⟩ := (epochBalanceReplay_deposits ordered replayOk).2 matched exitsOrd
+            e mem deposit
           exact epochReplay_deposit_count (Nat.le_trans (by decide) electra)
             (epochBalanceReplay_trace replayOk)
         · have none : (epochEvents.filter fun e => e.source = .deposits).length = 0 :=
@@ -540,7 +583,9 @@ private theorem stepBalanceEvents_withdrawnConsolidationCredit {checks : Signatu
     ∀ e ∈ events, e.source = .deposits → withdrawnConsolidationCredit e = 0 :=
   (stepBalanceEvents_deposits shared genesis step early delay ok).1 bounded
 
-/-- A slot step records at most one deposit event, a pending-deposit pass at an epoch's end. -/
+/-- A slot step records at most one deposit event, a pending-deposit pass at an epoch's end.
+
+The pass starts at an ordered state, whose registry keeps its assigned epochs to the slot's end. -/
 theorem Step.slot_deposit_site {checks : SignatureChecks} {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (across : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
@@ -548,7 +593,8 @@ theorem Step.slot_deposit_site {checks : SignatureChecks} {g x y : ForkedBeaconS
     {events : List (BalanceEvent preset)} (ok : (Step.slot across).balanceEvents = .ok events) :
     (∀ e ∈ events, e.source = .deposits →
       ∃ (electra : .pectra ≤ x.fork) (u v : BeaconState preset x.fork),
-        BalancesMatch u ∧ processPendingDeposits config checks u electra = .ok v ∧
+        BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u y.state ∧
+          processPendingDeposits config checks u electra = .ok v ∧
           e.before = ⟨x.fork, u⟩ ∧ e.after = ⟨x.fork, v⟩) ∧
     ((∃ e ∈ events, e.source = .deposits) →
       (getCurrentEpoch y.state).toNat = (getCurrentEpoch x.state).toNat + 1) ∧

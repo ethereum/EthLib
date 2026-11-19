@@ -1143,7 +1143,7 @@ private theorem step_deposit_keys {g : ForkedBeaconState preset}
           eventsOk
       have epochNext := ends any
       obtain ⟨e0, mem0, dep0⟩ := any
-      obtain ⟨electra, a, b, matched, deposited, before0, after0⟩ := sites e0 mem0 dep0
+      obtain ⟨electra, a, b, matched, -, -, deposited, before0, after0⟩ := sites e0 mem0 dep0
       obtain ⟨-, -, rises⟩ := pending_deposit_rises a b matched electra deposited
       have oneEpoch : (getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat = 1 := by
         omega

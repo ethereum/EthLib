@@ -81,7 +81,8 @@ Not yet released.
   `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period` makes the keys of the current committee, one period later, the keys of the next committee at the start.
   The pin's seat count reads it to bound the debited sync-committee seats of the two branches.
   `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
-  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes.
+  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes and ordered exits.
+  The registry of that state keeps its assigned epochs to the end of the slot.
   The slot ends an epoch, and it records at most one deposit event.
   Their reader is the count of the keys that a branch credits, in the pin reserve bound.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
