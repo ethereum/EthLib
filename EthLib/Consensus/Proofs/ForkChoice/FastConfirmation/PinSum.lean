@@ -16194,7 +16194,9 @@ R's rise closes it, up to the flows and the bands that pay the rounding.
 
 A key with no band has no credits, and its flows are at most its initial penalty and their gain.
 
-The cap enters only through `stay` and `cappedC`, which the cap arms prove.
+The cap enters only through `stay` and `cappedY`, which the cap arms prove.
+
+C's run may end at any state, so a prefix of it closes the same way.
 
 `cappedY` is the premise `capped` of `rise_close`, for a key on a low rate.
 
@@ -16208,7 +16210,8 @@ An arm with a frozen cap proves the cap alone, which is stronger. -/
 private theorem key_close (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    {ending : BeaconState preset fork}
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
     {eventsC events eventsF : List (BalanceEvent preset)} (v : ValidatorIndex)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true)
     (notWithdrawn : (pinTerms config pulled anc fin).withdrawnRB v.toNat = false) (P : ℕ)
@@ -16243,12 +16246,12 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         ((syncD eventsF v.toNat + syncD events v.toNat +
             slashW (pinTerms config pulled anc fin) v.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
-    (stay : balanceAt counted v.toNat = balanceAt pulled v.toNat ∨
-      (balanceAt counted v.toNat ≤ Bc + preset.downwardBand ∧
-        balanceAt counted v.toNat ≤ max (balanceAt fin v.toNat)
+    (stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
+      (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
+        balanceAt ending v.toNat ≤ max (balanceAt fin v.toNat)
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
-      balanceAt counted v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
+      balanceAt ending v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
         (Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) %
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (creditsLe : Cr ≤ credC tailC highC v.toNat + whistC tailC highC v.toNat +
@@ -16337,9 +16340,9 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
     rw [hBc, hHeq, Nat.mul_add (Df) _ _]
     omega
   -- the closing: R's rise, the flows, and the bands that pay the rounding
-  have alignedC : balanceAt counted v.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
+  have alignedC : balanceAt ending v.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
     FloorTrace.effective_aligned (toFin.append (fromFin.append tailC)) h.genesis h.aligned v.toNat
-  have atMax : balanceAt counted v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
+  have atMax : balanceAt ending v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
     PinSplit5.effectiveAt_le_capMax (toFin.append (fromFin.append tailC)) h.genesis h.caps h.early
       v.toNat
   -- the cap that `capFor` reads is the largest one off the low rate, and otherwise `cappedY`'s
@@ -16351,7 +16354,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
         (0 < slashW (pinTerms config pulled anc fin) v.toNat →
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U))) →
-      balanceAt counted v.toNat ≤
+      balanceAt ending v.toNat ≤
         capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U := by
     intro S U cases
     by_cases lowG : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -16372,9 +16375,9 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       omega
   have close : ∀ S U : ℕ, Bc ≤ H + S → (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
       (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) → balanceAt counted v.toNat ≤
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) → balanceAt ending v.toNat ≤
           capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U →
-      balanceAt counted v.toNat ≤
+      balanceAt ending v.toNat ≤
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
     fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
       alignedC (Nat.le_max_left _ _) stay cap ceiling slack
