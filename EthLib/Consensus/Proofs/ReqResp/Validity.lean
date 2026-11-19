@@ -192,7 +192,8 @@ theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config :
           computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot) := by
   have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
   simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.forkMatches,
-    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq]
+    lightClientForkMatches, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff,
+    beq_iff_eq]
   simp only [ResponseUpdate.period, UInt64.le_iff_toNat_le, limit, and_assoc]
 
 /-- In a valid response for light client updates by range, periods increase along the whole list.
@@ -216,8 +217,8 @@ theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Conf
       bootstraps.length ≤ 1 ∧
       ∀ bootstrap ∈ bootstraps, bootstrap.root = request ∧ Base.Fork.altair ≤ bootstrap.fork ∧
         bootstrap.fork = config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) := by
-  simp only [isValidLightClientBootstrapResponse, Bool.and_eq_true, decide_eq_true_eq,
-    List.all_eq_true, beq_iff_eq, and_assoc]
+  simp only [isValidLightClientBootstrapResponse, lightClientForkMatches, Bool.and_eq_true,
+    decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
 
 /-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 

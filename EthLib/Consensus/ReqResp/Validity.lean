@@ -82,6 +82,10 @@ The root of a bootstrap is the root of the beacon header of its header.
 
 That fork is the one that the context bytes of its chunk name.
 
+As for updates, the check compares forks, not digests.
+
+It does not check the header or the branch of the sync committee, which the light client checks.
+
 ## Sidecars by range
 
 From Deneb, a request names the blob sidecars of a range of slots.
@@ -258,11 +262,15 @@ def ResponseUpdate.ofUpdate {preset : Preset} {fork : Fork}
 def ResponseUpdate.period (preset : Preset) (update : ResponseUpdate) : UInt64 :=
   computeSyncCommitteePeriodAtSlot preset update.attestedSlot
 
+/-- Whether the fork of a light client chunk is the fork of the epoch of a slot, from Altair. -/
+def lightClientForkMatches (preset : Preset) (config : Config) (slot : Slot) (fork : Fork) :
+    Bool :=
+  .altair ≤ fork && fork == config.forkAtEpoch (computeEpochAtSlot preset slot)
+
 /-- Whether the fork of an update is the fork of the epoch of its attested header, from Altair. -/
 def ResponseUpdate.forkMatches (preset : Preset) (config : Config) (update : ResponseUpdate) :
     Bool :=
-  .altair ≤ update.fork &&
-    update.fork == config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)
+  lightClientForkMatches preset config update.attestedSlot update.fork
 
 /-- Whether the updates of a response are valid for a request for light client updates by range.
 
@@ -294,7 +302,7 @@ structure ResponseBootstrap where
 
 /-- What a response check reads from a light client bootstrap of a fork.
 
-It fails when the root of the header cannot be computed. -/
+It fails when the root of the beacon header cannot be computed. -/
 def ResponseBootstrap.ofBootstrap {preset : Preset} {fork : Fork}
     (bootstrap : LightClientBootstrap preset fork) : Except Err ResponseBootstrap := do
   let header := bootstrap.header.beacon
@@ -308,8 +316,8 @@ def isValidLightClientBootstrapResponse (preset : Preset) (config : Config) (req
     (bootstraps : List ResponseBootstrap) : Bool :=
   bootstraps.length ≤ 1 &&
     bootstraps.all (fun bootstrap =>
-      bootstrap.root == request && .altair ≤ bootstrap.fork &&
-        bootstrap.fork == config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot))
+      bootstrap.root == request &&
+        lightClientForkMatches preset config bootstrap.slot bootstrap.fork)
 
 /-- What a response check reads from a sidecar: the slot and root of its block, and its index.
 

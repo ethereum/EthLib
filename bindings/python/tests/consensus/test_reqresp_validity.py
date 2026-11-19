@@ -31,7 +31,8 @@ from raising import raises
 # - MAX_REQUEST_LIGHT_CLIENT_UPDATES is 128, and a sync committee period has 8192 slots.
 # - The periods of Altair, Deneb, Electra and Fulu start at 290, 1053, 1422 and 1607.
 #
-# The light client checks read the fork epochs and the length of a period, which minimal changes.
+# The light client checks read the fork epochs and the lengths of an epoch and a period.
+# The minimal preset and configuration change all three.
 # The minimal preset and configuration change none of the values that the other checks read.
 # The limits above and the number of columns and seats are the same as on mainnet.
 # So only the light client checks run under the name minimal.
@@ -353,8 +354,9 @@ def test_light_client_bootstrap_before_altair() -> None:
 
 
 def test_light_client_bootstrap_minimal() -> None:
-    # The minimal configuration leaves Altair at the far future epoch, so every epoch is Phase 0.
-    # So no bootstrap is valid there, while the empty response is.
+    # The minimal configuration puts every fork from Altair at the far future epoch.
+    # So the epoch of slot 0 is in Phase 0.
+    # No bootstrap is valid there, while the empty response is.
     protocol = _id("light_client_bootstrap")
     assert consensus.reqresp_is_valid_response("altair", protocol, C, [], name="minimal")
     for chunk_fork in ("phase0", "altair"):
