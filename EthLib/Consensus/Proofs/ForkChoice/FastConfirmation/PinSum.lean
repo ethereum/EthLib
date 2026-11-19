@@ -805,7 +805,9 @@ def syncF (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
 
 /-- One increment for a key slashed on R's branch after the finalized epoch.
 
-The initial penalty is at most one increment, and `branchR` charges `inc` for each such key. -/
+The effective-balance drop of R's initial penalty is at most one increment, by `slashBand`.
+
+`branchR` charges each such key `slashCharge`, at least one increment. -/
 def slashR (t : PinTerms preset) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0
 
