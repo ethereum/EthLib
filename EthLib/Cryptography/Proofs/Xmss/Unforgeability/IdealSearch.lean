@@ -461,6 +461,12 @@ theorem isQueryBoundP_node (pp : PublicParam) (layer : Layer) (level j : ℕ) :
   merkleNode_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
     (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
+/-- A build of a tree draws no base. -/
+theorem isQueryBoundP_build (pp : PublicParam) (layer : Layer) (level j : ℕ) :
+    IsQueryBoundP (build hashD pp prfD layer level j) IsRndQuery 0 :=
+  merkleBuild_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
+    (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
+
 /-- The path of a key draws no base. -/
 theorem isQueryBoundP_path (pp : PublicParam) (layer : Layer) (e : ℕ) :
     IsQueryBoundP (path hashD pp prfD layer e) IsRndQuery 0 :=
@@ -526,11 +532,10 @@ theorem failsAtMost_signDerived (Q : ℕ) (pp : PublicParam) (idx : LeafIndex) (
       (signDerived hashD prfD pp idx msg) := by
   unfold signDerived
   rw [two_mul]
-  refine FailsAtMost.bind (failsAtMost_signLayer Q pp .bottom _ _) fun r hr => ?_
-  rcases r with err | bottom
+  refine FailsAtMost.bind (failsAtMost_otsSign Q pp .bottom _ _) fun r hr => ?_
+  rcases r with _ | ⟨rho, y⟩
   · exact absurd rfl hr
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_pure _ _ _) fun bottom => ?_
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_node pp .bottom _ _) fun root => ?_
+  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build pp .bottom _ _) fun tree => ?_
   refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_signLayer Q pp .top _ _)
     fun r hr => ?_).mono_bound (add_zero _).le
   rcases r with err | top

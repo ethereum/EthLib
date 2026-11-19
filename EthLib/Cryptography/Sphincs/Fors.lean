@@ -112,25 +112,36 @@ def forsKey (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) : m Digest := do
 
 /-! ## Signing -/
 
-/-- The opening of tree `kappa` of instance `idx` at leaf `s`: its secret and its path.
+/-- Every node of tree `kappa` of instance `idx`, each computed once.
 
-```text
-    P_z = Y_{z, floor(s / 2^z) xor 1},   z < 10
-```
--/
+Its top value is the tree's root `Y^kappa_{a,0}`, and it holds the path of each leaf. -/
+def forsBuild (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES) :
+    m (Merkle.Built Digest) :=
+  Merkle.build (forsNodeHash H pkSeed idx kappa) (forsLeaves H pkSeed prf idx kappa)
+    ⟨FORS_HEIGHT, 0⟩
+
+/-- The opening of tree `kappa` of instance `idx` at leaf `s`, with the tree's root.
+
+The opening is the leaf's secret and its path `P_z = Y_{z, floor(s / 2^z) xor 1}`, for `z < 10`.
+
+One build of the tree gives both the path and the root. -/
 def treeOpen (pkSeed : PkSeed) (prf : Prf m) (idx : Nat) (kappa : Fin FORS_TREES)
-    (s : Fin (2 ^ FORS_HEIGHT)) : m TreeOpening := do
+    (s : Fin (2 ^ FORS_HEIGHT)) : m (TreeOpening × Digest) := do
   let secret ← forsSecret prf idx kappa s.val
-  let path ← Merkle.path (forsNodeHash H pkSeed idx kappa) (forsLeaves H pkSeed prf idx kappa)
-    FORS_HEIGHT s.val
-  return { secret, path }
+  let tree ← forsBuild H pkSeed prf idx kappa
+  return ({ secret, path := tree.path FORS_HEIGHT s.val }, tree.value)
 
-/-- `Fors.sign(idx, s)`: the opening of every tree, each at the leaf the digest picked for it.
+/-- `Fors.sign(idx, s)`: the opening of every tree, at the leaf the digest picked for it.
 
-It is FIPS 205's `fors_sign`, and the trees are opened in order, tree 0 first. -/
+It also gives `Fors.key(idx)`, `T_k` over the roots of the trees it built.
+
+Its openings are FIPS 205's `fors_sign`, and the trees are opened in order, tree 0 first. -/
 def forsSign (pkSeed : PkSeed) (prf : Prf m) (idx : Nat)
-    (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) : m (Vector TreeOpening FORS_TREES) :=
-  ofFnInOrder FORS_TREES fun kappa => treeOpen H pkSeed prf idx kappa leaves[kappa]
+    (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
+    m (Vector TreeOpening FORS_TREES × Digest) := do
+  let opened ← ofFnInOrder FORS_TREES fun kappa => treeOpen H pkSeed prf idx kappa leaves[kappa]
+  let key ← forsPkFromRoots H pkSeed idx (opened.map Prod.snd)
+  return (opened.map Prod.fst, key)
 
 /-! ## Recovering the key -/
 

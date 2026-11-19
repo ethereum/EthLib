@@ -249,7 +249,7 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
   have arrivalBound := (e.monotone_time later).trans bounded
   have finalRead := chain w receiver arrival arrival (le_refl _) arrivalBound
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas finalRead
+    Store.isAncestor_of_getCheckpointBlock finalRead
   -- The voter's head fits the finalized checkpoint, or the checkpoint descends from the root.
   by_cases fits : (∃ boundary,
         computeStartSlotAtEpoch preset ((e.world arrival).state w).finalizedCheckpoint.epoch =
@@ -296,7 +296,7 @@ private theorem blocks_or_justified_covers {Δ : ℕ} (sync : e.Synchronous Δ)
     refine .inl (.inr ⟨?_, fits⟩)
     have checkpoint := chain w receiver arrival endpoint later bounded
     obtain ⟨_, finalized, _, held, _, descends⟩ :=
-      Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
+      Store.isAncestor_of_getCheckpointBlock checkpoint
     exact Store.isAncestor_trans_of_lt preGloas held known descends covered
 
 /-- An honest duty vote is a sent message that signs its own data. -/
@@ -481,7 +481,7 @@ theorem Execution.latest_rank_of_voteAt {Δ : ℕ} (sync : e.Synchronous Δ)
   have targetRead := vote.data_target anchored anchorSlot anchorBoundary start honest
     (nonzero v honest n (by rw [vote.atTime]; omega))
   obtain ⟨targetBoundary, targetBlock, targetBoundaryOk, targetKnown, targetLe, _⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   have targetAbove := (forward v honest n).reachable.anchorSlot_le
     (UInt64.le_of_eq anchorSlot) targetKnown
   have receiverRead := Store.getCheckpointBlock_of_same_blocks

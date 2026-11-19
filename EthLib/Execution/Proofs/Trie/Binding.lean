@@ -19,6 +19,10 @@ Two proofs that verify against one root follow one path while their nodes agree.
 
 So when the search finds nothing, the two proofs are one proof, and give the key one value.
 
+The search reads each proof as the check reads it.
+
+The empty trie has no node, so against its root the proof of no nodes reads as the encoding `0x80`.
+
 Soundness follows: a proof that verifies against a trie's root is the trie's own proof.
 
 Otherwise the search finds a collision between the two.
@@ -217,21 +221,29 @@ theorem walk_binding (hash : ByteArray → Hash32) :
           exact ⟨rfl, [], rfl, rfl⟩
         | cons nibble rest => exact hfollow _ _ hp hq hcollision
 
-/-- Binding of a proof: two proofs that verify one key against one root are one proof.
+/-- Binding of a proof: two proofs that verify one key against one root read as the same nodes.
 
 So they give one value.
 
-Otherwise the search finds a collision in the two proofs. -/
+Otherwise the search finds a collision in the nodes that the two proofs read as.
+
+A proof reads as itself, except the proof of no nodes against the root of the empty trie. -/
 theorem verifyProof_binding (hash : ByteArray → Hash32) {root : Hash32} {secured : Bool}
     {key : ByteArray} {p q : List ByteArray} {v w : Option ByteArray}
     (hp : verifyProof hash root secured key p = .ok v)
     (hq : verifyProof hash root secured key q = .ok w) :
-    (p = q ∧ v = w) ∨ ∃ pair, findProofCollision hash p q = some pair ∧ IsCollision hash pair := by
+    (readNodes hash root p = readNodes hash root q ∧ v = w) ∨
+      ∃ pair,
+        findProofCollision hash (readNodes hash root p) (readNodes hash root q) = some pair ∧
+          IsCollision hash pair := by
+  simp only [verifyProof, Bind.bind, Except.bind] at hp hq
+  -- The check reads each proof as its nodes, so the rest is about those nodes.
+  generalize readNodes hash root p = p at hp hq ⊢
+  generalize readNodes hash root q = q at hp hq ⊢
   cases hcollision : findProofCollision hash p q with
   | some pair => exact .inr ⟨pair, rfl, findProofCollision_valid hash p q hcollision⟩
   | none =>
     refine .inl ?_
-    simp only [verifyProof, Bind.bind, Except.bind] at hp hq
     -- Both proofs resolve the root to one item, then walk the key's path from it.
     cases hp' : resolve hash (.bytes ⟨root.toArray⟩) p with
     | error => simp [hp'] at hp
@@ -386,11 +398,13 @@ theorem keyPath_nodup (hash : ByteArray → Hash32) {trie : Trie}
     simpa [keyPath_eq, List.map_map, Function.comp_def] using
       nodup_map_of_injective (fun _ _ h => bytesToNibbleList_injective h) hbytes
 
-/-- Soundness: a proof that verifies against the trie's root is the proof that the trie builds.
+/-- Soundness: a proof that verifies against the trie's root reads as the trie's own proof.
 
 So it gives the trie's value of the key.
 
-Otherwise the search finds a collision between the proof and the honest proof.
+Otherwise the search finds a collision between the nodes that the proof reads as and the honest one.
+
+A proof reads as itself, except the proof of no nodes against the root of the empty trie.
 
 Or a secured trie has two keys with one hash, which the key search finds.
 
@@ -401,15 +415,19 @@ theorem verifyProof_sound (hash : ByteArray → Hash32) {trie : Trie} {key : Byt
     (hroot : root hash trie = .ok root') (hhonest : getProof hash trie key = .ok honestProof)
     (hkeys : (trie.data.map Prod.fst).Nodup)
     (hverify : verifyProof hash root' trie.secured key proof = .ok result) :
-    (proof = honestProof ∧ result = valueAt hash trie key) ∨
-      (∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair) ∨
+    (readNodes hash root' proof = honestProof ∧ result = valueAt hash trie key) ∨
+      (∃ pair, findProofCollision hash (readNodes hash root' proof) honestProof = some pair ∧
+        IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   cases hsearch : findPathCollision hash trie with
   | some pair => exact .inr (.inr ⟨pair, rfl, findPathCollision_valid hash hsearch⟩)
   | none =>
     have hpaths := keyPath_nodup hash hkeys hsearch
+    -- The honest proof has a node, so it reads as itself.
+    have hself := readNodes_of_ne_nil hash root' (getProof_ne_nil hhonest)
     rcases verifyProof_binding hash hverify (verifyProof_getProof hash hroot hhonest hpaths)
       with hhonest | hfound
+      <;> rw [hself] at *
     · exact .inl hhonest
     · exact .inr (.inl hfound)
 
@@ -427,8 +445,9 @@ theorem verifyProof_sound_foldl_trieSet (hash : ByteArray → Hash32) (secured :
       {result : Option ByteArray},
       root hash trie = .ok root' → getProof hash trie key = .ok honestProof →
       verifyProof hash root' secured key proof = .ok result →
-      (proof = honestProof ∧ result = valueAt hash trie key) ∨
-        (∃ pair, findProofCollision hash proof honestProof = some pair ∧ IsCollision hash pair) ∨
+      (readNodes hash root' proof = honestProof ∧ result = valueAt hash trie key) ∨
+        (∃ pair, findProofCollision hash (readNodes hash root' proof) honestProof = some pair ∧
+          IsCollision hash pair) ∨
         ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   intro trie key root' honestProof proof result hroot hhonest hverify
   -- Setting pairs keeps the flag of the empty trie.
@@ -498,6 +517,9 @@ theorem root_binding (hash : ByteArray → Hash32) {trie₁ trie₂ : Trie} {roo
   rw [hsecured] at hverify₁
   rcases verifyProof_binding hash hverify₁ hverify₂ with ⟨-, hvalue⟩ | ⟨pair, hfind, hvalid⟩
   · exact .inl hvalue
+  -- Each proof that a trie builds has a node, so it reads as itself.
+  rw [readNodes_of_ne_nil hash root' (getProof_ne_nil hp),
+    readNodes_of_ne_nil hash root' (getProof_ne_nil hq)] at hfind
   · exact .inr (.inl ⟨pair, by simp [findCollision, hp, hq, hfind], hvalid⟩)
 
 /-- Binding for maps built by setting pairs in order, as in the trie root export.

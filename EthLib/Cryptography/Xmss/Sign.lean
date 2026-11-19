@@ -44,7 +44,7 @@ def signLayer (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat)
 /-- Sign a message at a leaf index, from the derivations of a seed and the parameter `P`.
 
 1. The bottom key `idx` signs the message.
-2. The root `X^0_{16,b}` of bottom tree `b = floor(idx / 2^16)`, which builds that whole tree.
+2. One build of bottom tree `b = floor(idx / 2^16)` gives the key's path and the root `X^0_{16,b}`.
 3. The top key `b` signs that root.
 
 # Errors
@@ -53,11 +53,14 @@ def signLayer (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : Nat)
 def signDerived (prf : SeedPrf m) (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
     m (Except XmssError Signature) := do
   -- A layer's error ends signing, before any later hash call.
-  let bottom ← match ← signLayer H pp prf .bottom idx.toNat (packBytes msg) with
-    | .ok sig => pure sig
-    | .error err => return .error err
-  let bottomRoot ← node H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
-  let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes bottomRoot) with
+  let some (randomizer, chainValues) ←
+      otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (packBytes msg)
+    | return .error (.noAdmissibleEncoding .bottom idx.toNat)
+  -- The bottom tree is built once: the key's path and the root both come from it.
+  let tree ← build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
+  let bottom : LayerSignature :=
+    { randomizer, chainValues, path := tree.path LAYER_HEIGHT idx.toNat }
+  let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes tree.value) with
     | .ok sig => pure sig
     | .error err => return .error err
   return .ok { leafIndex := idx, bottom, top }

@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Sphincs.Address
 public import EthLib.Cryptography.Proofs.Sphincs.Serialization
 public import EthLib.Cryptography.Proofs.Sphincs.TweakableHash
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.VerifyQueries
+public import EthLib.Cryptography.Proofs.Sphincs.Sign
 
 /-!
 # Proofs: the hash calls of leanSPHINCS key generation and signing
@@ -167,22 +168,39 @@ theorem forsKey_map_monad (pkSeed : PkSeed) (idx : Nat) :
   rw [forsKey, forsKey, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
   simp only [forsRoot_map_monad φ map_pure map_bind, forsPkFromRoots_map_monad φ map_pure map_bind]
 
-/-- A FORS opening commutes with the map. -/
+/-- A FORS tree's build commutes with the map. -/
+theorem forsBuild_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) :
+    φ (forsBuild H pkSeed prf idx kappa)
+      = forsBuild (fun x => φ (H x)) pkSeed (mapPrf φ prf) idx kappa := by
+  rw [forsBuild, forsBuild, Merkle.build_map _ φ map_pure map_bind]
+  simp only [forsNodeHash_map_monad φ map_pure map_bind,
+    forsLeaves_map_monad φ map_pure map_bind]
+
+/-- A FORS opening, with its tree's root, commutes with the map. -/
 theorem treeOpen_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
     (s : Fin (2 ^ FORS_HEIGHT)) :
     φ (treeOpen H pkSeed prf idx kappa s)
       = treeOpen (fun x => φ (H x)) pkSeed (mapPrf φ prf) idx kappa s := by
   rw [treeOpen, treeOpen, map_bind, forsSecret_map_monad φ]
-  simp only [map_bind, map_pure, Merkle.path_map _ φ map_pure map_bind,
-    forsNodeHash_map_monad φ map_pure map_bind, forsLeaves_map_monad φ map_pure map_bind]
+  simp only [map_bind, map_pure, forsBuild_map_monad φ map_pure map_bind]
 
-/-- The FORS openings commute with the map. -/
+/-- The FORS openings and the FORS public key commute with the map. -/
 theorem forsSign_map_monad (pkSeed : PkSeed) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     φ (forsSign H pkSeed prf idx leaves)
       = forsSign (fun x => φ (H x)) pkSeed (mapPrf φ prf) idx leaves := by
-  rw [forsSign, forsSign, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
-  simp only [treeOpen_map_monad φ map_pure map_bind]
+  rw [forsSign, forsSign, map_bind, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
+  simp only [treeOpen_map_monad φ map_pure map_bind, map_bind, map_pure,
+    forsPkFromRoots_map_monad φ map_pure map_bind]
+
+/-- A hypertree tree's build commutes with the map. -/
+theorem buildTree_map_monad (pkSeed : PkSeed) (layer : Layer) (tree : Nat) :
+    φ (buildTree H pkSeed prf layer tree)
+      = buildTree (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer tree := by
+  rw [buildTree, buildTree, Merkle.build_map _ φ map_pure map_bind]
+  simp only [nodeHash_map_monad φ map_pure map_bind, leaves,
+    otsPublicLeaf_map_monad φ map_pure map_bind]
+  rfl
 
 /-- The randomizer commutes with the map. -/
 theorem prfMsg_map_monad (skPrf : HashOutput) (optRand : PkSeed) (msg : Message) :
@@ -191,25 +209,16 @@ theorem prfMsg_map_monad (skPrf : HashOutput) (optRand : PkSeed) (msg : Message)
   erw [map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
-/-- What a layer's key signs commutes with the map. -/
-theorem layerMessage_map_monad (pkSeed : PkSeed) (layer : Layer) (idx : Nat) :
-    φ (layerMessage H pkSeed prf layer idx)
-      = layerMessage (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer idx := by
-  cases layer
-  · exact forsKey_map_monad φ map_pure map_bind H prf pkSeed idx
-  all_goals exact treeRoot_map_monad φ map_pure map_bind H prf pkSeed _ _
-
 /-- A layer's signature commutes with the map. -/
 theorem signLayer_map_monad [LawfulMonad m] [LawfulMonad n] (pkSeed : PkSeed) (layer : Layer)
-    (idx : Nat) (msg : Digest) :
-    φ (signLayer H pkSeed prf layer idx msg)
-      = signLayer (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer idx msg := by
+    (idx : Nat) (tree : Merkle.Built Digest) (msg : Digest) :
+    φ (signLayer H pkSeed prf layer idx tree msg)
+      = signLayer (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer idx tree msg := by
   rw [signLayer, signLayer, map_bind, otsSign_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun found => ?_)
   cases found with
   | none => exact map_pure _
-  | some found =>
-    simp only [map_bind, map_pure, path_map_monad φ map_pure map_bind]
+  | some found => exact map_pure _
 
 /-- The key expansion commutes with the map. -/
 theorem expandKey_map_monad (seed : Seed) :
@@ -225,30 +234,29 @@ theorem publicKeyOf_map_monad (pkSeed : PkSeed) :
   rw [publicKeyOf, publicKeyOf, map_bind, treeRoot_map_monad φ map_pure map_bind]
   exact congrArg _ (funext fun _ => map_pure _)
 
-/-- Signing from the secrets, the public key and the randomizer commutes with the map. -/
-theorem signDerived_map_monad [LawfulMonad m] [LawfulMonad n] (pk : PublicKey)
-    (rho : Randomizer) (msg : Message) :
-    φ (signDerived H prf pk rho msg)
-      = signDerived (fun x => φ (H x)) (mapPrf φ prf) pk rho msg := by
+/-- Signing from the secrets, `PK.seed`, the top tree and the randomizer commutes with the map. -/
+theorem signDerived_map_monad [LawfulMonad m] [LawfulMonad n] (pkSeed : PkSeed)
+    (top : Merkle.Built Digest) (rho : Randomizer) (msg : Message) :
+    φ (signDerived H prf pkSeed top rho msg)
+      = signDerived (fun x => φ (H x)) (mapPrf φ prf) pkSeed top rho msg := by
   rw [signDerived, signDerived, map_bind, hMsg_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun d => ?_)
   rw [map_bind, forsSign_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun fors => ?_)
-  simp only [map_bind, layerMessage_map_monad φ map_pure map_bind,
+  simp only [map_bind, buildTree_map_monad φ map_pure map_bind,
     signLayer_map_monad φ map_pure map_bind]
-  refine congrArg _ (funext fun _ => congrArg _ (funext fun r₀ => ?_))
+  refine congrArg _ (funext fun bottomTree => congrArg _ (funext fun r₀ => ?_))
   cases r₀ with
   | error e => exact map_pure _
   | ok bottom =>
-    simp only [map_bind, pure_bind, layerMessage_map_monad φ map_pure map_bind,
+    simp only [map_bind, pure_bind, buildTree_map_monad φ map_pure map_bind,
       signLayer_map_monad φ map_pure map_bind]
-    refine congrArg _ (funext fun _ => congrArg _ (funext fun r₁ => ?_))
+    refine congrArg _ (funext fun middleTree => congrArg _ (funext fun r₁ => ?_))
     cases r₁ with
     | error e => exact map_pure _
     | ok middle =>
-      simp only [map_bind, layerMessage_map_monad φ map_pure map_bind,
-        signLayer_map_monad φ map_pure map_bind]
-      refine congrArg _ (funext fun _ => congrArg _ (funext fun r₂ => ?_))
+      simp only [map_bind, signLayer_map_monad φ map_pure map_bind]
+      refine congrArg _ (funext fun r₂ => ?_)
       cases r₂ with
       | error e => exact map_pure _
       | ok top => simp only [map_pure]
@@ -272,13 +280,103 @@ theorem signWith_map_monad [LawfulMonad m] [LawfulMonad n] (sk : SecretKey) (msg
     φ (signWith H sk msg) = signWith (fun x => φ (H x)) sk msg := by
   rw [signWith, signWith, map_bind, expandKey_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun key => ?_)
-  rw [map_bind, publicKeyOf_map_monad φ map_pure map_bind, mapPrf_prf φ map_pure map_bind]
-  refine congrArg _ (funext fun pk => ?_)
+  rw [map_bind, buildTree_map_monad φ map_pure map_bind, mapPrf_prf φ map_pure map_bind]
+  refine congrArg _ (funext fun top => ?_)
   rw [map_bind, prfMsg_map_monad φ map_pure map_bind]
   refine congrArg _ (funext fun rho => ?_)
   rw [signDerived_map_monad φ map_pure map_bind, mapPrf_prf φ map_pure map_bind]
 
+/-! ### The signer that computes each path and each root apart -/
+
+/-- A FORS opening computed alone commutes with the map. -/
+theorem Recompute.treeOpen_map_monad (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
+    (s : Fin (2 ^ FORS_HEIGHT)) :
+    φ (Recompute.treeOpen H pkSeed prf idx kappa s)
+      = Recompute.treeOpen (fun x => φ (H x)) pkSeed (mapPrf φ prf) idx kappa s := by
+  rw [Recompute.treeOpen, Recompute.treeOpen, map_bind, forsSecret_map_monad φ]
+  simp only [map_bind, map_pure, Merkle.path_map _ φ map_pure map_bind,
+    forsNodeHash_map_monad φ map_pure map_bind, forsLeaves_map_monad φ map_pure map_bind]
+
+/-- The FORS openings computed alone commute with the map. -/
+theorem Recompute.forsSign_map_monad (pkSeed : PkSeed) (idx : Nat)
+    (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
+    φ (Recompute.forsSign H pkSeed prf idx leaves)
+      = Recompute.forsSign (fun x => φ (H x)) pkSeed (mapPrf φ prf) idx leaves := by
+  rw [Recompute.forsSign, Recompute.forsSign, HashSig.ofFnInOrder_map_monad φ map_pure map_bind]
+  simp only [Recompute.treeOpen_map_monad φ map_pure map_bind]
+
+/-- What a layer's key signs, computed anew, commutes with the map. -/
+theorem Recompute.layerMessage_map_monad (pkSeed : PkSeed) (layer : Layer) (idx : Nat) :
+    φ (Recompute.layerMessage H pkSeed prf layer idx)
+      = Recompute.layerMessage (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer idx := by
+  cases layer
+  · exact forsKey_map_monad φ map_pure map_bind H prf pkSeed idx
+  all_goals exact treeRoot_map_monad φ map_pure map_bind H prf pkSeed _ _
+
+/-- A layer's signature with its path computed alone commutes with the map. -/
+theorem Recompute.signLayer_map_monad [LawfulMonad m] [LawfulMonad n] (pkSeed : PkSeed)
+    (layer : Layer) (idx : Nat) (msg : Digest) :
+    φ (Recompute.signLayer H pkSeed prf layer idx msg)
+      = Recompute.signLayer (fun x => φ (H x)) pkSeed (mapPrf φ prf) layer idx msg := by
+  rw [Recompute.signLayer, Recompute.signLayer, map_bind, otsSign_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun found => ?_)
+  cases found with
+  | none => exact map_pure _
+  | some found =>
+    simp only [map_bind, map_pure, path_map_monad φ map_pure map_bind]
+
+/-- Signing with each path and root computed apart commutes with the map. -/
+theorem Recompute.signDerived_map_monad [LawfulMonad m] [LawfulMonad n] (pk : PublicKey)
+    (rho : Randomizer) (msg : Message) :
+    φ (Recompute.signDerived H prf pk rho msg)
+      = Recompute.signDerived (fun x => φ (H x)) (mapPrf φ prf) pk rho msg := by
+  rw [Recompute.signDerived, Recompute.signDerived, map_bind, hMsg_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun d => ?_)
+  rw [map_bind, Recompute.forsSign_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun fors => ?_)
+  simp only [map_bind, Recompute.layerMessage_map_monad φ map_pure map_bind,
+    Recompute.signLayer_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun _ => congrArg _ (funext fun r₀ => ?_))
+  cases r₀ with
+  | error e => exact map_pure _
+  | ok bottom =>
+    simp only [map_bind, pure_bind, Recompute.layerMessage_map_monad φ map_pure map_bind,
+      Recompute.signLayer_map_monad φ map_pure map_bind]
+    refine congrArg _ (funext fun _ => congrArg _ (funext fun r₁ => ?_))
+    cases r₁ with
+    | error e => exact map_pure _
+    | ok middle =>
+      simp only [map_bind, Recompute.layerMessage_map_monad φ map_pure map_bind,
+        Recompute.signLayer_map_monad φ map_pure map_bind]
+      refine congrArg _ (funext fun _ => congrArg _ (funext fun r₂ => ?_))
+      cases r₂ with
+      | error e => exact map_pure _
+      | ok top => simp only [map_pure]
+
+/-- Signing with each path and root computed apart commutes with the map. -/
+theorem Recompute.signWith_map_monad [LawfulMonad m] [LawfulMonad n] (sk : SecretKey)
+    (msg : Message) :
+    φ (Recompute.signWith H sk msg) = Recompute.signWith (fun x => φ (H x)) sk msg := by
+  rw [Recompute.signWith, Recompute.signWith, map_bind, expandKey_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun key => ?_)
+  rw [map_bind, publicKeyOf_map_monad φ map_pure map_bind, mapPrf_prf φ map_pure map_bind]
+  refine congrArg _ (funext fun pk => ?_)
+  rw [map_bind, prfMsg_map_monad φ map_pure map_bind]
+  refine congrArg _ (funext fun rho => ?_)
+  rw [Recompute.signDerived_map_monad φ map_pure map_bind, mapPrf_prf φ map_pure map_bind]
+
 end Map
+
+/-- Mapped to values, the signer signs as the signer that computes each path and root apart.
+
+The map keeps `pure` and `bind`, and sends each computation to the value it gives. -/
+theorem signWith_map_eq_recompute {m : Type → Type} [Monad m] [LawfulMonad m]
+    (φ : ∀ {β : Type}, m β → Id β) (map_pure : ∀ {β : Type} (b : β), φ (pure b) = pure b)
+    (map_bind : ∀ {β γ : Type} (x : m β) (f : β → m γ), φ (x >>= f) = φ x >>= fun b => φ (f b))
+    (H : ByteArray → m (Vector UInt8 32)) (sk : SecretKey) (msg : Message) :
+    φ (signWith H sk msg) = φ (Recompute.signWith H sk msg) := by
+  rw [signWith_map_monad φ map_pure map_bind, Recompute.signWith_map_monad φ map_pure map_bind]
+  exact signWith_eq_recompute (fun x => (φ (H x)).run) sk msg
 
 /-! ## Derivation addresses -/
 
@@ -624,20 +722,33 @@ theorem forsKey_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) :
     forsNode_isQueryBoundP_zero H prf hH hprf _ _ _ _ _) fun _ =>
       forsPkFromRoots_isQueryBoundP_zero H hH _ _ _
 
-/-- A FORS opening queries `p` nowhere. -/
+/-- A FORS tree's build queries `p` nowhere. -/
+theorem forsBuild_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES) :
+    IsQueryBoundP (forsBuild H pkSeed prf idx kappa) p 0 :=
+  merkleBuild_isQueryBoundP_zero _ _ (fun _ => forsLeaves_isQueryBoundP_zero H prf hH hprf _ _ _ _)
+    (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _
+
+/-- A FORS opening, with its tree's root, queries `p` nowhere. -/
 theorem treeOpen_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat) (kappa : Fin FORS_TREES)
     (s : Fin (2 ^ FORS_HEIGHT)) : IsQueryBoundP (treeOpen H pkSeed prf idx kappa s) p 0 :=
   isQueryBoundP_bind_zero _ _ (forsSecret_isQueryBoundP_zero prf hprf _ _ _) fun _ =>
-    isQueryBoundP_bind_zero _ _ (merkleSiblings_isQueryBoundP_zero _ _
-      (fun _ => forsLeaves_isQueryBoundP_zero H prf hH hprf _ _ _ _)
-      (fun _ _ _ => forsNodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _ _)
+    isQueryBoundP_bind_zero _ _ (forsBuild_isQueryBoundP_zero H prf hH hprf _ _ _)
       fun _ => isQueryBoundP_pure _ _ _
 
-/-- The FORS openings query `p` nowhere. -/
+/-- The FORS openings and the FORS public key query `p` nowhere. -/
 theorem forsSign_isQueryBoundP_zero (pkSeed : PkSeed) (idx : Nat)
     (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     IsQueryBoundP (forsSign H pkSeed prf idx leaves) p 0 :=
-  ofFnInOrder_isQueryBoundP_zero _ _ fun _ => treeOpen_isQueryBoundP_zero H prf hH hprf _ _ _ _
+  isQueryBoundP_bind_zero _ _ (ofFnInOrder_isQueryBoundP_zero _ _ fun _ =>
+    treeOpen_isQueryBoundP_zero H prf hH hprf _ _ _ _) fun _ =>
+      isQueryBoundP_bind_zero _ _ (forsPkFromRoots_isQueryBoundP_zero H hH _ _ _)
+        fun _ => isQueryBoundP_pure _ _ _
+
+/-- A hypertree tree's build queries `p` nowhere. -/
+theorem buildTree_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree : Nat) :
+    IsQueryBoundP (buildTree H pkSeed prf layer tree) p 0 :=
+  merkleBuild_isQueryBoundP_zero _ _ (fun _ => otsPublicLeaf_isQueryBoundP_zero H prf hH hprf _ _)
+    (fun _ _ _ => nodeHash_isQueryBoundP_zero H hH _ _ _ _ _ _) _
 
 /-- A tree's root queries `p` nowhere. -/
 theorem treeRoot_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (tree : Nat) :
@@ -650,40 +761,18 @@ theorem publicKeyOf_isQueryBoundP_zero (pkSeed : PkSeed) :
   isQueryBoundP_bind_zero _ _ (treeRoot_isQueryBoundP_zero H prf hH hprf _ _ _)
     fun _ => isQueryBoundP_pure _ _ _
 
-/-- What a layer's key signs queries `p` nowhere. -/
-theorem layerMessage_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (idx : Nat) :
-    IsQueryBoundP (layerMessage H pkSeed prf layer idx) p 0 := by
-  cases layer
-  · exact forsKey_isQueryBoundP_zero H prf hH hprf _ _
-  all_goals exact treeRoot_isQueryBoundP_zero H prf hH hprf _ _ _
-
 /-- A layer's signature queries `p` nowhere.
 
 The encodings of the layer's key must query `p` nowhere. -/
 theorem signLayer_isQueryBoundP_zero (pkSeed : PkSeed) (layer : Layer) (idx : Nat)
-    (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx)) (msg : Digest) :
-    IsQueryBoundP (signLayer H pkSeed prf layer idx msg) p 0 := by
+    (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx)) (tree : Merkle.Built Digest)
+    (msg : Digest) : IsQueryBoundP (signLayer H pkSeed prf layer idx tree msg) p 0 := by
   rw [signLayer]
   refine isQueryBoundP_bind_zero _ _ (otsSign_isQueryBoundP_zero H prf hH hprf _ hE msg)
     fun found => ?_
   cases found with
   | none => exact isQueryBoundP_pure _ _ _
-  | some found =>
-    exact isQueryBoundP_bind_zero _ _ (path_isQueryBoundP_zero H prf hH hprf _ _ _ _)
-      fun _ => isQueryBoundP_pure _ _ _
-
-/-- A layer signs what its layer message gives, and that queries `p` nowhere.
-
-The encodings of the layer's key must query `p` nowhere. -/
-theorem layerMessage_bind_signLayer_isQueryBoundP_zero {β : Type} (pkSeed : PkSeed)
-    (layer : Layer) (idx : Nat) (hE : EncodingAvoids p H (OtsKey.ofIndex layer idx))
-    (k : Except SphincsError (LayerSignature layer) → OracleComp spec β)
-    (hk : ∀ r, IsQueryBoundP (k r) p 0) :
-    IsQueryBoundP (layerMessage H pkSeed prf layer idx >>= fun msg =>
-      signLayer H pkSeed prf layer idx msg >>= k) p 0 :=
-  isQueryBoundP_bind_zero _ _ (layerMessage_isQueryBoundP_zero H prf hH hprf pkSeed layer idx)
-    fun msg => isQueryBoundP_bind_zero _ _
-      (signLayer_isQueryBoundP_zero H prf hH hprf pkSeed layer idx hE msg) hk
+  | some found => exact isQueryBoundP_pure _ _ _
 
 end Avoid
 
@@ -737,9 +826,10 @@ theorem verifyWith_isQueryBoundP_zero (pk : PublicKey) (msg : Message) (sig : Si
       | some r₂ => exact isQueryBoundP_pure _ _ _
 
 include hH hD hprf in
-/-- Signing from a source of secrets, a public key and a randomizer queries `p` nowhere. -/
-theorem signDerived_isQueryBoundP_zero (pk : PublicKey) (rho : Randomizer) (msg : Message) :
-    IsQueryBoundP (signDerived H prf pk rho msg) p 0 := by
+/-- Signing from a source of secrets, `PK.seed`, the top tree and `R` queries `p` nowhere. -/
+theorem signDerived_isQueryBoundP_zero (pkSeed : PkSeed) (top : Merkle.Built Digest)
+    (rho : Randomizer) (msg : Message) :
+    IsQueryBoundP (signDerived H prf pkSeed top rho msg) p 0 := by
   have hH' : ∀ pkSeed A payload, ¬IsDerivationAddress A → (∀ key, A ≠ adrsEnc key) →
       16 ≤ payload.size → IsQueryBoundP (H (thInput pkSeed A payload)) p 0 :=
     fun pkSeed A payload hA _ hsize => hH pkSeed A payload hA hsize
@@ -748,18 +838,22 @@ theorem signDerived_isQueryBoundP_zero (pk : PublicKey) (rho : Randomizer) (msg 
   rw [signDerived]
   refine isQueryBoundP_bind_zero _ _ (hMsg_isQueryBoundP_zero H _ _ _ _ fun _ => hD _ _ _ _ _)
     fun d => isQueryBoundP_bind_zero _ _ (forsSign_isQueryBoundP_zero H prf hH' hprf' _ _ _)
-    fun fors =>
-      layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₀ => ?_
+    fun fors => isQueryBoundP_bind_zero _ _ (buildTree_isQueryBoundP_zero H prf hH' hprf' _ _ _)
+    fun bottomTree => isQueryBoundP_bind_zero _ _
+      (signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ _) fun r₀ => ?_
   cases r₀ with
   | error e => exact isQueryBoundP_pure _ _ _
   | ok bottom =>
     refine isQueryBoundP_bind_zero _ _ (isQueryBoundP_pure _ _ _) fun _ =>
-      layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₁ => ?_
+      isQueryBoundP_bind_zero _ _ (buildTree_isQueryBoundP_zero H prf hH' hprf' _ _ _)
+      fun middleTree => isQueryBoundP_bind_zero _ _
+        (signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ _) fun r₁ => ?_
     cases r₁ with
     | error e => exact isQueryBoundP_pure _ _ _
     | ok middle =>
       refine isQueryBoundP_bind_zero _ _ (isQueryBoundP_pure _ _ _) fun _ =>
-        layerMessage_bind_signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ fun r₂ => ?_
+        isQueryBoundP_bind_zero _ _
+          (signLayer_isQueryBoundP_zero H prf hH' hprf' _ _ _ (hE _) _ _) fun r₂ => ?_
       cases r₂ with
       | error e => exact isQueryBoundP_pure _ _ _
       | ok top =>
@@ -807,11 +901,11 @@ theorem signWith_isQueryBoundP {k : Nat} (sk : SecretKey) (msg : Message)
     (hprf : ∀ pkSeed A, IsQueryBoundP (Sphincs.prf H pkSeed sk.seed A) p 0) :
     IsQueryBoundP (signWith H sk msg) p k :=
   isQueryBoundP_bind (m := 0) hX fun key _ =>
-    isQueryBoundP_bind_zero _ _ (publicKeyOf_isQueryBoundP_zero H _
+    isQueryBoundP_bind_zero _ _ (buildTree_isQueryBoundP_zero H _
       (fun pkSeed A payload hA _ hsize => hH pkSeed A payload hA hsize)
-      (fun A _ => hprf key.pkSeed A) _)
-      fun pk => isQueryBoundP_bind_zero _ _ (prfMsg_isQueryBoundP_zero H _ _ _ (hR _ _))
-        fun rho => signDerived_isQueryBoundP_zero H _ hH hD (hprf key.pkSeed) pk rho msg
+      (fun A _ => hprf key.pkSeed A) _ _ _)
+      fun top => isQueryBoundP_bind_zero _ _ (prfMsg_isQueryBoundP_zero H _ _ _ (hR _ _))
+        fun rho => signDerived_isQueryBoundP_zero H _ hH hD (hprf key.pkSeed) _ top rho msg
 
 end Expansion
 
@@ -854,11 +948,12 @@ theorem prf_H_isQueryBoundP_seedLength (pkSeed : PkSeed) (seed : Seed) (A : Adrs
     (H_isQueryBoundP_seedLength (by rw [size_thInput_seed]; decide))
 
 /-- In the game, signing from the secrets of any `SK.seed` makes no seed-length query. -/
-theorem signDerived_H_isQueryBoundP_seedLength (pkSeed : PkSeed) (seed : Seed) (pk : PublicKey)
-    (rho : Randomizer) (msg : Message) :
-    IsQueryBoundP (signDerived H (prf H pkSeed seed) pk rho msg) IsSeedLengthQuery 0 :=
+theorem signDerived_H_isQueryBoundP_seedLength (pkSeed : PkSeed) (seed : Seed)
+    (top : Merkle.Built Digest) (rho : Randomizer) (msg : Message) :
+    IsQueryBoundP (signDerived H (prf H pkSeed seed) pkSeed top rho msg) IsSeedLengthQuery 0 :=
   signDerived_isQueryBoundP_zero H _ H_thInput_isQueryBoundP_seedLength
-    H_digestInput_isQueryBoundP_seedLength (prf_H_isQueryBoundP_seedLength pkSeed seed) pk rho msg
+    H_digestInput_isQueryBoundP_seedLength (prf_H_isQueryBoundP_seedLength pkSeed seed) pkSeed top
+    rho msg
 
 /-- In the game, the public key from the secrets of any `SK.seed` makes no seed-length query. -/
 theorem publicKeyOf_H_isQueryBoundP_seedLength (pkSeed : PkSeed) (seed : Seed) :
