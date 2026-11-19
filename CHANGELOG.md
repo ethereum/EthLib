@@ -341,6 +341,11 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The root of an ancestor walk does not depend on the payload status of its start.
+  So a read at an earlier epoch goes through the checkpoint of a later one.
+  A caller drops the first explicit argument.
+
 - In Lean, `Store.isAncestor_of_getCheckpointBlock` holds at every fork and no longer takes `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   From Gloas the walk reaches the checkpoint's block with any payload status, and a pending ancestor accepts each.
   A caller drops the first explicit argument.

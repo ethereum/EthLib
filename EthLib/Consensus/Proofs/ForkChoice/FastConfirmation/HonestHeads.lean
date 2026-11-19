@@ -447,7 +447,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have headCheckpoint : ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
       ((e.world arrival).state w).finalizedCheckpoint.epoch =
         .ok ((e.world arrival).state w).finalizedCheckpoint.root := by
-    rw [Store.getCheckpointBlock_trans preGloas targetRead finalLeTarget]
+    rw [Store.getCheckpointBlock_trans targetRead finalLeTarget]
     exact voterRead
   -- So the head reaches the receiver by arrival, with its checkpoint blocks.
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ := Store.isAncestor_of_getCheckpointBlock

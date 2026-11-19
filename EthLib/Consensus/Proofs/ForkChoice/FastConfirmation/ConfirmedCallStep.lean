@@ -162,7 +162,7 @@ private theorem finalizedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
         ((e.world k).state w).blockStates[root]? = some state := by
     refine carrier_delivered sync positive window preGloas admitted anchored sound anchorSlot start
       nonzero agree sender receiver nBound late bounded upToDate known stored ?_
-    rw [Store.getCheckpointBlock_trans preGloas read
+    rw [Store.getCheckpointBlock_trans read
       (UInt64.le_of_lt (UInt64.lt_of_lt_of_le below finalLe))]
     exact crossRead
   obtain ⟨currentU, currentUOk⟩ := (forward u sender n).exists_getCurrentSlot slots
@@ -283,7 +283,7 @@ private theorem observedOrder {Δ : ℕ} {anchor : Store preset fork} {last : �
     have finalN : ((e.world n).state u).getCheckpointBlock root
         ((e.world k).state w).finalizedCheckpoint.epoch =
           .ok ((e.world k).state w).finalizedCheckpoint.root := by
-      rw [Store.getCheckpointBlock_trans preGloas readN.1 (UInt64.le_of_lt below)]
+      rw [Store.getCheckpointBlock_trans readN.1 (UInt64.le_of_lt below)]
       exact crossRead
     -- The read moves back to the earlier call, which delivers the block.
     have boundaryOf := finalN
@@ -459,7 +459,7 @@ private theorem observedStart {Δ : ℕ} {anchor : Store preset fork} {limit : �
               .ok ((e.world m).state u).unrealizedJustifiedCheckpoint.root) :
           (computeEpochAtSlot preset observedBlock.slot).toNat ≤
             ((e.world m).state u).unrealizedJustifiedCheckpoint.epoch.toNat := by
-        obtain ⟨block, held, le, -⟩ := Store.getCheckpointBlock_self preGloas positive read
+        obtain ⟨block, held, le, -⟩ := Store.getCheckpointBlock_self positive read
         obtain rfl : block = observedBlock := Option.some.inj
           ((e.blocks_of_le order held).symm.trans (Store.block_ok_iff.mp foundN))
         exact le
@@ -773,7 +773,7 @@ private theorem finalized_old {Δ : ℕ} {anchor : Store preset fork} {limit : �
   -- Past the anchor epoch the finality is read at a held block of its epoch or before.
   obtain ⟨root, read⟩ := finalized_read reached ctx.sound aligned ctx.positive ctx.window
     (anchorState_hash_nonzero ctx.anchored ctx.start ctx.roots ctx.caller nBound) later
-  obtain ⟨block, found, below, -⟩ := Store.getCheckpointBlock_self ctx.preGloas ctx.positive read
+  obtain ⟨block, found, below, -⟩ := Store.getCheckpointBlock_self ctx.positive read
   refine ⟨computeEpochAtSlot preset block.slot, ?_, below, lagged⟩
   simp [Store.getBlockEpoch, Store.block_ok_iff.mpr found, bind, Except.bind, pure, Except.pure]
 

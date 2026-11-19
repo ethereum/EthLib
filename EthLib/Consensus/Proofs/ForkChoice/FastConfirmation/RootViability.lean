@@ -1181,7 +1181,7 @@ private theorem late_previous_receiver_source {anchor : Store preset fork} {Δ t
       · exact ok
       · rw [reachedW.anchorState_root, Except.ok.injEq] at zero
         exact absurd zero nonzero
-    have composed := (Store.getCheckpointBlock_trans preGloas rootRead finalLe).trans sliceRead
+    have composed := (Store.getCheckpointBlock_trans rootRead finalLe).trans sliceRead
     -- The read moves to the caller's store, and up to its head.
     have boundaryRead := composed
     unfold Store.getCheckpointBlock at boundaryRead
@@ -1868,7 +1868,7 @@ private theorem finalized_read_above_root {anchor : Store preset fork} {Δ time 
     rw [Nat.add_mul, Nat.one_mul] at mono
     omega
   exact Store.getCheckpointBlock_of_isAncestor preGloas rootFound above boundaryOk boundaryLe
-    ((Store.getCheckpointBlock_trans preGloas rootRead finalLe).trans finalRead)
+    ((Store.getCheckpointBlock_trans rootRead finalLe).trans finalRead)
 
 /-- The root is in the receiver's filtered tree, given the finality reads of held states.
 

@@ -608,14 +608,16 @@ theorem isAncestor_of_getCheckpointBlock {root checkpoint : Root} {epoch : Epoch
   obtain ⟨block, held, le⟩ := getAncestor_le walk
   exact ⟨boundary, block, boundaryOk, held, le, isAncestor_of_getAncestor walk⟩
 
-/-- Before Gloas, a checkpoint read at an epoch goes through the checkpoint at any later epoch.
+/-- A checkpoint read at an epoch goes through the checkpoint at any later epoch.
 
 The read of the root at the later epoch names the block that the earlier read starts from. -/
 theorem getCheckpointBlock_trans {root through : Root} {high low : Epoch}
-    (before : fork < .glamsterdam)
     (read : store.getCheckpointBlock root high = .ok through) (le : low ≤ high) :
     store.getCheckpointBlock root low = store.getCheckpointBlock through low := by
-  obtain ⟨boundary, boundaryOk, walked⟩ := getCheckpointBlock_walk before read
+  unfold getCheckpointBlock at read
+  simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at read
+  obtain ⟨boundary, boundaryOk, walkedNode, walked, rfl⟩ := read
+  have boundaryOk := mapError_ok_iff.mp boundaryOk
   have boundaryNat := computeStartSlotAtEpoch_ok_iff.mp boundaryOk
   obtain ⟨lowSlot, lowOk⟩ : ∃ s, computeStartSlotAtEpoch preset low = .ok s := by
     refine ⟨low * preset.SLOTS_PER_EPOCH, computeStartSlotAtEpoch_ok_iff.mpr ⟨?_, ?_⟩⟩
@@ -630,9 +632,13 @@ theorem getCheckpointBlock_trans {root through : Root} {high low : Epoch}
     apply UInt64.le_iff_toNat_le.mpr
     rw [(computeStartSlotAtEpoch_ok_iff.mp lowOk).2, boundaryNat.2]
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp le)
+  -- The walk at the lower slot goes through the node reached, whatever its payload status.
   have through' := getAncestor_trans below walked
-  unfold getCheckpointBlock
-  simp only [lowOk, Except.mapError, bind, Except.bind, through']
+  have rootWalk := getAncestor_root (store := store) walkedNode .pending lowSlot
+  simp only [getCheckpointBlock, lowOk, Except.mapError, bind, Except.bind]
+  change (·.root) <$> store.getAncestor ⟨root, .pending⟩ lowSlot =
+    (·.root) <$> store.getAncestor ⟨walkedNode.root, .pending⟩ lowSlot
+  rw [through', rootWalk]
 
 /-- Before Gloas, a checkpoint read at an ancestor holds at each descendant.
 
@@ -648,10 +654,10 @@ theorem getCheckpointBlock_of_ancestor_epoch (before : fork < .glamsterdam)
   exact getCheckpointBlock_of_isAncestor before aboveFound descends boundaryOk
     (computeStartSlotAtEpoch_le_of_epoch_le boundaryOk le) read
 
-/-- Before Gloas, a checkpoint read names a held block in the checkpoint's epoch or before.
+/-- A checkpoint read names a held block in the checkpoint's epoch or before.
 
 That block reads itself as the checkpoint block of the epoch. -/
-theorem getCheckpointBlock_self (before : fork < .glamsterdam)
+theorem getCheckpointBlock_self
     (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) {root checkpoint : Root} {epoch : Epoch}
     (read : store.getCheckpointBlock root epoch = .ok checkpoint) :
     ∃ block : BeaconBlock preset fork, store.blocks[checkpoint]? = some block ∧
@@ -663,7 +669,7 @@ theorem getCheckpointBlock_self (before : fork < .glamsterdam)
   refine ⟨block, found, ?_, ?_⟩
   · rw [← epochEq]
     exact epoch_le_of_slot_le _ _ (UInt64.le_iff_toNat_le.mp le)
-  · rw [← getCheckpointBlock_trans before read (UInt64.le_refl _)]
+  · rw [← getCheckpointBlock_trans read (UInt64.le_refl _)]
     exact read
 
 /-- The store's epoch is the epoch of its slot. -/
