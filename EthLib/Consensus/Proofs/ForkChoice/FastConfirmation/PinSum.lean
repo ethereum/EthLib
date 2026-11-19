@@ -9524,7 +9524,6 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
     {z : ForkedBeaconState preset} (v : ℕ) (small : v < 2 ^ 64) (highC : ℕ)
     (zEarly : z.fork < .glamsterdam)
     (zHigh : (getCurrentEpoch z.state).toNat ≤ highC + 1)
-    (actFinite : (getCurrentEpoch z.state).toNat + 2 < 2 ^ 64)
     (ahead : ∀ m : ForkedBeaconState preset, Run config checks m z → ∀ w : Validator,
       m.state.validators.data[v]? = some w → w.activationEpoch ≠ FAR_FUTURE_EPOCH →
         (getCurrentEpoch m.state).toNat + 1 < w.activationEpoch.toNat)
@@ -9562,10 +9561,6 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       have middleElectra : .pectra ≤ middle.fork :=
         Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
       have middleEarly : middle.fork < .glamsterdam := Nat.lt_of_le_of_lt middleFork zEarly
-      have finite : getCurrentEpoch middle.state < FAR_FUTURE_EPOCH :=
-        UInt64.lt_iff_toNat_lt.mpr (by
-          have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-          omega)
       have known : v < middle.state.validators.data.size ∨ BalancesMatch middle.state := by
         by_cases inside : v < middle.state.validators.data.size
         · exact .inl inside
@@ -9590,13 +9585,11 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       exact slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle |>.trans
         (by omega)
 
-/-- A key of `K6` beyond R's registry holds the activation reserve at a state two epochs before it.
+/-- A key of `K6` beyond R's registry holds the activation reserve at a state of C's run.
 
 The run from the split reaches that state first, and then C.
 
 The key is active at C and absent at the split.
-
-Its activation was assigned two epochs before it.
 
 At that state its balance is at least `MAX_EFFECTIVE_BALANCE`.
 
@@ -9667,7 +9660,7 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
       split.balances.data.size ≤ v.toNat by omega), Option.map_none,
       Option.getD_none]
   refine ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, funded, hysteresis, reserve, ?_⟩
-  exact key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega) (by omega)
+  exact key_idle_walk h v.toNat v.toNat_lt highC zEarly (by omega)
     (fun m run w found assigned => by
       obtain ⟨later, foundLater, life⟩ := run.registryLifecycle.validators v.toNat w found
       have same : later = v0 := Option.some.inj (foundLater.symm.trans found0)
