@@ -171,7 +171,7 @@ private theorem getAttestationScore_exists
 /-- The children of a held node can be computed.
 
 Each child is a held node, of lower rank when parents sit below their children. -/
-private theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode}
+theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode}
     {block : BeaconBlock preset fork} (found : store.blocks[node.root]? = some block) :
     ∃ children, store.getNodeChildren node = .ok children ∧ ∀ child ∈ children,
       ∃ childBlock, store.blocks[child.root]? = some childBlock ∧
