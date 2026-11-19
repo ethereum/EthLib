@@ -29,6 +29,12 @@ Each slot proof is a proof in the secured storage trie, under the slot on 32 byt
 
 Its value is the RLP form of the word.
 
+An account with no storage has the root of the empty trie, which has no node.
+
+So the proof of a slot of it may hold no node, and it shows the slot not set.
+
+Likewise, against the empty state, an account proof with no node shows the address has no account.
+
 A proof can also show that the address has no account, or that the slot is not set.
 
 The word of a slot that is not set is the storage value `0`, so the answer must give `0`.
@@ -181,9 +187,6 @@ namespace AccountProof
 
 /-- The account that an answer gives, without its storage. -/
 def account (p : AccountProof) : Account := ⟨p.nonce, p.balance, p.codeHash⟩
-
-/-- The root of the empty trie: the hash of `0x80`, the encoding of the empty string. -/
-def emptyTrieRoot (hash : ByteArray → Hash32) : Hash32 := hash ⟨#[0x80]⟩
 
 /-- Whether the fields of an answer fit an address with no account.
 

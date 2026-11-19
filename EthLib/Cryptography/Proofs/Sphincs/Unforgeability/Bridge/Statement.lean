@@ -172,8 +172,8 @@ def HasAdversaryQueryBound (adversary : Adversary) (q r : Nat) : Prop :=
 /-- The hash calls of key generation: `2 + (258 * 2^10 - 1)`. -/
 def keyGenCalls : Nat := 264193
 
-/-- A bound on the hash calls of one request: 939499 and three counter searches of `2^32`. -/
-def signCalls : Nat := 939499 + 3 * MAX_COUNTER_TRIALS
+/-- A bound on the hash calls of one request: 470595 and three counter searches of `2^32`. -/
+def signCalls : Nat := 470595 + 3 * MAX_COUNTER_TRIALS
 
 /-- A bound on the hash calls of one verification: the digest, FORS and the three layers. -/
 def verifyCalls : Nat := 491

@@ -773,8 +773,55 @@ theorem verifyProof_getProof (hash : ByteArray → Hash32) {trie : Trie} {key : 
   have hwalk :=
     walk_honest hash _ _ honest (Nat.lt_succ_self _) (Nat.lt_succ_self _) hnode hbelow []
   simp only [List.append_nil] at hwalk
-  simp only [verifyProof, resolve_hash hash hencode, Bind.bind, Except.bind, hwalk, hlookup]
+  simp only [verifyProof, readNodes, resolve_hash hash hencode, Bind.bind, Except.bind, hwalk,
+    hlookup]
   rfl
+
+/-! ## The empty trie -/
+
+/-- A proof with a node reads as it is. -/
+theorem readNodes_of_ne_nil (hash : ByteArray → Hash32) (root : Hash32) {proof : List ByteArray}
+    (h : proof ≠ []) : readNodes hash root proof = proof := by
+  cases proof with
+  | nil => exact absurd rfl h
+  | cons node rest => rfl
+
+/-- Two proofs that read as the same nodes give one outcome. -/
+theorem verifyProof_congr_readNodes {hash : ByteArray → Hash32} {root : Hash32} {secured : Bool}
+    {key : ByteArray} {p q : List ByteArray}
+    (h : readNodes hash root p = readNodes hash root q) :
+    verifyProof hash root secured key p = verifyProof hash root secured key q := by
+  simp only [verifyProof, h]
+
+/-- The encoding of the empty trie verifies against its root, and shows that no key is set. -/
+theorem verifyProof_emptyTrieRoot_encoding (hash : ByteArray → Hash32) (secured : Bool)
+    (key : ByteArray) :
+    verifyProof hash (emptyTrieRoot hash) secured key [⟨#[0x80]⟩] = .ok none := by
+  -- The root node of the empty trie is no node, whose encoding is `0x80`.
+  have hencode : encode (unencoded none) = .ok ⟨#[0x80]⟩ := rfl
+  simp only [verifyProof, emptyTrieRoot, readNodes, resolve_hash hash hencode, Bind.bind,
+    Except.bind, walk_none]
+  rfl
+
+/-- The proof of no nodes verifies against the root of the empty trie, and shows no key set. -/
+theorem verifyProof_emptyTrieRoot_nil (hash : ByteArray → Hash32) (secured : Bool)
+    (key : ByteArray) : verifyProof hash (emptyTrieRoot hash) secured key [] = .ok none := by
+  rw [verifyProof_congr_readNodes (q := [⟨#[0x80]⟩]) (by simp [readNodes]),
+    verifyProof_emptyTrieRoot_encoding]
+
+/-- The proof of no nodes verifies only against the root of the empty trie.
+
+There it shows that the key is not set. -/
+theorem verifyProof_nil_eq_ok_iff {hash : ByteArray → Hash32} {root : Hash32} {secured : Bool}
+    {key : ByteArray} {value : Option ByteArray} :
+    verifyProof hash root secured key [] = .ok value ↔
+      root = emptyTrieRoot hash ∧ value = none := by
+  by_cases hroot : root = emptyTrieRoot hash
+  · subst hroot
+    rw [verifyProof_emptyTrieRoot_nil]
+    simp [eq_comm]
+  · -- Any other root needs its node, which the proof does not hold.
+    simp [verifyProof, readNodes, hroot, resolve, size_hashBytes, Bind.bind, Except.bind]
 
 /-- In a plain trie, the value that a proof gives is the value of the key itself, which `trieGet` reads. -/
 theorem valueAt_plain (hash : ByteArray → Hash32) (data : List (ByteArray × ByteArray)) (key : ByteArray) :
