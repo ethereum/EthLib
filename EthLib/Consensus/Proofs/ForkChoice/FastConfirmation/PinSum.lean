@@ -2617,7 +2617,9 @@ Otherwise the floor is rounded down to an increment, by `cfloor_endpoint`.
 
 The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
 
-The hypothesis `stay` keeps the effective balance at its finalized value if the test holds. -/
+The hypothesis `stay` keeps the effective balance at its finalized value if the test holds.
+
+It is `floorC_stay`, for a key with no sync debits. -/
 private theorem floorC_at (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -2630,12 +2632,12 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
       (before.snoc step).append after = fromFin.append tailC → ∀ w,
       n.state.validators.data[i.toNat]? = some w →
       (getCurrentEpoch pulled).toNat + 1 < w.exitEpoch.toNat)
-    (base0 X low ebUp finEB floorC : ℕ)
+    (base0 X low finEB floorC : ℕ)
     (hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat)
     (hlow : low = base0 - X)
     (hfin : finEB = effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
-    (hfloorC : floorC = if max ebUp base0 ≤ low + preset.downwardBand then finEB
+    (hfloorC : floorC = if max finEB base0 ≤ low + preset.downwardBand then finEB
       else min finEB (low - low % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     {z : ForkedBeaconState preset} (rp : Run config checks ⟨fork, fin⟩ z)
     (rest : Run config checks z ⟨fork, counted⟩) (cut : rp.append rest = fromFin.append tailC)
@@ -2654,9 +2656,8 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
             (withdrawalMaxEffectiveBalance preset fork val).toNat +
           preset.downwardBand) ≤ ρd * (a + D + preset.downwardBand) + ρn * slack →
         low - (events.map (syncDebit i.toNat)).sum ≤ a)
-    (stay : max ebUp base0 ≤ low + preset.downwardBand →
-      finEB ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
-        bandR events i.toNat) :
+    (stay : max finEB base0 ≤ low + preset.downwardBand →
+      (events.map (syncDebit i.toNat)).sum = 0 → finEB ≤ effectiveAt z i.toNat) :
     floorC ≤ effectiveAt z i.toNat + (events.map (syncDebit i.toNat)).sum +
       bandR events i.toNat := by
   obtain ⟨slack, ρn, ρd, start, pass, arith⟩ := margin
@@ -2673,24 +2674,26 @@ private theorem floorC_at (h : Setting config checks g split fin pulled anc coun
       (withdrawalMaxEffectiveBalance preset fork val).toNat
     omega
   rw [hfloorC]
-  split
-  · next test => exact stay test
-  · rw [← hfin] at eff
-    have lowMod := Nat.mod_lt low incPos
-    have lowModLe := Nat.mod_le low preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    rcases Nat.eq_zero_or_pos (events.map (syncDebit i.toNat)).sum with zero | positive
-    · have same : low - (events.map (syncDebit i.toNat)).sum = low := by omega
-      rw [same] at eff
-      have noBand : bandR events i.toNat = 0 := by
-        rw [bandEq]
-        simp [zero]
+  rw [← hfin] at eff
+  have lowMod := Nat.mod_lt low incPos
+  have lowModLe := Nat.mod_le low preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  rcases Nat.eq_zero_or_pos (events.map (syncDebit i.toNat)).sum with zero | positive
+  · have same : low - (events.map (syncDebit i.toNat)).sum = low := by omega
+    rw [same] at eff
+    have noBand : bandR events i.toNat = 0 := by
+      rw [bandEq]
+      simp [zero]
+    split
+    · next test =>
+      have kept := stay test zero
       omega
-    · have mod := Nat.mod_lt (low - (events.map (syncDebit i.toNat)).sum) incPos
-      have band : bandR events i.toNat =
-          preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 := by
-        rw [bandEq]
-        simp [positive]
-      omega
+    · omega
+  · have mod := Nat.mod_lt (low - (events.map (syncDebit i.toNat)).sum) incPos
+    have band : bandR events i.toNat =
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 := by
+      rw [bandEq]
+      simp [positive]
+    split <;> omega
 
 /-- If `X * S * b + K * a * b ≤ K * a * X`, then the floors `q` and `P` of `X` over `a` and `b`
 satisfy `q * S ≤ P * K`. -/
