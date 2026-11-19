@@ -62,6 +62,18 @@ theorem OtsKey.ofIndex_bottom_digestIndex (d : MessageDigest) :
   simp only [Nat.zero_add, Nat.pow_zero, Nat.div_one, OtsKey.mk.injEq, true_and]
   omega
 
+/-- A key's leaf index is a leaf of its tree. -/
+theorem OtsKey.ofIndex_leaf_lt (layer : Layer) (idx : Nat) :
+    (OtsKey.ofIndex layer idx).leaf < 2 ^ layer.height :=
+  Nat.mod_lt _ (Nat.two_pow_pos _)
+
+/-- An index of 26 bits leads to the one top tree, tree 0. -/
+theorem OtsKey.ofIndex_top_tree {idx : Nat} (h : idx < 2 ^ HEIGHT) :
+    (OtsKey.ofIndex .top idx).tree = 0 := by
+  -- The top tree number is the bits above all three layers, of which there are none.
+  simp only [OtsKey.ofIndex, Layer.below, Layer.height, Nat.shiftRight_eq_div_pow]
+  exact Nat.div_eq_of_lt (by simpa [HEIGHT, TOP_HEIGHT, LOWER_HEIGHT] using h)
+
 /-! ## Fields of bits -/
 
 /-- A field of one more bit doubles the field and adds the next bit. -/

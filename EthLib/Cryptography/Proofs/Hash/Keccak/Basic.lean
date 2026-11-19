@@ -98,7 +98,23 @@ Both are about pad10*1 (§5.1), at any positive rate, so at 136 and at 72 bytes.
 /-- Byte `i` of the padding is padding byte `i`, for each of its `rate - len mod rate` bytes. -/
 theorem padding_data (rate len : Nat) :
     (padding rate len).data =
-      Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i := rfl
+      Array.ofFn fun i : Fin (rate - len % rate) => paddingByte rate len i := by
+  apply Array.ext
+  · simp [padding]
+  · intro i _ inside
+    have hk : i < rate - len % rate := by simpa using inside
+    simp only [padding, Array.getElem_ofFn]
+    rw [Array.getElem_setIfInBounds (by simpa using hk),
+      Array.getElem_setIfInBounds (by simpa using hk), Array.getElem_replicate]
+    -- Byte i is written last when it is byte k - 1, and first when it is byte 0.
+    split
+    · next last => rw [last]
+    · split
+      · next first => rw [first]
+      -- Any other padding byte is zero, as it holds neither 1 bit.
+      · next notLast notFirst =>
+        have hl : i + 1 ≠ rate - len % rate := by omega
+        simp [paddingByte, Ne.symm notFirst, hl]
 
 /-- The padding of a message of `len` bytes has `rate - len mod rate` bytes. -/
 @[simp] theorem size_padding (rate len : Nat) :

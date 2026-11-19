@@ -16,7 +16,7 @@ When the check reports the account absent, the trie gives the address no value.
 
 The fields of the answer then fit an address with no account.
 
-Otherwise a search finds a collision between the account proof and the trie's own proof.
+Otherwise a search finds a collision between the account proof, as read, and the trie's own proof.
 
 Or it finds two keys of the trie with one hash.
 
@@ -170,6 +170,21 @@ theorem verifySlot_eq_ok_iff {storageRoot : Hash32} {index : Nat} {s : StoragePr
   | some bytes =>
     obtain ⟨hd, rfl⟩ := hmatch
     simp [hv, hd, Except.mapError, bind, Except.bind, pure, Except.pure]
+
+/-- A slot with no proof node passes exactly against the root of the empty trie, as absent.
+
+The answer must then give it the word `0`, as for a slot of an account with no storage. -/
+theorem verifySlot_nil_eq_ok_iff {storageRoot : Hash32} {index : Nat} {s : StorageProof}
+    {outcome : SlotOutcome} (hproof : s.proof = []) :
+    verifySlot hash storageRoot index s = .ok outcome ↔
+      storageRoot = emptyTrieRoot hash ∧ s.value = 0 ∧ outcome = .absent := by
+  rw [verifySlot_eq_ok_iff, hproof]
+  constructor
+  · rintro ⟨value, hv, hmatch⟩
+    obtain ⟨hroot, rfl⟩ := verifyProof_nil_eq_ok_iff.mp hv
+    exact ⟨hroot, hmatch⟩
+  · rintro ⟨rfl, hz, rfl⟩
+    exact ⟨none, verifyProof_emptyTrieRoot_nil hash true _, hz, rfl⟩
 
 /-- An account whose proven fields differ from those of the answer fails with `accountMismatch`. -/
 theorem verifyAccount_eq_accountMismatch {stateRoot : Hash32} {p : AccountProof}
@@ -329,7 +344,8 @@ theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List By
       | none =>
         p.absentFields hash = true ∧ present = false) ∨
       (∃ pair,
-        findProofCollision hash p.accountProof honest = some pair ∧ IsCollision hash pair) ∨
+        findProofCollision hash (readNodes hash stateRoot p.accountProof) honest = some pair ∧
+          IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   obtain ⟨value, hverify, hvalue⟩ := verifyAccount_eq_ok h
   rw [← hsecured] at hverify
@@ -354,7 +370,8 @@ theorem verifySlot_sound {trie : Trie} {storageRoot : Hash32} {honest : List Byt
     (match valueAt hash trie ⟨s.key.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
       | none => s.value = 0 ∧ outcome = .absent) ∨
-      (∃ pair, findProofCollision hash s.proof honest = some pair ∧ IsCollision hash pair) ∨
+      (∃ pair, findProofCollision hash (readNodes hash storageRoot s.proof) honest = some pair ∧
+        IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash trie = some pair ∧ IsCollision hash pair := by
   obtain ⟨value, hverify, hvalue⟩ := verifySlot_eq_ok h
   rw [← hsecured] at hverify
@@ -375,7 +392,8 @@ theorem verifyAccount_sound_state {state : State} {entries : List (ByteArray × 
       | none =>
         p.absentFields hash = true ∧ present = false) ∨
       (∃ pair,
-        findProofCollision hash p.accountProof honest = some pair ∧ IsCollision hash pair) ∨
+        findProofCollision hash (readNodes hash stateRoot p.accountProof) honest = some pair ∧
+          IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash ⟨true, entries⟩ = some pair ∧ IsCollision hash pair :=
   verifyAccount_sound hroot rfl hhonest (stateEntries_nodup hentries) h
 
@@ -390,7 +408,8 @@ theorem verifySlot_sound_storage {storage : Std.ExtTreeMap Bytes32 U256}
     (match valueAt hash ⟨true, entries⟩ ⟨s.key.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
       | none => s.value = 0 ∧ outcome = .absent) ∨
-      (∃ pair, findProofCollision hash s.proof honest = some pair ∧ IsCollision hash pair) ∨
+      (∃ pair, findProofCollision hash (readNodes hash storageRoot s.proof) honest = some pair ∧
+        IsCollision hash pair) ∨
       ∃ pair, findPathCollision hash ⟨true, entries⟩ = some pair ∧ IsCollision hash pair :=
   verifySlot_sound hroot rfl hhonest (storageEntries_nodup hentries) h
 

@@ -77,7 +77,8 @@ The definitions take the derivations as one function argument of type `SeedPrf`,
 The secret key is the 32-byte seed, and everything else derives from it.
 So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
 `keyGen` builds the top tree, which means `2^16` one-time keys.
-`sign` builds the paths of both keys and the root of the bottom tree, which costs about two trees on the bottom layer and one on the top.
+`sign` builds the bottom tree once, which gives both the bottom key's path and the root.
+It then computes the top key's path, so a signature costs about one tree on each layer.
 
 Never sign two different messages at one leaf index with one key.
 A one-time key that signs two different messages can reveal enough chain values for a forgery, and nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.

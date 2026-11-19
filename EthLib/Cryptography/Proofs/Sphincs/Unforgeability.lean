@@ -31,7 +31,7 @@ A second theorem charges only the adversary's own hash calls, and takes a bound 
 
 The scheme's calls then add a constant: 264193 for key generation and 491 for verification.
 
-Each signing request adds at most `939499 + 3 * 2^32`, when every counter search runs to its end.
+Each signing request adds at most `470595 + 3 * 2^32`, when every counter search runs to its end.
 
 At the model's cap of 1,182,000,000 requests, the constant is about `2^63.7`.
 -/
