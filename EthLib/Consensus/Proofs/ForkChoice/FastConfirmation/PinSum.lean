@@ -7712,8 +7712,10 @@ The credits are `Cr`, which covers C's net credits `credits`, and the sync debit
 Its gain is at most a tenth of the credits, sync debits, slack and base gain. -/
 private theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1) (P : ℕ)
+    {e : BeaconState preset fork}
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, e⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch e).toNat ≤ highC + 1)
+    (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1) (P : ℕ)
     (hP : P = ((getBaseRewardPerIncrement preset
       (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
@@ -7726,7 +7728,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
       (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Cr)
     (flipCover : PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
         preset.MIN_ACTIVATION_BALANCE.toNat ∧ preset.MIN_ACTIVATION_BALANCE.toNat <
-          PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat →
+          PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) v.toNat →
       credC tailC highC v.toNat + whistC tailC highC v.toNat +
         (eventsC.map (syncCredit v.toNat)).sum ≤ Cr)
     (startEff : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
@@ -7814,7 +7816,6 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨toPulled⟩ := h.toPulled
-  have near := h.near
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
   have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
     epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
@@ -7846,13 +7847,13 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   have alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
     rw [he0]
     exact ebUp_aligned h i
-  obtain ⟨P', hP', rateAll⟩ := key_rate_pre h tailC h.near
+  obtain ⟨P', hP', rateAll⟩ := key_rate_pre h tailC near
   rw [hP'.trans hP.symm] at rateAll
   have hDle : D ≤ (pinTerms config pulled anc fin).depth := hD ▸ min_le_left _ _
-  have epochs : (getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat ≤ D := by
+  have epochs : (getCurrentEpoch e).toNat - (getCurrentEpoch split).toNat ≤ D := by
     rw [hD]
     exact Nat.le_min.mpr ⟨by omega, by omega⟩
-  have sizeC : i < counted.validators.data.size :=
+  have sizeC : i < e.validators.data.size :=
     Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps tailC.chainSteps)
   have capSC := cap_le_cap_of_run h.caps tailC h.early i
   have capSP : PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤ capI :=
@@ -7862,9 +7863,9 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
   have minMax := UInt64.le_iff_toNat_le.mp h.caps.compounding
   obtain ⟨kindS, aMin, aMax⟩ := capAt_kind h i inside
   obtain ⟨kindC, -, -⟩ := capAt_kind h i sizeC
-  obtain ⟨wC, foundC⟩ : ∃ w, counted.validators.data[i]? = some w :=
+  obtain ⟨wC, foundC⟩ : ∃ w, e.validators.data[i]? = some w :=
     ⟨_, Array.getElem?_eq_getElem sizeC⟩
-  have alignedC := capAt_aligned h.aligned (z := (⟨fork, counted⟩ : ForkedBeaconState preset))
+  have alignedC := capAt_aligned h.aligned (z := (⟨fork, e⟩ : ForkedBeaconState preset))
     electra foundC
   have startKey : 11 * D * (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
@@ -7875,7 +7876,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
         exact Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 hDle)) rateLow)
   by_cases flipped : PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i ≤
       preset.MIN_ACTIVATION_BALANCE.toNat ∧ preset.MIN_ACTIVATION_BALANCE.toNat <
-        PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i
+        PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i
   · -- the cap rises on C's branch, so the run splits at the step that makes the key compound
     have cover := flipCover flipped
     have invariantS := Run.invariant h.genesis.invariant (shared.append fromFin)
@@ -7914,7 +7915,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     have minLe : preset.MIN_ACTIVATION_BALANCE.toNat ≤ capI := capMin ▸ capSP
     obtain ⟨gc, hform, hgc, bPre, bPost, -⟩ := c_ceiling_abstract_flip pre step post h.early
       h.fulu i inside highC P preset.MIN_ACTIVATION_BALANCE.toNat
-      (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) aMin alignedC
+      (PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i) aMin alignedC
       (by omega) (by omega) capsPre (fun z member => capCeil z (postMem z member))
       (fun z member => rateAll z (member.elim (preMem z) (postMem z))) endEpochC incPos D Cr
       (Cr + Ds + DsF) e0 C
@@ -7937,12 +7938,12 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
       rw [capMin]
       omega
   · -- the cap of C's branch is the cap at the split throughout
-    have same : PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i =
+    have same : PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i =
         PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i := by
-      rcases kindS with e | e <;> rcases kindC with f | f <;> omega
+      rcases kindS with s1 | s1 <;> rcases kindC with f | f <;> omega
     clear kindS kindC
     obtain ⟨gc, hform, hgc, bound, -⟩ := c_ceiling_abstract tailC h.early h.fulu i inside highC P
-      (PinSplit2.capAt (⟨fork, counted⟩ : ForkedBeaconState preset) i) alignedC
+      (PinSplit2.capAt (⟨fork, e⟩ : ForkedBeaconState preset) i) alignedC
       (by omega) capCeil rateAll endEpochC incPos D Cr (Cr + Ds + DsF) e0 C
       (min (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i + Dp + Ds + W)
         (PinSplit2.capAt (⟨fork, split⟩ : ForkedBeaconState preset) i)) W
@@ -14715,8 +14716,8 @@ private theorem key_core_frozen (h : Setting config checks g split fin pulled an
   obtain ⟨Cr, hCr⟩ : ∃ Cr, Cr = netScan v.toNat highC tailC +
     (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 :=
     ⟨_, rfl⟩
-  obtain ⟨gc, hform, hgc, bound⟩ := c_ceiling h fromFin tailC highC endEpochC P hP v splitSize
-    (slashW (pinTerms config pulled anc fin) v.toNat) replayedC Cr hCr.symm.le
+  obtain ⟨gc, hform, hgc, bound⟩ := c_ceiling h fromFin tailC highC endEpochC h.near P hP v
+    splitSize (slashW (pinTerms config pulled anc fin) v.toNat) replayedC Cr hCr.symm.le
     (fun flip => absurd flip.2 (by have := flip.1; omega)) startEff floorR debitsCap rateLow
   -- the frozen cap is constant along C's run
   have capEq : ∀ z ∈ tailC.balancePath, PinSplit2.capAt z v.toNat =
