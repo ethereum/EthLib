@@ -1153,7 +1153,7 @@ A block step counts the rise of the key's balance across the whole step.
 A credit that the same step takes back counts for nothing.
 
 The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
-def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
+private def netScan (v high : ℕ) {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → ℕ
   | _, .nil => 0
   | y, .snoc (middle := m) pre step =>
