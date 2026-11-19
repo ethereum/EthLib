@@ -79,6 +79,13 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
     exact created step member i (Nat.le_of_not_lt registered)
       (by simp [unslashedA, slashedB])
 
+/-- The amount of the departure charge of a key on a run, or 0.
+
+The charge reads the effective balance before the step that assigns the exit. -/
+private def chargeAmt {x y : ForkedBeaconState preset} (tail : Run config checks x y) (i : ℕ) :
+    ℕ :=
+  ((tail.departureCharges.find? fun c => c.index == i).map (·.amount)).getD 0
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that a step slashes with its exit unset is charged its effective balance before the step.
 
@@ -92,9 +99,9 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
     (i : ℕ) (old new : Validator) (foundA : a.state.validators.data[i]? = some old)
     (foundB : b.state.validators.data[i]? = some new) (unset : old.exitEpoch = FAR_FUTURE_EPOCH)
     (slashed : new.slashed = true) :
-    effectiveAt a i ≤
-      ((tailC.departureCharges.find? fun c => c.index == i).map (·.amount)).getD 0 := by
+    effectiveAt a i ≤ chargeAmt tailC i := by
   classical
+  unfold chargeAmt
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨pre, post, cut, -, -⟩ := Run.contains_step_facts member h.early
   have bEarly : b.fork < .glamsterdam :=
@@ -121,6 +128,37 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
   subst same
   rw [chosen]
   simp [effectiveAt, foundA]
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key beyond R's registry is charged the amount of its exit and what it gains after it.
+
+An exit that a step assigns by the slashing is the charge of that step.
+
+An earlier exit adds its gains, bands and credits, which `extra` bounds. -/
+private theorem created_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (extra : ℕ → ℕ)
+    (earlier : ∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ (i : ℕ) (old : Validator), a.state.validators.data[i]? = some old →
+        old.exitEpoch ≠ FAR_FUTURE_EPOCH → effectiveAt a i ≤ chargeAmt tailC i + extra i)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
+    effectiveAt a i ≤ chargeAmt tailC i + extra i := by
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
+  obtain ⟨-, slashedB⟩ := flag
+  cases foundA : a.state.validators.data[i]? with
+  | none => simp [effectiveAt, foundA]
+  | some old =>
+    by_cases unset : old.exitEpoch = FAR_FUTURE_EPOCH
+    · cases foundB : b.state.validators.data[i]? with
+      | none => simp [foundB] at slashedB
+      | some new =>
+        have marked : new.slashed = true := by simpa [foundB] using slashedB
+        exact (slash_exit_charge h fromFin tailC step member i old new foundA foundB unset
+          marked).trans (Nat.le_add_right _ _)
+    · exact earlier step member i old foundA unset
 
 end Charge
 
