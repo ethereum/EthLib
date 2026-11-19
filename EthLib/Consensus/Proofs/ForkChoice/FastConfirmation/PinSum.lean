@@ -16840,6 +16840,20 @@ private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
   whistleSlackBase t tail rrun highC high eventsC eventsF events fin i +
     (if 0 < slashW t i then t.unitGain else 0)
 
+/-- A bound by the slack without the unit of a slashed key is a bound by `whistleSlack`.
+
+`whistleSlack` is `whistleSlackBase` and the unit of gain of a key that R slashes. -/
+private theorem slack_close {t : PinTerms preset} {x y : ForkedBeaconState preset}
+    {tail : Run config checks x y} {x' y' : ForkedBeaconState preset}
+    {rrun : Run config checks x' y'} {highC high : ℕ}
+    {eventsC eventsF events : List (BalanceEvent preset)} {fin : BeaconState preset fork}
+    {i X E : ℕ}
+    (bound : X ≤ E + whistleSlackBase t tail rrun highC high eventsC eventsF events fin i +
+      (if 0 < slashW t i then t.unitGain else 0)) :
+    X ≤ E + whistleSlack t tail rrun highC high eventsC eventsF events fin i := by
+  unfold whistleSlack
+  omega
+
 /-- What a created key's charge adds to the effective balance of the key at an earlier exit.
 
 It is the band, the gains at the largest rate and the key's credits on C's branch. -/
