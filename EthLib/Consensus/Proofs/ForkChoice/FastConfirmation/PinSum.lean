@@ -15887,6 +15887,24 @@ private theorem rise_of_notKept (h : Setting config checks g split fin pulled an
   intro low
   exact notKept shallow (of_decide_eq_true (Bool.and_eq_true_iff.mp low).2)
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key of the split's registry that is off the kept arm is bounded by the largest cap.
+
+Its rise is its whole headroom, so the bound reads the largest cap at each step of C's branch. -/
+private theorem registry_headroom (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (notKept : ¬ (pinTerms config pulled anc fin).keptArm i = true) (slack : ℕ) :
+    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled i + slack := by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+  have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
+    h.caps aEarly i
+  have headroom := rise_of_notKept h i notKept
+  unfold whistleEnv
+  split <;> omega
+
 /-- The per-key core of the rise for a key on the headroom arm.
 
 Its rise is its whole headroom, to the largest cap.
