@@ -166,6 +166,7 @@ public import EthLib.Consensus.Proofs.ReqResp.Validity
 public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
+public import EthLib.Consensus.Proofs.SignatureChecks
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.SigningRandomOracle
 public import EthLib.Consensus.Proofs.Time
