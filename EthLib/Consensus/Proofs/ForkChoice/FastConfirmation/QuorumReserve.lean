@@ -328,6 +328,18 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   let leakAt (eb : ℕ) (i : ℕ) := 2 * (eb / inc * perIncrement) +
     eb * (scoreFin i + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
       (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat)
+  -- The largest inactivity score at the finalized block's state.
+  let scoreMaxFin := if altair : .altair ≤ fork then
+      ((finalizedState.inactivityScores altair).data.toList.map (·.toNat)).foldl max 0 else 0
+  -- Sync debits on this branch can raise a key's effective balance above `ebUp`.
+  --
+  -- Its inactivity and flag penalties then run at the raised balance, which `rise` does not read.
+  --
+  -- The seats of the window debit at most `syncDebitMax` in all, so this charges the extra leak.
+  let syncDebitMax := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope
+  let syncLeak := 3 * depthFin * (2 * perIncrement * (2 * syncDebitMax / (inc - 1) + 1) +
+    2 * syncDebitMax * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   let partialsR (i : ℕ) := if electra : .pectra ≤ fork then
       (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
         w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ epoch.toNat + 1).map
@@ -755,7 +767,7 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
     3 * (∑ i ∈ positions with current i = true, fall i) +
     3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
     seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    creditGain + creditUnits)
+    creditGain + creditUnits + syncLeak)
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
