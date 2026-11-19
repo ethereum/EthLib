@@ -15,7 +15,7 @@ This file proves that the two sponges agree in that order for one squeezed block
 
 The absorbing covers every positive byte rate that is a multiple of 8.
 
-The squeezing covers every such rate below 200 bytes, as FIPS 202 §4 asks.
+The whole sponge covers every such rate below 200 bytes, as FIPS 202 §4 asks.
 
 Keccak-256 and Keccak-512 therefore equal their bit models on every message.
 -/

@@ -507,7 +507,7 @@ Lane `i` of `S`, for `i < 25`, is XORed with lane `i` of `P_i || 0^c`.
 - A rate of 136 bytes fills lanes 0 to 16 with `P_i`, and lanes 17 to 24 are zero.
 - A rate of 72 bytes fills lanes 0 to 8, and lanes 9 to 24 are zero.
 
-All 25 lanes are XORed, so every rate below 200 bytes that is a multiple of 8 is absorbed. -/
+All 25 lanes are XORed, so every positive rate below 200 bytes that is a multiple of 8 works. -/
 def absorbBlock (rate : Nat) (S : State) (bytes : ByteArray) (start : Nat) : State :=
   -- lane i is lane i of P_i || 0^c: bytes 8i to 8i + 7 of P_i, or 0 past the rate.
   let lane := blockLane rate bytes start
@@ -600,7 +600,7 @@ The rate must be positive and below 200 bytes, since FIPS 202 §4 asks `0 < r < 
 
 It must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or in `0^c`.
 
-Other rates give a state that is not the sponge's.
+For other rates, the state is not specified.
 
 FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
 def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
