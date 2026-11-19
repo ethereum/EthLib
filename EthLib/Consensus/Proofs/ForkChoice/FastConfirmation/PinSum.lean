@@ -2641,9 +2641,9 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
     (fixpoint : max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
       (PinSplit2.creditBound post i high E P -
         PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤ E) :
-    effectiveAt y i ≤ max (effectiveAt n i) (min preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
-      (PinSplit2.creditBound post i high E P -
-        PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
+    effectiveAt y i ≤ max (effectiveAt n i) (min (PinSplit2.creditBound post i high E P -
+      PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) := by
   obtain ⟨-, -, third, fourth⟩ := PinSplit2.Run.effective_floor_pair post early fulu i inside 0 0 0
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat high E P
   have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
@@ -2700,7 +2700,7 @@ private theorem key_capped_credits {n y : ForkedBeaconState preset}
       PinSplit2.creditBound post i high E P % preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
         PinSplit2.creditBound post i high E P := Nat.sub_le _ _
   unfold gainOn
-  refine Nat.le_trans ceiling (max_le (by omega) (Nat.le_trans (Nat.min_le_right _ _) ?_))
+  refine Nat.le_trans ceiling (max_le (by omega) (Nat.le_trans (Nat.min_le_left _ _) ?_))
   omega
 
 /-- A key's effective balance on C's branch is at most R's plus the main rise and the slacks. -/
