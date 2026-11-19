@@ -4884,7 +4884,9 @@ So the floor of a new key from the finalized state reads its effective balance, 
 
 The floor adds the key's sync debits and its partial payments.
 
-The partial payments are none, by `noPartials`.
+The partial payments are none.
+
+No queued entry names the key at the finalized state, and one queued later is not due in the window.
 
 The charge is below `exitFloor`, so the debits exceed the slack.
 
@@ -4909,11 +4911,7 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
             b.state.validators.data[c.index]? = some w ∧
             v.exitEpoch = FAR_FUTURE_EPOCH ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH ∧
             c.amount = v.effectiveBalance.toNat ∧ c.epoch = w.exitEpoch.toNat)
-    (noPartials : ∀ (a : ForkedBeaconState preset) (r : Run config checks ⟨fork, fin⟩ a)
-      {evs : List (BalanceEvent preset)},
-      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
-      r.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs →
-      (evs.map (DirectSafety.Apriori.Internal.floorPartialDebit v.toNat.toUInt64)).sum = 0) :
+    :
     (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
   classical
   obtain ⟨toFin⟩ := h.toFin
@@ -5008,7 +5006,45 @@ private theorem pending_key_claim_of (h : Setting config checks g split fin pull
   have floor := PinSplit.Run.new_key_effective_floor toFin h.genesis h.parameters h.caps h.aligned
     h.twoSlots electra h.fulu (getCurrentEpoch pulled).toNat h.guard (fromFin.append pre) aEarly
     aInside h.window h.delay h.bands h.facts v.toNat pending active hysteresis priorOk
-  have partials := noPartials a (fromFin.append pre) aInside priorOk
+  -- no queued partial withdrawal names the key at the finalized state, which has no activation
+  have genesisPartials : Internal.AssignedPartials g.state := by
+    obtain ⟨_, _, _, initialized⟩ := h.genesis
+    have before := (initializeBeaconStateFromEth1_ok initialized).1
+    intro fork
+    exact (Nat.not_le_of_lt before (Nat.le_trans (by decide) fork)).elim
+  have finPartials : Internal.AssignedPartials fin :=
+    (Internal.CapStep.run toFin h.caps.activation h.caps.compounding h.early).2.1 genesisPartials
+  have noEntry : ((((fin.pendingPartialWithdrawals electra).data.toList.filter
+      fun entry => decide (entry.validatorIndex = v)).filter
+        (fun entry => entry.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).map
+          (·.amount.toNat)).sum = 0 := by
+    have none : (fin.pendingPartialWithdrawals electra).data.toList.filter
+        (fun entry => decide (entry.validatorIndex = v)) = [] := by
+      apply List.filter_eq_nil_iff.mpr
+      intro entry member same
+      obtain ⟨u, foundU, assignedU⟩ := finPartials electra entry member
+      rw [of_decide_eq_true same] at foundU
+      rcases fresh with absent | ⟨u', foundU', far⟩
+      · rw [absent] at foundU
+        cases foundU
+      · obtain rfl := Option.some.inj (foundU.symm.trans foundU')
+        exact assignedU far
+    rw [none]
+    rfl
+  have finEpoch : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have short : (getCurrentEpoch pulled).toNat + 1 < (getCurrentEpoch fin).toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+    have shallow := h.shallow
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    omega
+  have debits := Run.partialDebit_le (fromFin.append pre) electra aEarly
+    (getCurrentEpoch pulled).toNat ((getCurrentEpoch pulled).toNat + 1) aInside short v priorOk
+  have toUInt : v.toNat.toUInt64 = v := by simp
+  have partials : (prior.map (DirectSafety.Apriori.Internal.floorPartialDebit
+      v.toNat.toUInt64)).sum = 0 := by
+    rw [toUInt]
+    exact Nat.le_zero.mp (noEntry ▸ debits)
   have order := exitFloor_add_slack h
   have floorEq : (pinTerms config pulled anc fin).newKeyFloor =
       2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
