@@ -366,7 +366,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       ((v.slashed = false → (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∧
@@ -433,7 +434,8 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
         (edge : Step config checks a b) (rest : Run config checks b m),
         (head.snoc edge).append rest = pre → ∀ w,
         b.state.validators.data[i.toNat]? = some w →
-        high + 1 < w.exitEpoch.toNat ∧
+        (high + 1 < w.exitEpoch.toNat ∨
+          ∀ u, a.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
         ((v.slashed = false → (getCurrentEpoch a.state).toNat < (getCurrentEpoch x.state).toNat +
           preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
             (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat) ∧
@@ -463,7 +465,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
           cases flag : v.slashed
           · exact .inl ⟨rfl, window.1 flag⟩
           · exact .inr ⟨rfl, window.2 flag⟩)
-        high endEpoch retained
+        high endEpoch (retained.imp_right (· u middle))
         (noCrossing added addedOk) trace balance flagged capped effective positive quotient_le
     -- A key slashed by `m` stays slashed at `n`.
     have persists : (if u.slashed then 1 else 0) ≤ (if w.slashed then 1 else 0) := by
@@ -558,7 +560,10 @@ theorem FloorTrace.run_of_le_cap_general
             ∀ h, last.slashedHigh = some h → h ≤ bound) ∧
         (v.slashed = true → last.slashedHigh = none) :=
   FloorTrace.run_of_le_cap_general_or_fulu shared tail genesis caps delay early high endEpoch i v
-    initial (Or.inl activated) low base quotient low_le positive guards replayed
+    initial (Or.inl activated) low base quotient low_le positive
+    (fun pre step post split w found => by
+      obtain ⟨retained, rest⟩ := guards pre step post split w found
+      exact ⟨Or.inl retained, rest⟩) replayed
 
 /-- The per-key floor trace of a branch from a floor, for an activated key or a branch from Fulu. -/
 theorem FloorTrace.run_of_le_cap_or_fulu
@@ -576,7 +581,8 @@ theorem FloorTrace.run_of_le_cap_or_fulu
     (guards : ∀ {m n : ForkedBeaconState preset} (pre : Run config checks x m)
       (step : Step config checks m n) (post : Run config checks n y),
       (pre.snoc step).append post = tail → ∀ w, n.state.validators.data[i.toNat]? = some w →
-      high + 1 < w.exitEpoch.toNat ∧
+      (high + 1 < w.exitEpoch.toNat ∨
+        ∀ u, m.state.validators.data[i.toNat]? = some u → high + 1 < u.withdrawableEpoch.toNat) ∧
       (getCurrentEpoch m.state).toNat < (getCurrentEpoch x.state).toNat +
         preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat -
           (preset.EPOCHS_PER_SLASHINGS_VECTOR / 2).toNat ∧
@@ -649,7 +655,10 @@ theorem FloorTrace.run_of_le_cap
           c.balance = actualBalanceAt p i.toNat ∧ c.debt ≤ last.debt ∧
           (if c.slashedHigh.isSome then 1 else 0) ≤ (if w.slashed then 1 else 0) :=
   FloorTrace.run_of_le_cap_or_fulu shared tail genesis caps delay early high endEpoch i v initial
-    unslashed (Or.inl activated) low base quotient low_le positive guards replayed
+    unslashed (Or.inl activated) low base quotient low_le positive
+    (fun pre step post split w found => by
+      obtain ⟨retained, rest⟩ := guards pre step post split w found
+      exact ⟨Or.inl retained, rest⟩) replayed
 
 /-- The per-key accounting trace of a branch, through any slashing of the key.
 

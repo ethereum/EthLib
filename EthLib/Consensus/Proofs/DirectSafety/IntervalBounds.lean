@@ -1686,7 +1686,7 @@ private def intervalLoss_EventBetween {config : Config} {checks : SignatureCheck
       (getCurrentEpoch e.before.state).toNat < (getCurrentEpoch y.state).toNat) ∧
     (e.source = .crossing → x.fork < .pectra ∧ .pectra ≤ y.fork) ∧
     x.fork ≤ e.before.fork ∧
-    (e.source = .consolidations → .pectra ≤ x.fork →
+    (e.source = .consolidations → .pectra ≤ x.fork ∧
       intervalLoss_Late ((getCurrentEpoch e.before.state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
         config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) x.state e.before.state)
 
@@ -1812,12 +1812,16 @@ private theorem intervalLoss_step_sites {x y : ForkedBeaconState preset}
           processUpgrades_slot upgrades, nextSlot]
         omega
       · exact fun crossing => False.elim ((sites.2.1 e member).2.2.2.1.2.2.2 crossing)
-      · intro _ electra
+      · intro cons
+        obtain ⟨_, _, _, electra, atFork, _⟩ := (sites.2.1 e member).2.2.2.1.2.2.1 cons
+        have atLeast : .pectra ≤ e.before.fork := by rw [atFork]; exact electra
+        refine ⟨Nat.le_trans atLeast (Nat.le_trans during.fork_le last.fork_le), ?_⟩
         have cachedLate : intervalLoss_Late ((getCurrentEpoch cached).toNat +
             preset.MAX_SEED_LOOKAHEAD.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
             x.state cached := .of_data (by rw [cachedEq])
         rw [← first.epoch]
-        exact cachedLate.trans ((sites.2.2 electra).2 e member)
+        exact cachedLate.trans
+          ((sites.2.2 (Nat.le_trans atLeast (Nat.le_trans during.fork_le last.fork_le))).2 e member)
     · exact crossingBound e member
 
 /-- A replay event inherits registry, exit-order, balance and epoch bounds from its run. -/
@@ -2989,7 +2993,7 @@ theorem _root_.EthLib.Consensus.Step.balanceEvents_sites {x y : ForkedBeaconStat
 /-- At a pending-consolidation event, a key keeps its withdrawable epoch or has it set late. -/
 theorem _root_.EthLib.Consensus.Step.consolidation_withdrawable {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (early : y.fork < .glamsterdam) (holds : Invariant x.state)
-    (electra : .pectra ≤ x.fork) (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {events : List (BalanceEvent preset)} (replayed : step.balanceEvents = .ok events)
     {e : BalanceEvent preset} (member : e ∈ events) (source : e.source = .consolidations)
     (i : Nat) (v : Validator) (found : x.state.validators.data[i]? = some v) :
@@ -2998,7 +3002,7 @@ theorem _root_.EthLib.Consensus.Step.consolidation_withdrawable {x y : ForkedBea
         (getCurrentEpoch e.before.state).toNat + 1 < u.withdrawableEpoch.toNat) := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, late⟩ :=
     (intervalLoss_step_sites step early holds replayed).1 e member
-  obtain ⟨u, read, same | after⟩ := late source electra i v found
+  obtain ⟨u, read, same | after⟩ := (late source).2 i v found
   · exact ⟨u, read, .inl same⟩
   · exact ⟨u, read, .inr (by omega)⟩
 
