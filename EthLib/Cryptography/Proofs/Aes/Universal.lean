@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Aes.Gcm
 public import EthLib.Cryptography.Proofs.Aes.GaloisField
 public import VCVio.OracleComp.Constructions.SampleableType.Measure
+import EthLib.Base.Proofs.Bytes
 import EthLib.Cryptography.Proofs.Aes.Field
 
 /-!
@@ -300,6 +301,14 @@ theorem ghash_replicate_zeroBlock_append (H : Block) (k : Nat) (xs : List Block)
   | zero => simp
   | succ k ih => rw [List.replicate_succ, List.cons_append, ghash_zeroBlock_cons, ih]
 
+/-- Byte `i` of block `j` is entry `16j + i` of the byte array, or zero past its end.
+
+So the blocks read in place are the blocks read from the array. -/
+theorem blocksOf_eq_getD (data : ByteArray) :
+    blocksOf data = (List.range ((data.size + 15) / 16)).map fun j =>
+      Vector.ofFn fun i : Fin 16 => data.data.getD (16 * j + i.val) 0 := by
+  simp only [blocksOf, EthLib.Base.byteAt_eq_getD]
+
 /-- A byte string of `n` bytes has `(n + 15) / 16` blocks. -/
 theorem length_blocksOf (data : ByteArray) : (blocksOf data).length = (data.size + 15) / 16 := by
   simp [blocksOf]
@@ -316,7 +325,7 @@ theorem blocksOf_inj {a b : ByteArray} (hs : a.size = b.size) (h : blocksOf a = 
   have hj : k / 16 < (a.size + 15) / 16 := by omega
   have hr : k % 16 < 16 := Nat.mod_lt _ (by decide)
   have hblock := congrArg (fun l : List Block => l[k / 16]?) h
-  simp only [blocksOf, List.getElem?_map, List.getElem?_range, hj, hs ▸ hj,
+  simp only [blocksOf_eq_getD, List.getElem?_map, List.getElem?_range, hj, hs ▸ hj,
     Option.map_some, Option.some.injEq] at hblock
   have hbyte := congrArg (fun v : Block => v[k % 16]) hblock
   simp only [Vector.getElem_ofFn, Nat.div_add_mod, Array.getD, hkA, hkB, ↓reduceDIte] at hbyte

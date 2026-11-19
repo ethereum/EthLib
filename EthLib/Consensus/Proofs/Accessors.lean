@@ -1137,6 +1137,113 @@ theorem eq_of_mem_getBeaconCommittee {state : BeaconState preset fork}
   rw [← Nat.div_add_mod firstSlot.toNat length, ← Nat.div_add_mod secondSlot.toNat length,
     epochNat, sameMod]
 
+/-- A beacon committee has no repeated member.
+
+Its index must be below the count of its slot, and the registry must stay within its limit.
+
+The bounds of its epoch must fit in 64 bits. -/
+private theorem getBeaconCommittee_nodup {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) {slot : Slot} {index : CommitteeIndex}
+    (below : index < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot))
+    (fits : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length *
+      ((getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
+        preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    {committee : Array ValidatorIndex}
+    (computed : getBeaconCommittee state slot index = .ok committee) :
+    committee.toList.Nodup := by
+  obtain ⟨seed, position, count, -, positionEq, countEq, committeeOk⟩ :=
+    getBeaconCommittee_ok computed
+  have nodup : (getActiveValidatorIndices state
+      (computeEpochAtSlot preset slot)).toArray.toList.Nodup := by
+    simpa [List.Nodup] using (getActiveValidatorIndices_sorted within _).imp UInt64.ne_of_lt
+  have countFits : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).toArray.size *
+      count.toNat < 2 ^ 64 := by
+    rw [countEq]
+    simpa using fits
+  generalize perSlotEq : (getCommitteeCountPerSlot state
+    (computeEpochAtSlot preset slot)).toNat = perSlot at *
+  generalize epochLength : preset.SLOTS_PER_EPOCH.toNat = length at *
+  have indexLt : index.toNat < perSlot := perSlotEq ▸ UInt64.lt_iff_toNat_lt.mp below
+  have lengthPos : 0 < length := by
+    have nonzero := count_ne_zero_of_computeCommittee committeeOk
+    refine Nat.pos_of_ne_zero fun zero => nonzero (UInt64.toNat_inj.mp ?_)
+    rw [countEq, zero, Nat.mul_zero]
+    rfl
+  have modLt : (slot % preset.SLOTS_PER_EPOCH).toNat < length := by
+    rw [UInt64.toNat_mod, epochLength]
+    exact Nat.mod_lt _ lengthPos
+  -- The earlier slots of the epoch, then the index, stay below the count of the epoch.
+  have positionLt : position < count := by
+    rw [UInt64.lt_iff_toNat_lt, positionEq, countEq]
+    calc (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot + index.toNat
+        < (slot % preset.SLOTS_PER_EPOCH).toNat * perSlot + perSlot := by omega
+      _ = ((slot % preset.SLOTS_PER_EPOCH).toNat + 1) * perSlot := (Nat.succ_mul _ _).symm
+      _ ≤ length * perSlot := Nat.mul_le_mul_right _ modLt
+      _ = perSlot * length := Nat.mul_comm _ _
+  have sizeFits : (getActiveValidatorIndices state
+      (computeEpochAtSlot preset slot)).toArray.size < 2 ^ 64 :=
+    Nat.lt_of_le_of_lt (Nat.le_mul_of_pos_right _
+      (Nat.zero_lt_of_lt (UInt64.lt_iff_toNat_lt.mp positionLt))) countFits
+  have small := le_of_computeCommittee sizeFits committeeOk
+  rw [computeCommittee_eq positionLt small countFits, Except.ok.injEq] at committeeOk
+  subst committeeOk
+  -- The committee is a slice of a permutation of the active indices.
+  rw [List.toList_toArray]
+  exact ((Shuffle.shuffledIndices_perm preset seed sizeFits).nodup_iff.mpr nodup).sublist
+    ((List.take_sublist _ _).trans (List.drop_sublist _ _))
+
+/-- The committees of one slot together have no repeated member.
+
+The registry must stay within its limit.
+
+The bounds of the epoch of the slot must fit in 64 bits. -/
+theorem getBeaconCommittees_nodup {state : BeaconState preset fork}
+    (within : state.RegistryWithinLimit) {slot : Slot}
+    (fits : (getActiveValidatorIndices state (computeEpochAtSlot preset slot)).length *
+      ((getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat *
+        preset.SLOTS_PER_EPOCH.toNat) < 2 ^ 64)
+    {committees : List (Array ValidatorIndex)}
+    (mapped : (List.range
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).mapM
+      (fun index => getBeaconCommittee state slot index.toUInt64) = .ok committees) :
+    (committees.flatMap Array.toList).Nodup := by
+  obtain ⟨length, each⟩ := mapM_eq_ok_iff.mp mapped
+  have below : ∀ i, i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat →
+      i.toUInt64 < getCommitteeCountPerSlot state (computeEpochAtSlot preset slot) := by
+    intro i lt
+    rw [UInt64.lt_iff_toNat_lt, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
+      (Nat.lt_trans lt (UInt64.toNat_lt _))]
+    exact lt
+  have read : ∀ i (lt : i < committees.length),
+      getBeaconCommittee state slot i.toUInt64 = .ok committees[i] ∧
+        i < (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat := by
+    intro i lt
+    have inRange : i < (List.range
+        (getCommitteeCountPerSlot state (computeEpochAtSlot preset slot)).toNat).length := by
+      rw [← length]
+      exact lt
+    have := each i inRange
+    simp only [List.getElem_range] at this
+    exact ⟨this, by simpa using inRange⟩
+  rw [List.Nodup, List.pairwise_flatMap]
+  refine ⟨fun c mem => ?_, ?_⟩
+  · obtain ⟨i, lt, rfl⟩ := List.getElem_of_mem mem
+    obtain ⟨ok, iLt⟩ := read i lt
+    exact getBeaconCommittee_nodup within (below i iLt) fits ok
+  · -- Two committees of one slot that share a member have the same index.
+    rw [List.pairwise_iff_getElem]
+    intro i j iLt jLt lt v vIn v' vIn' equal
+    subst equal
+    obtain ⟨iOk, iBelow⟩ := read i iLt
+    obtain ⟨jOk, jBelow⟩ := read j jLt
+    have same := (eq_of_mem_getBeaconCommittee within rfl (below i iBelow) (below j jBelow) fits
+      iOk jOk (Array.mem_toList_iff.mp vIn) (Array.mem_toList_iff.mp vIn')).2
+    have := congrArg UInt64.toNat same
+    rw [Nat.toUInt64_eq, Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt'
+      (Nat.lt_trans iBelow (UInt64.toNat_lt _)), UInt64.toNat_ofNat_of_lt'
+      (Nat.lt_trans jBelow (UInt64.toNat_lt _))] at this
+    omega
+
 /-- Every active validator is in a committee of its epoch.
 
 The committee has a slot of the epoch and an index below the committees of a slot.

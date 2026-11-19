@@ -111,20 +111,21 @@ theorem loadKeptLaws : EpochStepLaws (@LoadKept preset fork) where
   proposerLookahead _ _ := ⟨rfl, rfl⟩
   ptcWindow _ _ := ⟨rfl, rfl⟩
 
-/-- Applying a list of pending deposits adds at most one validator for each of them. -/
-private theorem foldlM_applyPendingDeposit_size :
-    ∀ (applied : List PendingDeposit) {state next : BeaconState preset fork},
-      applied.foldlM (applyPendingDeposit config checks) state = .ok next →
-        next.validators.data.size ≤ state.validators.data.size + applied.length
-  | [], _, _, computed => by
-    simp only [List.foldlM, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simp
-  | deposit :: rest, _, _, computed => by
-    simp only [List.foldlM, bind_ok_iff] at computed
-    obtain ⟨middle, first, tail⟩ := computed
-    have one := (applyPendingDeposit_validators_size_le_and_mem first).1
-    have more := foldlM_applyPendingDeposit_size rest tail
+/-- A fold whose steps each add at most one validator adds at most one for each item. -/
+theorem foldlM_validators_size_le {α ε : Type}
+    {action : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (bound : ∀ s a t, action s a = .ok t →
+      t.validators.data.size ≤ s.validators.data.size + 1)
+    {items : List α} {s t : BeaconState preset fork}
+    (ok : items.foldlM action s = .ok t) :
+    t.validators.data.size ≤ s.validators.data.size + items.length := by
+  induction items generalizing s with
+  | nil => cases ok; simp
+  | cons a rest ih =>
+    simp only [List.foldlM_cons, bind_ok_iff] at ok
+    obtain ⟨middle, first, last⟩ := ok
+    have one := bound s a middle first
+    have remaining := ih last
     simp only [List.length_cons]
     omega
 
@@ -134,7 +135,8 @@ theorem processPendingDeposits_registryLoad_le {electra : .pectra ≤ fork}
     registryLoad after ≤ registryLoad state := by
   obtain ⟨read, rest, applied, postponed, next, pending, carried, queue, pushed, _, _, _, perm,
     applies, rfl⟩ := processPendingDeposits_applied computed
-  have grown := foldlM_applyPendingDeposit_size applied applies
+  have grown := foldlM_validators_size_le
+    (fun _ _ _ ok => (applyPendingDeposit_validators_size_le_and_mem ok).1) applies
   have lengths := perm.length_eq
   have queueLength := congrArg List.length queue
   have pushedLength := congrArg List.length pushed
