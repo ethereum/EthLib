@@ -1601,21 +1601,6 @@ private structure CapStepR (config : Config) {f h : Fork} (s : BeaconState prese
   targetsAt : h < .glamsterdam → ∀ c, TargetsAt c s → TargetsAt c t
   targets := fun early held => (targetsAt early False held.at).old
 
-set_option hygiene false in
-/-- Opens the goals of a walked step, the goal `targetsAt` apart, for `case targetsAt`. -/
-local macro "capStepR_split" : tactic =>
-  `(tactic| refine {
-    capped := ?_
-    monotone := ?_
-    forward := ?_
-    forks := ?_
-    proposers := ?_
-    targetsAt := ?targetsAt
-    retired := ?_
-    withdrawal := ?_
-    appended := ?_
-    frozen := ?_ })
-
 private theorem CapStepR.refl {f : Fork} (s : BeaconState preset f) : CapStepR config s s :=
   { CapStep.refl s with targetsAt := fun _ _ => id }
 
@@ -1671,7 +1656,17 @@ private theorem CapStep.setValidatorAt {f : Fork} {s t : BeaconState preset f}
       (hasCompoundingWithdrawalCredential w = true →
         hasCompoundingWithdrawalCredential v = true) := by
       intro _; exact ⟨rfl, id⟩) : CapStepR config s t := by
-  capStepR_split
+  refine {
+    capped := ?_
+    monotone := ?_
+    forward := ?_
+    forks := ?_
+    proposers := ?_
+    targetsAt := ?targetsAt
+    retired := ?_
+    withdrawal := ?_
+    appended := ?_
+    frozen := ?_ }
   · intro capped
     exact capped_setValidatorAt capped (bound (capped v (mem_of_getValidatorAt found))) ok
   · obtain ⟨inside, rfl⟩ := setValidatorAt_ok ok
@@ -2239,7 +2234,17 @@ private theorem CapStep.add {f : Fork} {s t : BeaconState preset f}
     exact UInt64.le_refl _
   refine ⟨?_, (fun matched held => held.add matched ok), fun _ held =>
     held.transfer (.append data) forward (fun _ _ member => partials ▸ member)⟩
-  capStepR_split
+  refine {
+    capped := ?_
+    monotone := ?_
+    forward := ?_
+    forks := ?_
+    proposers := ?_
+    targetsAt := ?targetsAt
+    retired := ?_
+    withdrawal := ?_
+    appended := ?_
+    frozen := ?_ }
   · intro capped v member
     rw [data, Array.mem_push] at member
     rcases member with old | rfl

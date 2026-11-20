@@ -185,9 +185,9 @@ def PinTerms.dueAmount (state : BeaconState preset fork) (electra : .pectra ≤ 
   (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
     w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ cutoff).map (·.amount.toNat)).sum
 
-/-- The envelope of one sync seat's reward per slot, at a total.
+/-- The envelope of one sync seat's reward per slot, at three halves of a total.
 
-The reward is the base rewards of the total, times the sync weight, per slot and per member.
+The reward is the base rewards of a total, times the sync weight, per slot and per member.
 
 The base rewards of a total are at most the base reward factor times its root plus 2. -/
 def PinTerms.syncEnvelope (preset : Preset) (total : ℕ) : ℕ :=
@@ -387,7 +387,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- So it is charged at the larger of the finalized block's carry and the churn here.
   let consolidationCarry := max (if electra : .pectra ≤ fork then
       (finalizedState.consolidationBalanceToConsume electra).toNat else 0) consolidationChurn
-  -- The exit carry is at most one epoch's exit churn, which `depositChurn` caps.
+  -- Before Gloas, the exit carry is at most one epoch's exit churn, which `depositChurn` caps.
   let exitCarry := max capMax depositChurn
   let depthFin := epoch.toNat + 2 - (getCurrentEpoch finalizedState).toNat
   -- A deposit postponed at the head of the queue lets the deposits behind it spend the carry.
@@ -462,7 +462,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- A partial requested after that state can then be paid on a branch and sit in no queue here.
   --
-  -- So its whole balance is charged.
+  -- So its whole effective balance is charged.
   --
   -- The floor reads the finalized block's balance.
   --
@@ -994,9 +994,9 @@ So a key's fall reaches its effective balance at the finalized block's state.
 
 Near the downward band of that start, it also reaches its rounded balance.
 
-Past the withdrawability delay, a key's whole balance is charged as its fall.
+Past the withdrawability delay from the finalized state, a key's fall is its effective balance.
 
-A key's rise is its headroom once eleven times its gain over the depth reaches its balance bound.
+A key's rise is its headroom once eleven times its gain over the depth exceeds its balance bound.
 
 Below that, its gain and the credits are scaled by eleven tenths, rounded up.
 
@@ -1020,11 +1020,7 @@ Those charges also read its finalized effective balance and its rounded finalize
 
 A due consolidation can raise its target by one more increment, whose gains count three times.
 
-Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
-
-The reserve grows as the total active balance shrinks.
-
-For small totals it exceeds all stake, so the pin is vacuous. -/
+Inactivity scores and the queue of partial withdrawals are read at the finalized block's state. -/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   (pinTerms config state ancestor finalizedState).total
 

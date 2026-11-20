@@ -27,13 +27,12 @@ Not yet released.
   The cohort's penalties in `Penalties` and one key's pass debits in the pin's drift bound read it.
 
 - `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
-  `pinReserve` is now `(pinTerms config state ancestor finalizedState).total`, with the same value and statement.
+  `pinReserve` is `(pinTerms config state ancestor finalizedState).total`.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.
 
 - `PinTerms.capAt`, `PinTerms.dueAmount` and `PinTerms.exitedSlashable` read a key's cap, its due partial withdrawals and its exit from a state, as `pinTerms` does.
   `PinTerms.syncEnvelope`, `PinTerms.wide`, `PinTerms.balanceChurn`, `PinTerms.activationExitChurn` and `PinTerms.consolidationChurn` are the bounds that `pinTerms` computes from a total.
   `joiningStake` is the stake joining the active set, which `quorumReserve` and `pinTerms` both read, with `quorumReserve`'s value and statement unchanged.
-  `PinTerms` gains the fields `flagRate`, `slashLeak`, `high` and `capFor`, and `pinReserve`'s value is unchanged.
   The pin's drift bound in `PinDriftBound` reads them at other states and totals.
 
 - `ConsolidationQueueRise.Appends` says that the queue of pending consolidations only grows at its end inside a block, and `ConsolidationQueueRise.appendStep_processBlock` proves it for a block from Altair and before Gloas, with the frame and the registry lifecycle.
