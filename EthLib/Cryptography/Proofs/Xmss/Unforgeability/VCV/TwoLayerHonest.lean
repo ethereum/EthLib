@@ -182,14 +182,33 @@ theorem path_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp L
     (e : Nat) : (selection pp l).Preserves (Xmss.path LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) :=
   path_calls_at pp l other LAYER_HEIGHT e le_rfl
 
-/-- Both tagged public rows have the original physical hash input. -/
-@[expose] noncomputable def hash (pp : PublicParam) (l : Layer) (bytes : ByteArray) : OracleComp SharedSpec (Vector UInt8 32) :=
-  simulateQ (selection pp l).liftQuery (LayerGraph.hash bytes)
+/-- Both layers use this one full-word callback, independent of the public parameter. -/
+@[expose] def hash (bytes : ByteArray) : OracleComp SharedSpec (Vector UInt8 32) := do
+  let lo ← query (spec := SharedSpec) (.inl (.inl (.inr (.inl bytes.data.toList))))
+  let hi ← query (spec := SharedSpec) (.inl (.inl (.inr (.inr bytes.data.toList))))
+  pure (ofOutput (PairedHashWord.halves.symm (lo, hi)))
+
+theorem hash_image (pp : PublicParam) (l : Layer) (b : ByteArray) :
+    simulateQ (selection pp l).liftQuery (LayerGraph.hash b) = hash b := by
+  rw [LayerGraph.hash_eq]
+  simp only [simulateQ_bind, simulateQ_pure, simulateQ_HasQuery_query]
+  rfl
 
 /-- Each original private start-pair call reads the two start labels in its own layer. -/
 @[expose] noncomputable def prf (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec)) :
     SeedPrf (OracleComp SharedSpec) := fun p a d =>
   simulateQ (selection pp l).liftQuery (LayerGraph.startPrf pp l other p a d)
+
+/-- The two halves of an actual chain-start request read the private rows of the selected layer. -/
+theorem prf_pair (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (e : UInt32) (j : Fin (V / 2)) : prf pp l other pp (addrPrf l e j) ByteArray.empty = (do
+      let lo ← readCell (pub := Public) (K := Row) (some (.inl (l, e, ChainGraph.indexAt j 0)))
+      let hi ← readCell (pub := Public) (K := Row) (some (.inl (l, e, ChainGraph.indexAt j 1)))
+      pure (ofOutput (PairedHashWord.halves.symm (lo, hi)))) := by
+  unfold prf
+  rw [LayerGraph.startPrf_pair]
+  simp only [LayerGraph.readPair, readCell, simulateQ_bind, simulateQ_pure, simulateQ_HasQuery_query]
+  rfl
 
 /-- The shared run satisfies the selected layer's cache condition and retains every unselected cell. -/
 @[expose] def Records {α : Type} (pp : PublicParam) (l : Layer) (op : OracleComp SharedSpec α)
@@ -210,11 +229,12 @@ private theorem transfer {α : Type} (pp : PublicParam) (l : Layer) (p : OracleC
 /-- Every path of the actual built tree is recorded in the shared graph. -/
 theorem build_recorded (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
     (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : Records pp l
-      (Xmss.build (hash pp l) pp (prf pp l other) l h j) (LayerGraph.BuildRecorded h j) := by
+      (Xmss.build hash pp (prf pp l other) l h j) (LayerGraph.BuildRecorded h j) := by
   let v := selection pp l
   have eqn := Xmss.build_map_monad (fun {_} p => simulateQ v.liftQuery p)
     (simulateQ_pure _) (simulateQ_bind _) LayerGraph.hash (LayerGraph.startPrf pp l other) pp l h j
-  rw [show Xmss.build (hash pp l) pp (prf pp l other) l h j = _ from eqn.symm]
+  simp only [v, hash_image] at eqn
+  rw [show Xmss.build hash pp (prf pp l other) l h j = _ from eqn.symm]
   exact transfer pp l _ _ (build_calls pp l other h j bound) (LayerGraph.build_recorded pp l other h j bound)
 
 private theorem lifted_path (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
@@ -227,13 +247,14 @@ private theorem lifted_path (pp : PublicParam) (l : Layer) (other : SeedPrf (Ora
 
 /-- Each height of the original path reads its true sibling in the one graph shared by both layers. -/
 theorem path_recorded (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (e : Nat) : Records pp l (Xmss.path (hash pp l) pp (prf pp l other) l e)
+    (e : Nat) : Records pp l (Xmss.path hash pp (prf pp l other) l e)
     (fun path st => ∀ k : Fin LAYER_HEIGHT, LayerGraph.Recorded
       (LayerGraph.treeRole k.val ((e / 2 ^ k.val) ^^^ 1)) path[k] st) := by
   let v := selection pp l
   have eqn := Xmss.path_map_monad (fun {_} p => simulateQ v.liftQuery p)
     (simulateQ_pure _) (simulateQ_bind _) LayerGraph.hash (LayerGraph.startPrf pp l other) pp l e
-  rw [show Xmss.path (hash pp l) pp (prf pp l other) l e = _ from eqn.symm]
+  simp only [v, hash_image] at eqn
+  rw [show Xmss.path hash pp (prf pp l other) l e = _ from eqn.symm]
   exact lifted_path pp l other LAYER_HEIGHT e le_rfl
 
 end Honest
