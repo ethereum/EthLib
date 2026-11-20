@@ -30,11 +30,11 @@ That result needs the gas limit of the parent below `2^63`.
 
 At every fork, each receipt records at most the execution gas plus the state gas of the body.
 
-So at every fork, a block that passes its transition records its gas in 64 bits.
+So at every fork, a block that passes its transition then records both below `2^64`.
 
 That result needs the gas limit of the parent below `2^62`.
 
-Twice the gas limit of the block then stays below `2^64`.
+The gas limit of the block then stays below `2^63`, and twice it below `2^64`.
 
 [EIP-4844][e4844] asks for the bound on the blob gas.
 
@@ -216,7 +216,7 @@ theorem applyTransactions_cumulativeGasUsed_le_add {env : BlockEnvironment fork}
 
 /-- A block that passes its transition has a parent, the last recent block.
 
-The gas limit rule keeps 1024 times its gas limit below 1025 times that of the parent.
+The gas limit rule keeps 1024 times the gas limit of the block below 1025 times that of the parent.
 
 That gas limit of the parent is the one that the rule reads, doubled at the first London block. -/
 theorem stateTransition_gasLimit_mul_lt {chain : BlockChain} {block : Block fork Transaction}

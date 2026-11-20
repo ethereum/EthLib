@@ -57,7 +57,7 @@ At every fork, the block counts the blob gas of the transaction.
 
 Up to BPO5, the block counts at most the gas limit, when that limit covers the least gas.
 
-At every fork, a transaction uses at most the execution gas plus the state gas that it adds.
+At every fork, a transaction uses at most the execution gas plus the state gas it adds to its block.
 
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
