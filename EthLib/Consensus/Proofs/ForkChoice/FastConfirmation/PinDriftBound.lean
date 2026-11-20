@@ -867,46 +867,39 @@ private def stepCredit (blockP slotP : BalanceSource → Bool) (v : ℕ)
   | .slot _ => ((events.filter (slotP ·.source)).map (keyCredit v)).sum
   | .block .. => ((events.filter (blockP ·.source)).map (keyCredit v)).sum
 
-/-- The credits to the key over a run, and the number of block steps that credit it.
+/-- The credits to the key over a run.
 
 The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
 private def creditScan (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x : ForkedBeaconState preset} :
-    {y : ForkedBeaconState preset} → Run config checks x y → ℕ × ℕ
-  | _, .nil => (0, 0)
+    {y : ForkedBeaconState preset} → Run config checks x y → ℕ
+  | _, .nil => 0
   | _, .snoc (middle := m) pre step =>
     let before := creditScan blockP slotP v high pre
     if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-      let credit := stepCredit blockP slotP v step
-      (before.1 + credit, before.2 + match step with
-        | .block .. => if 0 < credit then 1 else 0
-        | .slot _ => 0)
+      before + stepCredit blockP slotP v step
     else before
 
 /-- The credits that a scan reads from a run, after one more step. -/
-private theorem creditScan_snoc_fst (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+private theorem creditScan_snoc (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
     (step : Step config checks m y) :
-    (creditScan blockP slotP v high (pre.snoc step)).1 =
+    creditScan blockP slotP v high (pre.snoc step) =
       if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-        (creditScan blockP slotP v high pre).1 + stepCredit blockP slotP v step
-      else (creditScan blockP slotP v high pre).1 := by
-  change (if (getCurrentEpoch m.state).toNat ≤ high + 1 then
-      ((creditScan blockP slotP v high pre).1 + stepCredit blockP slotP v step, _)
-    else creditScan blockP slotP v high pre).1 = _
-  split_ifs <;> rfl
+        creditScan blockP slotP v high pre + stepCredit blockP slotP v step
+      else creditScan blockP slotP v high pre := rfl
 
 /-- The credits of a run to a key, read as a scan, add over `append`. -/
 private theorem creditScan_append (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
     (post : Run config checks m y) :
-    (creditScan blockP slotP v high (pre.append post)).1 =
-      (creditScan blockP slotP v high pre).1 + (creditScan blockP slotP v high post).1 := by
+    (creditScan blockP slotP v high (pre.append post)) =
+      (creditScan blockP slotP v high pre) + (creditScan blockP slotP v high post) := by
   induction post with
   | nil => rfl
   | snoc post step ih =>
-    change (creditScan blockP slotP v high ((pre.append post).snoc step)).1 = _
-    rw [creditScan_snoc_fst, creditScan_snoc_fst]
+    change (creditScan blockP slotP v high ((pre.append post).snoc step)) = _
+    rw [creditScan_snoc, creditScan_snoc]
     split
     · omega
     · exact ih
@@ -916,13 +909,13 @@ private theorem creditScan_eq_zero_of_steps (blockP slotP : BalanceSource → Bo
     {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (zero : ∀ {m n : ForkedBeaconState preset} (step : Step config checks m n),
       tail.Contains step → stepCredit blockP slotP v step = 0) :
-    (creditScan blockP slotP v high tail).1 = 0 := by
+    (creditScan blockP slotP v high tail) = 0 := by
   induction tail with
   | nil => rfl
   | @snoc m n pre step ih =>
     have prior := ih fun inner member => zero inner (.earlier member step)
     have here := zero step (.last pre step)
-    rw [creditScan_snoc_fst]
+    rw [creditScan_snoc]
     split <;> omega
 
 /-- The credits of a list of events from one source set are at most those from a larger set. -/
@@ -964,7 +957,7 @@ private theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (replayed : tail.balanceEvents high = .ok events)
     (each : ∀ e ∈ events, (blockP e.source = true ∨ slotP e.source = true) →
       ∑ v ∈ S, keyCredit (key v) e ≤ T e) :
-    (∑ v ∈ S, (creditScan blockP slotP (key v) high tail).1 ≤
+    (∑ v ∈ S, (creditScan blockP slotP (key v) high tail) ≤
       (events.map fun e =>
         if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum) ∧
     (∀ src : BalanceSource → Bool,
@@ -982,7 +975,7 @@ private theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
             ∀ i, ((es.filter (src ·.source)).map (keyCredit i)).sum = 0) →
       .pectra ≤ x.fork → y.fork < .glamsterdam →
       ∀ v, ((events.filter (src ·.source)).map (keyCredit v)).sum ≤
-        (creditScan blockP slotP v high tail).1) := by
+        (creditScan blockP slotP v high tail)) := by
   induction tail generalizing events with
   | nil =>
     simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
@@ -1030,7 +1023,7 @@ private theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
           simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
           exact part blockP fun _ h => Or.inl h
       refine ⟨?_, fun src blockKind slotKind electra early v => ?_⟩
-      · simp only [creditScan_snoc_fst, selected, ↓reduceIte, Finset.sum_add_distrib,
+      · simp only [creditScan_snoc, selected, ↓reduceIte, Finset.sum_add_distrib,
           List.map_append, List.sum_append]
         omega
       · have prior := previousSrc src blockKind slotKind electra
@@ -1051,16 +1044,16 @@ private theorem creditScan_bounds {ι : Type} (S : Finset ι) (key : ι → ℕ)
             · exact sum_filter_credit_le src blockP covered v added
             · rw [quiet inRun early addedOk v]
               exact Nat.zero_le _
-        simp only [creditScan_snoc_fst, selected, ↓reduceIte, List.filter_append, List.map_append,
+        simp only [creditScan_snoc, selected, ↓reduceIte, List.filter_append, List.map_append,
           List.sum_append]
         omega
     · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
       obtain rfl := rest
       obtain ⟨previous, previousSrc⟩ := ih priorOk each
       refine ⟨?_, fun src blockKind slotKind electra early v => ?_⟩
-      · simp only [creditScan_snoc_fst, selected, ↓reduceIte]
+      · simp only [creditScan_snoc, selected, ↓reduceIte]
         exact previous
-      · simp only [creditScan_snoc_fst, selected, ↓reduceIte]
+      · simp only [creditScan_snoc, selected, ↓reduceIte]
         exact previousSrc src blockKind slotKind electra
           (Nat.lt_of_le_of_lt step.chainStep.fork_le early) v
 
@@ -1078,7 +1071,7 @@ private theorem creditScan_sum_le {ι : Type} (S : Finset ι) (key : ι → ℕ)
     (replayed : tail.balanceEvents high = .ok events)
     (each : ∀ e ∈ events, (blockP e.source = true ∨ slotP e.source = true) →
       ∑ v ∈ S, keyCredit (key v) e ≤ T e) :
-    ∑ v ∈ S, (creditScan blockP slotP (key v) high tail).1 ≤
+    ∑ v ∈ S, (creditScan blockP slotP (key v) high tail) ≤
       (events.map fun e =>
         if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum :=
   (creditScan_bounds S key blockP slotP high T tail replayed each).1
@@ -1119,9 +1112,9 @@ private theorem netScan_nil (v high : ℕ) {x : ForkedBeaconState preset} :
     netScan v high (Run.nil : Run config checks x x) = 0 := rfl
 
 /-- A run with no step has no credits to scan. -/
-private theorem creditScan_nil_fst (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+private theorem creditScan_nil (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x : ForkedBeaconState preset} :
-    (creditScan blockP slotP v high (Run.nil : Run config checks x x)).1 = 0 := rfl
+    (creditScan blockP slotP v high (Run.nil : Run config checks x x)) = 0 := rfl
 
 /-- Events within their credit limits credit the slashing events at most their limits. -/
 private theorem slashing_credits_le_limits (events : List (BalanceEvent preset))
@@ -1837,7 +1830,7 @@ private def creditBound {x y : ForkedBeaconState preset} (tail : Run config chec
       (E / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
     netScan i high tail +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail).1
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail)
 
 end Rewards
 
@@ -1951,7 +1944,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       fun _ _ _ _ _ _ z hz => by
         rw [Run.balancePath, List.mem_singleton] at hz
         subst hz
-        simp [creditBound, PinKeys.netScan_nil, PinKeys.creditScan_nil_fst]⟩
+        simp [creditBound, PinKeys.netScan_nil, PinKeys.creditScan_nil]⟩
   | @snoc middle last pre step ih =>
     have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     obtain ⟨ihFloor, ihEnvelope, ihCeiling, ihCredit⟩ := ih middleEarly
@@ -1985,7 +1978,7 @@ private theorem Run.effective_floor_pair {x y : ForkedBeaconState preset}
       have ml : (getCurrentEpoch middle.state).toNat ≤ (getCurrentEpoch last.state).toNat :=
         UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
       have within : (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
-      have scan := PinKeys.creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards))
+      have scan := PinKeys.creditScan_snoc (fun _ => false) (fun s => decide (s ≠ .rewards))
         i high pre step
       have net := PinKeys.netScan_snoc i high pre step
       simp only [within, ↓reduceIte] at scan net
@@ -7146,7 +7139,7 @@ The consolidation bands are not here: `bud_consolidations` charges them. -/
 private def propC {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
   (creditScan (fun s => decide (s = .rewards ∨ s = .consolidations))
-    (fun s => decide (s = .consolidations)) v high tail).1
+    (fun s => decide (s = .consolidations)) v high tail)
 
 /-- Proposer credits to the key on C's branch since the split, without the consolidation credits.
 
@@ -7157,7 +7150,7 @@ The bounds of the terms charge an exact tenth of the keys' total, at ten times t
 The consolidation credits are under `consolidationsX`, so their compounding is not charged here. -/
 private def propN {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
-  (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v high tail).1
+  (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v high tail)
 
 /-- Proposer and deposit credits to the key on C's branch since the split.
 
@@ -7168,7 +7161,7 @@ A credited stake compounds by at most a tenth.
 The bounds of the terms charge an exact tenth of the keys' total, at ten times their terms. -/
 private def credN {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
-  (creditScan (fun s => decide (s = .rewards)) (fun s => decide (s = .deposits)) v high tail).1
+  (creditScan (fun s => decide (s = .rewards)) (fun s => decide (s = .deposits)) v high tail)
 
 /-- The deposits credited to a key by events whose state before them does not hold it slashed.
 
@@ -7191,7 +7184,7 @@ The rounding slack of a credited key is `bandC`, once for each key. -/
 private def credC {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
   (creditScan (fun s => decide (s = .rewards ∨ s = .consolidations))
-    (fun s => decide (s = .consolidations ∨ s = .deposits)) v high tail).1
+    (fun s => decide (s = .consolidations ∨ s = .deposits)) v high tail)
 
 /-- Whistleblower credits to the key on C's branch since the split.
 
@@ -7202,7 +7195,7 @@ The rounding slack of a credited key is `bandC`, once for each key.
 A slot step records only debits for a slashing. -/
 private def whistC {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
-  (creditScan (fun s => decide (s = .slashings)) (fun _ => false) v high tail).1
+  (creditScan (fun s => decide (s = .slashings)) (fun _ => false) v high tail)
 
 /-- The entries of X's queue of pending consolidations that name a target in `T`.
 
@@ -7246,7 +7239,7 @@ A block step counts the credits of its events from those sources, whatever the s
 private def grossScan (v high : ℕ) {x y : ForkedBeaconState preset} (tail : Run config checks x y) :
     ℕ :=
   (creditScan (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) v
-    high tail).1
+    high tail)
 
 /-- The gross credits of a run, after one more step. -/
 private theorem grossScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
@@ -7256,7 +7249,7 @@ private theorem grossScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
         (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) v step
       else grossScan v high pre := by
   unfold grossScan
-  exact creditScan_snoc_fst _ _ v high pre step
+  exact creditScan_snoc _ _ v high pre step
 
 private theorem grossScan_slot_pos (i high : ℕ) {x m n : ForkedBeaconState preset}
     (pre : Run config checks x m) (ok : advanceSlotAcross config checks m = .ok n)
@@ -7285,7 +7278,7 @@ A consolidation credit is not here: `bud_consolidations` charges its band for ea
 private def bandC {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
   if 0 < grossScan v high tail +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail).1 then
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail) then
     preset.upwardBand else 0
 
 /-- A sum over the members of a list that pass one of two apart tests is the two sums. -/
@@ -7313,8 +7306,8 @@ private theorem creditScan_or (blockP slotP b₁ b₂ s₁ s₂ : BalanceSource 
     (hb : ∀ s, blockP s = (b₁ s || b₂ s)) (hs : ∀ s, slotP s = (s₁ s || s₂ s))
     (apartB : ∀ s, ¬ (b₁ s = true ∧ b₂ s = true)) (apartS : ∀ s, ¬ (s₁ s = true ∧ s₂ s = true))
     (v high : ℕ) {x y : ForkedBeaconState preset} (tail : Run config checks x y) :
-    (creditScan blockP slotP v high tail).1 =
-      (creditScan b₁ s₁ v high tail).1 + (creditScan b₂ s₂ v high tail).1 := by
+    (creditScan blockP slotP v high tail) =
+      (creditScan b₁ s₁ v high tail) + (creditScan b₂ s₂ v high tail) := by
   obtain rfl : blockP = fun s => b₁ s || b₂ s := funext hb
   obtain rfl : slotP = fun s => s₁ s || s₂ s := funext hs
   induction tail with
@@ -7331,14 +7324,14 @@ private theorem creditScan_or (blockP slotP b₁ b₂ s₁ s₂ : BalanceSource 
         simp only [stepCredit]
         exact sum_filter_or _ (fun e : BalanceEvent preset => b₁ e.source)
           (fun e => b₂ e.source) (fun e => apartB e.source) _
-    rw [creditScan_snoc_fst, creditScan_snoc_fst, creditScan_snoc_fst, split]
+    rw [creditScan_snoc, creditScan_snoc, creditScan_snoc, split]
     split_ifs <;> omega
 
 /-- The credits of a key on C's branch are its proposer credits and the deposits it is credited. -/
 private theorem credN_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) :
     credN tail high v = propN tail high v +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail).1 :=
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high tail) :=
   creditScan_or _ _ (fun s => decide (s = .rewards)) (fun _ => false) (fun _ => false)
     (fun s => decide (s = .deposits)) (fun s => by cases s <;> decide)
     (fun s => by cases s <;> decide)
@@ -7349,7 +7342,7 @@ private theorem credC_split {x y : ForkedBeaconState preset} (tail : Run config 
     (high v : ℕ) :
     credC tail high v = credN tail high v +
       (creditScan (fun s => decide (s = .consolidations))
-        (fun s => decide (s = .consolidations)) v high tail).1 :=
+        (fun s => decide (s = .consolidations)) v high tail) :=
   creditScan_or _ _ (fun s => decide (s = .rewards)) (fun s => decide (s = .consolidations))
     (fun s => decide (s = .deposits)) (fun s => decide (s = .consolidations))
     (fun s => by cases s <;> decide) (fun s => by cases s <;> decide)
@@ -7361,7 +7354,7 @@ private theorem propC_split {x y : ForkedBeaconState preset} (tail : Run config 
     (high v : ℕ) :
     propC tail high v = propN tail high v +
       (creditScan (fun s => decide (s = .consolidations))
-        (fun s => decide (s = .consolidations)) v high tail).1 :=
+        (fun s => decide (s = .consolidations)) v high tail) :=
   creditScan_or _ _ (fun s => decide (s = .rewards)) (fun s => decide (s = .consolidations))
     (fun _ => false) (fun s => decide (s = .consolidations))
     (fun s => by cases s <;> decide) (fun s => by cases s <;> decide)
@@ -7955,16 +7948,16 @@ private theorem credits_le_sources {g x y : ForkedBeaconState preset}
     (i high : ℕ) {events : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events) :
     grossScan i high tail + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
-      tail).1 ≤ credC tail high i + whistC tail high i + (events.map (syncCredit i)).sum ∧
+      tail) ≤ credC tail high i + whistC tail high i + (events.map (syncCredit i)).sum ∧
     netScan i high tail ≤ grossScan i high tail ∧
-    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail).1 ≤
+    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high tail) ≤
       (creditScan (fun _ => false)
-        (fun s => decide (s = .consolidations ∨ s = .deposits)) i high tail).1 := by
+        (fun s => decide (s = .consolidations ∨ s = .deposits)) i high tail) := by
   induction tail generalizing events with
   | nil =>
     simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
     subst replayed
-    simp [credC, whistC, grossScan, netScan_nil, creditScan_nil_fst]
+    simp [credC, whistC, grossScan, netScan_nil, creditScan_nil]
   | @snoc middle last pre step ih =>
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
@@ -7977,14 +7970,14 @@ private theorem credits_le_sources {g x y : ForkedBeaconState preset}
         (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)) i addedOk
       unfold credC whistC grossScan at previous ⊢
       unfold grossScan at previousNet
-      simp only [netScan_snoc, creditScan_snoc_fst, selected, ↓reduceIte, List.map_append,
+      simp only [netScan_snoc, creditScan_snoc, selected, ↓reduceIte, List.map_append,
         List.sum_append]
       exact ⟨by omega, by omega, by omega⟩
     · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
       obtain rfl := rest
       unfold credC whistC grossScan at previous ⊢
       unfold grossScan at previousNet
-      simp only [netScan_snoc, creditScan_snoc_fst, selected, ↓reduceIte]
+      simp only [netScan_snoc, creditScan_snoc, selected, ↓reduceIte]
       exact ⟨previous, previousNet, previousSlot⟩
 
 /-- The credits of a switch step, whole, and of the runs around it are at most the sources.
@@ -7998,14 +7991,14 @@ private theorem flip_credits_le_sources {g x s s' y : ForkedBeaconState preset}
     {events : List (BalanceEvent preset)}
     (replayed : ((pre.snoc step).append post).balanceEvents high = .ok events) :
     (netScan i high pre + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
-        pre).1 + stepCredit (fun _ => true) (fun _ => true) i step +
+        pre) + stepCredit (fun _ => true) (fun _ => true) i step +
       (netScan i high post + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
-        post).1) ≤ credC ((pre.snoc step).append post) high i +
+        post)) ≤ credC ((pre.snoc step).append post) high i +
       whistC ((pre.snoc step).append post) high i + (events.map (syncCredit i)).sum) ∧
     (grossScan i high pre + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
-        pre).1 + stepCredit (fun _ => true) (fun _ => true) i step +
+        pre) + stepCredit (fun _ => true) (fun _ => true) i step +
       (netScan i high post + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
-        post).1) ≤ credC ((pre.snoc step).append post) high i +
+        post)) ≤ credC ((pre.snoc step).append post) high i +
       whistC ((pre.snoc step).append post) high i + (events.map (syncCredit i)).sum) := by
   have s'Early : s'.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early
@@ -8026,7 +8019,7 @@ private theorem flip_credits_le_sources {g x s s' y : ForkedBeaconState preset}
   have middle := block_credit_le_sources (shared.append pre) genesis step notSlot s'Early
     (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)) i replayedS
   unfold credC whistC
-  rw [creditScan_append, creditScan_append, creditScan_snoc_fst, creditScan_snoc_fst]
+  rw [creditScan_append, creditScan_append, creditScan_snoc, creditScan_snoc]
   simp only [inside, ↓reduceIte]
   unfold credC whistC at first last
   simp only [List.map_append, List.sum_append] at first last ⊢
@@ -8457,13 +8450,13 @@ private theorem stepCredit_le_creditScan (blockP slotP : BalanceSource → Bool)
     {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (within : (getCurrentEpoch y.state).toNat ≤ high + 1)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tail.Contains step) :
-    stepCredit blockP slotP v step ≤ (creditScan blockP slotP v high tail).1 := by
+    stepCredit blockP slotP v step ≤ (creditScan blockP slotP v high tail) := by
   obtain ⟨pre, post, same⟩ := tail.contains_split step member
   subst same
   have selected : (getCurrentEpoch a.state).toNat ≤ high + 1 :=
     Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
       (Relation.ReflTransGen.head step.chainStep post.chainSteps))) within
-  rw [creditScan_append, creditScan_snoc_fst]
+  rw [creditScan_append, creditScan_snoc]
   simp only [selected, ↓reduceIte]
   omega
 
@@ -8477,7 +8470,7 @@ private theorem depPre_pos_scan (h : Setting config checks g split fin pulled an
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (i : ℕ) (pos : 0 < depPre eventsC i) :
-    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1 := by
+    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC) := by
   classical
   obtain ⟨e, member, dep, credited⟩ : ∃ e ∈ eventsC, e.source = .deposits ∧ 0 < keyCredit i e := by
     by_contra none
@@ -8612,7 +8605,7 @@ private theorem credited_piece {g : ForkedBeaconState preset}
       (∀ i, 0 < grossScan i high r →
       i ∈ B ∨ ∃ w, y.state.validators.data[i]? = some w ∧
         w.pubkey ∈ (x.state.currentSyncCommittee altair).value.pubkeys.toList) ∧
-      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r).1 →
+      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r) →
         i ∈ D) ∧
       (∀ events, r.balanceEvents high = .ok events → ∀ i, 0 < (events.map (syncDebit i)).sum →
         ∃ w, y.state.validators.data[i]? = some w ∧
@@ -8652,12 +8645,12 @@ private theorem credited_piece {g : ForkedBeaconState preset}
       rw [Nat.mul_add] at joined
       exact (Finset.card_union_le _ _).trans (Nat.le_trans (Nat.add_le_add cardD cardDs) joined)
     have depMem : ∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high
-        (pre.snoc step)).1 → i ∈ D ∪ Ds := by
+        (pre.snoc step)) → i ∈ D ∪ Ds := by
       intro i pos
-      rw [creditScan_snoc_fst] at pos
+      rw [creditScan_snoc] at pos
       split at pos
       · by_cases prior : 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i
-            high pre).1
+            high pre)
         · exact Finset.mem_union_left _ (hDep i prior)
         · exact Finset.mem_union_right _ (hDs i (by omega))
       · exact Finset.mem_union_left _ (hDep i pos)
@@ -8833,7 +8826,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
       D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
         ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) ∧
       (∀ i, 0 < grossScan i high r → i ∈ B ∨ i ∈ S) ∧
-      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r).1 →
+      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r) →
         i ∈ D) ∧
       (∀ i, 0 < grossScan i high r → i ∈ B ∨
         ∃ w j, y.state.validators.data[i]? = some w ∧ j ≤ n ∧ w.pubkey ∈ Ls j) ∧
@@ -8966,11 +8959,11 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
         · exact .inr (Finset.mem_union_right _ member)
     · rw [creditScan_append] at pos
       by_cases first : 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high
-          (pre.snoc (Step.slot ok))).1
-      · rw [creditScan_snoc_fst] at first
+          (pre.snoc (Step.slot ok)))
+      · rw [creditScan_snoc] at first
         split at first
         · by_cases prior : 0 < (creditScan (fun _ => false)
-              (fun s => decide (s = .deposits)) i high pre).1
+              (fun s => decide (s = .deposits)) i high pre)
           · exact Finset.mem_union_left _ (Finset.mem_union_left _ (hDep₁ i prior))
           · exact Finset.mem_union_left _ (Finset.mem_union_right _ (hDs i (by omega)))
         · exact Finset.mem_union_left _ (Finset.mem_union_left _ (hDep₁ i first))
@@ -9052,7 +9045,7 @@ private theorem credited_pieces {g : ForkedBeaconState preset}
       D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
         ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) ∧
       (∀ i, 0 < grossScan i high r → i ∈ B ∨ i ∈ S) ∧
-      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r).1 →
+      (∀ i, 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high r) →
         i ∈ D) ∧
       ∀ events, r.balanceEvents high = .ok events → ∀ i, 0 < (events.map (syncDebit i)).sum →
         i ∈ S := by
@@ -9335,7 +9328,7 @@ private theorem banded_keys_le (h : Setting config checks g split fin pulled anc
     {x : BeaconState preset fork} (tail : Run config checks ⟨fork, split⟩ ⟨fork, x⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (keys : Finset ℕ) (banded : ∀ i ∈ keys, 0 < grossScan i high tail +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high tail).1 +
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high tail) +
         (events.map (syncDebit i)).sum) :
     keys.card ≤
       ((getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1) *
@@ -9374,7 +9367,7 @@ private theorem banded_keys_le (h : Setting config checks g split fin pulled anc
       · exact Finset.mem_union_left _ (Finset.mem_union_left _ inB)
       · exact Finset.mem_union_left _ (Finset.mem_union_right _ inS)
     · by_cases dep : 0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high
-          tail).1
+          tail)
       · exact Finset.mem_union_right _ (hD i dep)
       · exact Finset.mem_union_left _ (Finset.mem_union_right _ (hSD events replayed i (by omega)))
   -- The blocks of the run are at most one for each slot of its epochs.
@@ -9405,7 +9398,7 @@ private theorem credited_keys_le (h : Setting config checks g split fin pulled a
     {x : BeaconState preset fork} (tail : Run config checks ⟨fork, split⟩ ⟨fork, x⟩) (high : ℕ) :
     ((Finset.range x.validators.data.size).filter fun i =>
         0 < grossScan i high tail +
-          (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high tail).1).card ≤
+          (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i high tail)).card ≤
       ((getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1) *
           (preset.SLOTS_PER_EPOCH.toNat + preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) +
         preset.SYNC_COMMITTEE_SIZE.toNat *
@@ -12468,7 +12461,7 @@ private theorem deposits_scan_le (h : Setting config checks g split fin pulled a
         ∑ v ∈ P.filter (fun v => ¬ slashedFlagAt e.before.state v.toNat = some true),
           keyCredit v.toNat e ≤ DirectSafety.funding_deposit_credit e) :
     3 * (∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      tailC).1 + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+      tailC) + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
   obtain ⟨X, hX⟩ : ∃ X : BalanceEvent preset → ℕ, ∀ e, X e =
       ∑ v ∈ P.filter (fun v => ¬ slashedFlagAt e.before.state v.toNat = some true),
         keyCredit v.toNat e := ⟨_, fun _ => rfl⟩
@@ -12625,7 +12618,7 @@ private theorem deposits_active_le (h : Setting config checks g split fin pulled
       (getCurrentEpoch counted).toNat < w.exitEpoch.toNat)
     (slashedC : ∀ v ∈ P, ∃ b, counted.validators.data[v.toNat]? = some b ∧ b.slashed = true) :
     3 * (∑ v ∈ S, (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      tailC).1 + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
+      tailC) + ∑ v ∈ P, depPre eventsC v.toNat) ≤ (pinTerms config pulled anc fin).queueDep := by
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have located := (run_located tailC (Nat.le_trans (by decide) h.fulu) h.early highC replayedC).1
@@ -13518,7 +13511,7 @@ private theorem c_ceiling_abstract {n y : ForkedBeaconState preset}
     (startBal : min (actualBalanceAt n i) capHigh ≤ S)
     (startEff : effectiveAt n i ≤ e0 + C)
     (credits : netScan i high post +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post).1 ≤ Cr)
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post) ≤ Cr)
     (key : 11 * depth * (P * F) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (start : S + Cr ≤ e0 + Cr' + W) :
@@ -13597,9 +13590,9 @@ private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
       stepCredit (fun _ => true) (fun _ => true) i step)
     (keepEff : effectiveAt n i = effectiveAt m i)
     (credits : netScan i high pre + (creditScan (fun _ => false)
-        (fun s => decide (s ≠ .rewards)) i high pre).1 +
+        (fun s => decide (s ≠ .rewards)) i high pre) +
       stepCredit (fun _ => true) (fun _ => true) i step + netScan i high post +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post).1 ≤ Cr)
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high post) ≤ Cr)
     (key : 11 * depth * (P * F) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (start : S + Cr ≤ e0 + Cr' + W) :
@@ -14388,7 +14381,7 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     {events eventsF eventsC : List (BalanceEvent preset)} (W : ℕ)
     (replayedC : tailC.balanceEvents highC = .ok eventsC) (Cr : ℕ)
     (credits : netScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Cr)
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Cr)
     (flipCover : PinTerms.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ≤
         preset.MIN_ACTIVATION_BALANCE.toNat ∧ preset.MIN_ACTIVATION_BALANCE.toNat <
           PinTerms.capAt (⟨fork, e⟩ : ForkedBeaconState preset) v.toNat →
@@ -15004,7 +14997,7 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
     (found : fin.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch fin).toNat) (Cr : ℕ)
     (credits : netScan i high run +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run).1 ≤ Cr) :
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run) ≤ Cr) :
     effectiveAt (⟨fork, a⟩ : ForkedBeaconState preset) i ≤
       max (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
         ((actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i -
@@ -15050,7 +15043,7 @@ private theorem exited_ceiling (h : Setting config checks g split fin pulled anc
     exact Bool.false_ne_true this
   obtain ⟨cb, hcb⟩ : ∃ cb, cb = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i)
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat + (netScan i high run +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run).1) := ⟨_, rfl⟩
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high run)) := ⟨_, rfl⟩
   have cbE : ∀ E, PinKeyFloor.creditBound run i high E 0
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat = cb := fun E => by
     rw [hcb]
@@ -17468,7 +17461,7 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
     (inner : Run config checks ⟨fork, m⟩ u) (rest : Run config checks u ⟨fork, counted⟩)
     (same : getCurrentEpoch u.state = getCurrentEpoch m) :
     (∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      inner).1) * 896 ≤
+      inner)) * 896 ≤
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
@@ -17481,7 +17474,7 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
   obtain ⟨events, replayed, bounded⟩ :=
     Run.balanceEvents_bounded toM inner h.genesis uEarly highC
   have scan : ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      inner).1 ≤ sourceCredits .rewards events := by
+      inner) ≤ sourceCredits .rewards events := by
     have := creditScan_sum_le S UInt64.toNat (fun s => decide (s = .rewards)) (fun _ => false) highC
       (fun e => e.creditLimit) inner replayed fun e member _ =>
         sum_keyCredit_le_creditLimit S e (bounded e member).1
@@ -17531,8 +17524,8 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
     (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       mid.Contains step → getCurrentEpoch u.state = getCurrentEpoch m.state) :
     ((∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      head).1) + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat
-        highC mid).1) * 896 ≤
+      head)) + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat
+        highC mid)) * 896 ≤
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
@@ -17550,7 +17543,7 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
     simp only [creditScan_append, Finset.sum_add_distrib] at whole
     refine Nat.le_trans (Nat.mul_le_mul_right 896 (Nat.add_le_add_left
       (Finset.sum_le_sum fun v _ => ?_) _)) whole
-    rw [creditScan_snoc_fst]
+    rw [creditScan_snoc]
     split <;> simp [stepCredit]
 
 /-- The whole increments of aligned stakes are at most those of larger stakes on a larger set. -/
@@ -17622,18 +17615,18 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
         216 * (pinTerms config pulled anc fin).perIncrement) / 896 := ⟨_, rfl⟩
   -- the credits of `pre` are those of one epoch run, so they fit one epoch's bound
   obtain ⟨P, hP⟩ : ∃ P, P = ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards))
-    (fun _ => false) v.toNat highC pre).1 := ⟨_, rfl⟩
+    (fun _ => false) v.toNat highC pre) := ⟨_, rfl⟩
   have first : P ≤ B := by
     have one := propN_segment_le h highC S pulledOk toB link pre
       (Run.nil : Run config checks ⟨fork, split⟩ ⟨fork, split⟩) tailC sameEpoch
       (fun step member => by cases member)
     rw [hB, hP]
     refine (Nat.le_div_iff_mul_le (by norm_num)).mpr (Nat.le_trans ?_ one)
-    simp only [creditScan_nil_fst, Finset.sum_const_zero, Nat.add_zero]
+    simp only [creditScan_nil, Finset.sum_const_zero, Nat.add_zero]
     exact Nat.le_refl _
   have cut := run_cuts_of_additive tailC h.early (fun _ => True)
     (fun r => ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-      r).1) (fun i => if i = 0 then B - P else B)
+      r)) (fun i => if i = 0 then B - P else B)
     (fun pre post _ => by simp only [creditScan_append, Finset.sum_add_distrib])
     (fun _ _ _ _ => trivial)
     (fun {m n} toM mid rest starts _ => by
@@ -17648,13 +17641,13 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
         have one := propN_segment_le h highC S pulledOk toB link (pre.append toM) mid rest
           (by simpa only [sameEpoch] using e) starts
         have again : P ≤ ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false)
-            v.toNat highC (pre.append toM)).1 := by
+            v.toNat highC (pre.append toM)) := by
           rw [hP]
           exact Finset.sum_le_sum fun v _ => by
             rw [creditScan_append]
             exact Nat.le_add_right _ _
         have bound : P + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false)
-            v.toNat highC mid).1 ≤ B := by
+            v.toNat highC mid) ≤ B := by
           rw [hB]
           exact (Nat.le_div_iff_mul_le (by norm_num)).mpr
             (Nat.le_trans (Nat.mul_le_mul_right 896 (Nat.add_le_add_right again _)) one)
@@ -17670,7 +17663,7 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
         have one := propN_segment_le h highC S pulledOk ((toFin.append fromFin).append toM)
           (Or.inl ⟨fromFin.append toM⟩) (Run.nil : Run config checks ⟨fork, ms⟩ ⟨fork, ms⟩) mid
           rest rfl starts
-        simp only [creditScan_nil_fst, Finset.sum_const_zero, Nat.zero_add] at one
+        simp only [creditScan_nil, Finset.sum_const_zero, Nat.zero_add] at one
         exact (Nat.le_div_iff_mul_le (by norm_num)).mpr one)
     (ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1) (fun step member => steps_before_end tailC step member)
   have total : ∀ t : ℕ, ((List.range (t + 1)).map
@@ -17687,7 +17680,7 @@ private theorem proposer_rewards_le (h : Setting config checks g split fin pulle
       omega
   have joined : ∑ v ∈ S, propN (pre.append tailC) highC v.toNat =
       P + ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
-        tailC).1 := by
+        tailC) := by
     rw [hP, ← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl fun v _ => creditScan_append _ _ _ _ pre tailC
   have depth : ix ⟨fork, split⟩ ⟨fork, counted⟩ + 1 ≤ (pinTerms config pulled anc fin).depth := by
@@ -17968,7 +17961,7 @@ A block step credits it, or a pending-deposit pass does. -/
 private def creditedKey {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high : ℕ) (v : ValidatorIndex) : Bool :=
   decide (0 < grossScan v.toNat high tail +
-    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail).1)
+    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail))
 
 /-- `creditUnits` is `unitGain` for the credited-key slots and for two more of each exiting key.
 
@@ -18069,7 +18062,7 @@ private theorem credited_slots_le (h : Setting config checks g split fin pulled 
       ((Finset.range counted.validators.data.size).filter fun i =>
         0 < grossScan i highC tailC +
           (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC
-            tailC).1).card := by
+            tailC)).card := by
     refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
       (fun a _ b _ same => UInt64.toNat_inj.mp same)
     obtain ⟨member, flag⟩ := Finset.mem_filter.mp hv
@@ -18219,7 +18212,7 @@ private theorem band_sum {x y : ForkedBeaconState preset} (tail : Run config che
   refine Finset.sum_congr rfl fun v _ => ?_
   unfold bandC creditedKey
   by_cases credited : 0 < grossScan v.toNat high tail +
-    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail).1 <;>
+    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail) <;>
     simp [credited]
 
 /-- The credits that a scan reads for a key are at most the credits of its source's events.
@@ -18230,7 +18223,7 @@ private theorem scan_le_events (blockP slotP : BalanceSource → Bool) (p : Bala
     {x y : ForkedBeaconState preset} (tail : Run config checks x y) (high : ℕ)
     (v : ValidatorIndex) {events : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events) :
-    (creditScan blockP slotP v.toNat high tail).1 ≤
+    (creditScan blockP slotP v.toNat high tail) ≤
       ((events.filter fun e => p e.source).map (keyCredit v.toNat)).sum := by
   have scan := creditScan_sum_le {v} UInt64.toNat blockP slotP high (keyCredit v.toNat) tail
     replayed fun e _ _ => by simp
@@ -18329,7 +18322,7 @@ private theorem deposits_union_le (h : Setting config checks g split fin pulled 
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     3 * ((∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1) +
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC)) +
       (∑ v ∈ SC pulled counted split ∪ CS counted split, depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep := by
   have quorum : K4 pulled counted V ∪ K6 pulled counted ⊆
@@ -18380,7 +18373,7 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).syncProposer ≤
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit)
     (deposits : 3 * ((∑ v ∈ K4 pulled counted V ∪ K6 pulled counted,
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1) +
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC)) +
       (∑ v ∈ SC pulled counted split ∪ CS counted split, depPre eventsC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueDep)
     (cards : ((K4 pulled counted V).filter fun v => creditedKey tailC highC v = true).card +
@@ -18435,12 +18428,12 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
   simp only [Finset.sum_add_distrib] at c4 c6 c5
   have e4 : ∑ v ∈ K4 pulled counted V, credN tailC highC v.toNat =
       (∑ v ∈ K4 pulled counted V, propN tailC highC v.toNat) + ∑ v ∈ K4 pulled counted V,
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl fun v _ => credN_split tailC highC v.toNat
   have e6 : ∑ v ∈ K6 pulled counted, credN tailC highC v.toNat =
       (∑ v ∈ K6 pulled counted, propN tailC highC v.toNat) + ∑ v ∈ K6 pulled counted,
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) := by
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_congr rfl fun v _ => credN_split tailC highC v.toNat
   rw [Finset.sum_union d46, Finset.sum_union dSCCS] at deposits
@@ -18659,8 +18652,8 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
     (start : actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v = 0) :
     ∀ {m : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ m),
       Run config checks m z → grossScan v highC pre = 0 ∧ actualBalanceAt m v ≤
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v highC pre).1 +
-        (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v highC pre).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v highC pre) +
+        (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v highC pre) := by
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
@@ -18695,7 +18688,7 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
     have middleFork := fork_le_of_chainSteps afterStep.chainSteps
     have lastFork := fork_le_of_chainSteps post.chainSteps
     have selected : (getCurrentEpoch middle.state).toNat ≤ highC + 1 := by omega
-    rw [grossScan_snoc, creditScan_snoc_fst, creditScan_snoc_fst]
+    rw [grossScan_snoc, creditScan_snoc, creditScan_snoc]
     simp only [selected, ↓reduceIte]
     obtain ⟨noGross, before⟩ := ih afterStep
     have lastEarly : last.fork < .glamsterdam := Nat.lt_of_le_of_lt lastFork zEarly
@@ -18823,9 +18816,9 @@ private theorem created_start (h : Setting config checks g split fin pulled anc 
       effectiveAt z v.toNat ≤ actualBalanceAt z v.toNat + preset.downwardBand ∧
       preset.MAX_EFFECTIVE_BALANCE.toNat ≤ effectiveAt z v.toNat ∧
       actualBalanceAt z v.toNat ≤ grossScan v.toNat highC pre +
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre) +
         (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
-          pre).1 ∧ grossScan v.toNat highC pre = 0 ∧
+          pre) ∧ grossScan v.toNat highC pre = 0 ∧
       ∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
         w.activationEpoch ≠ FAR_FUTURE_EPOCH →
         (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat := by
@@ -20192,7 +20185,7 @@ private theorem exited_not_proposer (h : Setting config checks g split fin pulle
 private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) (p : BalanceSource → Bool)
     (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
-    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
+    (creditScan p (fun _ => false) v high tail) ≤ grossScan v high tail := by
   have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
     (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
     (fun _ => false) (fun _ => false)
@@ -23086,12 +23079,12 @@ private theorem ceiling_run (h : Setting config checks g split fin pulled anc co
       ((getCurrentEpoch a.state).toNat - (getCurrentEpoch c.state).toNat) *
         (pinTerms config pulled anc fin).gainRateMax +
       (netScan i highC tail +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail).1)) ∧
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail))) ∧
     effectiveAt a i ≤ max (effectiveAt c i) (B +
       ((getCurrentEpoch a.state).toNat - (getCurrentEpoch c.state).toNat) *
         (pinTerms config pulled anc fin).gainRateMax +
       (netScan i highC tail +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail).1)) := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail))) := by
   classical
   obtain ⟨P, hP, gainLe, -⟩ := pin_rate_exists h
   obtain ⟨P', hP', rateAll⟩ := key_rate_forked h
@@ -23126,7 +23119,7 @@ private theorem ceiling_run (h : Setting config checks g split fin pulled anc co
         ((getCurrentEpoch a.state).toNat - (getCurrentEpoch c.state).toNat) *
           (pinTerms config pulled anc fin).gainRateMax +
         (netScan i highC tail +
-          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail).1) := by
+          (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail)) := by
     unfold PinKeyFloor.creditBound
     omega
   exact ⟨fun z member => Nat.le_trans (balances z member) credit,
@@ -23263,13 +23256,13 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
   have nearC := h.near
   have near : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
   have scans : netScan i highC tail2 +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail2).1 ≤
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tail2) ≤
       netScan i highC tailC +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC tailC) := by
     have eqC : tailC = (((pre0.snoc (Step.slot ok)).append tail2).snoc step).append post := by
       rw [cut, whole]
     rw [eqC]
-    simp only [netScan_append, creditScan_append, netScan_snoc, creditScan_snoc_fst]
+    simp only [netScan_append, creditScan_append, netScan_snoc, creditScan_snoc]
     split_ifs <;> omega
   have sources := credits_le_sources (shared.append fromFin) h.genesis tailC h.early electra i highC
     replayedC
@@ -23646,9 +23639,9 @@ private theorem created_gain_arith (I WD F P D e0 S Cr Z β : ℕ)
 /-- The deposits and consolidations that a run credits to a key are among its non-reward credits. -/
 private theorem scan_deposits_consolidations_le (v high : ℕ) {x y : ForkedBeaconState preset}
     (run : Run config checks x y) :
-    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high run).1 +
-      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v high run).1 ≤
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v high run).1 := by
+    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high run) +
+      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v high run) ≤
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v high run) := by
   have named := creditScan_or (fun _ => false) (fun s => decide (s ≠ .rewards))
     (fun _ => false) (fun _ => false)
     (fun s => decide (s = .deposits ∨ s = .consolidations))
@@ -23694,7 +23687,7 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
       (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
         WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     {Z : ℕ} (flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z) :
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z) :
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
       (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
@@ -23750,7 +23743,7 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   obtain ⟨e0, he0⟩ : ∃ e0, e0 = effectiveAt z v.toNat := ⟨_, rfl⟩
   obtain ⟨S, hS⟩ : ∃ S, S = actualBalanceAt z v.toNat := ⟨_, rfl⟩
   obtain ⟨Cr, hCr⟩ : ∃ Cr, Cr = netScan v.toNat highC post +
-    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post).1 :=
+    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post) :=
     ⟨_, rfl⟩
   obtain ⟨W, hW⟩ : ∃ W, W = S - e0 := ⟨_, rfl⟩
   obtain ⟨q, hq⟩ : ∃ q, q = e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
@@ -23773,9 +23766,9 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   obtain ⟨gc, rfl, -, bound, -⟩ := core
   -- the credits, the base stake and the gains of the key
   have beforeZ : S ≤ grossScan v.toNat highC pre +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre) +
       (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
-        pre).1 := by
+        pre) := by
     rw [hS]
     exact walk
   have splitScans := scan_deposits_consolidations_le v.toNat highC pre
@@ -23921,7 +23914,7 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
   obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
     syncCr eventsC v.toNat := ⟨_, rfl⟩
   have flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z :=
     hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
       (by simpa using electra) v.toNat highC replayedC).1
   obtain ⟨z, pre, post, cut, positive, ahead, bound⟩ := created_ceiling h tailC highC endEpochC
@@ -24441,7 +24434,7 @@ private theorem created_deposit (h : Setting config checks g split fin pulled an
     {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
       w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) :
-    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 := by
+    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) := by
   classical
   obtain ⟨toFin⟩ := h.toFin
   by_contra none
@@ -24452,7 +24445,7 @@ private theorem created_deposit (h : Setting config checks g split fin pulled an
     created_start h tailC highC endEpochC activated absent
   have positive := maxEffectiveBalance_pos h
   have consScan : (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat
-      highC tailC).1 ≤ consAmt eventsC v.toNat :=
+      highC tailC) ≤ consAmt eventsC v.toNat :=
     scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC
   subst splitEq
   have depSplit := creditScan_append (fun _ => false) (fun s => decide (s = .deposits))
@@ -24483,7 +24476,7 @@ private theorem created_band (h : Setting config checks g split fin pulled anc c
   have deposit :=
     created_deposit h fromFin replayedF' tailC highC endEpochC replayedC activated absent
   have positive : 0 < grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 := by
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) := by
     omega
   have band : bandC tailC highC v.toNat = preset.upwardBand := by
     unfold bandC
@@ -24787,10 +24780,10 @@ private theorem credit_band_bounds (h : Setting config checks g split fin pulled
       whistC tailC highC i ≤ grossScan i highC tailC ∧
       (syncCr eventsC i = 0 ∨ 0 < grossScan i highC tailC) ∧
       ((0 < grossScan i highC tailC + (creditScan (fun _ => false)
-          (fun s => decide (s = .deposits)) i highC tailC).1 ∧
+          (fun s => decide (s = .deposits)) i highC tailC) ∧
           bandC tailC highC i = preset.upwardBand) ∨
         (grossScan i highC tailC + (creditScan (fun _ => false)
-          (fun s => decide (s = .deposits)) i highC tailC).1 = 0 ∧ bandC tailC highC i = 0)) ∧
+          (fun s => decide (s = .deposits)) i highC tailC) = 0 ∧ bandC tailC highC i = 0)) ∧
       (consAmt eventsC i = 0 ∨ preset.upwardBand ≤ bandX fin highC i) := by
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · exact scan_le_gross tailC highC i (fun s => decide (s = .rewards))
@@ -27451,7 +27444,7 @@ C's run has at most the epochs from the finalized state. -/
 private theorem deposit_scan_card_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) (T : Finset ℕ)
     (positive : ∀ i ∈ T,
-      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1) :
+      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC)) :
     T.card ≤ (pinTerms config pulled anc fin).depthFin *
       preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
   classical
@@ -27496,7 +27489,7 @@ private theorem whist_count (h : Setting config checks g split fin pulled anc co
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (created : ∀ i ∈ (slashedOnC split counted).filter
         (fun i => ¬ i < split.validators.data.size),
-      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1) :
+      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC)) :
     ((((slashedOnC split counted).filter
           (fun i => i < split.validators.data.size)).filter
             (fun i => 0 < depPre eventsC i)).card +
@@ -27717,7 +27710,7 @@ private theorem credit_gate {x y : ForkedBeaconState preset} (tail : Run config 
     (positive : 0 < cred + whistC tail high v.toNat) :
     creditedKey tail high v = true ∨
       0 < (creditScan (fun s => decide (s = .consolidations))
-        (fun s => decide (s = .consolidations)) v.toNat high tail).1 := by
+        (fun s => decide (s = .consolidations)) v.toNat high tail) := by
   have prop : propN tail high v.toNat ≤ grossScan v.toNat high tail :=
     scan_le_gross tail high v.toNat _ fun s h => .inl (by simpa using h)
   have whist : whistC tail high v.toNat ≤ grossScan v.toNat high tail :=
@@ -27726,7 +27719,7 @@ private theorem credit_gate {x y : ForkedBeaconState preset} (tail : Run config 
   have cc := credC_split tail high v.toNat
   have pc := propC_split tail high v.toNat
   by_cases cons : 0 < (creditScan (fun s => decide (s = .consolidations))
-      (fun s => decide (s = .consolidations)) v.toNat high tail).1
+      (fun s => decide (s = .consolidations)) v.toNat high tail)
   · exact .inr cons
   · left
     simp only [creditedKey, decide_eq_true_eq]
@@ -27771,7 +27764,7 @@ private theorem exited_proposer_credits_zero
   obtain ⟨toFin⟩ := h.toFin
   have zero : ∀ (blockP : BalanceSource → Bool),
       (∀ x, blockP x = true → x = .rewards ∨ x = .slashings) →
-      (creditScan blockP (fun _ => false) i high run).1 = 0 := fun blockP sources =>
+      (creditScan blockP (fun _ => false) i high run) = 0 := fun blockP sources =>
     creditScan_eq_zero_of_steps blockP _ i high run fun {m n} step member => by
       cases step with
       | slot ok => simp [stepCredit]
@@ -27880,13 +27873,13 @@ private theorem exited_credit_ceiling
   have index : i.toUInt64.toNat = i := toNat_toUInt64_of_lt
     (BeaconState.registryWithinLimit_of_lt h.early fin) insideFin
   have depScan : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC
-      (fromFin.append pre)).1 = 0 := by
+      (fromFin.append pre)) = 0 := by
     have := scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
       (by intro s; simp) (fromFin.append pre) highC i.toUInt64 wholeR
     rw [index] at this
     omega
   have consScan : (creditScan (fun s => decide (s = .consolidations))
-      (fun s => decide (s = .consolidations)) i highC (fromFin.append pre)).1 ≤
+      (fun s => decide (s = .consolidations)) i highC (fromFin.append pre)) ≤
         consAmt (eF ++ eP) i := by
     have := scan_le_events (fun s => decide (s = .consolidations))
       (fun s => decide (s = .consolidations))
@@ -28713,9 +28706,9 @@ private theorem credC_prefix_le (h : Setting config checks g split fin pulled an
 private theorem creditScan_prefix_le (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x a b c : ForkedBeaconState preset} (pre : Run config checks x a)
     (step : Step config checks a b) (post : Run config checks b c) :
-    (creditScan blockP slotP v high pre).1 ≤
-      (creditScan blockP slotP v high ((pre.snoc step).append post)).1 := by
-  rw [creditScan_append, creditScan_snoc_fst]
+    (creditScan blockP slotP v high pre) ≤
+      (creditScan blockP slotP v high ((pre.snoc step).append post)) := by
+  rw [creditScan_append, creditScan_snoc]
   split <;> omega
 
 /-- The credits, whistleblower credits and credit band of a prefix are within the whole run's. -/
@@ -29582,7 +29575,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       have := h.facts.incrementSize
       omega
     have scans : grossScan v.toNat highC tailC = 0 ∧
-        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 =
+        (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) =
           0 := by
       unfold bandC at hbC
       split_ifs at hbC <;> omega
@@ -29595,7 +29588,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         omega
     have c0 := consAmt_zero h fromFin replayedF tailC highC endEpochC nearC replayedC v hdue
     have consScan : (creditScan (fun s => decide (s = .consolidations))
-        (fun s => decide (s = .consolidations)) v.toNat highC tailC).1 ≤
+        (fun s => decide (s = .consolidations)) v.toNat highC tailC) ≤
           consAmt eventsC v.toNat :=
       scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC
     have noOwn : ¬ 0 < credC tailC highC v.toNat + whistC tailC highC v.toNat := fun pos => by
@@ -29951,7 +29944,7 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
   obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
     syncCr eventsC v.toNat := ⟨_, rfl⟩
   have flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z :=
     hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
       (by simpa using electra) v.toNat highC replayedC).1
   obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC activated
@@ -30404,17 +30397,17 @@ private theorem same_epoch_balance_le (i high : ℕ) {c a : ForkedBeaconState pr
     (same : getCurrentEpoch a.state = getCurrentEpoch c.state)
     (endEpoch : (getCurrentEpoch a.state).toNat ≤ high + 1) :
     actualBalanceAt a i ≤ actualBalanceAt c i + netScan i high r +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r).1 := by
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r) := by
   refine Run.induction_of_same_epoch (fun z r' => (getCurrentEpoch z.state).toNat ≤ high + 1 →
       actualBalanceAt z i ≤ actualBalanceAt c i + netScan i high r' +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r').1)
-    (fun _ => by simp [netScan_nil, creditScan_nil_fst]) ?_ ?_ r early same endEpoch
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high r'))
+    (fun _ => by simp [netScan_nil, creditScan_nil]) ?_ ?_ r early same endEpoch
   · intro f s t engine signed due ok pre' _ prior within
     have epoch : (getCurrentEpoch t).toNat = (getCurrentEpoch s).toNat := by
       simp only [getCurrentEpoch, processBlock_slot (applySignedBlock_ok ok).2.1]
     have before := prior (by simp only at within ⊢; omega)
     have net := netScan_snoc i high pre' (Step.block engine signed due ok)
-    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+    have credit := creditScan_snoc (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
       pre' (Step.block engine signed due ok)
     simp only at within net credit
     simp only [show (getCurrentEpoch s).toNat ≤ high + 1 by omega, ↓reduceIte] at net credit
@@ -30425,7 +30418,7 @@ private theorem same_epoch_balance_le (i high : ℕ) {c a : ForkedBeaconState pr
     subst lastEq
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
     have net := netScan_snoc i high pre' (Step.slot ok)
-    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+    have credit := creditScan_snoc (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
       pre' (Step.slot ok)
     simp only at within kept
     rw [kept] at within
@@ -30479,8 +30472,8 @@ private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
     (r : Run config checks c a) (electra : .pectra ≤ c.fork) (early : a.fork < .glamsterdam)
     (same : getCurrentEpoch a.state = getCurrentEpoch c.state) :
     (creditScan (fun s => decide (s = .consolidations)) (fun s => decide (s = .consolidations))
-        v.toNat high r).1 = 0 ∧
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high r).1 = 0 := by
+        v.toNat high r) = 0 ∧
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high r) = 0 := by
   obtain ⟨events, replayed⟩ := r.balanceEvents_ok early high
   obtain ⟨deposits, consolidations⟩ := run_located r electra early high replayed
   -- a slot step of the run starts and ends in the epoch of the run, so it records no event
@@ -30586,7 +30579,7 @@ private theorem charge_start_at (h : Setting config checks g split fin pulled an
       (effectiveAt n i < PinTerms.capAt n i →
         actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand) ∧
       actualBalanceAt a i ≤ actualBalanceAt n i + netScan i highC rest +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC rest).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC rest) := by
   -- the key is active at the charge, so it is in the registry at the start of the epoch
   obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
   obtain ⟨w, later, assigned, -⟩ := (Run.nil.snoc step).departure_charge_exit charge
@@ -30659,7 +30652,7 @@ private theorem charge_epoch_start (h : Setting config checks g split fin pulled
       (effectiveAt c i < PinTerms.capAt c i →
         actualBalanceAt c i ≤ effectiveAt c i + preset.upwardBand) ∧
       actualBalanceAt a i ≤ actualBalanceAt c i + netScan i highC r +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r) := by
   have aFork : a.fork = fork := fork_eq_of_run pre ((Run.nil.snoc step).append post)
     (by rw [yFork]; exact Nat.le_refl _)
   have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
@@ -30704,7 +30697,7 @@ private theorem charge_flip (h : Setting config checks g split fin pulled anc co
     (flipped : PinTerms.capAt c i ≠ PinTerms.capAt a i)
     (atCap : ¬ effectiveAt c i < PinTerms.capAt c i) :
     min (actualBalanceAt a i) (PinTerms.capAt a i) ≤ effectiveAt c i + grossScan i highC r +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r).1 := by
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC r) := by
   classical
   have sameC : fork = c.fork := cFork.symm
   obtain ⟨cf, cs⟩ := c
@@ -30791,7 +30784,7 @@ private theorem rise_fold (i high : ℕ) {x m : ForkedBeaconState preset}
       (riseScan i high pre).2 ≤ (riseScan i high (pre.append t)).2 ∧
       actualBalanceAt y i + (riseScan i high pre).2 ≤ actualBalanceAt m i +
         (riseScan i high (pre.append t)).2 + netScan i high t +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high t).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high t) := by
   intro y t
   induction t with
   | nil =>
@@ -30808,14 +30801,14 @@ private theorem rise_fold (i high : ℕ) {x m : ForkedBeaconState preset}
     have within : (getCurrentEpoch n.state).toNat ≤ high + 1 := by omega
     have bound := PinKeyFloor.step_balance_le step early i
     have net := netScan_snoc i high t step
-    have credit := creditScan_snoc_fst (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
+    have credit := creditScan_snoc (fun _ => false) (fun s => decide (s ≠ .rewards)) i high
       t step
     simp only [within, ↓reduceIte] at net credit
     change (riseScan i high ((pre.append t).snoc step)).1 = true ∧
       (riseScan i high pre).2 ≤ (riseScan i high ((pre.append t).snoc step)).2 ∧
       actualBalanceAt y i + (riseScan i high pre).2 ≤ actualBalanceAt m i +
         (riseScan i high ((pre.append t).snoc step)).2 + netScan i high (t.snoc step) +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high (t.snoc step)).1
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i high (t.snoc step))
     simp only [riseScan, flag, Bool.true_or, true_or, true_and, within, ↓reduceIte]
     rw [net, credit]
     exact ⟨by omega, by omega⟩
@@ -30864,11 +30857,11 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
       actualBalanceAt a i + (riseScan i highC ((pre.snoc step).append post)).2 +
         netScan i highC ((Run.nil.snoc step).append post) +
         (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC
-          ((Run.nil.snoc step).append post)).1) ∧
+          ((Run.nil.snoc step).append post))) ∧
     ∀ z ∈ post.balancePath, actualBalanceAt z i ≤
       actualBalanceAt b i + (riseScan i highC ((pre.snoc step).append post)).2 +
         netScan i highC post +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post) := by
   have yBack : y.fork ≤ fork := by rw [yFork]; exact Nat.le_refl _
   have yEarly : y.fork < .glamsterdam := by rw [yFork]; exact h.early
   have aFork : a.fork = fork := fork_eq_of_run pre ((Run.nil.snoc step).append post) yBack
@@ -30919,15 +30912,15 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
     rw [netScan_append, netScan_snoc, netScan_nil]
     simp [within]
   have creditStep : (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC
-      ((Run.nil.snoc step).append post)).1 =
+      ((Run.nil.snoc step).append post)) =
       stepCredit (fun _ => false) (fun s => decide (s ≠ .rewards)) i step +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
-    rw [creditScan_append, creditScan_snoc_fst, creditScan_nil_fst]
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post) := by
+    rw [creditScan_append, creditScan_snoc, creditScan_nil]
     simp [within]
   have fromB : ∀ z ∈ post.balancePath, actualBalanceAt z i + (riseScan i highC (pre.snoc step)).2 ≤
       actualBalanceAt b i + (riseScan i highC ((pre.snoc step).append post)).2 +
         netScan i highC post +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC post) := by
     intro z hz
     obtain ⟨r1, r2, eq⟩ := splitPost z hz
     have zEarly : z.fork < .glamsterdam :=
@@ -31006,16 +30999,16 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
     (held : ∀ w, b.state.validators.data[v.toNat]? = some w →
       (getCurrentEpoch y.state).toNat < w.withdrawableEpoch.toNat) :
     (grossScan v.toNat highC r + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards))
-        v.toNat highC r).1 +
+        v.toNat highC r) +
       (netScan v.toNat highC ((Run.nil.snoc step).append post) +
         (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC
-          ((Run.nil.snoc step).append post)).1) ≤
+          ((Run.nil.snoc step).append post))) ≤
       propC tailY highC v.toNat + whistC tailY highC v.toNat + syncCr eventsY v.toNat) ∧
     ((∀ ok, step ≠ Step.slot ok) →
       grossScan v.toNat highC r + (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards))
-        v.toNat highC r).1 + stepCredit (fun _ => true) (fun _ => true) v.toNat step +
+        v.toNat highC r) + stepCredit (fun _ => true) (fun _ => true) v.toNat step +
       (netScan v.toNat highC post +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post).1) ≤
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post)) ≤
       propC tailY highC v.toNat + whistC tailY highC v.toNat + syncCr eventsY v.toNat) := by
   subst site
   subst cut
@@ -31057,7 +31050,7 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
   obtain ⟨_, w, foundA, foundB, unset, set⟩ := charge_exits step charged
   have inside : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA).1
   have exited := exitEpoch_toNat_lt_of_ne_far set
-  have depR : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC r).1 =
+  have depR : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC r) =
       0 := by
     refine Nat.le_zero.mp
       ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
@@ -31077,7 +31070,7 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
     have eq := congrArg UInt64.toNat same
     omega
   have depR' : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-      ((Run.nil.snoc step).append post)).1 = 0 := by
+      ((Run.nil.snoc step).append post)) = 0 := by
     refine Nat.le_zero.mp
       ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
         (by intro s; simp) _ highC v hR).trans (Nat.le_of_eq ?_))
@@ -31143,7 +31136,7 @@ private theorem charge_effective_bound_of
       (effectiveAt c v.toNat < PinTerms.capAt c v.toNat →
         actualBalanceAt c v.toNat ≤ effectiveAt c v.toNat + preset.upwardBand) ∧
       actualBalanceAt a v.toNat ≤ actualBalanceAt c v.toNat + netScan v.toNat highC r +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r).1)
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r))
     (held : ∀ w, b.state.validators.data[v.toNat]? = some w →
       (getCurrentEpoch y.state).toNat < w.withdrawableEpoch.toNat) :
     effectiveAt y v.toNat ≤ effectiveAt a v.toNat + preset.upwardBand +
@@ -31169,7 +31162,7 @@ private theorem charge_effective_bound_of
     (aFork ▸ h.early) (cFork ▸ electra) v.toNat highC hr).2.1
   have start : min (actualBalanceAt a v.toNat) (PinTerms.capAt a v.toNat) ≤
       effectiveAt a v.toNat + preset.upwardBand + (grossScan v.toNat highC r +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r).1) := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r)) := by
     by_cases capEq : PinTerms.capAt c v.toNat = PinTerms.capAt a v.toNat
     · omega
     · by_cases lt : effectiveAt c v.toNat < PinTerms.capAt c v.toNat
@@ -31404,7 +31397,7 @@ private theorem split_epoch_start_data (h : Setting config checks g split fin pu
       (effectiveAt c v.toNat < PinTerms.capAt c v.toNat →
         actualBalanceAt c v.toNat ≤ effectiveAt c v.toNat + preset.upwardBand) ∧
       actualBalanceAt p v.toNat ≤ actualBalanceAt c v.toNat + netScan v.toNat highC r +
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r).1 := by
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC r) := by
   obtain ⟨u0, -, foundP, -, unset, -⟩ := charge_exits step charged
   have hin : v.toNat < p.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundP).1
   have pFork : p.fork = fork :=
@@ -31652,7 +31645,7 @@ private theorem registry_charge (h : Setting config checks g split fin pulled an
       have := charge_effective_bound h (y := a) aFork front highC aEpoch replayedY cf step' post'
         cut' hcharge later held
       simpa only [run_nil_append, List.nil_append] using this)
-  simp only [propN, whistC, creditScan_nil_fst, syncCr, List.map_nil, List.sum_nil,
+  simp only [propN, whistC, creditScan_nil, syncCr, List.map_nil, List.sum_nil,
     Nat.add_zero] at core
   exact core
 
@@ -31961,7 +31954,7 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
     have := h.delay
     omega
   have exited := exitEpoch_toNat_lt_of_ne_far assigned0
-  have dep : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 =
+  have dep : (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC) =
       0 := by
     refine Nat.le_zero.mp
       ((scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
@@ -32213,7 +32206,7 @@ private theorem created_slots_le (h : Setting config checks g split fin pulled a
       w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted) →
       split.validators.data.size ≤ v.toNat →
         0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat
-          (getCurrentEpoch counted).toNat tailC).1 := fun v activated absent =>
+          (getCurrentEpoch counted).toNat tailC) := fun v activated absent =>
     created_deposit h fromFin replayedF tailC (getCurrentEpoch counted).toNat (Nat.le_succ _)
       replayedC activated absent
   have apart := (cs_disjoint h).1
@@ -32292,7 +32285,7 @@ private theorem whist_created (h : Setting config checks g split fin pulled anc 
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
     ∀ i ∈ (slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size),
-      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1 := by
+      0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC) := by
   classical
   intro i member
   obtain ⟨toFin⟩ := h.toFin
