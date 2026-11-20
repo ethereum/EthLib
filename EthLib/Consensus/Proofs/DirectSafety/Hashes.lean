@@ -42,8 +42,7 @@ def HashObject.root (object : HashObject preset) : Option Root :=
 /-- The inputs of the binary hashes that the root of a header computes; none for a state. -/
 def HashObject.messages (object : HashObject preset) : List Bytes :=
   match object with
-  | .header h => ((valueTree (SszType.desc BeaconBlockHeader) (SszType.toValue h)).toOption.map
-      (fun tree => tree.messages)).getD []
+  | .header h => valueMessages (SszType.desc BeaconBlockHeader) (SszType.toValue h)
   | .state _ => []
 
 /-- The objects that a step exposes: its two states, their headers and the header of its block.
@@ -122,8 +121,8 @@ private theorem header_binding (objects : List (HashObject preset)) (a b : Beaco
     right
     refine hashEvidence_iff.mpr (.inl ⟨x, List.mem_flatMap.mpr ⟨.header a, one, ?_⟩,
       y, List.mem_flatMap.mpr ⟨.header b, two, ?_⟩, collided⟩)
-    · simpa [HashObject.messages, leftOk, Except.toOption] using leftMem
-    · simpa [HashObject.messages, rightOk, Except.toOption] using rightMem
+    · simpa [HashObject.messages, valueMessages_of_valueTree leftOk] using leftMem
+    · simpa [HashObject.messages, valueMessages_of_valueTree rightOk] using rightMem
 
 private theorem header_deposit {fork : Fork} {before after : BeaconState preset fork}
     {early : fork < .hegota} {deposit : Deposit}
