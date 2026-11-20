@@ -12264,13 +12264,15 @@
    "error_class": "SnapError",
    "docstring":
    "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.\n\nIt must repeat the request ID, and hold at most one node per requested node.\n\nA path that cannot be read is an error."},
-  {"summary": "The full RLP form of an account in slim form.",
+  {"summary":
+   "The full RLP form of an account, from the RLP encoding of its slim form.",
    "signature": "(slim: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",
    "method": "snap_full_account",
    "errors": [],
    "error_class": "SnapError",
-   "docstring": "The full RLP form of an account in slim form."},
+   "docstring":
+   "The full RLP form of an account, from the RLP encoding of its slim form."},
   {"summary":
    "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.",
    "signature":

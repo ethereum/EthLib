@@ -91,6 +91,27 @@ def test_rejects_a_full_body() -> None:
     assert error.value.code == 3
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A byte string that holds the slim form, as caps/snap.md writes `accBody: B`.
+        rlp.encode(_slim(FULL[HASHES[1]])),
+        # Bytes that are not RLP.
+        b"\xc5\x01",
+    ],
+)
+def test_rejects_a_body_that_is_not_the_slim_list(body: bytes) -> None:
+    accounts = _accounts(0, 60)
+    accounts[1] = (HASHES[1], body)
+    with raises(
+        SnapError,
+        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.slimAccount "
+        f"(hash := 0x{HASHES[1].hex()})",
+    ) as error:
+        verify_account_range(STATE.root, ZERO, accounts, [])
+    assert error.value.code == 3
+
+
 def test_rejects_a_gapped_account_range() -> None:
     accounts = _accounts(10, 30)
     proof = STATE.proof(HASHES[10]) + STATE.proof(HASHES[29])
