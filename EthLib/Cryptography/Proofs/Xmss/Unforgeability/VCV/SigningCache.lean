@@ -173,8 +173,8 @@ theorem notify_ok_run (pp : PublicParam) (msg : Message) (sig : Signature) (root
       (packBytes root) sig.top.randomizer
     (simulateQ (randomOracle.Targets.impl (record pp) (messageKey pp) low)
       (notify pp msg (.ok (sig, root)))).run s =
-      pure (.ok sig, {s with target :=
-        record pp top s.cache (record pp bottom s.cache s.target)}) := by
+      pure (.ok sig, { s with
+        target := record pp top s.cache (record pp bottom s.cache s.target) }) := by
   simp only [notify, simulateQ_bind, simulateQ_HasQuery_query, StateT.run_bind, simulateQ_pure,
     StateT.run_pure]
   simp [randomOracle.Targets.impl, StateT.run]
