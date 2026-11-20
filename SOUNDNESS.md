@@ -35,7 +35,7 @@ Gap D asks whether the use of EthLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-beta.4` and other upstream sources; consistency theorems on the constants | P R B V |
+| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to one commit or release of each upstream source, listed in `tests/sources.toml`; consistency theorems on the constants | P R B V |
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
 | A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
@@ -6644,7 +6644,7 @@ Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate
 They come in three kinds.
 A `partial` definition is defined by `partial` recursion.
 An `opaque` one is an opaque constant.
-A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to.
+A `reaches-opaque` one unfolds to an opaque constant: `while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition of Lean core.
 
 `lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
 The list below is generated from that file, and it is empty when none remains.
@@ -7136,8 +7136,9 @@ leanchecker replays every declaration of EthLib into Lean's kernel, proof bodies
 First, the workflow checks that leanchecker rejects a fixture theorem of `False` that the kernel never checked.
 The replay uses Lean's own kernel, so it does not protect against a bug in that kernel (C1).
 
-The workflow runs every Monday and on each push to `master`, but a newer push cancels a replay still in progress.
-So only the weekly run is sure to finish.
+The workflow runs every Monday and on each push to `master`.
+On `master` a running replay finishes, and a newer push replaces only a run that has not started.
+So a replay can skip a commit, but the latest commit on `master` is always replayed.
 
 ## Gap D: does the use of EthLib hold together?
 

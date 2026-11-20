@@ -1,4 +1,4 @@
-# Defaulting accessors that the specification uses today, each one to be removed.
+# Defaulting accessors that the specification uses: none remain.
 #
 # `xs[i]!`, `get!`, `set!`, `panic` and the like return a default value, or change nothing,
 # in place of failing.
