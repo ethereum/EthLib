@@ -1203,7 +1203,7 @@ They are its sync debits on the shared segment, its flow gain and its unit.
 
 They also include the leak that its sync debits on R's branch induce.
 
-`bud_sync`, `flow_split`, `bud_units` and `bud_syncLeak` pay them, in that order. -/
+`bud_sync`, `flow_split_of`, `bud_units` and `bud_syncLeak` pay them, in that order. -/
 private def keyExtra (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {x' y' : ForkedBeaconState preset}
     (tailC : Run config checks x' y') (high : ℕ)
@@ -16082,7 +16082,7 @@ So is a sync debit of R that `rise` omits.
 
 The keys of `K4` weigh one, and those of `K5` weigh three.
 
-`slashCharge`'s surplus pays `flow_split`'s slashed term.
+`slashCharge`'s surplus pays `flow_split_of`'s slashed term.
 
 `branchR` also holds the unit of each key slashed on R's branch.
 
@@ -26917,35 +26917,6 @@ private theorem flow_split_of (h : Setting config checks g split fin pulled anc 
   rw [creditLow]
   linarith
 
-/-- The flow split of the counted keys.
-
-`flow_split_of` proves it, once the kept arms give the registry bounds of the closure. -/
-private theorem flow_split (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    10 * ((∑ v ∈ (K4 pulled counted V),
-        flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat) +
-      3 * (∑ v ∈ (K5 counted V),
-          flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat
-            (propC tailC highC v.toNat)) +
-      (∑ v ∈ (K6 pulled counted),
-          flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat)) ≤
-      10 * ((pinTerms config pulled anc fin).creditLow +
-        3 * ((pinTerms config pulled anc fin).slashedR *
-          (2 * (pinTerms config pulled anc fin).depthFin *
-            flagRate (pinTerms config pulled anc fin)))) +
-        (((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
-          (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
-          (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
-          2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) :=
-  sorry
-
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
 In the high regime they are also paid by `capUse`, their share of `creditCap`.
@@ -27392,8 +27363,10 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have sJ := stub_J (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
-  have f1 := flow_split (config := config) h tail high endEpoch replayed fromFin replayedF tailC
-    highC endEpochC replayedC
+  have reg := registry_bounds (config := config) h tail high endEpoch replayed fromFin replayedF
+    tailC highC endEpochC replayedC toB pre sameEpoch earlier replayedP
+  have f1 := flow_split_of (config := config) h tail high endEpoch replayed fromFin replayedF
+    tailC highC endEpochC replayedC highLeR highLe pre reg.1 reg.2
   have u1 := (bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
     endEpochC replayedC).1
   have u2 := bud_csUnits (config := config) (events := events) (eventsF := eventsF) h fromFin
