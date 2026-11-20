@@ -5368,6 +5368,37 @@ private theorem no_charge_of_settled {g : ForkedBeaconState preset}
   intro c member
   exact tailC.departure_charge_ne_of_assigned i _ oldFound assigned c member
 
+/-- A deep key of R's registry that activates after R's next epoch is late or pending.
+
+It is deep when the seed lookahead past the finalized epoch is before R's next epoch.
+
+Without an activation epoch it is pending, if it is not yet eligible, and otherwise late.
+
+With one, its eligibility is by the finalized epoch, which the seed lookahead precedes. -/
+private theorem late_or_pending (h : Setting config checks g split fin pulled anc counted V)
+    {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
+    (deep : anc.finalizedCheckpoint.epoch.toNat + preset.MAX_SEED_LOOKAHEAD.toNat <
+      (getCurrentEpoch pulled).toNat + 1)
+    (after : (getCurrentEpoch pulled).toNat + 1 < w.activationEpoch.toNat) :
+    (pinTerms config pulled anc fin).lateB i = true ∨
+      (pinTerms config pulled anc fin).pendingRB i = true := by
+  obtain ⟨rf⟩ := h.toFin
+  obtain ⟨rs⟩ := h.fromFin
+  obtain ⟨rp⟩ := h.toPulled
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
+  · by_cases elig : (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat
+    · exact .inr ((pendingRB_iff config pulled anc fin i).mpr ⟨w, found, elig, far⟩)
+    · refine .inl ((lateB_iff config pulled anc fin i).mpr ⟨w, found, by omega, ?_⟩)
+      rw [far, farNat]
+      omega
+  · have eligible := Run.eligibility_le_finalized ((rf.append rs).append rp) h.genesis i w found far
+    have eligNat : w.activationEligibilityEpoch.toNat ≤ pulled.finalizedCheckpoint.epoch.toNat :=
+      UInt64.le_iff_toNat_le.mp eligible
+    have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+    exact .inl ((lateB_iff config pulled anc fin i).mpr ⟨w, found, by omega, by omega⟩)
+
 /-- A key counted in C and inactive at R, read at R's record, is in one of five classes.
 
 It joins at R's next epoch.
@@ -5455,25 +5486,15 @@ private theorem K6_class {g : ForkedBeaconState preset}
       · exact .inl far
       · exact .inr (Run.exit_activation_gap chain h.genesis v.toNat w found far)
     · -- Beyond the shared window, the finalized epoch is before R's epoch.
-      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
-      · by_cases elig : (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat
-        · exact .inr (.inr (.inr (.inr
-            ((pendingRB_iff config pulled anc fin v.toNat).mpr ⟨w, found, elig, far⟩))))
-        · refine .inr (.inl ((lateB_iff config pulled anc fin v.toNat).mpr
-            ⟨w, found, by omega, ?_⟩))
-          rw [far, farNat]
-          omega
-      · have eligible := Run.eligibility_le_finalized chain h.genesis v.toNat w found far
-        have eligNat : w.activationEligibilityEpoch.toNat ≤
-            pulled.finalizedCheckpoint.epoch.toNat := UInt64.le_iff_toNat_le.mp eligible
-        by_cases first : w.activationEpoch.toNat = (getCurrentEpoch pulled).toNat + 1
-        · left
-          refine joins first ?_
-          by_cases farExit : w.exitEpoch = FAR_FUTURE_EPOCH
-          · exact .inl farExit
-          · exact .inr (Run.exit_activation_gap chain h.genesis v.toNat w found farExit)
-        · exact .inr (.inl ((lateB_iff config pulled anc fin v.toNat).mpr
-            ⟨w, found, by omega, by omega⟩))
+      by_cases first : w.activationEpoch.toNat = (getCurrentEpoch pulled).toNat + 1
+      · left
+        refine joins first ?_
+        by_cases farExit : w.exitEpoch = FAR_FUTURE_EPOCH
+        · exact .inl farExit
+        · exact .inr (Run.exit_activation_gap chain h.genesis v.toNat w found farExit)
+      · rcases late_or_pending h found (by omega) (by omega) with late | pending
+        · exact .inr (.inl late)
+        · exact .inr (.inr (.inr (.inr pending)))
   · -- Exited at R's epoch or before.
     have exited : w.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat := by omega
     have exitNear : w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -15308,10 +15329,7 @@ private theorem sc3a_class (h : Setting config checks g split fin pulled anc cou
   obtain ⟨s, foundS, cleanS⟩ : ∃ s, split.validators.data[v.toNat]? = some s ∧
       s.slashed = false := by
     simpa [slashedFlagAt, Option.map_eq_some_iff] using flagS
-  obtain ⟨rf⟩ := h.toFin
-  obtain ⟨rs⟩ := h.fromFin
   obtain ⟨rp⟩ := h.toPulled
-  have chain := (rf.append rs).append rp
   obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[v.toNat]? = some w :=
     ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp foundS).1
       (registryGrows_of_chainSteps rp.chainSteps))⟩
@@ -15372,16 +15390,7 @@ private theorem sc3a_class (h : Setting config checks g split fin pulled anc cou
         apply notR1
         rw [succNat]
         exact ⟨by omega, by omega⟩
-      by_cases far : w.activationEpoch = FAR_FUTURE_EPOCH
-      · by_cases elig : (getCurrentEpoch pulled).toNat < w.activationEligibilityEpoch.toNat
-        · exact .inr ((pendingRB_iff config pulled anc fin v.toNat).mpr ⟨w, found, elig, far⟩)
-        · refine .inl ((lateB_iff config pulled anc fin v.toNat).mpr ⟨w, found, by omega, ?_⟩)
-          rw [far, farNat]
-          omega
-      · have eligible := Run.eligibility_le_finalized chain h.genesis v.toNat w found far
-        have eligNat : w.activationEligibilityEpoch.toNat ≤
-            pulled.finalizedCheckpoint.epoch.toNat := UInt64.le_iff_toNat_le.mp eligible
-        exact .inl ((lateB_iff config pulled anc fin v.toNat).mpr ⟨w, found, by omega, by omega⟩)
+      exact late_or_pending h found bound afterA
 
 /-- The charged keys of `SC` are current, upcoming-only, late or pending, and each pays that entry.
 
