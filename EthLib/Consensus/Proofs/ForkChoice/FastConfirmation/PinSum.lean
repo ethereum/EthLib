@@ -25675,6 +25675,111 @@ private theorem registry_charge_split_epoch
     (by rw [← cut']; exact (Run.append_assoc pre (cf.snoc step') post').symm) hcharge
     start held
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The registry keys of the split are bounded at each slashing step on C's branch.
+
+Every key is read at `whistleEnv` and the slack.
+
+A key that C's branch charges to depart is also read at its charge.
+
+A key that the finalized state does not hold is created after it.
+
+A key of the finalized state is read by its exit at R against the finalized epoch.
+
+If it exits before the finalized epoch and R does not slash it, its balance is the finalized one.
+
+If R slashes it, it is bounded by the frozen core, whose lateness holds vacuously.
+
+If it exits at or after the finalized epoch, it is late for the whole run.
+
+A charge in the split's own epoch also reads the credits of `pre`. -/
+private theorem registry_bounds (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
+    (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      toB.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat)
+    {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents highC = .ok eventsP) :
+    (∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, i < split.validators.data.size →
+        (split.validators.data[i]?.map (·.slashed)).getD false = false →
+        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
+          effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
+            whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+              eventsC eventsF events fin i) ∧
+    (∀ {a b : ForkedBeaconState preset} (step : Step config checks a b),
+      tailC.Contains step → ∀ i, i < split.validators.data.size →
+        (split.validators.data[i]?.map (·.slashed)).getD false = false →
+        (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+          (b.state.validators.data[i]?.map (·.slashed)).getD false) = true →
+        (tailC.departureCharges.any fun c => c.index == i) = true →
+          effectiveAt a i ≤ chargeAmt tailC i + riseQ tailC highC i +
+            (propN pre highC i + whistC pre highC i + syncCr eventsP i) +
+            whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+              eventsC eventsF events fin i) := by
+  classical
+  obtain ⟨toPulled⟩ := h.toPulled
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  refine ⟨fun {a b} step member i inside unslashed flag => ?_,
+    fun {a b} step member i inside unslashed flag charged => ?_⟩
+  · by_cases beyond : fin.validators.data.size ≤ i
+    · exact registry_created h tail high endEpoch replayed fromFin replayedF tailC highC
+        endEpochC replayedC step member i beyond inside unslashed flag
+    · have inFin : i < fin.validators.data.size := Nat.lt_of_not_le beyond
+      obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[i]? = some w :=
+        ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inside grows)⟩
+      by_cases exited : w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch fin).toNat
+      · by_cases slashedR : (pinTerms config pulled anc fin).slashedRB i = true
+        · by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
+          · refine registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC
+              endEpochC replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
+              (fun p mem => Or.inl (by simpa [Run.balancePath] using mem))
+              (.inl ⟨effective_fin_le_ebUp h i, Nat.le_refl _⟩) unslashed flag
+              (fun w' found' unslashedR => ?_) kept
+            -- R slashes the key, so it is not unslashed there
+            rw [slashedRB_eq] at slashedR
+            have := (of_decide_eq_true slashedR).1
+            simp [found'] at this
+            rw [this] at unslashedR
+            exact absurd unslashedR (by decide)
+          · exact registry_headroom (config := config) h tailC step member i kept _
+        · exact registry_exited h fromFin tail high endEpoch replayedF tailC highC endEpochC
+            replayedC step member i inside
+            (fun w' found' => by
+              obtain rfl := Option.some.inj (found.symm.trans found')
+              exact exited) flag slashedR
+      · exact registry_late h tail high endEpoch replayed fromFin replayedF tailC highC
+          endEpochC replayedC step member i inFin
+          (fun w' found' => by
+            obtain rfl := Option.some.inj (found.symm.trans found')
+            omega) unslashed flag
+  · -- the charge of the key on C's run, found from the exit that the step assigns
+    obtain ⟨c, chargeMember, chargeIndex⟩ := List.any_eq_true.mp charged
+    have indexEq : c.index = i := by simpa using chargeIndex
+    obtain ⟨cp, cq, cfront, cstep, cpost, csite, u, w, foundU, foundW, unset, assigned, -, -⟩ :=
+      tailC.departure_charge_site c chargeMember
+    have charge : cstep.departureCharges.any (·.index == i) = true := by
+      rw [← indexEq]
+      exact step_charges_of_exits cstep foundU foundW unset assigned
+    by_cases started : (getCurrentEpoch split).toNat < (getCurrentEpoch cp.state).toNat
+    · have bound := registry_charge (eventsF := eventsF) (events := events) h fromFin tail high
+        tailC highC endEpochC replayedC step member i inside flag charged cfront cstep cpost
+        csite charge started
+      omega
+    · exact registry_charge_split_epoch h fromFin tail high toB pre sameEpoch earlier tailC highC
+        endEpochC replayedC replayedP step member i inside flag charged cfront cstep cpost csite
+        charge started
+
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
 The epoch's start `b` is on the shared run, before the split.
