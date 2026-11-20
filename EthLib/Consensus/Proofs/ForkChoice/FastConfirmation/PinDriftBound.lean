@@ -1217,27 +1217,24 @@ private theorem creditScan_eq_zero_of_steps (blockP slotP : BalanceSource → Bo
     rw [creditScan_snoc_fst]
     split <;> omega
 
-/-- The sync credits of a list of events are at most the credits of its events of a source set.
-
-The source set holds the sync source. -/
-private theorem sum_syncCredit_le (blockP : BalanceSource → Bool) (sync : blockP .sync = true)
-    (v : ℕ) (L : List (BalanceEvent preset)) :
-    (L.map (syncCredit v)).sum ≤ ((L.filter (blockP ·.source)).map (keyCredit v)).sum := by
+/-- The credits of a list of events from one source set are at most those from a larger set. -/
+private theorem sum_filter_credit_le (p q : BalanceSource → Bool)
+    (sub : ∀ s, p s = true → q s = true) (v : ℕ) (L : List (BalanceEvent preset)) :
+    ((L.filter (p ·.source)).map (keyCredit v)).sum ≤
+      ((L.filter (q ·.source)).map (keyCredit v)).sum := by
   induction L with
   | nil => simp
   | cons e rest ih =>
-    by_cases isSync : e.source = .sync
-    · have member : blockP e.source = true := by rw [isSync]; exact sync
-      simp only [List.map_cons, List.sum_cons, List.filter_cons, member, ↓reduceIte]
-      have same : syncCredit v e = keyCredit v e := by simp [syncCredit, keyCredit, isSync]
+    by_cases inP : p e.source = true
+    · have inQ := sub _ inP
+      simp only [List.filter_cons, inP, inQ, ↓reduceIte, List.map_cons, List.sum_cons]
       omega
-    · have none : syncCredit v e = 0 := by simp [syncCredit, isSync]
-      by_cases member : blockP e.source = true
-      · simp only [List.map_cons, List.sum_cons, List.filter_cons, member, ↓reduceIte]
+    · by_cases inQ : q e.source = true
+      · simp only [List.filter_cons, inP, inQ, Bool.false_eq_true, ↓reduceIte, List.map_cons,
+          List.sum_cons]
         omega
-      · simp only [List.map_cons, List.sum_cons, List.filter_cons, member, Bool.false_eq_true,
-          ↓reduceIte]
-        omega
+      · simp only [List.filter_cons, inP, inQ, Bool.false_eq_true, ↓reduceIte]
+        exact ih
 
 /-- The credits of a set of keys over a run, read as a scan, fit one bound for each replayed event.
 
@@ -1247,9 +1244,11 @@ A slot step counts the events of `slotP`.
 
 So an event of the run is counted at most once.
 
-The sync credits of a key over the events are at most its scan, if `blockP` holds the sync source.
+The credits of a key from a source set `src` over the events are at most its scan.
 
-That holds for a run from Electra to before Glamsterdam whose slot steps record no sync credit. -/
+Each kind of step either counts all of `src`, or records no credit from `src`.
+
+That holds for a run from Electra to before Glamsterdam. -/
 private theorem creditScan_bounds (S : Finset ValidatorIndex) (blockP slotP : BalanceSource → Bool)
     (high : ℕ) (T : BalanceEvent preset → ℕ) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {events : List (BalanceEvent preset)}
@@ -1259,24 +1258,34 @@ private theorem creditScan_bounds (S : Finset ValidatorIndex) (blockP slotP : Ba
     (∑ v ∈ S, (creditScan blockP slotP v.toNat high tail).1 ≤
       (events.map fun e =>
         if blockP e.source = true ∨ slotP e.source = true then T e else 0).sum) ∧
-    (blockP .sync = true → .pectra ≤ x.fork → y.fork < .glamsterdam →
-      (∀ {u w : ForkedBeaconState preset} (ok : advanceSlotAcross config checks u = .ok w)
-        {es : List (BalanceEvent preset)}, .pectra ≤ u.fork → w.fork < .glamsterdam →
+    (∀ src : BalanceSource → Bool,
+      ((∀ s, src s = true → blockP s = true) ∨
+        ∀ {f : Fork} {u w : BeaconState preset f} {engine : ExecutionEngine preset f}
+          {signed : SignedBeaconBlock preset f} {due : upgradeDue config ⟨f, u⟩ = false}
+          {ok : applySignedBlock config checks engine u signed true = .ok w}
+          {es : List (BalanceEvent preset)}, .pectra ≤ f → f < .glamsterdam →
+          (Step.block engine signed due ok : Step config checks ⟨f, u⟩ ⟨f, w⟩).balanceEvents =
+            .ok es → ∀ i, ((es.filter (src ·.source)).map (keyCredit i)).sum = 0) →
+      ((∀ s, src s = true → slotP s = true) ∨
+        ∀ {u w : ForkedBeaconState preset} (ok : advanceSlotAcross config checks u = .ok w)
+          {es : List (BalanceEvent preset)}, .pectra ≤ u.fork → w.fork < .glamsterdam →
           (Step.slot ok : Step config checks u w).balanceEvents = .ok es →
-            ∀ i, (es.map (syncCredit i)).sum = 0) →
-      ∀ v, (events.map (syncCredit v)).sum ≤ (creditScan blockP slotP v high tail).1) := by
+            ∀ i, ((es.filter (src ·.source)).map (keyCredit i)).sum = 0) →
+      .pectra ≤ x.fork → y.fork < .glamsterdam →
+      ∀ v, ((events.filter (src ·.source)).map (keyCredit v)).sum ≤
+        (creditScan blockP slotP v high tail).1) := by
   induction tail generalizing events with
   | nil =>
     simp only [Run.balanceEvents, pure, Except.pure, Except.ok.injEq] at replayed
     subst replayed
-    exact ⟨Nat.le_zero.mpr (Finset.sum_eq_zero fun v _ => rfl), fun _ _ _ _ v => by simp⟩
+    exact ⟨Nat.le_zero.mpr (Finset.sum_eq_zero fun v _ => rfl), fun _ _ _ _ _ v => by simp⟩
   | @snoc middle last pre step ih =>
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
     by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
     · simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at rest
       obtain ⟨added, addedOk, rfl⟩ := rest
-      obtain ⟨previous, previousSync⟩ :=
+      obtain ⟨previous, previousSrc⟩ :=
         ih priorOk fun e member => each e (List.mem_append_left _ member)
       have swap (L : List (BalanceEvent preset)) : ∑ v ∈ S, (L.map (keyCredit v.toNat)).sum =
           (L.map fun e => ∑ v ∈ S, keyCredit v.toNat e).sum := by
@@ -1311,31 +1320,40 @@ private theorem creditScan_bounds (S : Finset ValidatorIndex) (blockP slotP : Ba
         | block engine signed due ok =>
           simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
           exact part blockP fun _ h => Or.inl h
-      refine ⟨?_, fun sync electra early quiet v => ?_⟩
+      refine ⟨?_, fun src blockKind slotKind electra early v => ?_⟩
       · simp only [creditScan_snoc_fst, selected, ↓reduceIte, Finset.sum_add_distrib,
           List.map_append, List.sum_append]
         omega
-      · have prior := previousSync sync electra
-          (Nat.lt_of_le_of_lt step.chainStep.fork_le early) quiet v
-        have stepSync : (added.map (syncCredit v)).sum ≤ stepCredit blockP slotP v step := by
+      · have prior := previousSrc src blockKind slotKind electra
+          (Nat.lt_of_le_of_lt step.chainStep.fork_le early) v
+        have stepSrc : ((added.filter (src ·.source)).map (keyCredit v)).sum ≤
+            stepCredit blockP slotP v step := by
+          have inRun := Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
           cases step with
           | slot ok =>
-            have zero := quiet ok
-              (Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)) early addedOk v
-            omega
+            simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
+            rcases slotKind with covered | quiet
+            · exact sum_filter_credit_le src slotP covered v added
+            · rw [quiet ok inRun early addedOk v]
+              exact Nat.zero_le _
           | block engine signed due ok =>
             simp only [stepCredit, addedOk, Except.toOption, Option.getD_some]
-            exact sum_syncCredit_le blockP sync v added
-        simp only [creditScan_snoc_fst, selected, ↓reduceIte, List.map_append, List.sum_append]
+            rcases blockKind with covered | quiet
+            · exact sum_filter_credit_le src blockP covered v added
+            · rw [quiet inRun early addedOk v]
+              exact Nat.zero_le _
+        simp only [creditScan_snoc_fst, selected, ↓reduceIte, List.filter_append, List.map_append,
+          List.sum_append]
         omega
     · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
       obtain rfl := rest
-      obtain ⟨previous, previousSync⟩ := ih priorOk each
-      refine ⟨?_, fun sync electra early quiet v => ?_⟩
+      obtain ⟨previous, previousSrc⟩ := ih priorOk each
+      refine ⟨?_, fun src blockKind slotKind electra early v => ?_⟩
       · simp only [creditScan_snoc_fst, selected, ↓reduceIte]
         exact previous
       · simp only [creditScan_snoc_fst, selected, ↓reduceIte]
-        exact previousSync sync electra (Nat.lt_of_le_of_lt step.chainStep.fork_le early) quiet v
+        exact previousSrc src blockKind slotKind electra
+          (Nat.lt_of_le_of_lt step.chainStep.fork_le early) v
 
 /-- The credits of a set of keys over a run, read as a scan, fit one bound for each replayed event.
 

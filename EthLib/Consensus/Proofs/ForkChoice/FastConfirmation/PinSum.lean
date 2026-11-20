@@ -13549,12 +13549,18 @@ private theorem syncCr_gross_shared (h : Setting config checks g split fin pulle
   obtain ⟨-, sync⟩ := creditScan_bounds ∅
     (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) high
     (fun _ => 0) fromFin replayedF (fun e _ _ => by simp)
-  have bound := sync (by simp) electra h.early
-    (fun ok _ fork early replayed i => (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) v
+  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
+      simp only [decide_eq_true_eq] at covered ⊢
+      exact Or.inr (Or.inr covered))
+    (Or.inr fun ok _ fork early replayed i =>
+      (sum_map_sync _ (keyCredit i)).symm.trans
+        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
+  have conv : syncCr eventsF v = ((eventsF.filter (·.source = .sync)).map (keyCredit v)).sum :=
+    sum_map_sync _ (keyCredit v)
   have split := creditScan_append (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
     (fun _ => false) v high fromFin tailC
   unfold grossScan
-  unfold syncCr at positive
+  rw [conv] at positive
   omega
 
 /-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
@@ -17575,10 +17581,16 @@ private theorem syncCr_gross (h : Setting config checks g split fin pulled anc c
   obtain ⟨-, sync⟩ := creditScan_bounds ∅
     (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
     (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
-  have bound := sync (by simp) electra h.early
-    (fun ok _ fork early replayed i => (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) v
+  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
+      simp only [decide_eq_true_eq] at covered ⊢
+      exact Or.inr (Or.inr covered))
+    (Or.inr fun ok _ fork early replayed i =>
+      (sum_map_sync _ (keyCredit i)).symm.trans
+        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
+  have conv : syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map (keyCredit v)).sum :=
+    sum_map_sync _ (keyCredit v)
   unfold grossScan
-  unfold syncCr at positive
+  rw [conv] at positive
   omega
 
 /-- A block step gives no reward or slashing credit to a key that is not its proposer. -/
