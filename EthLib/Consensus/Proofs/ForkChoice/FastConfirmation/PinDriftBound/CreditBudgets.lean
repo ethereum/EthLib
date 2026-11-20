@@ -518,9 +518,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingBand
   Internal.two_bands_le_exitingBands config pulled anc fin counted V tailC highC
     (fun _ member flag _ => Internal.K5_charged h tailC member flag) (charged_count h tailC)
 
-/-- The queue budget covers the rise of K5 keys after their exits start on C's branch.
+/-- The queue budget covers the rise after departure charges on C's branch.
 
-The bound includes all keys of `K5` with a departure charge. -/
+It covers keys counted in C's quorum but inactive at C and outside the voter set. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queueRise (h : Setting config
   checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
@@ -1584,7 +1584,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credit_parts_le
   have p := Internal.propC_split tail high v.toNat
   exact ⟨by unfold Internal.consAmt; omega, by unfold Internal.consAmt; omega⟩
 
-/-- C's proposer credits to K5 keys count at weight three.
+/-- C's proposer credits to counted but inactive keys outside the voter set count at weight three.
 
 The bound adds the amounts transferred by consolidation.
 
@@ -1594,7 +1594,7 @@ The bound uses a factor of ten to account for compounding and rounding the extra
 
 The compounding of the credits, an exact tenth of the keys' total, is in the bound.
 
-The reserve also accounts separately for two more bands per credited key of K5.
+The reserve also accounts separately for two more bands per credited key in this group.
 
 The run `pre` starts at the split's epoch, so its credits are proposer credits only.
 
@@ -3651,13 +3651,13 @@ private theorem sum_bandR (events : List (BalanceEvent preset)) (T : Finset Vali
   simp only [Internal.bandR_eq]
   rw [← Finset.sum_filter, Finset.sum_const, smul_eq_mul, Nat.mul_comm]
 
-/-- The keys of `SC` that C's run charges to depart.
+/-- Keys of R's registry newly slashed on C's branch and charged to depart there.
 
 A key charged in the split's epoch reads the balance before the credits of `pre` that follow it.
 
 A key charged later holds those credits in its charge, so reading them is an overpayment.
 
-The excess charge covers these keys and those of `K5` together. -/
+The excess charge also covers counted but inactive keys outside the voter set. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scCharged (pulled counted split :
   BeaconState preset fork)
     {x y : ForkedBeaconState preset} (tailC : Run config checks x y) : Finset ValidatorIndex :=
@@ -4299,9 +4299,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncProposer_le
       (pinTerms config state ancestor finalizedState).proposerCredit :=
   Nat.le_add_left _ _
 
-/-- The keys of `SC` whose balance rise counts toward the whistleblower budget.
+/-- Keys of R's registry newly slashed on C's branch whose rise funds whistleblower rewards.
 
-They are not slashed at R, `exitedSlashable` does not count them, and they are active at C. -/
+They are active at C and do not qualify for R's slashing or slashable-exit charges. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc3a (config : Config) (pulled anc fin
   counted split : BeaconState preset fork) :
     Finset ValidatorIndex :=

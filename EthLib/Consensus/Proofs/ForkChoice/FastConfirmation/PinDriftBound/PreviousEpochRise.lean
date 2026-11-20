@@ -2221,9 +2221,9 @@ private theorem whist_seat (h : Setting config checks g split fin pulled anc cou
       calc _ ≤ _ := this
         _ = _ := by ring
 
-/-- The units and the induced leak of the registry keys that C slashes fit the base.
+/-- The reward budget covers rounding units and induced leak for keys newly slashed on C's branch.
 
-The reserve counts the rounding units and induced leak of `SC` at weight one.
+It counts these keys of the split's registry at weight one.
 
 A key that R slashes holds a second unit, counted against the number of slashings on R. -/
 private theorem whist_units (h : Setting config checks g split fin pulled anc counted V)

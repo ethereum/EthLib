@@ -1522,9 +1522,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_arith {inc
 
 The run starts at a state where the key's effective balance is within the largest one.
 
-The bound `creditBound` applies at every state when the effective-balance floor `E` holds.
+The starting balance, epoch rewards and other credits bound the actual balance at every state.
 
-`E` is at least the effective balances that the bound allows.
+The effective-balance ceiling `E` must cover the rounded bound used to estimate epoch rewards.
 
 Then the update of the effective balances reads that bound as its ceiling. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_credit_ceiling {n y :

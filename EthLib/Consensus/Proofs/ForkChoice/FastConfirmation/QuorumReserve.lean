@@ -18,7 +18,7 @@ The reserves use only the call's states to account for changes in the quorum.
 
 The quorum reserve covers a later state on the call's own chain, from Fulu to before Gloas.
 
-The pin reserve also covers a counting state on another branch, from Fulu to before Glamsterdam.
+The pin reserve also covers a counting state on another branch, from Fulu to before Gloas.
 -/
 
 @[expose] public section
@@ -335,9 +335,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- A counting state on another branch can spend churn at a total up to that much.
   --
-  -- They follow `exitChurnLimit` and `getConsolidationChurnLimit` on natural numbers.
+  -- Before Gloas, the upper envelopes bound the exit and consolidation churn limits.
   --
-  -- They do not model the error branch of those reads.
+  -- They round the stake-based churn before applying the minimum, not after.
   --
   -- `wide` is a natural-number bound on another branch's total, not a copy of a read.
   --

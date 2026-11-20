@@ -81,11 +81,11 @@ The quorum classes and the keys slashed on C can draw on the same reserve terms.
 
 The keys of `SC` and `CS` join that claim, and the entry is spent once. -/
 
-/-- The rise of the current keys of K4 and of `SC` fits the rise of the current keys of R.
+/-- The rise budget for R's current keys covers both quorum and whistleblower charges.
 
-The keys of `SC` whose rise counts toward whistleblower rewards are not in K4.
+The quorum charge covers keys active on both branches and counted at C, excluding the voter set.
 
-Each of them is a key of R's registry. -/
+The whistleblower charge draws on different current keys at R, newly slashed on C's branch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_rise (h : Setting config checks
   g split fin pulled anc counted V) :
     (∑ v ∈ (Internal.K4 pulled counted V), (pinTerms config pulled anc fin).rise v.toNat) +
@@ -116,11 +116,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_rise (h : S
       (show isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true from current)
     exact Internal.mem_positions_filter config pulled anc fin found current
 
-/-- The reserve bounds the rise of upcoming-only keys in K6 and `SC` together.
+/-- The rise budget for keys joining at R's next epoch covers quorum and whistleblower charges.
 
-The keys of `SC` whose rise counts toward whistleblower rewards are not in K6.
+The quorum charge covers joining keys that are active and counted at C but inactive at R.
 
-Each of them is a key of R's registry. -/
+The whistleblower charge draws on different joining keys at R, newly slashed on C's branch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_joinRise (h : Setting config
   checks g split fin pulled anc counted V) :
     (∑ v ∈ (Internal.K6 pulled counted) with

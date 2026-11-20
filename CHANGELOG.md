@@ -10,6 +10,7 @@ Not yet released.
 ### Proof additions
 
 - The proof of the pin reserve bound separates the estimates for balances, exits and rewards into modules.
+  The helpers shared by these modules are public in the `PinDrift.Internal` namespace.
   The bound's statement and import path are unchanged.
 
 - `Run.nil_append` drops an empty prefix, and `Run.snoc_append_eq` puts the split of a run before its final prefix step instead of after it.
