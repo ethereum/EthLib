@@ -16,8 +16,8 @@ The [API description] fixes the version names and the bodies.
 
 The [Gloas builder] document requires the header on every request with a body.
 
-[API description]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/builder-oapi.yaml
-[Gloas builder]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#per-request-validator-inputs
+[API description]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/builder-oapi.yaml
+[Gloas builder]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#per-request-validator-inputs
 -/
 
 @[expose] public section
@@ -40,7 +40,7 @@ def builderVersion? (fork : Fork) : Option ConsensusVersion :=
 
 The [schema] of the API restricts the consensus versions to these.
 
-[schema]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/builder-oapi.yaml#L79-L82
+[schema]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/builder-oapi.yaml#L79-L82
 -/
 def builderVersions : List ConsensusVersion :=
   [.bellatrix, .capella, .deneb, .electra, .fulu, .gloas]
@@ -70,7 +70,7 @@ Its JSON form is a plain array of registrations, with no version.
 
 [`validators.yaml`] fixes its bound as the bound of the registry of validators.
 
-[`validators.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/validators.yaml
+[`validators.yaml`]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/validators.yaml
 -/
 abbrev RegistrationsBody (preset : Preset) : Type :=
   SszList SignedValidatorRegistrationV1 preset.VALIDATOR_REGISTRY_LIMIT.toNat

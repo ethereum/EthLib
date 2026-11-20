@@ -802,18 +802,8 @@ theorem Run.balanceCorrections_of_same_epoch {x y : ForkedBeaconState preset}
   -- A run inside one epoch has at most one block for each slot of the epoch.
   have blocksLe : 0 < slots → blocks ≤ slots := by
     intro positive
-    have epochs := congrArg UInt64.toNat same
-    simp only [getCurrentEpoch_toNat] at epochs
-    have low := Nat.div_mul_le_self a.slot.toNat slots
-    have high := Nat.lt_div_mul_add (a := b.slot.toNat) positive
-    have count := tail.blocks_le_slots (a := a.slot.toNat / slots * slots)
-      (b := a.slot.toNat / slots * slots + slots - 1) low (by
-        change b.slot.toNat ≤ _
-        change b.slot.toNat / slots = a.slot.toNat / slots at epochs
-        rw [epochs] at high
-        omega)
-    change tail.blockCount ≤ slots
-    omega
+    simpa only [blocks, same, Nat.add_sub_cancel_left, Nat.one_mul] using
+      tail.blockCount_le_epochs positive
   -- The proposer shares of the sync aggregates.
   have sharesLe : shares ≤ syncProposer := by
     have bound := tally.share

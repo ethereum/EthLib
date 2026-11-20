@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.FirstDrop
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # The round ledger of a branch
@@ -343,28 +344,34 @@ theorem initial_unslashed_debit_le
       simpa only [numeric i hi, numeric j hj] using equal
   rw [← sumImage]
   exact Finset.sum_le_sum_of_subset subset
+/-- A slot records no withdrawal event: its epoch passes and fork crossings pay no withdrawal. -/
+theorem slot_events_no_withdrawals {x y : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
+    {events : List (BalanceEvent preset)}
+    (replayed : (Step.slot ok).balanceEvents = .ok events) :
+    ∀ e ∈ events, e.source ≠ .withdrawals := by
+  obtain ⟨advanced, cached, crossings, _, _, _, crossingOk, split⟩ :=
+    Step.balanceEvents_slot ok early replayed
+  rcases split with ⟨_, rfl⟩ |
+    ⟨middle, _, recorded, recordedOk, _, _, _, shape, _, _, _, _, _⟩
+  · intro e member source
+    have crossed := upgradeBalanceReplay_crossing crossingOk e member
+    rw [crossed] at source
+    cases source
+  · intro e member source
+    rw [shape] at member
+    rcases List.mem_append.mp member with recordedMember | crossingMember
+    · exact epochBalanceReplay_no_withdrawals recordedOk e recordedMember source
+    · have crossed := upgradeBalanceReplay_crossing crossingOk e crossingMember
+      rw [crossed] at source
+      cases source
 private theorem slot_partial_sum {x y : ForkedBeaconState preset}
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok).balanceEvents = .ok events) :
     (events.map fun e => ∑ i ∈ Finset.range e.before.state.validators.data.size,
       floorPartialDebit (UInt64.ofNat i) e).sum = 0 := by
-  have absent : ∀ e ∈ events, e.source ≠ .withdrawals := by
-    obtain ⟨advanced, cached, crossings, _, _, _, crossingOk, split⟩ :=
-      Step.balanceEvents_slot ok early replayed
-    rcases split with ⟨_, rfl⟩ |
-      ⟨middle, _, recorded, recordedOk, _, _, _, shape, _, _, _, _, _⟩
-    · intro e member source
-      have crossed := upgradeBalanceReplay_crossing crossingOk e member
-      rw [crossed] at source
-      cases source
-    · intro e member source
-      rw [shape] at member
-      rcases List.mem_append.mp member with recordedMember | crossingMember
-      · exact epochBalanceReplay_no_withdrawals recordedOk e recordedMember source
-      · have crossed := upgradeBalanceReplay_crossing crossingOk e crossingMember
-        rw [crossed] at source
-        cases source
+  have absent := slot_events_no_withdrawals ok early replayed
   have each : ∀ e ∈ events,
       (∑ i ∈ Finset.range e.before.state.validators.data.size,
         floorPartialDebit (UInt64.ofNat i) e) = 0 := by
@@ -871,20 +878,9 @@ theorem initial_active_exit_cutoff {x y : ForkedBeaconState preset}
   have same := Option.some.inj (found.symm.trans final)
   subst later
   have chronological := currentEpoch_le_of_chainSteps tail.chainSteps
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  have activationStart := UInt64.le_iff_toNat_le.mp active.1
-  have exitStart := UInt64.lt_iff_toNat_lt.mp active.2
-  have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    intro far
-    have bound := activationStart.trans_lt exitStart
-    rw [far] at bound
-    have largest : v.exitEpoch.toNat ≤ FAR_FUTURE_EPOCH.toNat :=
-      Nat.le_sub_one_of_lt v.exitEpoch.toNat_lt
-    omega
   have activation : w.activationEpoch ≤ getCurrentEpoch y.state := by
-    rw [kept.activationEpoch assigned]
-    exact UInt64.le_iff_toNat_le.mpr
-      (activationStart.trans (UInt64.le_iff_toNat_le.mp chronological))
+    rw [kept.activationEpoch (Consensus.Internal.assigned_of_active active)]
+    exact UInt64.le_trans (activationLe_of_active active) chronological
   simp only [isActiveValidator, Bool.and_eq_false_iff, decide_eq_false_iff_not] at inactive
   rcases inactive with before | after
   · exact False.elim (before activation)

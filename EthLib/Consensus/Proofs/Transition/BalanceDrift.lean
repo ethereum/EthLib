@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
+import EthLib.Base.Proofs.Nat
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.ChainRoots
 public import EthLib.Consensus.Proofs.Transition.Committees
@@ -111,6 +112,43 @@ def _root_.EthLib.Consensus.Run.balancePath {x : ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → List (ForkedBeaconState preset)
   | _, .nil => [x]
   | _, .snoc pre step => pre.balancePath ++ step.balancePath
+
+/-- A state on the balance path of a run is a state of the run, or the state inside a slot step.
+
+The state inside a slot step comes after the slot and its epoch transition, before the upgrades. -/
+theorem Run.mem_balancePath_split {z w : ForkedBeaconState preset}
+    (r : Run config checks z w) {p : ForkedBeaconState preset} (member : p ∈ r.balancePath) :
+    (∃ (rp : Run config checks z p) (rest : Run config checks p w), r = rp.append rest) ∨
+    (∃ (q n : ForkedBeaconState preset) (rq : Run config checks z q)
+      (ok : advanceSlotAcross config checks q = .ok n) (rest : Run config checks n w)
+      (adv : BeaconState preset q.fork), r = (rq.snoc (Step.slot ok)).append rest ∧
+        advanceSlot config checks q.state = .ok adv ∧ p = ⟨q.fork, adv⟩ ∧
+        processUpgrades config checks ⟨q.fork, adv⟩ = .ok n) := by
+  induction r with
+  | nil =>
+    simp only [Run.balancePath, List.mem_singleton] at member
+    subst member
+    exact .inl ⟨.nil, .nil, rfl⟩
+  | @snoc q last pre step ih =>
+    simp only [Run.balancePath, List.mem_append] at member
+    rcases member with member | member
+    · rcases ih member with ⟨rp, rest, eq⟩ | ⟨q', n, rq, ok, rest, adv, eq, advanced, hp, up⟩
+      · exact .inl ⟨rp, rest.snoc step, by rw [eq]; rfl⟩
+      · exact .inr ⟨q', n, rq, ok, rest.snoc step, adv, by rw [eq]; rfl, advanced, hp, up⟩
+    · cases step with
+      | block engine signed due ok =>
+        simp only [Step.balancePath, List.mem_cons, List.not_mem_nil, or_false] at member
+        rcases member with rfl | rfl
+        · exact .inl ⟨pre, (Run.nil.snoc (.block engine signed due ok)), rfl⟩
+        · exact .inl ⟨pre.snoc (.block engine signed due ok), .nil, rfl⟩
+      | slot ok =>
+        obtain ⟨adv, advOk, upgrades⟩ := bind_ok_iff.mp ok
+        simp only [Step.balancePath, advOk, Except.toOption, List.mem_cons, List.not_mem_nil,
+          or_false] at member
+        rcases member with rfl | rfl | rfl
+        · exact .inl ⟨pre, (Run.nil.snoc (.slot ok)), rfl⟩
+        · exact .inr ⟨_, last, pre, ok, .nil, adv, rfl, advOk, rfl, upgrades⟩
+        · exact .inl ⟨pre.snoc (.slot ok), .nil, rfl⟩
 
 /-- A step's balance path starts at its start and ends at its end. -/
 theorem Step.balancePath_ends {m n : ForkedBeaconState preset}
@@ -703,6 +741,30 @@ theorem hysteresis_of_advanceSlot (bands : preset.IncrementWithinUpwardBand)
     at epochOk
   exact (hysteresis_of_epochTransition bands epochOk).of_data rfl rfl fun _ => rfl
 
+/-- A slot step of a run from genesis to an epoch's first slot ends within the bands of hysteresis.
+
+The epoch transition of the step sets the bands.
+
+The upgrades of the slot keep them.
+
+Every effective balance is at most its cap before the upgrades. -/
+theorem hysteresis_of_run_slot {g middle last : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
+    (run : Run config checks g middle) (ok : advanceSlotAcross config checks middle = .ok last)
+    (early : last.fork < .glamsterdam) (first : last.state.slot % preset.SLOTS_PER_EPOCH = 0) :
+    Hysteresis last.state := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+  have middleEarly : middle.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded) early
+  have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
+  exact Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩)
+    (hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)) (caps.maxEffective_eq activation)
+    caps.compounding
+    (advanceSlot_capped advancedOk
+      (run.effectiveBalance_capped genesis caps.activation caps.compounding middleEarly))
+    upgraded
+
 /-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
 theorem hysteresis_of_processSlots (bands : preset.IncrementWithinUpwardBand)
     {slot : Slot} (computed : processSlots config checks state slot = .ok after)
@@ -837,7 +899,7 @@ Before it, registry updates and pending deposits keep existing effective balance
 The other stages before it keep the validators.
 
 The stages after it keep the validators and the balances. -/
-private theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
+theorem balanceDrift_epoch {f : Fork} {s t : BeaconState preset f}
     (ok : processEpoch config checks s = .ok t) :
     ∃ before after, EffectiveKept s before ∧
       processEffectiveBalanceUpdates before = .ok after ∧
@@ -1049,21 +1111,16 @@ theorem Run.induction_of_same_epoch {x : ForkedBeaconState preset}
     {y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch x.state) :
     motive y tail := by
-  induction tail with
-  | nil => exact start
-  | @snoc middle last pre step ih =>
-    have middleEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have midEpoch : getCurrentEpoch middle.state = getCurrentEpoch x.state :=
-      UInt64.le_antisymm (same ▸ step.chainStep.currentEpoch_le)
-        (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have prior := ih middleEarly midEpoch
-    cases step with
-    | block engine signed due ok => exact blockStep engine signed due ok pre early prior
-    | slot ok =>
-      have kept := same.trans midEpoch.symm
-      obtain ⟨cached, next, cachedOk, lastEq⟩ := advanceSlotAcross_of_same_epoch ok kept
-      rw [lastEq] at kept
-      exact slotStep pre ok lastEq cachedOk kept prior
+  refine Run.induction_of_same_period 1 motive start blockStep ?_ tail early
+    (by simp only [same])
+  intro middle last pre ok lastEarly inside prior
+  have kept : getCurrentEpoch last.state = getCurrentEpoch middle.state := by
+    rcases inside with equal | inside
+    · exact equal
+    · exact (inside (UInt64.toNat_inj.mp (by simp))).elim
+  obtain ⟨cached, next, cachedOk, lastEq⟩ := advanceSlotAcross_of_same_epoch ok kept
+  rw [lastEq] at kept
+  exact slotStep pre ok lastEq cachedOk kept prior
 
 /-- Within one epoch before Gloas, each existing index keeps its effective balance. -/
 theorem Run.effectiveKept_of_same_epoch {x y : ForkedBeaconState preset}
@@ -1186,16 +1243,10 @@ private theorem balanceDrift_reference_update {f : Fork} {s t : BeaconState pres
         · exact previous
         · have rounded : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
             UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
-          have quotient := Nat.div_le_div_right funded
-            (c := preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-          have product := Nat.mul_le_mul_left preset.EFFECTIVE_BALANCE_INCREMENT.toNat quotient
-          have refDivision := Nat.mod_add_div reference.toNat
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-          have balDivision := Nat.mod_add_div balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-          rw [aligned] at refDivision
           rw [Base.Uint64.toNat_min, UInt64.toNat_sub_of_le _ _ rounded, UInt64.toNat_mod]
-          have capped := UInt64.le_iff_toNat_le.mp capped
-          omega
+          refine Nat.le_min.mpr ⟨?_, UInt64.le_iff_toNat_le.mp capped⟩
+          simpa only [aligned, Nat.sub_zero] using
+            Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat funded
     · have same :
           (a.putValidator j inside { v with effectiveBalance := next }).validators.data[i]? =
           a.validators.data[i]? := by
@@ -1276,22 +1327,11 @@ private theorem balanceDrift_preActivation_excludes {f : Fork} {s : BeaconState 
     (found : s.validators.data[i]? = some v)
     (activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH) :
     ∀ index ∈ preActivationIndices s, index.toNat ≠ i := by
-  intro index member
-  simp only [preActivationIndices, List.mem_map, List.mem_mergeSort, List.mem_filter] at member
-  obtain ⟨⟨w, j⟩, ⟨located, waiting⟩, rfl⟩ := member
-  have read : s.validators.data[j]? = some w := by
-    simpa using List.mem_zipIdx_iff_getElem?.mp located
-  have inside := (Array.getElem?_eq_some_iff.mp read).1
-  have small : j < 2 ^ 64 := Nat.lt_of_lt_of_le inside
-    ((s.validators.bound early).trans (Nat.le_of_lt preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt))
-  have converted : j.toUInt64.toNat = j := by
-    rw [Nat.toUInt64_eq, UInt64.toNat_ofNat_of_lt' small]
-  rw [converted]
-  intro eq
-  subst j
-  rw [found, Option.some.injEq] at read
+  intro index member equal
+  obtain ⟨w, read, waiting⟩ := preActivation_waiting early member
+  rw [equal, found, Option.some.injEq] at read
   subst w
-  exact activated (by simpa using waiting)
+  exact activated waiting
 
 private theorem balanceDrift_upgrade_active {s : ForkedBeaconState preset}
     {t : {t : ForkedBeaconState preset // s.fork < t.fork}}

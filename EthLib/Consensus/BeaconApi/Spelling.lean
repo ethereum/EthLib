@@ -44,7 +44,7 @@ The [`types` files] of the API fix these forms.
 
 Examples are `Transaction` in `primitive.yaml` and `altair/epoch_participation.yaml`.
 
-[`types` files]: https://github.com/ethereum/beacon-APIs/tree/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types
+[`types` files]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/types
 -/
 
 @[expose] public section

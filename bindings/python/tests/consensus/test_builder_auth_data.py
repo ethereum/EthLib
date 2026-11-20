@@ -11,7 +11,7 @@ from ethlib.errors import ConsensusError
 from raising import raises
 
 # The examples of "Default auth data" in the Gloas validator document of the builder specification:
-# https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/validator.md#default-auth-data
+# https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/validator.md#default-auth-data
 SOURCE_EXAMPLES = [
     ("https://builder.example.com/", b"builder.example.com"),
     ("HTTPS://Builder.Example.com:443/bids?x=1", b"builder.example.com"),

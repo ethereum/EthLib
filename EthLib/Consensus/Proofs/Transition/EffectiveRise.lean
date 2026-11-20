@@ -1661,20 +1661,8 @@ theorem effectiveRise_le
     omega
   -- The blocks of the epoch fit its slots.
   have blocksLe : toZ.blockCount ≤ slots := by
-    have epochR := getCurrentEpoch_toNat r
-    have epochZ' := getCurrentEpoch_toNat zs
-    rw [epochZ, ← he] at epochZ'
-    have sameQuotient : zs.slot.toNat / slots = r.slot.toNat / slots := by
-      simp only [slots]
-      omega
-    have bound := toZ.blocks_le_slots (a := r.slot.toNat / slots * slots)
-      (b := r.slot.toNat / slots * slots + slots - 1) (Nat.div_mul_le_self _ _) (by
-        have split := Nat.div_add_mod zs.slot.toNat slots
-        have small := Nat.mod_lt zs.slot.toNat slotsPos
-        rw [sameQuotient, Nat.mul_comm] at split
-        show zs.slot.toNat ≤ _
-        omega)
-    omega
+    simpa only [epochZ, ← he, Nat.add_sub_cancel_left, Nat.one_mul] using
+      toZ.blockCount_le_epochs slotsPos
   -- The largest effective balances are at most the largest of the fork.
   have capLe : ∀ v : Validator, (withdrawalMaxEffectiveBalance preset F v).toNat ≤ capMax := by
     intro v

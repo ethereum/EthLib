@@ -206,6 +206,7 @@ They may run in three places outside it:
   It reaches an internal step that has no C export, and it runs compiled code, as the Python suite does.
 - A Lean library of kernel vectors, which no default target imports, may prove known answers.
   CI must build it in its own step on every pull request, so that a failure points at the pull request that caused it.
+  It is `KernelVectors`, in `tests/kernel/`, and `lake build KernelVectors` builds it.
 
 In Lean, a known answer is a theorem or an `example` that evaluates a definition on concrete inputs.
 It compares the result with an expected value, by `rfl`, `decide`, `decide +kernel` or `simp`.

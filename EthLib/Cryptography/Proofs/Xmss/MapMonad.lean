@@ -150,8 +150,8 @@ theorem findCodeword_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32)
 theorem otsSign_map_monad (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray) :
     φ (otsSign H pp prf layer e msg) =
       otsSign (fun x => φ (H x)) pp (fun pp a suffix => φ (prf pp a suffix)) layer e msg := by
-  simp only [otsSign, map_bind, randomizerBase_map_monad φ map_pure map_bind,
-    findCodeword_map_monad φ map_pure map_bind H]
+  simp only [otsSign, Internal.otsSignTrials, map_bind,
+    randomizerBase_map_monad φ map_pure map_bind, findCodeword_map_monad φ map_pure map_bind H]
   refine bind_congr fun base => bind_congr fun r => ?_
   cases r with
   | none => exact map_pure _

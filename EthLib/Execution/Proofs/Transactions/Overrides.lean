@@ -139,4 +139,51 @@ theorem checkSender_of_skipNonce {fork : Fork} {state : TransactionState} {sende
       .error (.transaction (.nonceOverflow (2 ^ 64 - 1))) := by
   simp [checkSender, h, failIf, bind, Except.bind]
 
+/-- With the sender given, the checks of the sender never reject it for its code. -/
+private theorem checkSender_unsigned_ne_senderNotEoa {fork : Fork} {state : TransactionState}
+    {sender : Address} {tx : Transaction} {skipNonce : Bool} (address : Address) :
+    checkSender fork state sender tx false skipNonce ≠ .error (.senderNotEoa address) := by
+  unfold checkSender
+  simp only [Bool.false_eq_true, ↓reduceIte, bind, Except.bind]
+  repeat' split
+  all_goals first
+    | (rename_i h; unfold failIf at h; split at h <;> cases h <;> simp; done)
+    | (unfold failIf; split <;> simp [pure, Except.pure]; done)
+    | simp_all [pure, Except.pure]
+
+/-- The check of the gas a transaction takes from its block never rejects a sender for its code.
+-/
+private theorem checkBlockGas_ne_senderNotEoa {fork : Fork} {env : BlockEnvironment fork}
+    {used : BlockGas} {tx : Transaction} {lifted : LiftedRules} (address : Address) :
+    checkBlockGas env used tx lifted ≠ .error (.senderNotEoa address) := by
+  unfold checkBlockGas
+  simp only [bind, Except.bind]
+  repeat' split
+  all_goals first
+    | (rename_i h; unfold failIf at h; split at h <;> cases h <;> simp; done)
+    | (unfold failIf; split <;> simp; done)
+    | simp_all
+
+/-- With the sender given, as a simulation gives it, no check rejects the sender for its code.
+
+The rule on the code of the sender reads a recovered sender only. -/
+theorem checkInclusion_ne_senderNotEoa {fork : Fork} {chainId : UInt64}
+    {env : BlockEnvironment fork} {used : BlockGas} {state : TransactionState} {tx : Transaction}
+    {sender : Address} {lifted : LiftedRules} (address : Address) :
+    checkInclusion chainId env used state tx (some sender) lifted ≠
+      .error (.senderNotEoa address) := by
+  unfold checkInclusion
+  simp only [bind, Except.bind, pure, Except.pure, Option.isNone_some]
+  repeat' split
+  all_goals first
+    | (rename_i h; obtain ⟨_, -, rfl⟩ := EthLib.Base.mapError_eq_error h; nofun)
+    | (rename_i h; rintro ⟨⟩; exact checkBlockGas_ne_senderNotEoa address h)
+    | (rename_i h; rintro ⟨⟩; exact checkSender_unsigned_ne_senderNotEoa address h)
+    | (rename_i h; unfold failIf at h; split at h <;> cases h <;> simp; done)
+    | (unfold failIf; split <;> simp [pure, Except.pure]; done)
+    | (rename_i h; split at h
+       · cases h
+       · obtain ⟨_, -, rfl⟩ := EthLib.Base.mapError_eq_error h; nofun)
+    | simp_all
+
 end EthLib.Execution.Transactions

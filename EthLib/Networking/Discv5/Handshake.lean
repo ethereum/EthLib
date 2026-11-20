@@ -9,7 +9,7 @@ public import EthLib.Networking.Discv5.Packet
 The two sides of the discv5 handshake for the "v4" identity scheme.
 
 The source is "Handshake Steps" of `discv5-theory.md` in `ethereum/devp2p`:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md#handshake-steps>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#handshake-steps>
 
 Node A starts the handshake, and node B sent it the WHOAREYOU challenge.
 
@@ -32,7 +32,7 @@ The challenge data, the node IDs and the public key of each peer are inputs here
 The module also seals and opens the handshake message packet of node A.
 
 "Handshake Message Packet" of `discv5-wire.md` defines it:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-wire.md>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md>
 
 Node B verifies the ID signature under a public key of node A that it already holds.
 

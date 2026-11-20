@@ -43,10 +43,10 @@ When it knows none, the answer is the error with code 404.
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[bootstrap]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/light_client/bootstrap.yaml
-[updates]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/light_client/updates.yaml
-[finality update]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/light_client/finality_update.yaml
-[optimistic update]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/light_client/optimistic_update.yaml
+[bootstrap]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/light_client/bootstrap.yaml
+[updates]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/light_client/updates.yaml
+[finality update]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/light_client/finality_update.yaml
+[optimistic update]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/light_client/optimistic_update.yaml
 -/
 
 @[expose] public section

@@ -5,7 +5,7 @@ import pytest
 from ethlib.networking.libp2p import mplex
 from raising import raises
 
-# The format is mplex/README.md of libp2p/specs at commit c750236de43cd8b246a824b377dfdb26bae686db.
+# The format is mplex/README.md of libp2p/specs at commit 4facaf9876da1eb7d6e066982010c81495ebb965.
 # Its sections are "Message format", "Flag Values" and "Writing to a stream".
 # The rules for an end of stream are in "Closing a stream" and "Resetting a stream".
 # The header is the unsigned varint of 8 * stream ID + flag; the length and the data follow.

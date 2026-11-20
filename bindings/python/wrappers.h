@@ -424,6 +424,8 @@ PyObject* py_consensus_api_columns               (PyObject* self, PyObject* args
 PyObject* py_consensus_api_columns_ssz           (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_payload_envelope      (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_payload_envelope_ssz  (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_cached_envelope       (PyObject* self, PyObject* args);
+PyObject* py_consensus_api_cached_envelope_ssz   (PyObject* self, PyObject* args);
 PyObject* py_consensus_api_light_client_bootstrap(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_light_client_bootstrap_ssz(PyObject* self, PyObject* args);
 PyObject* py_consensus_api_light_client_updates(PyObject* self, PyObject* args);

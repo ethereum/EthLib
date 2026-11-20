@@ -80,11 +80,29 @@ A fee cap or a gas price below the base fee fails with code 806.
 
 A priority fee above the fee cap fails with code 804.
 
-A type that is not yet active at the fork of the call is an invalid parameter.
+The call ignores the field `type`, as the [text of the method][rules] requires.
 
-So is a field that the kind of the request cannot carry, or a chain other than the node's.
+The other fields decide the kind of the transaction, so any type gives the answer of no type.
 
-So is a creation of type 3 or 4.
+A field whose EIP is not active at the block makes the request invalid, even when it is zero.
+
+The fields are an access list before Berlin, a fee cap or a priority fee before London.
+
+They also include blob hashes before Cancun, and authorizations before Prague.
+
+The kind of the request has the fork of the latest of these fields, so its fork check covers them.
+
+An empty list of blob hashes, or a blob fee cap without blob hashes, is invalid at every fork.
+
+The text names no code for these rejections, and the fixtures expect -32000.
+
+That is the code of invalid input in [EIP-1474][eip-1474], which EthLib gives them.
+
+A field that the kind of the request cannot carry is an invalid parameter.
+
+So is a chain other than the node's.
+
+So is a creation with blob hashes or authorizations.
 
 Past their reading as bytes, a call never reads the blobs, their commitments or their proofs.
 
@@ -111,6 +129,8 @@ Any other halt is code -32000, such as a creation at an address that has code.
 A call at a fork that EthLib does not yet specify fails with code -32603.
 
 [execute]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/execute.yaml
+[rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L11-L24
+[eip-1474]: https://eips.ethereum.org/EIPS/eip-1474#error-codes
 -/
 
 @[expose] public section
@@ -157,6 +177,10 @@ structure CallChoices where
 /-- The error of a parameter of a call that does not fit its field or its kind. -/
 def callParamError (reason : String) : RpcError :=
   RpcError.invalidParams s!"transaction: {reason}"
+
+/-- The error of a request that a rule of the method rejects, code -32000 for invalid input. -/
+def callRuleError (reason : String) : RpcError :=
+  invalidInput.toRpcError (some (.str s!"transaction: {reason}"))
 
 /-- A number of the request as a 256-bit word, or the error of a number that does not fit. -/
 def callWord (what : String) (n : Nat) : Except RpcError U256 :=
@@ -262,14 +286,20 @@ def callInternalError (reason : String) : RpcError :=
 
 /-- The call of a request on the state after a block, ready to run, or the error that stops it.
 
-The block is the one that `p` names, and `choices` are the choices of the node. -/
+The block is the one that `p` names, and `choices` are the choices of the node.
+
+The type of the request is dropped first, so that its other fields decide its kind. -/
 def ChainView.prepareCall (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (choices : CallChoices) : Except RpcError CallSetup :=
+  let tx : GenericTransaction := { tx with type := none }
   v.ofBlock p fun r => do
     let ce := choices.environment v r
     let fork := ce.fork
     let env := if tx.namesFee then ce.env else { ce.env with baseFeePerGas := fun _ => 0 }
     ensure (fork < .hegota) (callInternalError "fork not yet specified")
+    ensure (tx.blobVersionedHashes ≠ some []) (callRuleError "blobVersionedHashes: empty")
+    ensure (¬(tx.maxFeePerBlobGas.isSome ∧ tx.blobVersionedHashes.isNone))
+      (callRuleError "maxFeePerBlobGas: no blobVersionedHashes")
     let sender := tx.sender.getD choices.sender
     let state := TransactionState.ofBlock ⟨r.state, ∅, ∅, ∅, ∅⟩
     let account := state.getAccount sender
@@ -280,7 +310,7 @@ def ChainView.prepareCall (v : ChainView) (tx : GenericTransaction) (p : BlockPa
     let t ← tx.toTransaction env.chainId account.nonce gas (if tx.namesFee then maxFee else 0)
     if 2 ≤ tx.kind && tx.namesFee then
       ensure (priority ≤ maxFee) (priorityFeeAboveCap.toRpcError)
-    ensure (t.fork ≤ fork) (callParamError "type: not active at the fork of the block")
+    ensure (t.fork ≤ fork) (callRuleError "a field is not active at the fork of the block")
     ensure (¬(tx.namesFee && t.maxFeePerGas < baseFee)) feeCapBelowBaseFee.toRpcError
     let price := if tx.namesFee then effectiveGasPrice baseFee t else choices.gasPrice
     ensure (t.value.toNat ≤ account.balance.toNat) insufficientFunds.toRpcError

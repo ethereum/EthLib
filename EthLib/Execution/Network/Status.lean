@@ -13,7 +13,7 @@ The source is "Status (0x00)" and "BlockRangeUpdate (0x11)" of [`caps/eth.md`][e
 
 The Status of eth/68 comes from [EIP-7642][eip-7642].
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#status-0x00
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#status-0x00
 
 - eth/68: `[version, networkid, td, blockhash, genesis, forkid]`.
 - eth/69 on: `[version, networkid, genesis, forkid, earliest, latest, latestHash]`.

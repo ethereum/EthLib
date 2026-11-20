@@ -94,15 +94,16 @@ def chainViewOf (chain : String × String × String × ByteArray) : Result Chain
 
 /-- The responses of calls made one after another on a client, then its state. -/
 def keymanagerRunOf (args : Nat × Nat × ExecutionAddress × UInt64 × String × String ×
-    Option (String × String × String × ByteArray) × List (String × String × PyValue)) :
-    Result (List (Nat × PyValue) × PyValue) := do
-  let (memory, work, feeRecipient, gasLimit, graffiti, protection, chain, calls) := args
+    Option (String × String × String × ByteArray) × List (String × String × PyValue) ×
+    PyValue) : Result (List (Nat × PyValue) × PyValue) := do
+  let (memory, work, feeRecipient, gasLimit, graffiti, protection, chain, calls, builder) := args
+  let builder ← runKeymanager (readClientBuilderConfig builder.toJson)
   let chain ← match chain with
     | some chain => some <$> chainViewOf chain
     | none => pure none
   let config : ClientConfig :=
     { limits := { memory, work }, defaultFeeRecipient := feeRecipient,
-      defaultGasLimit := gasLimit, defaultGraffiti := graffiti }
+      defaultGasLimit := gasLimit, defaultGraffiti := graffiti, builder }
   let record ← runKeymanager
     (readSlashingProtection toolchainJsonText "" (.str protection))
   let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
@@ -121,6 +122,8 @@ The defaults are the fee recipient, the gas limit and the graffiti; the record a
 A view of the chain may follow: the names of its preset, configuration and fork, and a state.
 
 The calls follow, each its method, its path and its body.
+
+The builder configuration of the client comes last, as an object with every field.
 
 The client starts with no key, and each call sees the state that the one before it left.
 

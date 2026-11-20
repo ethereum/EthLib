@@ -13,7 +13,7 @@ from .containers import FORKS
 from .test_beacon_api_json import BEACON_API
 from .test_gossip_validation import FILES, case_store, read
 
-# The event stream of ethereum/beacon-APIs at 7911555e, pinned in tests/sources.toml.
+# The event stream of ethereum/beacon-APIs at 0ed1255, pinned in tests/sources.toml.
 EVENTSTREAM = BEACON_API / "apis" / "eventstream" / "index.yaml"
 
 # Each event whose example carries a whole object: its gossip topic, its type, and a fork.

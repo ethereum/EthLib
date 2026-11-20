@@ -22,6 +22,140 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 noncomputable section
 
+/-! ## The events of an epoch replay
+
+The stages of an epoch after the rewards record slashing, deposit and consolidation events only.
+
+Only the pending-deposit stage records a deposit event, and it records at most one.
+-/
+
+/-- The stages of an epoch after the rewards append only slashing, deposit and consolidation events.
+
+Only the pending-deposit stage appends a deposit event, and it appends at most one. -/
+private theorem epochReplayAction_sources {f : Fork} {k : EpochStage}
+    (later : k ∈ [EpochStage.registry, .slashings, .eth1Reset, .pendingDeposits,
+      .pendingConsolidations]) {pre post : BalanceReplay preset f}
+    (ok : epochReplayAction (config := config) (checks := checks) k pre = .ok post) :
+    ∃ added, post.2 = pre.2 ++ added ∧ (∀ e ∈ added,
+      e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
+      (added.filter fun e => e.source = .deposits).length ≤ 1 ∧
+      (k ≠ .pendingDeposits → (added.filter fun e => e.source = .deposits).length = 0) := by
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at later
+  rcases later with rfl | rfl | rfl | rfl | rfl <;> simp only [epochReplayAction] at ok
+  · simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, _, rfl⟩ := ok
+    exact ⟨[], by simp, by simp, by simp, fun _ => by simp⟩
+  · simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+    obtain ⟨_, _, _, _, rfl⟩ := ok
+    exact ⟨_, rfl, by simp, (List.length_filter_le _ _).trans (by simp), fun _ => by simp⟩
+  all_goals
+    split at ok
+    · simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, rfl⟩ := ok
+      first
+        | exact ⟨_, rfl, by simp, (List.length_filter_le _ _).trans (by simp),
+            fun h => by first | exact absurd rfl h | simp⟩
+        | exact ⟨[], by simp, by simp, by simp, fun _ => by simp⟩
+    · cases ok
+      exact ⟨[], by simp, by simp, by simp, fun _ => by simp⟩
+
+/-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards.
+
+Its events are those of the rewards pass, replayed from the state after the score update.
+
+They are followed by slashing, deposit and consolidation events only.
+
+The rewards pass records reward, penalty and inactivity events only.
+
+The later stages record at most one deposit event. -/
+private theorem epochReplay_events_core {f : Fork} (altair : .altair ≤ f)
+    {cached : BeaconState preset f} {post : BalanceReplay preset f}
+    (trace : EpochTrace (epochReplayAction (config := config) (checks := checks))
+      EpochStage.prefixStages (cached, []) post) :
+    ∃ just pass rewarded later, EpochStage.Edge config checks .justification cached just ∧
+      EpochStage.Edge config checks .inactivity just pass ∧
+      replayRewards (config := config) (pass, []) = .ok rewarded ∧
+      post.2 = rewarded.2 ++ later ∧
+      (∀ e ∈ later, e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
+      (∀ e ∈ rewarded.2, e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity) ∧
+      (later.filter fun e => e.source = .deposits).length ≤ 1 := by
+  simp only [EpochStage.prefixStages] at trace
+  cases trace with | cons one trace =>
+  cases trace with | cons two trace =>
+  cases trace with | cons three trace =>
+  cases trace with | cons four trace =>
+  cases trace with | cons five trace =>
+  cases trace with | cons six trace =>
+  cases trace with | cons seven trace =>
+  cases trace with | cons eight trace =>
+  cases trace
+  simp only [epochReplayAction, carryBalance, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at one
+  obtain ⟨just, justOk, rfl⟩ := one
+  simp only [epochReplayAction, altair, ↓reduceDIte, carryBalance, bind_ok_iff, pure,
+    Except.pure, Except.ok.injEq] at two
+  obtain ⟨pass, passOk, rfl⟩ := two
+  simp only [epochReplayAction] at three
+  -- The rewards record rewards and penalties only.
+  have sources := replayRewards_sources (by simp) three
+  obtain ⟨a4, e4, s4, c4⟩ := epochReplayAction_sources (by simp) four
+  obtain ⟨a5, e5, s5, c5⟩ := epochReplayAction_sources (by simp) five
+  obtain ⟨a6, e6, s6, c6⟩ := epochReplayAction_sources (by simp) six
+  obtain ⟨a7, e7, s7, c7⟩ := epochReplayAction_sources (by simp) seven
+  obtain ⟨a8, e8, s8, c8⟩ := epochReplayAction_sources (by simp) eight
+  refine ⟨just, pass, _, a4 ++ a5 ++ a6 ++ a7 ++ a8, justOk,
+    by simp only [EpochStage.Edge, altair, ↓reduceDIte]; exact passOk, three,
+    by rw [e8, e7, e6, e5, e4]; simp only [List.append_assoc], ?_, sources, ?_⟩
+  · intro e member
+    simp only [List.mem_append] at member
+    rcases member with (((m | m) | m) | m) | m
+    exacts [s4 e m, s5 e m, s6 e m, s7 e m, s8 e m]
+  · simp only [List.filter_append, List.length_append]
+    have z4 := c4.2 nofun
+    have z5 := c5.2 nofun
+    have z6 := c6.2 nofun
+    have z8 := c8.2 nofun
+    have o7 := c7.1
+    omega
+
+/-- The replay of an epoch, from Altair, runs justification and inactivity, then the rewards.
+
+Its events are those of the rewards pass, replayed from the state after the score update.
+
+They are followed by slashing, deposit and consolidation events only.
+
+The rewards pass records reward, penalty and inactivity events only. -/
+theorem epochReplay_events {f : Fork} (altair : .altair ≤ f)
+    {cached : BeaconState preset f} {post : BalanceReplay preset f}
+    (trace : EpochTrace (epochReplayAction (config := config) (checks := checks))
+      EpochStage.prefixStages (cached, []) post) :
+    ∃ just pass rewarded later, EpochStage.Edge config checks .justification cached just ∧
+      EpochStage.Edge config checks .inactivity just pass ∧
+      replayRewards (config := config) (pass, []) = .ok rewarded ∧
+      post.2 = rewarded.2 ++ later ∧
+      (∀ e ∈ later, e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
+      ∀ e ∈ rewarded.2, e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity := by
+  obtain ⟨just, pass, rewarded, later, justOk, passOk, replayed, split, laterSources,
+    rewardSources, -⟩ := epochReplay_events_core altair trace
+  exact ⟨just, pass, rewarded, later, justOk, passOk, replayed, split, laterSources,
+    rewardSources⟩
+
+/-- The replay of an epoch, from Altair, records at most one deposit event.
+
+Only the pending-deposit stage records one, and the rewards pass records none. -/
+private theorem epochReplay_deposit_count {f : Fork} (altair : .altair ≤ f)
+    {cached : BeaconState preset f} {post : BalanceReplay preset f}
+    (trace : EpochTrace (epochReplayAction (config := config) (checks := checks))
+      EpochStage.prefixStages (cached, []) post) :
+    (post.2.filter fun e => e.source = .deposits).length ≤ 1 := by
+  obtain ⟨_, _, rewarded, later, _, _, _, split, _, rewardSources, count⟩ :=
+    epochReplay_events_core altair trace
+  have none : (rewarded.2.filter fun e => e.source = .deposits).length = 0 :=
+    List.length_eq_zero_iff.mpr (List.filter_eq_nil_iff.mpr fun e member => by
+      rcases rewardSources e member with s | s | s <;> simp [s])
+  rw [split, List.filter_append, List.length_append]
+  omega
+
 /-! ## No deposit credit to a withdrawable consolidation source
 
 The withdrawn-source credit of an event is what a deposit event credits to pending sources.
@@ -101,48 +235,85 @@ private theorem withdrawnConsolidationCredit_eq_zero_of_ordered {s t : BeaconSta
     · rfl
   · rfl
 
-/-- The epoch replay of an ordered state credits no withdrawable pending source.
+/-- The deposit events of an ordered state's epoch replay credit no withdrawable pending source.
 
-Each stage keeps the order at the current epoch, so the deposit event starts at an ordered state. -/
-private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : SignatureChecks}
+Each stage keeps the order at the current epoch, so the deposit event starts at an ordered state.
+
+A deposit event of the replay is the pending-deposit pass at a state with matching sizes. -/
+private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
     {s : BeaconState preset fork} {post : BalanceReplay preset fork}
     (holds : PendingConsolidationsOrdered config (getCurrentEpoch s).toNat s)
     (ok : epochBalanceReplay (config := config) (checks := checks) s = .ok post) :
-    ∀ e ∈ post.2, e.source = .deposits → withdrawnConsolidationCredit e = 0 := by
+    (∀ e ∈ post.2, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
+    (BalancesMatch s → ExitsOrdered s → ∀ e ∈ post.2, e.source = .deposits →
+      ∃ (electra : .pectra ≤ fork) (u v : BeaconState preset fork),
+        BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u post.1 ∧
+          processPendingDeposits config checks u electra = .ok v ∧
+          e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩) := by
   let Settled (pre : BalanceReplay preset fork) : Prop :=
     PendingConsolidationsOrdered config (getCurrentEpoch pre.1).toNat pre.1 ∧
-      ∀ e ∈ pre.2, e.source = .deposits → withdrawnConsolidationCredit e = 0
+      (∀ e ∈ pre.2, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
+      (BalancesMatch s → ExitsOrdered s → BalancesMatch pre.1 ∧ ExitsOrdered pre.1 ∧
+        ∀ e ∈ pre.2, e.source = .deposits →
+          ∃ (electra : .pectra ≤ fork) (u v : BeaconState preset fork),
+            BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u pre.1 ∧
+              processPendingDeposits config checks u electra = .ok v ∧
+              e.before = ⟨fork, u⟩ ∧ e.after = ⟨fork, v⟩)
   -- A stage moves the state along its edge and records events that are not deposits.
   have moved {k : EpochStage} {pre : BalanceReplay preset fork} {u : BeaconState preset fork}
       (added : List (BalanceEvent preset)) (held : Settled pre)
       (edge : EpochStage.Edge config checks k pre.1 u)
+      (keeps : BalancesMatch pre.1 → BalancesMatch u)
+      (ord : ExitsOrdered pre.1 → ExitsOrdered u)
       (quiet : ∀ e ∈ added, e.source ≠ .deposits) : Settled (u, pre.2 ++ added) := by
-    refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_⟩
-    rcases List.mem_append.mp mem with mem | mem
-    · exact held.2 e mem deposit
-    · exact absurd deposit (quiet e mem)
+    refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_,
+      fun matched ordered => ?_⟩
+    · rcases List.mem_append.mp mem with mem | mem
+      · exact held.2.1 e mem deposit
+      · exact absurd deposit (quiet e mem)
+    · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+      refine ⟨keeps before, ord beforeOrd, fun e mem deposit => ?_⟩
+      rcases List.mem_append.mp mem with mem | mem
+      · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+        exact ⟨electra, a, b, ma, oa, la.trans edge.registryLifecycle, rest⟩
+      · exact absurd deposit (quiet e mem)
   -- A carried stage moves the state along its edge and records nothing.
   have carried {k : EpochStage} {action : BeaconState preset fork → Except TransitionError _}
       {pre next : BalanceReplay preset fork} (held : Settled pre)
       (edge : ∀ {u}, action pre.1 = .ok u → EpochStage.Edge config checks k pre.1 u)
+      (keeps : ∀ {u}, action pre.1 = .ok u → BalancesMatch pre.1 → BalancesMatch u)
+      (ord : ∀ {u}, action pre.1 = .ok u → ExitsOrdered pre.1 → ExitsOrdered u)
       (step : carryBalance action pre = .ok next) : Settled next := by
     simp only [carryBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
     obtain ⟨u, computed, rfl⟩ := step
-    have settled := moved [] held (edge computed) (fun _ mem => by cases mem)
+    have settled := moved [] held (edge computed) (keeps computed) (ord computed)
+      (fun _ mem => by cases mem)
     rwa [List.append_nil] at settled
   have done : Settled post := by
     refine (epochBalanceReplay_trace ok).transport (fun a b => Settled a → Settled b)
-      (fun _ => id) (fun one two => two ∘ one) ?_ ⟨holds, fun _ mem => by cases mem⟩
+      (fun _ => id) (fun one two => two ∘ one) ?_
+      ⟨holds, fun _ mem => (by cases mem),
+        fun matched ordered => ⟨matched, ordered, fun _ mem => (by cases mem)⟩⟩
     intro k member pre next step held
     cases k <;> simp only [epochReplayAction] at step
-    case justification => exact carried (k := .justification) held id step
-    case registry => exact carried (k := .registry) held id step
+    case justification =>
+      exact carried (k := .justification) held id
+        (fun ok => balancesMatch_of_sameSizes (sameSizes_processJustificationAndFinalization ok))
+        (fun ok o => by
+          simpa only [ExitsOrdered, (processJustificationAndFinalization_keeps ok).2.2.2.2.2.1]
+            using o)
+        step
+    case registry =>
+      exact carried (k := .registry) held id
+        (fun ok => (frame_processRegistryUpdates ok).balancesMatch)
+        (fun ok o => (frame_processRegistryUpdates ok).exitsOrdered o) step
     case inactivity =>
       split at step
       · rename_i present
         exact carried (k := .inactivity) held (fun computed => by
           simp only [EpochStage.Edge, present, ↓reduceDIte]
-          exact computed) step
+          exact computed) (fun ok => (frame_processInactivityUpdates ok).balancesMatch)
+          (fun ok o => (frame_processInactivityUpdates ok).exitsOrdered o) step
       · cases step
         exact held
     case eth1Reset =>
@@ -150,7 +321,8 @@ private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : Signat
       · rename_i present
         exact carried (k := .eth1Reset) held (fun computed => by
           simp only [EpochStage.Edge, present, ↓reduceDIte]
-          exact computed) step
+          exact computed) (fun ok => (frame_processEth1DataReset ok).balancesMatch)
+          (fun ok o => (frame_processEth1DataReset ok).exitsOrdered o) step
       · cases step
         exact held
     case rewards =>
@@ -159,26 +331,44 @@ private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : Signat
       · simp only [recordBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
           Except.ok.injEq] at ok
         obtain ⟨_, _, u, raised, rfl⟩ := ok
+        have sizes := sameSizes_increaseBalance raised
         obtain ⟨_, set⟩ := increaseBalance_ok raised
         obtain ⟨_, rfl⟩ := setBalance_ok set
-        refine ⟨held.1, fun e mem deposit => ?_⟩
-        rcases List.mem_append.mp mem with mem | mem
-        · exact held.2 e mem deposit
-        · rw [List.mem_singleton.mp mem] at deposit
-          cases deposit
+        refine ⟨held.1, fun e mem deposit => ?_, fun matched ordered => ?_⟩
+        · rcases List.mem_append.mp mem with mem | mem
+          · exact held.2.1 e mem deposit
+          · rw [List.mem_singleton.mp mem] at deposit
+            cases deposit
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+          refine ⟨balancesMatch_of_sameSizes sizes before, beforeOrd, fun e mem deposit => ?_⟩
+          rcases List.mem_append.mp mem with mem | mem
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans (.of_data rfl), rest⟩
+          · rw [List.mem_singleton.mp mem] at deposit
+            cases deposit
       · simp only [recordBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
           Except.ok.injEq] at ok
         obtain ⟨_, _, u, lowered, rfl⟩ := ok
+        have sizes := sameSizes_decreaseBalance lowered
         obtain ⟨_, rfl⟩ := decreaseBalance_eq_ok_iff.mp lowered
-        refine ⟨held.1, fun e mem deposit => ?_⟩
-        rcases List.mem_append.mp mem with mem | mem
-        · exact held.2 e mem deposit
-        · rw [List.mem_singleton.mp mem] at deposit
-          rcases penalty with rfl | rfl <;> cases deposit
+        refine ⟨held.1, fun e mem deposit => ?_, fun matched ordered => ?_⟩
+        · rcases List.mem_append.mp mem with mem | mem
+          · exact held.2.1 e mem deposit
+          · rw [List.mem_singleton.mp mem] at deposit
+            rcases penalty with rfl | rfl <;> cases deposit
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+          refine ⟨balancesMatch_of_sameSizes sizes before, beforeOrd, fun e mem deposit => ?_⟩
+          rcases List.mem_append.mp mem with mem | mem
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans (.of_data rfl), rest⟩
+          · rw [List.mem_singleton.mp mem] at deposit
+            rcases penalty with rfl | rfl <;> cases deposit
     case slashings =>
       simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
       obtain ⟨_, _, u, slashed, rfl⟩ := step
-      exact moved (k := .slashings) _ held slashed (by simp)
+      exact moved (k := .slashings) _ held slashed
+        (fun matched => (frame_processSlashings slashed).balancesMatch matched)
+        (fun o => (frame_processSlashings slashed).exitsOrdered o) (by simp)
     case pendingDeposits =>
       split at step
       · rename_i electra
@@ -187,11 +377,22 @@ private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : Signat
         have edge : EpochStage.Edge config checks .pendingDeposits pre.1 u := by
           simp only [EpochStage.Edge, electra, ↓reduceDIte]
           exact deposited
-        refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_⟩
-        rcases List.mem_append.mp mem with mem | mem
-        · exact held.2 e mem deposit
-        · rw [List.mem_singleton.mp mem]
-          exact withdrawnConsolidationCredit_eq_zero_of_ordered held.1
+        refine ⟨edge.pendingConsolidationsOrdered held.1, fun e mem deposit => ?_,
+          fun matched ordered => ?_⟩
+        · rcases List.mem_append.mp mem with mem | mem
+          · exact held.2.1 e mem deposit
+          · rw [List.mem_singleton.mp mem]
+            exact withdrawnConsolidationCredit_eq_zero_of_ordered held.1
+        · obtain ⟨before, beforeOrd, sites⟩ := held.2.2 matched ordered
+          refine ⟨(frame_processPendingDeposits deposited).balancesMatch before,
+            (frame_processPendingDeposits deposited).exitsOrdered beforeOrd,
+            fun e mem deposit => ?_⟩
+          rcases List.mem_append.mp mem with mem | mem
+          · obtain ⟨electra, a, b, ma, oa, la, rest⟩ := sites e mem deposit
+            exact ⟨electra, a, b, ma, oa, la.trans edge.registryLifecycle, rest⟩
+          · rw [List.mem_singleton.mp mem]
+            exact ⟨electra, pre.1, u, before, beforeOrd, edge.registryLifecycle, deposited,
+              rfl, rfl⟩
       · cases step
         exact held
     case pendingConsolidations =>
@@ -200,11 +401,144 @@ private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : Signat
         simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at step
         obtain ⟨u, consolidated, rfl⟩ := step
         exact moved (k := .pendingConsolidations) _ held
-          (by simp only [EpochStage.Edge, electra, ↓reduceDIte]; exact consolidated) (by simp)
+          (by simp only [EpochStage.Edge, electra, ↓reduceDIte]; exact consolidated)
+          (fun matched => (frame_processPendingConsolidations consolidated).balancesMatch matched)
+          (fun o => (frame_processPendingConsolidations consolidated).exitsOrdered o) (by simp)
       · cases step
         exact held
     all_goals simp [EpochStage.prefixStages] at member
-  exact done.2
+  exact ⟨done.2.1, fun matched ordered => (done.2.2 matched ordered).2.2⟩
+
+/-- The deposit events of one step before Gloas credit no withdrawable pending source.
+
+A block deposit has no credit limit from Electra, and its credits are within that limit.
+
+A slot runs the epoch replay from an ordered state, and its upgrades record no deposit.
+
+A deposit event of a slot is the pending-deposit pass at an ordered state with matching sizes.
+
+The registry of that state keeps its assigned epochs to the end of the slot. -/
+private theorem stepBalanceEvents_deposits {checks : SignatureChecks}
+    {g x y : ForkedBeaconState preset} (shared : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g) (step : Step config checks x y)
+    (early : y.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
+    (EventsBounded events →
+      ∀ e ∈ events, e.source = .deposits → withdrawnConsolidationCredit e = 0) ∧
+    ∀ (across : advanceSlotAcross config checks x = .ok y), step = Step.slot across →
+      (∀ e ∈ events, e.source = .deposits →
+        ∃ (electra : .pectra ≤ x.fork) (u v : BeaconState preset x.fork),
+          BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u y.state ∧
+            processPendingDeposits config checks u electra = .ok v ∧
+            e.before = ⟨x.fork, u⟩ ∧ e.after = ⟨x.fork, v⟩) ∧
+      ((∃ e ∈ events, e.source = .deposits) →
+        (getCurrentEpoch y.state).toNat = (getCurrentEpoch x.state).toNat + 1) ∧
+      (events.filter fun e => e.source = .deposits).length ≤ 1 := by
+  have sourceEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+  cases step with
+  | block engine signed due blockOk =>
+    have quiet := funding_block_events sourceEarly engine signed.message
+      (Step.balanceEvents_block sourceEarly ok)
+    refine ⟨fun bounded e mem deposit => ?_, fun across same => by cases same⟩
+    by_cases electra : .pectra ≤ e.before.fork
+    · have zero := quiet e mem deposit electra
+      have within := (bounded e mem).1
+      have part := withdrawnConsolidationCredit_le_credits e
+      omega
+    · rw [withdrawnConsolidationCredit, dite_eq_right electra]
+  | slot across =>
+    -- The slot replays the epoch only at its last slot, then records the upgrade crossings.
+    obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp across
+    have steps := advanceOk
+    simp only [advanceSlot, bind_ok_iff] at steps
+    obtain ⟨next, nextOk, cached, cachedOk, epoched, epochedOk, advancedEq⟩ := steps
+    obtain ⟨crossings, crossingOk, -⟩ := upgradeBalanceReplay_bounded upgrades
+    have crossed : ∀ e ∈ crossings, e.source ≠ .deposits := fun e mem deposit =>
+      absurd ((upgradeBalanceReplay_crossing crossingOk e mem).symm.trans deposit) (by decide)
+    obtain ⟨last, epochedOk⟩ | ⟨last, rfl⟩ := epochIfLast_cases epochedOk
+    · obtain ⟨middle, updated, epochEvents, replayOk, updateOk, updatedValidators, -⟩ :=
+        epochBalanceReplay_result cached epoched sourceEarly epochedOk
+      rw [Step.balanceEvents_epoch_slot across cachedOk nextOk last replayOk advanceOk
+        crossingOk] at ok
+      cases ok
+      have matched : BalancesMatch cached :=
+        (frame_processSlot cachedOk).balancesMatch
+          (run_justified_separated shared genesis).1.balancesMatch
+      have exitsOrd : ExitsOrdered cached :=
+        (frame_processSlot cachedOk).exitsOrdered
+          (run_justified_separated shared genesis).1.exitsOrdered
+      have toEnd : RegistryLifecycle middle y.state := by
+        simp only [pure, Except.pure, Except.ok.injEq] at advancedEq
+        have epochedKept : RegistryLifecycle updated epoched :=
+          .of_data (congrArg (·.data) updatedValidators.symm)
+        have advancedKept : RegistryLifecycle epoched advanced := by
+          rw [← advancedEq]
+          exact .of_data rfl
+        have upgraded := processUpgrades_induction
+          (property := fun post => RegistryLifecycle advanced post.state)
+          (fun before ok => before.trans (registryLifecycle_upgradeNext ok)) (.refl advanced)
+          upgrades
+        exact (EpochStage.Edge.registryLifecycle (config := config) (checks := checks)
+          (k := .effectiveBalances) updateOk).trans
+          (epochedKept.trans (advancedKept.trans upgraded))
+      have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
+          cached := by
+        obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
+        exact shared.pendingConsolidationsOrdered genesis sourceEarly delay
+      refine ⟨fun _ e mem deposit => ?_,
+        fun across' same => ⟨fun e mem deposit => ?_, fun _ => ?_, ?_⟩⟩
+      · rcases List.mem_append.mp mem with mem | mem
+        · exact (epochBalanceReplay_deposits ordered replayOk).1 e mem deposit
+        · exact absurd deposit (crossed e mem)
+      · rcases List.mem_append.mp mem with mem | mem
+        · obtain ⟨electra, a, b, ma, oa, la, rest⟩ :=
+            (epochBalanceReplay_deposits ordered replayOk).2 matched exitsOrd e mem deposit
+          exact ⟨electra, a, b, ma, oa, la.trans toEnd, rest⟩
+        · exact absurd deposit (crossed e mem)
+      · -- The epoch replay runs at the last slot of an epoch, which the slot then leaves.
+        have remainder : next.toNat % preset.SLOTS_PER_EPOCH.toNat = 0 := by
+          simpa only [UInt64.toNat_mod, UInt64.toNat_zero] using congrArg UInt64.toNat last
+        have nextVal : next.toNat = x.state.slot.toNat + 1 := by
+          simp only [liftAccessor_ok, liftArith, mapError_ok_iff, addChecked_ok_iff,
+            UInt64.toNat_one] at nextOk
+          exact nextOk.2
+        have divides := Nat.dvd_of_mod_eq_zero remainder
+        rw [nextVal] at divides
+        have slotEq := processUpgrades_slot upgrades
+        simp only [pure, Except.pure, Except.ok.injEq] at advancedEq
+        have advancedSlot : advanced.slot = next := by
+          rw [← advancedEq]
+        rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, slotEq, advancedSlot, nextVal]
+        exact Nat.succ_div_of_dvd divides
+      · -- Only the pending-deposit stage records a deposit, so an epoch replay records one at most.
+        have none : (crossings.filter fun e => e.source = .deposits).length = 0 :=
+          List.length_eq_zero_iff.mpr (List.filter_eq_nil_iff.mpr fun e mem => by
+            simpa using crossed e mem)
+        rw [List.filter_append, List.length_append, none, Nat.add_zero]
+        by_cases any : ∃ e ∈ epochEvents, e.source = .deposits
+        · obtain ⟨e, mem, deposit⟩ := any
+          obtain ⟨electra, -⟩ := (epochBalanceReplay_deposits ordered replayOk).2 matched exitsOrd
+            e mem deposit
+          exact epochReplay_deposit_count (Nat.le_trans (by decide) electra)
+            (epochBalanceReplay_trace replayOk)
+        · have none : (epochEvents.filter fun e => e.source = .deposits).length = 0 :=
+            List.length_eq_zero_iff.mpr (List.filter_eq_nil_iff.mpr fun e mem => by
+              simpa using fun deposit => any ⟨e, mem, deposit⟩)
+          omega
+    · have replayed : (Step.slot across).balanceEvents = .ok ([] ++ crossings) := by
+        simp only [Step.balanceEvents, cachedOk, nextOk, last, ↓reduceIte, advanceOk,
+          crossingOk, bind, Except.bind, pure, Except.pure]
+      rw [replayed] at ok
+      cases ok
+      exact ⟨fun _ e mem deposit => absurd deposit (crossed e (by simpa using mem)),
+        fun across' same => ⟨fun e mem deposit => absurd deposit (crossed e (by simpa using mem)),
+          fun ⟨e, mem, deposit⟩ => absurd deposit (crossed e (by simpa using mem)),
+          by
+            rw [List.nil_append]
+            exact Nat.le_trans (Nat.le_of_eq (List.length_eq_zero_iff.mpr
+              (List.filter_eq_nil_iff.mpr fun e mem => by simpa using crossed e mem)))
+              (Nat.zero_le _)⟩⟩
 
 /-- The deposit events of one step before Gloas credit no withdrawable pending source.
 
@@ -218,49 +552,26 @@ private theorem stepBalanceEvents_withdrawnConsolidationCredit {checks : Signatu
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events)
     (bounded : EventsBounded events) :
-    ∀ e ∈ events, e.source = .deposits → withdrawnConsolidationCredit e = 0 := by
-  have sourceEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-  cases step with
-  | block engine signed due blockOk =>
-    have quiet := funding_block_events sourceEarly engine signed.message
-      (Step.balanceEvents_block sourceEarly ok)
-    intro e mem deposit
-    by_cases electra : .pectra ≤ e.before.fork
-    · have zero := quiet e mem deposit electra
-      have within := (bounded e mem).1
-      have part := withdrawnConsolidationCredit_le_credits e
-      omega
-    · rw [withdrawnConsolidationCredit, dite_eq_right electra]
-  | slot across =>
-    -- The slot replays the epoch only at its last slot, then records the upgrade crossings.
-    obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp across
-    have steps := advanceOk
-    simp only [advanceSlot, bind_ok_iff] at steps
-    obtain ⟨next, nextOk, cached, cachedOk, epoched, epochedOk, -⟩ := steps
-    obtain ⟨crossings, crossingOk, -⟩ := upgradeBalanceReplay_bounded upgrades
-    have crossed : ∀ e ∈ crossings, e.source = .deposits →
-        withdrawnConsolidationCredit e = 0 := fun e mem deposit =>
-      absurd ((upgradeBalanceReplay_crossing crossingOk e mem).symm.trans deposit) (by decide)
-    obtain ⟨last, epochedOk⟩ | ⟨last, rfl⟩ := epochIfLast_cases epochedOk
-    · obtain ⟨_, _, epochEvents, replayOk, -⟩ :=
-        epochBalanceReplay_result cached epoched sourceEarly epochedOk
-      rw [Step.balanceEvents_epoch_slot across cachedOk nextOk last replayOk advanceOk
-        crossingOk] at ok
-      cases ok
-      intro e mem
-      rcases List.mem_append.mp mem with mem | mem
-      · have ordered : PendingConsolidationsOrdered config (getCurrentEpoch cached).toNat
-            cached := by
-          obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-          exact shared.pendingConsolidationsOrdered genesis sourceEarly delay
-        exact epochBalanceReplay_withdrawnConsolidationCredit ordered replayOk e mem
-      · exact crossed e mem
-    · have replayed : (Step.slot across).balanceEvents = .ok ([] ++ crossings) := by
-        simp only [Step.balanceEvents, cachedOk, nextOk, last, ↓reduceIte, advanceOk,
-          crossingOk, bind, Except.bind, pure, Except.pure]
-      rw [replayed] at ok
-      cases ok
-      simpa using crossed
+    ∀ e ∈ events, e.source = .deposits → withdrawnConsolidationCredit e = 0 :=
+  (stepBalanceEvents_deposits shared genesis step early delay ok).1 bounded
+
+/-- A slot step records at most one deposit event, a pending-deposit pass at an epoch's end.
+
+The pass starts at an ordered state, whose registry keeps its assigned epochs to the slot's end. -/
+theorem Step.slot_deposit_site {checks : SignatureChecks} {g x y : ForkedBeaconState preset}
+    (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
+    (across : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    {events : List (BalanceEvent preset)} (ok : (Step.slot across).balanceEvents = .ok events) :
+    (∀ e ∈ events, e.source = .deposits →
+      ∃ (electra : .pectra ≤ x.fork) (u v : BeaconState preset x.fork),
+        BalancesMatch u ∧ ExitsOrdered u ∧ RegistryLifecycle u y.state ∧
+          processPendingDeposits config checks u electra = .ok v ∧
+          e.before = ⟨x.fork, u⟩ ∧ e.after = ⟨x.fork, v⟩) ∧
+    ((∃ e ∈ events, e.source = .deposits) →
+      (getCurrentEpoch y.state).toNat = (getCurrentEpoch x.state).toNat + 1) ∧
+    (events.filter fun e => e.source = .deposits).length ≤ 1 :=
+  (stepBalanceEvents_deposits shared genesis (Step.slot across) early delay ok).2 across rfl
 
 /-- Lemma WC: on a run from genesis, no deposit event credits a withdrawable pending source.
 
@@ -358,38 +669,41 @@ So a key of the registry at `x` has a score of at most `sigma + bias * t` after 
 `sigma` is the start score, at least each score at `x`.
 -/
 
-/-- From Altair, each score of a state at a position below `n` is at most `bound`. -/
-def ScoresBelow (n bound : Nat) (s : ForkedBeaconState preset) : Prop :=
+/-- From Altair, the score of a state at each position `i` below `n` is at most `bound i`. -/
+private def ScoresBelowAt (n : Nat) (bound : Nat → Nat) (s : ForkedBeaconState preset) : Prop :=
   ∀ altair : .altair ≤ s.fork, ∀ i < n, ∀ score : UInt64,
-    (s.state.inactivityScores altair).data[i]? = some score → score.toNat ≤ bound
+    (s.state.inactivityScores altair).data[i]? = some score → score.toNat ≤ bound i
 
 /-- A step that keeps the scores below `n` keeps their bound. -/
-private theorem ScoresBelow.of_kept {f : Fork} {s t : BeaconState preset f} {n bound : Nat}
-    (kept : ∀ i < n, ScoreKept i s t) (below : ScoresBelow n bound ⟨f, s⟩) :
-    ScoresBelow n bound ⟨f, t⟩ := fun altair i member score found =>
+private theorem ScoresBelowAt.of_kept {f : Fork} {s t : BeaconState preset f} {n : Nat}
+    {bound : Nat → Nat}
+    (kept : ∀ i < n, ScoreKept i s t) (below : ScoresBelowAt n bound ⟨f, s⟩) :
+    ScoresBelowAt n bound ⟨f, t⟩ := fun altair i member score found =>
   below altair i member score (by rw [← kept i member altair]; exact found)
 
 /-- An update of the scores raises each one by at most the score bias. -/
-theorem ScoresBelow.inactivity {f : Fork} {s t : BeaconState preset f} {n bound : Nat}
+private theorem ScoresBelowAt.inactivity {f : Fork} {s t : BeaconState preset f} {n : Nat}
+    {bound : Nat → Nat}
     (altair : .altair ≤ f) (computed : processInactivityUpdates config s altair = .ok t)
-    (below : ScoresBelow n bound ⟨f, s⟩) :
-    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, t⟩ := by
+    (below : ScoresBelowAt n bound ⟨f, s⟩) :
+    ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, t⟩ := by
   intro _ i member score found
   obtain ⟨old, olds, raised⟩ := processInactivityUpdates_score_le computed found
   have := below altair i member old olds
+  dsimp only
   omega
 
 /-- Justification keeps the scores, and the update after it raises each by the bias at most. -/
-private theorem ScoresBelow.pass {f : Fork} {s cached just pass : BeaconState preset f}
-    {n bound : Nat} (altair : .altair ≤ f) (below : ScoresBelow n bound ⟨f, s⟩)
+private theorem ScoresBelowAt.pass {f : Fork} {s cached just pass : BeaconState preset f}
+    {n : Nat} {bound : Nat → Nat} (altair : .altair ≤ f) (below : ScoresBelowAt n bound ⟨f, s⟩)
     (cachedOk : processSlot s = .ok cached)
     (justified : processJustificationAndFinalization cached = .ok just)
     (scored : processInactivityUpdates config just altair = .ok pass) :
-    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, pass⟩ := by
+    ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, pass⟩ := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-  refine ScoresBelow.inactivity altair scored (ScoresBelow.of_kept (fun i _ =>
+  refine ScoresBelowAt.inactivity altair scored (ScoresBelowAt.of_kept (fun i _ =>
     ScoreKept.of_scores (processJustificationAndFinalization_inactivityScores justified) i) ?_)
-  exact ScoresBelow.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
+  exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
 
 /-- An upgrade before Gloas from Altair keeps the scores, unless it is the upgrade to Electra. -/
 private theorem upgradeNext_scores {pre : ForkedBeaconState preset}
@@ -427,12 +741,13 @@ private theorem upgradeNext_scores {pre : ForkedBeaconState preset}
     | (simp only [upgradeNext] at computed; cases computed)
 
 /-- The upgrades of a slot step keep the bound of the scores below `n`, before Gloas. -/
-private theorem ScoresBelow.upgrades {s t : ForkedBeaconState preset} {n bound : Nat}
+private theorem ScoresBelowAt.upgrades {s t : ForkedBeaconState preset} {n : Nat}
+    {bound : Nat → Nat}
     (computed : processUpgrades config checks s = .ok t) (altair : .altair ≤ s.fork)
     (early : t.fork < .glamsterdam) (era : .pectra ≤ s.fork ∨ t.fork < .pectra)
-    (below : ScoresBelow n bound s) : ScoresBelow n bound t := by
+    (below : ScoresBelowAt n bound s) : ScoresBelowAt n bound t := by
   refine (processUpgrades_induction (property := fun u => u.fork < .glamsterdam →
-      (.pectra ≤ s.fork ∨ u.fork < .pectra) → s.fork ≤ u.fork ∧ ScoresBelow n bound u)
+      (.pectra ≤ s.fork ∨ u.fork < .pectra) → s.fork ≤ u.fork ∧ ScoresBelowAt n bound u)
     (fun {pre post} held stepOk postEarly postEra => ?_)
     (fun _ _ => ⟨Nat.le_refl _, below⟩) computed early era).2
   have rising := post.property
@@ -446,12 +761,15 @@ private theorem ScoresBelow.upgrades {s t : ForkedBeaconState preset} {n bound :
 
 /-- A step from Altair keeps the bound of the scores below `n`, or raises it by the bias.
 
-It raises it only when it ends an epoch, and so moves the epoch on by one. -/
-theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config checks m l)
-    {n bound : Nat} (altair : .altair ≤ m.fork) (inside : n ≤ m.state.validators.data.size)
+It needs no premise on the registry: a validator that the step adds takes the score zero.
+
+It raises the bound only when the step ends an epoch, and so moves the epoch on by one. -/
+private theorem ScoresBelowAt.step_all {m l : ForkedBeaconState preset}
+    (step : Step config checks m l)
+    {n : Nat} {bound : Nat → Nat} (altair : .altair ≤ m.fork)
     (early : l.fork < .glamsterdam) (era : .pectra ≤ m.fork ∨ l.fork < .pectra)
-    (below : ScoresBelow n bound m) :
-    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat *
+    (below : ScoresBelowAt n bound m) :
+    ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat *
       ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat)) l := by
   cases step with
   | @block f before after engine signed due ok =>
@@ -459,11 +777,13 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
     have processed := (applySignedBlock_ok ok).2.1
     have same : getCurrentEpoch after = getCurrentEpoch before := by
       simp only [getCurrentEpoch, (frame_processBlock processed).slot]
-    show ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat *
+    show ScoresBelowAt n (fun i => bound i + config.INACTIVITY_SCORE_BIAS.toNat *
       ((getCurrentEpoch after).toNat - (getCurrentEpoch before).toNat)) ⟨_, after⟩
-    rw [same, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
-    exact ScoresBelow.of_kept (fun i member =>
-      scoreKept_processBlock processed (Nat.lt_of_lt_of_le member inside)) below
+    simp only [same, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
+    intro later i member score found
+    rcases (scoresKept_processBlock processed).2 later i score found with old | zero
+    · exact below later i member score old
+    · simp [zero]
   | slot ok =>
     obtain ⟨advanced, advanceOk, upgrades⟩ := bind_ok_iff.mp ok
     obtain ⟨next, cached, epoched, sum, cachedOk, epochedOk, rfl⟩ := advanceSlot_ok advanceOk
@@ -471,7 +791,7 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
     have lEpoch : (getCurrentEpoch l.state).toNat =
         next.toNat / preset.SLOTS_PER_EPOCH.toNat := by
       rw [getCurrentEpoch_toNat, lSlot]
-    refine ScoresBelow.upgrades upgrades altair early era ?_
+    refine ScoresBelowAt.upgrades upgrades altair early era ?_
     rw [lEpoch, getCurrentEpoch_toNat]
     obtain ⟨last, epochedOk⟩ | ⟨within, rfl⟩ := epochIfLast_cases epochedOk
     · -- The last slot of an epoch updates the scores once, and moves the epoch on by one.
@@ -479,51 +799,128 @@ theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config ch
       have epochRun : processEpochAltair config checks cached altair = .ok epoched := by
         unfold processEpoch at epochedOk
         simpa only [altair, ↓reduceDIte] using epochedOk
-      have registry : cached.validators = m.state.validators := by
-        obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-        rfl
       intro later i member score found
-      obtain ⟨just, pass, justified, scored, kept⟩ := scoreKept_processEpochAltair epochRun
-        (index := i) (by rw [registry]; exact Nat.lt_of_lt_of_le member inside)
-      exact ScoresBelow.pass altair below cachedOk justified scored later i member score
-        (by rw [← kept later]; exact found)
+      obtain ⟨just, pass, justified, scored, -, kept⟩ := scoresKept_processEpochAltair epochRun
+      rcases kept i score found with old | zero
+      · exact ScoresBelowAt.pass altair below cachedOk justified scored later i member score old
+      · simp [zero]
     · -- Another slot keeps the epoch and the scores.
-      rw [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
+      simp only [nextSlot_epoch_of_inside sum within, Nat.sub_self, Nat.mul_zero, Nat.add_zero]
       obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-      exact ScoresBelow.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
+      exact ScoresBelowAt.of_kept (fun i _ => ScoreKept.of_scores rfl i) below
 
-/-- On a branch from `x` from Altair, the scores of the registry at `x` follow `sigma + bias * t`.
+/-- On a branch from `x` from Altair, each score below `n` follows its start bound plus `bias * t`.
+
+It needs no premise on the registry at `x`: a validator that the branch adds takes the score zero.
 
 `t` is the number of epochs from `x`, so the number of updates of the scores so far. -/
-private theorem scoresBelow_run {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+private theorem scoresBelowAt_run_all {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y)
     (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
-    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) :
-    ScoresBelow x.state.validators.data.size (startInactivityScore config x +
-      config.INACTIVITY_SCORE_BIAS.toNat *
+    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) {n : Nat} {start : Nat → Nat}
+    (initial : ScoresBelowAt n start x) :
+    ScoresBelowAt n (fun i => start i + config.INACTIVITY_SCORE_BIAS.toNat *
         ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat)) y := by
   induction tail with
   | nil =>
-    intro _ i _ score found
-    rw [Nat.sub_self, Nat.mul_zero, Nat.add_zero]
-    have member := le_foldr_max (List.mem_map_of_mem (f := UInt64.toNat)
-      (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found)))
-    unfold startInactivityScore
-    simp only [altair, ↓reduceDIte]
-    exact member.trans (Nat.le_max_left _ _)
+    intro altair' i member score found
+    simpa using initial altair' i member score found
   | @snoc m l pre step ih =>
     have mEarly := Nat.lt_of_le_of_lt step.chainStep.fork_le early
     have forks := fork_le_of_chainSteps pre.chainSteps
     have before := ih mEarly
       (era.imp id fun later => Nat.lt_of_le_of_lt step.chainStep.fork_le later)
-    have moved := ScoresBelow.step step (Nat.le_trans altair forks)
-      (registryGrows_of_chainSteps pre.chainSteps) early
+    have moved := ScoresBelowAt.step_all step (Nat.le_trans altair forks) early
       (era.imp (fun electra => Nat.le_trans electra forks) id) before
     have first := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
     have second := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
+    intro later i member score found
+    have bound := moved later i member score found
+    dsimp only at bound ⊢
     have epochs : (getCurrentEpoch m.state).toNat - (getCurrentEpoch x.state).toNat +
         ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat) =
           (getCurrentEpoch l.state).toNat - (getCurrentEpoch x.state).toNat := by omega
-    rwa [Nat.add_assoc, ← Nat.mul_add, epochs] at moved
+    rw [Nat.add_assoc, ← Nat.mul_add, epochs] at bound
+    exact bound
+
+/-- From Altair, each score of a state at a position below `n` is at most `bound`. -/
+def ScoresBelow (n bound : Nat) (s : ForkedBeaconState preset) : Prop :=
+  ∀ altair : .altair ≤ s.fork, ∀ i < n, ∀ score : UInt64,
+    (s.state.inactivityScores altair).data[i]? = some score → score.toNat ≤ bound
+
+/-- An update of the scores raises each one by at most the score bias. -/
+theorem ScoresBelow.inactivity {f : Fork} {s t : BeaconState preset f} {n bound : Nat}
+    (altair : .altair ≤ f) (computed : processInactivityUpdates config s altair = .ok t)
+    (below : ScoresBelow n bound ⟨f, s⟩) :
+    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, t⟩ :=
+  ScoresBelowAt.inactivity (bound := fun _ => bound) altair computed below
+
+/-- Justification keeps the scores, and the update after it raises each by the bias at most. -/
+private theorem ScoresBelow.pass {f : Fork} {s cached just pass : BeaconState preset f}
+    {n bound : Nat} (altair : .altair ≤ f) (below : ScoresBelow n bound ⟨f, s⟩)
+    (cachedOk : processSlot s = .ok cached)
+    (justified : processJustificationAndFinalization cached = .ok just)
+    (scored : processInactivityUpdates config just altair = .ok pass) :
+    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat) ⟨f, pass⟩ :=
+  ScoresBelowAt.pass (bound := fun _ => bound) altair below cachedOk justified scored
+
+/-- A step from Altair keeps the bound of the scores below `n`, or raises it by the bias.
+
+It raises it only when it ends an epoch, and so moves the epoch on by one. -/
+theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config checks m l)
+    {n bound : Nat} (altair : .altair ≤ m.fork)
+    (early : l.fork < .glamsterdam) (era : .pectra ≤ m.fork ∨ l.fork < .pectra)
+    (below : ScoresBelow n bound m) :
+    ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat *
+      ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat)) l :=
+  ScoresBelowAt.step_all (bound := fun _ => bound) step altair early era below
+
+/-- From Altair, each score of a state is at most the start score that the floor reads. -/
+private theorem scoresBelowAt_start (x : ForkedBeaconState preset) (altair : .altair ≤ x.fork)
+    (n : Nat) : ScoresBelowAt n (fun _ => startInactivityScore config x) x := by
+  intro _ i _ score found
+  have member := le_foldr_max (List.mem_map_of_mem (f := UInt64.toNat)
+    (Array.mem_toList_iff.mpr (Array.mem_of_getElem? found)))
+  unfold startInactivityScore
+  simp only [altair, ↓reduceDIte]
+  exact member.trans (Nat.le_max_left _ _)
+
+/-- On a branch from `x` from Altair, each score of a state is small, new positions too.
+
+It holds for every position of the state, also those that the branch adds.
+
+The score is at most `sigma + bias * t`, with `sigma` the start score that the floor reads.
+
+`t` is the number of epochs from `x`, so the number of updates of the scores so far. -/
+theorem runScores_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
+    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) (later : .altair ≤ y.fork) {i : Nat}
+    {score : UInt64} (found : (y.state.inactivityScores later).data[i]? = some score) :
+    score.toNat ≤ startInactivityScore config x + config.INACTIVITY_SCORE_BIAS.toNat *
+      ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) :=
+  scoresBelowAt_run_all (start := fun _ => startInactivityScore config x) tail altair early era
+    (scoresBelowAt_start x altair (i + 1)) later i (Nat.lt_succ_self i) score found
+
+/-- A key's score on a branch from Altair is at most its start score plus a bias per epoch. -/
+theorem runScore_le_start {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (altair : .altair ≤ x.fork) (early : y.fork < .glamsterdam)
+    (era : .pectra ≤ x.fork ∨ y.fork < .pectra) (later : .altair ≤ y.fork) {i : Nat}
+    {score : UInt64} (found : (y.state.inactivityScores later).data[i]? = some score) :
+    score.toNat ≤ (((x.state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0 +
+      config.INACTIVITY_SCORE_BIAS.toNat *
+        ((getCurrentEpoch y.state).toNat - (getCurrentEpoch x.state).toNat) := by
+  let start : Nat → Nat := fun j => if j = i then
+    (((x.state.inactivityScores altair).data[i]?).map (·.toNat)).getD 0
+    else startInactivityScore config x
+  have initial : ScoresBelowAt (i + 1) start x := by
+    intro altair' j below score' read
+    by_cases same : j = i
+    · subst same
+      simp [start, read]
+    · simpa [start, same] using scoresBelowAt_start x altair' (i + 1) altair' j below score' read
+  have bound := scoresBelowAt_run_all tail altair early era initial later i (Nat.lt_succ_self i)
+    score found
+  simpa [start] using bound
 
 /-- After the update of pass `s`, each inactivity score of the registry at `x` is small.
 
@@ -542,7 +939,8 @@ theorem referenceScores_le {x z : ForkedBeaconState preset} (head : Run config c
       ((getCurrentEpoch z.state).toNat - (getCurrentEpoch x.state).toNat + 1) := by
   have scoredOk : processInactivityUpdates config just later = .ok pass := by
     simpa only [EpochStage.Edge, later, ↓reduceDIte] using scored
-  have bound := ScoresBelow.pass later (scoresBelow_run head altair early era) cachedOk
+  have bound := ScoresBelow.pass (n := x.state.validators.data.size) later
+    (fun later' _ _ _ found' => runScores_le head altair early era later' found') cachedOk
     justified scoredOk later i inside score found
   rwa [Nat.mul_add, Nat.mul_one, ← Nat.add_assoc]
 

@@ -257,7 +257,7 @@ A value of fields 1, 2 or 4 with another wire type is skipped, like an unknown f
 
 So the reader is not strict: many byte strings decode to one payload.
 
-[payload]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#the-libp2p-handshake-payload
+[payload]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md#the-libp2p-handshake-payload
 -/
 
 open EthLib.Networking.Encoding.Protobuf (Record Value valuesOf records)

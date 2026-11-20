@@ -14,7 +14,7 @@ The logarithmic distance of discv5 is an ultrametric.
 
 "Node Table" of `discv5-theory.md` groups the nodes of a table by their logarithmic distance:
 
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md#node-table>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#node-table>
 -/
 
 @[expose] public section

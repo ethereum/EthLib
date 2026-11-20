@@ -89,17 +89,20 @@ def memoryWords (memory : ByteArray) : List Json :=
 
 /-- The JSON of an entry of the opcode logger.
 
-The refund counter is always given, as the source recommends.
+The refund counter is given only when it is not zero, as the [entry schema][schema] requires.
 
 Empty memory and empty return data are left out.
 
-The fixtures leave them out, and they match this form field for field. -/
+The fixtures leave them out, and they match this form field for field.
+
+[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199
+-/
 def structLogJson (e : StructLog) : Json :=
   Json.mkObj <|
     [("pc", Json.num e.pc), ("op", .str e.op), ("gas", Json.num e.gas),
       ("gasCost", Json.num e.gasCost), ("depth", Json.num e.depth)] ++
     (e.error.map fun err => [("error", Json.str (stepErrorText err))]).getD [] ++
-    [("refund", Json.num e.refund)] ++
+    (if e.refund = 0 then [] else [("refund", Json.num e.refund)]) ++
     (e.stack.map fun s => [("stack", listJson (quantityJson ·.toNat) s)]).getD [] ++
     ((e.memory.filter (·.size ≠ 0)).map fun m =>
       [("memory", Json.arr (memoryWords m).toArray)]).getD [] ++

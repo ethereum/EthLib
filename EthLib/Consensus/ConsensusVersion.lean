@@ -18,7 +18,7 @@ The [`ConsensusVersion` schema] of the Beacon API lists the names up to Gloas.
 
 The Builder API takes the names from Bellatrix on, since it starts at the Merge.
 
-[`ConsensusVersion` schema]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/beacon-node-oapi.yaml#L378-L381
+[`ConsensusVersion` schema]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/beacon-node-oapi.yaml#L378-L381
 -/
 
 @[expose] public section
@@ -31,7 +31,7 @@ open Base
 
 The cases follow the order of the [`ConsensusVersion` schema].
 
-[`ConsensusVersion` schema]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/beacon-node-oapi.yaml#L378-L381
+[`ConsensusVersion` schema]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/beacon-node-oapi.yaml#L378-L381
 -/
 inductive ConsensusVersion where
   /-- Phase 0, the launch of the beacon chain. -/

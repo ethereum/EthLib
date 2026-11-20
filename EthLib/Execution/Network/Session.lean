@@ -7,7 +7,7 @@ public import EthLib.Execution.Network.Message
 
 The rules of an eth session, from [`caps/eth.md`][eth], and when snap may run beside it.
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md
 
 "Basic Operation" asks each side to send Status first.
 
@@ -223,7 +223,7 @@ def sendEth (session : EthSession) (m : Message) : Option EthSession :=
 
 So snap needs some version of eth among the shared capabilities.
 
-[rel]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#relation-to-eth
+[rel]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#relation-to-eth
 -/
 def snapAllowed (offsets : List (Capability × Nat)) : Bool :=
   offsets.any fun entry => entry.1.name == ETH_NAME

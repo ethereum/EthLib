@@ -21,17 +21,15 @@ A delete removes the mapping of a key that the client manages, with HTTP 204.
 
 Each call gets HTTP 404 for a key that the client does not manage, local or remote.
 
-The source says so for a delete, and lists HTTP 404 for a get and a set without saying when.
-
-This keeps a set from leaving a mapping that no delete could remove.
+The source gives the get, the set and the delete this one response: the key was not found.
 
 A fee recipient of zero is refused with HTTP 400; the source forbids it and names no code.
 
 The source does not say how a graffiti string fills the 32 bytes of a block, so it is kept as is.
 
-[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/fee_recipient.yaml
-[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/gas_limit.yaml
-[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/graffiti.yaml
+[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/fee_recipient.yaml
+[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/gas_limit.yaml
+[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/graffiti.yaml
 -/
 
 @[expose] public section
@@ -99,6 +97,10 @@ def graffitiSetting : Setting String where
 
 /-! ## The calls -/
 
+/-- The answer of a get with HTTP 200, whose data is the given JSON. -/
+def dataResponse (data : Json) : Response :=
+  ⟨200, Json.mkObj [("data", data)]⟩
+
 /-- The calls on one setting at the path of a key: a get, a set and a delete.
 
 The body of a set reads to a value, which a check may refuse with a message. -/
@@ -109,8 +111,8 @@ structure SettingCalls (α : Type) where
   read : Json → Except KeymanagerError α
   /-- Why a value may not be set, if it may not. -/
   refuse : α → Option String
-  /-- The data of a get, from the key and its value. -/
-  write : BLSPubkey → α → Json
+  /-- The answer of a get, from the settings of the client, the key and its value. -/
+  answer : ClientConfig → BLSPubkey → α → Response
 
 /-- The response of a call on a setting at the path of a key, and the state after it. -/
 def SettingCalls.handle {α : Type} (calls : SettingCalls α) (config : ClientConfig)
@@ -119,7 +121,7 @@ def SettingCalls.handle {α : Type} (calls : SettingCalls α) (config : ClientCo
   if !state.isManaged pubkey then (Setting.notManaged, state) else
   match method with
   | "GET" =>
-    (⟨200, Json.mkObj [("data", calls.write pubkey (calls.setting.get config state pubkey))]⟩,
+    (calls.answer config pubkey (calls.setting.get config state pubkey),
       state)
   | "POST" =>
     match calls.read body with
@@ -142,21 +144,57 @@ def feeRecipientCalls : SettingCalls ExecutionAddress where
     if address = Vector.replicate 20 0 then
       some "Cannot specify the 0x00 fee recipient address through the API"
     else none
-  write pubkey address := feeRecipientJson ⟨some pubkey, address⟩
+  answer _ pubkey address := dataResponse (feeRecipientJson ⟨some pubkey, address⟩)
 
 /-- The calls on the gas limit. -/
 def gasLimitCalls : SettingCalls UInt64 where
   setting := gasLimitSetting
   read := requiredField "" "gas_limit" readUint64
   refuse _ := none
-  write pubkey limit := gasLimitJson ⟨some pubkey, limit⟩
+  answer _ pubkey limit := dataResponse (gasLimitJson ⟨some pubkey, limit⟩)
 
 /-- The calls on the graffiti. -/
 def graffitiCalls : SettingCalls String where
   setting := graffitiSetting
   read := requiredField "" "graffiti" readString
   refuse _ := none
-  write pubkey graffiti :=
-    Json.mkObj [("pubkey", Interchange.bytesJson pubkey), ("graffiti", stringJson graffiti)]
+  answer _ pubkey graffiti := dataResponse
+    (Json.mkObj [("pubkey", Interchange.bytesJson pubkey), ("graffiti", stringJson graffiti)])
+
+/-! ## The builder configuration -/
+
+/-- The builder configuration of each key; a key never set has the empty configuration.
+
+The empty configuration resolves as the client's own, as the [source] says of a set of `{}`.
+
+[source]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml
+-/
+def builderConfigSetting : Setting BuilderConfigSetting where
+  mappings state := state.builderConfigs
+  withMappings state mappings := { state with builderConfigs := mappings }
+  default _ := {}
+
+/-- The answer of a get of a builder configuration: the configuration resolved, with HTTP 200.
+
+A configuration that does not resolve, from a client whose own one does not, gives HTTP 500. -/
+def builderConfigGet (config : ClientConfig) (value : BuilderConfigSetting) : Response :=
+  match value.resolve config.builder with
+  | .ok resolved => dataResponse (resolvedBuilderConfigJson resolved)
+  | .error _ => ⟨500, errorResponseJson ⟨"the builder configuration does not resolve"⟩⟩
+
+/-- The calls on the builder configuration of a key.
+
+A get gives the configuration of the key resolved against that of the client.
+
+A set replaces the configuration of the key in full, and a delete removes it.
+
+A set whose entries share a URL and authentication data is refused with HTTP 400.
+
+So is a set with an entry whose authentication data is omitted and whose URL gives none. -/
+def builderConfigCalls : SettingCalls BuilderConfigSetting where
+  setting := builderConfigSetting
+  read := readBuilderConfigSetting
+  refuse value := value.refusal
+  answer config _ value := builderConfigGet config value
 
 end EthLib.Consensus.KeymanagerApi

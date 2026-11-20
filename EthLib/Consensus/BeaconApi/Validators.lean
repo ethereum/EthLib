@@ -22,7 +22,7 @@ The [API types] name both statuses; SOUNDNESS.md records where their conditions 
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[API types]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/api.yaml
+[API types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/api.yaml
 -/
 
 @[expose] public section

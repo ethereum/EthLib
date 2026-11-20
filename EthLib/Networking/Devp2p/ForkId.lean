@@ -3,7 +3,7 @@ module
 public import EthLib.Base.BigEndian
 public import EthLib.Base.ChainConfig
 public import EthLib.Base.Hash32
-public import EthLib.Cryptography.Hash.Crc32
+public import EthLib.Cryptography.Hash.Crc.Crc32
 public import EthLib.Serialization.Rlp.Codec
 
 /-!

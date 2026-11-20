@@ -956,7 +956,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\n1. The bottom key `idx` signs the message.\n2. Bottom tree `b = floor(idx / 2^16)` gives the key's path, and its top signature.\n   The tree comes from the key, or is built and kept.\n\nWhen the bottom search succeeds, the updated key keeps tree `b`.\n\nA failed bottom search returns the key unchanged.\n\nA key that key generation and signing give signs as the note's stateless signer, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\n1. The bottom key `idx` signs the message.\n2. Bottom tree `b = floor(idx / 2^16)` gives the key's path, and its top signature.\n   The tree comes from the key, or is built and kept.\n\nWhen the bottom search succeeds, the updated key keeps tree `b`.\n\nA failed bottom search returns the key unchanged.\n\nA key that key generation and signing give signs as the note's stateless signer, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\nEach trial of a randomizer search hashes its input with `H`.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -1213,10 +1213,11 @@
       {"constructor": "accountMismatch", "code": 503},
       {"constructor": "slot", "code": 504},
       {"constructor": "slotEncoding", "code": 505},
-      {"constructor": "slotMismatch", "code": 506}]}],
+      {"constructor": "slotMismatch", "code": 506},
+      {"constructor": "absentSlotProof", "code": 507}]}],
    "error_class": "TrieError",
    "docstring":
-   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address.\n\nThe answer then has nonce and balance 0, zero hashes, and each slot the word 0 with no proof node.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
   {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -3312,6 +3313,26 @@
    "error_class": "ForkChoiceError",
    "docstring":
    "The SSZ body of the envelope answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
+  {"summary":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeExport",
+   "method": "consensus_api_cached_envelope",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.\n\nThe first arguments are the preset and the fork.\n\nThe cache is a slot with the SSZ bytes of its envelope, or None.\n\nThen come the slot and the block root of the request."},
+  {"summary":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeSszExport",
+   "method": "consensus_api_cached_envelope_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.\n\nThe arguments are those of the JSON answer."},
   {"summary": "The JSON response of the bootstrap endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]",
@@ -7957,7 +7978,7 @@
   {"summary":
    "The responses of calls made one after another on a validator client, then its state.",
    "signature":
-   "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
+   "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]], builder: dict[str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
    "operation": "EthLib.Consensus.Exports.keymanagerRunExport",
    "method": "consensus_keymanager_run",
    "errors":
@@ -7968,7 +7989,7 @@
       {"constructor": "slashingProtection", "code": 3}]}],
    "error_class": "KeymanagerError",
    "docstring":
-   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, then the defaults of the client.\n\nThe defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.\n\nA view of the chain may follow: the names of its preset, configuration and fork, and a state.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
+   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, then the defaults of the client.\n\nThe defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.\n\nA view of the chain may follow: the names of its preset, configuration and fork, and a state.\n\nThe calls follow, each its method, its path and its body.\n\nThe builder configuration of the client comes last, as an object with every field.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
   {"summary":
    "From Bellatrix: whether a block carries a payload other than the empty one.",
    "signature": "(name: str, fork: str, block: bytes) -> bool",
@@ -12165,7 +12186,9 @@
       {"constructor": "tooManyOmmers", "code": 607},
       {"constructor": "wrongOmmersHash", "code": 608},
       {"constructor": "ommerAfterBlock", "code": 609},
-      {"constructor": "untypedTransaction", "code": 610}]}],
+      {"constructor": "untypedTransaction", "code": 610},
+      {"constructor": "invalidTransaction", "code": 611},
+      {"constructor": "gasLimitAboveBlock", "code": 612}]}],
    "error_class": "EthWireError",
    "docstring":
    "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.\n\nThe header and the body are RLP.\n\nIt returns true on acceptance, and raises the code of the refusal otherwise."},

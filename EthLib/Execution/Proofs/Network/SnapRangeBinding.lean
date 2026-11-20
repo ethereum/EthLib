@@ -12,7 +12,7 @@ A valid StorageRanges answer does the same for each storage trie it covers.
 
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 The tries are secured: each key is the hash of an address or of a slot key.
 

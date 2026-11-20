@@ -16,8 +16,8 @@ Peer authentication follows libp2p TLS, [Peer Authentication][auth] and [Public 
 Host keys may be secp256k1 or P-256; Ed25519 and RSA host keys are rejected as unsupported.
 
 [rfc5280]: https://www.rfc-editor.org/rfc/rfc5280#section-4.1
-[auth]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md#peer-authentication
-[ext]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md#libp2p-public-key-extension
+[auth]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md#peer-authentication
+[ext]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md#libp2p-public-key-extension
 -/
 
 @[expose] public section
@@ -387,7 +387,7 @@ That key has 95 bytes, more than 42, so its peer ID is the SHA-256 multihash.
 
 Ed25519, RSA and other ECDSA keys are rejected as unsupported algorithms.
 
-[keys]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/peer-ids/peer-ids.md#keys
+[keys]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/peer-ids/peer-ids.md#keys
 -/
 def authenticateHost (policy : Policy) (spki key signature : ByteArray) :
     Except TlsCertError ByteArray := do

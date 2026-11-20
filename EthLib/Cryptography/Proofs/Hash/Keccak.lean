@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Basic
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Hasher
+public import EthLib.Cryptography.Proofs.Hash.Keccak.LastBlock
 public import EthLib.Cryptography.Proofs.Hash.Keccak.Permutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsPermutation
 public import EthLib.Cryptography.Proofs.Hash.Keccak.BitsSponge

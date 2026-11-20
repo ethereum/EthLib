@@ -24,7 +24,7 @@ Framing follows its "Wire Format".
 Keys are secret, and this specification makes no constant-time claim.
 
 [noise]: https://noiseprotocol.org/noise_rev34.pdf
-[libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md
+[libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md
 -/
 
 @[expose] public section

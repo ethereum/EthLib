@@ -69,6 +69,40 @@ structure State where
 def State.zero : State :=
   ⟨0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0⟩
 
+/-- XOR a word into lane `i` of the state, the lane with the field number `i`.
+
+An index of 25 or more names no lane, and leaves the state unchanged.
+
+Absorbing a block XORs one such word into each lane of the rate. -/
+def State.xorLane (A : State) (i : Nat) (v : UInt64) : State :=
+  match i with
+  | 0 => { A with a0 := A.a0 ^^^ v }
+  | 1 => { A with a1 := A.a1 ^^^ v }
+  | 2 => { A with a2 := A.a2 ^^^ v }
+  | 3 => { A with a3 := A.a3 ^^^ v }
+  | 4 => { A with a4 := A.a4 ^^^ v }
+  | 5 => { A with a5 := A.a5 ^^^ v }
+  | 6 => { A with a6 := A.a6 ^^^ v }
+  | 7 => { A with a7 := A.a7 ^^^ v }
+  | 8 => { A with a8 := A.a8 ^^^ v }
+  | 9 => { A with a9 := A.a9 ^^^ v }
+  | 10 => { A with a10 := A.a10 ^^^ v }
+  | 11 => { A with a11 := A.a11 ^^^ v }
+  | 12 => { A with a12 := A.a12 ^^^ v }
+  | 13 => { A with a13 := A.a13 ^^^ v }
+  | 14 => { A with a14 := A.a14 ^^^ v }
+  | 15 => { A with a15 := A.a15 ^^^ v }
+  | 16 => { A with a16 := A.a16 ^^^ v }
+  | 17 => { A with a17 := A.a17 ^^^ v }
+  | 18 => { A with a18 := A.a18 ^^^ v }
+  | 19 => { A with a19 := A.a19 ^^^ v }
+  | 20 => { A with a20 := A.a20 ^^^ v }
+  | 21 => { A with a21 := A.a21 ^^^ v }
+  | 22 => { A with a22 := A.a22 ^^^ v }
+  | 23 => { A with a23 := A.a23 ^^^ v }
+  | 24 => { A with a24 := A.a24 ^^^ v }
+  | _ => A
+
 /-- Rotate a lane towards its high bits by `n` positions, `n < 64`.
 
 Bit `z` moves to bit `(z + n) mod 64`, which is what `rho` and `theta` ask of the bit index. -/
@@ -621,6 +655,30 @@ def absorbBlocks (f : State → State) (rate : Nat) (bytes : ByteArray) :
 
 end Internal
 
+/-- The absorbing phase of FIPS 202 §4, Algorithm 8, up to its last permutation.
+
+It is steps 1 to 6, except that the last block is XORed into the state but not permuted:
+
+- every block `P_i` with `i < n - 1` goes through `S = f(S ^ (P_i || 0^c))`;
+- the last block gives `S ^ (P_{n-1} || 0^c)`.
+
+There are `n - 1 = len(N) / r` blocks before the last one, since `n = len(N) / r + 1`.
+
+The state after the absorbing phase is `f` of this state.
+
+A caller that hashes many messages differing only in their last block can share all the rest.
+
+The rate must be positive, below 200 bytes and a multiple of 8 bytes, as for the absorbing phase. -/
+def stateBeforeLastPermutation (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
+  -- Step 1: P = N || pad(r, len(N)).
+  let P := pad rate msg
+  -- Step 2: n = len(P) / r, and k = n - 1 blocks come before the last one.
+  let k := blockCount rate msg.size - 1
+  -- Steps 3 to 6 for i < n - 1: from S = 0^b, S = f(S ^ (P_i || 0^c)), with P_i at index i * r.
+  let S := Internal.absorbBlocks f rate P k 0 State.zero
+  -- The last block P_{n-1}, at index k * r, is XORed in and not yet permuted.
+  Internal.absorbBlock rate S P (rate * k)
+
 /-- The absorbing phase, FIPS 202 §4, Algorithm 8, steps 1 to 6, at a rate of `rate` bytes:
 
 1. Let `P = N || pad(r, len(N))`.
@@ -638,17 +696,14 @@ It must also be a multiple of 8 bytes, so that each lane lies wholly in `P_i` or
 
 FIPS 202 defines no sponge at other rates.
 
-FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument. -/
+FIPS 202 §4 defines the sponge for any permutation `f`, so the permutation is an argument.
+
+The absorbing phase ends with the last permutation of step 6.
+
+So it is that permutation applied to the state just before it. -/
 def spongeAbsorb (f : State → State) (rate : Nat) (msg : ByteArray) : State :=
-  -- Step 1: P = N || pad(r, len(N)).
-  let P := pad rate msg
-  -- Step 2: n = len(P) / r, which is len(N) / r + 1, as the padding adds 1 to r bytes.
-  let n := blockCount rate msg.size
-  -- Step 3: c = b - r needs no value, since the capacity lanes are just left alone.
-  -- Step 4: block P_i is read in place, at index i * r of P.
-  -- Step 5: S = 0^b, the zero state.
-  -- Step 6: S = f(S ^ (P_i || 0^c)) for i = 0 to n - 1.
-  Internal.absorbBlocks f rate P n 0 State.zero
+  -- Steps 1 to 6, up to the last block XORed in, then the last application of f.
+  f (stateBeforeLastPermutation f rate msg)
 
 /-- Keccak-256 of a byte string, `KECCAK[512](N, 256)` of FIPS 202 §5.2:
 

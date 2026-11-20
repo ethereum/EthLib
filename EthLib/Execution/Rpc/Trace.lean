@@ -175,7 +175,7 @@ structure StructLog where
 
   Each slot holds its value after the last step that read or wrote it.
 
-  A step that fails adds no slot.
+  A step that fails adds no slot, and has none of this field, as it runs no opcode.
 
   It is none at another opcode, or when the storage is not recorded. -/
   storage : Option (List (Bytes32 × U256))
@@ -260,8 +260,9 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
     let op := stepOp evm
     let account := evm.message.currentTarget
     let storageOp := op = some .sload ∨ op = some .sstore
+    let touched := touchedSlot op evm result
     let seen := (tracer.slots.lookup account).getD []
-    let seen := match touchedSlot op evm result with
+    let seen := match touched with
       | some (key, value) => setSlot seen key value
       | none => seen
     let slots := if storageOp then (account, seen) :: tracer.slots.filter (·.1 != account)
@@ -278,7 +279,7 @@ def Tracer.record (config : TraceConfig) {fork : Fork} {Meter : Type} [GasMeter 
         stack := if config.disableStack then none else some evm.stack.val.reverse
         memory := if config.enableMemory then some evm.memory else none
         returnData := if config.enableReturnData then some evm.returnData else none
-        storage := if config.disableStorage ∨ ¬storageOp then none else some seen }
+        storage := if config.disableStorage ∨ touched.isNone then none else some seen }
     let refunds := match result with
       | .ok (.child caller _ _) => callers ++ [caller.substate.refundCounter]
       | _ => callers

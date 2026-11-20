@@ -21,8 +21,8 @@ The flag `execution_optimistic` comes from the store, not from the state.
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[duties endpoints]: https://github.com/ethereum/beacon-APIs/tree/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/duties
-[types]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/duty.yaml
+[duties endpoints]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties
+[types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/duty.yaml
 -/
 
 @[expose] public section
@@ -327,7 +327,14 @@ The first proposer answer is for the current epoch only.
 
 The root of a later epoch is that of a slot the state has not reached.
 
-The sync answer needs Altair and the PTC answer Gloas, or the error has code 400. -/
+The sync answer needs Altair and the PTC answer Gloas, or the error has code 400.
+
+The PTC of the Gloas fork epoch is computed at the fork, from balances of the epoch before.
+
+So its root is the one at the last slot before that epoch, as [`ptc.yaml`][ptc] says.
+
+[ptc]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties/ptc.yaml#L19-L27
+-/
 def dutiesResponse (config : Config) (state : BeaconState preset fork) (kind : DutyKind)
     (epoch : Epoch) (indices : List ValidatorIndex) (genesisRoot : Root) :
     Except ErrorMessage ApiEnvelope :=
@@ -353,7 +360,8 @@ def dutiesResponse (config : Config) (state : BeaconState preset fork) (kind : D
   | .ptc =>
     if gloas : .glamsterdam ≤ fork then do
       let duties ← ptcDuties config state gloas epoch indices
-      return { dependentRoot := some (← dependentRoot state 1 epoch genesisRoot),
+      let lag := if epoch = config.GLOAS_FORK_EPOCH then 0 else 1
+      return { dependentRoot := some (← dependentRoot state lag epoch genesisRoot),
                data := .arr (duties.map PtcDuty.toJson).toArray }
     else .error (beforeFork "PTC duties" .glamsterdam)
 

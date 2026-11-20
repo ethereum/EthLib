@@ -207,7 +207,7 @@ theorem prEvent_otsSign_none_le (pp : PublicParam) (seed : Seed) (layer : Layer)
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (otsSign Hq pp (seedPrf Hq seed) layer e msg)).run' cache}[z = none]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
-  unfold otsSign
+  unfold otsSign Internal.otsSignTrials
   refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTrialQuery (addrMsg layer e) (msg.size + 16)))
     _ _ _ (fun z hz => cache_eq_none_of_mem_support_run_romImpl
       (randomizerBase_isQueryBoundP pp seed layer e msg _) hcache hz) fun base c hc => ?_
@@ -371,6 +371,7 @@ theorem prEvent_signRootWith_error_le (sk : SecretKey) (b : Nat) (root : Digest)
       (signRootWith Hq sk b root)).run' cache}[z.isOk = false]
       ≤ ENNReal.ofReal (Real.exp (-4000)) := by
   unfold signRootWith
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1 = none) _ fun z _ hz => ?_).trans ?_
   · rcases z with ⟨_ | ⟨rho, y⟩, c'⟩
@@ -400,7 +401,8 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (idx : LeafIndex) (msg : Mess
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
       (signWith Hq sk idx msg)).run' cache}[z.1.isOk = false]
       ≤ 2 * ENNReal.ofReal (Real.exp (-4000)) := by
-  unfold signWith
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_add_mul_prEvent_not_of_support _ _
     (fun z => z.1 = none) _ (ε := ENNReal.ofReal (Real.exp (-4000)))

@@ -16,7 +16,7 @@ A message on the wire is its message ID, then the RLP list of its data.
 
 "Message Encoding" of [`rlpx.md`][rlpx] defines this form.
 
-[rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-encoding
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-encoding
 
 Here the ID is relative to the capability: Status is 0x00 whatever offset RLPx gives eth.
 

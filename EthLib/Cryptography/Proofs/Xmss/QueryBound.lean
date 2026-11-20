@@ -242,7 +242,7 @@ theorem isQueryBoundP_otsSign (hH : ∀ x, IsQueryBoundP (H x) p 1)
     (hprf : ∀ pp a suffix, IsQueryBoundP (prf pp a suffix) p 1) (pp : PublicParam)
     (layer : Layer) (e : UInt32) (msg : ByteArray) :
     IsQueryBoundP (otsSign H pp prf layer e msg) p (2 ^ 32 + 204) := by
-  unfold otsSign
+  unfold otsSign Internal.otsSignTrials
   refine (isQueryBoundP_bind (isQueryBoundP_randomizerBase hprf pp layer e msg) fun base _ =>
     isQueryBoundP_bind (isQueryBoundP_findCodeword hH pp layer e msg base 0
       MAX_RANDOMIZER_TRIALS) fun r _ => ?_).mono (n := 1 + (MAX_RANDOMIZER_TRIALS + (29 + V * 3)))
