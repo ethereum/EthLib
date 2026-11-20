@@ -230,6 +230,39 @@ def test_ptc_duties_match_the_assignments(epoch: int) -> None:
     assert answer == {"dependent_root": root, "data": expected}
 
 
+def _ptc(fork_epoch: int, epoch: int) -> dict[str, Any]:
+    """The PTC answer of the Gloas state for two active validators, with Gloas at an epoch."""
+    config = {"GLOAS_FORK_EPOCH": str(fork_epoch)}
+    requested = _active("gloas", EPOCH)[:2]
+    return consensus.api_duties(
+        "minimal",
+        FORKS["gloas"],
+        _state("gloas"),
+        "ptc",
+        epoch,
+        GENESIS,
+        config=config,
+        indices=requested,
+    )
+
+
+def test_ptc_root_at_the_gloas_fork_epoch() -> None:
+    """At the fork epoch the PTC root is that of the last slot before it, one epoch later."""
+    # Both answers depend on the root at the last slot of epoch 19.
+    root = _root_at("gloas", EPOCH * SLOTS_PER_EPOCH - 1)
+    assert _ptc(EPOCH, EPOCH)["dependent_root"] == root
+    assert _ptc(EPOCH, EPOCH + 1)["dependent_root"] == root
+    # Without the fork at epoch 20, the root of epoch 20 is one epoch earlier.
+    assert _ptc(0, EPOCH)["dependent_root"] == _root_at("gloas", (EPOCH - 1) * SLOTS_PER_EPOCH - 1)
+
+
+def test_ptc_duties_of_the_next_fork_epoch() -> None:
+    """The duties of a fork epoch that starts after the state wait for its last slot before."""
+    with raises(consensus.ConsensusError, f"Invalid epoch: {EPOCH + 1}") as error:
+        _ptc(EPOCH + 1, EPOCH + 1)
+    assert error.value.code == 400
+
+
 @pytest.mark.parametrize(
     ("fork", "kind", "message"),
     [

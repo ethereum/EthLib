@@ -701,6 +701,28 @@ theorem dutiesResponse_ptc_of_lt_gloas {config : Config} {state : BeaconState pr
   have notGloas : ¬.glamsterdam ≤ fork := Nat.not_le.2 early
   simp [dutiesResponse, notGloas]
 
+/-- An answer of the PTC duties carries the dependent root of its epoch.
+
+At the Gloas fork epoch it is the root at the last slot before that epoch.
+
+At any other epoch it is the root at the last slot before the epoch before.
+
+When that slot does not exist, it is the genesis root. -/
+theorem dutiesResponse_ptc_root {config : Config} {state : BeaconState preset fork}
+    {epoch : Epoch} {indices : List ValidatorIndex} {genesisRoot : Root}
+    {envelope : ApiEnvelope}
+    (made : dutiesResponse config state .ptc epoch indices genesisRoot = .ok envelope) :
+    ∃ root, dependentRoot state (if epoch = config.GLOAS_FORK_EPOCH then 0 else 1) epoch
+        genesisRoot = .ok root ∧ envelope.dependentRoot = some root := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · simp only [dutiesResponse, gloas, dite_true, bind, Except.bind, pure, Except.pure] at made
+    rcases duties : ptcDuties config state gloas epoch indices with _ | list <;>
+      rcases root : dependentRoot state (if epoch = config.GLOAS_FORK_EPOCH then 0 else 1) epoch
+        genesisRoot with _ | found <;>
+      simp only [duties, root, reduceCtorEq, Except.ok.injEq] at made
+    exact ⟨found, rfl, by rw [← made]⟩
+  · simp [dutiesResponse, gloas] at made
+
 /-- An attester, sync or PTC request with no index gets an error with code 400. -/
 theorem dutiesResponse_nil {config : Config} {state : BeaconState preset fork}
     {kind : DutyKind} {epoch : Epoch} {genesisRoot : Root}
@@ -1757,6 +1779,52 @@ private theorem ptcDuties_ok_near {config : Config} {state : BeaconState preset 
     exact window.2.1
   · cases computed
 
+/-- A PTC answer that computes its duties has an epoch whose first slot fits in 64 bits.
+
+Each requested index has an assignment, which reads the slots of the epoch. -/
+private theorem ptcDuties_ok_fits {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {duties : List PtcDuty} (computed : ptcDuties config state gloas epoch indices = .ok duties) :
+    epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
+  rw [ptcDuties_eq] at computed
+  split at computed
+  · cases computed
+  rename_i nonempty
+  split at computed
+  · split at computed
+    · obtain ⟨index, member⟩ := List.exists_mem_of_ne_nil indices nonempty
+      obtain ⟨all, mapped, -⟩ := map_ok_iff.mp computed
+      obtain ⟨duty, step⟩ := mapM_ok_of_mem mapped index member
+      unfold ptcDuty at step
+      obtain ⟨_, -, step⟩ := bind_ok_iff.mp step
+      obtain ⟨assignment, assigned, -⟩ := bind_ok_iff.mp step
+      have read := mapError_ok_iff.mp assigned
+      unfold getPtcAssignment at read
+      obtain ⟨_, -, read⟩ := bind_ok_iff.mp read
+      dsimp only at read
+      split at read
+      · obtain ⟨slots, sliced, -⟩ := bind_ok_iff.mp read
+        have := (epochSlots_eq_ok_iff.mp (mapError_ok_iff.mp sliced)).1
+        omega
+      · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind] at read
+    · cases computed
+  · cases computed
+
+/-- The dependent root of a PTC answer that computed its duties fails only with code 400.
+
+It needs the slot of the state plus the length of the buffer of roots to be at most `2^64`. -/
+private theorem dependentRoot_ptc_error {config : Config} {state : BeaconState preset fork}
+    {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {indices : List ValidatorIndex}
+    {duties : List PtcDuty} {genesisRoot : Root} {error : ErrorMessage}
+    (computed : ptcDuties config state gloas epoch indices = .ok duties)
+    (room : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat ≤ 2 ^ 64)
+    (failed : dependentRoot state (if epoch = config.GLOAS_FORK_EPOCH then 0 else 1) epoch
+      genesisRoot = .error error) :
+    error = invalidEpoch epoch := by
+  split at failed
+  · exact dependentRoot_error (by simpa using ptcDuties_ok_fits computed) room failed
+  · exact dependentRoot_next_error (ptcDuties_ok_near computed) room failed
+
 /-- A PTC duty fails at an index that names no validator, or at its PTC assignment. -/
 private theorem ptcDuty_error {config : Config} {state : BeaconState preset fork}
     {gloas : .glamsterdam ≤ fork} {epoch : Epoch} {index : ValidatorIndex} {error : ErrorMessage}
@@ -1850,7 +1918,7 @@ theorem dutiesResponse_ptc_internal_iff {config : Config} {state : BeaconState p
       cases assigned
       simp [dutyError, invalidEpoch] at code
     rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
-    · rw [dependentRoot_next_error (ptcDuties_ok_near dutiesOk) room refused] at code
+    · rw [dependentRoot_ptc_error dutiesOk room refused] at code
       simp [invalidEpoch] at code
     · cases failed
   · rintro ⟨window, distinct, served, index, member, fault, assigned⟩
@@ -1931,7 +1999,7 @@ theorem dutiesResponse_ptc_error {config : Config} {state : BeaconState preset f
       rw [assignedOk] at assigned
       cases assigned
   rcases bind_eq_error failed with refused | ⟨_, -, failed⟩
-  · exact .inr (.inr (.inl (dependentRoot_next_error (ptcDuties_ok_near dutiesOk) room refused)))
+  · exact .inr (.inr (.inl (dependentRoot_ptc_error dutiesOk room refused)))
   · cases failed
 
 /-- A PTC answer fails only with code 400.

@@ -5517,6 +5517,8 @@ The window runs from the previous epoch to the next one, and not before the Gloa
 The mixes must also still hold the seed of the epoch.
 In the window a repeated index gets code 400.
 Distinct indices run the duty of each requested validator in turn, in request order, and the first index that fails ends the answer.
+The PTC of the Gloas fork epoch is computed at the fork, from balances of the epoch before, so blocks of the epoch before the fork can still change it.
+So its dependent root is the block root at the last slot before the fork epoch, as [`ptc.yaml`](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties/ptc.yaml#L19-L27) requires, and every other epoch keeps a lag of one epoch (`dutiesResponse_ptc_root`).
 `proposerDuties_beaconProposer` shows that in the current epoch each proposer duty names the proposer of the state advanced to its slot.
 `proposerDuties_current_slot` shows the same at the slot of the state itself.
 `syncDuties_seats` shows that each seat of a sync duty holds the key of the validator, in the committee of the period, and that a duty has a seat.
@@ -5908,6 +5910,7 @@ The events of the fork choice are in `Consensus/BeaconApi/ChainEvents.lean` (#20
 `chainEvents_head_iff` and `chainEvents_reorg_iff` (`Consensus/Proofs/BeaconApi/ChainEvents.lean`) show when a head event and a reorganization come.
 `chainEvents_head` shows that a head event names the head of the later store, and `chainEvents_dependent_roots_duties` that its two dependent roots are those of the attester duties of its epoch and of the next one, read from the head state; the second needs the next epoch to fit in 64 bits.
 `computeEpochAtSlot_succ_lt` shows that it does for every slot when an epoch has at least two slots.
+`chainEvents_ptc_root_at_fork` shows that, for a head in the Gloas fork epoch, the PTC duties of that epoch carry the next-epoch root of the head event, as the source says.
 `chainEvents_finalized_iff` shows that a finalized event comes exactly when the finalized checkpoint changes, and `chainEvents_finalized` that it names the block and the epoch of the new checkpoint.
 `chainEvents_finalized_epoch` shows that the epoch of a finalized event is above the finalized epoch of the earlier store, when the finalized checkpoint advances from one store to the other.
 `Store.CheckpointsAdvance` (`Consensus/Proofs/ForkChoice/Handlers.lean`) says that each of the justified and finalized checkpoints stays as it was or moves to one at a greater epoch.

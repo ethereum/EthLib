@@ -202,6 +202,25 @@ theorem chainEvents_dependent_roots_duties {config : Config} {optimistic : Root 
     obtain ⟨root, read, carried⟩ := dutiesResponse_attester answer
     rw [carried, Except.ok.inj (read.symm.trans (dependentRoot_succ_of_ok room next))]
 
+/-- At the Gloas fork epoch, the root of the PTC duties is the next-epoch root of a head event.
+
+The head must lie in that epoch, and the duties must come from the head state. -/
+theorem chainEvents_ptc_root_at_fork {config : Config} {optimistic : Root → Bool}
+    {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
+    (made : chainEvents config optimistic genesisRoot before after = .ok events)
+    {event : HeadEvent} (listed : .head event ∈ events)
+    (atFork : computeEpochAtSlot preset event.slot = config.GLOAS_FORK_EPOCH) :
+    ∃ state, after.blockState event.block = .ok state ∧
+      ∀ indices envelope, dutiesResponse config state .ptc config.GLOAS_FORK_EPOCH indices
+          genesisRoot = .ok envelope →
+        envelope.dependentRoot = some event.nextEpochDependentRoot := by
+  obtain ⟨head, previous, -, made⟩ := chainEvents_head_event made listed
+  obtain ⟨state, got, block, -, -, next⟩ := headEvent_spec made
+  refine ⟨state, by rw [block]; exact got, fun indices envelope answer => ?_⟩
+  obtain ⟨root, read, carried⟩ := dutiesResponse_ptc_root answer
+  rw [ite_eq_left rfl, ← atFork] at read
+  rw [carried, Except.ok.inj (read.symm.trans next)]
+
 /-- A finalized event comes exactly when the finalized checkpoint changes. -/
 theorem chainEvents_finalized_iff {config : Config} {optimistic : Root → Bool}
     {genesisRoot : Root} {before after : Store preset fork} {events : List ChainEvent}
