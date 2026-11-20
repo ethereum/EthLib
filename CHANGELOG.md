@@ -618,6 +618,27 @@ Not yet released.
   `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
+- `PinPresetFacts` is public: the preset facts that the pin's drift bound needs.
+  Each field is a fact about the preset alone, and a deployed preset has it.
+
+- `PinPresetFacts.mainnet` is public: the mainnet preset has the preset facts of the pin.
+
+- `PinPresetFacts.minimal` is public: the minimal preset has the preset facts of the pin.
+
+- `Setting` is public: the setting of the pin's drift bound for one call.
+  It holds the runs from genesis to the finalized state, the split state, the pulled-up state and the counting state, with the fork bounds.
+
+- `pinDrift_le_of_stubs` is public: under a `Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
+
+- `PinGuarded` is public: the a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
+
+- `justifiedPinned_of_setting` is public: the voters of a call pin the justified checkpoints of the call's epoch.
+  It reads the pin through `pinDrift_le_of_stubs`.
+
+- `justifiedPinned_of_setting.mainnet` is `justifiedPinned_of_setting` on the mainnet preset, with the preset premises proved.
+
+- `justifiedPinned_of_setting.minimal` is `justifiedPinned_of_setting` on the minimal preset, with the preset premises proved.
+
 ### Changes that break callers
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
