@@ -22310,10 +22310,8 @@ Each of them was created by a deposit of C's run, so its flows are positive and 
 
 The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
 private theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    {events eventsF : List (BalanceEvent preset)}
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
@@ -22880,8 +22878,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     highC endEpochC replayedC
   have u1 := (bud_units (config := config) h tail high replayed fromFin replayedF tailC highC
     endEpochC replayedC).1
-  have u2 := bud_csUnits (config := config) h tail high replayed fromFin replayedF tailC highC
-    endEpochC replayedC
+  have u2 := bud_csUnits (config := config) (events := events) (eventsF := eventsF) h fromFin
+    tailC highC endEpochC replayedC
   have l1 := (bud_syncLeak (config := config) h tail high endEpoch replayed fromFin replayedF).1
   have cg := creditGain_split config pulled anc fin
   have b1 := bud_exiting (config := config) h tailC
