@@ -492,12 +492,9 @@ theorem BuilderDebtSettled.processWithdrawals {gloas : .glamsterdam ≤ fork}
 theorem processWithdrawals_builders_size {gloas : .glamsterdam ≤ fork}
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    (after.builders gloas).data.size = (state.builders gloas).data.size := by
-  cases full : isParentBlockFull state gloas
-  · rw [processWithdrawals_of_parentEmpty payload gloas full, Except.ok.injEq] at computed
-    rw [computed]
-  · obtain ⟨_, -, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
-    exact (applyExpectedWithdrawals_kept gloas appliedOk).1
+    (after.builders gloas).data.size = (state.builders gloas).data.size :=
+  processWithdrawals_of (fun a b => (b.builders gloas).data.size = (a.builders gloas).data.size)
+    rfl (fun _ applied => (applyExpectedWithdrawals_kept gloas applied).1) computed
 
 /-- From Gloas, the expected withdrawals take from each builder of the registry at most its balance.
 

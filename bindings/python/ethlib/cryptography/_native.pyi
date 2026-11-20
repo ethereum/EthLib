@@ -1036,6 +1036,14 @@ def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     """The record after importing a file with the minimal strategy of EIP-3076, as JSON text."""
     ...
 
+def consensus_read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    ...
+
+def consensus_signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    ...
+
 def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:
     """Whether a key may sign a block of a slot with a signing root, given a record."""
     ...
@@ -1050,6 +1058,14 @@ def consensus_record_block_signing(interchange: bytes, pubkey: bytes, slot: int,
 
 def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bytes:
     """The record after a key signs a vote, as JSON text."""
+    ...
+
+def consensus_keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a schema of the Keymanager API, read from its JSON and written back."""
+    ...
+
+def consensus_keymanager_run(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """The responses of calls made one after another on a validator client, then its state."""
     ...
 
 def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:

@@ -101,11 +101,10 @@ def keyShare (group : Wire.CodePoint) (privateKey : Vector UInt8 32) :
 def sharedSecret (group : Wire.CodePoint) (privateKey : Vector UInt8 32) (peer : ByteArray) :
     Except Error (Vector UInt8 32) := do
   if group.val = 0x001d then
-    if h : peer.size = 32 then
-      let output := X25519.x25519 privateKey (readBytes peer 0 32 (by omega))
-      ensure (output ≠ Vector.replicate 32 0) .sharedSecret
-      return output
-    else throw .keyShare
+    let peer ← exactBytes 32 peer fun _ => .keyShare
+    let output := X25519.x25519 privateKey peer
+    ensure (output ≠ Vector.replicate 32 0) .sharedSecret
+    return output
   else if group.val = 0x0017 then
     let scalar ← readScalar privateKey .privateKey
     let point ← readP256Share peer

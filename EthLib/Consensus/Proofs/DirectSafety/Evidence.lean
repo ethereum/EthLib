@@ -4,6 +4,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.Attestations
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Consensus.Proofs.Transition.TargetUpgrades
+import EthLib.Consensus.Proofs.Transition.BalanceDrift
 
 /-!
 # Slashed validators come from evidence on the selected history
@@ -288,11 +289,9 @@ private theorem slashedKept_operationsInput {fork : Fork}
     ⟨SlashedKept.keep frame same, congrArg (·.data.size) same⟩
   have laws := SlashedKept.slashedKeptLaws (preset := preset) (fork := fork)
   refine started.step_of Sized refl trans
-    (fun _ ok => processParentExecutionPayload_step_of Sized refl trans keep
-      (fun ok => ⟨laws.processWithdrawalRequest SlashedKept.keep ok,
-        (sameSizes_processWithdrawalRequest ok).1⟩)
-      (fun ok => ⟨laws.processConsolidationRequest SlashedKept.keep ok,
-        (sameSizes_processConsolidationRequest ok).1⟩) ok)
+    (fun _ ok => ⟨processParentExecutionPayload_step_of SlashedKept .refl (·.trans ·)
+      SlashedKept.keep (laws.processWithdrawalRequest SlashedKept.keep)
+      (laws.processConsolidationRequest SlashedKept.keep) ok, (effectiveKept_parentPayload ok).2⟩)
     (fun ok => ?_)
     (fun _ ok => processBlockExecution_step_of Sized refl trans keep
       (fun ok => ⟨laws.processWithdrawals SlashedKept.keep ok, (sameSizes_processWithdrawals ok).1⟩)

@@ -4,6 +4,7 @@ public import EthLib.Networking.Rlpx.Ecies
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.Ecdsa.Encoding
 public import EthLib.Serialization.Rlp.Codec
 
 /-!
@@ -30,7 +31,7 @@ The keys and the nonces are secret, and EthLib makes no constant-time claim (SOU
 
 namespace EthLib.Networking.Rlpx
 
-open EthLib.Base (natToBytes natToBytes_length xorBytes)
+open EthLib.Base (xorBytes)
 open EthLib.Cryptography
 open EthLib.Cryptography.Secp256k1
 open EthLib.Serialization.Rlp
@@ -191,16 +192,13 @@ structure Sealing where
 
 /-- The signature `r || s || v` of a hash, where `v` is the recovery id. -/
 def signatureBytes (sig : Fn × Fn × Bool) : Vector UInt8 65 :=
-  ⟨(natToBytes 32 sig.1.val ++ natToBytes 32 sig.2.1.val ++ [if sig.2.2 then 1 else 0]).toArray,
-    by simp [natToBytes_length]⟩
+  Cryptography.Ecdsa.toRecoverableBytes sig.1.val sig.2.1.val sig.2.2
 
 /-- The public key that signed a hash, from a signature `r || s || v`. -/
 def recoverSigner (hash : Vector UInt8 32) (sig : Vector UInt8 65) : Except HandshakeError Point :=
-  let bytes := sig.toList
+  let (r, s) := Cryptography.Ecdsa.toNats (sig.take Cryptography.Ecdsa.SIGNATURE_LEN)
   let v := sig[64]
-  if h : v.toNat < 2 then
-    (Ecdsa.recover hash (Base.bytesToNat (bytes.take 32))
-      (Base.bytesToNat ((bytes.drop 32).take 32)) ⟨v.toNat, h⟩).mapError .secp256k1
+  if h : v.toNat < 2 then (Ecdsa.recover hash r s ⟨v.toNat, h⟩).mapError .secp256k1
   else .error (.badRecoveryId v)
 
 /--

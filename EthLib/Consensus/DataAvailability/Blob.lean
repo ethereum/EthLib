@@ -113,9 +113,8 @@ def blobKzgCommitmentInclusionProof {preset : Preset} {fork : Fork}
   let gindex ← blobKzgCommitmentGindex preset fork index
   let nodes ← buildProof (SszType.desc (BeaconBlockBody preset fork)) (SszType.toValue body) gindex
   let nodes ← nodes.mapM toChunk
-  if exact : nodes.toArray.size = preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat then
-    return ⟨nodes.toArray, exact⟩
-  else throw (.count preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat nodes.length)
+  Base.exactArray preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat nodes.toArray
+    (.count preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat)
 
 /-- The sidecars of the blobs of a signed block, from Deneb until Gloas, whose body has no blobs.
 

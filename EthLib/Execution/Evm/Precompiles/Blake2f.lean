@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Execution.ErrorFormat
 public import EthLib.Cryptography.Hash.Blake2b
 
@@ -108,14 +109,11 @@ def compute (input : Input) (f : Bool) : Vector UInt8 OUTPUT_BYTES :=
 The length is checked before the flag.
 
 EIP-152 does not fix that order, so this module fixes it. -/
-def output (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES) :=
-  if hsize : data.size = INPUT_BYTES then
-    let input : Input := ⟨data.data, hsize⟩
-    -- The flag is byte 212, the last one.
-    match readFlag (input[212]'(by simp only [INPUT_BYTES]; omega)) with
-    | .error e => .error e
-    | .ok f => .ok (compute input f)
-  else .error (.invalidInputLength data.size)
+def output (data : ByteArray) : Except Blake2fError (Vector UInt8 OUTPUT_BYTES) := do
+  let input : Input ← Base.exactBytes INPUT_BYTES data .invalidInputLength
+  -- The flag is byte 212, the last one.
+  let f ← readFlag (input[212]'(by simp only [INPUT_BYTES]; omega))
+  return compute input f
 
 /-! ## The price -/
 
@@ -126,8 +124,9 @@ def GAS_PER_ROUND : Nat := 1
 
 Any other input fails before the charge, so its price is 0. -/
 def gasCost (data : ByteArray) : Nat :=
-  if hsize : data.size = INPUT_BYTES then GAS_PER_ROUND * (readRounds ⟨data.data, hsize⟩).toNat
-  else 0
+  match Base.exactBytes? INPUT_BYTES data with
+  | some input => GAS_PER_ROUND * (readRounds input).toNat
+  | none => 0
 
 /-- The call: the length is checked, then the gas is charged, then the flag is read.
 

@@ -133,9 +133,9 @@ theorem processWithdrawals_paymentStep {gloas : .glamsterdam ≤ fork}
     PaymentStep state after gloas [] := by
   have inputs := payloadInputs_processWithdrawals computed
   have payments := processWithdrawals_payments gloas computed
-  by_cases full : isParentBlockFull state gloas = true
-  · obtain ⟨expected, -, applied, -⟩ := processWithdrawals_recorded gloas full computed
-    have queue := (applyExpectedWithdrawals_builderQueues gloas applied).2
+  refine processWithdrawals_of (fun s t => PaymentStep s t gloas [])
+    (.of_release (.refl state gloas) nofun) (fun {expected} _ applied => ?_) computed
+  · have queue := (applyExpectedWithdrawals_builderQueues gloas applied).2
     have positions := slotPaymentPosition_congr inputs.slot
     have header : after.latestBlockHeader.slot = state.latestBlockHeader.slot := by
       rw [inputs.latestBlockHeader]
@@ -148,10 +148,5 @@ theorem processWithdrawals_paymentStep {gloas : .glamsterdam ≤ fork}
       nofun, fun slot opened => Or.inl ((paymentOpen_congr positions header bid read slot).mp
         opened), by rw [inputs.slot]; exact UInt64.le_refl _⟩
     simpa using queue
-  · have empty : isParentBlockFull state gloas = false := by simpa using full
-    have same := processWithdrawals_of_parentEmpty (capella := capella) payload gloas empty
-    rw [same] at computed
-    cases computed
-    exact .of_release (.refl state gloas) nofun
 
 end EthLib.Consensus
