@@ -785,6 +785,9 @@
 #define DOC_consensus_keymanager_json \
   "A value of a schema of the Keymanager API, read from its JSON and written back."
 
+#define DOC_consensus_keymanager_run \
+  "The responses of calls made one after another on a validator client, then its state."
+
 #define DOC_consensus_is_execution_block \
   "From Bellatrix: whether a block carries a payload other than the empty one."
 

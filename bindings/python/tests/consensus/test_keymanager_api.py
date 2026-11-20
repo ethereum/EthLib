@@ -1,5 +1,6 @@
 """The values of the Keymanager API against the examples of its schemas."""
 
+import hashlib
 import json
 from functools import cache
 from pathlib import Path
@@ -9,6 +10,8 @@ import pytest
 from ruamel.yaml import YAML
 
 from ethlib import consensus
+from ethlib.consensus import SlashingProtectionError
+from ethlib.cryptography import aes, keystore
 from raising import raises
 
 # The OpenAPI document and the types of the Keymanager API, pinned in tests/sources.toml.
@@ -238,3 +241,216 @@ def test_unknown_schema():
     """A name that the source gives no schema has code 0."""
     with raises(ERROR, "the Keymanager API has no schema Validator"):
         consensus.keymanager_json("Validator", "0")
+
+
+# The PBKDF2 keystore of ERC-2335 and its password, pinned in tests/cryptography/keystore.
+KEYSTORE_VECTOR = Path(__file__).resolve().parents[4] / "tests/cryptography/keystore/pbkdf2.json"
+VECTOR_PASSWORD = "𝔱𝔢𝔰𝔱𝔭𝔞𝔰𝔰𝔴𝔬𝔯𝔡🔑"
+# The derivation of the keystores that the tests build: few PBKDF2 rounds, so that they run fast.
+ROUNDS = 2
+SALT = bytes(range(32))
+IV = bytes(range(16))
+PATH = "m/12381/3600/0/0/0"
+# Bounds on key derivation that every keystore of the tests meets.
+MEMORY, WORK = 2**20, 2**20
+# The genesis validators root of the slashing protection example of the source.
+GENESIS = json.loads(_load("types/slashing_protection.yaml")["example"])["metadata"][
+    "genesis_validators_root"
+]
+# Secret keys of the tests, each a nonzero scalar below the order of the group.
+SECRETS = [bytes(31) + bytes([n]) for n in (1, 2, 3)]
+
+
+def _keystore(secret: bytes, password: str) -> str:
+    """An ERC-2335 keystore of a secret key under a password, with PBKDF2 and AES-128-CTR."""
+    key = hashlib.pbkdf2_hmac("sha256", keystore.password_bytes(password), SALT, ROUNDS, 32)
+    message = aes.ctr(key[:16], IV, secret)
+    checksum = hashlib.sha256(key[16:32] + message).digest()
+    kdf = {"dklen": 32, "c": ROUNDS, "prf": "hmac-sha256", "salt": SALT.hex()}
+    return json.dumps(
+        {
+            "version": 4,
+            "uuid": "00000000-0000-4000-8000-000000000000",
+            "path": PATH,
+            "crypto": {
+                "kdf": {"function": "pbkdf2", "params": kdf, "message": ""},
+                "checksum": {"function": "sha256", "params": {}, "message": checksum.hex()},
+                "cipher": {
+                    "function": "aes-128-ctr",
+                    "params": {"iv": IV.hex()},
+                    "message": message.hex(),
+                },
+            },
+        }
+    )
+
+
+def _interchange(entries: list[dict[str, Any]]) -> str:
+    """The text of EIP-3076 slashing protection data with the genesis root of the source."""
+    metadata = {"interchange_format_version": "5", "genesis_validators_root": GENESIS}
+    return json.dumps({"metadata": metadata, "data": entries})
+
+
+def _entry(pubkey: str, slot: int, source: int, target: int) -> dict[str, Any]:
+    """The entry of a key that signed one block and one vote."""
+    return {
+        "pubkey": pubkey,
+        "signed_blocks": [{"slot": str(slot)}],
+        "signed_attestations": [{"source_epoch": str(source), "target_epoch": str(target)}],
+    }
+
+
+def _run(
+    calls: list[tuple[str, str, Any]], memory: int = MEMORY, work: int = WORK
+) -> tuple[list[tuple[int, Any]], bytes, list[bytes]]:
+    """The responses of calls on a client with no key, the record and the keys afterwards."""
+    responses, state = consensus.keymanager_run(memory, work, _interchange([]), calls)
+    keys = [bytes.fromhex(key[2:]) for key in state["local_keys"]]
+    return responses, state["slashing_protection"].encode(), keys
+
+
+def _import(
+    keystores: list[str], passwords: list[str], protection: str | None = None
+) -> tuple[str, str, Any]:
+    """The call that imports keystores."""
+    body: dict[str, Any] = {"keystores": keystores, "passwords": passwords}
+    if protection is not None:
+        body["slashing_protection"] = protection
+    return ("POST", "/eth/v1/keystores", body)
+
+
+@cache
+def _pubkeys() -> list[str]:
+    """The public keys of the secret keys of the tests, from a client that imports them."""
+    calls = [_import([_keystore(secret, "pass")], ["pass"]) for secret in SECRETS]
+    _, _, pubkeys = _run(calls)
+    return ["0x" + pubkey.hex() for pubkey in pubkeys]
+
+
+def _statuses(response: tuple[int, Any]) -> list[str]:
+    """The statuses of a response with HTTP 200."""
+    code, body = response
+    assert code == 200
+    return [entry["status"] for entry in body["data"]]
+
+
+def test_import_erc_2335_vector():
+    """The PBKDF2 keystore of ERC-2335 imports the key that the ERC names."""
+    vector = json.loads(KEYSTORE_VECTOR.read_text())
+    responses, _, pubkeys = _run([_import([json.dumps(vector)], [VECTOR_PASSWORD])])
+    assert responses == [(200, {"data": [{"status": "imported"}]})]
+    assert pubkeys == [bytes.fromhex(vector["pubkey"])]
+
+
+def test_import_example():
+    """The example of the issue: one keystore with its data, then a repeat and a length mismatch."""
+    a = _pubkeys()[0]
+    protection = _interchange([_entry(a, 81952, 2290, 3007)])
+    keystore_a = _keystore(SECRETS[0], "pass")
+    responses, record, _ = _run(
+        [
+            _import([keystore_a], ["pass"], protection),
+            _import([keystore_a], ["pass"]),
+            _import([keystore_a, keystore_a], ["pass"]),
+        ]
+    )
+    assert responses[0] == (200, {"data": [{"status": "imported"}]})
+    assert responses[1] == (200, {"data": [{"status": "duplicate"}]})
+    assert responses[2][0] == 400
+    key = bytes.fromhex(a[2:])
+    root = bytes(32)
+    # A block at the slot of the limit conflicts with it, which has no signing root.
+    with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+        consensus.check_block_signing(record, key, 81952, root)
+    consensus.check_block_signing(record, key, 81953, root)
+    # A vote with the target of the limit is a double vote with it.
+    with raises(SlashingProtectionError, "slashing protection failed with code 5"):
+        consensus.check_attestation_signing(record, key, 2290, 3007, root)
+    consensus.check_attestation_signing(record, key, 2290, 3008, root)
+
+
+def test_duplicate_in_one_request():
+    """A key imported earlier in the same request is a duplicate, as the use cases say."""
+    keystore_a = _keystore(SECRETS[0], "pass")
+    responses, _, pubkeys = _run([_import([keystore_a, keystore_a], ["pass", "pass"])])
+    assert [_statuses(response) for response in responses] == [["imported", "duplicate"]]
+    assert len(pubkeys) == 1
+
+
+def test_data_of_imported_keys_only():
+    """Keystores of a and b with data of a, b and c load the data of a and b only."""
+    a, b, c = _pubkeys()
+    protection = _interchange([_entry(key, 100, 9, 10) for key in (a, b, c)])
+    keystores = [_keystore(secret, "pass") for secret in SECRETS[:2]]
+    responses, record, _ = _run([_import(keystores, ["pass", "pass"], protection)])
+    assert [_statuses(response) for response in responses] == [["imported", "imported"]]
+    root = bytes(32)
+    for key in (a, b):
+        with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+            consensus.check_block_signing(record, bytes.fromhex(key[2:]), 100, root)
+    consensus.check_block_signing(record, bytes.fromhex(c[2:]), 100, root)
+
+
+def test_failure_does_not_stop_the_others():
+    """A wrong password gives an error status, and the next keystore is still imported."""
+    keystores = [_keystore(secret, "pass") for secret in SECRETS[:2]]
+    responses, _, pubkeys = _run([_import(keystores, ["wrong", "pass"])])
+    code, body = responses[0]
+    assert code == 200
+    assert body["data"][0] == {
+        "status": "error",
+        "message": "the keystore did not decrypt, with code 8",
+    }
+    assert body["data"][1] == {"status": "imported"}
+    assert ["0x" + key.hex() for key in pubkeys] == [_pubkeys()[1]]
+
+
+def test_example_keystore_of_the_source():
+    """The keystore example of the source does not decrypt with the password example of the call."""
+    example = _load("types/keystore.yaml")["example"]
+    password = "ABCDEFGH01234567ABCDEFGH01234567"
+    responses, _, pubkeys = _run([_import([example], [password])], 2**30, 2**24)
+    error = {"status": "error", "message": "the keystore did not decrypt, with code 8"}
+    assert responses == [(200, {"data": [error]})]
+    assert pubkeys == []
+
+
+def test_empty_request():
+    """A request with no keystore succeeds with no status, even with data that does not read."""
+    responses, _, _ = _run([_import([], [], "{not json")])
+    assert responses == [(200, {"data": []})]
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (
+            {"keystores": ["{}"], "passwords": []},
+            "the keystores and the passwords differ in number",
+        ),
+        (
+            {"keystores": ["{}"], "passwords": ["pass"], "slashing_protection": "{not json"},
+            "the slashing protection data does not read",
+        ),
+        ({"keystores": ["{}"]}, "the request does not read"),
+        ({"keystores": [1], "passwords": ["pass"]}, "the request does not read"),
+    ],
+)
+def test_bad_request(body: dict[str, Any], message: str):
+    """A request refused as a whole gets HTTP 400 and the body of an error, and changes nothing."""
+    responses, _, pubkeys = _run([("POST", "/eth/v1/keystores", body)])
+    assert responses == [(400, {"message": message})]
+    assert pubkeys == []
+
+
+def test_unknown_call():
+    """A method and path that the API does not define get HTTP 404, and change nothing."""
+    responses, _, pubkeys = _run([("GET", "/eth/v1/unknown", {})])
+    assert responses == [(404, {"message": "Path not found"})]
+    assert pubkeys == []
+
+
+def test_bad_starting_record():
+    """A starting record that does not read is refused with the code of EIP-3076 data."""
+    with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
+        consensus.keymanager_run(MEMORY, WORK, '{"metadata": {}}', [])

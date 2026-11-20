@@ -319,6 +319,30 @@ theorem mem_blocksOf {interchange : Interchange} {pubkey : BLSPubkey}
       ∃ entry ∈ interchange.data, entry.pubkey = pubkey ∧ block ∈ entry.signedBlocks := by
   simp [Interchange.blocksOf, and_assoc]
 
+/-- The entries that name the keys of a list hold all the blocks of each of those keys. -/
+theorem blocksOf_entriesOf {interchange : Interchange} {keys : List BLSPubkey}
+    {pubkey : BLSPubkey} (kept : pubkey ∈ keys) :
+    (interchange.entriesOf keys).blocksOf pubkey = interchange.blocksOf pubkey := by
+  simp only [Interchange.blocksOf, Interchange.entriesOf, List.filter_filter]
+  congr 1
+  apply List.filter_congr
+  intro entry _
+  by_cases same : entry.pubkey = pubkey
+  · simp [same, kept]
+  · simp [same]
+
+/-- The entries that name the keys of a list hold all the votes of each of those keys. -/
+theorem attestationsOf_entriesOf {interchange : Interchange} {keys : List BLSPubkey}
+    {pubkey : BLSPubkey} (kept : pubkey ∈ keys) :
+    (interchange.entriesOf keys).attestationsOf pubkey = interchange.attestationsOf pubkey := by
+  simp only [Interchange.attestationsOf, Interchange.entriesOf, List.filter_filter]
+  congr 1
+  apply List.filter_congr
+  intro entry _
+  by_cases same : entry.pubkey = pubkey
+  · simp [same, kept]
+  · simp [same]
+
 /-! ## A signer's history -/
 
 /-- A signer of votes: each vote of a key is checked against the record, then recorded.
@@ -856,6 +880,20 @@ theorem checkAttestationSigning_of_foldl_importFile {files : List Interchange}
         (fun old kept => above old (List.mem_append_right _ kept))
         (fun old kept => after old (List.mem_append_right _ kept))
     · exact all file (List.mem_cons_of_mem _ member)
+
+/-- After one import, the record accepts a block only if the record before it accepts it. -/
+theorem checkBlock_of_importFile {held file : Interchange} {pubkey : BLSPubkey} {slot : Slot}
+    {root : Root} (passed : (held.importFile file).checkBlock pubkey slot root = .ok ()) :
+    held.checkBlock pubkey slot root = .ok () :=
+  checkBlockSigning_of_foldl_importFile (files := [file]) passed held (List.mem_cons_self ..)
+
+/-- After one import, the record accepts a vote only if the record before it accepts it. -/
+theorem checkAttestation_of_importFile {held file : Interchange} {pubkey : BLSPubkey}
+    {source target : Epoch} {root : Root}
+    (passed : (held.importFile file).checkAttestation pubkey source target root = .ok ()) :
+    held.checkAttestation pubkey source target root = .ok () :=
+  checkAttestationSigning_of_foldl_importFile (files := [file]) passed held
+    (List.mem_cons_self ..)
 
 /-! ## Imports between signed blocks -/
 

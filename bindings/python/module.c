@@ -887,6 +887,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_relay_validators},
   {"consensus_keymanager_json", py_consensus_keymanager_json, METH_VARARGS,
    DOC_consensus_keymanager_json},
+  {"consensus_keymanager_run", py_consensus_keymanager_run, METH_VARARGS,
+   DOC_consensus_keymanager_run},
   {"consensus_relay_delivered_payload", py_consensus_relay_delivered_payload,
    METH_VARARGS, DOC_consensus_relay_delivered_payload},
   {"consensus_relay_received_bid", py_consensus_relay_received_bid,

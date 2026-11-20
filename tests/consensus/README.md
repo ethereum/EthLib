@@ -293,3 +293,5 @@ The source has no other test vectors.
 `bindings/python/tests/consensus/test_keymanager_api.py` reads the example of each schema through the bindings, and checks what the writer gives back.
 A schema with no example of its own takes the examples of its fields.
 The test also checks the letter case of hex, the pattern of an integer, and the codes of the errors.
+The same file runs the call that imports keystores, on keystores that it builds with PBKDF2 and AES-128-CTR, and on the PBKDF2 keystore of ERC-2335 in `tests/cryptography/keystore/`.
+It checks the example of issue #2136 and the cases of the use case "Add a key" in `use-cases/README.md` of the source.

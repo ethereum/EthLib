@@ -6263,6 +6263,38 @@ The source leaves six points about its values open:
 - The graffiti is a string, and the block field that it fills is 32 bytes.
   EthLib reads it as a string; how it becomes 32 bytes is a question for the call that sets it.
 
+The call `POST /eth/v1/keystores` imports ERC-2335 keystores with their EIP-3076 slashing protection data (`Consensus/KeymanagerApi/LocalKeys.lean`).
+The key state of a validator client is a pure value: its local keys, its remote keys and its EIP-3076 record.
+A request whose lists of keystores and passwords differ in length is refused (`importKeystores_eq_error_of_length_ne`, `Consensus/Proofs/KeymanagerApi/LocalKeys.lean`), with HTTP 400 and the state unchanged (`postKeystores_of_length_ne`).
+A request with no keystore succeeds with no status, whatever its data (`importKeystores_of_keystores_eq_nil`).
+A call that succeeds gives one status for each keystore, in order (`length_of_importKeystores`).
+A keystore with the status `imported` holds a key that the client holds afterwards (`mem_localKeys_of_importKeystores`), and no key held before is removed (`localKeys_prefix_of_importKeystores`).
+A keystore is a `duplicate` exactly when its key was held before the call, or a keystore before it in the request imported it (`duplicate_iff_of_importKeystores`).
+After a call, the record refuses every block and every vote that it refused before (`checkBlock_of_importKeystores`, `checkAttestation_of_importKeystores`).
+For a key imported with slashing protection data, a block or vote that the record accepts meets the conditions of EIP-3076 against the entries of that key (`checkBlockSigning_of_importKeystores`, `checkAttestationSigning_of_importKeystores`).
+The record imports those entries by the minimal strategy of EIP-3076.
+So such a block is after every block of the key in the data (`lt_slot_of_importKeystores`).
+Such a vote has a source at least, and a target after, those of every vote of the key in the data (`sourceEpoch_targetEpoch_of_importKeystores`).
+The key derivation of a keystore is bounded by limits that the caller sets, since the source sets none.
+The Python suite runs the example of the issue and the cases of the source's use case "Add a key", with keystores that it builds.
+
+The source leaves six points about the import open, and EthLib takes these readings:
+
+- Which keys' slashing protection data is loaded.
+  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
+  The [use case](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
+  Step 3 of the flow allows the data to be "loaded in its entirety, or imported on a per-key basis", and its step 4 loads it only for a matching keystore.
+  EthLib takes the per-key reading of step 4: it loads the entries of each imported key, and no others.
+  So the data of a keystore that is a duplicate is not loaded either.
+  Loading more data would refuse more messages, so the other reading is not less safe.
+- What `duplicate` compares against: "already known to the keymanager", or "not currently active".
+  EthLib compares against the local keys only, so a remote key of the same public key does not make a keystore a duplicate.
+- Which public key identifies a keystore.
+  ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret and does not read the field.
+- Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
+- Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
+- For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -6322,6 +6354,9 @@ The churn limit of validators before Electra and the Phase 0 weak subjectivity p
 Both run only before Electra, where the type of the registry keeps it within the limit of the preset (`BeaconState.registryWithinLimit_of_lt`).
 There the count is below `2^64` (`length_getActiveValidatorIndices_lt`), so the conversion keeps its value (`toNat_length_getActiveValidatorIndices`) and agrees with the specification.
 The genesis validity check, fork choice, gossip and the honest-validator duties call the pure list directly, and keep the difference.
+
+The Keymanager API has no official vectors, and its source leaves points open.
+EthLib takes a reading for each, listed under Keymanager API, until the implementers of the API answer.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
@@ -6646,12 +6681,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 525 operations and 51 size constants.
-The Python extension calls 525 of the operations and 51 of the constants.
+Lean exports 526 operations and 51 size constants.
+The Python extension calls 526 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11804 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2596), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
+11818 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1591), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (825), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

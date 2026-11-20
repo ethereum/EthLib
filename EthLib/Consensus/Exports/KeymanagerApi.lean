@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
-public import EthLib.Consensus.KeymanagerApi.Types
+public import EthLib.Consensus.KeymanagerApi.Server
 
 /-!
 # `Exports.KeymanagerApi`
@@ -13,6 +13,10 @@ A value is named by its schema in the source, and travels as a Python value: str
 A value that does not read has the code of its error.
 
 A name that the source does not give a schema has code 0.
+
+Calls run one after another on a validator client that starts with no key and a given record.
+
+A call is named by its method and its path; one that the API lacks gets HTTP 404.
 -/
 
 public section
@@ -67,5 +71,40 @@ The arguments are the name of the schema in the source, such as `Pubkey`, and th
 Hex is written in lowercase, and a document held as text is printed in compact form. -/
 @[export eth_consensus_keymanager_json]
 def keymanagerJsonExport (args : PyValue) : Result PyValue := pyExport keymanagerJsonOf args
+
+/-! ## Calls on a validator client -/
+
+/-- The state of a client as the export gives it: its record as JSON text and its keys. -/
+def keyStateJson (state : KeyState) : Json :=
+  Json.mkObj [
+    ("slashing_protection", slashingProtectionJson toolchainJsonText state.protection),
+    ("local_keys", .arr (state.localKeys.map fun key =>
+      Interchange.bytesJson key.pubkey).toArray)]
+
+/-- The responses of calls made one after another on a client, then its state. -/
+def keymanagerRunOf (args : Nat × Nat × String × List (String × String × PyValue)) :
+    Result (List (Nat × PyValue) × PyValue) := do
+  let (memory, work, protection, calls) := args
+  let config : ClientConfig := { limits := { memory, work } }
+  let record ← runKeymanager
+    (readSlashingProtection toolchainJsonText "" (.str protection))
+  let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
+  let (responses, state) := calls.foldl (init := ([], start)) fun (responses, state) call =>
+    let (method, path, body) := call
+    let (response, state) := handle toolchainJsonText config state method path body.toJson
+    ((response.status, PyValue.ofJson response.body) :: responses, state)
+  return (responses.reverse, PyValue.ofJson (keyStateJson state))
+
+/-- The responses of calls made one after another on a validator client, then its state.
+
+The arguments are the memory and work bounds of key derivation, and the record as JSON text.
+
+The calls follow, each its method, its path and its body.
+
+The client starts with no key, and each call sees the state that the one before it left.
+
+The result gives the status code and body of each response, then the record and the keys held. -/
+@[export eth_consensus_keymanager_run]
+def keymanagerRunExport (args : PyValue) : Result PyValue := pyExport keymanagerRunOf args
 
 end EthLib.Consensus.Exports

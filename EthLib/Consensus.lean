@@ -91,6 +91,9 @@ public import EthLib.Consensus.HonestAggregation
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.HonestProposer
 public import EthLib.Consensus.InclusionListCommittee
+public import EthLib.Consensus.KeymanagerApi.Client
+public import EthLib.Consensus.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.KeymanagerApi.Server
 public import EthLib.Consensus.KeymanagerApi.Types
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.LightClient.Branch

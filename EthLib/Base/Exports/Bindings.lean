@@ -1037,6 +1037,10 @@ def bindings : List Binding := [
   ⟨"consensus_keymanager_json", `EthLib.Consensus.Exports.keymanagerJsonExport,
     "(schema: str, document: Any) -> Any",
     [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
+  ⟨"consensus_keymanager_run", `EthLib.Consensus.Exports.keymanagerRunExport,
+    "(memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]) -> " ++
+      "tuple[list[tuple[int, Any]], dict[str, Any]]",
+    [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_is_execution_block", `EthLib.Consensus.Exports.isExecutionBlockExport,
     "(name: str, fork: str, block: bytes) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,

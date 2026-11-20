@@ -462,6 +462,7 @@ PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_validators (PyObject* self, PyObject* args);
 PyObject* py_consensus_keymanager_json (PyObject* self, PyObject* args);
+PyObject* py_consensus_keymanager_run (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_received_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_keeps (PyObject* self, PyObject* args);
