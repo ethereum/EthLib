@@ -15347,6 +15347,13 @@ private theorem effective_le_foldl_max {x y : ForkedBeaconState preset}
   rw [List.foldl_max_eq_max (List.ne_nil_of_mem mapped)]
   exact Nat.le_trans (List.le_max_of_mem mapped) (Nat.le_max_right _ _)
 
+/-- A key's slashing slack and the downward band fit an increment. -/
+private theorem slashW_add_downwardBand_le
+    (h : Setting config checks g split fin pulled anc counted V) (i : ℕ) :
+    slashW (pinTerms config pulled anc fin) i + preset.downwardBand ≤
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  unfold slashW; split <;> first | exact h.facts.slashBand | simpa using h.facts.below.le
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a cut key at the split is bounded from an anchor state of R's run that holds it.
 
@@ -15524,8 +15531,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
     omega
   have bandSlash : W + preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     rw [hWdef]
-    unfold slashW
-    split <;> first | exact h.facts.slashBand | simpa using h.facts.below.le
+    exact slashW_add_downwardBand_le h v.toNat
   obtain ⟨s, hs⟩ : ∃ s, s = syncD eventsF v.toNat + syncD events v.toNat := ⟨_, rfl⟩
   rw [← hind, ← hs]
   by_cases kept : (pinTerms config pulled anc fin).keptArm v.toNat = true
@@ -15674,11 +15680,7 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
   have notWithdrawn : (pinTerms config pulled anc fin).withdrawnRB v.toNat = false := by
     simp only [pinTerms, foundP, Option.any_some, decide_eq_false_iff_not]
     omega
-  have hWdb : slashW (pinTerms config pulled anc fin) v.toNat + preset.downwardBand ≤
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    unfold slashW
-    rw [ite_eq_left rb]
-    exact h.facts.slashBand
+  have hWdb := slashW_add_downwardBand_le h v.toNat
   have hW : slashW (pinTerms config pulled anc fin) v.toNat <
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     have := h.facts.bandLow
@@ -17337,15 +17339,10 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   · have stays := same (by omega)
     omega
 
-/-- Off the high gain rate, the depth of the window is small against the rate.
-
-It is below an eleventh of an increment.
-
-It is the rate premise of `created_ceiling` and `created_key_ceiling`. -/
-private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc counted V)
+/-- Off the high gain rate, the full window's weighted gain is below an increment. -/
+private theorem wide_of_lowGain (h : Setting config checks g split fin pulled anc counted V)
     (lowGain : (pinTerms config pulled anc fin).gainHigh = false) :
-    11 * (min (pinTerms config pulled anc fin).depth
-      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+    11 * (pinTerms config pulled anc fin).depth *
         ((pinTerms config pulled anc fin).perIncrement *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
@@ -17360,13 +17357,27 @@ private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
         (pinTerms config pulled anc fin).perIncrement *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
-  have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  exact rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
     WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
     (pinTerms config pulled anc fin).perIncrement
     preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat (pinTerms config pulled anc fin).depth
     h.bands.1 (by decide) (cap_values_aligned h.aligned).2 (by rw [← gainMax]; exact low)
+
+/-- Off the high gain rate, the depth of the window is small against the rate.
+
+It is below an eleventh of an increment.
+
+It is the rate premise of `created_ceiling` and `created_key_ceiling`. -/
+private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc counted V)
+    (lowGain : (pinTerms config pulled anc fin).gainHigh = false) :
+    11 * (min (pinTerms config pulled anc fin).depth
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+        ((pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+      WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   exact Nat.lt_of_le_of_lt
-    (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _))) wide
+    (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _)))
+    (wide_of_lowGain h lowGain)
 
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
@@ -18018,6 +18029,587 @@ private theorem created_band (h : Setting config checks g split fin pulled anc c
       omega
     · exact absurd cons consolidated
 
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key of `SC` that R neither slashes nor exits, and that is not active at C, is charged on C.
+
+An exit unset at the split is set by the key's slashing on C's run, which charges it.
+
+An exit set at the split belongs to a key activated by the split's epoch.
+
+If R slashes the key, its withdrawal is a vector past the split, so `slashedRB` holds.
+
+Otherwise its exit is after R's next epoch, or `exitedSlashable` counts it.
+
+An exit after R's next epoch leaves the key active at C. -/
+private theorem sc_inactive_charged (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {i : ℕ}
+    (member : i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size))
+    (notRB : ¬ (pinTerms config pulled anc fin).slashedRB i = true)
+    (notES : ¬ exitedSlashable anc pulled i = true)
+    (inactive : ¬ isActiveAt counted (getCurrentEpoch counted) i = true) :
+    ∃ c ∈ tailC.departureCharges, c.index = i := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
+  obtain ⟨-, unslashedS, slashedC⟩ := Finset.mem_filter.mp inSlashed
+  obtain ⟨u, foundS⟩ : ∃ u, split.validators.data[i]? = some u :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  have cleanU : u.slashed = false := by simpa [foundS] using unslashedS
+  obtain ⟨wc, foundC, lifeC⟩ := tailC.registryLifecycle.validators i u foundS
+  have markedC : wc.slashed = true := by simpa [foundC] using slashedC
+  by_cases unset : u.exitEpoch = FAR_FUTURE_EPOCH
+  · have assigned : wc.exitEpoch ≠ FAR_FUTURE_EPOCH :=
+      run_slashed_exit_assigned ((toFin.append fromFin).append tailC) h.genesis
+        h.caps.activation h.caps.compounding h.early h.delay i wc foundC markedC
+    obtain ⟨c, inRun, index, -⟩ :=
+      tailC.departure_charge_of_assigned i u wc foundS foundC unset assigned
+    exact ⟨c, inRun, index⟩
+  exfalso
+  obtain ⟨w, foundP, lifeP⟩ := tail.registryLifecycle.validators i u foundS
+  have exitP : w.exitEpoch = u.exitEpoch := lifeP.exitEpoch unset
+  have exitC : wc.exitEpoch = u.exitEpoch := lifeC.exitEpoch unset
+  have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  have belowS := getCurrentEpoch_succ_lt_farFuture h.twoSlots split
+  have activated : u.activationEpoch.toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp ((toFin.append fromFin).exit_activated h.genesis i u foundS unset)
+  have actAssigned : u.activationEpoch ≠ FAR_FUTURE_EPOCH := fun same => by
+    rw [same] at activated
+    omega
+  have actC : wc.activationEpoch = u.activationEpoch := lifeC.activationEpoch actAssigned
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have near := h.near
+  cases slashedP : w.slashed
+  · by_cases early : u.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1
+    · -- R keeps the key unslashed and exits it by its next epoch, so `exitedSlashable` counts it
+      apply notES
+      have delayS := (toFin.append fromFin).withdrawable_eq_exit_delay h.genesis i u foundS cleanU
+      have delayP := ((toFin.append fromFin).append tail).withdrawable_eq_exit_delay h.genesis i w
+        foundP slashedP
+      have unassigned : u.exitEpoch.toNat ≠ 2 ^ 64 - 1 := fun same =>
+        unset (UInt64.toNat_inj.mp (by rw [same, far]))
+      have positive := h.delay
+      have openS : (getCurrentEpoch split).toNat < u.withdrawableEpoch.toNat := by
+        by_cases exited : u.exitEpoch ≤ getCurrentEpoch split
+        · exact UInt64.lt_iff_toNat_lt.mp (tailC.newly_slashed_initial_exited_unwithdrawable
+            h.caps.activation h.caps.compounding h.early i u wc foundS foundC cleanU markedC exited)
+        · have later := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
+          rcases delayS with ⟨same, -⟩ | same
+          · exact absurd same unset
+          · omega
+      have wdP : w.withdrawableEpoch.toNat = u.withdrawableEpoch.toNat := by
+        rcases delayS with ⟨same, -⟩ | eqS
+        · exact absurd same unset
+        rcases delayP with ⟨same, -⟩ | eqP
+        · exact absurd (exitP ▸ same) unset
+        rw [eqS, eqP, exitP]
+      unfold exitedSlashable
+      simp only [foundP, Option.map_some, Option.getD_some, slashedP, Option.any_some, exitP,
+        decide_eq_true_eq, true_and]
+      omega
+    · -- its exit is after R's next epoch, so it is active at C
+      apply inactive
+      have splitC := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tailC.chainSteps)
+      refine isActiveAt_eq_true_iff.mpr ⟨wc, foundC, ?_⟩
+      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
+      constructor
+      · rw [actC]
+        exact UInt64.le_iff_toNat_le.mpr (by simp only at splitC; omega)
+      · rw [exitC]
+        exact UInt64.lt_iff_toNat_lt.mpr (by omega)
+  · -- R slashes the key after the split, so its withdrawal is a vector past the split
+    apply notRB
+    have delayed : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+        w.withdrawableEpoch.toNat :=
+      (tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding h.early h.delay
+        i u w foundS foundP cleanU slashedP).2
+    rw [slashedRB_eq]
+    simp only [foundP, Option.map_some, Option.getD_some, slashedP, Option.any_some,
+      decide_eq_true_eq, true_and]
+    omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key absent or unslashed at the finalized state is bounded from there or its creation.
+
+A key already in the split's registry needs its slashing withdrawal bound.
+
+A later key gets that bound from the state that first holds it. -/
+private theorem envelope_of_clean_fin (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (replayed : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events)
+    (v : ValidatorIndex) (inside : v.toNat < pulled.validators.data.size)
+    (cleanFin : ∀ u, fin.validators.data[v.toNat]? = some u → u.slashed = false)
+    (slashedLateSplit : v.toNat < split.validators.data.size →
+      ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
+        anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+          w.withdrawableEpoch.toNat)
+    (late : ∀ w, pulled.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) :
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
+      (pinTerms config pulled anc fin).ebUp v.toNat + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        ((syncD eventsF v.toNat + syncD events v.toNat +
+            slashW (pinTerms config pulled anc fin) v.toNat) /
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
+  intro z inPath
+  by_cases inFin : v.toNat < fin.validators.data.size
+  · have splitSize : v.toNat < split.validators.data.size :=
+      Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps fromFin.chainSteps)
+    exact envelope_of_voter h fromFin tail replayedF replayed v
+      (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) (fromFin.append tail)
+      (run_nil_append (fromFin.append tail)) cleanFin (slashedLateSplit splitSize) inFin
+      (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) (fun w fw clean' =>
+        late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw)) z inPath
+  · obtain ⟨c, toC, fromC, cutC, insideC, clean, before, floorStart, firstAfter⟩ :=
+      created_first_state h (fromFin.append tail) (by omega) inside
+    have slashedLate : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
+        anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+          w.withdrawableEpoch.toNat := by
+      by_cases inSplit : v.toNat < split.validators.data.size
+      · exact slashedLateSplit inSplit
+      · have after := firstAfter split fromFin tail rfl inSplit
+        have finalizedNat := UInt64.le_iff_toNat_le.mp h.finalized
+        exact slashed_withdrawable_of_clean h fromC v clean insideC
+          (UInt64.le_iff_toNat_le.mpr (by omega))
+    have envC := envelope_of_voter h fromFin tail replayedF replayed v toC fromC cutC clean
+      slashedLate insideC (Or.inr floorStart) (fun w fw clean' =>
+        late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw))
+    rw [← cutC, Run.balancePath_append] at inPath
+    rcases List.mem_append.mp inPath with onTo | onFrom
+    · rcases before z onTo with rfl | zero
+      · obtain ⟨rest, head⟩ := Run.balancePath_head fromC
+        exact envC _ (by rw [head]; exact List.mem_cons_self)
+      · rw [zero]
+        exact Nat.zero_le _
+    · exact envC z (List.mem_of_mem_tail onFrom)
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key of the split's registry, unslashed there, induces a leak on R's run only with a debit.
+
+Its envelope on R's run is `ebUp` with its debits and its penalty in whole increments.
+
+The penalty is below an increment.
+
+So a key without a sync debit stays within `ebUp`, and induces no leak. -/
+private theorem induced_debited (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    {i : ℕ} (inside : i < split.validators.data.size)
+    (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
+    (positive : 0 < inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i) :
+    0 < syncD eventsF i + syncD events i := by
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
+    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayed
+  by_contra none
+  have zero : syncD eventsF i + syncD events i = 0 := by omega
+  by_cases late : ∀ w, pulled.validators.data[i]? = some w →
+      (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat
+  swap
+  · obtain ⟨w, found, notLate⟩ : ∃ w, pulled.validators.data[i]? = some w ∧
+        w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
+      by_contra no
+      exact late fun w found => by
+        by_contra notLate
+        exact no ⟨w, found, by omega⟩
+    rw [inducedR_of_withdrawn _ _ _ (withdrawnRB_of_le config pulled anc fin found notLate)]
+      at positive
+    exact Nat.lt_irrefl 0 positive
+  have limit := BeaconState.registryWithinLimit_of_lt h.early split
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+  have cleanSplit : ∀ u, split.validators.data[v.toNat]? = some u → u.slashed = false :=
+    fun u foundU => by
+      rw [foundU] at unslashed
+      simpa using unslashed
+  have envelope := envelope_of_clean_fin h fromFin tail replayedF' replayed' v
+    (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps tail.chainSteps))
+    (fun u foundU => unslashed_of_run fromFin foundU cleanSplit)
+    (fun splitSize => slashed_withdrawable_of_clean h tail v cleanSplit splitSize h.finalized) late
+  have hWdb := slashW_add_downwardBand_le h v.toNat
+  have bandLow := h.facts.bandLow
+  have incBig := h.facts.incrementSize
+  have hW : slashW (pinTerms config pulled anc fin) v.toNat <
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by omega
+  have perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement := by
+    have := four_le_perIncrement h
+    omega
+  have bound := inducedR_le config pulled anc fin h.bands.1 perPos (fromFin.append tail) v.toNat
+    0 0 (Nat.zero_le _) fun z inPath => by
+      have within := envelope z inPath
+      rw [zero, Nat.zero_add, Nat.div_eq_of_lt hW] at within
+      simpa using within
+  simp at bound
+  omega
+
+/-- The deposits of `depPre` are among the deposits of the events. -/
+private theorem depPre_le_deposits (L : List (BalanceEvent preset)) (i : ℕ) :
+    depPre L i ≤ ((L.filter fun e => e.source = .deposits).map (keyCredit i)).sum := by
+  induction L with
+  | nil => simp [depPre]
+  | cons e rest ih =>
+    unfold depPre at ih ⊢
+    by_cases dep : e.source = .deposits
+    · by_cases slashed : slashedFlagAt e.before.state i = some true <;>
+        simp [dep, slashed] at ih ⊢ <;> omega
+    · simp [dep] at ih ⊢
+      omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key credited by a consolidation from the split, or on the shared segment, has a due entry.
+
+The entry is in the queue of the finalized state, so the key has its band. -/
+private theorem band_of_consolidation (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    {ending : BeaconState preset fork}
+    (run : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch ending).toNat ≤ high + 1)
+    (near : (getCurrentEpoch ending).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {events : List (BalanceEvent preset)} (replayed : run.balanceEvents high = .ok events)
+    {i : ℕ} (small : i < 2 ^ 64) (credited : 0 < consAmt eventsF i + consAmt events i) :
+    preset.upwardBand ≤ bandX fin high i := by
+  by_contra low
+  have none : dueAt fin high {(UInt64.ofNat i : ValidatorIndex)} = 0 := by
+    unfold bandX at low
+    by_contra pos
+    exact low (Nat.le_mul_of_pos_right _ (Nat.pos_of_ne_zero pos))
+  have zero := consAmt_zero h fromFin replayedF run high endEpoch near replayed _ none
+  rw [UInt64.toNat_ofNat_of_lt' small] at zero
+  omega
+
+/-- Ten quotients times three ceilings of a slack are zero, or within thirty slacks and quotients.
+-/
+private theorem ceil_round (X Q : ℕ) (pos : 0 < Q) :
+    10 * Q * (3 * ((X + Q - 1) / Q)) = 0 ∨
+      (0 < X ∧ 10 * Q * (3 * ((X + Q - 1) / Q)) ≤ 30 * X + 30 * Q - 30) := by
+  rcases Nat.eq_zero_or_pos X with rfl | positive
+  · left
+    rw [Nat.zero_add, Nat.div_eq_of_lt (by omega)]
+    simp
+  · right
+    refine ⟨positive, ?_⟩
+    have floor := Nat.div_mul_le_self (X + Q - 1) Q
+    have e : 10 * Q * (3 * ((X + Q - 1) / Q)) = 30 * ((X + Q - 1) / Q * Q) := by ring
+    rw [e]
+    omega
+
+/-- Thirty-three of an amount is within ten quotients of its share. -/
+private theorem share_ge (pos : 0 < (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
+    (x : ℕ) :
+    33 * x ≤ 10 * (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat *
+      wShare preset fork x := by
+  unfold wShare
+  generalize (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat = Q at pos ⊢
+  have split := Nat.div_add_mod (33 * x + 10 * Q - 1) (10 * Q)
+  have small := Nat.mod_lt (33 * x + 10 * Q - 1) (show 0 < 10 * Q by omega)
+  omega
+
+/-- A key's credits on C's run have their gross scan and their credit or consolidation band. -/
+private theorem credit_band_bounds (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
+    (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {i : ℕ} (small : i < 2 ^ 64) :
+    propN tailC highC i ≤ grossScan i highC tailC ∧
+      whistC tailC highC i ≤ grossScan i highC tailC ∧
+      (syncCr eventsC i = 0 ∨ 0 < grossScan i highC tailC) ∧
+      ((0 < grossScan i highC tailC + (creditScan (fun _ => false)
+          (fun s => decide (s = .deposits)) i highC tailC).1 ∧
+          bandC tailC highC i = preset.upwardBand) ∨
+        (grossScan i highC tailC + (creditScan (fun _ => false)
+          (fun s => decide (s = .deposits)) i highC tailC).1 = 0 ∧ bandC tailC highC i = 0)) ∧
+      (consAmt eventsC i = 0 ∨ preset.upwardBand ≤ bandX fin highC i) := by
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · exact scan_le_gross tailC highC i (fun s => decide (s = .rewards))
+      fun s h => by simp at h; simp [h]
+  · exact scan_le_gross tailC highC i (fun s => decide (s = .slashings))
+      fun s h => by simp at h; simp [h]
+  · rcases Nat.eq_zero_or_pos (syncCr eventsC i) with none | positive
+    · exact .inl none
+    · exact .inr (syncCr_gross h tailC highC replayedC i positive)
+  · unfold bandC
+    split_ifs <;> omega
+  · rcases Nat.eq_zero_or_pos (consAmt eventsC i) with none | positive
+    · exact .inl none
+    · exact .inr (band_of_consolidation h fromFin replayedF tailC highC endEpochC h.near replayedC
+        small (by omega))
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The rounding of one key of `SC` is within its shares and bands, at ten quotients.
+
+The slack's credits pay at eleven tenths of three, the shares' rate.
+
+A nonzero slack has an unscaled band of at least four, which pays the rounding of its floor.
+
+A credit of C's run or of the shared segment has its credit, consolidation or seat band.
+
+An induced leak has a sync debit, and so its seat band.
+
+A slashing on R's branch has the key's unit.
+
+The credits of `pre` of a charged key have its upward band. -/
+private theorem sc_key_round (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {b : BeaconState preset fork} (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (eventsP : List (BalanceEvent preset)) (Q : ℕ)
+    (hQ : Q = (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) {i : ℕ}
+    (member : i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size)) :
+    10 * Q * (3 * ((whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC
+        high eventsC eventsF events fin i +
+      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        propN pre highC i + whistC pre highC i + syncCr eventsP i else 0) + Q - 1) / Q)) ≤
+      33 * propN tailC highC i + 33 * depPre eventsC i + 33 * syncCr eventsC i +
+        33 * consAmt eventsC i + 33 * syncD eventsF i + 33 * syncD events i +
+        30 * (Q * whistC tailC highC i) + 10 * (Q * bandC tailC highC i) +
+        10 * (Q * bandX fin highC i) +
+        33 * (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          syncCr eventsF i else 0) +
+        33 * (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          consAmt eventsF i else 0) +
+        10 * (Q * (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          bandX fin high i else 0)) +
+        10 * (Q * (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
+          inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
+          bandR (eventsF ++ events) i +
+          if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+            (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0)) +
+        33 * propN pre highC i + 10 * (Q * syncCr eventsP i) +
+        30 * (Q * (if ∃ c ∈ tailC.departureCharges, c.index = i then whistC pre highC i else 0)) +
+        10 * (Q * (if ∃ c ∈ tailC.departureCharges, c.index = i then
+          (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+            preset.upwardBand else 0) else 0)) := by
+  have quotient : 30 ≤ Q := hQ ▸ h.facts.whistleblower fork
+  have up := h.bands.2
+  have incBig := h.facts.incrementSize
+  have unit : 4 ≤ (pinTerms config pulled anc fin).unitGain := by
+    have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+    have called := UInt64.le_iff_toNat_le.mp h.called
+    have depth : (pinTerms config pulled anc fin).depth =
+        (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+    have unitEq : (pinTerms config pulled anc fin).unitGain =
+        (pinTerms config pulled anc fin).depth * ((pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) := rfl
+    have product := Nat.mul_le_mul (show 2 ≤ (pinTerms config pulled anc fin).depth by omega)
+      (Nat.le_add_left 2 ((pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat))
+    omega
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
+  obtain ⟨-, unslashedS, -⟩ := Finset.mem_filter.mp inSlashed
+  have limit := BeaconState.registryWithinLimit_of_lt h.early split
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have small : i < 2 ^ 64 := by omega
+  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
+    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  -- the credits that the slack reads, and the bands that they bring
+  obtain ⟨grossP, grossW, grossS, hbC, consBand⟩ :=
+    credit_band_bounds h fromFin replayedF' tailC highC endEpochC replayedC small
+  obtain ⟨-, credits⟩ := PinSplit.creditScan_bounds ∅ (fun _ => false)
+    (fun s => decide (s = .deposits)) highC (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
+  have dep := credits (fun s => decide (s = .deposits))
+    (Or.inr fun electra early replayed i => PinSplit5.block_deposit_zero electra early replayed i)
+    (Or.inl fun _ covered => covered) electra h.early i
+  have deposits := (depPre_le_deposits eventsC i).trans dep
+  have bandXZero : ∀ hh, bandX fin hh i = 0 ∨ preset.upwardBand ≤ bandX fin hh i := by
+    intro hh
+    unfold bandX
+    rcases Nat.eq_zero_or_pos (dueAt fin hh {(UInt64.ofNat i : ValidatorIndex)}) with zero | pos
+    · exact .inl (by rw [zero, Nat.mul_zero])
+    · exact .inr (Nat.le_mul_of_pos_right _ pos)
+  have hbX : (bandX fin highC i = 0 ∧ consAmt eventsC i = 0) ∨
+      preset.upwardBand ≤ bandX fin highC i := by
+    rcases bandXZero highC with zero | big
+    · rcases consBand with none | big
+      · exact .inl ⟨zero, none⟩
+      · exact .inr big
+    · exact .inr big
+  have hbXh : (bandX fin high i = 0 ∧ consAmt eventsF i = 0) ∨
+      preset.upwardBand ≤ bandX fin high i := by
+    rcases bandXZero high with zero | big
+    · rcases Nat.eq_zero_or_pos (consAmt eventsF i) with none | pos
+      · exact .inl ⟨zero, none⟩
+      · exact .inr (band_of_consolidation h fromFin replayedF' tail high endEpoch (by omega)
+          replayed small (by omega))
+    · exact .inr big
+  have hbR : (syncD eventsF i + syncD events i = 0 ∧ bandR (eventsF ++ events) i = 0 ∧
+        inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i = 0) ∨
+      bandR (eventsF ++ events) i =
+        preset.EFFECTIVE_BALANCE_INCREMENT.toNat + preset.downwardBand - 1 := by
+    have induced : inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i = 0 ∨
+        0 < syncD eventsF i + syncD events i := by
+      rcases Nat.eq_zero_or_pos
+          (inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i) with zero | pos
+      · exact .inl zero
+      · exact .inr (induced_debited h tail high endEpoch replayed fromFin replayedF inside
+          unslashedS pos)
+    rw [bandR_eq]
+    simp only [List.map_append, List.sum_append]
+    unfold syncD at induced ⊢
+    split_ifs <;> omega
+  have huK : (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i = 0 ∧
+        (if 0 < slashW (pinTerms config pulled anc fin) i then
+          (pinTerms config pulled anc fin).unitGain else 0) = 0) ∨
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i =
+        (pinTerms config pulled anc fin).unitGain := by
+    unfold unitK flowCredit
+    split_ifs <;> omega
+  have hSW : (if 0 < slashW (pinTerms config pulled anc fin) i then
+        (pinTerms config pulled anc fin).unitGain else 0) ≤
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i := by
+    unfold unitK flowCredit
+    split_ifs <;> omega
+  have huSF : (syncCr eventsF i = 0 ∧
+        (if 0 < syncCr eventsF i then preset.upwardBand else 0) = 0) ∨
+      (if 0 < syncCr eventsF i then preset.upwardBand else 0) = preset.upwardBand := by
+    split_ifs <;> omega
+  have hb5 : (propN pre highC i + whistC pre highC i + syncCr eventsP i = 0 ∧
+        (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+          preset.upwardBand else 0) = 0) ∨
+      (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+        preset.upwardBand else 0) = preset.upwardBand := by
+    split_ifs <;> omega
+  -- the terms of a key that exited by the finalized state
+  have hE : ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          syncCr eventsF i else 0) = syncCr eventsF i ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          consAmt eventsF i else 0) = consAmt eventsF i ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          bandX fin high i else 0) = bandX fin high i ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) =
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i +
+            (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) =
+          (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i +
+            (if 0 < syncCr eventsF i then preset.upwardBand else 0)) ∨
+      ((if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          syncCr eventsF i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          consAmt eventsF i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          bandX fin high i else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) = 0 ∧
+        (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i +
+            (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) = 0) := by
+    by_cases e : (pinTerms config pulled anc fin).exitBeforeFin i = true
+    · left
+      simp only [e, ↓reduceIte, and_self]
+    · right
+      simp only [e, Bool.false_eq_true, ↓reduceIte, and_self]
+  -- the terms of a key not active at C that R neither slashes nor exits, which is charged
+  have hD : ((if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        propN pre highC i + whistC pre highC i + syncCr eventsP i else 0) =
+          propN pre highC i + whistC pre highC i + syncCr eventsP i ∧
+        (if ∃ c ∈ tailC.departureCharges, c.index = i then whistC pre highC i else 0) =
+          whistC pre highC i ∧
+        (if ∃ c ∈ tailC.departureCharges, c.index = i then
+          (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+            preset.upwardBand else 0) else 0) =
+          (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+            preset.upwardBand else 0)) ∨
+      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        propN pre highC i + whistC pre highC i + syncCr eventsP i else 0) = 0 := by
+    by_cases d : ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ exitedSlashable anc pulled i = true ∧
+        ¬ isActiveAt counted (getCurrentEpoch counted) i = true
+    · have charged := sc_inactive_charged h fromFin tail tailC member d.1 d.2.1 d.2.2
+      exact .inl ⟨ite_eq_left d, ite_eq_left charged, ite_eq_left charged⟩
+    · exact .inr (ite_eq_right d)
+  -- the products by the quotient
+  have pWT := Nat.mul_le_mul_right (whistC tailC highC i) (show 2 ≤ Q by omega)
+  have pSP := Nat.mul_le_mul_right (syncCr eventsP i) (show 3 ≤ Q by omega)
+  have pWP := Nat.mul_le_mul_right
+    (if ∃ c ∈ tailC.departureCharges, c.index = i then whistC pre highC i else 0)
+    (show 3 ≤ Q by omega)
+  obtain ⟨SB, hSB⟩ : ∃ SB, SB = bandC tailC highC i + bandX fin highC i +
+      (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
+        inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
+        bandR (eventsF ++ events) i +
+        if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) +
+      (if (pinTerms config pulled anc fin).exitBeforeFin i = true then bandX fin high i else 0) +
+      (if ∃ c ∈ tailC.departureCharges, c.index = i then
+        (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+          preset.upwardBand else 0) else 0) := ⟨_, rfl⟩
+  have hQSB : Q * bandC tailC highC i + Q * bandX fin highC i +
+      Q * (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
+        inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
+        bandR (eventsF ++ events) i +
+        if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) +
+      Q * (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+        bandX fin high i else 0) +
+      Q * (if ∃ c ∈ tailC.departureCharges, c.index = i then
+        (if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+          preset.upwardBand else 0) else 0) = Q * SB := by
+    rw [hSB]
+    ring
+  have pSB := Nat.mul_le_mul_right SB quotient
+  -- the slack is zero, or it has a band of at least four
+  have hc := ceil_round (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail)
+    highC high eventsC eventsF events fin i +
+    (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ exitedSlashable anc pulled i = true ∧
+        ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+      propN pre highC i + whistC pre highC i + syncCr eventsP i else 0)) Q (by omega)
+  unfold whistleSlack whistleSlackBase at hc ⊢
+  have big : (11 * (propN tailC highC i + depPre eventsC i + whistC tailC highC i +
+        syncCr eventsC i + consAmt eventsC i + syncD eventsF i + syncD events i) + 9) / 10 +
+      bandC tailC highC i + bandX fin highC i + bandR (eventsF ++ events) i +
+      unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF i +
+      inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
+      (if 0 < slashW (pinTerms config pulled anc fin) i then
+        (pinTerms config pulled anc fin).unitGain else 0) +
+      (if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+        (11 * (syncCr eventsF i + consAmt eventsF i) + 9) / 10 + bandX fin high i +
+          (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0) +
+      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        propN pre highC i + whistC pre highC i + syncCr eventsP i else 0) = 0 ∨ 4 ≤ SB := by
+    omega
+  rcases big with zero | four
+  · omega
+  · have pFour := Nat.mul_le_mul_left Q four
+    omega
+
 /-- (W-S, the keys of `SC`) The slack and the rounding of their rewards are paid by their shares.
 
 A key of the split's registry is read at its bound and the slack that `registry` adds.
@@ -18112,8 +18704,232 @@ private theorem whistle_slack_sc (h : Setting config checks g split fin pulled a
         3 * (∑ v ∈ scCharged pulled counted split tailC, whistC pre highC v.toNat) +
         (∑ v ∈ scCharged pulled counted split tailC,
           if 0 < propN pre highC v.toNat + whistC pre highC v.toNat + syncCr eventsP v.toNat then
-            preset.upwardBand else 0) :=
-  sorry
+            preset.upwardBand else 0) := by
+  have quotient := h.facts.whistleblower fork
+  have pos : 0 < (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by omega
+  -- each key is read at its group's bound, with the ceiling of its slack
+  obtain ⟨base, hbase⟩ : ∃ base : ℕ → ℕ, ∀ i, base i =
+      if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        (chargeAmt tailC i + riseQ tailC highC i) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+      else whistleEnv (pinTerms config pulled anc fin) pulled anc fin i /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := ⟨_, fun _ => rfl⟩
+  obtain ⟨X, hX⟩ : ∃ X : ℕ → ℕ, ∀ i, X i =
+      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high eventsC
+        eventsF events fin i +
+      (if ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true ∧
+          ¬ isActiveAt counted (getCurrentEpoch counted) i = true then
+        propN pre highC i + whistC pre highC i + syncCr eventsP i else 0) := ⟨_, fun _ => rfl⟩
+  have floorKey : ∀ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      3 * (min (whistleRead (pinTerms config pulled anc fin) pulled anc counted tailC
+          (fromFin.append tail) pre highC high eventsC eventsF events eventsP fin i)
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
+      3 * base i + 3 * ((X i + (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
+        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) := by
+    intro i member
+    rw [hbase, hX]
+    by_cases hD : ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ exitedSlashable anc pulled i = true ∧
+        ¬ isActiveAt counted (getCurrentEpoch counted) i = true
+    · -- the key is charged, and read at its charge
+      obtain ⟨c, inRun, index⟩ := sc_inactive_charged h fromFin tail tailC member hD.1 hD.2.1 hD.2.2
+      have any : (tailC.departureCharges.any fun c => c.index == i) = true :=
+        List.any_eq_true.mpr ⟨c, inRun, by simp [index]⟩
+      have read : whistleRead (pinTerms config pulled anc fin) pulled anc counted tailC
+          (fromFin.append tail) pre highC high eventsC eventsF events eventsP fin i ≤
+          (chargeAmt tailC i + riseQ tailC highC i) +
+            (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+              eventsC eventsF events fin i +
+              (propN pre highC i + whistC pre highC i + syncCr eventsP i)) := by
+        unfold whistleRead
+        rw [ite_eq_left ⟨hD.2.2, any⟩]
+        exact (min_le_right _ _).trans (by omega)
+      rw [ite_eq_left hD, ite_eq_left hD]
+      have down := Nat.div_le_div_right
+        (c := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
+        ((min_le_left _ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat).trans read)
+      have split := floor_add_ceil_le (chargeAmt tailC i + riseQ tailC highC i)
+        (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+          eventsC eventsF events fin i +
+          (propN pre highC i + whistC pre highC i + syncCr eventsP i)) _ pos
+      omega
+    · -- the key is read at its bound and its slack
+      have read : whistleRead (pinTerms config pulled anc fin) pulled anc counted tailC
+          (fromFin.append tail) pre highC high eventsC eventsF events eventsP fin i ≤
+          whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
+            whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+              eventsC eventsF events fin i := by
+        unfold whistleRead
+        split
+        · exact min_le_left _ _
+        · exact le_rfl
+      rw [ite_eq_right hD, ite_eq_right hD, Nat.add_zero]
+      have down := Nat.div_le_div_right
+        (c := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
+        ((min_le_left _ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat).trans read)
+      have split := floor_add_ceil_le (whistleEnv (pinTerms config pulled anc fin) pulled anc fin i)
+        (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+          eventsC eventsF events fin i) _ pos
+      omega
+  have floors := Finset.sum_le_sum floorKey
+  rw [Finset.sum_add_distrib, ← Finset.mul_sum, ← Finset.mul_sum, ← Finset.mul_sum] at floors
+  -- the bounds of the keys are the sums of the groups
+  have apart : ∀ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      (pinTerms config pulled anc fin).slashedRB i = true →
+        ¬ exitedSlashable anc pulled i = true := by
+    intro i _ rb es
+    rw [slashedRB_eq] at rb
+    unfold exitedSlashable at es
+    cases f : pulled.validators.data[i]? with
+    | none => simp [f] at rb
+    | some w => simp [f] at rb es; simp [rb.1] at es
+  have splitThree : ∀ (S : Finset ℕ) (p q : ℕ → Prop) [DecidablePred p] [DecidablePred q],
+      (∀ i ∈ S, p i → ¬ q i) → ∀ f : ℕ → ℕ, ∑ i ∈ S, f i = ∑ i ∈ S.filter p, f i +
+        ∑ i ∈ S.filter q, f i + ∑ i ∈ S.filter (fun i => ¬ p i ∧ ¬ q i), f i := by
+    intro S p q _ _ disjoint f
+    rw [← Finset.sum_filter_add_sum_filter_not S p, add_assoc]
+    congr 1
+    rw [← Finset.sum_filter_add_sum_filter_not (S.filter (fun i => ¬ p i)) q, Finset.filter_filter,
+      Finset.filter_filter]
+    congr 1
+    refine Finset.sum_congr ?_ fun _ _ => rfl
+    ext i
+    simp only [Finset.mem_filter]
+    constructor
+    · rintro ⟨hi, -, hq⟩
+      exact ⟨hi, hq⟩
+    · rintro ⟨hi, hq⟩
+      exact ⟨hi, fun hp => disjoint i hi hp hq, hq⟩
+  have three := splitThree
+    ((slashedOnC split counted).filter (fun i => i < split.validators.data.size))
+    (fun i => (pinTerms config pulled anc fin).slashedRB i = true)
+    (fun i => exitedSlashable anc pulled i = true) apart base
+  have g1 : ∑ i ∈ ((slashedOnC split counted).filter
+      (fun i => i < split.validators.data.size)).filter
+        (fun i => (pinTerms config pulled anc fin).slashedRB i = true), base i =
+      ∑ i ∈ ((slashedOnC split counted).filter
+        (fun i => i < split.validators.data.size)).filter
+          (fun i => (pinTerms config pulled anc fin).slashedRB i = true),
+        whistleEnv (pinTerms config pulled anc fin) pulled anc fin i /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
+    Finset.sum_congr rfl fun i m => by
+      rw [hbase, ite_eq_right fun hD => hD.1 (Finset.mem_filter.mp m).2]
+  have g2 : ∑ i ∈ ((slashedOnC split counted).filter
+      (fun i => i < split.validators.data.size)).filter
+        (fun i => exitedSlashable anc pulled i = true), base i =
+      ∑ i ∈ ((slashedOnC split counted).filter
+        (fun i => i < split.validators.data.size)).filter
+          (fun i => exitedSlashable anc pulled i = true),
+        whistleEnv (pinTerms config pulled anc fin) pulled anc fin i /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
+    Finset.sum_congr rfl fun i m => by
+      rw [hbase, ite_eq_right fun hD => hD.2.1 (Finset.mem_filter.mp m).2]
+  have y := (Finset.sum_filter_add_sum_filter_not (((slashedOnC split counted).filter
+    (fun i => i < split.validators.data.size)).filter
+      (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ exitedSlashable anc pulled i = true))
+    (fun i => isActiveAt counted (getCurrentEpoch counted) i = true) base).symm
+  have g3 := Finset.sum_congr rfl fun i (m : i ∈ (((slashedOnC split counted).filter
+      (fun i => i < split.validators.data.size)).filter
+        (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true)).filter
+      (fun i => isActiveAt counted (getCurrentEpoch counted) i = true)) => show base i =
+        whistleEnv (pinTerms config pulled anc fin) pulled anc fin i /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat by
+      rw [hbase, ite_eq_right fun hD => hD.2.2 (Finset.mem_filter.mp m).2]
+  have g4 := Finset.sum_congr rfl fun i (m : i ∈ (((slashedOnC split counted).filter
+      (fun i => i < split.validators.data.size)).filter
+        (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+          ¬ exitedSlashable anc pulled i = true)).filter
+      (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true)) => show base i =
+        (chargeAmt tailC i + riseQ tailC highC i) /
+          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat by
+      obtain ⟨inY, inactive⟩ := Finset.mem_filter.mp m
+      obtain ⟨-, both⟩ := Finset.mem_filter.mp inY
+      rw [hbase, ite_eq_left ⟨both.1, both.2, inactive⟩]
+  have g5 := (Finset.sum_filter_add_sum_filter_not ((((slashedOnC split counted).filter
+    (fun i => i < split.validators.data.size)).filter
+      (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
+        ¬ exitedSlashable anc pulled i = true)).filter
+      (fun i => isActiveAt counted (getCurrentEpoch counted) i = true))
+    (fun i => (pinTerms config pulled anc fin).tight = false ∧
+      ((pinTerms config pulled anc fin).lateB i = true ∨
+        (pinTerms config pulled anc fin).pendingRB i = true))
+    (fun i => whistleEnv (pinTerms config pulled anc fin) pulled anc fin i /
+      (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)).symm
+  have part := congrArg
+    (fun x => 10 * (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat * (3 * x))
+    ((three.trans (by rw [g1, g2, y, g3, g4, g5])) : _ = _)
+  -- the rounding of the keys is within the shares and bands
+  have rounds := Finset.sum_le_sum fun i (m : i ∈ (slashedOnC split counted).filter
+      (fun i => i < split.validators.data.size)) => by
+    have one := sc_key_round h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
+      replayedC pre eventsP _ rfl m
+    rw [← hX i] at one
+    exact one
+  simp only [Finset.sum_add_distrib, ← Finset.mul_sum] at rounds
+  -- the sums over `SC` are sums over the positions
+  have fEBF (f : ℕ → ℕ) : ∑ v ∈ SC pulled counted split with
+      (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true, f v.toNat =
+      ∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+        if (pinTerms config pulled anc fin).exitBeforeFin i = true then f i else 0 :=
+    (sum_SC_filter_positions h (fun i => (pinTerms config pulled anc fin).exitBeforeFin i = true)
+      f).trans (Finset.sum_filter _ _)
+  have fCharged (f : ℕ → ℕ) : ∑ v ∈ scCharged pulled counted split tailC, f v.toNat =
+      ∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+        if ∃ c ∈ tailC.departureCharges, c.index = i then f i else 0 :=
+    (sum_SC_filter_positions h (fun i => ∃ c ∈ tailC.departureCharges, c.index = i) f).trans
+      (Finset.sum_filter _ _)
+  rw [fEBF (fun i => syncCr eventsF i), fEBF (fun i => consAmt eventsF i),
+    fEBF (fun i => bandX fin high i), fCharged (fun i => whistC pre highC i),
+    fCharged (fun i => if 0 < propN pre highC i + whistC pre highC i + syncCr eventsP i then
+      preset.upwardBand else 0),
+    sum_SC_positions h (fun i => propN tailC highC i),
+    sum_SC_positions h (fun i => depPre eventsC i),
+    sum_SC_positions h (fun i => syncCr eventsC i), sum_SC_positions h (fun i => consAmt eventsC i),
+    sum_SC_positions h (fun i => syncD eventsF i + syncD events i),
+    sum_SC_positions h (fun i => bandC tailC highC i),
+    sum_SC_positions h (fun i => bandX fin highC i),
+    sum_SC_positions h (fun i => unitK (pinTerms config pulled anc fin) tailC highC eventsC events
+      eventsF i + inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i +
+      bandR (eventsF ++ events) i + if (pinTerms config pulled anc fin).exitBeforeFin i = true then
+        (if 0 < syncCr eventsF i then preset.upwardBand else 0) else 0),
+    sum_SC_positions h (fun i => propN pre highC i), sum_SC_positions h (fun i => syncCr eventsP i)]
+  simp only [Finset.sum_add_distrib]
+  refine Nat.le_of_mul_le_mul_left
+    (c := 10 * (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ?_ (by omega)
+  have scaled := Nat.mul_le_mul_left
+    (10 * (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) floors
+  have s1 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      propN tailC highC i +
+    ∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      depPre eventsC i)
+  have s2 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      syncCr eventsC i)
+  have s3 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      consAmt eventsC i)
+  have s4 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      syncD eventsF i +
+    ∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      syncD events i)
+  have s5 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      if (pinTerms config pulled anc fin).exitBeforeFin i = true then syncCr eventsF i else 0)
+  have s6 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      if (pinTerms config pulled anc fin).exitBeforeFin i = true then consAmt eventsF i else 0)
+  have s7 := share_ge (preset := preset) (fork := fork) pos
+    (∑ i ∈ (slashedOnC split counted).filter (fun i => i < split.validators.data.size),
+      propN pre highC i)
+  linarith
 
 /-- (W-S, the keys of `CS`) The slack and the rounding of their rewards are paid by their shares.
 
@@ -20948,12 +21764,7 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
     rfl
   have hW : 11 * slashW t i < 10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     subst ht
-    have hWdb : slashW (pinTerms config pulled anc fin) i + preset.downwardBand ≤
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-      unfold slashW
-      split
-      · exact h.facts.slashBand
-      · simpa using h.facts.below.le
+    have hWdb := slashW_add_downwardBand_le h i
     have := h.facts.bandLow
     omega
   have envLe : balanceAt pulled i + t.rise i + slashR t i ≤ whistleEnv t pulled anc fin i := by
@@ -21594,12 +22405,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   have fK : flowK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat =
       flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
     simp [flowK, kept]
-  have hWdb : slashW (pinTerms config pulled anc fin) v.toNat + preset.downwardBand ≤
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    unfold slashW
-    split
-    · exact h.facts.slashBand
-    · simpa using h.facts.below.le
+  have hWdb := slashW_add_downwardBand_le h v.toNat
   have fW : slashW (pinTerms config pulled anc fin) v.toNat ≤
       slashR (pinTerms config pulled anc fin) v.toNat := by
     have := hWdb
@@ -22706,44 +23512,6 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
     simp only [SC, Finset.mem_filter] at member
     have flagS := member.2.2
     simp [slashedFlagAt, found, flag] at flagS
-  -- the keys that the shared segment or R's run creates have their envelope from their start
-  have created : ∀ v : ValidatorIndex, fin.validators.data.size ≤ v.toNat →
-      v.toNat < pulled.validators.data.size →
-      (v.toNat < split.validators.data.size →
-        ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
-          anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-            w.withdrawableEpoch.toNat) →
-      (∀ w, pulled.validators.data[v.toNat]? = some w →
-        (getCurrentEpoch pulled).toNat + 1 < w.withdrawableEpoch.toNat) →
-      ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z v.toNat ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat + preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-          ((syncD eventsF v.toNat + syncD events v.toNat +
-              slashW (pinTerms config pulled anc fin) v.toNat) /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
-    intro v createdV insideV slashedLateSplit late z inPath
-    obtain ⟨c, toC, fromC, cutC, insideC, clean, before, floorStart, firstAfter⟩ :=
-      created_first_state h (fromFin.append tail) createdV insideV
-    have slashedLate : ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
-        anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-          w.withdrawableEpoch.toNat := by
-      by_cases inSplit : v.toNat < split.validators.data.size
-      · exact slashedLateSplit inSplit
-      · -- the key is created on R's tail, so its first state is at or after the split
-        have after := firstAfter split fromFin tail rfl inSplit
-        have finalizedNat := UInt64.le_iff_toNat_le.mp h.finalized
-        exact slashed_withdrawable_of_clean h fromC v clean insideC
-          (UInt64.le_iff_toNat_le.mpr (by omega))
-    have envC := envelope_of_voter h fromFin tail replayedF' replayed' v toC fromC cutC clean
-      slashedLate insideC (Or.inr floorStart) (fun w fw clean' =>
-        late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw))
-    rw [← cutC, Run.balancePath_append] at inPath
-    rcases List.mem_append.mp inPath with onTo | onFrom
-    · rcases before z onTo with rfl | zero
-      · obtain ⟨rest, head⟩ := Run.balancePath_head fromC
-        exact envC _ (by rw [head]; exact List.mem_cons_self)
-      · rw [zero]
-        exact Nat.zero_le _
-    · exact envC z (List.mem_of_mem_tail onFrom)
   -- a key slashed at the split that R reads as slashed withdraws a vector past `fin`
   have kcFrozen : ∀ v ∈ Kc, ∀ w, pulled.validators.data[v.toNat]? = some w →
       (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
@@ -22793,21 +23561,14 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
         · have notKc : v ∈ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
               SC pulled counted split := (Finset.mem_union.mp member).resolve_right inKc
           have unslashed := notKcUnslashed v notKc
-          have splitSize : v.toNat < split.validators.data.size :=
-            Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps fromFin.chainSteps)
           have cleanSplit : ∀ u, split.validators.data[v.toNat]? = some u →
               u.slashed = false := fun u foundU => by
             rw [foundU] at unslashed
             simpa using unslashed
-          have clean : ∀ u, fin.validators.data[v.toNat]? = some u → u.slashed = false :=
-            fun u foundU => unslashed_of_run fromFin foundU cleanSplit
-          have slashedLate := slashed_withdrawable_of_clean h tail v cleanSplit splitSize
-            h.finalized
-          exact envelope_of_voter h fromFin tail replayedF' replayed' v
-            (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) (fromFin.append tail)
-            (run_nil_append (fromFin.append tail)) clean slashedLate inFin
-            (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) (fun w fw clean' =>
-              late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw)) z inPath
+          exact envelope_of_clean_fin h fromFin tail replayedF' replayed' v (by omega)
+            (fun u foundU => unslashed_of_run fromFin foundU cleanSplit)
+            (fun splitSize => slashed_withdrawable_of_clean h tail v cleanSplit splitSize
+              h.finalized) late z inPath
       · have createdV : fin.validators.data.size ≤ v.toNat := by omega
         have slashedLate : v.toNat < split.validators.data.size →
             ∀ w, pulled.validators.data[v.toNat]? = some w → w.slashed = true →
@@ -22827,7 +23588,10 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
             exact slashed_withdrawable_of_clean h tail v (fun u foundU => by
               rw [foundU] at unslashed
               simpa using unslashed) splitSize h.finalized
-        exact created v createdV (by omega) slashedLate late z inPath
+        exact envelope_of_clean_fin h fromFin tail replayedF' replayed' v (by omega)
+          (fun u foundU => by
+            rw [Array.getElem?_eq_none createdV] at foundU
+            contradiction) slashedLate late z inPath
   have whole := syncLeak_of_envelope h perPos fromFin tail replayedF' replayed'
     (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪ Kc)
     envelope
