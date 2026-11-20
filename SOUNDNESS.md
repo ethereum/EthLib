@@ -4512,6 +4512,14 @@ Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction 
 So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
 Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
 The ID is then that of the head and the attributes.
+Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
+The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
+The fork is the active fork at the number after the head and at the timestamp.
+The head and the timestamp come first in those bytes, and the tree gives the number of the head.
+Take two calls on one configuration and one tree that start builds.
+They hash the same bytes only for the same head and the same attributes at the same fork (`forkchoiceUpdatedCall_payloadIdInput_inj`).
+So two distinct builds of such calls get distinct IDs, unless the Keccak-256 hashes of their inputs share their first 8 bytes.
+No theorem bounds the chance of such a collision.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
 They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
 
