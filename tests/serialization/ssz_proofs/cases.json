@@ -83,6 +83,14 @@
     ]
    ]
   },
+  "uint64_list_0": {
+   "list": [
+    {
+     "uint": 8
+    },
+    0
+   ]
+  },
   "uint64_list_8": {
    "list": [
     {
@@ -91,12 +99,28 @@
     8
    ]
   },
+  "uint16_vector_5": {
+   "vector": [
+    {
+     "uint": 2
+    },
+    5
+   ]
+  },
   "uint64_list_2p40": {
    "list": [
     {
      "uint": 8
     },
     1099511627776
+   ]
+  },
+  "uint256_list_2p64": {
+   "list": [
+    {
+     "uint": 32
+    },
+    18446744073709551616
    ]
   },
   "root_list_4": {
@@ -131,6 +155,9 @@
     },
     null
    ]
+  },
+  "progressive_bitlist": {
+   "progressive_bitlist": null
   },
   "square": {
    "progressive_container": [
@@ -508,6 +535,22 @@
    "fault": "NO_MIXIN"
   },
   {
+   "type": "uint64_list_0",
+   "path": [
+    "__len__"
+   ],
+   "gindex": 3
+  },
+  {
+   "type": "uint64_list_0",
+   "path": [
+    0
+   ],
+   "gindex": null,
+   "fault": "NO_SUCH_POSITION",
+   "step": 0
+  },
+  {
    "type": "uint64_list_8",
    "path": [
     "__len__"
@@ -552,6 +595,37 @@
    "step": 8
   },
   {
+   "type": "uint16_vector_5",
+   "path": [
+    0
+   ],
+   "gindex": 1
+  },
+  {
+   "type": "uint16_vector_5",
+   "path": [
+    4
+   ],
+   "gindex": 1
+  },
+  {
+   "type": "uint16_vector_5",
+   "path": [
+    5
+   ],
+   "gindex": null,
+   "fault": "NO_SUCH_POSITION",
+   "step": 5
+  },
+  {
+   "type": "uint16_vector_5",
+   "path": [
+    "__len__"
+   ],
+   "gindex": null,
+   "fault": "NO_MIXIN"
+  },
+  {
    "type": "uint64_list_2p40",
    "path": [
     "__len__"
@@ -580,6 +654,36 @@
    "gindex": null,
    "fault": "NO_SUCH_POSITION",
    "step": 1099511627776
+  },
+  {
+   "type": "uint256_list_2p64",
+   "path": [
+    "__len__"
+   ],
+   "gindex": 3
+  },
+  {
+   "type": "uint256_list_2p64",
+   "path": [
+    0
+   ],
+   "gindex": 36893488147419103232
+  },
+  {
+   "type": "uint256_list_2p64",
+   "path": [
+    18446744073709551615
+   ],
+   "gindex": 55340232221128654847
+  },
+  {
+   "type": "uint256_list_2p64",
+   "path": [
+    18446744073709551616
+   ],
+   "gindex": null,
+   "fault": "NO_SUCH_POSITION",
+   "step": 18446744073709551616
   },
   {
    "type": "root_list_4",
@@ -803,6 +907,41 @@
    "gindex": 2948
   },
   {
+   "type": "progressive_bitlist",
+   "path": [
+    "__len__"
+   ],
+   "gindex": 3
+  },
+  {
+   "type": "progressive_bitlist",
+   "path": [
+    0
+   ],
+   "gindex": 4
+  },
+  {
+   "type": "progressive_bitlist",
+   "path": [
+    255
+   ],
+   "gindex": 4
+  },
+  {
+   "type": "progressive_bitlist",
+   "path": [
+    256
+   ],
+   "gindex": 40
+  },
+  {
+   "type": "progressive_bitlist",
+   "path": [
+    1000
+   ],
+   "gindex": 42
+  },
+  {
    "type": "square",
    "path": [
     "side"
@@ -976,6 +1115,23 @@
    ],
    "gindex": null,
    "fault": "NO_MIXIN"
+  },
+  {
+   "type": "shape",
+   "path": [
+    "color"
+   ],
+   "gindex": null,
+   "fault": "NOT_A_POSITION",
+   "step": "color"
+  },
+  {
+   "type": "shape",
+   "path": [
+    1,
+    "__active_fields__"
+   ],
+   "gindex": 5
   }
  ],
  "values": [
@@ -1143,6 +1299,11 @@
     },
     {
      "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
      "branch": null,
      "fault": "PATH_INTO_PACKED"
     }
@@ -1459,6 +1620,11 @@
      "gindex": 647,
      "branch": null,
      "fault": "PATH_INTO_GAP"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -1799,6 +1965,361 @@
       "0x28bcbed4ed8bf7f8d974b8adfbb42c195f16422233db51e67b277cfbaefe44dc",
       "0xa575987e27ee6f810f6946a527e96cd04e3aa1f4f7245e4791b835b51f99f4f0"
      ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    }
+   ]
+  },
+  {
+   "name": "uint64_list_0",
+   "type": "uint64_list_0",
+   "serialized": "0x",
+   "root": "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+   "proofs": [
+    {
+     "gindex": 0,
+     "branch": null,
+     "fault": "NOT_A_GINDEX",
+     "index": 0
+    },
+    {
+     "gindex": 1,
+     "branch": null,
+     "fault": "ROOT_HAS_NO_BRANCH"
+    },
+    {
+     "gindex": 2,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 3,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 4,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 5,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 6,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 7,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 8,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 9,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 10,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 11,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 12,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 13,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 14,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 15,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 16,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 17,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 18,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 19,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 20,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 21,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 22,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 23,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 24,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 25,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 26,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 27,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 28,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 29,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 30,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    }
+   ]
+  },
+  {
+   "name": "uint16_vector_5",
+   "type": "uint16_vector_5",
+   "serialized": "0x01000200030004000500",
+   "root": "0x0100020003000400050000000000000000000000000000000000000000000000",
+   "proofs": [
+    {
+     "gindex": 0,
+     "branch": null,
+     "fault": "NOT_A_GINDEX",
+     "index": 0
+    },
+    {
+     "gindex": 1,
+     "branch": null,
+     "fault": "ROOT_HAS_NO_BRANCH"
+    },
+    {
+     "gindex": 2,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 3,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 4,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 5,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 6,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 7,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 8,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 9,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 10,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 11,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 12,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 13,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 14,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 15,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 16,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 17,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 18,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 19,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 20,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 21,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 22,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 23,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 24,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 25,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 26,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 27,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 28,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 29,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 30,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -1974,6 +2495,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -2149,6 +2675,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -2324,6 +2855,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -2631,6 +3167,375 @@
       "0x9341978163683c14d16bbaf1df39a4012c86b46b210540fcf223976027b9ff9e",
       "0x0900000000000000000000000000000000000000000000000000000000000000"
      ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    }
+   ]
+  },
+  {
+   "name": "uint256_list_2p64",
+   "type": "uint256_list_2p64",
+   "serialized": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "root": "0xee3a09c10111b59d29e4045005b80346f7e9ebec298ee2a195c3788baab67b4a",
+   "proofs": [
+    {
+     "gindex": 0,
+     "branch": null,
+     "fault": "NOT_A_GINDEX",
+     "index": 0
+    },
+    {
+     "gindex": 1,
+     "branch": null,
+     "fault": "ROOT_HAS_NO_BRANCH"
+    },
+    {
+     "gindex": 2,
+     "branch": [
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 3,
+     "branch": [
+      "0x7622a70e294faeea15af5bbb38ffd3161c44f0b14f3e7f6c9346318fd225e4cc"
+     ]
+    },
+    {
+     "gindex": 4,
+     "branch": [
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 5,
+     "branch": [
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 6,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 7,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 8,
+     "branch": [
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 9,
+     "branch": [
+      "0x9379eeb5e74d4467764718405378fc08f051691924f78a987ed49326863b524c",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 10,
+     "branch": [
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 11,
+     "branch": [
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 12,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 13,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 14,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 15,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 16,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 17,
+     "branch": [
+      "0x2622ad236d3d9b96f29fc123f180285eb4c05f4ce482f06818d5a0bd00c7d72f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 18,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x9379eeb5e74d4467764718405378fc08f051691924f78a987ed49326863b524c",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 19,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x9379eeb5e74d4467764718405378fc08f051691924f78a987ed49326863b524c",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 20,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 21,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 22,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 23,
+     "branch": [
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 24,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 25,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 26,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 27,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 28,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 29,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 30,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 36893488147419103232,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+      "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
+      "0xc78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c",
+      "0x536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c",
+      "0x9efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30",
+      "0xd88ddfeed400a8755596b21942c1497e114c302e6118290f91e6772976041fa1",
+      "0x87eb0ddba57e35f6d286673802a4af5975e22506c7cf4c64bb6be5ee11527f2c",
+      "0x26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193",
+      "0x506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e1",
+      "0xffff0ad7e659772f9534c195c815efc4014ef1e1daed4404c06385d11192e92b",
+      "0x6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220",
+      "0xb7d05f875f140027ef5118a2247bbb84ce8f2f0f1123623085daf7960c329f5f",
+      "0xdf6af5f5bbdb6be9ef8aa618e4bf8073960867171e29676f8b284dea6a08a85e",
+      "0xb58d900f5e182e3c50ef74969ea16c7726c549757cc23523c369587da7293784",
+      "0xd49a7502ffcfb0340b1d7885688500ca308161a7f96b62df9d083b71fcc8f2bb",
+      "0x8fe6b1689256c0d385f42f5bbe2027a22c1996e110ba97c171d3e5948de92beb",
+      "0x8d0d63c39ebade8509e0ae3c9c3876fb5fa112be18f905ecacfecb92057603ab",
+      "0x95eec8b2e541cad4e91de38385f2e046619f54496c2382cb6cacd5b98c26f5a4",
+      "0xf893e908917775b62bff23294dbbe3a1cd8e6cc1c35b4801887b646a6f81f17f",
+      "0xcddba7b592e3133393c16194fac7431abf2f5485ed711db282183c819e08ebaa",
+      "0x8a8d7fe3af8caa085a7639a832001457dfb9128a8061142ad0335629ff23ff9c",
+      "0xfeb3c337d7a51a6fbf00b9e34c52e1c9195c969bd4e7a0bfd51d5c5bed9c1167",
+      "0xe71f0aa83cc32edfbefa9f4d3e0174ca85182eec9f3a09f6a6c0df6377a510d7",
+      "0x31206fa80a50bb6abe29085058f16212212a60eec8f049fecb92d8c8e0a84bc0",
+      "0x21352bfecbeddde993839f614c3dac0a3ee37543f9b412b16199dc158e23b544",
+      "0x619e312724bb6d7c3153ed9de791d764a366b389af13c58bf8a8d90481a46765",
+      "0x7cdd2986268250628d0c10e385c58c6191e6fbe05191bcc04f133f2cea72c1c4",
+      "0x848930bd7ba8cac54661072113fb278869e07bb8587f91392933374d017bcbe1",
+      "0x8869ff2c22b28cc10510d9853292803328be4fb0e80495e8bb8d271f5b889636",
+      "0xb5fe28e79f1b850f8658246ce9b6a1e7b49fc06db7143e8fe0b4f2b0c5523a5c",
+      "0x985e929f70af28d0bdd1a90a808f977f597c7c778c489e98d3bd8910d31ac0f7",
+      "0xc6f67e02e6e4e1bdefb994c6098953f34636ba2b6ca20a4721d2b26a886722ff",
+      "0x1c9a7e5ff1cf48b4ad1582d3f4e4a1004f3b20d8c5a2b71387a4254ad933ebc5",
+      "0x2f075ae229646b6f6aed19a5e372cf295081401eb893ff599b3f9acc0c0d3e7d",
+      "0x328921deb59612076801e8cd61592107b5c67c79b846595cc6320c395b46362c",
+      "0xbfb909fdb236ad2411b4e4883810a074b840464689986c3f8a8091827e17c327",
+      "0x55d8fb3687ba3ba49f342c77f5a1f89bec83d811446e1a467139213d640b6a74",
+      "0xf7210d4f8e7e1039790e7bf4efa207555a10a6db1dd4b95da313aaa88b88fe76",
+      "0xad21b516cbc645ffe34ab5de1c8aef8cd4e7f8d2b51e8e1456adc7563cda206f",
+      "0x6bfe8d2bcc4237b74a5047058ef455339ecd7360cb63bfbb8ee5448e6430ba04",
+      "0xa7f23ce9181740dc220c814782654fee6aceb9f1ec9222c4e2467d0ab1680837",
+      "0xaef9476c89590a2c8cc9b3b74f4967c757c49d9866a44bacf21fa2ed675ddfa2",
+      "0x9a42bcad82f6a9e41284d808ead319f29f3b08209d680f0e2ce71510d071e205",
+      "0xd1a66d354a67b9cf179571d8e5f97792716e8dd4ec44196839a3f7c6b74f8bac",
+      "0xfafa3025f2f89509c2c71c74fba0cd92858ef49b0780fb5479746c8a9bfcb346",
+      "0x3334a7c1e7f6705aa6011a6a949645016db4acde0ca9abd66dc79d8266423056",
+      "0x0796fd75664faef744ee4e52d7271e2bbb769f91ed6f9b74d8b694f56606852c",
+      "0x7ba3ae4a417fe8545b142bc89f4adcd7ae13941cbab7750b83e9f0a66d16be64",
+      "0x788fafcc4aa520399adbaed195f8b12c4eb31ec10168e50aabc659a6aea516dc",
+      "0xe833d7a67160e68bf4c9044a53077df2727ad00cf36f4949c7b681a912140cbb",
+      "0x309eabf095dc6714f9f4d864bba5affae0b35ae2f5e3565bcc3a47b212767701",
+      "0x226a8ebefa288665a644a50273335efbb610510f241b5b720c8a368d59a69a5d",
+      "0x41abfd995425827625938131af0c4f33fe0bd4688c222c21fa9da8e89caa03f8",
+      "0x442c642ef50fa1a667a6e6d105c77c5cc3fec8d7aa2570cf1a3077b503c38069",
+      "0xa0a08dfc9b42d96c2de19b6d127b8ae136ddcf3e5ad0dce422c45a56f61f6a74",
+      "0x7d348382af096dbe0bf086c7bb39b2a2c0bc36b621ab0c738e9885d731d81740",
+      "0x3ab134751d191269026c86994eaa8b43a83b4ad1f6d0e77381c4e2974afbc8f6",
+      "0x9a7452611db2d23eae26f9bdbb88958ef44c64d0fe987be9f726adf938f50f6c",
+      "0x725c7f816037bfe452cd1e7ba35ac47edcb49a9a2b27aeca70dce483cb7ded1f",
+      "0x2cea1af51fb28b62887c39998ac9fef4dfdeda1f07e071ba558a173afd06cbc3",
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0xecc502c9b1145f3950cb7d3e3842446f81a4f0df1df537cee139ef64ea984bd9",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 55340232221128654847,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+      "0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71",
+      "0xc78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c",
+      "0x536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c",
+      "0x9efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30",
+      "0xd88ddfeed400a8755596b21942c1497e114c302e6118290f91e6772976041fa1",
+      "0x87eb0ddba57e35f6d286673802a4af5975e22506c7cf4c64bb6be5ee11527f2c",
+      "0x26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193",
+      "0x506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e1",
+      "0xffff0ad7e659772f9534c195c815efc4014ef1e1daed4404c06385d11192e92b",
+      "0x6cf04127db05441cd833107a52be852868890e4317e6a02ab47683aa75964220",
+      "0xb7d05f875f140027ef5118a2247bbb84ce8f2f0f1123623085daf7960c329f5f",
+      "0xdf6af5f5bbdb6be9ef8aa618e4bf8073960867171e29676f8b284dea6a08a85e",
+      "0xb58d900f5e182e3c50ef74969ea16c7726c549757cc23523c369587da7293784",
+      "0xd49a7502ffcfb0340b1d7885688500ca308161a7f96b62df9d083b71fcc8f2bb",
+      "0x8fe6b1689256c0d385f42f5bbe2027a22c1996e110ba97c171d3e5948de92beb",
+      "0x8d0d63c39ebade8509e0ae3c9c3876fb5fa112be18f905ecacfecb92057603ab",
+      "0x95eec8b2e541cad4e91de38385f2e046619f54496c2382cb6cacd5b98c26f5a4",
+      "0xf893e908917775b62bff23294dbbe3a1cd8e6cc1c35b4801887b646a6f81f17f",
+      "0xcddba7b592e3133393c16194fac7431abf2f5485ed711db282183c819e08ebaa",
+      "0x8a8d7fe3af8caa085a7639a832001457dfb9128a8061142ad0335629ff23ff9c",
+      "0xfeb3c337d7a51a6fbf00b9e34c52e1c9195c969bd4e7a0bfd51d5c5bed9c1167",
+      "0xe71f0aa83cc32edfbefa9f4d3e0174ca85182eec9f3a09f6a6c0df6377a510d7",
+      "0x31206fa80a50bb6abe29085058f16212212a60eec8f049fecb92d8c8e0a84bc0",
+      "0x21352bfecbeddde993839f614c3dac0a3ee37543f9b412b16199dc158e23b544",
+      "0x619e312724bb6d7c3153ed9de791d764a366b389af13c58bf8a8d90481a46765",
+      "0x7cdd2986268250628d0c10e385c58c6191e6fbe05191bcc04f133f2cea72c1c4",
+      "0x848930bd7ba8cac54661072113fb278869e07bb8587f91392933374d017bcbe1",
+      "0x8869ff2c22b28cc10510d9853292803328be4fb0e80495e8bb8d271f5b889636",
+      "0xb5fe28e79f1b850f8658246ce9b6a1e7b49fc06db7143e8fe0b4f2b0c5523a5c",
+      "0x985e929f70af28d0bdd1a90a808f977f597c7c778c489e98d3bd8910d31ac0f7",
+      "0xc6f67e02e6e4e1bdefb994c6098953f34636ba2b6ca20a4721d2b26a886722ff",
+      "0x1c9a7e5ff1cf48b4ad1582d3f4e4a1004f3b20d8c5a2b71387a4254ad933ebc5",
+      "0x2f075ae229646b6f6aed19a5e372cf295081401eb893ff599b3f9acc0c0d3e7d",
+      "0x328921deb59612076801e8cd61592107b5c67c79b846595cc6320c395b46362c",
+      "0xbfb909fdb236ad2411b4e4883810a074b840464689986c3f8a8091827e17c327",
+      "0x55d8fb3687ba3ba49f342c77f5a1f89bec83d811446e1a467139213d640b6a74",
+      "0xf7210d4f8e7e1039790e7bf4efa207555a10a6db1dd4b95da313aaa88b88fe76",
+      "0xad21b516cbc645ffe34ab5de1c8aef8cd4e7f8d2b51e8e1456adc7563cda206f",
+      "0x6bfe8d2bcc4237b74a5047058ef455339ecd7360cb63bfbb8ee5448e6430ba04",
+      "0xa7f23ce9181740dc220c814782654fee6aceb9f1ec9222c4e2467d0ab1680837",
+      "0xaef9476c89590a2c8cc9b3b74f4967c757c49d9866a44bacf21fa2ed675ddfa2",
+      "0x9a42bcad82f6a9e41284d808ead319f29f3b08209d680f0e2ce71510d071e205",
+      "0xd1a66d354a67b9cf179571d8e5f97792716e8dd4ec44196839a3f7c6b74f8bac",
+      "0xfafa3025f2f89509c2c71c74fba0cd92858ef49b0780fb5479746c8a9bfcb346",
+      "0x3334a7c1e7f6705aa6011a6a949645016db4acde0ca9abd66dc79d8266423056",
+      "0x0796fd75664faef744ee4e52d7271e2bbb769f91ed6f9b74d8b694f56606852c",
+      "0x7ba3ae4a417fe8545b142bc89f4adcd7ae13941cbab7750b83e9f0a66d16be64",
+      "0x788fafcc4aa520399adbaed195f8b12c4eb31ec10168e50aabc659a6aea516dc",
+      "0xe833d7a67160e68bf4c9044a53077df2727ad00cf36f4949c7b681a912140cbb",
+      "0x309eabf095dc6714f9f4d864bba5affae0b35ae2f5e3565bcc3a47b212767701",
+      "0x226a8ebefa288665a644a50273335efbb610510f241b5b720c8a368d59a69a5d",
+      "0x41abfd995425827625938131af0c4f33fe0bd4688c222c21fa9da8e89caa03f8",
+      "0x442c642ef50fa1a667a6e6d105c77c5cc3fec8d7aa2570cf1a3077b503c38069",
+      "0xa0a08dfc9b42d96c2de19b6d127b8ae136ddcf3e5ad0dce422c45a56f61f6a74",
+      "0x7d348382af096dbe0bf086c7bb39b2a2c0bc36b621ab0c738e9885d731d81740",
+      "0x3ab134751d191269026c86994eaa8b43a83b4ad1f6d0e77381c4e2974afbc8f6",
+      "0x9a7452611db2d23eae26f9bdbb88958ef44c64d0fe987be9f726adf938f50f6c",
+      "0x725c7f816037bfe452cd1e7ba35ac47edcb49a9a2b27aeca70dce483cb7ded1f",
+      "0x2cea1af51fb28b62887c39998ac9fef4dfdeda1f07e071ba558a173afd06cbc3",
+      "0xff1d59f98b6c551d95089357057d5c8be26402279e9df0b1df1a10b72bf3927f",
+      "0x2f8a181f7c99dd215a7529bfe296a9603a1446737186d21aeb8bc7ae59e1fd21",
+      "0x2e1518b0ea0b1091f7e59f8b34e2fd8a9802f376679b9de56b38b0d3772b3f9f",
+      "0x0100000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -2818,6 +3723,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_GAP"
     }
    ]
   },
@@ -3005,6 +3915,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -3224,6 +4139,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -3399,6 +4319,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -3570,6 +4495,11 @@
      "gindex": 31,
      "branch": null,
      "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -3739,6 +4669,11 @@
     },
     {
      "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
      "branch": null,
      "fault": "PATH_INTO_PACKED"
     }
@@ -3920,6 +4855,11 @@
     },
     {
      "gindex": 2948,
+     "branch": null,
+     "fault": "PATH_PAST_SPINE"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
      "branch": null,
      "fault": "PATH_PAST_SPINE"
     }
@@ -4107,6 +5047,11 @@
      "gindex": 2948,
      "branch": null,
      "fault": "PATH_PAST_SPINE"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -4319,6 +5264,225 @@
      "gindex": 2948,
      "branch": null,
      "fault": "PATH_PAST_SPINE"
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    }
+   ]
+  },
+  {
+   "name": "progressive_bitlist",
+   "type": "progressive_bitlist",
+   "serialized": "0x2184104208218410420821841042082184104208218410420821841042082184104208218410",
+   "root": "0x6962c55960e2d401246bc93c6ba17aa6c7b4bda23475891541e577a78192b4ef",
+   "proofs": [
+    {
+     "gindex": 0,
+     "branch": null,
+     "fault": "NOT_A_GINDEX",
+     "index": 0
+    },
+    {
+     "gindex": 1,
+     "branch": null,
+     "fault": "ROOT_HAS_NO_BRANCH"
+    },
+    {
+     "gindex": 2,
+     "branch": [
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 3,
+     "branch": [
+      "0xb1f509499fda4b4da26e71cf6d4f6abf06f05712b98e6a8079d308e67a261359"
+     ]
+    },
+    {
+     "gindex": 4,
+     "branch": [
+      "0x2df807e1d9a7b8e0fedc8fa50b7adfb85d9752e15cf182ff0aa734bc6cf52481",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 5,
+     "branch": [
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 6,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 7,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 8,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 9,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 10,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 11,
+     "branch": [
+      "0x264ebb8d70b7e3b9d30e04629fca32eba9dd1c3359e2e54f71b6c7e170e39801",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 12,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 13,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 14,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 15,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 16,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 17,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 18,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 19,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
+    },
+    {
+     "gindex": 20,
+     "branch": [
+      "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 21,
+     "branch": [
+      "0x6141984b4c06ea802a87629746f91625a3e102f8e4f5d47e6f770b3c7bdba6ab",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 22,
+     "branch": null,
+     "fault": "PATH_PAST_SPINE"
+    },
+    {
+     "gindex": 23,
+     "branch": null,
+     "fault": "PATH_PAST_SPINE"
+    },
+    {
+     "gindex": 24,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 25,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 26,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 27,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 28,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 29,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 30,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 31,
+     "branch": null,
+     "fault": "PATH_INTO_MIXIN"
+    },
+    {
+     "gindex": 40,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 42,
+     "branch": [
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x6141984b4c06ea802a87629746f91625a3e102f8e4f5d47e6f770b3c7bdba6ab",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x2184104208218410420821841042082184104208218410420821841042082184",
+      "0x2c01000000000000000000000000000000000000000000000000000000000000"
+     ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -4518,6 +5682,11 @@
       "0x0300000000000000000000000000000000000000000000000000000000000000",
       "0x0500000000000000000000000000000000000000000000000000000000000000"
      ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_PACKED"
     }
    ]
   },
@@ -4729,6 +5898,11 @@
       "0x0600000000000000000000000000000000000000000000000000000000000000",
       "0x0200000000000000000000000000000000000000000000000000000000000000"
      ]
+    },
+    {
+     "gindex": 1606938044258990275541962092341162602522202993782792835301376,
+     "branch": null,
+     "fault": "PATH_INTO_GAP"
     }
    ]
   }
