@@ -224,10 +224,7 @@ It reads the total active balance, the key's effective balance and its score the
 
 The pass reads the score after its update, which adds at most the score bias. -/
 private def passPenaltyRate (config : Config) (z : ForkedBeaconState preset) (v : ℕ) : ℕ :=
-  let total := max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    (∑ i ∈ (Finset.range z.state.validators.data.size).filter
-        (fun i => isActiveAt z.state (getCurrentEpoch z.state) i = true),
-      ((z.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0)
+  let total := activeBalanceTotal z.state
   let score := if altair : .altair ≤ z.fork then
       (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
   (TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat) * preset.BASE_REWARD_FACTOR.toNat *
@@ -327,17 +324,9 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     unfold eligibleWeight
     simp only [validators, effectiveAt]
     split <;> [split <;> simp_all; simp]
-  have totalValue : total.toNat = max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      (∑ i ∈ (Finset.range u.state.validators.data.size).filter
-          (fun i => isActiveAt u.state (getCurrentEpoch u.state) i = true),
-        ((u.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0) := by
-    rw [getTotalActiveBalance_toNat passTotal, ← passEpoch]
-    unfold activeBalanceTotal
-    simp only [isActiveAt, validators]
-    congr
   unfold passPenaltyRate
   dsimp only
-  rw [← totalValue, ← scoreDef]
+  rw [← getTotalActiveBalance_toNat totalU, ← scoreDef]
   apply Nat.add_le_add
   · apply Nat.div_le_div_right
     exact Nat.mul_le_mul_left _ weight
@@ -2249,53 +2238,36 @@ The flag term is `40 / 64` of a base reward per increment for each increment.
 
 It fits in `2 * (increments * perIncrement)`.
 
-The floor of a quotient that is at least one is at least half of it.
-
-The left side is `passPenaltyRate config z v` of this file, restated. -/
+The floor of a quotient that is at least one is at least half of it. -/
 private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ) (pulledTotal : ℕ)
-    (scoreBound : ℕ)
-    (size : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-    (roomy : 2 ^ 33 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat)
+    (scoreBound : ℕ) (facts : PinPresetFacts preset)
     (pulledFits : pulledTotal < 2 ^ 64)
     (aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣ effectiveAt z v)
-    (band : 2 * pulledTotal ≤ 3 * max preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      (∑ i ∈ (Finset.range z.state.validators.data.size).filter
-          (fun i => isActiveAt z.state (getCurrentEpoch z.state) i = true),
-        ((z.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0))
+    (band : 2 * pulledTotal ≤ 3 * activeBalanceTotal z.state)
     (scored : (if altair : .altair ≤ z.fork then
         (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0) +
       config.INACTIVITY_SCORE_BIAS.toNat ≤ scoreBound) :
     let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    let total := max inc
-      (∑ i ∈ (Finset.range z.state.validators.data.size).filter
-          (fun i => isActiveAt z.state (getCurrentEpoch z.state) i = true),
-        ((z.state.validators.data[i]?).map (·.effectiveBalance.toNat)).getD 0)
-    let score := if altair : .altair ≤ z.fork then
-        (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
     let quarter := if 18 * inc ≤ pulledTotal then pulledTotal / 4 else inc / 5
     let perIncrement := inc * preset.BASE_REWARD_FACTOR.toNat / quarter.sqrt
-    (TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat) * preset.BASE_REWARD_FACTOR.toNat *
-        effectiveAt z v / (WEIGHT_DENOMINATOR.toNat * total.sqrt) +
-      effectiveAt z v * (score + config.INACTIVITY_SCORE_BIAS.toNat) /
-        (config.INACTIVITY_SCORE_BIAS.toNat *
-          (parameters preset z.fork).INACTIVITY_PENALTY_QUOTIENT.toNat) ≤
-    2 * (effectiveAt z v / inc * perIncrement) +
-      effectiveAt z v * scoreBound /
-        (config.INACTIVITY_SCORE_BIAS.toNat *
-          (parameters preset z.fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
-  intro inc total score quarter perIncrement
-  have sizeInc : 10 ^ 8 ≤ inc := size
+    passPenaltyRate config z v ≤
+      2 * (effectiveAt z v / inc * perIncrement) +
+        effectiveAt z v * scoreBound /
+          (config.INACTIVITY_SCORE_BIAS.toNat *
+            (parameters preset z.fork).INACTIVITY_PENALTY_QUOTIENT.toNat) := by
+  intro inc quarter perIncrement
+  unfold passPenaltyRate
+  let total := activeBalanceTotal z.state
+  let score := if altair : .altair ≤ z.fork then
+    (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
+  have sizeInc : 10 ^ 8 ≤ inc := facts.incrementSize
+  have roomy := Nat.le_trans (show 2 ^ 33 ≤ 2 ^ 35 by decide) facts.rewardScale
   have positive : 0 < inc := by omega
   have weights : TIMELY_SOURCE_WEIGHT.toNat + TIMELY_TARGET_WEIGHT.toNat = 40 := by decide
   have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
   rw [weights, denominator]
   obtain ⟨k, hk⟩ := aligned
   have hinc : inc ≤ total := le_max_left _ _
-  have hfactor : 1 ≤ preset.BASE_REWARD_FACTOR.toNat := by
-    rcases Nat.eq_zero_or_pos preset.BASE_REWARD_FACTOR.toNat with zero | pos
-    · rw [zero, Nat.mul_zero] at roomy
-      exact absurd roomy (by decide)
-    · exact pos
   -- the numerator of the per-increment reward, `X`, dominates the square root of the quarter
   obtain ⟨X, hX⟩ : ∃ X, inc * preset.BASE_REWARD_FACTOR.toNat = X := ⟨_, rfl⟩
   rw [hX] at roomy
@@ -2303,7 +2275,7 @@ private theorem passPenaltyRate_le_leak (z : ForkedBeaconState preset) (v : ℕ)
     simp only [perIncrement, hX]
   have incX : inc ≤ X := by
     rw [← hX]
-    exact Nat.le_mul_of_pos_right _ hfactor
+    exact Nat.le_mul_of_pos_right _ facts.reward
   have quarterLe : quarter ≤ X ^ 2 := by
     by_cases big : 18 * inc ≤ pulledTotal
     · have : 2 ^ 66 ≤ X ^ 2 := by
@@ -3339,17 +3311,24 @@ private def Shape (L : List PendingConsolidation) (e0 : Epoch) (n : ℕ) {f : Fo
     ∀ c ∈ N, ∃ w, z.validators.data[c.sourceIndex.toNat]? = some w ∧
       e0 < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
 
+/-- An assigned exit stays fixed, so its queue entry still has a source that exited after `e0`. -/
+private theorem carry_source_exit {e0 : Epoch} {i : ℕ} {f g : Fork}
+    {a : BeaconState preset f} {b : BeaconState preset g} (life : RegistryLifecycle a b)
+    (source : ∃ w, a.validators.data[i]? = some w ∧
+      e0 < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    ∃ w, b.validators.data[i]? = some w ∧
+      e0 < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+  obtain ⟨w, read, later, assigned⟩ := source
+  obtain ⟨w', read', kept⟩ := life.validators i w read
+  exact ⟨w', read', by rw [kept.exitEpoch assigned]; exact ⟨later, assigned⟩⟩
+
 /-- A state of any fork with the same queue and a later life of its validators has the shape. -/
 private theorem Shape.carry {L : List PendingConsolidation} {e0 : Epoch} {n : ℕ} {f g : Fork}
     {a : BeaconState preset f} {b : BeaconState preset g} (shape : Shape L e0 n a)
     (queue : fundingSources b = fundingSources a) (life : RegistryLifecycle a b) :
     Shape L e0 n b := by
   obtain ⟨N, eq, new⟩ := shape
-  refine ⟨N, queue.trans eq, fun c member => ?_⟩
-  obtain ⟨w, read, later, assigned⟩ := new c member
-  obtain ⟨w', read', kept⟩ := life.validators _ w read
-  have exit := kept.exitEpoch assigned
-  exact ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
+  exact ⟨N, queue.trans eq, fun c member => carry_source_exit life (new c member)⟩
 
 /-- A block that grows the queue keeps the shape. -/
 private theorem Shape.grow {L : List PendingConsolidation} {e0 : Epoch} {n : ℕ} {f : Fork}
@@ -3362,10 +3341,7 @@ private theorem Shape.grow {L : List PendingConsolidation} {e0 : Epoch} {n : ℕ
   refine ⟨N ++ added, by rw [fundingSources_eq electra, queue, ← fundingSources_eq electra, eq,
     List.append_assoc], fun c member => ?_⟩
   rcases List.mem_append.mp member with old | recent
-  · obtain ⟨w, read, later, assigned⟩ := new c old
-    obtain ⟨w', read', kept⟩ := life.validators _ w read
-    have exit := kept.exitEpoch assigned
-    exact ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
+  · exact carry_source_exit life (new c old)
   · obtain ⟨w, read, later, assigned⟩ := fresh c recent
     exact ⟨w, read, UInt64.lt_of_le_of_lt started later, assigned⟩
 
@@ -3378,10 +3354,7 @@ private theorem Shape.pass {L : List PendingConsolidation} {e0 : Epoch} {n r : �
   refine ⟨N.drop (r - (L.length - n)), ?_, fun c member => ?_⟩
   · rw [queue, eq, List.drop_append, List.drop_drop]
     simp [List.length_drop]
-  · obtain ⟨w, read, later, assigned⟩ := new c (List.mem_of_mem_drop member)
-    obtain ⟨w', read', kept⟩ := life.validators _ w read
-    have exit := kept.exitEpoch assigned
-    exact ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
+  · exact carry_source_exit life (new c (List.mem_of_mem_drop member))
 
 /-- The stake that X lets a pending consolidation move: the cap of its source at X.
 
@@ -4283,31 +4256,23 @@ private theorem Run.charge_of_exit {x y : ForkedBeaconState preset}
     (v : Validator) (found : y.state.validators.data[i]? = some v)
     (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
     ∃ c ∈ tail.departureCharges, c.index = i ∧ c.epoch = v.exitEpoch.toNat := by
-  induction tail generalizing v with
-  | nil => exact absurd (unset v found) assigned
-  | @snoc middle last pre step ih =>
-    have middleEarly : middle.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt step.chainStep.fork_le early
-    have middleElectra : .pectra ≤ middle.fork :=
-      Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
-    cases present : middle.state.validators.data[i]? with
-    | none =>
-      have outside : middle.state.validators.data.size ≤ i :=
-        Array.getElem?_eq_none_iff.mp present
-      exact absurd (ExitFarFrom.of_chainStep step.chainStep middleElectra middleEarly i v outside
-        found) assigned
-    | some w =>
-      by_cases pending : w.exitEpoch = FAR_FUTURE_EPOCH
-      · obtain ⟨charge, member, index, epoch⟩ :=
-          (Run.nil.snoc step).departure_charge_of_assigned i w v present found pending assigned
-        exact ⟨charge, List.mem_append_right _ member, index, epoch⟩
-      · obtain ⟨charge, member, index, epoch⟩ :=
-          ih middleEarly w present pending
-        obtain ⟨u, usedFound, kept⟩ :=
-          (RegistryLifecycle.chainStep step.chainStep).validators i w present
-        have same : u = v := Option.some.inj (usedFound.symm.trans found)
-        refine ⟨charge, List.mem_append_left _ member, index, ?_⟩
-        rw [epoch, ← same, kept.exitEpoch pending]
+  cases initial : x.state.validators.data[i]? with
+  | some w => exact tail.departure_charge_of_assigned i w v initial found (unset w initial) assigned
+  | none =>
+    obtain ⟨m, n, pre, step, post, rfl, absent, arrived⟩ := Run.split_at_flip tail
+      (fun z => i < z.state.validators.data.size)
+      (Nat.not_lt.mpr (Array.getElem?_eq_none_iff.mp initial))
+      (Array.getElem?_eq_some_iff.mp found).1
+    have electraM : .pectra ≤ m.fork := Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
+    have earlyM : m.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le
+      (Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) early)
+    have read := Array.getElem?_eq_getElem arrived
+    have pending := ExitFarFrom.of_chainStep step.chainStep electraM earlyM i _
+      (Nat.le_of_not_lt absent) read
+    obtain ⟨c, member, index, epoch⟩ :=
+      post.departure_charge_of_assigned i _ v read found pending assigned
+    exact ⟨c, by rw [Run.departureCharges_append]; exact List.mem_append_right _ member, index,
+      epoch⟩
 
 end PinKeys
 
@@ -4414,21 +4379,13 @@ private theorem effectiveAt_le_capMax {g m : ForkedBeaconState preset}
     (run : Run config checks g m) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset) (early : m.fork < .glamsterdam) (v : ℕ) :
     effectiveAt m v ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-  unfold effectiveAt
   cases found : m.state.validators.data[v]? with
-  | none => simp
+  | none => simp [effectiveAt, found]
   | some w =>
-    obtain ⟨inside, rfl⟩ := Array.getElem?_eq_some_iff.mp found
-    have bound := run.effectiveBalance_capped genesis caps.activation caps.compounding early _
-      (Array.getElem_mem inside)
-    have activation := UInt64.le_iff_toNat_le.mp caps.activation
-    have compounding := UInt64.le_iff_toNat_le.mp caps.compounding
-    rw [UInt64.le_iff_toNat_le] at bound
-    unfold withdrawalMaxEffectiveBalance getMaxEffectiveBalance at bound
-    simp only [Option.map_some, Option.getD_some]
-    split at bound
-    · split at bound <;> omega
-    · omega
+    exact (DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax run genesis caps early
+      found).trans ((withdrawalMaxEffectiveBalance_le_largestEffectiveBalance preset m.fork w).trans
+        (max_le (UInt64.le_iff_toNat_le.mp (UInt64.le_trans caps.activation caps.compounding))
+          (max_le (UInt64.le_iff_toNat_le.mp caps.compounding) le_rfl)))
 
 /-- The replay of a block from Altair ends with its one sync pass, after events of other sources.
 
@@ -4993,6 +4950,26 @@ private theorem mspq_fusaka {f : Fork} (h : .fusaka ≤ f) :
   simp [EthLib.Consensus.parameters, ge_iff_le, pectra, pectra']
 
 
+/-- Epochs cannot decrease, so a step inside a same-epoch run starts in that epoch. -/
+private theorem step_start_epoch_eq {m n a b : ForkedBeaconState preset}
+    (r : Run config checks m n) (same : getCurrentEpoch n.state = getCurrentEpoch m.state)
+    (step : Step config checks a b) (member : r.Contains step) :
+    getCurrentEpoch a.state = getCurrentEpoch m.state := by
+  obtain ⟨before, after, -⟩ := r.contains_split step member
+  exact UInt64.le_antisymm
+    (same ▸ currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps)
+    (currentEpoch_le_of_chainSteps before.chainSteps)
+
+/-- A final step can cross the boundary, but it still starts in the prefix's epoch. -/
+private theorem snoc_step_start_epoch_eq {m z n a b : ForkedBeaconState preset}
+    (pre : Run config checks m z) (last : Step config checks z n)
+    (same : getCurrentEpoch z.state = getCurrentEpoch m.state)
+    (step : Step config checks a b) (member : (pre.snoc last).Contains step) :
+    getCurrentEpoch a.state = getCurrentEpoch m.state := by
+  cases member with
+  | last => exact same
+  | earlier member _ => exact step_start_epoch_eq pre same step member
+
 open Classical in
 /-- The rewards pass at the last state of the first epoch debits a key at most its pass rate.
 
@@ -5012,19 +4989,9 @@ private theorem lastPass_debit_le {m z n : ForkedBeaconState preset} (pre : Run 
     (events.map (penaltyDebit i)).sum ≤
       if ∃ total, getTotalActiveBalance z.state = .ok total then passPenaltyRate config z i
       else 0 := by
-  have starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      (pre.snoc (Step.slot ok)).Contains step →
-        getCurrentEpoch u.state = getCurrentEpoch m.state := by
-    intro u w step member
-    cases member with
-    | last => exact same
-    | earlier member _ =>
-      obtain ⟨before, after, -⟩ := pre.contains_split step member
-      exact UInt64.le_antisymm
-        (same ▸ currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append after).chainSteps)
-        (currentEpoch_le_of_chainSteps before.chainSteps)
   have bound := segment_passDebit_le_guarded (pre.snoc (Step.slot ok)) early altair
-    (getCurrentEpoch m.state).toNat endEpoch starts inside
+    (getCurrentEpoch m.state).toNat endEpoch
+    (snoc_step_start_epoch_eq pre (Step.slot ok) same) inside
     (if ∃ total, getTotalActiveBalance z.state = .ok total then passPenaltyRate config z i
       else 0)
     (fun {z'} pre' ok' split before found => by
@@ -5115,8 +5082,6 @@ private theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run conf
       (pre'.snoc step).append post = r → getCurrentEpoch a.state = getCurrentEpoch m.state ∧
         .fusaka ≤ a.fork ∧ b.fork < .glamsterdam := by
     intro a b pre' step post split
-    have lo := currentEpoch_le_of_chainSteps pre'.chainSteps
-    have hi := currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps
     have forkLo := fork_le_of_chainSteps pre'.chainSteps
     have forkHi := fork_le_of_chainSteps post.chainSteps
     refine ⟨?_, Nat.le_trans hm forkLo, Nat.lt_of_le_of_lt forkHi hn⟩
@@ -5124,14 +5089,8 @@ private theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run conf
       rw [← split, Run.contains_append]
       exact .inl (.last _ _)
     rcases shape with same | ⟨z, pre, ok, req, hz, h1⟩
-    · exact UInt64.le_antisymm (same ▸ hi) lo
-    · subst req
-      cases member with
-      | last => exact hz
-      | earlier member _ =>
-        obtain ⟨_, q, _⟩ := pre.contains_split step member
-        exact UInt64.le_antisymm
-          (hz ▸ currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append q).chainSteps) lo
+    · exact step_start_epoch_eq r same step member
+    · exact snoc_step_start_epoch_eq pre (Step.slot ok) hz step (req ▸ member)
   obtain ⟨z, pre, post, hsplit, hz, hpen⟩ : ∃ (z : ForkedBeaconState preset)
       (pre : Run config checks m z) (post : Run config checks z n),
       r = pre.append post ∧ getCurrentEpoch z.state = getCurrentEpoch m.state ∧
@@ -5701,8 +5660,6 @@ private theorem passRate_mul_le {x z : ForkedBeaconState preset} (high t i : ℕ
         (stakeCeilingAt config x high t + slashedUnwithdrawnStake x)
         (stakeFloorAt config x high t) t := by omega
   rw [pen]
-  have totalValue := getTotalActiveBalance_toNat totalOk
-  unfold activeBalanceTotal at totalValue
   have fpos : 0 < stakeFloorAt config x high t := by omega
   have rootPos : 0 < (stakeFloorAt config x high t).sqrt := Nat.sqrt_pos.mpr fpos
   have roots := Nat.sqrt_le_sqrt floor
@@ -5726,7 +5683,7 @@ private theorem passRate_mul_le {x z : ForkedBeaconState preset} (high t i : ℕ
     (stakeCeilingAt config x high t + slashedUnwithdrawnStake x) divisor quotient scored floorLe
   unfold passPenaltyRate epochPenalty
   dsimp only
-  rw [totalValue] at first
+  rw [← getTotalActiveBalance_toNat totalOk]
   rw [add_mul]
   linarith
 
@@ -11458,11 +11415,9 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.mul_comm (_ - _)] at times
       nlinarith
   have key := PinKeyFloor.passPenaltyRate_le_leak (config := config)
-    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize
-    (Nat.le_trans (by norm_num) h.facts.rewardScale)
-    T.toNat_lt aligned band scored
+    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts T.toNat_lt aligned band scored
   dsimp only at key
-  refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
+  refine Nat.le_trans key ?_
   simp only [pinTerms]
   have totalRead : (getTotalActiveBalance pulled).toOption.getD 0 = T := by
     rw [pulledOk]
