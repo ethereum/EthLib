@@ -27430,8 +27430,6 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The base is `Sx`, the credit total `Y` and the band total `Ck` of `otherCredits`.
 
-The keys of R's registry are read at twice their largest bounds, by `whistleEnv_sum_le`.
-
 A key that received a deposit on C's branch, or was created there, is read at the largest cap.
 
 `count` bounds those keys by the deposit recipients of the window, so `Y` pays them.
@@ -27440,7 +27438,7 @@ A key that received a deposit on C's branch, or was created there, is read at th
 
 It holds their whistleblower credits twice, because their rounding is at most their double.
 
-Those credits are bounded by the base itself, so `Q * W ≤ Zt + 2 * Q` and `Q ≤ Zt / (W - 2)`. -/
+Those credits are within the base too, so the bound divides by the quotient less two. -/
 private theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -28244,15 +28242,9 @@ private theorem slashW_le (h : Setting config checks g split fin pulled anc coun
 
 A key withdrawn by R's horizon induces no leak.
 
-The envelope of any other key reads its debits and penalty in whole increments.
-
 A key's induced leak is that of its debited increments and of its penalty's increment.
 
-The debited increments of all keys fit the window's envelope.
-
-The keys that R slashed after the finalized epoch are at most `slashedR`.
-
-The leak of the keys, at weight three, is then within the bound. -/
+The keys that R slashed after the finalized epoch are at most `slashedR`. -/
 private theorem syncLeak_of_envelope (h : Setting config checks g split fin pulled anc counted V)
     (perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -28827,19 +28819,11 @@ It adds the debits and slack on R's runs, and the credits and gains of C's run.
 
 R's rise closes it, up to the flows and the bands that pay the rounding.
 
-A key with no band has no credits, and its flows are at most its initial penalty and their gain.
-
 The cap enters only through `stay` and `cappedY`, which the cap arms prove.
 
 C's run may end at any state, so a prefix of it closes the same way.
 
 The start of the effective balance's ceiling is any state's, bounded as `rise_close` reads it.
-
-A key that ends at its start has the two bounds of `start` that `rise_close` reads, for each slack.
-
-Its bound may use the ceiling `Bc ≤ high + S` of the slack `S` that the closing chooses.
-
-At the finalized state it is `balanceAt fin`, and the bound is `Nat.le_max_left`.
 
 It concludes with the flows and bands in the form of `keyExtra`, without the credits of `credC`.
 
@@ -28849,11 +28833,7 @@ It concludes with the flows and bands in the form of `keyExtra`, without the cre
 
 It says the effective balance at C is at most the cap that `capFor` reads, and the rounded stake.
 
-The slack pays that stake, by `y_floor_le`.
-
-A key off the low rate reads the largest cap.
-
-An arm with a frozen cap proves the cap alone, which is stronger. -/
+A key off the low rate reads the largest cap. -/
 private theorem key_close (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -29191,13 +29171,7 @@ The credits `Cr` are all of C's, so they cover the cap's rise on C's run.
 
 `late` is read only for a key that is unslashed at R.
 
-A key at an end before R's epoch and no later than `c` keeps its effective balance at `c`.
-
-`shortStart` bounds that balance by the cap and the rounded top, for every slack.
-
-It may read the ceiling of the balance at `c`, which the slack's ceiling gives.
-
-It holds vacuously at an end that is not before R's epoch.
+At an end before R's epoch and no later than `c`, `shortStart` bounds the effective balance at `c`.
 
 The replays are read at R's epoch. -/
 private theorem key_core_frozen_from (h : Setting config checks g split fin pulled anc counted V)
@@ -29593,19 +29567,9 @@ The closing reads the cap of each state, so the cap is not read as frozen.
 
 The step `a → b` of C's run slashes it, and `pre` is C's run up to `a`.
 
-The balance at `a` is the closing of the rise at the end `a`, from `c`.
-
-Its credits are those of the prefix.
-
-Those credits are within the terms of `whistleSlack`.
+Its credits are those of the prefix, within the terms of `whistleSlack`.
 
 The slashing's increment is `whistleEnv`'s.
-
-An end before R's epoch and no later than `c` keeps the balance of `c`.
-
-With the finalized start, `short_in_fin` bounds it by `whistleEnv`.
-
-With a floor start, the core reads it through `short_start_floor`.
 
 An unslashed key at R is late for the whole run, which `late` states for the key. -/
 private theorem registry_frozen (h : Setting config checks g split fin pulled anc counted V)
@@ -29910,12 +29874,6 @@ They are the keys of `Kc` in `bud_sync`.
 
 It fits `syncLeak`, and the leak of one increment for each key slashed on R's branch.
 
-The keys slashed at C alone fit `syncLeak` and one such leak for each key slashed on R's branch.
-
-The weights of the counted classes are at most three.
-
-So `syncLeak` pays the debits of the keys slashed at C at weight one.
-
 The second bound is read by `flow_whist`, through `whist_units`. -/
 private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -30082,9 +30040,7 @@ They are one rounding step for a credit on C's branch or a sync debit on R's.
 
 The key's flows also compound, which `keyExtra` charges with its unit and its induced leak.
 
-`keyExtra` also holds the key's sync debits on the shared segment.
-
-The start's rounding is `prefix_envelope`'s floor form. -/
+`keyExtra` also holds the key's sync debits on the shared segment. -/
 private theorem key_core (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -30505,13 +30461,7 @@ The switch moves the balance beyond the old cap into the pending deposits.
 
 The step that switches also takes the block credits that follow the switch in it.
 
-So the credits are the gross ones: the net rise of that step can be zero while a credit is not.
-
-The run splits at the step that switches, by `Run.flip_split`.
-
-That lemma bounds the balance after the step by the old cap and the credits of the step.
-
-The rest of the epoch rises by its credits alone, by `same_epoch_balance_le`. -/
+So the credits are the gross ones: the net rise of that step can be zero while a credit is not. -/
 private theorem charge_flip (h : Setting config checks g split fin pulled anc counted V)
     (highC : ℕ) {c a : ForkedBeaconState preset}
     (toC : Run config checks g c) (r : Run config checks c a) (i : ℕ)
@@ -30661,11 +30611,7 @@ The step itself can switch the key to compounding: one payload can switch it, th
 
 So the cap is at most `capAt b` on the whole run, and on `post`.
 
-From `a` the balance rises by the exact epoch rewards of the steps from the charge on.
-
-Those are the rewards that `riseScan` sums.
-
-It also rises by the block credits, and by the credits of the slot steps other than the rewards.
+From `a` the balance rises by the epoch rewards that `riseScan` sums, and by the other credits.
 
 From `b` it rises by the same rewards and the credits of `post`. -/
 private theorem charge_rise_fold (h : Setting config checks g split fin pulled anc counted V)
@@ -30799,15 +30745,7 @@ The second bound adds the whole credits of the charge step, then those of `post`
 
 It needs the charge step to be a block step.
 
-A slot step's whole credits hold its epoch rewards, which none of the three sources pays.
-
-None is a deposit.
-
-The key's deposits are postponed from the step that starts its exit on.
-
-That is `Run.exiting_deposit_credit_zero`.
-
-No deposit is applied in the rest of the epoch before it. -/
+A slot step's whole credits hold its epoch rewards, which none of the three sources pays. -/
 private theorem charge_credits_to (h : Setting config checks g split fin pulled anc counted V)
     {xs : BeaconState preset fork} (toX : Run config checks g ⟨fork, xs⟩)
     {y : ForkedBeaconState preset} (yFork : y.fork = fork)
@@ -31539,16 +31477,6 @@ Every key is read at `whistleEnv` and the slack.
 
 A key that C's branch charges to depart is also read at its charge.
 
-A key that the finalized state does not hold is created after it.
-
-A key of the finalized state is read by its exit at R against the finalized epoch.
-
-If it exits before the finalized epoch and R does not slash it, its balance is the finalized one.
-
-If R slashes it, it is bounded by the frozen core, whose lateness holds vacuously.
-
-If it exits at or after the finalized epoch, it is late for the whole run.
-
 A charge in the split's own epoch also reads the credits of `pre`. -/
 private theorem registry_bounds (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -31810,8 +31738,6 @@ Both add C's proposer credits and sync seats.
 A key with a charge pays no deposit credit after it, so `propC` stands for its credits.
 
 The run `pre` is the shared run from the start of the split's epoch.
-
-No block of that epoch precedes its start, by `earlier`.
 
 A charge in that epoch reads the balance before the credits of `pre`.
 
@@ -32975,15 +32901,7 @@ The run from `b` to the split, `pre`, is the end of the shared run.
 
 The state `b` comes after the finalized state, or before it in its epoch.
 
-In the first case the run from the finalized state ends with `pre`.
-
-In the second case `pre` ends with the run from the finalized state.
-
-No step of the run to `b` starts in the epoch of `b`, so no block of that epoch precedes it.
-
-No genesis fact is read.
-
-If the finalized state and genesis are in the split's epoch, then `b` is genesis. -/
+No step of the run to `b` starts in the epoch of `b`, so no block of that epoch precedes it. -/
 private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) :
     ∃ (b : BeaconState preset fork) (toB : Run config checks g ⟨fork, b⟩)
