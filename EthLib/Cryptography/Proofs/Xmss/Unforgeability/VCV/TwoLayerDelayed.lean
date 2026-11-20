@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TwoLayerSign
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TwoLayerStoredPath
 
 /-!
 # Chain values released by a successful two-layer signature
@@ -25,24 +26,24 @@ private theorem grows {α : Type} (pp : PublicParam) (op : OracleComp SharedSpec
     op s le_rfl z ran
 
 /-- Marking the bottom signer establishes one value which all later reads can return unchanged. -/
-def StableRead {α : Type} (pp : PublicParam) (mark : OracleComp SharedSpec Unit)
+def StableRead {α θ : Type} (pp : PublicParam) (mark : OracleComp SharedSpec θ)
     (read : OracleComp SharedSpec α) : Prop :=
   ∀ s z, z ∈ support ((simulateQ (graph pp).eagerImpl mark).run s) →
     ∃ a, ∀ t : SharedState, z.2 ≤ t →
       (simulateQ (graph pp).eagerImpl read).run t = pure (a, t)
 
-private theorem delay {α β γ ε : Type} (pp : PublicParam)
-    (mark : OracleComp SharedSpec Unit) (read : OracleComp SharedSpec α)
-    (next : OracleComp SharedSpec (Except ε β)) (pack : α → β → γ)
+private theorem delay {α β γ ε θ : Type} (pp : PublicParam)
+    (mark : OracleComp SharedSpec θ) (read : OracleComp SharedSpec α)
+    (next : θ → OracleComp SharedSpec (Except ε β)) (pack : α → β → γ)
     (ready : StableRead pp mark read) :
     simulateQ (graph pp).eagerImpl (do
-      mark
+      let u ← mark
       let a ← read
-      let result ← next
+      let result ← next u
       return result.map (pack a)) =
     simulateQ (graph pp).eagerImpl (do
-      mark
-      match ← next with
+      let u ← mark
+      match ← next u with
       | .error e => return .error e
       | .ok b => return .ok (pack (← read) b)) := by
   ext s : 1
@@ -53,7 +54,7 @@ private theorem delay {α β γ ε : Type} (pp : PublicParam)
   rw [stable w.2 le_rfl, pure_bind]
   apply OracleComp.bind_congr_of_forall_mem_support
   rintro ⟨r, t⟩ later
-  have keep := stable t (grows pp next w.2 later)
+  have keep := stable t (grows pp (next w.1) w.2 later)
   cases r with
   | error err => rfl
   | ok b => simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
@@ -90,6 +91,46 @@ noncomputable def finishTree (pp : PublicParam) (cb : SeedPrf (OracleComp Shared
   let answer ← layerSchedule pp cb .top (bottomTree idx) (packBytes both.1)
   return answer.map (fun top => (both.2, top))
 
+/-- The top finder needs the root before it can decide whether to return the bottom path. -/
+noncomputable def releasedTree (pp : PublicParam) (cb : SeedPrf (OracleComp SharedSpec))
+    (idx : LeafIndex) : OracleComp SharedSpec (Except XmssError
+      (Vector Digest LAYER_HEIGHT × LayerSignature)) := do
+  let lift := selection pp .bottom
+  let root ← simulateQ lift.liftQuery
+    (beforeNode pp .bottom LAYER_HEIGHT (bottomTree idx) >>= fun _ =>
+      LayerGraph.readOutput (LayerGraph.treeRole LAYER_HEIGHT (bottomTree idx)))
+  match ← layerSchedule pp cb .top (bottomTree idx) (packBytes root) with
+  | .error err => return .error err
+  | .ok top =>
+    let path ← simulateQ lift.liftQuery (revealPath LAYER_HEIGHT idx.toNat)
+    return .ok (path, top)
+
+attribute [local irreducible] beforeNode revealPath LayerGraph.readOutput layerSchedule
+
+/-- The bottom path comes from the tree already built for the root. -/
+theorem finishTree_released (pp : PublicParam) (cb : SeedPrf (OracleComp SharedSpec))
+    (idx : LeafIndex) : simulateQ (graph pp).eagerImpl (finishTree pp cb idx) =
+      simulateQ (graph pp).eagerImpl (releasedTree pp cb idx) := by
+  let l := selection pp .bottom
+  let h := LAYER_HEIGHT
+  let j := bottomTree idx
+  let root := simulateQ l.liftQuery (beforeNode pp .bottom h j >>= fun _ =>
+    LayerGraph.readOutput (LayerGraph.treeRole h j))
+  let path := simulateQ l.liftQuery (revealPath h idx.toNat)
+  have stored : StableRead pp root path :=
+    fun s z ran => root_stores_path pp .bottom h j idx.toNat le_rfl rfl s z ran
+  have same := delay pp root path (fun b => layerSchedule pp cb .top j (packBytes b))
+    (fun xs top => (xs, top)) stored
+  refine Eq.trans ?_ (same.trans ?_)
+  · simp only [finishTree, builtPathSchedule, root, path, l, h, j, simulateQ_bind, simulateQ_pure,
+      bind_assoc, pure_bind]
+  · simp only [releasedTree, root, path, l, h, j, simulateQ_bind]
+    apply bind_congr
+    intro _
+    apply bind_congr
+    intro answer
+    cases answer <;> rfl
+
 def packSignature (idx : LeafIndex) (rho : Randomizer) (ys : Vector Digest V)
     (result : Vector Digest LAYER_HEIGHT × LayerSignature) : Signature :=
   ⟨idx, ⟨rho, ys, result.1⟩, result.2⟩
@@ -105,14 +146,14 @@ noncomputable def releasedSchedule (pp : PublicParam) (cb : SeedPrf (OracleComp 
     | return .error (.noAdmissibleEncoding .bottom idx.toNat)
   let lift := selection pp .bottom
   simulateQ lift.liftQuery (beforeValues pp .bottom e x)
-  match ← finishTree pp cb idx with
+  match ← releasedTree pp cb idx with
   | .error err => return .error err
   | .ok b =>
     let ys ← simulateQ lift.liftQuery (revealValues e x)
     return .ok (packSignature idx rho ys b)
 
 attribute [local irreducible] Xmss.Internal.findCodeword beforeValues revealValues
-  layerSchedule builtPathSchedule
+  builtPathSchedule
 
 /-- The actual signer and its success-only chain disclosures have the same full shared eager law. -/
 theorem signDerived_released (pp : PublicParam) (cb : SeedPrf (OracleComp SharedSpec))
@@ -131,7 +172,7 @@ theorem signDerived_released (pp : PublicParam) (cb : SeedPrf (OracleComp Shared
     let lift := selection pp .bottom
     let mark := simulateQ lift.liftQuery (beforeValues pp .bottom e x)
     let read := simulateQ lift.liftQuery (revealValues e x)
-    have same := delay pp mark read (finishTree pp cb idx) (packSignature idx rho)
+    have same := delay pp mark read (fun _ => finishTree pp cb idx) (packSignature idx rho)
       (stable_values pp .bottom e x)
     simp only [simulateQ_bind] at same
     simp only [simulateQ_bind, simulateQ_pure, bind_assoc, pure_bind]
@@ -149,6 +190,7 @@ theorem signDerived_released (pp : PublicParam) (cb : SeedPrf (OracleComp Shared
       cases ans <;> rfl
     · apply bind_congr
       intro _
+      rw [finishTree_released]
       apply bind_congr
       intro reply
       cases reply <;> rfl
