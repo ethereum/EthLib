@@ -3472,7 +3472,7 @@ The Byzantine bound and the two conditions on the anchor are assumptions on the 
 `justifiedPinned_of_setting` proves `JustifiedPinned` at any margin, as `justifiedPinned_of_setting.mainnet` and `.minimal` on the two deployed presets.
 Its conclusion allows a collision of two honest stores.
 It assumes the nonzero roots of the held block states and the absent parent of the anchor.
-It assumes the bounded honest store epochs, the stake floors, the unslashed counted voters and the withdrawal delay.
+It assumes the bounded honest store epochs, the stake floors and the unslashed counted voters.
 It also assumes the finality of honest stores and the guard `PinGuarded` at each call's finalized state.
 The fork is from Fusaka and before Gloas, and the next fork is past the horizon.
 It derives the agreement of honest blocks, the held states before the next fork and the justified chain of each store itself.
