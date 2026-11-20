@@ -197,5 +197,124 @@ theorem node (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spe
         (beforeNode pp layer h j >>= fun _ => readOutput (treeRole h j)) :=
   (node_settles pp layer other h j bound).1.trans (tree pp layer other h j)
 
+private theorem collect_cached {α : Type} (pp : PublicParam) (l : Layer) (s : State)
+    (n : Nat) (f : Fin n → OracleComp Spec α) (v : Fin n → Id α)
+    (entries : ∀ i, (simulateQ (graph pp l).eagerImpl (f i)).run s = pure ((v i).run, s)) :
+    (simulateQ (graph pp l).eagerImpl (ofFnInOrder n f)).run s =
+      pure ((ofFnInOrder n v).run, s) := by
+  induction n with
+  | zero => simp [ofFnInOrder]
+  | succ n ih =>
+    simp only [ofFnInOrder, simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
+      entries 0, pure_bind, Id.run_bind, Id.run_pure]
+    rw [ih (fun i => f i.succ) (fun i => v i.succ) (fun i => entries i.succ), pure_bind]
+
+theorem bounded_digit (d : Fin CHAIN_LENGTH) : 0 + d.val ≤ CHAIN_LENGTH - 1 := by
+  have limit := d.isLt
+  omega
+
+/-- Touch the private start pairs and both halves of each selected chain prefix. -/
+def beforeValues (pp : PublicParam) (l : Layer) (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V) :
+    OracleComp Spec Unit := do
+  visit (V / 2) (startPair e)
+  visit V fun i => Wots.chain (GraphChain.touchStep (schedule pp l e i))
+    0 (x[i]).val (bounded_digit x[i]) ()
+
+/-- Reading a signature exposes each chain only at its chosen digit, in its original order. -/
+noncomputable def revealValues (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V) :
+    OracleComp Spec (Vector Digest V) :=
+  ofFnInOrder V fun i => digestEquiv.symm <$> readCell (some (position e i (x[i]).val))
+
+theorem reveal_cached (pp : PublicParam) (l : Layer) (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V)
+    (ys : Vector Digest V) (s : State)
+    (ready : ∀ i : Fin V, s.2 (position e i (x[i]).val) = some (digestEquiv ys[i])) :
+    (simulateQ (graph pp l).eagerImpl (revealValues e x)).run s = pure (ys, s) := by
+  have law := collect_cached pp l s V
+    (fun i => digestEquiv.symm <$> readCell (some (position e i (x[i]).val)))
+    (fun i => (ys[i] : Id Digest)) (fun i => by
+      rw [simulateQ_map, StateT.run_map, CanonicalGraph.eagerImpl_readCell_run,
+        RelabelState.drawCell_run_of_cell_eq_some (ready i)]
+      simp [Id.run])
+  have same : (ofFnInOrder (m := Id) V (fun i : Fin V => ys[i])).run = ys := by
+    rw [HashSig.ofFnInOrder_run]
+    apply Vector.ext
+    intro j hj
+    simp [Id.run]
+  rw [same] at law
+  exact law
+
+/-- After a successful trial, all touches can precede every disclosed chain read.
+
+The original eager output and both caches are preserved even when a chosen digit is zero. -/
+theorem values (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp Spec))
+    (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V) :
+    simulateQ (graph pp l).eagerImpl (do
+      let xs ← chainStarts pp (startPrf pp l other) l e
+      ofFnInOrder V fun i => Xmss.chain hash pp l e i 0 (x[i]).val (by simp) xs[i]) =
+    simulateQ (graph pp l).eagerImpl (beforeValues pp l e x >>= fun _ => revealValues e x) := by
+  let steps := fun (xs : Vector Digest V) => ofFnInOrder V fun i =>
+    Xmss.chain hash pp l e i 0 (x[i]).val (by simp) xs[i]
+  have eqn := fusion pp l (chainStarts pp (startPrf pp l other) l e)
+    (visit (V / 2) (startPair e)) steps
+    (visit V fun i => Wots.chain (GraphChain.touchStep (schedule pp l e i))
+      0 (x[i]).val (bounded_digit x[i]) ())
+    (fun ys => pure ys) (revealValues e x) (starts pp l other e) ?_ ?_
+  · simpa only [steps, beforeValues, bind_pure] using eqn
+  · intro s a ha
+    have ready := starts_stored pp l other e s (z := a) ha
+    apply forget_collect pp l
+    intro i t ext
+    unfold Xmss.chain
+    exact GraphChain.chain_touches_run (schedule pp l e i) digestEquiv
+      (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
+        (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) a.1[i] t (ext.2 (ready i))
+  · intro s a ha b hb
+    have start := starts_stored pp l other e s (z := a) ha
+    rw [simulateQ_pure, StateT.run_pure]
+    symm
+    apply reveal_cached
+    apply collect_recorded pp l V _ (fun i d t => t.2 (position e i (x[i]).val) =
+      some (digestEquiv d)) a.2 (fun _ _ _ _ ext old => ext.2 old) _ hb
+    intro i t old z run
+    unfold Xmss.chain at run
+    have stored := GraphChain.chain_records_result (schedule pp l e i) digestEquiv
+      (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
+        (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) a.1[i] t
+      (old.2 (start i)) run
+    change z.2.2 (position e i (0 + (x[i]).val)) = some (digestEquiv z.1) at stored
+    rw [Nat.zero_add] at stored
+    exact stored
+
+/-- The actual finder controls entry into the chain schedule.
+
+A failed finder returns immediately and touches no chain starts. -/
+noncomputable def sign (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp Spec))
+    (e : UInt32) (msg : ByteArray) : OracleComp Spec (Option (Randomizer × Vector Digest V)) := do
+  let base ← randomizerBase pp (startPrf pp l other) l e msg
+  let some (rho, x) ← Xmss.Internal.findCodeword hash pp l e msg base 0 MAX_RANDOMIZER_TRIALS
+    | return none
+  beforeValues pp l e x
+  let ys ← revealValues e x
+  return some (rho, ys)
+
+attribute [local irreducible] Xmss.Internal.findCodeword
+
+/-- The actual one-time signer and the schedule give the same result and complete eager state. -/
+theorem ots (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp Spec))
+    (e : UInt32) (msg : ByteArray) :
+    simulateQ (graph pp l).eagerImpl (otsSign hash pp (startPrf pp l other) l e msg) =
+      simulateQ (graph pp l).eagerImpl (sign pp l other e msg) := by
+  unfold otsSign sign
+  simp only [simulateQ_bind]
+  apply bind_congr
+  intro base
+  apply bind_congr
+  rintro (_ | ⟨rho, x⟩)
+  · rfl
+  · have complete := congrArg
+      (fun p : StateT State ProbComp (Vector Digest V) =>
+        p >>= fun ys => pure (some (rho, ys))) (values pp l other e x)
+    simpa only [simulateQ_bind, simulateQ_pure, bind_assoc] using complete
+
 end Hidden
 end EthLib.Cryptography.Xmss.Unforgeability.VCV.LayerGraph
