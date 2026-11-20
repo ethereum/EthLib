@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.exitChurnLimit_total` gives the total active balance read by a successful exit churn limit before Gloas.
+  `ExitCharges` reads it for the pin reserve, and `BlockFold` reads it for the deposit churn bound.
+
 - The proof of the pin reserve bound separates the estimates for balances, exits and rewards into modules.
   The helpers shared by these modules are public in the `PinDrift.Internal` namespace.
   The bound's statement and import path are unchanged.

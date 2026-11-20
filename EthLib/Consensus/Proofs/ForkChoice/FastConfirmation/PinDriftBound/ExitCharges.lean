@@ -2702,13 +2702,7 @@ private theorem exitRate_le {fork' : Fork} {s : BeaconState preset fork'}
     (band : ∀ t : Gwei, getTotalActiveBalance s = .ok t → t.toNat ≤ wide)
     (computed : exitChurnLimit config s = .ok rate) :
     rate.toNat ≤ Apriori.activationExitChurn preset config wide := by
-  have notGloas : ¬ .glamsterdam ≤ fork' := Nat.not_le_of_lt early
-  obtain ⟨total, read⟩ : ∃ t, getTotalActiveBalance s = .ok t := by
-    cases first : getTotalActiveBalance s with
-    | error e =>
-      simp [exitChurnLimit, notGloas, getActivationExitChurnLimit, getBalanceChurnLimit, first,
-        bind, Except.bind] at computed
-    | ok t => exact ⟨t, rfl⟩
+  obtain ⟨total, read⟩ := DirectSafety.exitChurnLimit_total early computed
   exact (Apriori.Internal.exit_rate_le_churn early read computed).trans
     (Apriori.Internal.exit_churn_mono (band total read))
 

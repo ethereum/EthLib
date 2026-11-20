@@ -6445,7 +6445,8 @@ variable (consRate : ∀ {fork : Fork} {s : BeaconState preset fork}
     total.toNat ≤ ceilingValue atEpoch → rate.toNat ≤ consEnvelope (ceilingValue atEpoch))
 variable (consMono : Monotone (fun atEpoch => consEnvelope (ceilingValue atEpoch)))
 
-private theorem exitChurnLimit_total {fork : Fork} {s : BeaconState preset fork} {rate : Gwei}
+/-- Before Gloas, a computed exit churn limit reads a total active balance. -/
+theorem exitChurnLimit_total {fork : Fork} {s : BeaconState preset fork} {rate : Gwei}
     (early : fork < .glamsterdam) (computed : exitChurnLimit config s = .ok rate) :
     ∃ total, getTotalActiveBalance s = .ok total := by
   simp only [exitChurnLimit, show ¬ .glamsterdam ≤ fork from Nat.not_le_of_lt early,
