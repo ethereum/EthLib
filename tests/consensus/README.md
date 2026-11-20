@@ -295,6 +295,7 @@ A schema with no example of its own takes the examples of its fields.
 The test also checks the letter case of hex, the pattern of an integer, and the codes of the errors.
 The same file runs the call that imports keystores, on keystores that it builds with PBKDF2 and AES-128-CTR, and on the PBKDF2 keystore of ERC-2335 in `tests/cryptography/keystore/`.
 It checks the example of issue #2136 and the cases of the use case "Add a key" in `use-cases/README.md` of the source.
+It also lists the keys of a client, and runs the use case "Delete a key" of the source, with the request `a, a, b, c` and its statuses.
 
 The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
 The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.

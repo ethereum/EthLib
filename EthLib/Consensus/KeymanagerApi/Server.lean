@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.KeymanagerApi.LocalKeys
 
 /-!
@@ -32,7 +33,9 @@ def notFound : Response :=
 def handle (text : JsonText) (config : ClientConfig) (state : KeyState) (method path : String)
     (body : Json) : Response × KeyState :=
   match method, pathSegments path with
+  | "GET", ["eth", "v1", "keystores"] => getKeystores state
   | "POST", ["eth", "v1", "keystores"] => postKeystores text config.limits state body
+  | "DELETE", ["eth", "v1", "keystores"] => deleteKeystores text state body
   | _, _ => (notFound, state)
 
 end EthLib.Consensus.KeymanagerApi

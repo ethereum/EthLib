@@ -333,6 +333,22 @@ The writer of the Beacon API can fail in its type, so this one can too; it never
 def signedVoluntaryExitJson (signed : SignedVoluntaryExit) : Except KeymanagerError Json :=
   (BeaconApi.toApiJson signed).mapError fun _ => .field ""
 
+/-! ## Requests -/
+
+/-- A request to delete keys, local or remote. -/
+structure DeleteKeysRequest where
+  /-- The keys to delete, in order. -/
+  pubkeys : List BLSPubkey
+  deriving DecidableEq, Repr
+
+/-- An array of public keys, each read in turn. -/
+def readPubkeys (path : String) (document : Json) : Except KeymanagerError (List BLSPubkey) :=
+  ofProtection (Interchange.readArray path (fun path => Interchange.readBytes path 48) document)
+
+/-- A request to delete keys, from its object. -/
+def readDeleteKeysRequest (document : Json) : Except KeymanagerError DeleteKeysRequest := do
+  return { pubkeys := ← requiredField "" "pubkeys" readPubkeys document }
+
 /-! ## Responses -/
 
 /-- A response of the API: its HTTP status code and its JSON body. -/
