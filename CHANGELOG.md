@@ -35,6 +35,14 @@ Not yet released.
 
 ### Proof additions
 
+- `Step.eq_slot_of_crossing` says that a step of a run that crosses an epoch is a slot step, and gives the step as that slot.
+  `slot_of_crossing` now follows from it, and its statement is unchanged.
+  The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
+
+- `DirectSafety.Apriori.Internal.segment_events_cases` splits the events of a segment of a branch that starts in an epoch.
+  The segment stays in its epoch, or it ends with the slot of the epoch boundary after an inner run, whose epoch passes it gives by source.
+  The cohort's penalties in `Penalties` and one key's pass debits in the pin's drift bound read it.
+
 - `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
   `pinReserve` is now `(pinTerms config state ancestor finalizedState).total`, with the same value and statement.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.

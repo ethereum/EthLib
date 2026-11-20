@@ -698,14 +698,9 @@ private theorem epoch_succ_of_slot {m n : ForkedBeaconState preset}
 /-- A step that crosses an epoch is a slot step. -/
 theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
-    advanceSlotAcross config checks m = .ok n := by
-  cases step with
-  | slot ok => exact ok
-  | block engine signed due ok =>
-    exfalso
-    have := processBlock_slot (applySignedBlock_ok ok).2.1
-    simp only [getCurrentEpoch, this] at crossing
-    omega
+    advanceSlotAcross config checks m = .ok n :=
+  let ⟨ok, _⟩ := step.eq_slot_of_crossing (UInt64.lt_iff_toNat_lt.mpr crossing)
+  ok
 
 /-- Events with no penalty or inactivity source debit no key as a penalty. -/
 private theorem penaltyDebit_sum_zero_of_free {events : List (BalanceEvent preset)}

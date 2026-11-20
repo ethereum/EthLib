@@ -81,6 +81,16 @@ theorem Step.chainStep {x y : ForkedBeaconState preset} (step : Step config chec
   | slot ok => exact .slot ok
   | block engine signed _ ok => exact .block engine signed true ok
 
+/-- A step that crosses an epoch is the slot that ends it: a block keeps the slot. -/
+theorem Step.eq_slot_of_crossing {x y : ForkedBeaconState preset} (step : Step config checks x y)
+    (crossing : getCurrentEpoch x.state < getCurrentEpoch y.state) :
+    ∃ ok : advanceSlotAcross config checks x = .ok y, step = .slot ok := by
+  cases step with
+  | slot ok => exact ⟨ok, rfl⟩
+  | block engine signed due ok =>
+    exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
+      (applySignedBlock_ok ok).2.1).slot]) (UInt64.ne_of_lt crossing).symm
+
 /-- A run is a sequence of steps of a chain. -/
 theorem Run.chainSteps {x y : ForkedBeaconState preset} (run : Run config checks x y) :
     Relation.ReflTransGen (ChainStep config checks) x y := by

@@ -589,12 +589,7 @@ private theorem apriori_prefix_witness {g v y : ForkedBeaconState preset}
       -- A step that leaves the epoch is a slot at its boundary.
       have crossing : getCurrentEpoch u.state < getCurrentEpoch u'.state :=
         UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le (Ne.symm kept)
-      obtain ⟨boundary, rfl⟩ : ∃ boundary, step = .slot boundary := by
-        cases step with
-        | block engine signed due ok =>
-          exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
-            (applySignedBlock_ok ok).2.1).slot]) kept
-        | slot ok => exact ⟨ok, rfl⟩
+      obtain ⟨boundary, rfl⟩ := step.eq_slot_of_crossing crossing
       have rElectra : .pectra ≤ r.fork :=
         Nat.le_trans electra (fork_le_of_chainSteps toR.chainSteps)
       have uElectra : .pectra ≤ u.fork :=

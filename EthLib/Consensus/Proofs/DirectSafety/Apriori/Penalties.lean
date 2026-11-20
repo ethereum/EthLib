@@ -148,6 +148,79 @@ private theorem balanceEvents_of_empty {m y : ForkedBeaconState preset}
   | nil => rfl
   | snoc pre step => exact absurd (.last _ _) (empty step)
 
+/-- A segment of a branch that starts in an epoch either stays in it or ends it with one slot.
+
+Every step of the segment `mid` starts at the epoch of its start `m`.
+
+If the segment leaves the epoch, its last step is the slot that ends it, after an inner run.
+
+That slot records the fork crossings of its upgrades, which pay no penalty and no sync debit.
+
+When it also runs the epoch passes, it records the rewards pass and then the later passes. -/
+theorem segment_events_cases {m n : ForkedBeaconState preset}
+    (mid : Run config checks m n) (early : n.fork < .glamsterdam) (altair : .altair ≤ m.fork)
+    (high : Nat) (endEpoch : (getCurrentEpoch n.state).toNat ≤ high + 1)
+    (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      mid.Contains step → getCurrentEpoch u.state = getCurrentEpoch m.state)
+    {found : List (BalanceEvent preset)} (replayed : mid.balanceEvents high = .ok found) :
+    getCurrentEpoch n.state = getCurrentEpoch m.state ∨
+      ∃ (u : ForkedBeaconState preset) (inner : Run config checks m u)
+        (boundary : advanceSlotAcross config checks u = .ok n)
+        (during crossings : List (BalanceEvent preset)) (cached : BeaconState preset u.fork),
+        mid = inner.snoc (.slot boundary) ∧ u.fork < .glamsterdam ∧
+        getCurrentEpoch u.state = getCurrentEpoch m.state ∧
+        getCurrentEpoch u.state < getCurrentEpoch n.state ∧
+        inner.balanceEvents high = .ok during ∧ processSlot u.state = .ok cached ∧
+        PenaltyFree crossings ∧ (∀ e ∈ crossings, e.source ≠ .sync) ∧
+        (found = during ++ crossings ∨
+          ∃ just pass rewarded later, EpochStage.Edge config checks .justification cached just ∧
+            EpochStage.Edge config checks .inactivity just pass ∧
+            replayRewards (config := config) (pass, []) = .ok rewarded ∧
+            found = during ++ ((rewarded.2 ++ later) ++ crossings) ∧
+            (∀ e ∈ later,
+              e.source = .slashings ∨ e.source = .deposits ∨ e.source = .consolidations) ∧
+            (∀ e ∈ rewarded.2,
+              e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)) := by
+  by_cases same : getCurrentEpoch n.state = getCurrentEpoch m.state
+  · exact .inl same
+  right
+  cases mid with
+  | nil => exact absurd rfl same
+  | @snoc u _ inner step =>
+  have uEarly : u.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le early
+  have uEpoch : getCurrentEpoch u.state = getCurrentEpoch m.state := starts step (.last _ _)
+  have crossing : getCurrentEpoch u.state < getCurrentEpoch n.state :=
+    UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
+      (fun equal => same (equal.symm.trans uEpoch))
+  -- The last step leaves the epoch, so it is the slot that ends it.
+  obtain ⟨boundary, rfl⟩ := step.eq_slot_of_crossing crossing
+  obtain ⟨added, addedOk⟩ := (Step.slot boundary).balanceEvents_ok early
+  obtain ⟨during, duringOk⟩ := inner.balanceEvents_ok uEarly high
+  have split : found = during ++ added := by
+    simp only [Run.balanceEvents, duringOk, addedOk, bind, Except.bind,
+      show (getCurrentEpoch u.state).toNat ≤ high + 1 by
+        have := UInt64.lt_iff_toNat_lt.mp crossing; omega,
+      ↓reduceIte, pure, Except.pure, Except.ok.injEq] at replayed
+    exact replayed.symm
+  subst split
+  -- The slot records the epoch passes, then the upgrades, which are fork crossings.
+  obtain ⟨advanced, cached, crossings, -, -, cachedOk, crossingOk, kind⟩ :=
+    Step.balanceEvents_slot boundary early addedOk
+  have crossed := upgradeBalanceReplay_crossing crossingOk
+  refine ⟨u, inner, boundary, during, crossings, cached, rfl, uEarly, uEpoch, crossing, duringOk,
+    cachedOk, fun e member => by simp [crossed e member], fun e member => by
+      simp [crossed e member], ?_⟩
+  rcases kind with ⟨-, rfl⟩ | ⟨middle, -, recorded, recordOk, -, -, -, rfl, -⟩
+  · exact .inl rfl
+  -- The epoch passes are the rewards pass, then slashings, deposits and consolidations.
+  have altairU : .altair ≤ u.fork := Nat.le_trans altair (fork_le_of_chainSteps inner.chainSteps)
+  obtain ⟨just, pass, rewarded, later, justified, scored, rewardedOk, recordedEq, laterSources,
+    rewardSources⟩ := epochReplay_events altairU (epochBalanceReplay_trace recordOk)
+  simp only at recordedEq
+  subst recordedEq
+  exact .inr ⟨just, pass, rewarded, later, justified, scored, rewardedOk, rfl, laterSources,
+    rewardSources⟩
+
 /-- The penalty and sync debits of the cohort in one segment of a branch fit its epoch's `lambda_t`.
 
 The segment `mid` runs from `m`, and each of its steps starts at the epoch of `m`.
@@ -222,61 +295,26 @@ private theorem segment_penalties_core {g x m n : ForkedBeaconState preset}
     · exact sync_penalty_envelope (syncCredits total totalOk) (totalBound total totalOk)
         floorCeiling floorPositive
     · exact quiet ▸ Nat.zero_le _
-  by_cases same : getCurrentEpoch n.state = getCurrentEpoch m.state
+  rcases segment_events_cases mid early mAltair high endEpoch starts replayed with same |
+    ⟨u, inner, boundary, during, crossings, cached, rfl, uEarly, uEpoch, crossing, duringOk,
+      cachedOk, crossingsFree, crossingsQuiet, kind⟩
   · -- A segment inside its epoch pays only the sync debits of its blocks.
     obtain ⟨_, free, syncBound, _⟩ := syncOnly mid early same replayed
     rw [penaltyDebits_zero _ free, Nat.zero_add] at debits
     exact debits.trans syncBound
-  cases mid with
-  | nil => exact absurd rfl same
-  | @snoc u _ inner step =>
-  have uEarly : u.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-  have uEpoch : getCurrentEpoch u.state = getCurrentEpoch m.state := starts step (.last _ _)
-  have crossing : getCurrentEpoch u.state < getCurrentEpoch n.state :=
-    UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
-      (fun equal => same (equal.symm.trans uEpoch))
-  -- The last step leaves the epoch, so it is the slot that ends it.
-  obtain ⟨boundary, rfl⟩ : ∃ boundary, step = .slot boundary := by
-    cases step with
-    | block engine signed due ok =>
-      exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
-        (applySignedBlock_ok ok).2.1).slot]) (UInt64.ne_of_lt crossing).symm
-    | slot ok => exact ⟨ok, rfl⟩
-  obtain ⟨added, addedOk⟩ := (Step.slot boundary).balanceEvents_ok early
-  obtain ⟨during, duringOk⟩ := inner.balanceEvents_ok uEarly high
-  have split : found = during ++ added := by
-    simp only [Run.balanceEvents, duringOk, addedOk, bind, Except.bind,
-      show (getCurrentEpoch u.state).toNat ≤ high + 1 by
-        have := UInt64.lt_iff_toNat_lt.mp crossing; omega,
-      ↓reduceIte, pure, Except.pure, Except.ok.injEq] at foundOk
-    exact foundOk.symm
-  subst split
-  simp only [List.map_append, List.sum_append]
   -- The blocks inside the epoch pay its sync debits and no penalty.
   obtain ⟨effective, free, syncBound, syncCredits⟩ := syncOnly inner uEarly uEpoch duringOk
-  -- The slot records the epoch passes, then the upgrades, which are fork crossings.
-  obtain ⟨advanced, cached, crossings, -, -, cachedOk, crossingOk, kind⟩ :=
-    Step.balanceEvents_slot boundary early addedOk
-  have crossed := upgradeBalanceReplay_crossing crossingOk
-  have crossingsFree : PenaltyFree crossings := fun e member => by
-    simp [crossed e member]
-  have crossingsQuiet : ∀ e ∈ crossings, e.source ≠ .sync := fun e member => by
-    simp [crossed e member]
-  rcases kind with ⟨-, rfl⟩ | ⟨middle, -, recorded, recordOk, -, -, -, rfl, -⟩
+  rcases kind with rfl | ⟨just, pass, rewarded, later, justified, scored, rewardedOk, rfl,
+    laterSources, rewardSources⟩
   · -- Without epoch passes, the slot records only fork crossings.
-    have penalties : ((during ++ added).map fun e =>
+    have penalties : ((during ++ crossings).map fun e =>
         ∑ j ∈ penaltyCohort x, penaltyDebit j e).sum = 0 :=
       penaltyDebits_zero _ (free.append crossingsFree)
     simp only [List.map_append, List.sum_append, sourceDebits_append,
       syncDebits_zero crossingsQuiet] at debits penalties ⊢
     omega
-  -- The epoch passes are the rewards pass, then slashings, deposits and consolidations.
   have altair : .altair ≤ u.fork :=
     Nat.le_trans mAltair (fork_le_of_chainSteps inner.chainSteps)
-  obtain ⟨just, pass, rewarded, later, justified, scored, rewardedOk, recordedEq, laterSources,
-    rewardSources⟩ := epochReplay_events altair (epochBalanceReplay_trace recordOk)
-  simp only at recordedEq
-  subst recordedEq
   have laterFree : PenaltyFree later := fun e member => by
     rcases laterSources e member with s | s | s <;> simp [s]
   have laterQuiet : ∀ e ∈ later, e.source ≠ .sync := fun e member => by

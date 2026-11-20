@@ -271,56 +271,26 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     {found : List (BalanceEvent preset)} (replayed : mid.balanceEvents high = .ok found) :
     (found.map (penaltyDebit v)).sum ≤
       if getCurrentEpoch m.state < getCurrentEpoch n.state then pen else 0 := by
-  by_cases same : getCurrentEpoch n.state = getCurrentEpoch m.state
+  rcases DirectSafety.Apriori.Internal.segment_events_cases mid early altair high endEpoch starts
+      replayed with same | ⟨u, inner, boundary, during, crossings, cached, rfl, uEarly, uEpoch,
+      crossing, duringOk, cachedOk, crossingsFree, -, kind⟩
   · -- A segment inside its epoch runs only blocks, which record no penalty.
     have free := (epoch_sync_data mid altair early same high replayed).2.1
     rw [penaltyDebit_sum_zero free]
     exact Nat.zero_le _
-  cases mid with
-  | nil => exact absurd rfl same
-  | @snoc u _ inner step =>
-  have uEarly : u.fork < .glamsterdam := Nat.lt_of_le_of_lt step.chainStep.fork_le early
-  have uEpoch : getCurrentEpoch u.state = getCurrentEpoch m.state := starts step (.last _ _)
-  have crossing : getCurrentEpoch u.state < getCurrentEpoch n.state :=
-    UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
-      (fun equal => same (equal.symm.trans uEpoch))
   rw [ite_eq_left (uEpoch ▸ crossing)]
-  -- The last step leaves the epoch, so it is the slot that ends it.
-  obtain ⟨boundary, rfl⟩ : ∃ boundary, step = .slot boundary := by
-    cases step with
-    | block engine signed due ok =>
-      exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
-        (applySignedBlock_ok ok).2.1).slot]) (UInt64.ne_of_lt crossing).symm
-    | slot ok => exact ⟨ok, rfl⟩
-  obtain ⟨added, addedOk⟩ := (Step.slot boundary).balanceEvents_ok early
-  obtain ⟨during, duringOk⟩ := inner.balanceEvents_ok uEarly high
-  have split : found = during ++ added := by
-    simp only [Run.balanceEvents, duringOk, addedOk, bind, Except.bind,
-      show (getCurrentEpoch u.state).toNat ≤ high + 1 by
-        have := UInt64.lt_iff_toNat_lt.mp crossing; omega,
-      ↓reduceIte, pure, Except.pure, Except.ok.injEq] at replayed
-    exact replayed.symm
-  subst split
   have free := (epoch_sync_data inner altair uEarly uEpoch high duringOk).2.1
-  simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero free, Nat.zero_add]
-  -- The slot records the epoch passes, then the upgrades, which are fork crossings.
-  obtain ⟨advanced, cached, crossings, -, -, cachedOk, crossingOk, kind⟩ :=
-    Step.balanceEvents_slot boundary early addedOk
-  have crossed := upgradeBalanceReplay_crossing crossingOk
-  have crossingsFree : PenaltyFree crossings := fun e member => by
-    simp [crossed e member]
-  rcases kind with ⟨-, rfl⟩ | ⟨middle, -, recorded, recordOk, -, -, -, rfl, -⟩
-  · rw [penaltyDebit_sum_zero crossingsFree]
+  rcases kind with rfl | ⟨just, pass, rewarded, later, justified, scored, rewardedOk, rfl,
+    laterSources, -⟩
+  · simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero free,
+      penaltyDebit_sum_zero crossingsFree]
     exact Nat.zero_le _
   have altairU : .altair ≤ u.fork := Nat.le_trans altair (fork_le_of_chainSteps inner.chainSteps)
-  obtain ⟨just, pass, rewarded, later, justified, scored, rewardedOk, recordedEq, laterSources,
-    -⟩ := epochReplay_events altairU (epochBalanceReplay_trace recordOk)
-  simp only at recordedEq
-  subst recordedEq
   have laterFree : PenaltyFree later := fun e member => by
     rcases laterSources e member with s | s | s <;> simp [s]
-  simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero laterFree,
-    penaltyDebit_sum_zero crossingsFree, Nat.add_zero]
+  simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero free,
+    penaltyDebit_sum_zero laterFree, penaltyDebit_sum_zero crossingsFree, Nat.zero_add,
+    Nat.add_zero]
   -- The pass reads the registry, the slot and the scores of `u`, after one update of the scores.
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   have one := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
@@ -17958,12 +17928,7 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
       UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
         (fun equal => same (equal.symm.trans uEpoch))
     -- The last step leaves the epoch, so it is the slot that ends it.
-    obtain ⟨boundary, rfl⟩ : ∃ boundary, step = .slot boundary := by
-      cases step with
-      | block engine signed due ok =>
-        exact absurd (by simp only [getCurrentEpoch, (frame_processBlock
-          (applySignedBlock_ok ok).2.1).slot]) (UInt64.ne_of_lt crossing).symm
-      | slot ok => exact ⟨ok, rfl⟩
+    obtain ⟨boundary, rfl⟩ := step.eq_slot_of_crossing crossing
     have whole := propN_epoch_le h highC S pulledOk toS link (head.append inner)
       ((Run.nil.snoc (Step.slot boundary)).append rest) (uEpoch.trans sameStart)
     simp only [creditScan_append, Finset.sum_add_distrib] at whole
