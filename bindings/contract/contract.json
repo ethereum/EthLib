@@ -3313,6 +3313,26 @@
    "error_class": "ForkChoiceError",
    "docstring":
    "The SSZ body of the envelope answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
+  {"summary":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeExport",
+   "method": "consensus_api_cached_envelope",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.\n\nThe first arguments are the preset and the fork.\n\nThe cache is a slot with the SSZ bytes of its envelope, or None.\n\nThen come the slot and the block root of the request."},
+  {"summary":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeSszExport",
+   "method": "consensus_api_cached_envelope_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.\n\nThe arguments are those of the JSON answer."},
   {"summary": "The JSON response of the bootstrap endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]",

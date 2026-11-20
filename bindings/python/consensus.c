@@ -211,6 +211,12 @@ extern lean_object*
 eth_consensus_api_payload_envelope_ssz(lean_object* args);
 
 extern lean_object*
+eth_consensus_api_cached_envelope(lean_object* args);
+
+extern lean_object*
+eth_consensus_api_cached_envelope_ssz(lean_object* args);
+
+extern lean_object*
 eth_consensus_api_light_client_bootstrap(lean_object* args);
 
 PyObject*
@@ -1129,6 +1135,22 @@ py_consensus_api_payload_envelope_ssz(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_api_payload_envelope_ssz, args, 8, FORK_CHOICE_ERROR);
+}
+
+PyObject*
+py_consensus_api_cached_envelope(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_cached_envelope, args, 5, CONSENSUS_ERROR);
+}
+
+PyObject*
+py_consensus_api_cached_envelope_ssz(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_api_cached_envelope_ssz, args, 5, CONSENSUS_ERROR);
 }
 
 PyObject*

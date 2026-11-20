@@ -207,4 +207,44 @@ The arguments are those of the JSON answer. -/
 def apiPayloadEnvelopeSszExport (args : PyValue) : Result PyValue :=
   pyExport apiPayloadEnvelopeSszOf args
 
+/-- The cache of the proposer's envelope endpoint: a slot and the SSZ bytes of an envelope. -/
+def cachedEnvelopeInput (preset : Preset) (fork : Fork) (cached : Option (UInt64 × ByteArray)) :
+    Result (Option (BeaconApi.CachedEnvelope preset fork)) :=
+  cached.mapM fun (slot, bytes) => do
+    return ⟨slot, ← decodeInput (ExecutionPayloadEnvelope preset fork) bytes⟩
+
+/-- The JSON response of the endpoint that gives a proposer the envelope that its node built. -/
+def apiCachedEnvelopeOf (args : String × String × Option (UInt64 × ByteArray) × UInt64 × Root) :
+    Result PyValue := do
+  let (name, fork, cached, slot, root) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let cache ← cachedEnvelopeInput preset fork cached
+  let answer ← apiError (BeaconApi.cachedEnvelopeResponse cache slot root)
+  return PyValue.ofJson answer.toJson
+
+/-- The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.
+
+The first arguments are the preset and the fork.
+
+The cache is a slot with the SSZ bytes of its envelope, or None.
+
+Then come the slot and the block root of the request. -/
+@[export eth_consensus_api_cached_envelope]
+def apiCachedEnvelopeExport (args : PyValue) : Result PyValue := pyExport apiCachedEnvelopeOf args
+
+/-- The SSZ body of the endpoint that gives a proposer the envelope that its node built. -/
+def apiCachedEnvelopeSszOf
+    (args : String × String × Option (UInt64 × ByteArray) × UInt64 × Root) : Result ByteArray := do
+  let (name, fork, cached, slot, root) := args
+  let (preset, fork) ← transitionPresetAndFork name.toUTF8 fork.toUTF8
+  let cache ← cachedEnvelopeInput preset fork cached
+  apiError (BeaconApi.cachedEnvelopeSsz cache slot root)
+
+/-- The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.
+
+The arguments are those of the JSON answer. -/
+@[export eth_consensus_api_cached_envelope_ssz]
+def apiCachedEnvelopeSszExport (args : PyValue) : Result PyValue :=
+  pyExport apiCachedEnvelopeSszOf args
+
 end EthLib.Consensus.Exports
