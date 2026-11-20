@@ -703,7 +703,7 @@ theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config ch
   ok
 
 /-- Events with no penalty or inactivity source debit no key as a penalty. -/
-private theorem penaltyDebit_sum_zero_of_free {events : List (BalanceEvent preset)}
+theorem penaltyDebit_sum_zero_of_free {events : List (BalanceEvent preset)}
     (free : PenaltyFree events) (i : ℕ) : (events.map (penaltyDebit i)).sum = 0 := by
   apply List.sum_eq_zero
   intro d member

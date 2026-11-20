@@ -705,6 +705,18 @@ Not yet released.
 - `DirectSafety.Apriori.Internal.except_dite_bind` moves a fork-conditional replay before its common continuation.
   The pin's credit bound reads it.
 
+- `DirectSafety.Apriori.Internal.penaltyDebit_sum_zero_of_free` says that events with no penalty or inactivity source debit no key as a penalty.
+  The pin's segment penalty bounds read it.
+
+- `DirectSafety.Apriori.Internal.single_balanceEvents` reads the events of one step as the events of the one-step run.
+  The pin's step bounds read it.
+
+- `add_le_of_lt_of_aligned` says that a whole number of increments above another is at least one increment above it.
+  The pin's effective-balance bounds read it.
+
+- `voters_sum_le` says that a sum over some voters of a function of their positions is at most its sum over those positions.
+  The pin's drift bound reads it.
+
 - `DirectSafety.Apriori.Internal.keys_debits_le` says that the debits of one event over a set of keys are at most its debits over the registry.
   The pin's debit bounds read it.
 

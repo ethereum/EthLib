@@ -496,7 +496,7 @@ private theorem balance_le_pathCredits (i : Nat) :
     omega
 
 /-- The events of one step, read as the events of the one-step run. -/
-private theorem single_balanceEvents {u v : ForkedBeaconState preset}
+theorem single_balanceEvents {u v : ForkedBeaconState preset}
     (step : Step config checks u v) {events : List (BalanceEvent preset)}
     (replayed : step.balanceEvents = .ok events) :
     (Run.nil.snoc step).balanceEvents (getCurrentEpoch v.state).toNat = .ok events := by

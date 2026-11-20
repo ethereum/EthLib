@@ -28,6 +28,8 @@ import EthLib.Consensus.Proofs.Transition.BranchLedger
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.DirectSafety.Apriori.Assembly
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
+import EthLib.Consensus.Proofs.Transition.InactivityLeakBound
+import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
@@ -234,13 +236,6 @@ private def passPenaltyRate (config : Config) (z : ForkedBeaconState preset) (v 
       (config.INACTIVITY_SCORE_BIAS.toNat *
         (parameters preset z.fork).INACTIVITY_PENALTY_QUOTIENT.toNat)
 
-/-- Events with no penalty or inactivity source debit no key as a penalty. -/
-private theorem penaltyDebit_sum_zero {events : List (BalanceEvent preset)}
-    (free : PenaltyFree events) (v : ℕ) : (events.map (penaltyDebit v)).sum = 0 :=
-  List.sum_eq_zero fun _ member => by
-    obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
-    simp [penaltyDebit, (free e inside).1, (free e inside).2]
-
 /-- The penalties of one key in one segment of a branch fit its pass rate.
 
 This holds if the segment ends an epoch, and the penalties are zero otherwise.
@@ -276,21 +271,21 @@ private theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
       crossing, duringOk, cachedOk, crossingsFree, -, kind⟩
   · -- A segment inside its epoch runs only blocks, which record no penalty.
     have free := (epoch_sync_data mid altair early same high replayed).2.1
-    rw [penaltyDebit_sum_zero free]
+    rw [penaltyDebit_sum_zero_of_free free]
     exact Nat.zero_le _
   rw [ite_eq_left (uEpoch ▸ crossing)]
   have free := (epoch_sync_data inner altair uEarly uEpoch high duringOk).2.1
   rcases kind with rfl | ⟨just, pass, rewarded, later, justified, scored, rewardedOk, rfl,
     laterSources, -⟩
-  · simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero free,
-      penaltyDebit_sum_zero crossingsFree]
+  · simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero_of_free free,
+      penaltyDebit_sum_zero_of_free crossingsFree]
     exact Nat.zero_le _
   have altairU : .altair ≤ u.fork := Nat.le_trans altair (fork_le_of_chainSteps inner.chainSteps)
   have laterFree : PenaltyFree later := fun e member => by
     rcases laterSources e member with s | s | s <;> simp [s]
-  simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero free,
-    penaltyDebit_sum_zero laterFree, penaltyDebit_sum_zero crossingsFree, Nat.zero_add,
-    Nat.add_zero]
+  simp only [List.map_append, List.sum_append, penaltyDebit_sum_zero_of_free free,
+    penaltyDebit_sum_zero_of_free laterFree, penaltyDebit_sum_zero_of_free crossingsFree,
+    Nat.zero_add, Nat.add_zero]
   -- The pass reads the registry, the slot and the scores of `u`, after one update of the scores.
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
   have one := justified.records ⟨nofun, nofun, nofun, nofun, nofun, nofun⟩
@@ -1940,22 +1935,12 @@ private theorem balance_le_pathCredits (i : ℕ) :
       simp only [pathCredits]
       omega
 
-/-- The replay of a run of one step, to the end epoch of the step, is the replay of the step. -/
-private theorem run_one_step_events {m n : ForkedBeaconState preset}
-    (step : Step config checks m n) {events : List (BalanceEvent preset)}
-    (ok : step.balanceEvents = .ok events) :
-    (Run.nil.snoc step).balanceEvents (getCurrentEpoch n.state).toNat = .ok events := by
-  have epochs : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch n.state).toNat :=
-    UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-  simp [Run.balanceEvents, show (getCurrentEpoch m.state).toNat ≤
-    (getCurrentEpoch n.state).toNat + 1 by omega, ok]
-
 /-- A step raises the balance of a key by at most the credits of its events. -/
 private theorem step_balance_le_events {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam) (i : ℕ)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
     actualBalanceAt n i ≤ actualBalanceAt m i + (events.map (keyCredit i)).sum := by
-  have run := run_one_step_events step ok
+  have run := DirectSafety.Apriori.Internal.single_balanceEvents step ok
   have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
     (Nat.le_succ _) run false i
   have ends := Run.balancePath_ends (Run.nil.snoc step)
@@ -4188,7 +4173,7 @@ private theorem Step.charge_deposit_credit_zero {a b : ForkedBeaconState preset}
     ((events.filter (·.source = .deposits)).map (keyCredit i)).sum = 0 := by
   refine Run.exiting_deposit_credit_zero_of_exited (Run.nil.snoc step)
     (Nat.le_trans (by decide) fulu) early (getCurrentEpoch b.state).toNat
-    (PinSplit2.run_one_step_events step replayed) i ?_
+    (DirectSafety.Apriori.Internal.single_balanceEvents step replayed) i ?_
   intro u w' ok contains es replayedEs e member source
   cases contains with
   | last =>
@@ -8069,7 +8054,7 @@ private theorem step_events_bounded {g m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam)
     {events : List (BalanceEvent preset)} (ok : step.balanceEvents = .ok events) :
     ∀ e ∈ events, e.credits ≤ e.creditLimit := by
-  have run := PinSplit2.run_one_step_events step ok
+  have run := DirectSafety.Apriori.Internal.single_balanceEvents step ok
   obtain ⟨found, foundOk, bounded⟩ := Run.balanceEvents_bounded shared (Run.nil.snoc step)
     genesis early (getCurrentEpoch n.state).toNat
   rw [run] at foundOk
@@ -9808,19 +9793,6 @@ private def CS (split : BeaconState preset fork) : Finset ValidatorIndex :=
 end Costs
 
 /-! ## Sums over validator indices, read at positions -/
-
-/-- A sum over validator indices is at most the sum over a set of positions that holds them all.
-
-An index is read at its position, `toNat` is injective, and the terms are natural numbers. -/
-private theorem sum_toNat_le {S : Finset ValidatorIndex} {P : Finset ℕ} (f : ℕ → ℕ)
-    (inside : ∀ v ∈ S, v.toNat ∈ P) : ∑ v ∈ S, f v.toNat ≤ ∑ i ∈ P, f i := by
-  classical
-  refine Finset.sum_le_sum_of_injOn (fun v : ValidatorIndex => v.toNat)
-    (fun a _ b _ same => UInt64.toNat_inj.mp same) ?_ (fun _ _ => le_rfl)
-    (fun _ _ _ => Nat.zero_le _)
-  intro i hi
-  obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
-  exact inside v hv
 
 /-- A position that holds a validator and meets a test is among the positions that meet it. -/
 private theorem mem_positions_filter (config : Config)
@@ -12125,7 +12097,7 @@ private theorem sum_le_exiting (config : Config)
     (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
     ∑ v ∈ S, balanceAt state v.toNat ≤ (pinTerms config state ancestor finalizedState).exiting := by
   dsimp only [pinTerms]
-  refine sum_toNat_le (fun i => balanceAt state i) fun v hv => ?_
+  refine voters_sum_le (fun i => balanceAt state i) fun v hv => ?_
   have mark := of_decide_eq_true (member v hv)
   obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
   exact mem_positions_filter config state ancestor finalizedState found mark
@@ -12519,7 +12491,8 @@ private theorem sum_exitQ_le {x y : ForkedBeaconState preset} (tail : Run config
         fun c => if c.index = v.toNat then c.amount else 0).sum :=
     fun v _ => exitQ_amount_le _ _ b v.toNat le
   refine (Finset.sum_le_sum each).trans ?_
-  refine (sum_toNat_le (S := S) (P := S.image fun v : ValidatorIndex => v.toNat)
+  refine (voters_sum_le (voters := S)
+    (positions := S.image fun v : ValidatorIndex => v.toNat)
     (fun n => ((tail.departureCharges.filter fun c => c.epoch ≤ b).map
       fun c => if c.index = n then c.amount else 0).sum)
     fun v member => Finset.mem_image_of_mem _ member).trans ?_
@@ -16573,15 +16546,6 @@ private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc 
         bounded⟩⟩
   omega
 
-/-- Two different whole numbers of increments differ by at least an increment. -/
-private theorem aligned_gap {E M inc : ℕ} (e : E % inc = 0) (m : M % inc = 0) (lt : M < E) :
-    M + inc ≤ E := by
-  obtain ⟨a, rfl⟩ := Nat.dvd_of_mod_eq_zero e
-  obtain ⟨b, rfl⟩ := Nat.dvd_of_mod_eq_zero m
-  have next : b < a := Nat.lt_of_mul_lt_mul_left lt
-  calc inc * b + inc = inc * (b + 1) := by ring
-    _ ≤ inc * a := Nat.mul_le_mul_left _ next
-
 /-- The effective balance of a key on C's run stays at its finalized value when the test holds.
 
 The key has no sync debits on the run, and the test of its floor holds.
@@ -16682,7 +16646,7 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
     by_cases down : effectiveAt (⟨fork, mS⟩ : ForkedBeaconState preset) i.toNat ≤ finEB
     · omega
     have alignedM := FloorTrace.effective_aligned (toFin.append before) h.genesis h.aligned i.toNat
-    have gap := aligned_gap alignedM aligned (by omega)
+    have gap := add_le_of_lt_of_aligned alignedM aligned (by omega)
     have origin := cfloor_origin h counted (fromFin.append tailC) h.near replayed i val initial
       clean retained before ((Run.nil.snoc step).append (after.append rest))
       (by rw [Run.append_assoc]; exact eqn)
@@ -17567,9 +17531,9 @@ private theorem charged_count_of (h : Setting config checks g split fin pulled a
   have lows : (small.filter fun v => (pinTerms config pulled anc fin).lowB v.toNat = true).card ≤
       (pinTerms config pulled anc fin).lowKeys := by
     rw [lowKeys_eq]
-    have count := sum_toNat_le (S := small.filter fun v =>
+    have count := voters_sum_le (voters := small.filter fun v =>
         (pinTerms config pulled anc fin).lowB v.toNat = true)
-      (P := (pinTerms config pulled anc fin).positions.filter fun i =>
+      (positions := (pinTerms config pulled anc fin).positions.filter fun i =>
         (pinTerms config pulled anc fin).lowB i = true) (fun _ => 1) (fun v member => by
       have low := (Finset.mem_filter.mp member).2
       obtain ⟨w, found⟩ := lowB_found config pulled anc fin low
@@ -17706,7 +17670,7 @@ private theorem bud_exitingRise (h : Setting config checks g split fin pulled an
     have active := (Finset.mem_filter.mp (Finset.mem_filter.mp second).1).1
     exact (Finset.mem_filter.mp (Finset.mem_filter.mp first).1).2.1 active
   rw [← Finset.sum_union apart, exitingRise]
-  refine sum_toNat_le (pinTerms config pulled anc fin).rise fun v selected => ?_
+  refine voters_sum_le (pinTerms config pulled anc fin).rise fun v selected => ?_
   have exiting : (pinTerms config pulled anc fin).exitingB v.toNat = true := by
     rcases Finset.mem_union.mp selected with chosen | chosen
     · exact K5_exiting_of_not_charged h tailC (Finset.mem_filter.mp chosen).1
@@ -19792,7 +19756,7 @@ private theorem bud_exitedR :
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
         (pinTerms config pulled anc fin).exitedR := by
   rw [exitedR_eq]
-  refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
+  refine voters_sum_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
     fun v hv => ?_
   have flag := (Finset.mem_filter.mp hv).2
   obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (i := v.toNat) (Or.inl flag)
@@ -21229,7 +21193,7 @@ private theorem floor_aux {A : Finset ValidatorIndex} {S : Finset ℕ} {P : ℕ 
       (∑ i ∈ S.filter P, f i + c) / q :=
   le_trans (DirectSafety.Apriori.Internal.sum_div_le (A.filter fun v => rb v.toNat = true)
     (fun v : ValidatorIndex => f v.toNat) q)
-    (Nat.div_le_div_right (Nat.le_trans (sum_toNat_le f fun v hv =>
+    (Nat.div_le_div_right (Nat.le_trans (voters_sum_le f fun v hv =>
       Finset.mem_filter.mpr (inside v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2))
       (Nat.le_add_right _ _)))
 
@@ -21413,7 +21377,7 @@ private theorem bud_rise (h : Setting config checks g split fin pulled anc count
         (Finset.disjoint_of_subset_left
           (Finset.subset_union_left.trans Finset.subset_union_left) dSC))
   rw [← Finset.sum_union dis]
-  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  refine voters_sum_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
   rcases Finset.mem_union.mp hv with member | member
   · simp only [K4, Finset.mem_filter] at member
     obtain ⟨w, found, active⟩ := active_of_activeVoters h.early (s := pulled) member.2.1
@@ -21452,7 +21416,7 @@ private theorem bud_joinRise (h : Setting config checks g split fin pulled anc c
         (Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
           (Finset.disjoint_of_subset_left (Finset.subset_union_right) dSC)))
   rw [← Finset.sum_union dis, joinRise_eq]
-  refine sum_toNat_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
+  refine voters_sum_le (fun i => (pinTerms config pulled anc fin).rise i) fun v hv => ?_
   have upcoming : isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
       isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true := by
     rcases Finset.mem_union.mp hv with member | member <;> exact (Finset.mem_filter.mp member).2
@@ -21602,7 +21566,7 @@ private theorem bud_late (h : Setting config checks g split fin pulled anc count
             (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) := by
       rw [← Finset.sum_union apartAB, ← Finset.sum_union (Finset.disjoint_union_left.mpr
         ⟨apartAC, apartBC⟩)]
-      refine sum_toNat_le (fun i => 3 * balanceAt pulled i +
+      refine voters_sum_le (fun i => 3 * balanceAt pulled i +
         (pinTerms config pulled anc fin).rise i + 3 * ((balanceAt fin i - balanceAt pulled i -
             (pinTerms config pulled anc fin).rise i +
             ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
@@ -21689,7 +21653,7 @@ private theorem bud_pendingR (h : Setting config checks g split fin pulled anc c
       Finset.sum_le_sum fun v _ => Nat.le_add_right _ _
     refine Nat.le_trans (Nat.add_le_add_right grow _) ?_
     rw [← Finset.sum_union apart]
-    refine sum_toNat_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
+    refine voters_sum_le (fun i => balanceAt pulled i + (pinTerms config pulled anc fin).rise i +
       3 * ((balanceAt fin i - balanceAt pulled i -
             (pinTerms config pulled anc fin).rise i +
             ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
@@ -23260,10 +23224,12 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
     refine Finset.disjoint_of_subset_right (fun v inE => ?_) cutAll
     simp only [Finset.mem_union]
     exact .inl (.inr (Finset.mem_filter.mp inE).1)
-  have posD := sum_toNat_le (S := V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ NF ∪
-      cutKeys config pulled anc fin split) (P := PD) (fun i => syncD eventsF i)
+  have posD := voters_sum_le
+      (voters := V ∪ K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ NF ∪
+        cutKeys config pulled anc fin split) (positions := PD) (fun i => syncD eventsF i)
     fun v member => by rw [hPD]; exact Finset.mem_image_of_mem _ member
-  have posK := sum_toNat_le (S := EK) (P := PK) (fun i => syncCr eventsF i + syncD eventsF i)
+  have posK := voters_sum_le (voters := EK) (positions := PK)
+      (fun i => syncCr eventsF i + syncD eventsF i)
     fun v member => by rw [hPK]; exact Finset.mem_image_of_mem _ member
   have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       fromFin.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
@@ -23328,7 +23294,7 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
       ∑ i ∈ (U ∪ cutKeys config pulled anc fin split).image (fun v : ValidatorIndex => v.toNat),
         (syncF (eventsP ++ events) i + syncF eventsC i) :=
     (Finset.sum_congr rfl fun v _ => by rw [hG, hg, syncAppend]; omega).le.trans
-      (sum_toNat_le (fun i => syncF (eventsP ++ events) i + syncF eventsC i)
+      (voters_sum_le (fun i => syncF (eventsP ++ events) i + syncF eventsC i)
         fun v member => Finset.mem_image_of_mem _ member)
   have first := syncF_run_le h pulledTotal pulledOk fromFin pre sameEpoch shape tail
     (Nat.le_succ _) high joined
@@ -26609,7 +26575,7 @@ private theorem floor_excess {E V r Q inc : ℕ} (quotient : 30 ≤ Q) (big : 4 
     omega
   · have lt : E < V := Nat.lt_of_not_le le
     rw [max_eq_right lt.le]
-    have gap := aligned_gap alignedV alignedE lt
+    have gap := add_le_of_lt_of_aligned alignedV alignedE lt
     obtain ⟨x, rfl⟩ := Nat.exists_eq_add_of_le lt.le
     have sum : (E + x) / Q ≤ E / Q + x / Q + 1 := by
       rw [Nat.add_div (by omega)]
@@ -27438,7 +27404,7 @@ private theorem bud_fall (h : Setting config checks g split fin pulled anc count
         (pinTerms config pulled anc fin).current i = true,
         (pinTerms config pulled anc fin).fall i := by
   have within := BeaconState.registryWithinLimit_of_lt h.early pulled
-  refine sum_toNat_le (pinTerms config pulled anc fin).fall fun v voter => ?_
+  refine voters_sum_le (pinTerms config pulled anc fin).fall fun v voter => ?_
   have listed : v ∈ getActiveValidatorIndices pulled (getCurrentEpoch pulled) := by
     simpa [activeVoters] using (h.voting v voter).1
   obtain ⟨validator, found, active⟩ := (mem_getActiveValidatorIndices within).mp listed
@@ -33751,7 +33717,7 @@ private theorem flow_split_of (h : Setting config checks g split fin pulled anc 
     refine ⟨WB + _, hOther, fun keys => ?_⟩
     rw [Finset.sum_add_distrib]
     exact Nat.add_le_add (hWhist keys)
-      ((sum_toNat_le (fun i => syncCr eventsC i + syncD events i + syncD eventsF i)
+      ((voters_sum_le (fun i => syncCr eventsC i + syncD events i + syncD eventsF i)
         fun v member => Finset.mem_image_of_mem _ member).trans
         (flow_sync h tail high replayed fromFin replayedF tailC highC replayedC _))
   -- The credits of each class split by kind: the credit part, the consolidations, the rest.
@@ -34064,7 +34030,7 @@ private theorem stub_J (h : Setting config checks g split fin pulled anc counted
         isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true), eR pulled v ≤
       (pinTerms config pulled anc fin).joining := by
     rw [joining_eq]
-    refine sum_toNat_le (fun i => balanceAt pulled i) fun v hv => ?_
+    refine voters_sum_le (fun i => balanceAt pulled i) fun v hv => ?_
     obtain ⟨hi, hj⟩ := Finset.mem_filter.mp hv
     obtain ⟨hK, hin⟩ := Finset.mem_filter.mp hi
     exact mem_positions_filter config pulled anc fin (Array.getElem?_eq_getElem hin) hj

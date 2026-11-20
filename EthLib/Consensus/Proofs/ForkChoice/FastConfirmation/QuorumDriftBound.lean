@@ -39,7 +39,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 /-- A sum over some voters of a function of their positions is at most its sum over positions.
 
 Each voter's position must be one of those positions. -/
-private theorem voters_sum_le {voters : Finset ValidatorIndex} {positions : Finset ℕ}
+theorem voters_sum_le {voters : Finset ValidatorIndex} {positions : Finset ℕ}
     (f : ℕ → ℕ) (inside : ∀ v ∈ voters, v.toNat ∈ positions) :
     ∑ v ∈ voters, f v.toNat ≤ ∑ i ∈ positions, f i := by
   rw [← Finset.sum_image (g := UInt64.toNat) fun a _ b _ same => UInt64.toNat_inj.mp same]
