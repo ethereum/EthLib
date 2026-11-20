@@ -1240,7 +1240,7 @@ theorem sync_bounds_combined {fork : Fork} {s t : BeaconState preset fork}
     bounds.2.2.1.trans (Nat.mul_le_mul_right _ length),
     bounds.2.2.2.trans (Nat.mul_le_mul_right _ length)⟩
 
-theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
+private theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
     (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
     (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
     ∃ reward proposer,
