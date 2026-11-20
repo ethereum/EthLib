@@ -26249,6 +26249,36 @@ private theorem flow_split (h : Setting config checks g split fin pulled anc cou
           2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) :=
   sorry
 
+/-- The whistleblower credits of the shared run's last epoch fit the keys that it slashes.
+
+The run `pre` is the part of the finalized-to-split run that starts at `b`, in the split's epoch.
+
+A whistleblower credit lands in the proposer's block, so a key of any class can receive it.
+
+Each key slashed along `pre` pays the quotient of its effective balance at the slashing.
+
+That balance is the one at the split.
+
+It changes only at an epoch update, and `pre` is in one epoch.
+
+R's call reads each such key as slashed, since its withdrawable epoch is a slashing vector away.
+
+The sum is over keys that `SC` leaves out, because they are slashed at the split. -/
+private theorem cut_whistle (h : Setting config checks g split fin pulled anc counted V)
+    (toFin : Run config checks g ⟨fork, fin⟩)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (cut : toB.append pre = toFin.append fromFin)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b) (high : ℕ) (keys : Finset ℕ) :
+    ∑ i ∈ keys, whistC pre high i ≤
+      ∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
+          (fun v => ((b.validators.data[v.toNat]?).map (·.slashed)).getD false = false ∧
+            ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+            (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+        balanceAt split v.toNat / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat :=
+  sorry
+
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
 In the high regime they are also paid by `capUse`, their share of `creditCap`.
