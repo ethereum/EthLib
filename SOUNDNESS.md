@@ -6187,8 +6187,9 @@ Points that remain open:
 ### Builder API
 
 The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
-EthLib cites commit `fce64468` of that repository.
-For Bellatrix to Fulu, its specification text matches release `v0.6.1`; the changes are formatting, `deprecated` flags and notes that point to the Gloas replacements.
+EthLib cites commit `ea92eff` of that repository.
+For Bellatrix to Fulu, its specification text matches release `v0.6.1`, except for formatting, `deprecated` flags, notes that point to the Gloas replacements and links pinned to consensus-specs releases.
+Its pseudocode also corrects that of the release, so that it states the rules that EthLib follows.
 EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
 
 A JSON response names the fork of its data by the consensus version of the Beacon API, from Bellatrix on.
@@ -6217,10 +6218,6 @@ The source adds the ten seconds to the clock as a 64-bit integer, which fails pa
 The source keeps only the message of each registration; EthLib keeps the signed registration, which holds that message.
 The Relay API serves the signed registration of each upcoming proposer ([`responses.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml)), so a relay needs the signature too.
 `Registry.find?_insert_self` shows that the registry gives back the signed registration just inserted for its key.
-The pseudocode of the source has two defects, which EthLib reads by their evident meaning:
-
-- `process_registration` reads `pubkey`, which it never binds; EthLib reads the key of the registration.
-- It rebinds `registration` to the message, then passes it to the signature check, which takes the signed registration; EthLib checks the signed registration.
 
 The endpoint takes a list of registrations.
 The source does not say whether one invalid entry rejects the whole list, nor whether earlier entries of the same list count as kept registrations.
@@ -6236,11 +6233,6 @@ EthLib answers 500, the internal error of the source, when the proposer of the s
 `processBid_getBid` shows that such a bid is accepted when the payload extends the state, pays the registered fee recipient, and the signature verifies.
 The source gives the bid of a builder for Bellatrix only.
 From Deneb the commitments to the blobs, and from Electra the requests, are inputs, since the source gives no function that fills them.
-The pseudocode of the source has three defects, which EthLib reads by their evident meaning:
-
-- `get_bid` takes `execution_payload` but reads `payload`; EthLib reads the argument.
-- `verify_bid_signature` computes its signing root from `signed_registration.message`, a name it never binds; EthLib uses the message of the bid, as `get_bid_signature` does.
-- `process_bid` calls `verify_bid_signature` without asserting its result, so read literally it accepts any signature; EthLib refuses a bid whose signature does not verify.
 
 From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with eight rules and the signature.
 `isEligibleForBidGloas_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) states the builder's rules.
@@ -6353,13 +6345,14 @@ The rule names no slot, so EthLib keeps the submissions of one slot in a store, 
 From Bellatrix to Fulu, a relay serves a submission to proposers as a bid of the Builder API.
 `SubmitBlockRequest.bid_total` shows that the bid always computes, and `SubmitBlockRequest.bid_header` that it holds the header of the payload.
 `SubmitBlockRequest.bid_value_pubkey` shows that it holds the value of the bid trace and the key it is served under.
-`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding) require.
+`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#bidding) require.
 `SubmitBlockRequest.bid_requests` shows that from Electra it holds the requests of the submission.
 `SubmitBlockRequest.bid_unblind` shows that a blinded body that carries the header of the bid unblinds to a body that holds the payload of the submission.
 The source does not fix the key that signs the served bid, so it is an input.
-From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
+From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
 That check needs the balance change of the fee recipient from a simulation of the payload.
-It also subtracts withdrawal amounts in Gwei from that change in Wei, with no conversion, so EthLib does not yet say which submissions a relay may serve.
+It subtracts the amounts of the withdrawals to the fee recipient, each converted from Gwei to Wei, from that change in Wei.
+EthLib does not yet specify this check, so it does not say which submissions a relay may serve; [#2125](https://github.com/ethereum/EthLib/issues/2125) tracks the check.
 
 The source leaves four points about a submission open, and EthLib specifies none of them:
 

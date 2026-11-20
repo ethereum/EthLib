@@ -226,7 +226,7 @@ Their SHA-256 digests are:
 - `mainnet.tar.gz`: `67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c`, 967,886,924 bytes.
 - `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.
 
-The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `fce64468a81a87892d7cb9b4858272bb3d010e50`.
+The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `ea92eff73ad77c33d3b59a2033ffa02dfae5ee05`.
 They are SSZ examples and their JSON forms in `examples/<fork>/`, copied byte for byte under their fork.
 From Bellatrix to Fulu, they are the files `signed_*`: every fork has a signed bid and a signed blinded block.
 Bellatrix also has a signed validator registration.

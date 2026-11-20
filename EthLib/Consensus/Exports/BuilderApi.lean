@@ -383,9 +383,9 @@ From Deneb to Fulu, it carries the payload with its blobs bundle.
 
 At Gloas, the response to a request for a [bid] carries a signed bid of the execution payload.
 
-[header]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/header.yaml
-[blinded block]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/blinded_blocks.yaml
-[bid]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/execution_payload_bid.yaml
+[header]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/header.yaml
+[blinded block]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/blinded_blocks.yaml
+[bid]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/execution_payload_bid.yaml
 -/
 def isVersionedBody (fork : Fork) : String → Bool
   | "SignedBuilderBid" => .bellatrix ≤ fork && fork < .glamsterdam
