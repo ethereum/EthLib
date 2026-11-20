@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.OutcomeClassification
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.PrecomputedKeygenCache
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
@@ -10,6 +11,77 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity
 
+/-- An output of a simulated bind comes from an output of its first step.
+
+It is an output of the continuation on that step's value, from that step's cache.
+
+The continuation applied appears only inside an equation, so the kernel never runs it. -/
+private theorem exists_eq_of_mem_support_romImpl_bind {α β : Type} (x : OracleComp OracleWorld α)
+    (k : α → OracleComp OracleWorld β) (cache : QueryCache HashSpec)
+    {y : β × QueryCache HashSpec} (h : y ∈ support ((simulateQ romImpl (x >>= k)).run cache)) :
+    ∃ a ∈ support ((simulateQ romImpl x).run cache),
+      ∀ c, (simulateQ romImpl (k a.1)).run a.2 = c → y ∈ support c := by
+  rw [simulateQ_bind, StateT.run_bind] at h
+  exact exists_eq_of_mem_support_bind _ _ h
+
+/-- An output of a logged computation, with its log dropped, is an output of the computation.
+
+It holds for any computation, so the kernel checks it without running one. -/
+private theorem mem_support_run_of_mem_support_withQueryLog {α : Type}
+    (computation : OracleComp HashSpec α) (initialCache : QueryCache HashSpec)
+    {result : α × QueryLog HashSpec} {cache : QueryCache HashSpec}
+    (h : (result, cache) ∈ support
+      ((simulateQ randomOracle computation.withQueryLog).run initialCache)) :
+    (result.1, cache) ∈ support ((simulateQ randomOracle computation).run initialCache) := by
+  rw [← withQueryLog_cache_projection, support_map]
+  exact ⟨(result, cache), h, rfl⟩
+
+/-- An execution of the detailed game runs key generation, then the rest of the game.
+
+The rest starts from the cache that key generation leaves.
+
+It holds for any scheme, so the kernel checks it without running one. -/
+theorem exists_of_mem_support_detailedGameWithCache (scheme : Scheme SecretKey)
+    (adversary : Adversary) {execution : GameOutcome × QueryCache HashSpec}
+    (hmem : execution ∈ support (detailedGameWithCache scheme adversary)) :
+    ∃ publicKey secretKey keyCache,
+      ((publicKey, secretKey), keyCache) ∈ support ((simulateQ romImpl scheme.keygen).run ∅) ∧
+      execution ∈ support ((simulateQ romImpl
+        (detailedGameAfterKeygen scheme adversary publicKey secretKey)).run keyCache) := by
+  unfold detailedGameWithCache detailedGameCore at hmem
+  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, hkeygen, hrest⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ hmem
+  exact ⟨publicKey, secretKey, keyCache, hkeygen, hrest _ rfl⟩
+
+/-- An execution of the game after key generation runs the adversary, then the verifier.
+
+Its outcome records the keys, the forgery, the signing log and the verdict.
+
+It holds for any scheme, so the kernel checks it without running one. -/
+theorem exists_of_mem_support_detailedGameAfterKeygen (scheme : Scheme SecretKey)
+    (adversary : Adversary) (publicKey : PublicKey) (secretKey : SecretKey)
+    (cache : QueryCache HashSpec) {outcome : GameOutcome} {finalCache : QueryCache HashSpec}
+    (hmem : (outcome, finalCache) ∈ support ((simulateQ romImpl
+      (detailedGameAfterKeygen scheme adversary publicKey secretKey)).run cache)) :
+    ∃ forgery signingLog adversaryCache verified,
+      ((forgery, signingLog), adversaryCache) ∈ support ((simulateQ romImpl
+        (simulateQ (forwardOracles + signingOracle scheme secretKey)
+          (adversary.main publicKey)).run).run cache) ∧
+      (verified, finalCache) ∈ support ((simulateQ romImpl
+        (scheme.verify publicKey forgery.leafIndex forgery.message forgery.signature)).run
+          adversaryCache) ∧
+      outcome = ⟨publicKey, secretKey, forgery, signingLog, verified⟩ := by
+  unfold detailedGameAfterKeygen at hmem
+  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, hadversary, hrest⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ hmem
+  obtain ⟨⟨verified, verifyCache⟩, hverify, hout⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ (hrest _ rfl)
+  have hout := hout _ rfl
+  simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff,
+    Prod.mk.injEq] at hout
+  obtain ⟨rfl, rfl⟩ := hout
+  exact ⟨forgery, signingLog, adversaryCache, verified, hadversary, hverify, rfl⟩
+
 theorem capped_detailed_execution_verification_consistent
     (adversary : Adversary)
     (execution : GameOutcome × QueryCache HashSpec)
@@ -17,17 +89,13 @@ theorem capped_detailed_execution_verification_consistent
       (detailedGameWithCache Concrete.scheme adversary)) :
     execution.1.verified = Concrete.verifyFromCache execution.2 execution.1.publicKey
       execution.1.forgery.leafIndex execution.1.forgery.message execution.1.forgery.signature := by
-  unfold detailedGameWithCache detailedGameCore at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, _hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, hverify, hout⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hout
-  subst execution
+  -- Decompose through lemmas for any scheme: the kernel would run the game to match two forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  obtain ⟨forgery, signingLog, adversaryCache, verified, -, hverify, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   simp only
   have hroute :
       simulateQ romImpl
@@ -100,33 +168,29 @@ theorem capped_detailed_execution_keygen_eval
           execution.1.secretKey.topChainStart (fun key _ => pure (topBase key)) :
           OracleComp HashSpec _) =
         (execution.1.publicKey.root, execution.1.secretKey.topSigned) := by
-  unfold detailedGameWithCache detailedGameCore at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, hkeygen, hrest⟩ := hmem
-  have hkeyCacheLe : keyCache ≤ execution.2 :=
-    xmssRom_cache_le _ keyCache execution hrest
-  simp only [Concrete.scheme] at hkeygen
-  unfold Concrete.precomputedKeygen at hkeygen
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hkeygen
-  obtain ⟨⟨parameter, parameterCache⟩, _hparameter, hkeygen⟩ := hkeygen
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hkeygen
-  obtain ⟨⟨secret, secretCache⟩, _hsecret, hkeygen⟩ := hkeygen
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hkeygen
-  obtain ⟨⟨topSecret, topSecretCache⟩, _htopSecret, hkeygen⟩ := hkeygen
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hkeygen
-  obtain ⟨⟨topBase, topBaseCache⟩, _htopBase, hkeygen⟩ := hkeygen
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hkeygen
-  obtain ⟨⟨treeResult, rootCache⟩, hroot, hout⟩ := hkeygen
+  -- Decompose by lemmas for any computation, or the kernel runs key generation to match forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, hkeygen, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  have hkeyCacheLe : keyCache ≤ finalCache :=
+    xmssRom_cache_le _ keyCache (outcome, finalCache) hrest
+  rw [Concrete.scheme_keygen, Concrete.precomputedKeygen.eq_1] at hkeygen
+  obtain ⟨⟨parameter, parameterCache⟩, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ hkeygen
+  obtain ⟨⟨secret, secretCache⟩, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
+  obtain ⟨⟨topSecret, topSecretCache⟩, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
+  obtain ⟨⟨topBase, topBaseCache⟩, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
+  obtain ⟨⟨treeResult, rootCache⟩, hroot, hout⟩ :=
+    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
+  have hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hout
   cases hout
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, _hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, _hverify, hfinal⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hfinal
-  cases hfinal
+  obtain ⟨forgery, signingLog, adversaryCache, verified, -, -, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   let honest : OracleComp HashSpec (Digest × (TopIndex → Option (Randomness × Encoding))) :=
     Concrete.honestKeygen parameter secret topSecret (fun key _ => pure (topBase key))
   have hroute :
@@ -135,10 +199,7 @@ theorem capped_detailed_execution_keygen_eval
     exact QueryImpl.simulateQ_add_liftM_right (unifFwdImpl HashSpec)
       (randomOracle : QueryImpl HashSpec (StateT (QueryCache HashSpec) ProbComp)) honest.withQueryLog
   rw [hroute] at hroot
-  have hroot' : (treeResult.1, keyCache) ∈ support
-      ((simulateQ randomOracle honest).run topBaseCache) := by
-    rw [← withQueryLog_cache_projection, support_map]
-    exact ⟨(treeResult, keyCache), hroot, rfl⟩
+  have hroot' := mem_support_run_of_mem_support_withQueryLog honest topBaseCache hroot
   refine ⟨topBase, rfl, ?_⟩
   exact Concrete.CacheReplay.eval_answerFn_largerCache_eq_of_mem_support honest topBaseCache
     keyCache finalCache treeResult.1 hroot' hkeyCacheLe

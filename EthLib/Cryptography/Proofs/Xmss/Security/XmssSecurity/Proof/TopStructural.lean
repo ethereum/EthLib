@@ -270,8 +270,9 @@ theorem topChainCollision_afterKeygen
     Concrete.precomputedKeygen_cache_has_topChainInput keyResult hkeygen key chain step
   have hforgedInitial := Concrete.precomputedKeygen_cache_topChainInput_eq_none_of_ne keyResult
     hkeygen key chain step forgedValue (fun heq => hne (heq.trans hstable))
+  -- State the honest output at its plain type: the kernel would compare its input otherwise.
   refine ⟨Concrete.CacheView.topChainInput keyResult.1.2.parameter key chain step forgedValue,
-    forgedOutput, honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
+    forgedOutput, show HashOutput from honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
   · rw [keygenTopTargetInput_topChainInput]
     exact hhonest
   · rw [keygenTopTargetInput_topChainInput, hstable]
@@ -297,8 +298,9 @@ theorem topLeafCollision_afterKeygen
     Concrete.precomputedKeygen_cache_has_topLeafInput keyResult hkeygen key
   have hforgedInitial := Concrete.precomputedKeygen_cache_topLeafInput_eq_none_of_ne keyResult
     hkeygen key forgedEndpoints (fun heq => hcollision.1 (heq.trans hstable))
+  -- State the honest output at its plain type: the kernel would compare its input otherwise.
   refine ⟨Concrete.CacheView.topLeafInput keyResult.1.2.parameter key forgedEndpoints,
-    forgedOutput, honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
+    forgedOutput, show HashOutput from honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
   · rw [keygenTopTargetInput_topLeafInput]
     exact hhonest
   · rw [keygenTopTargetInput_topLeafInput, hstable]
@@ -411,8 +413,9 @@ theorem topEncodingCollision_afterKeygen
         simp only [Option.some.injEq, Prod.mk.injEq] at hselected
         apply hne
         rw [← hroot, ← hforgedRoot, hselected.1]
+  -- State the honest output at its plain type: the kernel would compare its input otherwise.
   refine ⟨Concrete.CacheView.topEncodingInput keyResult.1.2.parameter key forgedInput,
-    forgedOutput, honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
+    forgedOutput, show HashOutput from honestOutput, hforgedCached, hforgedInitial, ?_, ?_⟩
   · rw [keygenTopTargetInput_topEncodingInput _ _ _ _ randomness encoding hsigned]
     exact hhonest
   · rw [keygenTopTargetInput_topEncodingInput _ _ _ _ randomness encoding hsigned, hroot]
@@ -642,18 +645,13 @@ theorem CappedTop.detailed_execution_topQueriesCached
       execution.1.forgery.signature.top := by
   have hparameter :=
     (capped_detailed_execution_key_components_consistent adversary execution hmem).1
-  unfold detailedGameWithCache detailedGameCore at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, _hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, hverify, hfinal⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure,
-    Set.mem_singleton_iff] at hfinal
-  cases hfinal
+  -- Decompose through lemmas for any scheme: the kernel would run the game to match two forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  obtain ⟨forgery, signingLog, adversaryCache, verified, -, hverify, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   simp only at hparameter hverified hdecode ⊢
   subst verified
   have hroute :
@@ -740,9 +738,9 @@ theorem winningTopBadEvent_afterKeygen_orientation
   obtain ⟨hwon, event, hverified, encoding, forgedTopEncoding, hdecode, htopDecode, htop⟩ := hevent
   have hkeys := CappedLeaf.detailedGameAfterKeygen_keys_eq adversary keyResult.1.1 keyResult.1.2
     keyResult.2 execution hafter
-  have hkeygen' : keyResult ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
+  -- Rewrite key generation by its equation: the kernel would run it to match two forms.
+  have hkeygen' := hkeygen
+  rw [Concrete.scheme_keygen] at hkeygen'
   have hle := xmssRom_cache_le
     (detailedGameAfterKeygen Concrete.scheme adversary keyResult.1.1 keyResult.1.2)
     keyResult.2 execution hafter

@@ -41,6 +41,9 @@ theorem cappedCacheTracedMappedAdversaryImpl_selectedValid
   cases input with
   | inl worldInput => simpa [signingCacheTraceUpdate] using hstate
   | inr request =>
+      -- Rewrite the query to the signer: the kernel would run it to match the impl's branch.
+      rw [cappedUnloggedMappedAdversaryImpl_inr] at hbase
+      have hbase := mem_support_range_inr request _ _ _ hbase
       intro entry hentry
       rw [signingCacheTraceUpdate, List.mem_append] at hentry
       rcases hentry with hentry | hentry
@@ -179,9 +182,11 @@ theorem capped_cachedSelection_probability_le_expectedDigest
   · rw [mul_assoc]
     refine mul_le_mul' le_rfl ?_
     obtain ⟨⟨publicKey, secretKey⟩, cache0⟩ := keyResult
+    -- Rewrite key generation by its equation: the kernel would run it to match two forms.
+    have hkey' := hkey
+    rw [Concrete.scheme_keygen] at hkey'
     have hc0 : ∀ e y, cache0 (Partner.input secretKey.parameter e y) = none := fun e y =>
-      Concrete.precomputedKeygen_cache_none_encodingInput _
-        (by simpa [Concrete.scheme] using hkey) e y
+      Concrete.precomputedKeygen_cache_none_encodingInput _ hkey' e y
     have hcore := Ghost.collision_le publicKey secretKey hc0 _ hq (adversary.main publicKey)
       (verifyCont publicKey)
       (cappedSourceUnloggedDetailedGameAfterKeygen_hashQueryBound_sub_keygen
@@ -195,8 +200,9 @@ theorem capped_cachedSelection_probability_le_expectedDigest
     rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map, prEvent_map]
     refine prEvent_mono_of_support _ _ _ fun y hy hev => ?_
     refine cachedSelection_event_le adversary publicKey secretKey cache0 _ ?_ hev
-    rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map, support_map]
-    exact ⟨y, hy, rfl⟩
+    -- Map through a lemma for any computation: the kernel would run the game to match two forms.
+    rw [cappedDetailedGameAfterKeygenWithSigningTrace_eq_map]
+    exact mem_support_map_of_eq _ _ hy rfl
   · rw [(prEvent_eq_zero_of_not_mem_support _) hkey, zero_mul]
     exact zero_le
 

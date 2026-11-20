@@ -36,8 +36,9 @@ theorem capped_winning_implies_cachedSelection_or_digestBad
       WinningDigestBadEventOccurs execution := by
   have hcache : (execution.1, execution.2.1.1) ∈ support
       (detailedGameWithCache Concrete.scheme adversary) := by
-    rw [← cappedDetailedGameWithEncodingTrace_cache_projection, support_map]
-    exact ⟨execution, hmem, rfl⟩
+    -- Map through a lemma for any computation: the kernel would run the game to match two forms.
+    rw [← cappedDetailedGameWithEncodingTrace_cache_projection]
+    exact mem_support_map_of_eq _ _ hmem rfl
   have hunified := winning_outcome_has_unifiedBadEvent execution.2.1.1
     execution.1 (capped_detailed_execution_consistent adversary _ hcache) hwin
   rcases hunified with hencoding | hchain | hstructural | htop
@@ -47,8 +48,8 @@ theorem capped_winning_implies_cachedSelection_or_digestBad
         GlobalOutcomeBadEventOccurs, WinningOutcomeBadEventOccurs] using hencoding
     have hsigning : (execution.1, execution.2.1) ∈ support
         (cappedDetailedGameWithSigningTrace adversary) := by
-      rw [← cappedDetailedGameWithEncodingTrace_projection, support_map]
-      exact ⟨execution, hmem, rfl⟩
+      rw [← cappedDetailedGameWithEncodingTrace_projection]
+      exact mem_support_map_of_eq _ _ hmem rfl
     obtain ⟨entry, hentry, hcachedSelection | hsigningCollision |
         hforgedCollision⟩ :=
       cappedWinning_encoding_event_trace_postSigning_decomposition adversary

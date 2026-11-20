@@ -3,9 +3,11 @@ module
 public import VCVio.OracleComp.ProbComp.Basic
 
 /-!
-# Proofs: an output of a bind, for the kernel
+# Proofs: an output of a bind or a map, for the kernel
 
 An output of a bind is an output of its continuation on an output of its first step.
+
+The image of an output under a map is an output of the mapped computation.
 
 The library lemma states the bind through the generic monad instances.
 
@@ -46,5 +48,15 @@ theorem exists_eq_of_mem_support_bind (x : ProbComp α) (k : α → ProbComp β)
     (h : y ∈ support (x >>= k)) : ∃ a ∈ support x, ∀ c, k a = c → y ∈ support c := by
   obtain ⟨a, first, next⟩ := (mem_support_bind_iff x k y).1 h
   exact ⟨a, first, fun _ same => same ▸ next⟩
+
+/-- The image of an output of a computation is an output of the mapped computation.
+
+The image is stated for any value it equals.
+
+It holds for any computation, so the kernel checks it without running one. -/
+theorem mem_support_map_of_eq (f : α → β) (c : ProbComp α) {a : α} {b : β}
+    (h : a ∈ support c) (hb : f a = b) : b ∈ support (f <$> c) := by
+  rw [support_map]
+  exact ⟨a, h, hb⟩
 
 end OracleComp

@@ -29,18 +29,13 @@ theorem capped_detailed_execution_verified_leaf_cached
             encoding execution.1.forgery.signature.chainValue)) = some output := by
   have hparameter :=
     (capped_detailed_execution_key_components_consistent adversary execution hmem).1
-  unfold detailedGameWithCache detailedGameCore at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, _hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, hverify, hfinal⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure,
-    Set.mem_singleton_iff] at hfinal
-  cases hfinal
+  -- Decompose through lemmas for any scheme: the kernel would run the game to match two forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  obtain ⟨forgery, signingLog, adversaryCache, verified, -, hverify, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   simp only at hparameter hverified ⊢
   subst verified
   have hroute :
