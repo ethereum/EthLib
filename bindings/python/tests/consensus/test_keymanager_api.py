@@ -511,3 +511,53 @@ def test_delete_bad_request():
     """A delete whose body does not read gets HTTP 400."""
     responses, _ = _calls(("DELETE", "/eth/v1/keystores", {"pubkeys": ["0x12"]}))
     assert responses == [(400, {"message": "the request does not read"})]
+
+
+# Two remote keys, and the address of a remote signer from the example of the source.
+REMOTE_A = "0x" + "aa" * 48
+REMOTE_B = "0x" + "bb" * 48
+REMOTE_C = "0x" + "cc" * 48
+SIGNER = _load("types/url.yaml")["example"]
+
+
+def _remote(*pubkeys: str) -> tuple[str, str, Any]:
+    """The call that imports remote keys, each at the signer of the example."""
+    keys = [{"pubkey": pubkey, "url": SIGNER} for pubkey in pubkeys]
+    return ("POST", "/eth/v1/remotekeys", {"remote_keys": keys})
+
+
+def test_remote_keys_example():
+    """The example of the issue: import a, b, b onto a, then delete b, c."""
+    listed = ("GET", "/eth/v1/remotekeys", {})
+    responses, _ = _calls(
+        _remote(REMOTE_A),
+        _remote(REMOTE_A, REMOTE_B, REMOTE_B),
+        listed,
+        ("DELETE", "/eth/v1/remotekeys", {"pubkeys": [REMOTE_B, REMOTE_C]}),
+        listed,
+    )
+    statuses = [[entry["status"] for entry in body["data"]] for _, body in responses[:2]]
+    assert statuses == [["imported"], ["duplicate", "imported", "duplicate"]]
+    definitions = [
+        {"pubkey": key, "url": SIGNER, "readonly": False} for key in (REMOTE_A, REMOTE_B)
+    ]
+    assert responses[2] == (200, {"data": definitions})
+    deleted = {"data": [{"status": "deleted"}, {"status": "not_found"}]}
+    assert responses[3] == (200, deleted)
+    assert responses[4] == (200, {"data": definitions[:1]})
+
+
+def test_remote_key_held_locally():
+    """A key that the client holds locally is known, so its remote import is a duplicate."""
+    local = _pubkeys()[0]
+    responses, _ = _calls(_import([_keystore(SECRETS[0], "pass")], ["pass"]), _remote(local))
+    assert responses[1] == (200, {"data": [{"status": "duplicate"}]})
+
+
+def test_remote_bad_request():
+    """A remote call whose body does not read gets HTTP 400."""
+    responses, _ = _calls(
+        ("POST", "/eth/v1/remotekeys", {"remote_keys": [{"url": SIGNER}]}),
+        ("DELETE", "/eth/v1/remotekeys", {}),
+    )
+    assert responses == [(400, {"message": "the request does not read"})] * 2

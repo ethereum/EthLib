@@ -6314,6 +6314,26 @@ The source leaves two points about the delete open, and EthLib takes these readi
 - The flow sets every status to `error` when the export of the data fails.
   EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
 
+The calls on `/eth/v1/remotekeys` list, import and delete the keys that a client signs with through a remote signer (`Consensus/KeymanagerApi/RemoteKeys.lean`).
+An import and a delete give one status for each key of the request (`length_importRemoteKeys`, `length_deleteRemoteKeys`, `Consensus/Proofs/KeymanagerApi/RemoteKeys.lean`).
+Each is the status of its key on the state that the keys before it leave (`getElem?_importRemoteKeys`, `getElem?_deleteRemoteKeys`), as `fst_importRemoteKey` and `fst_deleteRemoteKey` give it.
+After an import, each key with the status `imported` is a remote key (`mem_remoteKeys_importRemoteKeys`), and no remote key is lost (`remoteKeys_prefix_importRemoteKeys`).
+After a delete, no key with the status `deleted` is a remote key (`not_mem_remoteKeys_deleteRemoteKeys`).
+Importing one key that the client does not know imports it, deleting it then deletes it (`fst_deleteRemoteKeys_importRemoteKeys`), and the remote keys are those before (`remoteKeys_deleteRemoteKeys_importRemoteKeys`).
+The model takes the remote keys of a state to have distinct public keys.
+The Python suite runs the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
+
+The source leaves five points about remote keys open, and EthLib takes these readings:
+
+- Whether a local key is "already known to the validator client" for a remote import.
+  EthLib reads it as known, so its remote import is a `duplicate`.
+  The local import of #2136 compares with the local keys only, so a key imported remotely and then locally is held both ways.
+  A local delete of such a key then returns its data while the remote signer can still sign with it; the implementers should say whether the local import must refuse it.
+- The source lists no HTTP 400 for the remote calls; EthLib answers a body that does not read with HTTP 400, as for the local calls.
+- What a missing `url` means is left to the client; EthLib keeps the key without one.
+- A remote key imported through the API is marked as one that can be deleted.
+- A remote key marked read-only stays on a delete, with the status `error`, as a local one does.
+
 ### Remote-signing API
 
 The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.

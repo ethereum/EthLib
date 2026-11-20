@@ -94,6 +94,7 @@ public import EthLib.Consensus.InclusionListCommittee
 public import EthLib.Consensus.KeymanagerApi.Client
 public import EthLib.Consensus.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.KeymanagerApi.RemoteKeys
 public import EthLib.Consensus.KeymanagerApi.Server
 public import EthLib.Consensus.KeymanagerApi.Types
 public import EthLib.Consensus.LightClient.Containers
