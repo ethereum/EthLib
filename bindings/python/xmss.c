@@ -65,7 +65,7 @@ parse_uint(
  *
  * Memory: a built tree holds 2^17 - 1 digests, about 22 MiB of Lean objects.
  * A key holds its top tree and up to 8 bottom trees, so the 2 slots hold at most 18 trees.
- * That is about 400 MiB, which no call releases but eviction.
+ * That is about 400 MiB, and only eviction releases it.
  * A call in flight holds its own key on top of that, until it stores or frees it.
  * A signer uses one seed, so 2 slots keep it warm while a second seed is in use.
  *

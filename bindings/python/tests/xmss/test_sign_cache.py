@@ -1,6 +1,7 @@
 """Signing gives the same bytes on every call, whatever secret keys the extension keeps."""
 
 import re
+import sysconfig
 import threading
 import time
 from collections.abc import Callable
@@ -15,14 +16,22 @@ from . import fixtures
 # The extension keeps the secret keys of the last few seeds, which only the time of a call shows.
 # A seed it does not keep builds the top tree and a bottom tree, each costing a key generation.
 # A signature in a bottom tree it keeps makes one one-time signature.
-# Each test builds trees, so the module runs only with the slow cases.
-pytestmark = fixtures.slow
+# Each test builds trees, so it runs with the slow cases.
+slow = pytest.mark.skipif(not fixtures.SLOW, reason="set ETHLIB_SLOW_VECTORS=1 to run it")
+
+# Without the GIL, the threads share the cache at once, so the thread tests run on every such build.
+FREE_THREADED = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+threaded = pytest.mark.skipif(
+    not (fixtures.SLOW or FREE_THREADED),
+    reason="runs without the GIL, or with ETHLIB_SLOW_VECTORS=1",
+)
 
 # The number of seeds the extension keeps, read from `xmss.c`.
 _SLOTS = re.search(
     r"#define XMSS_KEY_CACHE_SEEDS (\d+)", (Path(__file__).parents[2] / "xmss.c").read_text()
 )
-assert _SLOTS is not None
+if _SLOTS is None:
+    raise RuntimeError("XMSS_KEY_CACHE_SEEDS not found in xmss.c")
 CACHE_SEEDS = int(_SLOTS[1])
 
 SEED = fixtures.SEED_KNOWN_ANSWER
@@ -73,6 +82,7 @@ def run_threads(work: Callable[[int], bytes], count: int) -> list[bytes]:
     return [results[i] for i in range(count)]
 
 
+@slow
 @pytest.mark.parametrize(
     ("leaf_index", "case"),
     [
@@ -96,6 +106,7 @@ def test_repeated_signing(leaf_index: int, case: str | None) -> None:
     assert xmss.verify(PUBLIC_KEY, MESSAGE, first)
 
 
+@slow
 def test_eviction() -> None:
     # Seeds that differ from SEED in one byte, so a seed compared in part would be confused.
     others = [near_seed(tag) for tag in range(1, CACHE_SEEDS)]
@@ -122,6 +133,7 @@ def test_eviction() -> None:
     assert not xmss.verify(PUBLIC_KEY, MESSAGE, signature)
 
 
+@slow
 def test_kept_tree_is_faster() -> None:
     # Bottom tree 2 of SEED is used by this test only, so its first signature builds it.
     building, _ = timed_sign(SEED, 2 * TREE_SIZE)
@@ -129,6 +141,7 @@ def test_kept_tree_is_faster() -> None:
     assert reading * 4 < building
 
 
+@slow
 def test_key_gen_keeps_signing_warm() -> None:
     # Key generation on a kept seed reads its public key, and keeps the bottom trees it holds.
     xmss.sign(SEED, 1, MESSAGE)
@@ -140,6 +153,7 @@ def test_key_gen_keeps_signing_warm() -> None:
     assert after < max(4 * before, 1.0)
 
 
+@threaded
 def test_threads_on_a_kept_key() -> None:
     # Eight threads share the kept key of SEED; without the GIL, they read it at once.
     # Two of them build a new bottom tree, so their stores free keys that the others still read.
@@ -152,6 +166,7 @@ def test_threads_on_a_kept_key() -> None:
     assert all(xmss.verify(PUBLIC_KEY, MESSAGE, signature) for signature in serial)
 
 
+@threaded
 def test_threads_on_cold_seeds() -> None:
     # Eight threads sign with two cold seeds, four per seed; without the GIL, they all build keys.
     # Key generation reads kept keys here, so the eviction test is the oracle for confused seeds.

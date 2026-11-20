@@ -80,7 +80,7 @@ noncomputable def statelessReasonRun (adversary : ReasonAdversary) :
   let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
   return (forgery, log, verified)
 
-/-- The game against the counted random oracle of the stateless game, from an empty cache. -/
+/-- The stateless game against the counted random oracle, from an empty cache. -/
 noncomputable def statelessReasonExperiment (adversary : ReasonAdversary) :
     ProbComp ((Forgery × QueryLog SigningSpec × Bool) × Nat) :=
   (simulateQ countedOracle (statelessReasonRun adversary)).run.run' ∅
