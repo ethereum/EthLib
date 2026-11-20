@@ -6917,6 +6917,25 @@ The codeword searches of each scheme share the bullet of that scheme:
   No theorem bounds the assumption on the aggregate calls for Ethereum.
   The bound with proofs of possession needs PopProve under the key tag, and Ethereum registers keys with deposit signatures under the message tag, which that game does not model.
   Without proofs of possession the aggregate assumption can fail for an honest key that never signed (`fastAggregateVerify_rogue`, `Cryptography/Proofs/Bls/SignaturesUnique.lean`).
+  The bound that the assumptions need is not proved; issue #3433 tracks it, and the reduction it needs is this.
+  For one signature, the notion is existential unforgeability under chosen messages of the scheme of [Boneh, Lynn, Shacham](https://hovav.net/ucsd/dist/sigs.pdf), §3, as the game of `Cryptography/Proofs/Bls/Security/Game.lean` states it, extended to `n` honest keys at once.
+  A reduction guesses which honest key is forged and samples the other secret keys itself, so it loses a factor `n` on top of the bound above; no theorem states the `n`-key game or that reduction.
+  The tighter reduction that spreads one challenge key over all `n` keys does not apply: honest keys sign the same attestation data, so a forgery for one key can fall on a message the challenge key already signed for another.
+  For aggregates, the notion is that of the proof-of-possession scheme of [draft-irtf-cfrg-bls-signature-04, §3.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3), whose proofs hash the key alone under a tag of their own (§3.3.1); `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds it on EthLib's bytes.
+  Ethereum's deposit signature differs from that proof in two ways, which that game does not model.
+  It signs the signing root of a deposit message, which holds the key, the withdrawal credentials and the amount, so one key can have many proofs.
+  It hashes under the message tag in the deposit domain, so it shares the oracle of the other signatures.
+  `computeSigningRoot_ne_or_collision_of_domainType_ne` (`Consensus/Proofs/Signing.lean`) shows the part that domains give: a signing root in one domain type is never one in another, unless the node hash collides on the signing data.
+  So no honest signature on an attestation, a block or a sync message signs the signing root of a deposit, unless SHA-256 collides.
+  Three steps remain.
+  First, a game with proofs over the key and extra data, any number per key, under the one message oracle.
+  Its reduction must embed the challenge in the point of every adversarial deposit and not in any point the honest key signs.
+  A signing root hides both its domain and its key, so a guess per point loses a factor exponential in the number of adversarial keys of the forgery.
+  The alternative models the hash as an oracle on the deposit message and domain, so that the reduction sees the key, a stronger idealisation.
+  Second, an invariant of the transition: every key of an accepted aggregate call entered the registry after its deposit signature was checked, which needs a genesis built from checked deposits.
+  Third, the assumption that an honest key signs a deposit message only for its own key, builder keys included, since builder deposits use the deposit domain too, and signs nothing but signing roots of Ethereum domain types.
+  Then the bound would cover the aggregate assumption, with the factor `n` of the guess; no theorem states it.
+  Reading any such probability as the absence of forgery in one pair of runs also stays informal, since the runs use the concrete hash and the bound the random oracle.
 - ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
   In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
   The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
