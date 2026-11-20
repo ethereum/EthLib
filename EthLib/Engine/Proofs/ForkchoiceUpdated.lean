@@ -1671,6 +1671,7 @@ theorem forkchoiceUpdatedCall_payloadIdInput_inj {version version' : Nat}
   obtain ⟨-, rfl, rfl⟩ := hr
   obtain ⟨-, rfl, rfl⟩ := hr'
   -- The head and the timestamp come first in the bytes.
+  --
   -- With the configuration and the tree, they fix the fork.
   obtain ⟨rfl, hTime⟩ := payloadIdInput_head_timestamp same
   rw [hk, Option.some.injEq] at hk'
