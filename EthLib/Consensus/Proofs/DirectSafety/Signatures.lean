@@ -32,6 +32,8 @@ So the keys that signed such a pair hold at least a third of the unslashed activ
 
 Two thirds of the larger drift of the two tails are subtracted from that third.
 
+When the unslashed active keys stay those of `x` on both tails, the drift is zero.
+
 Otherwise the hashes of the runs show evidence.
 
 These theorems do not show that a block of either run could include a slashing of those keys.
@@ -379,6 +381,51 @@ theorem accountable_safety_signed {g x a b : ForkedBeaconState preset}
   classical
   rcases accountable_safety shared left right parameters genesis enoughA enoughB ordered
     conflict with bound | hashes
+  · -- Each accountable key signed conflicting objects, so the signers hold at least its stake.
+    have more := Models.stake_mono (w := effectiveWeight x.state)
+      (accountableKeys_subset_signedConflictKeys shared left right genesis parameters.lookahead
+        aggregate single)
+    exact .inl (by omega)
+  · exact .inr hashes
+
+/-- Direct accountable safety, for the keys that signed conflicting objects, in its one-third form.
+
+The hypotheses are those of the signed form, with stable unslashed active keys on both tails.
+
+That holds up to one epoch past the later finalized epoch, as for the one-third form.
+
+Then the signers of conflicting objects hold at least a third of the unslashed active stake at `x`.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
+-/
+theorem accountable_safety_signed_third {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
+    (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
+    (enoughB : EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat)
+    (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
+    (conflict : Conflict (shared.append left) (shared.append right)
+      a.state.finalizedCheckpoint b.state.finalizedCheckpoint)
+    {signed : BLSPubkey → ByteArray → Prop}
+    (aggregate : checks.AggregateSoundOn
+      (· ∈ aggregateCalls (shared.append left) ∪ aggregateCalls (shared.append right)) signed)
+    (single : checks.VerifySoundOn
+      (· ∈ verifyCalls (shared.append left) ∪ verifyCalls (shared.append right)) signed)
+    (stableA : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
+      (post : Run config checks u a), pre.append post = left →
+        (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
+          StableKeys x u)
+    (stableB : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
+      (post : Run config checks u b), pre.append post = right →
+        (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
+          StableKeys x u) :
+    Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
+        3 * Models.stake (effectiveWeight x.state)
+          (signedConflictKeys config g.state.genesisValidatorsRoot signed x) ∨
+      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+  classical
+  rcases accountable_safety_third shared left right parameters genesis enoughA enoughB ordered
+    conflict stableA stableB with bound | hashes
   · -- Each accountable key signed conflicting objects, so the signers hold at least its stake.
     have more := Models.stake_mono (w := effectiveWeight x.state)
       (accountableKeys_subset_signedConflictKeys shared left right genesis parameters.lookahead
