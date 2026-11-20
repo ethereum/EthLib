@@ -2668,7 +2668,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exiting (h 
           (Finset.mem_filter.mp member).2
     · exact (Finset.mem_filter.mp member).2
 
-/-- Outside the tight window, late exits charge three times the keys' stake plus their rise.
+/-- Outside the tight window, late activations charge triple the effective balance plus the rise.
 
 It also holds the reward of what the finalized balance exceeds them by. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_eq (config : Config) (pulled

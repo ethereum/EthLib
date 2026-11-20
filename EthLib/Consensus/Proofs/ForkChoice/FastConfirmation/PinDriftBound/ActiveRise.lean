@@ -1708,7 +1708,7 @@ The caps along the runs are those of each state, so a switch to compounding on e
 
 The credits `Cr` are all of C's, so they cover the cap's rise on C's run.
 
-The late-exit charge applies only to keys that are unslashed at R.
+For an unslashed key at R, the exit epoch plus the withdrawal delay must exceed R's next epoch.
 
 At an end before R's epoch and no later than `c`, `shortStart` bounds the effective balance at `c`.
 
@@ -2136,7 +2136,8 @@ The reward budget's credit allowance covers the credits of the prefix.
 
 The reward budget's stake bound includes the slashing increment.
 
-An unslashed key at R has a late exit for the whole run. -/
+For an unslashed key at R, the exit epoch plus the withdrawal delay must exceed R's next epoch.
+-/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_frozen (h : Setting config
   checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

@@ -158,7 +158,7 @@ A key of `SC` outside the tight window pays its stake three times and its rise.
 
 It also pays the reward of what its finalized balance exceeds them by, rounded up.
 
-In the tight window the late-exit charge is zero, and the guard excludes all keys of `SC`. -/
+In the tight window the charge for late activations is zero, including the sum over `SC`. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_late (h : Setting config checks
   g split fin pulled anc counted V) :
     3 * (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,

@@ -2997,7 +2997,7 @@ private theorem slashed_beyond_horizon
   have half := Internal.depthFin_lt_half h
   omega
 
-/-- A key unslashed at R that R does not hold withdrawable has a late exit.
+/-- If an unslashed key is not withdrawable by R's next epoch, its exit plus the delay is later.
 
 Its withdrawable epoch is its exit plus the delay, or both are unset. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_of_withdrawable (h : Setting

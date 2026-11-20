@@ -3096,7 +3096,7 @@ These are the keys of the split's registry that C slashes and leaves active.
 
 R neither slashes them nor exits them.
 
-Outside the tight window, R does not charge them as late exits or pending activations.
+Outside the tight window, R does not charge them as late or pending activations.
 
 They are active at both branches.
 
@@ -3314,7 +3314,7 @@ At R the key is late or pending, and only the upcoming-only quorum class can sha
 
 It needs no floor.
 
-The late-exit charge triples the effective balance but counts the rise once.
+The charge for late activations triples the effective balance but counts the rise once.
 
 Its finalized balance can exceed its balance and rise at R.
 
