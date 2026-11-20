@@ -15,7 +15,7 @@ Properties of the request and response messages of the consensus layer.
 - Each protocol ID parses back to its protocol and its version.
 - So no two protocol IDs of a fork are one string.
 - A protocol ID of a fork is a protocol ID of every later fork.
-- The metadata of a version is that of the first fork that has the version.
+- The metadata of a version is that of the first fork from Phase 0 that has the version.
 - The status, the metadata and the container requests are lawful SSZ containers at every fork.
 - A goodbye code is recovered from the reason it names.
 -/
@@ -119,7 +119,7 @@ theorem toString_injective {fork : Fork} {a b : ProtocolId} (left : a ∈ protoc
   rw [same, parse?_protocolIds right] at this
   exact (Option.some.inj this).symm
 
-/-- The metadata of a version is that of the first fork from Phase 0 whose protocol has it.
+/-- The metadata of a version is that of the first fork from Phase 0 whose metadata protocol has it.
 
 So version 1 carries the metadata of Phase 0, version 2 that of Altair, and version 3 that of Fulu.
 -/
