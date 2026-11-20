@@ -16,8 +16,8 @@ Each join, publish and heartbeat of the run uses a lawful choice.
 - So in each state that a run reaches, the peers that announced each topic appear once each.
 - From a router with no mesh, no fanout and no topics of peers, every run keeps all three.
 - So a join with a lawful choice after such a run keeps every mesh free of a repeated peer.
-- Every run keeps the explicit peers.
-  If no explicit peer is in a mesh at the start, none is in a mesh along the run.
+- Say no explicit peer is in a mesh at the start of a run.
+  Then the run keeps the explicit peers, and none of them is in a mesh along the run.
 - Say a run starts from a router with no mesh, no fanout and no topics of peers.
   Then an RPC after the run forwards each message at most once to each peer.
   That result needs a positive lifetime of the seen cache, and each explicit peer listed once.

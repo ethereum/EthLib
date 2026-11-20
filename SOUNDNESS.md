@@ -2754,7 +2754,7 @@ A leave removes at most the mesh of its topic, and a publish keeps every mesh (`
 A join and a heartbeat with a lawful choice add only peers that this node may GRAFT, as `join_graftable` states for a join.
 `graftable` excludes every explicit peer.
 `steps_explicit` carries both facts along a run whose start has no explicit peer in a mesh.
-`steps_receiveRpc_forward_nodup` applies it to a run from a router with no mesh, no fanout and no topics of peers, followed by one RPC.
+`steps_receiveRpc_forward_nodup` combines it with `steps_nodup_of_empty` for a run from a router with no mesh, no fanout and no topics of peers, followed by one RPC.
 That RPC sends each message it forwards at most once to each peer, by `receiveRpc_forward_nodup`.
 The result needs a positive lifetime of the seen cache, and the explicit peers of the start listed once each.
 
