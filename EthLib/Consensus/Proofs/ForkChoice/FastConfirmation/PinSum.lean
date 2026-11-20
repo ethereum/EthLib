@@ -22260,15 +22260,34 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
     (created_band h fromFin high endEpoch replayedF tailC highC endEpochC replayedC activated
       absent)
 
+/-- A key of `K6` beyond R's registry has a deposit credit on C's run.
+
+It holds the activation reserve at its start.
+
+No gross block credit reaches it before its activation, so a deposit or a consolidation pays it.
+
+A consolidation needs an entry of the finalized queue, whose target is inside that registry. -/
+private theorem created_deposit (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {v : ValidatorIndex} (member : v ∈ K6 pulled counted)
+    (created : pulled.validators.data.size ≤ v.toNat) :
+    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 :=
+  sorry
+
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
-In the high regime they are also paid by `creditCap`.
+In the high regime they are also paid by `capUse`, their share of `creditCap`.
 
 They joined the registry on C's branch, so their stake is the credits that reach them.
 
 The credits compound, which `keyExtra`'s flow gain charges, when the gain rate is low.
 
-Otherwise `creditCap` charges the deposits up to the cap. -/
+Otherwise `capUse` charges each key up to the cap. -/
 private theorem beyond_keys (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -22296,7 +22315,23 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
     obtain ⟨inK6, beyond⟩ := Finset.mem_filter.mp member
     exact beyond_key h tail high endEpoch fromFin replayedF tailC highC endEpochC replayedC low
       inK6 beyond
-  · sorry
+  · -- Each key is at most the cap, and `capUse` is that cap for each key, at a high rate.
+    obtain ⟨shared⟩ := h.toFin
+    have capped (v : ValidatorIndex) : eC counted v ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
+      PinSplit5.effectiveAt_le_capMax (shared.append (fromFin.append tailC)) h.genesis h.caps
+        h.early v.toNat
+    have highGain : (pinTerms config pulled anc fin).gainHigh = true := by
+      show (!decide (11 * (pinTerms config pulled anc fin).depth *
+        ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = true
+      simp [low]
+    have total := Finset.sum_le_card_nsmul
+      ((K6 pulled counted).filter fun v => pulled.validators.data.size ≤ v.toNat) (eC counted)
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat fun v _ => capped v
+    rw [smul_eq_mul] at total
+    unfold capUse
+    rw [if_pos highGain]
+    exact Nat.le_trans total (Nat.le_add_left _ _)
 
 /-- D-8 (activations): keys counted in C and not active at R.
 
