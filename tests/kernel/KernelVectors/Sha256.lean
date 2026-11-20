@@ -7,7 +7,9 @@ import EthLib.Cryptography.Hash.Sha256
 
 Each case is a file of `tests/cryptography/sha256/hash/`, copied byte for byte.
 
-That directory is pinned: its `SHA256SUMS` names FIPS 180-2 as the source of these two cases.
+`tests/cryptography/sha256/SHA256SUMS` pins these files.
+
+Their source, as `hash/format.md` says, is FIPS 180-2, Appendix B.
 
 The kernel computes each digest, so a case holds only if the definition gives the expected bytes.
 -/
