@@ -7276,6 +7276,14 @@ private theorem grossScan_snoc (v high : ℕ) {x m y : ForkedBeaconState preset}
   unfold grossScan
   exact creditScan_snoc_fst _ _ v high pre step
 
+private theorem grossScan_slot_pos (i high : ℕ) {x m n : ForkedBeaconState preset}
+    (pre : Run config checks x m) (ok : advanceSlotAcross config checks m = .ok n)
+    (pos : 0 < grossScan i high (pre.snoc (Step.slot ok))) : 0 < grossScan i high pre := by
+  rw [grossScan_snoc] at pos
+  split at pos
+  · simpa [stepCredit] using pos
+  · exact pos
+
 /-- The gross credits of a run add over `append`. -/
 private theorem grossScan_append (v high : ℕ) {x m y : ForkedBeaconState preset}
     (pre : Run config checks x m) (post : Run config checks m y) :
@@ -7624,18 +7632,7 @@ private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
     split at ok
     · exact carried ok
     · exact unchanged ok
-  case pendingDeposits =>
-    simp only [epochReplayAction] at ok
-    split at ok
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, rfl⟩ := ok
-      intro e member source
-      rcases List.mem_append.mp member with old | new
-      · exact held e old source
-      · obtain rfl := List.mem_singleton.mp new
-        exact absurd source (by simp)
-    · exact unchanged ok
-  case pendingConsolidations =>
+  case pendingDeposits | pendingConsolidations =>
     simp only [epochReplayAction] at ok
     split at ok
     · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
@@ -8692,11 +8689,7 @@ private theorem credited_piece {g : ForkedBeaconState preset}
     | slot ok =>
       have fulu' : .fusaka ≤ u.fork := Nat.le_trans fulu (fork_le_of_chainSteps pre.chainSteps)
       refine ⟨B, D ∪ Ds, cardB, cardUnion, fun i pos => ?_, depMem, ?_, hP⟩
-      rw [grossScan_snoc] at pos
-      have prior : 0 < grossScan i high pre := by
-        split at pos
-        · simpa [stepCredit] using pos
-        · exact pos
+      have prior := grossScan_slot_pos i high pre ok pos
       rcases hB i prior with member | ⟨w, found, mem⟩
       · exact .inl member
       · exact .inr (carry i w found mem)
@@ -8980,11 +8973,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
         ((Finset.card_union_le _ _).trans (Nat.add_le_add cardD₁ cardDs)) cardD₂) joined)
     · rw [grossScan_append] at pos
       by_cases first : 0 < grossScan i high (pre.snoc (Step.slot ok))
-      · have prior : 0 < grossScan i high pre := by
-          rw [grossScan_snoc] at first
-          split at first
-          · simpa [stepCredit] using first
-          · exact first
+      · have prior := grossScan_slot_pos i high pre ok first
         rcases hB₁ i prior with member | ⟨w, found, mem⟩
         · exact .inl (Finset.mem_union_left _ member)
         · exact .inr (Finset.mem_union_left _ (hS₁ i w found mem))
@@ -9006,11 +8995,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
     · -- a credit in the first part is a proposer or a seat holder, and a seat persists
       rw [grossScan_append] at pos
       by_cases first : 0 < grossScan i high (pre.snoc (Step.slot ok))
-      · have prior : 0 < grossScan i high pre := by
-          rw [grossScan_snoc] at first
-          split at first
-          · simpa [stepCredit] using first
-          · exact first
+      · have prior := grossScan_slot_pos i high pre ok first
         rcases hB₁ i prior with member | ⟨w, found, mem⟩
         · exact .inl (Finset.mem_union_left _ member)
         · have kept := (validatorKeys_prefix_and_distinct_of_chainSteps
@@ -9541,6 +9526,21 @@ section Terms
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
 
+/-- Activity up to the seed lookahead after the split is the same at R and C. -/
+private theorem activity_shared {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) {e : Epoch}
+    (fixed : e.toNat ≤ (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat)
+    (i : ℕ) : isActiveAt pulled e i = isActiveAt counted e i := by
+  obtain ⟨rp⟩ := h.toPulled
+  obtain ⟨rc⟩ := h.toCounted
+  have inside : e ≤ activityFixedEpoch split := by
+    rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
+    have := e.toNat_lt
+    omega
+  exact (activeKept_of_chainSteps rp.chainSteps e inside i).trans
+    (activeKept_of_chainSteps rc.chainSteps e inside i).symm
+
 /-- A key active at C's epoch is activated by then at R, when that epoch is within the lookahead.
 
 Activity up to the seed lookahead after the split is the same on both branches. -/
@@ -9554,18 +9554,10 @@ private theorem activation_le_of_active {g : ForkedBeaconState preset}
     w.activationEpoch.toNat ≤ (getCurrentEpoch counted).toNat := by
   have finalized := UInt64.le_iff_toNat_le.mp h.finalized
   obtain ⟨u, foundU, activeU⟩ := active_of_activeVoters h.early member
-  obtain ⟨rp⟩ := h.toPulled
-  obtain ⟨rc⟩ := h.toCounted
-  have fixed : getCurrentEpoch counted ≤ activityFixedEpoch split := by
-    rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
-    have := (getCurrentEpoch counted).toNat_lt
-    omega
-  have kc := activeKept_of_chainSteps rc.chainSteps (getCurrentEpoch counted) fixed v.toNat
-  have kp := activeKept_of_chainSteps rp.chainSteps (getCurrentEpoch counted) fixed v.toNat
   have activeAtC : isActiveAt counted (getCurrentEpoch counted) v.toNat = true :=
     isActiveAt_eq_true_iff.mpr ⟨u, foundU, activeU⟩
   have activeAtR : isActiveAt pulled (getCurrentEpoch counted) v.toNat = true := by
-    rw [kp, ← kc]
+    rw [activity_shared h (e := getCurrentEpoch counted) (by omega) v.toNat]
     exact activeAtC
   obtain ⟨w', found', active⟩ := isActiveAt_eq_true_iff.mp activeAtR
   rw [found] at found'
@@ -10781,6 +10773,30 @@ private theorem prevStake_band_of_guard {g x z : ForkedBeaconState preset} {high
   simp only [stakeCeilingAt, stakeFloorAt, zero] at low previous mono anti ratio ⊢
   omega
 
+private theorem total_band_of_setting (h : Setting config checks g split fin pulled anc counted V)
+    {m : ForkedBeaconState preset} (toM : Run config checks ⟨fork, fin⟩ m)
+    (early : m.fork < .glamsterdam)
+    (inside : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
+    {total T : Gwei} (totalOk : getTotalActiveBalance m.state = .ok total)
+    (pulledOk : getTotalActiveBalance pulled = .ok T) :
+    2 * T.toNat ≤ 3 * total.toNat ∧ 2 * total.toNat ≤ 3 * T.toNat := by
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have toP := fromFin.append toPulled
+  exact ⟨total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+      electra h.guard toM early inside toP h.early (Nat.le_succ _) totalOk pulledOk,
+    total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
+      electra h.guard toP h.early (Nat.le_succ _) toM early inside pulledOk totalOk⟩
+
+private theorem quarter_toNat (T : Gwei) :
+    ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
+      if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
+  split <;> simp [UInt64.toNat_div]
+
 /-- The reward per increment at a state of a run from the finalized state is at most the pin's rate.
 
 It is read times the increments active at the previous epoch or at the current one.
@@ -10806,13 +10822,8 @@ private theorem rate_of_guard
   intro total perIncrement totalOk perOk
   obtain ⟨T, pulledOk⟩ := h.pulledTotal
   obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have toP := fromFin.append toPulled
-  have band := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-    electra h.guard toM h.early inside toP h.early (Nat.le_succ _)
-    totalOk pulledOk
+  have band := (total_band_of_setting h toM h.early inside totalOk pulledOk).1
   obtain ⟨-, -, value⟩ := getTotalBalance_ok_iff_stake.mp (getTotalActiveBalance_ok totalOk)
   have stake : 2 * ∑ i ∈ (getActiveValidatorIndices m epoch).toFinset,
       effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) i.toNat ≤ 3 * total.toNat := by
@@ -10830,13 +10841,7 @@ private theorem rate_of_guard
   have high : total.toNat < 2 ^ 64 := total.toNat_lt
   rw [toNat_getBaseRewardPerIncrement perOk]
   simp only [pulledOk, Except.toOption, Option.getD_some] at pqOk
-  rw [toNat_getBaseRewardPerIncrement pqOk]
-  have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
-      else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
-      if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
-      else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
-    split <;> simp [UInt64.toNat_div]
-  rw [quarter]
+  rw [toNat_getBaseRewardPerIncrement pqOk, quarter_toNat]
   exact rate_arith h.facts.rewardScale h.facts.incrementSize h.facts.reward clamp high band stake
 
 /-- Adding `S` to a number loses at most `U` of rounding down to a multiple of `inc`.
@@ -11211,82 +11216,6 @@ private theorem block_flip_balance {engine : ExecutionEngine preset fork}
     List.sum_nil, keyCredit]
   omega
 
-/-- A step makes a key compound.
-
-It leaves the balance of the key within the activation balance plus the credits of the step. -/
-private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step config checks m n)
-    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
-    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt m i)
-    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt n i) :
-    actualBalanceAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
-      stepCredit (fun _ => true) (fun _ => true) i step := by
-  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
-  have base := PinKeyFloor.step_balance_le_events step early i replayed
-  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
-      (events.map (keyCredit i)).sum := by
-    cases step <;> simp [stepCredit, replayed, Except.toOption]
-  rw [credit]
-  have electraM : .pectra ≤ m.fork := Nat.le_trans (by decide) fulu
-  have electraN : .pectra ≤ n.fork := Nat.le_trans electraM step.chainStep.fork_le
-  obtain ⟨w, foundN, switched⟩ := compounding_of_cap electraN large
-  have strict : preset.MIN_ACTIVATION_BALANCE.toNat <
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-    rw [capAt_of_found electraN foundN, switched] at large
-    simpa using large
-  cases found : m.state.validators.data[i]? with
-  | none =>
-    have out := Array.getElem?_eq_none_iff.mp found
-    have sizes := invariant.balancesMatch
-    unfold BalancesMatch at sizes
-    have zero : actualBalanceAt m i = 0 := by
-      simp [actualBalanceAt,
-        Array.getElem?_eq_none (show m.state.balances.data.size ≤ i by omega)]
-    omega
-  | some v =>
-    have plain : hasCompoundingWithdrawalCredential v = false := by
-      by_contra compounds
-      have yes : hasCompoundingWithdrawalCredential v = true := by simpa using compounds
-      rw [capAt_of_found electraM found, yes] at flat
-      simp at flat
-      omega
-    cases step with
-    | slot ok =>
-      obtain ⟨w', found', same⟩ := slot_compounding_kept ok fulu early found
-      have equal := Option.some.inj (found'.symm.trans foundN)
-      subst equal
-      simp [switched, plain] at same
-    | @block f s t engine signed due ok =>
-      have replay := Step.balanceEvents_block (fork := f) early replayed
-      have limit := s.registryWithinLimit_of_lt early
-      unfold BeaconState.RegistryWithinLimit at limit
-      have inside : i < s.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
-      have bound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-      obtain ⟨key, hkey⟩ : ∃ key : ValidatorIndex, key.toNat = i :=
-        ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (show i < 2 ^ 64 by omega)⟩
-      subst hkey
-      exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
-        plain foundN switched
-
-/-- A step that makes a key compound leaves its balance within the smaller of two bounds.
-
-Those are its balance before the step and the activation balance, each plus the credits of the step.
-
-Both bounds add the same credits, so the smaller of the two bases carries them. -/
-private theorem step_flip_min {m n : ForkedBeaconState preset} (step : Step config checks m n)
-    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
-    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt m i)
-    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt n i) :
-    actualBalanceAt n i ≤ min (actualBalanceAt m i) preset.MIN_ACTIVATION_BALANCE.toNat +
-      stepCredit (fun _ => true) (fun _ => true) i step := by
-  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
-  have base := PinKeyFloor.step_balance_le_events step early i replayed
-  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
-      (events.map (keyCredit i)).sum := by
-    cases step <;> simp [stepCredit, replayed, Except.toOption]
-  have flip := step_flip_balance step early fulu invariant i flat large
-  rw [credit] at flip ⊢
-  omega
-
 /-- A step that makes a registered key compound is not a slot step.
 
 A slot step keeps whether each validator of its first state compounds. -/
@@ -11318,6 +11247,79 @@ private theorem step_flip_not_slot {m n : ForkedBeaconState preset} (step : Step
   have equal := Option.some.inj (found'.symm.trans foundN)
   subst equal
   simp [switched, plain] at same
+
+/-- A step makes a key compound.
+
+It leaves the balance of the key within the activation balance plus the credits of the step. -/
+private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
+    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt n i) :
+    actualBalanceAt n i ≤ preset.MIN_ACTIVATION_BALANCE.toNat +
+      stepCredit (fun _ => true) (fun _ => true) i step := by
+  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
+  have base := PinKeyFloor.step_balance_le_events step early i replayed
+  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
+      (events.map (keyCredit i)).sum := by
+    cases step <;> simp [stepCredit, replayed, Except.toOption]
+  rw [credit]
+  cases found : m.state.validators.data[i]? with
+  | none =>
+    have out := Array.getElem?_eq_none_iff.mp found
+    have sizes := invariant.balancesMatch
+    unfold BalancesMatch at sizes
+    have zero : actualBalanceAt m i = 0 := by
+      simp [actualBalanceAt,
+        Array.getElem?_eq_none (show m.state.balances.data.size ≤ i by omega)]
+    omega
+  | some v =>
+    cases step with
+    | slot ok =>
+      have inside := (Array.getElem?_eq_some_iff.mp found).1
+      exact absurd rfl (step_flip_not_slot (Step.slot ok) early fulu i inside flat large ok)
+    | @block f s t engine signed due ok =>
+      have electra : .pectra ≤ f := Nat.le_trans (by decide) fulu
+      obtain ⟨w, foundN, switched⟩ := compounding_of_cap electra large
+      have strict : preset.MIN_ACTIVATION_BALANCE.toNat <
+          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+        rw [capAt_of_found electra foundN, switched] at large
+        simpa using large
+      have plain : hasCompoundingWithdrawalCredential v = false := by
+        by_contra compounds
+        have yes : hasCompoundingWithdrawalCredential v = true := by simpa using compounds
+        rw [capAt_of_found electra found, yes] at flat
+        simp at flat
+        omega
+      have replay := Step.balanceEvents_block (fork := f) early replayed
+      have limit := s.registryWithinLimit_of_lt early
+      unfold BeaconState.RegistryWithinLimit at limit
+      have inside : i < s.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
+      have bound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+      obtain ⟨key, hkey⟩ : ∃ key : ValidatorIndex, key.toNat = i :=
+        ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (show i < 2 ^ 64 by omega)⟩
+      subst hkey
+      exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
+        plain foundN switched
+
+/-- A step that makes a key compound leaves its balance within the smaller of two bounds.
+
+Those are its balance before the step and the activation balance, each plus the credits of the step.
+
+Both bounds add the same credits, so the smaller of the two bases carries them. -/
+private theorem step_flip_min {m n : ForkedBeaconState preset} (step : Step config checks m n)
+    (early : n.fork < .glamsterdam) (fulu : .fusaka ≤ m.fork) (invariant : Invariant m.state)
+    (i : ℕ) (flat : ¬preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt m i)
+    (large : preset.MIN_ACTIVATION_BALANCE.toNat < PinTerms.capAt n i) :
+    actualBalanceAt n i ≤ min (actualBalanceAt m i) preset.MIN_ACTIVATION_BALANCE.toNat +
+      stepCredit (fun _ => true) (fun _ => true) i step := by
+  obtain ⟨events, replayed⟩ := step.balanceEvents_ok early
+  have base := PinKeyFloor.step_balance_le_events step early i replayed
+  have credit : stepCredit (fun _ => true) (fun _ => true) i step =
+      (events.map (keyCredit i)).sum := by
+    cases step <;> simp [stepCredit, replayed, Except.toOption]
+  have flip := step_flip_balance step early fulu invariant i flat large
+  rw [credit] at flip ⊢
+  omega
 
 /-- A step that makes a registered key compound stays in its epoch.
 
@@ -11386,18 +11388,14 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
         v := by
   obtain ⟨T, pulledOk⟩ := h.pulledTotal
   obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have altair : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have toP := fromFin.append toPulled
   have aligned : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∣
       effectiveAt (⟨fork, m⟩ : ForkedBeaconState preset) v :=
     Nat.dvd_of_mod_eq_zero
       (DirectSafety.Apriori.Internal.FloorTrace.effective_aligned (shared.append toM) h.genesis
         h.aligned v)
-  have bandTotal := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots
-    electra h.guard toM h.early inside toP h.early (Nat.le_succ _) totalOk pulledOk
+  have bandTotal := (total_band_of_setting h toM h.early inside totalOk pulledOk).1
   have band : 2 * T.toNat ≤ 3 * activeBalanceTotal m := by
     rw [← getTotalActiveBalance_toNat totalOk]
     exact bandTotal
@@ -11441,13 +11439,8 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
   rw [totalRead] at pqOk ⊢
   rw [pqOk]
   simp only [Except.toOption, Option.getD_some]
-  have quarter : ((if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T / 4
-      else preset.EFFECTIVE_BALANCE_INCREMENT / 5 : Gwei)).toNat =
-      if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ T.toNat then T.toNat / 4
-      else preset.EFFECTIVE_BALANCE_INCREMENT.toNat / 5 := by
-    split <;> simp [UInt64.toNat_div]
   have perIncrement := toNat_getBaseRewardPerIncrement pqOk
-  rw [quarter] at perIncrement
+  rw [quarter_toNat] at perIncrement
   refine Nat.le_of_eq ?_
   rw [perIncrement]
 
@@ -11503,21 +11496,6 @@ private theorem exitedRB_iff (config : Config) (pulled anc fin : BeaconState pre
           w.exitEpoch.toNat ∧ w.exitEpoch.toNat + 1 ≤ (getCurrentEpoch pulled).toNat := by
   simp only [pinTerms]
   cases pulled.validators.data[i]? <;> simp
-
-/-- Activity up to the seed lookahead after the split is the same at R and C. -/
-private theorem activity_shared {g : ForkedBeaconState preset}
-    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
-    (h : Setting config checks g split fin pulled anc counted V) {e : Epoch}
-    (fixed : e.toNat ≤ (getCurrentEpoch split).toNat + preset.MAX_SEED_LOOKAHEAD.toNat)
-    (i : ℕ) : isActiveAt pulled e i = isActiveAt counted e i := by
-  obtain ⟨rp⟩ := h.toPulled
-  obtain ⟨rc⟩ := h.toCounted
-  have inside : e ≤ activityFixedEpoch split := by
-    rw [UInt64.le_iff_toNat_le, activityFixedEpoch_toNat]
-    have := e.toNat_lt
-    omega
-  exact (activeKept_of_chainSteps rp.chainSteps e inside i).trans
-    (activeKept_of_chainSteps rc.chainSteps e inside i).symm
 
 /-- The finalized epoch of R is at most its current epoch. -/
 private theorem finalized_le_current {g : ForkedBeaconState preset}
@@ -12229,19 +12207,14 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have early := h.early
-  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have later := UInt64.le_iff_toNat_le.mp h.later
-  have near := h.near
+  obtain ⟨finalized, called, later, near, -⟩ := setting_epochs h
   -- the exit and consolidation churn of every state on the runs from the finalized state
   have band : ∀ (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u),
       u.fork < .glamsterdam →
       (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 →
       ∀ t : Gwei, getTotalActiveBalance u.state = .ok t → t.toNat ≤ PinTerms.wide pulled := by
     intro u run uEarly uWithin t read
-    have := total_band_of_guard shared h.genesis h.parameters h.caps h.aligned h.twoSlots electra
-      h.guard (fromFin.append toPulled) h.early (Nat.le_succ_of_le (Nat.le_refl _)) run uEarly
-      uWithin pulledOk read
+    have := (total_band_of_setting h run uEarly uWithin read pulledOk).2
     simp only [PinTerms.wide, pulledOk, Except.toOption, Option.getD_some]
     omega
   have exitBound : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
@@ -12349,10 +12322,7 @@ private theorem bud_queues (h : Setting config checks g split fin pulled anc cou
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have early := h.early
-  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have later := UInt64.le_iff_toNat_le.mp h.later
-  have near := h.near
+  obtain ⟨finalized, called, later, near, -⟩ := setting_epochs h
   -- the two sets are disjoint
   have apart : Disjoint (VN counted V)
       ((K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat) := by
@@ -13031,29 +13001,17 @@ private theorem chargeAmt_eq_zero {x y : ForkedBeaconState preset} (tail : Run c
   rfl
 
 /-- A key of `K5` that has a charge on the run exits by the run's last epoch. -/
-private theorem charge_epoch_le_of_K5 (early : fork < .glamsterdam)
+private theorem charge_epoch_le_of_K5 (h : Setting config checks g split fin pulled anc counted V)
     {x : ForkedBeaconState preset} (tail : Run config checks x ⟨fork, counted⟩)
     {v : ValidatorIndex} (member : v ∈ K5 counted V) :
     ∀ c ∈ tail.departureCharges, c.index = v.toNat →
       c.epoch ≤ (getCurrentEpoch counted).toNat := by
   intro c charged same
   obtain ⟨w, found, assigned, epoch⟩ := Run.departure_charge_exit tail c charged
-  have within := BeaconState.registryWithinLimit_of_lt early counted
-  have inK5 := Finset.mem_filter.mp member
-  simp only [Q, quorumVoters, Finset.mem_filter, List.mem_toFinset, List.mem_append] at inK5
-  obtain ⟨⟨listed, -⟩, notActive, -⟩ := inK5
-  have notCurrent : v ∉ getActiveValidatorIndices counted (getCurrentEpoch counted) := fun now =>
-    notActive (by simpa [AC, activeVoters] using now)
-  rcases listed with now | before
-  · exact absurd now notCurrent
-  obtain ⟨u, foundU, activeBefore⟩ := (mem_getActiveValidatorIndices within).mp before
+  obtain ⟨u, foundU, activeBefore, notNow⟩ := K5_previous_only h member
   rw [same] at found
   have equal : u = w := Option.some.inj (foundU.symm.trans found)
   subst equal
-  have notNow : isActiveValidator u (getCurrentEpoch counted) = false := by
-    cases now : isActiveValidator u (getCurrentEpoch counted)
-    · rfl
-    · exact absurd ((mem_getActiveValidatorIndices within).mpr ⟨u, foundU, now⟩) notCurrent
   have previous := getPreviousEpoch_toNat counted
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeBefore
   simp only [isActiveValidator, Bool.and_eq_false_iff, decide_eq_false_iff_not] at notNow
@@ -17248,7 +17206,7 @@ private theorem charged_count (h : Setting config checks g split fin pulled anc 
       (pinTerms config pulled anc fin).queueKeys := by
   refine charged_count_of h tailC _ fun v member => ?_
   obtain ⟨inK5, charged⟩ := Finset.mem_filter.mp member
-  refine ⟨fun c foundC => ?_, charge_epoch_le_of_K5 h.early tailC inK5, charged⟩
+  refine ⟨fun c foundC => ?_, charge_epoch_le_of_K5 h tailC inK5, charged⟩
   obtain ⟨u, foundU, activeBefore, -⟩ := K5_previous_only h inK5
   obtain rfl : u = c := Option.some.inj (foundU.symm.trans foundC)
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeBefore
@@ -17295,7 +17253,7 @@ private theorem bud_queueRise (h : Setting config checks g split fin pulled anc 
       intro v member
       apply riseQ_eq_zero
       intro c charged same
-      have inside := charge_epoch_le_of_K5 h.early tailC (Finset.mem_filter.mp member).1 c
+      have inside := charge_epoch_le_of_K5 h tailC (Finset.mem_filter.mp member).1 c
         charged same
       have far : (getCurrentEpoch split).toNat + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ c.epoch :=
         DirectSafety.Run.departureCharges_epoch_ge_start tailC electra h.early c charged
