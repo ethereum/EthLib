@@ -459,7 +459,9 @@ Not yet released.
   `Xmss.verify_keyGen_sign`, `Xmss.verifyWith_keyGenWith_signWith` and `Xmss.sign_error` take `sk.Reachable` in place of the key pair of `keyGen`; `Xmss.signatureIndex_sign` reads `(sign sk idx m).1`.
   `Xmss.prEvent_signWith_error_le` and `..._empty` take `hkept`: a bottom tree of the index that the key keeps holds a top signature.
   `Xmss.Cost.isQueryBoundP_signWith` and `Xmss.Cost.signCalls_eq` bound signing by `8603369879` calls; `isQueryBoundP_signWith_of_mem` and `signKeptCalls_eq` give `4294967500` in a kept tree.
-  The old statements hold for the stateless signer: `signWith_run`, `sign_eq_ok`, `sign_error`, `prEvent_signWith_error_le`, `..._empty`, `isQueryBoundP_keyGenWith` and `isQueryBoundP_signWith` become `statelessSignWith_run`, `statelessSign_eq_ok`, `statelessSign_error`, `prEvent_statelessSignWith_error_le`, `..._empty`, `isQueryBoundP_statelessKeyGenWith` and `isQueryBoundP_statelessSignWith`.
+  The old statements hold for the stateless signer, under new names: `Xmss.signWith_run`, `sign_eq_ok`, `sign_error`, `prEvent_signWith_error_le` and `..._empty` become `statelessSignWith_run`, `statelessSign_eq_ok`, `statelessSign_error`, `prEvent_statelessSignWith_error_le` and `..._empty`.
+  `Xmss.Cost.isQueryBoundP_signWith` of the old signer becomes `Xmss.Cost.isQueryBoundP_statelessSignWith`, and `Unforgeability.isQueryBoundP_keyGenWith` and `isQueryBoundP_signWith` become `isQueryBoundP_statelessKeyGenWith` and `isQueryBoundP_statelessSignWith`.
+  `Xmss.Cost.isQueryBoundP_keyGenWith` keeps its name and its bound over the new key generation.
   `Xmss.bottomTree_lt` moves from `Proofs/Xmss/Correctness.lean` to `Proofs/Xmss/Sign.lean`.
   The unforgeability game's signer keeps its key across requests, and `Unforgeability.HasHashQueryBound` counts the calls of the same game with the stateless signer, `statelessExperiment`.
   `Unforgeability.unforgeable`, `forgeAdvantage_le_adversaryBudget`, `forgeAdvantage_le_lifetime`, `reasonForgeAdvantage_le`, `reasonForgeAdvantage_le_add`, `signingFailure_le` and `reasonForgeAdvantage_le_bounded` keep their text over the new game.
