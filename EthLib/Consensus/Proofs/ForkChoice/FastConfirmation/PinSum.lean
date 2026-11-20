@@ -17674,6 +17674,198 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
   exact retained_of_exit h fromFin tailC _ (Nat.le_refl _) i foundC late before step after cut w
     found
 
+/-- A scan over sources that the gross credits hold is at most the gross credits. -/
+private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) (p : BalanceSource → Bool)
+    (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
+    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
+  have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
+    (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
+    (fun _ => false) (fun _ => false)
+    (fun s => by
+      by_cases hp : p s = true
+      · simp [hp, inside s hp]
+      · simp [hp])
+    (fun _ => rfl) (fun s ⟨first, second⟩ => by simp [first] at second)
+    (fun s h => by simp at h) v high tail
+  unfold grossScan
+  omega
+
+/-- A key with a sync credit over C's replayed events has a gross credit on C's run. -/
+private theorem syncCr_gross (h : Setting config checks g split fin pulled anc counted V)
+    {ending : BeaconState preset fork}
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨-, sync⟩ := creditScan_bounds ∅
+    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
+    (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
+  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
+      simp only [decide_eq_true_eq] at covered ⊢
+      exact Or.inr (Or.inr covered))
+    (Or.inr fun ok _ fork early replayed i =>
+      (sum_map_sync _ (keyCredit i)).symm.trans
+        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
+  have conv : syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map (keyCredit v)).sum :=
+    sum_map_sync _ (keyCredit v)
+  unfold grossScan
+  rw [conv] at positive
+  omega
+
+/-- A key that R holds withdrawable by the next epoch is a key with `withdrawnRB`. -/
+private theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
+    {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
+    (le : w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
+    (pinTerms config pulled anc fin).withdrawnRB i = true := by
+  simp only [pinTerms]
+  simp [found, le]
+
+/-- The deposit credits of some events are within `depPre` when each credited one is unslashed. -/
+private theorem deposits_le_depPre (L : List (BalanceEvent preset)) (i : ℕ)
+    (clean : ∀ e ∈ L, e.source = .deposits →
+      keyCredit i e = 0 ∨ ¬ slashedFlagAt e.before.state i = some true) :
+    ((L.filter fun e => e.source = .deposits).map (keyCredit i)).sum ≤ depPre L i := by
+  induction L with
+  | nil => simp [depPre]
+  | cons e rest ih =>
+    have tail := ih fun x member => clean x (List.mem_cons_of_mem _ member)
+    unfold depPre at tail ⊢
+    by_cases dep : e.source = .deposits
+    · rcases clean e List.mem_cons_self dep with zero | unslashed
+      · by_cases slashed : slashedFlagAt e.before.state i = some true <;>
+          simp [dep, zero, slashed] <;> omega
+      · simp [dep, unslashed]
+        omega
+    · simp [dep]
+      omega
+
+/-- Each deposit of a run's replay that credits a key finds it unslashed.
+
+The run ends with the key unslashed.
+
+A deposit event of a block credits no balance.
+
+One of a slot step starts from a state that does not hold the key slashed.
+
+A slashed key stays slashed up to the end of the run. -/
+private theorem prefix_deposits_clean (h : Setting config checks g split fin pulled anc counted V)
+    {a : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
+    (aEarly : a.fork < .glamsterdam) (highC : ℕ) {e1 : List (BalanceEvent preset)}
+    (replayed1 : pre.balanceEvents highC = .ok e1) (v : ValidatorIndex)
+    (unslashedA : (a.state.validators.data[v.toNat]?.map (·.slashed)).getD false = false) :
+    ∀ e ∈ e1, e.source = .deposits →
+      keyCredit v.toNat e = 0 ∨ ¬ slashedFlagAt e.before.state v.toNat = some true := by
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  intro e member dep
+  rcases (run_located pre electra aEarly highC replayed1).1 e member dep with
+    unconditional | ⟨u, w, ok, es, contains, replayedEs, inEs, -⟩
+  · have := unconditional v.toNat
+    unfold keyCredit
+    omega
+  · right
+    intro slashed
+    obtain ⟨p1, p2, -⟩ := pre.contains_split (Step.slot ok) contains
+    have wEarly : w.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps p2.chainSteps) aEarly
+    have holds := Run.invariant h.genesis.invariant ((toFin.append fromFin).append p1)
+    obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, one, two, -⟩ :=
+      (Step.balanceEvents_sites (Step.slot ok) wEarly holds h.caps.compounding replayedEs) e inEs
+    obtain ⟨x, found, flagged⟩ : ∃ x, e.before.state.validators.data[v.toNat]? = some x ∧
+        x.slashed = true := by
+      unfold slashedFlagAt at slashed
+      cases hx : e.before.state.validators.data[v.toNat]? <;> simp_all
+    obtain ⟨y, foundA, flagA⟩ :=
+      ((one.trans two).trans p2.slashedPersistence) v.toNat x found flagged
+    simp [foundA, flagA] at unslashedA
+
+/-- A run split at a step is the run before it and the run from the step. -/
+private theorem snoc_append_eq {a b c : ForkedBeaconState preset}
+    (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
+    (post : Run config checks b c) :
+    (pre.snoc step).append post = pre.append ((Run.nil.snoc step).append post) := by
+  rw [Run.append_assoc]
+  rfl
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A bound along R's run from the first state of a key holds on the whole run.
+
+Before the first state `c` the key is absent, so its effective balance is zero there. -/
+private theorem path_le_of_start
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) {c : BeaconState preset fork}
+    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
+    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
+    (i X : ℕ)
+    (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
+    (after : ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z i ≤ X) :
+    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤ X := by
+  intro z member
+  have path := Run.balancePath_append toC (fromC.append tail)
+  have cut : toC.append (fromC.append tail) = fromFin.append tail := by
+    rw [← cutC, Run.append_assoc]
+  rw [cut] at path
+  rw [path] at member
+  rcases List.mem_append.mp member with front | later
+  · rcases before z front with atC | zero
+    · obtain ⟨rest, head⟩ := Run.balancePath_head (fromC.append tail)
+      rw [atC]
+      exact after _ (by rw [head]; exact List.mem_cons_self)
+    · rw [zero]
+      exact Nat.zero_le _
+  · exact after z (List.mem_of_mem_tail later)
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- A key that C's branch holds beyond the split pays an upward band.
+
+It pays it with its credit band or its due band.
+
+A key credited by a block or a deposit has the credit band.
+
+Otherwise a consolidation credits it, and it is the target of a due entry, which has the due band.
+
+Both bands are an upward band at least.
+
+A credited key's band is one, and each entry adds one. -/
+private theorem created_band (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
+    (absent : split.validators.data.size ≤ v.toNat) :
+    preset.upwardBand ≤ bandC tailC highC v.toNat + bandX fin highC v.toNat := by
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  have laterNat := UInt64.le_iff_toNat_le.mp h.later
+  have nearC := h.near
+  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
+    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  by_cases consolidated : 0 < consAmt eventsC v.toNat
+  · have due : 1 ≤ dueAt fin highC {v} := by
+      by_contra none
+      exact absurd (consAmt_zero h fromFin replayedF' tailC highC endEpochC h.near replayedC v
+        (by omega)) (by omega)
+    unfold bandX
+    rw [UInt64.ofNat_toNat]
+    exact Nat.le_trans (Nat.le_mul_of_pos_right _ due) (Nat.le_add_left _ _)
+  · rcases created_credited h tailC highC endEpochC replayedC activated absent with credited | cons
+    · have positive : 0 < grossScan v.toNat highC tailC +
+          (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
+            tailC).1 := by
+        simpa [creditedKey] using credited
+      have band : bandC tailC highC v.toNat = preset.upwardBand := by
+        unfold bandC
+        simp [positive]
+      omega
+    · exact absurd cons consolidated
+
 /-- (W-S) The slack and the rounding of the slashed keys' rewards are paid by the shares and bands.
 
 A key of the split's registry is read at its bound and the slack that `registry` adds.
@@ -19407,23 +19599,6 @@ private theorem flow_whist_of (h : Setting config checks g split fin pulled anc 
     omega
   omega
 
-/-- A scan over sources that the gross credits hold is at most the gross credits. -/
-private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (high v : ℕ) (p : BalanceSource → Bool)
-    (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
-    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
-  have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
-    (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
-    (fun _ => false) (fun _ => false)
-    (fun s => by
-      by_cases hp : p s = true
-      · simp [hp, inside s hp]
-      · simp [hp])
-    (fun _ => rfl) (fun s ⟨first, second⟩ => by simp [first] at second)
-    (fun s h => by simp at h) v high tail
-  unfold grossScan
-  omega
-
 /-- A key with a flow credit of `cred` or a whistleblower credit has a gross credit on C's run.
 
 Or a consolidation credits it. -/
@@ -19447,28 +19622,6 @@ private theorem credit_gate {x y : ForkedBeaconState preset} (tail : Run config 
   · left
     simp only [creditedKey, decide_eq_true_eq]
     rcases source with rfl | rfl <;> omega
-
-/-- A key with a sync credit over C's replayed events has a gross credit on C's run. -/
-private theorem syncCr_gross (h : Setting config checks g split fin pulled anc counted V)
-    {ending : BeaconState preset fork}
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨-, sync⟩ := creditScan_bounds ∅
-    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
-    (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
-  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
-      simp only [decide_eq_true_eq] at covered ⊢
-      exact Or.inr (Or.inr covered))
-    (Or.inr fun ok _ fork early replayed i =>
-      (sum_map_sync _ (keyCredit i)).symm.trans
-        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
-  have conv : syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map (keyCredit v)).sum :=
-    sum_map_sync _ (keyCredit v)
-  unfold grossScan
-  rw [conv] at positive
-  omega
 
 /-- A block step gives no reward or slashing credit to a key that is not its proposer. -/
 private theorem block_proposer_credit_zero {g : ForkedBeaconState preset}
@@ -20087,14 +20240,6 @@ private theorem slashW_le (h : Setting config checks g split fin pulled anc coun
     exact (Nat.le_add_right _ _).trans h.facts.slashBand
   · exact Nat.zero_le _
 
-/-- A key that R holds withdrawable by the next epoch is a key with `withdrawnRB`. -/
-private theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
-    {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
-    (le : w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
-    (pinTerms config pulled anc fin).withdrawnRB i = true := by
-  simp only [pinTerms]
-  simp [found, le]
-
 /-- The leak induced by the sync debits of any keys fits `syncLeak` and the slashed keys' leak.
 
 A key withdrawn by R's horizon induces no leak.
@@ -20394,74 +20539,6 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
   unfold whistleSlack whistleSlackBase
   rw [fK, gainEq] at close
   omega
-
-/-- The deposit credits of some events are within `depPre` when each credited one is unslashed. -/
-private theorem deposits_le_depPre (L : List (BalanceEvent preset)) (i : ℕ)
-    (clean : ∀ e ∈ L, e.source = .deposits →
-      keyCredit i e = 0 ∨ ¬ slashedFlagAt e.before.state i = some true) :
-    ((L.filter fun e => e.source = .deposits).map (keyCredit i)).sum ≤ depPre L i := by
-  induction L with
-  | nil => simp [depPre]
-  | cons e rest ih =>
-    have tail := ih fun x member => clean x (List.mem_cons_of_mem _ member)
-    unfold depPre at tail ⊢
-    by_cases dep : e.source = .deposits
-    · rcases clean e List.mem_cons_self dep with zero | unslashed
-      · by_cases slashed : slashedFlagAt e.before.state i = some true <;>
-          simp [dep, zero, slashed] <;> omega
-      · simp [dep, unslashed]
-        omega
-    · simp [dep]
-      omega
-
-/-- Each deposit of a run's replay that credits a key finds it unslashed.
-
-The run ends with the key unslashed.
-
-A deposit event of a block credits no balance.
-
-One of a slot step starts from a state that does not hold the key slashed.
-
-A slashed key stays slashed up to the end of the run. -/
-private theorem prefix_deposits_clean (h : Setting config checks g split fin pulled anc counted V)
-    {a : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
-    (aEarly : a.fork < .glamsterdam) (highC : ℕ) {e1 : List (BalanceEvent preset)}
-    (replayed1 : pre.balanceEvents highC = .ok e1) (v : ValidatorIndex)
-    (unslashedA : (a.state.validators.data[v.toNat]?.map (·.slashed)).getD false = false) :
-    ∀ e ∈ e1, e.source = .deposits →
-      keyCredit v.toNat e = 0 ∨ ¬ slashedFlagAt e.before.state v.toNat = some true := by
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  intro e member dep
-  rcases (run_located pre electra aEarly highC replayed1).1 e member dep with
-    unconditional | ⟨u, w, ok, es, contains, replayedEs, inEs, -⟩
-  · have := unconditional v.toNat
-    unfold keyCredit
-    omega
-  · right
-    intro slashed
-    obtain ⟨p1, p2, -⟩ := pre.contains_split (Step.slot ok) contains
-    have wEarly : w.fork < .glamsterdam :=
-      Nat.lt_of_le_of_lt (fork_le_of_chainSteps p2.chainSteps) aEarly
-    have holds := Run.invariant h.genesis.invariant ((toFin.append fromFin).append p1)
-    obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, one, two, -⟩ :=
-      (Step.balanceEvents_sites (Step.slot ok) wEarly holds h.caps.compounding replayedEs) e inEs
-    obtain ⟨x, found, flagged⟩ : ∃ x, e.before.state.validators.data[v.toNat]? = some x ∧
-        x.slashed = true := by
-      unfold slashedFlagAt at slashed
-      cases hx : e.before.state.validators.data[v.toNat]? <;> simp_all
-    obtain ⟨y, foundA, flagA⟩ :=
-      ((one.trans two).trans p2.slashedPersistence) v.toNat x found flagged
-    simp [foundA, flagA] at unslashedA
-
-/-- A run split at a step is the run before it and the run from the step. -/
-private theorem snoc_append_eq {a b c : ForkedBeaconState preset}
-    (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
-    (post : Run config checks b c) :
-    (pre.snoc step).append post = pre.append ((Run.nil.snoc step).append post) := by
-  rw [Run.append_assoc]
-  rfl
 
 /-- The key that a step slashes is an index.
 
@@ -21218,34 +21295,6 @@ private theorem start_le_round {inc fin e a cap ebUp H S : ℕ}
     simpa using rounded
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A bound along R's run from the first state of a key holds on the whole run.
-
-Before the first state `c` the key is absent, so its effective balance is zero there. -/
-private theorem path_le_of_start
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) {c : BeaconState preset fork}
-    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
-    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
-    (i X : ℕ)
-    (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
-    (after : ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z i ≤ X) :
-    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤ X := by
-  intro z member
-  have path := Run.balancePath_append toC (fromC.append tail)
-  have cut : toC.append (fromC.append tail) = fromFin.append tail := by
-    rw [← cutC, Run.append_assoc]
-  rw [cut] at path
-  rw [path] at member
-  rcases List.mem_append.mp member with front | later
-  · rcases before z front with atC | zero
-    · obtain ⟨rest, head⟩ := Run.balancePath_head (fromC.append tail)
-      rw [atC]
-      exact after _ (by rw [head]; exact List.mem_cons_self)
-    · rw [zero]
-      exact Nat.zero_le _
-  · exact after z (List.mem_of_mem_tail later)
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the rise for a key on its kept arm, from a start state `c`, at any end of C.
 
 The key is in the registry at the state `c` of the shared segment, and unslashed at the split.
@@ -21839,55 +21888,6 @@ private theorem key_core_headroom (h : Setting config checks g split fin pulled 
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := capped
   unfold keyCeiling
   omega
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key that C's branch holds beyond the split pays an upward band.
-
-It pays it with its credit band or its due band.
-
-A key credited by a block or a deposit has the credit band.
-
-Otherwise a consolidation credits it, and it is the target of a due entry, which has the due band.
-
-Both bands are an upward band at least.
-
-A credited key's band is one, and each entry adds one. -/
-private theorem created_band (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
-      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
-    (absent : split.validators.data.size ≤ v.toNat) :
-    preset.upwardBand ≤ bandC tailC highC v.toNat + bandX fin highC v.toNat := by
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  have laterNat := UInt64.le_iff_toNat_le.mp h.later
-  have nearC := h.near
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  by_cases consolidated : 0 < consAmt eventsC v.toNat
-  · have due : 1 ≤ dueAt fin highC {v} := by
-      by_contra none
-      exact absurd (consAmt_zero h fromFin replayedF' tailC highC endEpochC h.near replayedC v
-        (by omega)) (by omega)
-    unfold bandX
-    rw [UInt64.ofNat_toNat]
-    exact Nat.le_trans (Nat.le_mul_of_pos_right _ due) (Nat.le_add_left _ _)
-  · rcases created_credited h tailC highC endEpochC replayedC activated absent with credited | cons
-    · have positive : 0 < grossScan v.toNat highC tailC +
-          (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC
-            tailC).1 := by
-        simpa [creditedKey] using credited
-      have band : bandC tailC highC v.toNat = preset.upwardBand := by
-        unfold bandC
-        simp [positive]
-      omega
-    · exact absurd cons consolidated
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch created beyond the split is bounded by its credits and their gains.
