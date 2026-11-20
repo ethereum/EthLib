@@ -44,12 +44,12 @@ variable {G : CanonicalGraph pub X K R} (S : Schedule G n) (e : D ≃ R)
   pure (e.symm (cast (G.range_eq (S.low j) [e d]) a))
 
 /-- A chain prefix only touches both nodes of every intermediate edge. -/
-def touchStep (j : Fin n) (_ : Unit) : OracleComp (pub.withLabels X K R) Unit := do
+@[expose] def touchStep (j : Fin n) (_ : Unit) : OracleComp (pub.withLabels X K R) Unit := do
   touchCell (some (.inr (S.low j)))
   touchCell (some (.inr (S.high j)))
 
 /-- The final edge reads the low node for the signature and touches the high node. -/
-noncomputable def finalStep [Nonempty R] (j : Fin n) : OracleComp (pub.withLabels X K R) D := do
+@[expose] noncomputable def finalStep [Nonempty R] (j : Fin n) : OracleComp (pub.withLabels X K R) D := do
   let a ← readCell (some (.inr (S.low j)))
   touchCell (some (.inr (S.high j)))
   pure (e.symm a)

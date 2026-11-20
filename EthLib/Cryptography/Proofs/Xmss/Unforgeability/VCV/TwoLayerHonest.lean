@@ -4,7 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.MapMonad
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TwoLayerGraph
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraphBuild
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraphPath
-public import VCVio.OracleComp.QueryTracking.RandomOracle.JointPotential.EagerSubgraph
+public import VCVio.OracleComp.QueryTracking.RandomOracle.JointPotential.EagerSubgraph.Run
 
 /-!
 # Honest Merkle computations in the shared public graph
@@ -80,72 +80,98 @@ theorem other_public {pp : PublicParam} {l other : Layer} {s t : SharedState}
   apply different
   simpa only [localView, otherView, layer_of_row] using congrArg rowLayer same.1.symm
 
+/-- An honest computation has the same complete run in the shared graph and preserves its frame. -/
+@[expose] def Selected (pp : PublicParam) (l : Layer) {α : Type} (p : OracleComp LayerGraph.Spec α) : Prop :=
+  (selection pp l).Preserves p ∧ (selection pp l).Exact p
+
+namespace Selected
+
+private theorem ret (pp : PublicParam) (l : Layer) {α : Type} (a : α) :
+    Selected pp l (pure a) :=
+  ⟨(selection pp l).preserves_pure a, (selection pp l).exact_pure a⟩
+
+private theorem bind {pp : PublicParam} {l : Layer} {α β : Type}
+    {p : OracleComp LayerGraph.Spec α} {k : α → OracleComp LayerGraph.Spec β}
+    (first : Selected pp l p) (next : ∀ a, Selected pp l (k a)) : Selected pp l (p >>= k) :=
+  ⟨(selection pp l).preserves_bind first.1 (fun a => (next a).1),
+    (selection pp l).exact_bind first.2 (fun a => (next a).2)⟩
+
+private theorem map {pp : PublicParam} {l : Layer} {α β : Type} (f : α → β)
+    {p : OracleComp LayerGraph.Spec α} (h : Selected pp l p) : Selected pp l (f <$> p) :=
+  ⟨(selection pp l).preserves_map f h.1, (selection pp l).exact_map f h.2⟩
+
+private theorem read (pp : PublicParam) (l : Layer) (c : LayerGraph.Cell) :
+    Selected pp l (readCell (some c)) :=
+  ⟨(selection pp l).preserves_readCell c, (selection pp l).exact_readCell c⟩
+
+private theorem point (pp : PublicParam) (l : Layer) (r : LayerGraph.Row) (vs : List Word)
+    (width : vs.length = ((LayerGraph.graph pp l).ch r).length) :
+    Selected pp l (query (spec := LayerGraph.Spec)
+      (.inl (.inl (.inr ((LayerGraph.graph pp l).pt r vs))))) :=
+  ⟨(selection pp l).preserves_public r vs width, (selection pp l).exact_public r vs width⟩
+
+end Selected
+
 private theorem collect (pp : PublicParam) (l : Layer) {α : Type} (n : Nat)
-    (f : Fin n → OracleComp LayerGraph.Spec α) (entries : ∀ i, (selection pp l).Preserves (f i)) :
-    (selection pp l).Preserves (ofFnInOrder n f) := by
-  let v := selection pp l
+    (f : Fin n → OracleComp LayerGraph.Spec α) (entries : ∀ i, Selected pp l (f i)) :
+    Selected pp l (ofFnInOrder n f) := by
   induction n with
-  | zero => exact v.preserves_pure _
+  | zero => exact Selected.ret pp l _
   | succ n ih =>
     rw [ofFnInOrder]
-    exact v.preserves_bind (entries 0) fun _ => v.preserves_bind
-      (ih (fun i => f i.succ) (fun i => entries i.succ)) fun _ => v.preserves_pure _
+    exact Selected.bind (entries 0) fun _ => Selected.bind
+      (ih (fun i => f i.succ) (fun i => entries i.succ)) fun _ => Selected.ret pp l _
 
 private theorem start_calls (pp : PublicParam) (l : Layer)
     (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (e : UInt32) : (selection pp l).Preserves
+    (e : UInt32) : Selected pp l
       (chainStarts pp (LayerGraph.startPrf pp l other) l e) := by
-  let v := selection pp l
   simp only [chainStarts, LayerGraph.startPrf_pair]
-  apply v.preserves_bind (collect pp l _ _ ?_) (fun _ => v.preserves_pure _)
+  apply Selected.bind (collect pp l _ _ ?_) (fun _ => Selected.ret pp l _)
   intro j
   unfold LayerGraph.readPair
-  exact v.preserves_bind (v.preserves_readCell _) fun _ =>
-    v.preserves_bind (v.preserves_readCell _) fun _ => v.preserves_pure _
+  exact Selected.bind (Selected.read pp l _) fun _ =>
+    Selected.bind (Selected.read pp l _) fun _ => Selected.ret pp l _
 
 private theorem step_calls (pp : PublicParam) (l : Layer) (e : UInt32) (i : Fin V)
     (j : Fin (CHAIN_LENGTH - 1)) (d : Digest) :
-    (selection pp l).Preserves (chainStep LayerGraph.hash pp l e i j d) := by
-  let v := selection pp l
+    Selected pp l (chainStep LayerGraph.hash pp l e i j d) := by
   rw [LayerGraph.chainStep_eq]
   unfold Wots.GraphChain.publicStep
-  exact v.preserves_bind (v.preserves_public _ _ rfl) fun _ =>
-    v.preserves_bind (v.preserves_public _ _ rfl) fun _ => v.preserves_pure _
+  exact Selected.bind (Selected.point pp l _ _ rfl) fun _ =>
+    Selected.bind (Selected.point pp l _ _ rfl) fun _ => Selected.ret pp l _
 
 private theorem chain_calls (pp : PublicParam) (l : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (d : Digest) :
-    (selection pp l).Preserves (Xmss.chain LayerGraph.hash pp l e i start steps h d) := by
-  let v := selection pp l
+    Selected pp l (Xmss.chain LayerGraph.hash pp l e i start steps h d) := by
   unfold Xmss.chain
   induction steps with
-  | zero => exact v.preserves_pure _
+  | zero => exact Selected.ret pp l _
   | succ n ih =>
     rw [Wots.chain]
-    exact v.preserves_bind (ih (by omega)) (step_calls pp l e i _)
+    exact Selected.bind (ih (by omega)) (step_calls pp l e i _)
 
 private theorem th_calls (pp : PublicParam) (l : Layer) (r : LayerGraph.Role)
     (vs : List Word) (width : vs.length = LayerGraph.arity r) (a : Address) (d : ByteArray)
     (raw : LayerGraph.input pp l r vs = (thInput pp a d).data.toList) :
-    (selection pp l).Preserves (th LayerGraph.hash pp a d) := by
-  let v := selection pp l
+    Selected pp l (th LayerGraph.hash pp a d) := by
   unfold th
   rw [LayerGraph.hash_eq, ← raw]
-  apply v.preserves_bind
-  · apply v.preserves_bind (v.preserves_public (.inl r) vs
+  apply Selected.bind
+  · apply Selected.bind (Selected.point pp l (.inl r) vs
     (width.trans (LayerGraph.length_children r).symm))
-    exact fun _ => v.preserves_bind
-      (v.preserves_public (.inr r) vs (width.trans (LayerGraph.length_children r).symm))
-        fun _ => v.preserves_pure _
-  · exact fun _ => v.preserves_pure _
+    exact fun _ => Selected.bind
+      (Selected.point pp l (.inr r) vs (width.trans (LayerGraph.length_children r).symm))
+        fun _ => Selected.ret pp l _
+  · exact fun _ => Selected.ret pp l _
 
-theorem leaf_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (e : UInt32) : (selection pp l).Preserves
+theorem leaf_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (e : UInt32) : Selected pp l
       (otsPublicLeaf LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) := by
-  let v := selection pp l
   unfold otsPublicLeaf
-  apply v.preserves_bind (start_calls pp l other e)
+  apply Selected.bind (start_calls pp l other e)
   intro starts
-  apply v.preserves_bind (collect pp l _ _ (fun i => chain_calls pp l e i _ _ _ _))
+  apply Selected.bind (collect pp l _ _ (fun i => chain_calls pp l e i _ _ _ _))
   intro ends
   apply th_calls pp l (.leaf e) (LayerGraph.endWords ends)
     (by simp [LayerGraph.endWords, LayerGraph.arity])
@@ -156,47 +182,66 @@ theorem leaf_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp L
 
 private theorem node_hash_calls (pp : PublicParam) (l : Layer) (h j : Nat)
     (valid : h < LAYER_HEIGHT)
-    (a b : Digest) : (selection pp l).Preserves (nodeHash LayerGraph.hash pp l ⟨h+1,j⟩ a b) := by
+    (a b : Digest) : Selected pp l (nodeHash LayerGraph.hash pp l ⟨h+1,j⟩ a b) := by
   apply th_calls pp l (LayerGraph.treeRole (h+1) j) [digestEquiv a, digestEquiv b]
     (by simp [LayerGraph.treeRole_succ _ _ valid, LayerGraph.arity])
   exact LayerGraph.node_input pp l h j valid a b
 
-theorem build_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : (selection pp l).Preserves
+theorem build_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : Selected pp l
       (Xmss.build LayerGraph.hash pp (LayerGraph.startPrf pp l other) l h j) := by
-  let v := selection pp l
   induction h generalizing j with
   | zero =>
     rw [Xmss.build, build_zero]
-    exact v.preserves_bind (leaf_calls pp l other _) fun _ => v.preserves_pure _
+    exact Selected.bind (leaf_selected pp l other _) fun _ => Selected.ret pp l _
   | succ h ih =>
     rw [Xmss.build, build_succ]
-    exact v.preserves_bind (ih _ (by omega)) fun a => v.preserves_bind (ih _ (by omega)) fun b =>
-      v.preserves_bind (node_hash_calls pp l h j (by omega) a.value b.value)
-        fun _ => v.preserves_pure _
+    exact Selected.bind (ih _ (by omega)) fun a => Selected.bind (ih _ (by omega)) fun b =>
+      Selected.bind (node_hash_calls pp l h j (by omega) a.value b.value)
+        fun _ => Selected.ret pp l _
 
-theorem node_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : (selection pp l).Preserves
+theorem node_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : Selected pp l
       (Xmss.node LayerGraph.hash pp (LayerGraph.startPrf pp l other) l h j) := by
   unfold Xmss.node
   rw [← value_build]
-  exact (selection pp l).preserves_map Built.value (build_calls pp l other h j bound)
+  exact Selected.map Built.value (build_selected pp l other h j bound)
 
-private theorem path_calls_at (pp : PublicParam) (l : Layer)
+private theorem path_selected_at (pp : PublicParam) (l : Layer)
     (other : SeedPrf (OracleComp LayerGraph.Spec))
-    (height e : Nat) (bound : height ≤ LAYER_HEIGHT) : (selection pp l).Preserves
+    (height e : Nat) (bound : height ≤ LAYER_HEIGHT) : Selected pp l
       (Merkle.path (nodeHash LayerGraph.hash pp l)
         (leaves LayerGraph.hash pp (LayerGraph.startPrf pp l other) l)
         height e) := by
   rw [Merkle.path, LayerGraph.siblings_in_order]
   simp only [Nat.zero_add]
   exact collect pp l height _
-    (fun k => node_calls pp l other k.val _ ((Nat.le_of_lt k.isLt).trans bound))
+    (fun k => node_selected pp l other k.val _ ((Nat.le_of_lt k.isLt).trans bound))
+
+theorem path_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (e : Nat) : Selected pp l
+      (Xmss.path LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) :=
+  path_selected_at pp l other LAYER_HEIGHT e le_rfl
+
+theorem leaf_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (e : UInt32) : (selection pp l).Preserves
+      (otsPublicLeaf LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) :=
+  (leaf_selected pp l other e).1
+
+theorem build_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : (selection pp l).Preserves
+      (Xmss.build LayerGraph.hash pp (LayerGraph.startPrf pp l other) l h j) :=
+  (build_selected pp l other h j bound).1
+
+theorem node_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (h j : Nat) (bound : h ≤ LAYER_HEIGHT) : (selection pp l).Preserves
+      (Xmss.node LayerGraph.hash pp (LayerGraph.startPrf pp l other) l h j) :=
+  (node_selected pp l other h j bound).1
 
 theorem path_calls (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
     (e : Nat) : (selection pp l).Preserves
       (Xmss.path LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) :=
-  path_calls_at pp l other LAYER_HEIGHT e le_rfl
+  (path_selected pp l other e).1
 
 /-- Both layers use this one full-word callback, independent of the public parameter. -/
 @[expose] def hash (bytes : ByteArray) : OracleComp SharedSpec (Vector UInt8 32) := do
@@ -264,7 +309,7 @@ private theorem lifted_path (pp : PublicParam) (l : Layer)
         (leaves LayerGraph.hash pp (LayerGraph.startPrf pp l other) l) n e))
       (fun path st => ∀ k : Fin n, LayerGraph.Recorded
         (LayerGraph.treeRole k.val ((e / 2 ^ k.val) ^^^ 1)) path[k] st) :=
-  transfer pp l _ _ (path_calls_at pp l other n e bound)
+  transfer pp l _ _ (path_selected_at pp l other n e bound).1
     (LayerGraph.siblings_recorded pp l other n e bound)
 
 /-- The shared graph records the sibling returned at each height of the original path. -/
