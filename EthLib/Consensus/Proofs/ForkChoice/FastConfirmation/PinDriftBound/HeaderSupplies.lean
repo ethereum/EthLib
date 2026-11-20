@@ -56,7 +56,7 @@ import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Time
 import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.TermsA
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.CreditBudgets
 
 /-! The pin reserve: shared supplies of the header terms for the keys of `SC` and `CS`. -/
 

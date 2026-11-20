@@ -56,7 +56,7 @@ import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Time
 import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
-public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.TermsB
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.PreviousEpochRise
 
 /-! The pin reserve bounds the drift of a call's quorum. -/
 
