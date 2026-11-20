@@ -661,15 +661,15 @@ Not yet released.
 
 - `PinPresetFacts.minimal` is public: the minimal preset has the preset facts of the pin.
 
-- `Setting` is public: the setting of the pin's drift bound for one call.
+- `PinDrift.Setting` is public: the setting of the pin's drift bound for one call.
   It holds the runs from genesis to the finalized state, the split state, the pulled-up state and the counting state, with the fork bounds.
 
-- `pinDrift_le_of_stubs` is public: under a `Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
+- `PinDrift.le_pinReserve` is public: under a `PinDrift.Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
 
 - `PinGuarded` is public: the a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
 
 - `justifiedPinned_of_setting` is public: the voters of a call pin the justified checkpoints of the call's epoch.
-  It reads the pin through `pinDrift_le_of_stubs`.
+  It reads the pin through `PinDrift.le_pinReserve`.
 
 - `justifiedPinned_of_setting.mainnet` is `justifiedPinned_of_setting` on the mainnet preset, with the preset premises proved.
 

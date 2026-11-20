@@ -28,7 +28,7 @@ The reader proves `JustifiedPinned`.
 
 namespace EthLib.Consensus.Models.Network
 
-open Base Uint64 Models DirectSafety PinSum
+open Base Uint64 Models DirectSafety PinDrift
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 section PinReader
@@ -272,7 +272,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
       toPulled.balanceEvents_ok preGloas (getCurrentEpoch pulled).toNat
     obtain ⟨eventsC, replayedC⟩ :=
       toCounted.balanceEvents_ok preGloas (getCurrentEpoch pulled).toNat
-    have pin := pinDrift_le_of_stubs setting toPulled (getCurrentEpoch pulled).toNat
+    have pin := PinDrift.le_pinReserve setting toPulled (getCurrentEpoch pulled).toNat
       (Nat.le_succ _) replayed toCounted (getCurrentEpoch pulled).toNat nearPulled replayedC
       (Nat.le_refl _) (Nat.le_refl _) totalOkC totalOk
     have splitStake := Finset.sum_filter_add_sum_filter_not (quorumVoters state) (· ∈ voters)
