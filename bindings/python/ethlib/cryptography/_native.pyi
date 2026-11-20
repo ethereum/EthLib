@@ -1064,7 +1064,7 @@ def consensus_keymanager_json(schema: str, document: Any) -> Any:
     """A value of a schema of the Keymanager API, read from its JSON and written back."""
     ...
 
-def consensus_keymanager_run(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+def consensus_keymanager_run(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """The responses of calls made one after another on a validator client, then its state."""
     ...
 

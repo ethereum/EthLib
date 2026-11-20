@@ -6336,6 +6336,22 @@ The source leaves seven points about the settings open, and EthLib takes these r
 - The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
 - The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
 
+The call `POST /eth/v1/validator/{pubkey}/voluntary_exit` signs a voluntary exit with a key of the client (`Consensus/KeymanagerApi/VoluntaryExit.lean`).
+It reads the state that the client takes from its beacon node, which the call takes as a view of the chain.
+For a client whose keys have the public keys of their secret keys, a signed exit verifies under the key of its validator (`verify_of_signVoluntaryExit`, `Consensus/Proofs/KeymanagerApi/VoluntaryExit.lean`).
+It verifies against the signing root of the exit, under the domain of a voluntary exit in that state, which is the check that the processing of an exit makes.
+From Deneb, by [EIP-7044](https://eips.ethereum.org/EIPS/eip-7044#specification), the domain is fixed on the Capella fork version, so the exit verifies in every state of the same chain and configuration at a fork from Deneb on (`verify_of_signVoluntaryExit_of_dencun_le`).
+That theorem assumes that the validator at the index of the exit keeps its key in that state, which a chain does but the statement does not derive.
+That each key has the public key of its secret key is also an assumption: the import sets it for each key that it adds, and no call changes a key, but no theorem states it of a run of calls.
+The Python suite signs the exit of the case `basic` of the voluntary exits of consensus-specs, at Capella and at Deneb, and gets its signature byte for byte.
+
+The source leaves three points about the exit open, and EthLib takes these readings:
+
+- A key that the client holds but whose validator is not in the state, or not active.
+  EthLib answers HTTP 400 when no validator has the key, and does not check that the validator is active; the chain checks that when it processes the exit.
+- Whether a remote key, which the client does not hold, is served: EthLib answers HTTP 404, as for an unknown key.
+- How the client learns the current epoch and the registry: from the state that it is given.
+
 A key moved between two clients keeps its slashing protection, by the use case "Move a key" of the source (`Consensus/Proofs/KeymanagerApi/Move.lean`).
 The old client holds the key, and every key that it holds under that public key can be deleted.
 With a read-only copy, the delete refuses the key and returns no data for it, so the statement needs this.

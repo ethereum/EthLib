@@ -58,6 +58,7 @@ public import EthLib.Consensus.Proofs.KeymanagerApi.Move
 public import EthLib.Consensus.Proofs.KeymanagerApi.RemoteKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.Settings
 public import EthLib.Consensus.Proofs.KeymanagerApi.Types
+public import EthLib.Consensus.Proofs.KeymanagerApi.VoluntaryExit
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
