@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
+import EthLib.Consensus.Proofs.ForkChoice.Head
 
 /-!
 # Proofs: the data that the Beacon API hands a validator
@@ -11,6 +12,12 @@ public import EthLib.Consensus.Proofs.BeaconApi.Responses
 The attestation data votes for the head of the store, at the requested slot.
 
 For a store in Electra or Fulu its index is 0.
+
+Once the checks before a step pass, the attestation data gets code 500 exactly when that step fails.
+
+The steps are the head with its block and state, the current slot, the empty slots and the target.
+
+From Gloas, the payload attestation data refuses with code 500 exactly when the store has no head.
 
 An aggregate has the requested data root, slot and committee, and joins the messages that match.
 
@@ -96,6 +103,23 @@ theorem stateAtSlot_slot {config : Config} {state after : BeaconState preset for
   · obtain ⟨_, advanced⟩ := processSlots_slot (mapError_ok_iff.mp computed)
     exact advanced
 
+/-- Taking a state to a slot gets code 500 exactly when the empty slots up to that slot fail.
+
+For that refusal, the slot must be after the slot of the state. -/
+theorem stateAtSlot_internal_iff {config : Config} {state : BeaconState preset fork}
+    {slot : Slot} :
+    (∃ error, stateAtSlot config state slot = .error error ∧ error.code = 500) ↔
+      state.slot < slot ∧ ∃ fault, processSlots config .bls state slot = .error fault := by
+  unfold stateAtSlot
+  by_cases below : slot < state.slot
+  · simp [below, slotBeforeHead, UInt64.not_lt.mpr (UInt64.le_of_lt below)]
+  by_cases same : slot = state.slot
+  · simp [same]
+  have after : state.slot < slot :=
+    UInt64.lt_of_le_of_ne (UInt64.not_lt.mp below) (Ne.symm same)
+  simp only [below, same, after, ite_false, true_and]
+  cases processSlots config .bls state slot <;> simp [Except.mapError, internalError]
+
 /-- A produced attestation data comes from the head state taken to the slot. -/
 private theorem produceAttestationData_spec {config : Config} {store : Store preset fork}
     {optimistic : OptimisticStore preset fork} {slot : Slot} {committeeIndex : CommitteeIndex}
@@ -174,6 +198,155 @@ theorem producePayloadAttestationData_block {config : Config} {store : Store pre
       simp [gloas, hr, hb, pure, Except.pure] at produced
       subst produced
       exact ⟨head, rfl, hb, rfl, rfl, rfl⟩
+
+/-- Computing the index in attestation data never fails.
+
+From Gloas, the payload status must not be pending. -/
+private theorem attestationDataIndex_ok_exists {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus}
+    (settled : .glamsterdam ≤ fork → payloadStatus ≠ .pending) :
+    ∃ index, attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok index := by
+  unfold attestationDataIndex
+  split_ifs with gloas <;> cases payloadStatus <;> simp_all
+
+/-- Building attestation data never fails for an index out of range. -/
+private theorem getAttestationData_ne_indexOutOfRange {state : BeaconState preset fork}
+    {headRoot : Root} {headSlot : Slot} {committeeIndex : CommitteeIndex}
+    {payloadStatus : PayloadStatus} {index limit : UInt64} :
+    getAttestationData state headRoot headSlot committeeIndex payloadStatus ≠
+      .error (.indexOutOfRange index limit) := by
+  intro failed
+  unfold getAttestationData at failed
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · unfold attestationDataIndex at failed
+    split_ifs at failed
+    cases payloadStatus <;> simp at failed
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · unfold getEpochBoundaryBlockRoot at failed
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    · obtain ⟨_, -, mapped⟩ := mapError_eq_error_iff.mp failed
+      cases mapped
+    split at failed
+    · simp [pure, Except.pure] at failed
+    · obtain ⟨_, -, mapped⟩ := mapError_eq_error_iff.mp failed
+      cases mapped
+  · simp [pure, Except.pure] at failed
+
+/-- Building attestation data gets code 500 exactly when the root of its target fails.
+
+From Gloas, the payload status must not be pending. -/
+private theorem getAttestationData_internal_iff {state : BeaconState preset fork}
+    {headRoot : Root} {headSlot : Slot} {committeeIndex : CommitteeIndex}
+    {payloadStatus : PayloadStatus} (settled : .glamsterdam ≤ fork → payloadStatus ≠ .pending) :
+    (∃ error, (getAttestationData state headRoot headSlot committeeIndex payloadStatus).mapError
+      constructionError = .error error ∧ error.code = 500) ↔
+      ∃ fault, getEpochBoundaryBlockRoot state headRoot = .error fault := by
+  have anyFault : (∃ fault, getAttestationData state headRoot headSlot committeeIndex
+      payloadStatus = .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+      ∃ fault, getAttestationData state headRoot headSlot committeeIndex payloadStatus =
+        .error fault :=
+    ⟨fun ⟨fault, failed, _⟩ => ⟨fault, failed⟩, fun ⟨fault, failed⟩ => ⟨fault, failed,
+      fun _ _ same => getAttestationData_ne_indexOutOfRange (same ▸ failed)⟩⟩
+  rw [mapError_constructionError_internal_iff, anyFault]
+  obtain ⟨index, indexed⟩ := attestationDataIndex_ok_exists (slot := state.slot)
+    (headSlot := headSlot) (committeeIndex := committeeIndex) settled
+  unfold getAttestationData
+  rw [indexed]
+  cases getEpochBoundaryBlockRoot state headRoot <;> simp [bind, Except.bind, pure, Except.pure]
+
+/-- Once the checks before a step pass, the answer gets code 500 exactly when that step fails.
+
+The answer is the attestation data at the head of the store.
+
+The first steps find the head of the store, then the block and the state of that head.
+
+The next step reads the current slot of the store, and needs a verified head block.
+
+The later steps also need a requested slot not after the current slot.
+
+The step of the empty slots takes the head state up to the requested slot.
+
+That step needs a requested slot after the slot of the head state.
+
+The last step takes the root of the target, and needs a requested slot not before the head state.
+
+Computing the index of the data never fails, since from Gloas the head is never a pending node. -/
+theorem produceAttestationData_internal_iff {config : Config} {store : Store preset fork}
+    {optimistic : OptimisticStore preset fork} {slot : Slot} {committeeIndex : CommitteeIndex} :
+    (∃ error, produceAttestationData config store optimistic slot committeeIndex =
+      .error error ∧ error.code = 500) ↔
+      (∃ fault, store.getHead config = .error fault) ∨
+      ∃ head, store.getHead config = .ok head ∧
+        (store.blocks[head.root]? = none ∨ store.blockStates[head.root]? = none ∨
+          ∃ block headState, store.blocks[head.root]? = some block ∧
+            store.blockStates[head.root]? = some headState ∧
+            isExecutionOptimistic optimistic head.root = false ∧
+            ((∃ fault, store.getCurrentSlot config = .error fault) ∨
+              ∃ current, store.getCurrentSlot config = .ok current ∧ slot ≤ current ∧
+                ((headState.slot < slot ∧
+                    ∃ fault, processSlots config .bls headState slot = .error fault) ∨
+                  ∃ state, stateAtSlot config headState slot = .ok state ∧
+                    ∃ fault, getEpochBoundaryBlockRoot state head.root = .error fault))) := by
+  unfold produceAttestationData
+  cases got : store.getHead config with
+  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
+  | ok head =>
+    simp only [Except.mapError, bind, Except.bind, reduceCtorEq, exists_false, false_or,
+      Except.ok.injEq, exists_eq_left']
+    cases store.blocks[head.root]? with
+    | none => simp [internalError]
+    | some block =>
+      cases store.blockStates[head.root]? with
+      | none => simp [internalError]
+      | some headState =>
+        simp only [reduceCtorEq, false_or, Option.some.injEq, exists_and_left, exists_eq_left']
+        unfold checkVerified
+        cases isExecutionOptimistic optimistic head.root with
+        | true => simp [optimisticBlock]
+        | false =>
+          simp only [Bool.false_eq_true, ite_false, true_and]
+          cases store.getCurrentSlot config with
+          | error fault => simp [internalError]
+          | ok current =>
+            simp only [reduceCtorEq, exists_false, false_or, Except.ok.injEq, exists_eq_left']
+            by_cases late : current < slot
+            · simp [late, UInt64.not_le.mpr late, throw, throwThe, MonadExceptOf.throw]
+            have notLate : slot ≤ current := UInt64.not_lt.mp late
+            simp only [late, ite_false, notLate, true_and]
+            cases atSlot : stateAtSlot config headState slot with
+            | error fault =>
+              have internal := stateAtSlot_internal_iff (config := config) (state := headState)
+                (slot := slot)
+              rw [atSlot] at internal
+              simp only [reduceCtorEq, false_and, exists_false, or_false, Except.error.injEq,
+                exists_eq_left'] at internal ⊢
+              exact internal
+            | ok state =>
+              have notInternal : ¬ (headState.slot < slot ∧
+                  ∃ fault, processSlots config .bls headState slot = .error fault) := by
+                intro failed
+                obtain ⟨_, refused, -⟩ := stateAtSlot_internal_iff.mpr failed
+                rw [atSlot] at refused
+                cases refused
+              simp only [notInternal, Except.ok.injEq, exists_eq_left', false_or]
+              simpa only [Except.mapError] using
+                getAttestationData_internal_iff fun gloas => Store.getHead_ne_pending gloas got
+
+/-- The payload attestation data answer gets code 500 exactly when the store has no head.
+
+For that refusal, the fork must be from Gloas. -/
+theorem producePayloadAttestationData_internal_iff {config : Config}
+    {store : Store preset fork} {slot : Slot} {payloadPresent blobDataAvailable : Bool} :
+    (∃ error, producePayloadAttestationData config store slot payloadPresent blobDataAvailable =
+      .error error ∧ error.code = 500) ↔
+      .glamsterdam ≤ fork ∧ ∃ fault, store.getHead config = .error fault := by
+  unfold producePayloadAttestationData headRoot
+  by_cases gloas : .glamsterdam ≤ fork
+  swap
+  · simp [gloas, beforeFork, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  cases store.getHead config with
+  | error fault => simp [gloas, internalError, Except.toOption]
+  | ok head => simp [gloas, Except.toOption, pure, Except.pure]
 
 /-! ## Aggregates -/
 

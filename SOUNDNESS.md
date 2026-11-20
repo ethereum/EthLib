@@ -5645,7 +5645,18 @@ It then refuses so exactly when the sync committee of the next slot has no value
 The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
 The answer hands the construction only the messages of members.
 A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
-No theorem states when the attestation data and payload attestation data answers refuse with code 500.
+`produceAttestationData_internal_iff` states when the attestation data answer refuses with code 500.
+It refuses so exactly when the store has no head, or lacks the block or the state of the head.
+Else, for a verified head block, it refuses so exactly when the store has no current slot.
+Else, for a slot not after the current slot, it refuses so exactly when the empty slots up to the slot fail.
+`stateAtSlot_internal_iff` gives that case: the slot is after the slot of the head state, and `processSlots` fails.
+Else it refuses so exactly when the root of the target of the data (`getEpochBoundaryBlockRoot`) fails.
+The index never fails, since from Gloas the head is never a pending node (`getHead_ne_pending`, `Consensus/Proofs/ForkChoice/Head.lean`).
+A private lemma of the same file shows that building the data never fails for an index out of range.
+So the last step never gives code 400.
+`producePayloadAttestationData_internal_iff` states that the payload attestation data answer refuses with code 500 exactly when the fork is from Gloas and `getHead` fails.
+No theorem states when `getHead`, `getCurrentSlot`, `processSlots` or `getEpochBoundaryBlockRoot` fail.
+So no theorem states which stores make the two answers refuse with code 500.
 No theorem states it for the aggregate and contribution responses either, which also refuse so when writing the value as JSON fails.
 `toApiJson_total` excludes that failure for a lawful type.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
