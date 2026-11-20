@@ -5010,6 +5010,8 @@ A request makes a transaction exactly when it passes the checks of its kind (`ex
 Its kind is at most 4, and a request of type 3 or 4 names a recipient.
 A gas price, a fee cap, a priority fee, an access list, blob hashes, a blob fee cap or authorizations appear only in the kinds that carry them.
 The schema ties none of its fields to the kind, so these checks are choices of EthLib.
+The call drops the field `type` before these checks, as the [text of the three methods](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L11-L24) requires, so the kind comes from the other fields.
+So a request with any type gets the answer of the same request without it (`prepareCall_type`, `ethCall_type`, `estimateGas_type`, `createAccessList_type`).
 A chain that it names is that of the node.
 The nonce, the gas limit and the fee cap that the call gives are below `2^256`.
 So is each number of the request that the transaction carries.
@@ -5034,7 +5036,13 @@ The other rules are choices of EthLib, and the header of `Execution/Rpc/Call.lea
 A request that names no fee pays none, and runs with a base fee of 0, as the fixture `call-callenv.io` expects.
 A request that names a fee buys its gas with `buyGas`, as a transaction does, and the sender must hold that fee plus the value.
 A transaction must hold its fee at its caps instead, and its blob fee cap is checked; a call checks neither.
-The type must be active at the fork of the call, and the gas limit must cover the intrinsic gas and, from Pectra, the floor of EIP-7623.
+A field must be active at the fork of the call, even when it is zero or an empty list: an access list from Berlin, a fee cap or a priority fee from London, blob hashes from Cancun and authorizations from Prague.
+The kind of the request is that of its latest such field, so the check of the fork of its kind is this rule.
+No theorem states that equivalence; the Python tests pin it with the fixtures of the source.
+An empty list of blob hashes, or a blob fee cap without blob hashes, is rejected at every fork that EthLib specifies (`prepareCall_emptyBlobHashes`, `prepareCall_blobFeeWithoutHashes`).
+The text names no code for these rejections; EthLib gives them `-32000`, the code of invalid input in EIP-1474, which the fixtures of the source expect.
+The checks of the kind run first, so a request that also mixes the fields of two kinds, or names blob hashes or authorizations without a recipient, gets `-32602` instead.
+The gas limit must cover the intrinsic gas and, from Pectra, the floor of EIP-7623.
 The checks of the blobs, of the authorization list and of a sender with code do not run, and neither the nonce of the request nor that of the sender is checked.
 The default gas limit is that of the block, which may exceed the cap of EIP-7825.
 The hashes that BLOCKHASH reads are those of the canonical blocks that the view holds.
@@ -5060,15 +5068,18 @@ Code that reads the gas left can break that hypothesis, and the answer may then 
 Even without the hypothesis, the call does not complete with one gas less, unless the answer is at most 1 (`estimateGas_pred_not_completes`).
 A call completes with a gas limit exactly when `eth_call` answers data at that limit (`completes_iff`).
 
-The source fixes none of the contents of the result of `eth_createAccessList`.
 EthLib lists each address and storage key that the call read or wrote, as the state tracker records them, a revert included.
 It leaves out an address without a storage key that the transaction accesses from the start.
 These addresses are the sender, the recipient or the created contract, the precompiles and, from Shapella, the beneficiary.
 The list keeps the authorities and the delegate of EIP-7702, and the contracts that the code of the call creates.
 EIP-2929 and EIP-7702 make these addresses warm, but they stay in the list.
+The [text of the method](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142) leaves out only the sender, the recipient or the created contract, and the precompiles, and keeps every other address that the transaction accesses.
+Read literally, it keeps the beneficiary, which EIP-3651 makes warm from Shapella, so that its entry only costs gas.
+EthLib leaves it out until the source says which reading holds ([ethereum/execution-apis#1005](https://github.com/ethereum/execution-apis/issues/1005)).
 
-The method then runs the call again with that list, as type 1 when the request has type 0.
-Before Berlin no transaction has an access list, so the list is empty and the call runs once.
+Before Berlin no transaction has an access list, so the source rejects the request; EthLib does so with code `-32000` once the call has run (`createAccessList_before_berlin`).
+A request that the call itself rejects keeps the error of the call.
+From Berlin the method runs the call again with that list, which gives the request type 1 or above.
 The result reports the gas used and the error message of that second call (`createAccessList_eq_ok`).
 A rejection of the second call, such as a gas limit that no longer covers the list, is the error of the method.
 The list is not iterated to a fixed point, so a call whose accesses change with its access list can report a list that the second call does not match.

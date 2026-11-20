@@ -1090,3 +1090,194 @@ def test_network_id() -> None:
     (response,) = chain.serve(['{"jsonrpc":"2.0","id":1,"method":"net_version"}'])
     assert response is not None
     assert json.loads(response) == {"jsonrpc": "2.0", "id": 1, "result": "1"}
+
+
+# The requests of the fixtures of execution-apis#938 and execution-apis#939, with their answers.
+# Each request runs from the funded account below, to the address 0x01 followed by zeros.
+# Block 0x17 is before Berlin, 0x1a before London, 0x29 before Cancun and 0x2c before Prague.
+_FROM: Final = "0x0c2c51a0990aee1d73c1228de158688341557508"
+_TO: Final = "0x0100000000000000000000000000000000000000"
+_AUTHORIZATION: Final = {
+    "chainId": "0x0",
+    "address": _TO,
+    "nonce": "0x0",
+    "yParity": "0x0",
+    "r": "0x0",
+    "s": "0x0",
+}
+_HASH: Final = "0x01" + "00" * 31
+_FEES: Final = {"maxFeePerGas": "0x77359400", "maxPriorityFeePerGas": "0x3b9aca00"}
+
+
+def _rule_error(reason: str) -> dict[str, object]:
+    """The error of a request that a rule of the method rejects: code -32000, invalid input."""
+    return {"code": -32000, "message": "Invalid input", "data": f"transaction: {reason}"}
+
+
+_INACTIVE: Final = _rule_error("a field is not active at the fork of the block")
+_BLOB_FEE: Final = _rule_error("maxFeePerBlobGas: no blobVersionedHashes")
+_EMPTY_HASHES: Final = _rule_error("blobVersionedHashes: empty")
+_NO_BERLIN: Final = _rule_error("no access list before Berlin")
+
+REQUEST_RULES: Final = [
+    # The type is ignored: the other fields decide the kind.
+    ("call-type-access-list-before-berlin", "eth_call", {"type": "0x1"}, "0x17", "0x"),
+    ("call-type-blob-before-cancun", "eth_call", {"type": "0x3"}, "0x29", "0x"),
+    ("call-type-set-code-before-prague", "eth_call", {"type": "0x4"}, "0x2c", "0x"),
+    ("call-type-unknown", "eth_call", {"type": "0x7f"}, "latest", "0x"),
+    ("estimate-type-blob-before-cancun", "eth_estimateGas", {"type": "0x3"}, "0x29", "0x5208"),
+    (
+        "create-al-type-set-code-before-prague",
+        "eth_createAccessList",
+        {"type": "0x4"},
+        "0x2c",
+        {"accessList": [], "gasUsed": "0x5208"},
+    ),
+    (
+        "call-gas-price-before-london",
+        "eth_call",
+        {"gas": "0x5208", "gasPrice": "0x3b9aca00"},
+        "0x1a",
+        "0x",
+    ),
+    # A field whose EIP is not active at the block is invalid, even when it is zero or empty.
+    ("call-fork-inactive-access-list", "eth_call", {"accessList": []}, "0x17", _INACTIVE),
+    (
+        "estimate-fork-inactive-access-list",
+        "eth_estimateGas",
+        {"accessList": []},
+        "0x17",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-fee-fields-zero",
+        "eth_call",
+        {"maxFeePerGas": "0x0", "maxPriorityFeePerGas": "0x0"},
+        "0x1a",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-priority-fee",
+        "eth_call",
+        {"maxPriorityFeePerGas": "0x3b9aca00"},
+        "0x1a",
+        _INACTIVE,
+    ),
+    ("estimate-fork-inactive-fee-fields", "eth_estimateGas", _FEES, "0x1a", _INACTIVE),
+    ("create-al-fork-inactive-fee-fields", "eth_createAccessList", _FEES, "0x1a", _INACTIVE),
+    (
+        "call-fork-inactive-blob-hashes",
+        "eth_call",
+        {"blobVersionedHashes": [_HASH]},
+        "0x29",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-authorization-list",
+        "eth_call",
+        {"authorizationList": [_AUTHORIZATION]},
+        "0x2c",
+        _INACTIVE,
+    ),
+    # Blob fields without blob hashes are invalid at every fork.
+    ("call-empty-blob-hashes", "eth_call", {"blobVersionedHashes": []}, "latest", _EMPTY_HASHES),
+    (
+        "call-blob-fee-empty-blob-hashes",
+        "eth_call",
+        {"blobVersionedHashes": [], "maxFeePerBlobGas": "0x1"},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    ("call-blob-fee-without-hashes", "eth_call", {"maxFeePerBlobGas": "0x1"}, "latest", _BLOB_FEE),
+    (
+        "call-blob-fee-without-hashes-before-cancun",
+        "eth_call",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    (
+        "estimate-empty-blob-hashes",
+        "eth_estimateGas",
+        {"blobVersionedHashes": []},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    (
+        "estimate-blob-fee-without-hashes",
+        "eth_estimateGas",
+        {"maxFeePerBlobGas": "0x1"},
+        "latest",
+        _BLOB_FEE,
+    ),
+    (
+        "estimate-blob-fee-without-hashes-before-cancun",
+        "eth_estimateGas",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    (
+        "create-al-empty-blob-hashes",
+        "eth_createAccessList",
+        {"blobVersionedHashes": []},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    (
+        "create-al-blob-fee-without-hashes",
+        "eth_createAccessList",
+        {"maxFeePerBlobGas": "0x1"},
+        "latest",
+        _BLOB_FEE,
+    ),
+    (
+        "create-al-blob-fee-without-hashes-before-cancun",
+        "eth_createAccessList",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    # Before Berlin, eth_createAccessList rejects every request.
+    ("create-al-fork-inactive", "eth_createAccessList", {}, "0x17", _NO_BERLIN),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "fields", "block", "expected"),
+    [pytest.param(*case[1:], id=case[0]) for case in REQUEST_RULES],
+)
+def test_request_rule(method: str, fields: dict[str, object], block: str, expected: object) -> None:
+    """Each request of the fixture gets the answer of the fixture, or its error code."""
+    params = [{"from": _FROM, "to": _TO, **fields}, block]
+    answer = _answer(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
+    # A rejection is compared whole, so that it names the rule that rejects the request.
+    if isinstance(expected, dict) and "code" in expected:
+        assert answer["error"] == expected
+    else:
+        assert answer["result"] == expected
+
+
+# The code of the two requests of `call-type-legacy-with-access-list`, with and without type 0.
+# It reads the balance of 0x01 followed by zeros, then returns the gas left.
+_GAS_LEFT_CODE: Final = "0x73010000000000000000000000000000000000000031505a60005260206000f3"
+
+
+def test_type_zero_with_access_list() -> None:
+    """A type 0 with an access list runs as the same request without its type."""
+    request = {
+        "accessList": [{"address": _TO, "storageKeys": []}],
+        "from": _FROM,
+        "gas": "0x493e0",
+        "input": _GAS_LEFT_CODE,
+    }
+    expected = "0x" + "00" * 29 + "01572b"
+    assert _call("eth_call", [{**request, "type": "0x0"}, "latest"]) == expected
+    assert _call("eth_call", [request, "latest"]) == expected
+
+
+def test_type_zero_with_fee_fields() -> None:
+    """A type 0 with fee caps runs with those caps, as its fixture of execution-apis expects."""
+    request = {"from": _FROM, "gas": "0x493e0", "input": "0x3a60005260206000f3", **_FEES}
+    expected = "0x" + "00" * 28 + "3c5742d4"
+    assert _call("eth_call", [{**request, "type": "0x0"}, "latest"]) == expected
