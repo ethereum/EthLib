@@ -767,14 +767,14 @@ structure PinPresetFacts (preset : Preset) : Prop where
 /-- The downward band is below an increment.
 
 Four bands fit in an increment, and an increment is positive. -/
-theorem PinPresetFacts.below (facts : PinPresetFacts preset) :
+private theorem PinPresetFacts.below (facts : PinPresetFacts preset) :
     preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have := facts.quarterBand
   have := facts.incrementSize
   omega
 
 /-- The base reward factor is positive, since its product with an increment is at least `2 ^ 35`. -/
-theorem PinPresetFacts.reward (facts : PinPresetFacts preset) :
+private theorem PinPresetFacts.reward (facts : PinPresetFacts preset) :
     1 ≤ preset.BASE_REWARD_FACTOR.toNat := by
   have scale := facts.rewardScale
   rcases Nat.eq_zero_or_pos preset.BASE_REWARD_FACTOR.toNat with zero | positive
@@ -787,7 +787,7 @@ theorem PinPresetFacts.reward (facts : PinPresetFacts preset) :
 It compares epochs with gwei, since the unit gain adds two gwei of rounding for each epoch.
 
 An increment is at least 900 slashings vectors. -/
-theorem PinPresetFacts.vectorSmall (facts : PinPresetFacts preset) :
+private theorem PinPresetFacts.vectorSmall (facts : PinPresetFacts preset) :
     44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have := facts.rounding

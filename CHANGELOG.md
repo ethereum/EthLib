@@ -661,9 +661,10 @@ Not yet released.
 
 - `PinPresetFacts` is public: the preset facts that the pin's drift bound needs.
   Each field is a fact about the preset alone, and a deployed preset has it.
-  `PinPresetFacts.below`, `PinPresetFacts.reward` and `PinPresetFacts.vectorSmall` are now theorems, with the same names and types as the fields they replace, and follow from its other fields.
-  The field `divisors : preset.DivisorsPositive` is now `syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0`, the one divisor fact the pin reads.
-  A preset's witness drops the proofs of those three facts and gives `syncPeriod` in place of `divisors`.
+  Its fields bound the increment, the largest effective balance, the bands, the slashings vector, the slashing and whistleblower quotients, the reward factor and the seed lookahead, and include `activation : ActivationWithinMaxEffective preset`.
+  The one divisor fact the pin reads is `syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0`.
+  Facts that follow from its other fields are not fields.
+  A preset's witness proves each field, as `PinPresetFacts.mainnet` and `PinPresetFacts.minimal` do.
 
 - `PinPresetFacts.mainnet` is public: the mainnet preset has the preset facts of the pin.
 
