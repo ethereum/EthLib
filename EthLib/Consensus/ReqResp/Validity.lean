@@ -207,16 +207,10 @@ def ResponseBlock.slotsAscending (blocks : List ResponseBlock) : Bool :=
 def ResponseBlock.parentsLinked (blocks : List ResponseBlock) : Bool :=
   allAdjacent (fun a b => b.parentRoot == a.root) blocks
 
-/-- Whether a slot lies in the range of a count of slots from a start slot.
-
-The bound is computed without overflow, so a range past the largest slot stops there. -/
-def slotInRange (startSlot : Slot) (count : UInt64) (slot : Slot) : Bool :=
-  startSlot ≤ slot && slot.toNat < startSlot.toNat + count.toNat
-
 /-- Whether a slot is one that a request for blocks by range names. -/
 def BeaconBlocksByRangeRequest.containsSlot (request : BeaconBlocksByRangeRequest)
     (slot : Slot) : Bool :=
-  slotInRange request.startSlot request.count slot
+  decide (InCountRange request.startSlot request.count slot)
 
 /-- Whether the blocks of a response are valid for a request for blocks by range.
 
@@ -279,17 +273,12 @@ def ResponseUpdate.forkMatches (preset : Preset) (config : Config) (update : Res
     Bool :=
   lightClientForkMatches preset config update.attestedSlot update.fork
 
-/-- Whether the updates of a response are valid for a request for light client updates by range.
-
-The range of periods is computed without overflow, so a range past the largest period stops there.
--/
+/-- Whether the updates of a response are valid for a request for light client updates by range. -/
 def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
     (request : LightClientUpdatesByRangeRequest) (updates : List ResponseUpdate) : Bool :=
-  updates.length ≤ request.count.toNat &&
-    updates.length ≤ MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat &&
+  updates.length ≤ lightClientUpdatesLimit request.count &&
     updates.all (fun update =>
-      request.startPeriod ≤ update.period preset &&
-        (update.period preset).toNat < request.startPeriod.toNat + request.count.toNat &&
+      decide (InCountRange request.startPeriod request.count (update.period preset)) &&
         update.forkMatches preset config) &&
     allAdjacent (fun a b => (b.period preset).toNat == (a.period preset).toNat + 1) updates
 
@@ -388,8 +377,9 @@ def isValidBlobSidecarsByRangeResponse (config : Config) (fork : Fork)
   sidecars.length ≤ request.count.toNat * (blobSidecarLimit config fork).toNat &&
     sidecars.length ≤
       config.MAX_REQUEST_BLOCKS_DENEB.toNat * (blobSidecarLimit config fork).toNat &&
-    sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
-      sidecar.index.toNat < (blobSidecarLimit config fork).toNat) &&
+    sidecars.all (fun sidecar =>
+      decide (InCountRange request.startSlot request.count sidecar.slot) &&
+        sidecar.index.toNat < (blobSidecarLimit config fork).toNat) &&
     sidecars.head?.all (fun first => first.index == 0) &&
     allAdjacent ResponseSidecar.nextBlob sidecars
 
@@ -412,8 +402,9 @@ def isValidDataColumnSidecarsByRangeResponse (preset : Preset) (config : Config)
     (request : DataColumnSidecarsByRangeRequest preset) (sidecars : List ResponseSidecar) : Bool :=
   sidecars.length ≤ request.count.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
     sidecars.length ≤ config.MAX_REQUEST_BLOCKS_DENEB.toNat * preset.NUMBER_OF_COLUMNS.toNat &&
-    sidecars.all (fun sidecar => slotInRange request.startSlot request.count sidecar.slot &&
-      sidecar.index < preset.NUMBER_OF_COLUMNS && request.columns.data.contains sidecar.index) &&
+    sidecars.all (fun sidecar =>
+      decide (InCountRange request.startSlot request.count sidecar.slot) &&
+        sidecar.index < preset.NUMBER_OF_COLUMNS && request.columns.data.contains sidecar.index) &&
     allAdjacent ResponseSidecar.nextColumn sidecars &&
     (ResponseSidecar.groupBySlot sidecars).all (fun block =>
       request.columns.data.all (fun column => block.any (·.index == column)))
@@ -468,7 +459,8 @@ def isValidExecutionPayloadEnvelopesByRangeResponse (config : Config) (fork : Fo
     Bool :=
   envelopes.length ≤ request.count.toNat &&
     envelopes.length ≤ (config.maxRequestBlocks fork).toNat &&
-    envelopes.all (fun envelope => slotInRange request.startSlot request.count envelope.slot) &&
+    envelopes.all (fun envelope =>
+      decide (InCountRange request.startSlot request.count envelope.slot)) &&
     allAdjacent ResponseEnvelope.next envelopes
 
 /-- Whether the envelopes of a response are valid for a request for payload envelopes by root. -/

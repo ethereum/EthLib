@@ -244,6 +244,17 @@ def GoodbyeReason.toCode : GoodbyeReason → UInt64
   | .faultOrError => 3
   | .reserved code | .other code => code
 
+/-- Whether a value lies in the range of a count of values from a start.
+
+The bound is computed without overflow, so a range past the largest value stops there.
+
+Requests by range name their slots or their light client periods this way. -/
+def InCountRange (start count value : UInt64) : Prop :=
+  start.toNat ≤ value.toNat ∧ value.toNat < start.toNat + count.toNat
+
+instance (start count value : UInt64) : Decidable (InCountRange start count value) :=
+  inferInstanceAs (Decidable (_ ∧ _))
+
 /-- A request for the blocks of a range of slots; the step must be 1. -/
 structure BeaconBlocksByRangeRequest where
   /-- The first slot. -/
@@ -277,6 +288,14 @@ structure LightClientUpdatesByRangeRequest where
 instance : SszType LightClientUpdatesByRangeRequest :=
   .container ["start_period", "count"] (fun r => (r.startPeriod, r.count))
     (fun (s, c) => ⟨s, c⟩)
+
+/-- The most light client updates that a request of a count of periods allows.
+
+It is the smaller of the request limit of 128 and the count.
+
+The updates query of the Beacon API reads the same limit. -/
+def lightClientUpdatesLimit (count : UInt64) : Nat :=
+  min MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat count.toNat
 
 /-- A request for the blob sidecars of a range of slots. -/
 structure BlobSidecarsByRangeRequest where
