@@ -561,3 +561,30 @@ def test_remote_bad_request():
         ("DELETE", "/eth/v1/remotekeys", {}),
     )
     assert responses == [(400, {"message": "the request does not read"})] * 2
+
+
+def test_move_a_key():
+    """The use case "Move a key": the new client refuses what the old one refused."""
+    a = _pubkeys()[0]
+    key = bytes.fromhex(a[2:])
+    keystore_a = _keystore(SECRETS[0], "pass")
+    # The old client signed a block at slot 100 and a vote from 9 to 10 with the key.
+    history = _interchange([_entry(a, 100, 9, 10)])
+    old, old_state = _calls(
+        _import([keystore_a], ["pass"], history),
+        ("DELETE", "/eth/v1/keystores", {"pubkeys": [a]}),
+    )
+    assert old_state["local_keys"] == []
+    moved = old[1][1]["slashing_protection"]
+    new, new_state = _calls(_import([keystore_a], ["pass"], moved))
+    assert new == [(200, {"data": [{"status": "imported"}]})]
+    old_record = old_state["slashing_protection"].encode()
+    new_record = new_state["slashing_protection"].encode()
+    root = b"\x01" * 32
+    for record in (old_record, new_record):
+        # A block at slot 100 with another root, and a vote around the old one, are refused.
+        with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+            consensus.check_block_signing(record, key, 100, root)
+        with raises(SlashingProtectionError, "slashing protection failed with code 5"):
+            consensus.check_attestation_signing(record, key, 8, 11, root)
+    consensus.check_block_signing(new_record, key, 101, root)

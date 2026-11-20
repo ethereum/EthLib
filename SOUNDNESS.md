@@ -6314,6 +6314,16 @@ The source leaves two points about the delete open, and EthLib takes these readi
 - The flow sets every status to `error` when the export of the data fails.
   EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
 
+A key moved between two clients keeps its slashing protection, by the use case "Move a key" of the source (`Consensus/Proofs/KeymanagerApi/Move.lean`).
+The old client holds the key, and every key that it holds under that public key can be deleted.
+With a read-only copy, the delete refuses the key and returns no data for it, so the statement needs this.
+A delete of that key alone gives data, and an import of its keystore with that data into the new client imports it.
+Then the new client accepts a block or a vote of the key only if the old client accepted it (`checkBlock_of_move`, `checkAttestation_of_move`), and the old client no longer holds the key as a local key (`isActive_of_move`).
+The scope is one key and one move.
+The data passes from the delete to the import as a value: the round trip of its document is proved, and that of its text is not, as said above.
+No step compares the genesis validators root of the data with that of either client.
+The Python suite runs a move between two clients, through the JSON text of the data.
+
 The calls on `/eth/v1/remotekeys` list, import and delete the keys that a client signs with through a remote signer (`Consensus/KeymanagerApi/RemoteKeys.lean`).
 An import and a delete give one status for each key of the request (`length_importRemoteKeys`, `length_deleteRemoteKeys`, `Consensus/Proofs/KeymanagerApi/RemoteKeys.lean`).
 Each is the status of its key on the state that the keys before it leave (`getElem?_importRemoteKeys`, `getElem?_deleteRemoteKeys`), as `fst_importRemoteKey` and `fst_deleteRemoteKey` give it.
