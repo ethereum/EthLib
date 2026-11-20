@@ -22,9 +22,9 @@ A bit of a contribution is set exactly when the key of that seat signed a matchi
 
 Each refusal of an aggregate or a contribution with a code other than 500 is stated with its cause.
 
-An aggregate refuses with code 500 only when its construction fails.
+Once its checks pass, an aggregate refuses with code 500 exactly when its construction fails.
 
-A contribution refuses so only without the sync committee of the next slot, or on a signature.
+A contribution gets code 500 only on a signature, or at the largest slot, whose next overflows.
 -/
 
 @[expose] public section
@@ -707,6 +707,7 @@ private theorem constructSyncCommitteeContribution_members_error
       (messages.filter (inSubcommittee state
         (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) = .error fault) :
     fault = .noMessages state.slot blockRoot ∨ ∃ error, fault = .bls error := by
+  -- Each message that passes the filter comes from a known validator whose key holds a seat.
   have seated : ∀ message ∈ messages.filter (inSubcommittee state
       (syncSubcommitteePubkeys committee subcommitteeIndex.toNat)), ∃ validator,
         getValidator state message.validatorIndex = .ok validator ∧
@@ -732,6 +733,7 @@ private theorem constructSyncCommitteeContribution_members_error
     obtain ⟨validator, found, -⟩ := seated message (List.mem_filter.mp member).1
     simp [found, Except.mapError, bind, Except.bind, pure, Except.pure] at step
   split at failed
+  -- No message is outside the subcommittee, since its key holds a seat.
   · rename_i key other found
     obtain ⟨message, member, step⟩ := mapM_ok_mem keyedOk _ (List.mem_of_find?_eq_some found)
     obtain ⟨validator, read, step⟩ := bind_ok_iff.mp step
@@ -841,9 +843,11 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
 
 It refuses so when the sync committee of the next slot has no value.
 
+That happens only at the largest 64-bit slot, whose next slot overflows.
+
 Else it refuses so when the construction of the contribution fails on a signature.
 
-Both refusals need a request at the slot of the state, and a verified root.
+Both refusals need a request at the slot of the state, and a root whose block is verified.
 
 They also need an index that names a subnet. -/
 theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState preset fork}
