@@ -1,9 +1,13 @@
 module
 
 public import EthLib.Consensus.BeaconApi.LightClient
+public import EthLib.Consensus.ForkChoice.Optimistic
+public import EthLib.Consensus.ForkChoice.OptimisticSync
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
 import EthLib.Consensus.Proofs.BeaconApi.StateQueries
+import EthLib.Consensus.Proofs.ForkChoice.Optimistic
+import EthLib.Consensus.Proofs.ForkChoice.OptimisticSync
 import EthLib.Consensus.Proofs.ForkSchedule
 
 /-!
@@ -28,6 +32,14 @@ They need the anchor state at the slot of the anchor block, with the header of t
 Only the state roots of the two headers may differ.
 
 They also need Electra at or before Fulu and Gloas at or before Heze, with the same type and sizes.
+
+An invalid payload keeps the answer of each root whose block stays in the store.
+
+Recording whether a validated payload satisfies its inclusion lists keeps each bootstrap answer.
+
+So a bootstrap served after either step on a reachable store starts a light client too.
+
+That result needs the same forks, state type and preset sizes as the first.
 -/
 
 @[expose] public section
@@ -169,5 +181,90 @@ theorem bootstrapFor_error_iff_of_reachable [NeZero preset.BYTES_PER_LOGS_BLOOM.
     cases refused
   · intro other
     simp [bootstrapFor, held, heldState, other]
+
+/-- After an invalid payload, a root whose block stays keeps its bootstrap answer. -/
+theorem bootstrapFor_onInvalidPayload {invalid : BeaconBlock preset fork}
+    {latestValidHash : Option Hash32} {after : Store preset fork}
+    (invalidated : store.onInvalidPayload invalid latestValidHash = .ok after) {root : Root}
+    (kept : after.blocks.contains root) :
+    bootstrapFor config after root = bootstrapFor config store root := by
+  rcases Store.onInvalidPayload_blocks_blockStates invalidated root with ⟨blocks, states⟩ |
+    ⟨gone, -⟩
+  · unfold bootstrapFor
+    rw [blocks, states]
+  · simp [Std.TreeMap.contains_eq_isSome_getElem?, gone] at kept
+
+/-- Recording whether a validated payload satisfies its inclusion lists keeps each bootstrap answer.
+
+Each root gets the same bootstrap or the same refusal as before. -/
+theorem bootstrapFor_recordValidatedInclusionListSatisfaction {heze : .hegota ≤ fork}
+    {validated : Root} {satisfied : Bool} {after : Store preset fork}
+    (recorded :
+      store.recordValidatedInclusionListSatisfaction heze validated satisfied = .ok after)
+    (root : Root) : bootstrapFor config after root = bootstrapFor config store root := by
+  obtain rfl := Store.recordValidatedInclusionListSatisfaction_eq recorded
+  rfl
+
+/-- A bootstrap served after an invalid payload on a reachable store starts a light client.
+
+That light client trusts the block of the bootstrap.
+
+It needs the schedule to put the forks from Capella to Heze in order.
+
+It needs the sizes of the preset that the block and the state hold to be nonzero.
+
+It needs the state type to be lawful. -/
+theorem bootstrapFor_valid_of_onInvalidPayload [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
+    [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+    [LawfulSszType (BeaconState preset fork)]
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {invalid : BeaconBlock preset fork} {latestValidHash : Option Hash32}
+    {after : Store preset fork}
+    (invalidated : store.onInvalidPayload invalid latestValidHash = .ok after) {root : Root}
+    {bootstrap : LightClientBootstrap preset fork}
+    (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
+      config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
+      config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧
+      config.FULU_FORK_EPOCH ≤ config.GLOAS_FORK_EPOCH ∧
+      config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH)
+    (served : bootstrapFor config after root = .ok bootstrap) :
+    ∃ lightClient, initializeLightClientStore config root bootstrap = .ok lightClient := by
+  -- A served root still has its block, since a root without one gets the error.
+  cases kept : after.blocks.contains root
+  · have missing := Std.TreeMap.getElem?_eq_none_of_contains_eq_false kept
+    rw [bootstrapFor_of_missing (.inl missing)] at served
+    cases served
+  · exact bootstrapFor_valid_of_reachable reachable ordered
+      ((bootstrapFor_onInvalidPayload invalidated kept).symm.trans served)
+
+/-- A bootstrap served after an inclusion list record on a reachable store starts a light client.
+
+That light client trusts the block of the bootstrap.
+
+It needs the schedule to put the forks from Capella to Heze in order.
+
+It needs the sizes of the preset that the block and the state hold to be nonzero.
+
+It needs the state type to be lawful. -/
+theorem bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction
+    [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat]
+    [NeZero preset.PTC_SIZE.toNat] [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
+    [LawfulSszType (BeaconState preset fork)]
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    {heze : .hegota ≤ fork} {validated : Root} {satisfied : Bool} {after : Store preset fork}
+    (recorded :
+      store.recordValidatedInclusionListSatisfaction heze validated satisfied = .ok after)
+    {root : Root} {bootstrap : LightClientBootstrap preset fork}
+    (ordered : config.CAPELLA_FORK_EPOCH ≤ config.DENEB_FORK_EPOCH ∧
+      config.DENEB_FORK_EPOCH ≤ config.ELECTRA_FORK_EPOCH ∧
+      config.ELECTRA_FORK_EPOCH ≤ config.FULU_FORK_EPOCH ∧
+      config.FULU_FORK_EPOCH ≤ config.GLOAS_FORK_EPOCH ∧
+      config.GLOAS_FORK_EPOCH ≤ config.HEZE_FORK_EPOCH)
+    (served : bootstrapFor config after root = .ok bootstrap) :
+    ∃ lightClient, initializeLightClientStore config root bootstrap = .ok lightClient :=
+  bootstrapFor_valid_of_reachable reachable ordered
+    ((bootstrapFor_recordValidatedInclusionListSatisfaction recorded root).symm.trans served)
 
 end EthLib.Consensus.BeaconApi
