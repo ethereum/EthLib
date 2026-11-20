@@ -1,7 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
-public import EthLib.Cryptography.Hash.Crc32
+public import EthLib.Cryptography.Hash.Crc.Crc32
 
 /-!
 # Exports: CRC-32
