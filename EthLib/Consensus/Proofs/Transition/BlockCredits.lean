@@ -436,19 +436,11 @@ private theorem kept_processBlsToExecutionChanges {body : BeaconBlockBody preset
 
 private theorem kept_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (computed : processExecutionRequests config s body electra = .ok t) : Kept s t := by
-  have inputs : PayloadInputs s t := by
-    have ok := computed
-    simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
-    obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
-    exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processDepositRequest ok)
-      deposits).trans <| (PayloadInputs.foldlM
-        (fun _ _ _ ok => payloadInputs_processWithdrawalRequest ok) withdrawals).trans <|
-      PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processConsolidationRequest ok)
-        consolidations
-  exact ⟨(frame_processExecutionRequests computed).toFrame, inputs,
-    stepKeeps_processExecutionRequests computed, effectiveKept_requests computed,
-    registryLifecycle_processExecutionRequests computed, lives_processExecutionRequests computed⟩
+    (computed : processExecutionRequests config s body electra = .ok t) : Kept s t :=
+  ⟨(frame_processExecutionRequests computed).toFrame,
+    payloadInputs_processExecutionRequests computed, stepKeeps_processExecutionRequests computed,
+    effectiveKept_requests computed, registryLifecycle_processExecutionRequests computed,
+    lives_processExecutionRequests computed⟩
 
 end KeptSteps
 

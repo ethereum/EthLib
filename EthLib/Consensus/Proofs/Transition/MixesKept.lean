@@ -38,14 +38,6 @@ private theorem Kept.trans {first second third : BeaconState preset fork}
     (one : Kept first second) (two : Kept second third) : Kept first third :=
   ⟨two.1.trans one.1, two.2.trans one.2⟩
 
-/-- A fold whose every step keeps the mixes and the slot keeps them. -/
-private theorem Kept.foldlM {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (kept : ∀ s x s', step s x = .ok s' → Kept s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : Kept state after :=
-  foldlM_ok_invariant (Kept state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
-    (Kept.refl state) computed
-
 /-- A step that keeps the inputs of a payload keeps the mixes and the slot. -/
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   ⟨inputs.randaoMixes, inputs.slot⟩
@@ -153,48 +145,6 @@ theorem mixesKeptBut_advanceSlot (computed : advanceSlot config checks state = .
 
 /-! ## The steps of a block -/
 
-/-- The operations of a block keep the mixes and the slot, at every fork. -/
-private theorem kept_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (computed : processOperations config checks state body parentSlot = .ok after) :
-    Kept state after := by
-  by_cases gloas : Fork.glamsterdam ≤ fork
-  · exact Kept.of_payloadInputs (payloadInputs_processOperations gloas computed)
-  simp only [processOperations, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
-    exitsOk, changed, changesOk, requestsOk⟩ := computed
-  have changes : Kept exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact Kept.foldlM (fun _ _ _ ok =>
-        Kept.of_payloadInputs (payloadInputsLaws.processBlsToExecutionChange ok)) changesOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ Kept.refl _
-  have requests : Kept changed after := by
-    split at requestsOk
-    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
-      obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := requestsOk
-      exact (Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processDepositRequest ok)) depositsOk).trans <|
-        (Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processWithdrawalRequest ok)) withdrawalsOk).trans <|
-        Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processConsolidationRequest ok)) consolidationsOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
-      exact requestsOk ▸ Kept.refl _
-  exact (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processProposerSlashing ok)) proposersOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processAttesterSlashing ok)) attestersOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processAttestation ok)) attestedOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processDeposit ok)) depositedOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputsLaws.processVoluntaryExit ok)) exitsOk).trans <|
-    changes.trans requests
-
 /-- Two states with the same slot, whose RANDAO mixes agree except at the current epoch. -/
 private def Writes (state after : BeaconState preset fork) : Prop :=
   MixesKeptBut (getCurrentEpoch state) state after ∧ after.slot = state.slot
@@ -252,7 +202,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
         exact Writes.refl _
     exact paidStep.trans <| (header headedOk).trans <| executedStep.trans <|
       (randao revealedOk).trans <| votedStep.trans <|
-      (Writes.of_kept (kept_processOperations operatedOk)).trans
+      (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processOperations operatedOk))).trans
       (Writes.of_kept (Kept.of_payloadInputs (payloadInputsLaws.processSyncAggregate synced)))
   rename_i notAltair
   have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
@@ -263,7 +213,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
   exact (header headerOk).trans <| (randao randaoOk).trans <|
     (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processEth1Data eth1Ok))).trans
-    (Writes.of_kept (kept_processOperations operationsOk))
+    (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processOperations operationsOk)))
 
 /-! ## Committees -/
 

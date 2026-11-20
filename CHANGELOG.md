@@ -105,6 +105,8 @@ Not yet released.
 
 - `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; the pin's `created_first_state` reads it.
 
+- In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
+
 - Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
   `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
   `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
@@ -771,6 +773,10 @@ Not yet released.
   Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
   The new statement implies the old one, so a reader of the old statement drops the last conjunct.
   The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
+
+- In Lean, `payloadInputs_processOperations` holds at every fork and no longer takes `gloas : .glamsterdam ≤ fork`.
+  Before Gloas the deposits and, from Electra, the requests of the execution layer keep the inputs of a payload too.
+  A caller drops the first explicit argument.
 
 - In Lean, signed direct safety catches collisions of signing roots ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
   `SignedIn` takes the signed root, and `SignedConflict` asks that the two roots differ, so one signature never counts as two.
