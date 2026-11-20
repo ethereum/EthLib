@@ -407,7 +407,7 @@ def initialPot (x : ForkedBeaconState preset) (high pot index : Nat) : Nat × Na
   if pot = 0 then (index,
     if (x.state.validators.data[index]?).any
         (fun v => isActiveValidator v (getCurrentEpoch x.state))
-    then actualBalanceAt x index - effectiveAt x index else 0)
+    then potential x index - effectiveAt x index else 0)
   else if pot = 1 then (index,
     (x.state.validators.data[index]?.map fun v =>
       if !isActiveValidator v (getCurrentEpoch x.state) &&
@@ -426,7 +426,7 @@ def initialPot (x : ForkedBeaconState preset) (high pot index : Nat) : Nat × Na
         else 0).getD 0)
 def OwnedInitial (x : ForkedBeaconState preset) (high : Nat) (o : Ownership) : Prop :=
   OwnershipValid o ∧ o.retired = ∅ ∧
-    o.issued.card ≤ initialExcess x + preActiveStake x +
+    o.issued.card ≤ initialCappedExcess x + preActiveStake x +
         dueConsolidationCredits x (driftHorizon x high) + pendingSourceExcess x high ∧
     (∀ token ∈ o.issued, ∃ pot index unit, token = .initial pot index unit ∧ pot < 4 ∧
       unit < (initialPot x high pot index).2 ∧
@@ -459,7 +459,7 @@ def ReserveCut (x : ForkedBeaconState preset) (high : Nat)
         ¬ ∃ c ∈ suffix, c.sourceIndex.toNat = i) ∧
     (∀ i, o.original i ≤ effectiveAt x i ∧ (¬ NewReference x i → o.original i = 0)) ∧
     (∀ i, NewReference x i → i ∉ o.retired → FundingRelevant u demandEpoch suffix i →
-      max (effectiveAt u i) (actualBalanceAt u i) ≤ o.original i + (held o i).card) ∧
+      potential u i ≤ o.original i + (held o i).card) ∧
     (∀ i initial v, x.state.validators.data[i]? = some initial →
       isActiveValidator initial (getCurrentEpoch x.state) → initial.slashed = false →
       initial.exitEpoch ≠ FAR_FUTURE_EPOCH → u.state.validators.data[i]? = some v →
@@ -708,7 +708,7 @@ theorem ReservedFrame.trans
 private theorem reserveCut_slot {fork : Fork} {s : BeaconState preset fork}
     (reserve : ReserveCut x high ⟨fork, s⟩ epoch suffix owned) :
     ReserveCut x high ⟨fork, { s with slot := next }⟩ epoch suffix owned := by
-  simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt, pendingQueue]
+  simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt, pendingQueue]
     using reserve
 theorem reservedFrame_slot {fork : Fork} {s : BeaconState preset fork}
     (checked : addChecked s.slot 1 = .ok next)
@@ -727,7 +727,7 @@ private theorem reserveCut_cache {fork : Fork} {s t : BeaconState preset fork}
     (reserve : ReserveCut x high ⟨fork, s⟩ epoch suffix owned) :
     ReserveCut x high ⟨fork, t⟩ epoch suffix owned := by
   obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok ok
-  simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt,
+  simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt,
     getCurrentEpoch, pendingQueue] using reserve
 private theorem reserveCut_justification {fork : Fork} {s t : BeaconState preset fork}
     (ok : processJustificationAndFinalization s = .ok t)
@@ -737,7 +737,7 @@ private theorem reserveCut_justification {fork : Fork} {s t : BeaconState preset
   · exact reserve
   · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
     rw [← rest] at reserve
-    simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt,
+    simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt,
       getCurrentEpoch, pendingQueue] using reserve
 private theorem reserveCut_inactivity {fork : Fork} {s t : BeaconState preset fork}
     {altair : .altair ≤ fork} (ok : processInactivityUpdates config s altair = .ok t)
@@ -749,7 +749,7 @@ private theorem reserveCut_inactivity {fork : Fork} {s t : BeaconState preset fo
     exact ok ▸ reserve
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
     obtain ⟨_, _, _, _, rfl⟩ := ok
-    simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt,
+    simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt,
       getCurrentEpoch, pendingQueue] using reserve
 theorem reservedFrame_cache {fork : Fork} {s t : BeaconState preset fork}
     (ok : processSlot s = .ok t)

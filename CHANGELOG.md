@@ -434,6 +434,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's excess only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
+  `creditBudget` reads it in place of `initialExcess`.
+  `initialExcess` is unchanged.
+  `creditBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
+  In `Apriori.Internal`, pot 0 of `initialPot` is `potential x i - effectiveAt x i`, and `OwnedInitial` bounds its tokens with `initialCappedExcess`.
+  The `NewReference` clause of `ReserveCut` bounds `potential u i` in place of `max (effectiveAt u i) (actualBalanceAt u i)`.
+  The former clause implies the new one; a caller that read the balance from it reads `potential` instead.
+
 - In Lean, `processInactivityUpdates_frame` moves from `EthLib.Consensus.Proofs.Transition.EpochParticipation` to `EthLib.Consensus.Proofs.Transition.EpochUpdates`, next to the other frame facts of the epoch steps.
   Its name and statement are unchanged; a caller that imports only the former adds `import EthLib.Consensus.Proofs.Transition.EpochUpdates`.
 
