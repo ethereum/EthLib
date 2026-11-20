@@ -16111,10 +16111,8 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (toFin : Run config checks g ⟨fork, fin⟩)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
-    (cut : toB.append pre = toFin.append fromFin)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -26853,8 +26851,8 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b2 := bud_late (config := config) h
   have b3 := bud_queues (config := config) h tailC
   have b4 := bud_credits (config := config) h toB link pre sameEpoch tailC highC endEpochC replayedC
-  have b5 := bud_branchR (config := config) h tail high endEpoch replayed fromFin toFin toB pre
-    cut sameEpoch replayedF tailC highC endEpochC replayedC replayedP
+  have b5 := bud_branchR (config := config) h tail high endEpoch replayed fromFin toB pre
+    sameEpoch replayedF tailC highC endEpochC replayedC replayedP
   have replayedPHigh : pre.balanceEvents high = .ok eventsP := by
     have called := UInt64.le_iff_toNat_le.mp h.called
     have later := UInt64.le_iff_toNat_le.mp h.later
