@@ -3454,7 +3454,7 @@ private theorem run_indexedTrace_sites {x y : ForkedBeaconState preset}
           exits.filterMap (·.entry) :=
   run_indexedTrace_sites_cap tail electra early targetElectra cap _
     (fun {u _} _ contained =>
-      let ⟨_, _, _, uEarly, _⟩ := Run.contains_step_facts contained early
+      let ⟨_, _, _, uEarly, _⟩ := Apriori.Internal.Run.contains_step_facts contained early
       ExitRateBelow.of_max uEarly u.state) rates
 
 /-- The entries of the calls hold the amounts of the calls with no index. -/
@@ -3600,7 +3600,7 @@ private theorem exit_calls_le_window_electra {x y : ForkedBeaconState preset}
           (x.state.earliestConsolidationEpoch electra).toNat) * cap :=
   exit_calls_le_window_electra_cap tail electra early high cap _
     (fun {u _} _ contained =>
-      let ⟨_, _, _, uEarly, _⟩ := Run.contains_step_facts contained early
+      let ⟨_, _, _, uEarly, _⟩ := Apriori.Internal.Run.contains_step_facts contained early
       ExitRateBelow.of_max uEarly u.state) rates
 
 /-- Post-Electra departures spend only carry-in capacity and eligible epochs in the window.
@@ -3649,7 +3649,7 @@ private theorem departure_charges_le_window_electra {x y : ForkedBeaconState pre
         (x.state.earliestConsolidationEpoch electra).toNat) * cap :=
   departure_charges_le_window_electra_cap tail electra early high cap _
     (fun {_ _} _ contained _ computed =>
-      let ⟨_, _, _, uEarly, _⟩ := Run.contains_step_facts contained early
+      let ⟨_, _, _, uEarly, _⟩ := Apriori.Internal.Run.contains_step_facts contained early
       exitChurnLimit_le_cap uEarly computed) rates
 
 /-- Every finite exit cohort holds at most the larger of its base count and a cap.
@@ -6410,7 +6410,7 @@ theorem run_joint_partial_window
     intro site member electra rate computed
     obtain ⟨_, _, step, contained, forks, same⟩ := consolidationSite_rate tail early site member
     have computed := same rate computed
-    obtain ⟨_, _, _, sourceEarly, _⟩ := Run.contains_step_facts contained early
+    obtain ⟨_, _, _, sourceEarly, _⟩ := Apriori.Internal.Run.contains_step_facts contained early
     obtain ⟨total, read⟩ := consolidationChurnLimit_total sourceEarly computed
     exact rates step contained (forks electra) total read rate computed
   obtain ⟨calls, matched, queues, _, budget⟩ :=

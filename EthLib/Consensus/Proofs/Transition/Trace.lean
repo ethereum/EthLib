@@ -134,6 +134,8 @@ theorem Run.contains_split {g a x y : ForkedBeaconState preset}
     obtain ⟨pre, post, same⟩ := ih
     exact ⟨pre, post.snoc next, congrArg (fun run => run.snoc next) same⟩
 
+namespace DirectSafety.Apriori.Internal
+
 /-- A step of a pre-Gloas run is pre-Gloas, and its input epoch is at most the run's end epoch. -/
 theorem Run.contains_step_facts {x y u v : ForkedBeaconState preset}
     {tail : Run config checks x y} {step : Step config checks u v} (member : tail.Contains step)
@@ -146,6 +148,8 @@ theorem Run.contains_step_facts {x y u v : ForkedBeaconState preset}
     (Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)) early,
     UInt64.le_iff_toNat_le.mp
       (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)⟩
+
+end DirectSafety.Apriori.Internal
 
 /-- The number of block steps of a run. -/
 def Run.blockCount {first last : ForkedBeaconState preset} :

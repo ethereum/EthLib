@@ -13448,7 +13448,8 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
       tailC.Contains step → ∀ rate : Gwei, exitChurnLimit config u.state = .ok rate →
         rate.toNat ≤ pinExit preset config (pinWide pulled) := by
     intro u w step member rate computed
-    obtain ⟨pre, post, _, uEarly, uEpoch⟩ := Run.contains_step_facts member h.early
+    obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
+      DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
     have uEpoch' : (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch counted).toNat := uEpoch
     exact exitRate_le uEarly _ (band u (fromFin.append pre) uEarly (by omega)) computed
   have consTail : ∀ site ∈ tailC.consolidationSites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
@@ -13456,7 +13457,8 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
         rate.toNat ≤ pinCons preset config (pinWide pulled) := by
     intro site member _ rate computed
     obtain ⟨u, w, step, contained, _, same⟩ := consolidationSite_rate tailC h.early site member
-    obtain ⟨pre, post, _, uEarly, uEpoch⟩ := Run.contains_step_facts contained h.early
+    obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
+      DirectSafety.Apriori.Internal.Run.contains_step_facts contained h.early
     have uEpoch' : (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch counted).toNat := uEpoch
     exact consRate_le uEarly _ (band u (fromFin.append pre) uEarly (by omega))
       (same rate computed)
@@ -13465,7 +13467,8 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
         rate.toNat ≤ pinCons preset config (pinWide pulled) := by
     intro site member _ rate computed
     obtain ⟨u, w, step, contained, _, same⟩ := consolidationSite_rate fromFin h.early site member
-    obtain ⟨pre, post, _, uEarly, uEpoch⟩ := Run.contains_step_facts contained h.early
+    obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
+      DirectSafety.Apriori.Internal.Run.contains_step_facts contained h.early
     have uEpoch' : (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch split).toNat := uEpoch
     exact consRate_le uEarly _ (band u pre uEarly (by omega)) (same rate computed)
   obtain ⟨exitCarry, consolidationCarry⟩ :
@@ -14010,7 +14013,8 @@ private theorem slashing_charge (h : Setting config checks g split fin pulled an
   refine slashing_credits_le (shared.append fromFin) tailC h.genesis h.early h.caps.compounding
     highC endEpochC _ _ ?_ replayedC
   intro a b step member i inside flag
-  obtain ⟨pre, post, -, -, -⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, -, -, -⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have sameFork : a.fork = fork :=
     fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)
   simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
@@ -14071,7 +14075,8 @@ private theorem slash_exit_charge (h : Setting config checks g split fin pulled 
   classical
   unfold chargeAmt
   obtain ⟨shared⟩ := h.toFin
-  obtain ⟨pre, post, cut, -, -⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, cut, -, -⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have bEarly : b.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
   have assigned : new.exitEpoch ≠ FAR_FUTURE_EPOCH :=
@@ -16373,7 +16378,8 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
     (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) tailC
     (fun {m n} step member inside => by
-      obtain ⟨pre, post, _, mEarly, mEpoch⟩ := Run.contains_step_facts member h.early
+      obtain ⟨pre, post, _, mEarly, mEpoch⟩ :=
+        DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
       have above : fork ≤ m.fork := Nat.le_trans (by exact le_refl _)
         (fork_le_of_chainSteps pre.chainSteps)
       have below : m.fork ≤ fork := Nat.le_trans step.chainStep.fork_le
@@ -18320,7 +18326,8 @@ private theorem step_band_of_guard (h : Setting config checks g split fin pulled
   obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   intro u w step member T read
-  obtain ⟨pre, post, _, _, _⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, _, _, _⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have wEarly : w.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
   have wEpoch : (getCurrentEpoch w.state).toNat ≤ (getCurrentEpoch e).toNat :=
@@ -24156,7 +24163,8 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
     cases step with
     | slot _ => trivial
     | @block f before after engine signed due ok =>
-      obtain ⟨pre, post, -, -, -⟩ := fromFin.contains_step_facts member h.early
+      obtain ⟨pre, post, -, -, -⟩ :=
+        DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
       intro p found inK
       obtain ⟨v, inEK, same⟩ := Finset.mem_image.mp (hPK ▸ inK)
       -- v exits at R by the finalized epoch, so the finalized state has its record and exit
@@ -24482,7 +24490,8 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have aFork : a.fork ≤ fork :=
     Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)
   -- the key is absent at the split, so it has a charge on the run before `a`
@@ -25209,7 +25218,8 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨pre', post', cut', aEarly, -⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre', post', cut', aEarly, -⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   by_cases high : (pinTerms config pulled anc fin).gainHigh = true
   · simp only [createdCeil, high, ↓reduceIte]
     exact PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre') h.genesis h.caps
@@ -25384,7 +25394,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
         effectiveAt a i ≤ E i := by
     intro a b step member i inside flag
     rw [hE i]
-    obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+    obtain ⟨pre, -, -, aEarly, -⟩ :=
+      DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
     have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
       h.caps aEarly i
     by_cases unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false
@@ -25406,7 +25417,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
         effectiveAt a i / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ cr i := by
     intro a b step member i created flag
     rw [hcr i]
-    obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+    obtain ⟨pre, -, -, aEarly, -⟩ :=
+      DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
     have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
       h.caps aEarly i
     by_cases act : isActiveAt counted (getCurrentEpoch counted) i = true
@@ -29307,7 +29319,8 @@ private theorem exited_proposer_credits_zero
       cases step with
       | slot ok => simp [stepCredit]
       | @block f s t engine signed due ok =>
-        obtain ⟨pre, -, -, mEarly, -⟩ := Run.contains_step_facts member early
+        obtain ⟨pre, -, -, mEarly, -⟩ :=
+          DirectSafety.Apriori.Internal.Run.contains_step_facts member early
         exact block_proposer_credit_zero h.genesis h.parameters.lookahead (toFin.append pre)
           (Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)) mEarly i
           (fun p read => exited_not_proposer h foundPulled exited _ pre p mEarly read) blockP _
@@ -29349,7 +29362,8 @@ private theorem exited_credit_ceiling
                 preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) := by
   classical
   obtain ⟨shared⟩ := h.toFin
-  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨u, foundFin, sameExit⟩ := exit_kept_of_le_fin h foundPulled (by omega)
   have exitedFin : u.exitEpoch.toNat + 1 ≤ (getCurrentEpoch fin).toNat := by
@@ -31361,7 +31375,8 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin i := by
   classical
-  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, post, cut, aEarly, aEpoch⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   obtain ⟨af, as⟩ := a
   have sameFork : fork = af :=
     (fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)).symm
@@ -31438,7 +31453,8 @@ private theorem registry_headroom (h : Setting config checks g split fin pulled 
     effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i + slack := by
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨pre, -, -, aEarly, -⟩ := Run.contains_step_facts member h.early
+  obtain ⟨pre, -, -, aEarly, -⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have capped := PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
     h.caps aEarly i
   have headroom := rise_of_notKept h i notKept
@@ -33196,7 +33212,8 @@ private theorem registry_charge_of (h : Setting config checks g split fin pulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
   obtain ⟨flagA, flagB⟩ := flag
-  obtain ⟨front, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  obtain ⟨front, post, cut, aEarly, aEpoch⟩ :=
+    DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
   have insideA : v.toNat < a.state.validators.data.size :=
     Nat.lt_of_lt_of_le inside front.registryLifecycle.size_le
   have insideB : v.toNat < b.state.validators.data.size :=
