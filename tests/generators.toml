@@ -333,7 +333,7 @@ generator = "pyspec v1.7.0-beta.4"
 [[directories."tests/consensus/builder_api"]]
 cases = ["**"]
 generator = "not established"
-checked = "builder-specs at fce64468 holds no generator code, and the commits that added the examples (#128, #138, #165) name no tool"
+checked = "builder-specs at ea92eff holds no generator code, and the commits that added the examples (#128, #138, #165) name no tool"
 
 [[directories."tests/consensus/relay_api"]]
 cases = ["**"]

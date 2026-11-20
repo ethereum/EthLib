@@ -31,10 +31,10 @@ The [builder specification] gives the rules for [preferences] and for [bid reque
 
 Its [validator document] gives the authentication data.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md
-[preferences]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#builder-preferences
-[bid requests]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/builder.md#per-request-validator-inputs
-[validator document]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/gloas/validator.md#constructing-the-builderrequestauth
+[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md
+[preferences]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#builder-preferences
+[bid requests]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/builder.md#per-request-validator-inputs
+[validator document]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/gloas/validator.md#constructing-the-builderrequestauth
 -/
 
 @[expose] public section
