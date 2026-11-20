@@ -460,6 +460,22 @@ theorem Execution.exists_validated_of_blocks {ν κ : Type*} [DecidableEq ν]
       · simp only [eq, ↓reduceIte] at bf
         exact False.elim (held bf)
 
+/-- A store that is reachable from the anchor at the start stays reachable. -/
+theorem Execution.reachable_of_start {ν κ : Type*} [DecidableEq ν] {config : Config}
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork} {v : ν}
+    (start : Store.Reachable config anchorState anchorBlock (e.start v)) (i : ℕ) :
+    Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
+  induction i with
+  | zero => exact start
+  | succ i ih =>
+    rcases e.state_succ i v with same | ⟨_, moved⟩
+    · exact same ▸ ih
+    · exact moved.reachable ih
+
 /-- Along an execution, the store of each honest validator stays reachable from the anchor.
 
 The stores of the honest validators must be reachable at the start. -/
@@ -469,7 +485,7 @@ theorem Execution.reachable {ν κ : Type*} [DecidableEq ν] {checks : Signature
     {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
     (start : ∀ v ∈ J, Store.Reachable config anchorState anchorBlock (e.start v)) (n : ℕ) :
     ∀ v ∈ J, Store.Reachable config anchorState anchorBlock ((e.world n).state v) :=
-  e.state_induction start (fun _ _ _ _ _ _ reachable moved => moved.reachable reachable) n
+  fun v honest => e.reachable_of_start (start v honest) n
 
 /-- A move of an honest validator keeps its store reachable with a forward clock. -/
 theorem Handles.forwardReachable {checks : SignatureChecks} {sources : BlockSources preset fork}

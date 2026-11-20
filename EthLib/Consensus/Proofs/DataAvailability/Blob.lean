@@ -25,6 +25,8 @@ Otherwise the two climbs to the body root hash two different messages to one SHA
 
 The depth of the inclusion proof, 17 for both presets, is the depth that the body type gives.
 
+The signed header of a block carries the root of its body.
+
 Every sidecar built from a block passes the inclusion check.
 
 For both presets, a block gives one sidecar per blob.
@@ -221,6 +223,26 @@ theorem blobKzgCommitmentGindex_depth (named : preset = .mainnet ∨ preset = .m
     simp only [nextPow2, Nat.pow_succ]
     constructor <;> omega
   rw [depth, named_limits named |>.1, named_limits named |>.2, depthFor_pow]
+
+/-- The signed header of a block carries the root of its body and the signature of the block.
+
+Its other fields are those of the block. -/
+theorem signedHeader_eq_ok_iff {signed : SignedBeaconBlock preset fork}
+    {header : SignedBeaconBlockHeader} :
+    signed.signedHeader = .ok header ↔
+      SszType.hashTreeRoot signed.message.body = .ok header.message.bodyRoot ∧
+        header = ⟨⟨signed.message.slot, signed.message.proposerIndex, signed.message.parentRoot,
+          signed.message.stateRoot, header.message.bodyRoot⟩, signed.signature⟩ := by
+  unfold SignedBeaconBlock.signedHeader
+  cases rooted : SszType.hashTreeRoot signed.message.body with
+  | error e => simp [bind, Except.bind]
+  | ok bodyRoot =>
+    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+    constructor
+    · rintro rfl
+      exact ⟨rfl, rfl⟩
+    · rintro ⟨rfl, eq⟩
+      exact eq.symm
 
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
