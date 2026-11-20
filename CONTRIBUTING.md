@@ -419,11 +419,8 @@ Then check the values of the rules that forks change:
 lake exe rule-history --check
 ```
 
-It computes the value of each fork-indexed rule of the execution layer at each fork, and compares them with `tests/execution/history/rules.tsv`.
-An edit made for one fork can change the rule at an earlier fork, and the check shows that change.
-The file records what the code computes, so it is a change detector, as [Known answers](#known-answers) says.
-When a change is intended, run `lake exe rule-history` to rewrite the file.
-The pull request then names the source of each changed line.
+It fails when a rule of the execution layer computes another value at some fork than `tests/execution/history/rules.tsv` records.
+The [README](tests/execution/history/README.md) next to that file says how to update it.
 
 When you change the tool, also run `scripts/test_rule_history.sh`.
 

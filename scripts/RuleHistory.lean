@@ -5,9 +5,7 @@ import Lean
 
 Writes the value of each fork-indexed rule at each fork, so that a change at an earlier fork shows.
 
-EthLib writes each rule once, with the fork as an argument.
-
-So an edit made for one fork can change the rule at every earlier fork, and no build error says so.
+`tests/execution/history/README.md` says why the file exists and how a pull request changes it.
 
 A rule here is a definition of the execution layer or of `Base`.
 
@@ -29,10 +27,6 @@ It skips a rule that takes another argument, such as a preset or a chain configu
 It reads the forks from the constructors of `Fork`, in order, so it never names the last fork.
 
 It reads the values from compiled code.
-
-So the file it writes records what the code computes, not what the specification says.
-
-It is a change detector, not a check of the values.
 
 Usage, after `lake build EthLib`:
 

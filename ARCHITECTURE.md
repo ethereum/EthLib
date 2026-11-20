@@ -468,8 +468,7 @@ The beacon chain starts at Phase 0, so a theorem about the consensus layer assum
 
 A rule written once has a cost.
 An edit made for one fork can change the rule at earlier forks, and no build error says so.
-`lake exe rule-history` writes the value of each rule of the execution layer at each fork to `tests/execution/history/rules.tsv`.
-CI fails when the code computes another value, so such a change shows in the pull request that makes it.
+So CI compares the value of each rule of the execution layer at each fork with a snapshot, [`tests/execution/history/rules.tsv`](tests/execution/history/README.md).
 
 ### Constants that change at forks
 
