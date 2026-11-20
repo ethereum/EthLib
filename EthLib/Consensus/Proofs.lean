@@ -152,6 +152,7 @@ public import EthLib.Consensus.Proofs.History.Era
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.HonestAggregation
+public import EthLib.Consensus.Proofs.HonestAggregateIndex
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.HonestContributionSignatures
 public import EthLib.Consensus.Proofs.HonestValidator
