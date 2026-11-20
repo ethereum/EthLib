@@ -111,6 +111,11 @@ def _check_struct_log(entry: object) -> None:
         rpc.read_param("bytes32", chunk)
     if "returnData" in entry:
         rpc.read_param("bytes", entry["returnData"])
+    # The source leaves out a refund of zero, and the storage of a step that fails.
+    if entry.get("refund") == 0:
+        raise ValueError("refund: zero, which the source leaves out")
+    if "storage" in entry and "error" in entry:
+        raise ValueError("storage: at a step that fails")
     if "storage" in entry:
         if not isinstance(entry["storage"], dict):
             raise ValueError("storage: not an object")
@@ -167,15 +172,6 @@ TRACE_METHODS: Final = frozenset(
 )
 
 
-def _without_refund(value: object) -> object:
-    """The value with every `refund` field of its objects left out."""
-    if isinstance(value, dict):
-        return {key: _without_refund(item) for key, item in value.items() if key != "refund"}
-    if isinstance(value, list):
-        return [_without_refund(item) for item in value]
-    return value
-
-
 # Every fixture of a method that the view serves.
 SERVED: Final = sorted(
     path for method in RESULT_SCHEMAS for path in (FIXTURES / method).glob("*.io")
@@ -230,9 +226,8 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
         if not fixture.speconly:
             assert got["result"] == expected["result"]
         elif fixture.method in TRACE_METHODS:
-            # The trace gives the refund counter at every step, as the source recommends.
-            # The fixtures leave it out; every other field is compared.
-            assert _without_refund(got["result"]) == expected["result"]
+            # The trace leaves out a refund counter of zero, as the source requires.
+            assert got["result"] == expected["result"]
 
 
 def test_chain_links() -> None:
@@ -282,8 +277,8 @@ def test_trace_limit_keeps_the_first_entries() -> None:
     cut = _call("debug_traceTransaction", [_TRACED, {"limit": 2}])
     assert len(full["structLogs"]) > 2
     assert cut == {**full, "structLogs": full["structLogs"][:2]}
-    # Every entry gives its refund counter, which the source recommends even when it is zero.
-    assert all("refund" in entry for entry in full["structLogs"])
+    # The refund counter of this trace stays zero, so no entry gives it, as the source requires.
+    assert not any("refund" in entry for entry in full["structLogs"])
 
 
 @pytest.mark.parametrize("config", [{"limit": 0}, {"tracer": ""}], ids=["limit-0", "tracer-empty"])
@@ -366,6 +361,15 @@ BAD_TRACE_RESULTS: Final = [
     ),
     pytest.param(
         _trace(_entry(storage=[])), ValueError, "storage: not an object", id="storage-array"
+    ),
+    pytest.param(
+        _trace(_entry(refund=0)), ValueError, "refund: zero, which the source leaves out", id="zero"
+    ),
+    pytest.param(
+        _trace(_entry(op="SSTORE", error="out of gas", storage={})),
+        ValueError,
+        "storage: at a step that fails",
+        id="storage-at-error",
     ),
     pytest.param(
         _trace(_entry(memory=["0x00"])),
@@ -1281,3 +1285,20 @@ def test_type_zero_with_fee_fields() -> None:
     request = {"from": _FROM, "gas": "0x493e0", "input": "0x3a60005260206000f3", **_FEES}
     expected = "0x" + "00" * 28 + "3c5742d4"
     assert _call("eth_call", [{**request, "type": "0x0"}, "latest"]) == expected
+
+
+# A transaction of block 58 whose trace has an SLOAD or SSTORE step that fails.
+_FAILED_STORAGE_STEP: Final = "0x9117624aeba24b35fec724154870d2ebf04b6a06ce0cf1f8905875039a2b69d8"
+
+
+def test_trace_failed_storage_step() -> None:
+    """A storage step that fails runs no opcode, so its entry has no storage, as the source says."""
+    logs = _call("debug_traceTransaction", [_FAILED_STORAGE_STEP])["structLogs"]
+    failed = [
+        index
+        for index, entry in enumerate(logs)
+        if entry["op"] in ("SLOAD", "SSTORE") and "error" in entry
+    ]
+    assert failed
+    for index in failed:
+        assert "storage" not in logs[index]

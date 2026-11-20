@@ -5286,16 +5286,18 @@ With no bound, the trace has one entry for each step of a frame with code, as a 
 That count includes the STOP past the end of the code, which the official fixtures record; a frame with no code has no step, so a plain transfer gives no entry.
 Before Glamsterdam, between two consecutive entries at one depth, where the first starts no message and did not fail, the gas falls by exactly the cost of the first (`traceRun_gas`, `Proofs/Rpc/TraceGas.lean`).
 A transaction that the body of a block runs has a trace (`traceTransaction_ok`), and from Byzantium its receipt says it succeeded exactly when the trace says it did not fail (`traceTransaction_failed`).
-The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field, apart from `refund`, which the fixtures leave out.
+The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field.
+The [schema of an entry](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199) gives `refund` only when it is not zero, and `storage` only at an SLOAD or SSTORE step that does not halt with an error.
+`record_storage` (`Proofs/Rpc/Trace.lean`) shows that an entry holds storage only at a step that read or wrote a slot, and `record_slots_of_stepError` that a step that fails changes the slots of no account.
 
 The source leaves these points open, and EthLib picks:
 - `failed` counts every exceptional halt, while the schema names a revert and a lack of gas.
 - `gasCost` is the gas that the step removes from its frame; a step that starts a message counts the gas that it passes, and a call that starts none counts only its price.
 - A step that fails counts all the gas left, which its halt burns: the schema asks for the price on success, which a failed step does not give.
 - From Glamsterdam, `gas` and `gasCost` count execution gas only, without the reservoir of EIP-8037.
-- `refund` adds the counters of the frame and of its callers, and is always given, as the schema recommends; it leaves out the refund of EIP-7702 authorizations, which no step shows, and a negative total counts as 0.
+- `refund` adds the counters of the frame and of its callers; it leaves out the refund of EIP-7702 authorizations, which no step shows, and a negative total counts as 0.
 - `stack`, `memory` and `returnData` are those before the step; empty memory and empty return data are left out, as the fixtures do.
-- `storage` holds, at SLOAD and SSTORE, every slot of the current account that the trace has seen, with its value after the last step that read or wrote it; a failed step adds no slot.
+- `storage` holds every slot of the current account that the trace has seen, with its value after the last step that read or wrote it.
 - A byte that is no opcode at the fork is `INVALID`, the name that EIP-141 gives to `0xfe`, and `0x44` is `DIFFICULTY` before Paris, by EIP-4399.
 - The text of `error` is EthLib's own; the source fixes none.
 - `gas` of the trace is the gas used after the refund.
