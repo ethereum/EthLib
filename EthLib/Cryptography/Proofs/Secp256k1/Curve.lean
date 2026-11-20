@@ -2,7 +2,7 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Proofs.Secp256k1.Field
-public import EthLib.Cryptography.Proofs.Montgomery.Fin
+public import EthLib.Cryptography.Proofs.Secp256k1.Inverse
 public import EthLib.Cryptography.Proofs.Jacobian
 public import Mathlib.AlgebraicGeometry.EllipticCurve.Affine.Point
 
@@ -16,7 +16,7 @@ Mathlib defines that curve over the field `ZMod p`, and proves its points form a
 Each point of the specification maps to an element of that group.
 
 - Addition and negation are the group's.
-- Double and add computes `k P`, and one shared chain of doublings computes `k P + l Q`.
+- Double and add computes `k P`.
 - Each operation stays on the curve.
 - Points on the curve and group elements correspond one to one.
 
@@ -233,7 +233,7 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve 0 7 p) 
     simp only [hx, hy]
     rfl
 
-/-- Reading Montgomery limbs back is a change of field representation. -/
+/-- Reading the Montgomery form back is a change of field representation. -/
 theorem toFin_embedding : Jacobian.Coords.Embedding (Montgomery.toFin : Fp.Montgomery → Fp) :=
   ⟨Montgomery.toFin_zero, Montgomery.toFin_one, Montgomery.toFin_add, Montgomery.toFin_sub,
     Montgomery.toFin_mul, Montgomery.toFin_injective⟩
@@ -249,19 +249,18 @@ theorem ofCoords_map {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] 
   rw [← Jacobian.Coords.map_toAffine hf hinv q]
   cases q.toAffine inv <;> rfl
 
-/-- Normalizing on Montgomery limbs gives the point of the form read back into `Fp`. -/
+/-- Normalizing in Montgomery form gives the point of the form read back into `Fp`. -/
 theorem ofMontgomeryCoords_eq (q : Jacobian.Coords Fp.Montgomery) :
     ofMontgomeryCoords q = ofJacobian (Jacobian.ofCoords (q.map Montgomery.toFin)) := by
-  have : Fact (Nat.Prime Fp.params.p) := ⟨Fp.modulus_prime⟩
   exact ofCoords_map toFin_embedding (fun x => Montgomery.toFin_inv x) q
 
 /-- Reading back the Montgomery form of a point gives its Jacobian form. -/
 theorem map_toMontgomeryCoords (p : Point) :
     (toMontgomeryCoords p).map Montgomery.toFin = (toJacobian p).toCoords := by
   show Jacobian.Coords.mk _ _ _ = Jacobian.Coords.mk _ _ _
-  congr 1 <;> exact Montgomery.toFin_ofFin (M := Fp.params) _
+  congr 1 <;> exact Montgomery.toFin_ofFin _
 
-/-- Double and add on Montgomery limbs is double and add on `Fp`, for every input. -/
+/-- Double and add in Montgomery form is double and add on `Fp`, for every input. -/
 theorem mulBits_eq_jacobian (fuel k : Nat) (p : Point) :
     mulBits fuel k p = ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p)) := by
   rw [mulBits, ofMontgomeryCoords_eq]
@@ -331,44 +330,6 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
   | some x y h =>
     have hc : (affine x y).isOnCurve = true := (isOnCurve_affine x y).mpr ((equation_iff x y).mp h.1)
     exact ⟨affine x y, hc, toPoint_affine hc⟩
-
-/-! ## Two products with shared doublings -/
-
-/-- The shared chain on Montgomery limbs is the shared chain on `Fp`, for every input. -/
-theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
-    mulAdd k p l q =
-      ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q)) := by
-  rw [mulAdd, ofMontgomeryCoords_eq]
-  have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 256 k.val (toMontgomeryCoords p) l.val
-    (toMontgomeryCoords q)
-  rw [toFin_embedding.map_zero, map_toMontgomeryCoords, map_toMontgomeryCoords] at h
-  exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
-
-theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
-    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
-  rw [mulAdd_eq_jacobian]
-  exact (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
-    (toJacobian_spec hp).1 (toJacobian_spec hq).1)).1
-
-/-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
-theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
-    (hq : q.isOnCurve = true) :
-    toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
-  have hJp := toJacobian_spec hp
-  have hJq := toJacobian_spec hq
-  rw [mulAdd_eq_jacobian,
-    (ofJacobian_spec (Jacobian.onCurve_mulAdd toZ_a two_ne_zero' 256 k.val l.val
-      hJp.1 hJq.1)).2,
-    Jacobian.toPoint_mulAdd toZ_a two_ne_zero' 256 k.val l.val hJp.1 hJq.1
-      (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
-  exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2
-
-/-- On points of the curve, the shared chain gives the sum of the two products. -/
-theorem mulAdd_eq (k l : Fn) {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    mulAdd k p l q = mul k p + mul l q := by
-  rw [← toPoint_inj (isOnCurve_mulAdd k l hp hq) (isOnCurve_add (isOnCurve_mul k hp)
-    (isOnCurve_mul l hq)), toPoint_mulAdd k l hp hq, toPoint_add (isOnCurve_mul k hp)
-    (isOnCurve_mul l hq), toPoint_mul k hp, toPoint_mul l hq]
 
 end Point
 

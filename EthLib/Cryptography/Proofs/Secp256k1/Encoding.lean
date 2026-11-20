@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256k1.Encoding
+public import EthLib.Cryptography.Proofs.Secp256k1.Sqrt
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
 /-!
