@@ -25687,8 +25687,24 @@ private theorem registry_charge_split_epoch
     effectiveAt a i ≤ chargeAmt tailC i + riseQ tailC highC i +
       (propN pre highC i + whistC pre highC i + syncCr eventsP i) +
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-        eventsC eventsF events fin i :=
-  sorry
+        eventsC eventsF events fin i := by
+  obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i := ⟨UInt64.ofNat i, by
+    have := BeaconState.validators_size_lt_of_lt_glamsterdam h.early split
+    exact UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+  refine registry_charge_of h fromFin tail high pre sameEpoch tailC highC endEpochC replayedC step
+    member v inside flag charged ?_
+  intro front post p q eventsY cf step' post' cut' site hcharge aFork aEpoch replayedY held
+  have sameStart := charge_site_start cf step' _ site cfront cstep cpost csite hcharge charge
+  have notStarted : ¬ (getCurrentEpoch split).toNat < (getCurrentEpoch p.state).toNat := by
+    rw [sameStart]
+    exact inSplitEpoch
+  have start := split_epoch_start_data h highC toT pre sameEpoch earlier cf step'
+    ((post'.snoc step).append post) endEpochC notStarted hcharge
+  exact charge_effective_bound_of h toT (y := a) aFork (pre.append front) highC aEpoch
+    (DirectSafety.Apriori.Internal.balanceEvents_append pre front highC replayedP replayedY)
+    (pre.append cf) step' post'
+    (by rw [← cut']; exact (Run.append_assoc pre (cf.snoc step') post').symm) hcharge
+    start held
 
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
