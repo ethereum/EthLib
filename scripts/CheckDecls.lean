@@ -16,7 +16,11 @@ Every declaration in scope is checked for:
 * a `@[csimp]` theorem that replaces a function in scope.
 
 A definition of the specification is also checked for reaching an opaque constant through the definitions it unfolds to.
-`while` reaches `Loop.forIn`, which Lean core defines with `partial`, and `IO` reaches the runtime's primitives.
+
+`while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition of Lean core.
+
+`IO` reaches the runtime's primitives.
+
 Such a definition cannot be unfolded either.
 Proofs are exempt, because nothing unfolds them.
 The C exports are exempt, because IO belongs there.

@@ -120,7 +120,8 @@ When a definition is too slow, a change makes that definition fast and keeps its
 EthLib holds three kinds of Lean code, and they answer different questions.
 
 A **specification** says what the protocol computes.
-It is executable, pure and total, and it follows its source definition by definition.
+It is executable, pure and total, and it follows its source definition.
+Where speed needs another algorithm, such as Pippenger's for a sum of scalar multiples, a theorem states that it computes the formula of the source.
 Clients and other Lean projects import it, and the bindings run it.
 
 A **property** says what a specification guarantees.
