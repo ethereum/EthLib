@@ -1,0 +1,129 @@
+openapi: "3.0.3"
+
+info:
+  title: "Eth2 key manager API"
+  description: |
+    API specification for a key manager client, which enables users to manage keystores.
+
+    The key manager API is served by the binary holding the validator keys. This binary may be a remote signer or a validator client.
+
+    All routes SHOULD be exposed through a secure channel, such as with HTTPs, an SSH tunnel, a VPN, etc.
+
+    All requests by default send and receive JSON, and as such should have either or both of the "Content-Type: application/json"
+    and "Accept: application/json" headers.
+
+    All sensitive routes MUST be authenticated with a token.
+
+    The key manager binary SHOULD accept a configuration parameter: `token-file`, which designates a file containing the hex-encoded token
+    of at least 256 bits. If such a parameter is not given, the client SHOULD generate such a token and write it to a file, to be reused
+    across multiple restarts of the binary. If such a parameter is given, but the file or token cannot be read, the client SHOULD treat this
+    as an error: either abort the startup, or show the error and continue without exposing the key manager routes.
+  version: "Dev"
+  contact:
+    name: Ethereum Github
+    url: https://github.com/ethereum/keymanager-APIs/issues
+  license:
+    name: "Creative Commons Zero v1.0 Universal"
+    url: "https://creativecommons.org/publicdomain/zero/1.0/"
+
+servers:
+  - url: "{server_url}"
+    variables:
+      server_url:
+        description: "key manager API url"
+        default: "http://localhost/"
+
+tags:
+  - name: Fee Recipient
+    description: Set of endpoints for management of fee recipient.
+  - name: Gas Limit
+    description: Set of endpoints for management of gas limits.
+  - name: Graffiti
+    description: Set of endpoints for management of graffiti.
+  - name: Local Key Manager
+    description: Set of endpoints for key management of local keys.
+  - name: Remote Key Manager
+    description: Set of endpoints for key management of external keys.
+  - name: Voluntary Exit
+    description: Set of endpoints for voluntary exits.
+
+paths:
+  /eth/v1/keystores:
+    $ref:  './apis/local_keystores.yaml'
+  /eth/v1/remotekeys:
+    $ref:  './apis/remote_keystores.yaml'
+  /eth/v1/validator/{pubkey}/feerecipient:
+    $ref:  './apis/fee_recipient.yaml'
+  /eth/v1/validator/{pubkey}/gas_limit:
+    $ref:  './apis/gas_limit.yaml'
+  /eth/v1/validator/{pubkey}/graffiti:
+    $ref:  './apis/graffiti.yaml'
+  /eth/v1/validator/{pubkey}/voluntary_exit:
+    $ref: './apis/voluntary_exit.yaml'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: URL safe, opaque token
+
+  schemas:
+    Pubkey:
+      $ref: './types/public_key.yaml'
+    EthAddress:
+      $ref: './types/eth_address.yaml'
+    Keystore:
+      $ref: './types/keystore.yaml'
+    FeeRecipient:
+      $ref: './types/fee_recipient.yaml'
+    GasLimit:
+      $ref: './types/gas_limit.yaml'
+    Graffiti:
+      $ref: './types/graffiti.yaml'
+    Uint64:
+      $ref: './types/uint.yaml#/Uint64'
+    SignerDefinition:
+      $ref: './types/signer_definition.yaml'
+    ImportRemoteSignerDefinition:
+      $ref: './types/import_remote_signer_definition.yaml'
+    SlashingProtectionData:
+      $ref: './types/slashing_protection.yaml'
+    ErrorResponse:
+      $ref: './types/error_response.yaml'
+    SignedVoluntaryExit:
+      $ref: './types/voluntary_exit.yaml#/SignedVoluntaryExit'
+
+  responses:
+    BadRequest:
+      description: "Bad request. Request was malformed and could not be processed"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: "Unauthorized, no token is found"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: "Forbidden, a token is found but is invalid"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: "Path not found"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: |
+        Internal server error. The server encountered an unexpected error indicative of
+        a serious fault in the system, or a bug.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

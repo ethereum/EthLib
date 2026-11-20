@@ -1018,6 +1018,18 @@ def bindings : List Binding := [
     `EthLib.Consensus.Exports.importSlashingInterchangeExport,
     "(held: bytes, file: bytes) -> bytes",
     [`EthLib.Consensus.SlashingProtectionError], some "SlashingProtectionError"⟩,
+  ⟨"consensus_read_signing_request", `EthLib.Consensus.Exports.readSigningRequestExport,
+    "(name: str, document: Any) -> Any",
+    [`EthLib.Consensus.RemoteSigningApi.RequestError], some "RemoteSigningError"⟩,
+  ⟨"consensus_signing_request_root", `EthLib.Consensus.Exports.signingRequestRootExport,
+    "(name: str, config: str, document: Any) -> bytes",
+    [`EthLib.Consensus.RemoteSigningApi.RequestError], some "RemoteSigningError"⟩,
+  ⟨"consensus_remote_signer_sign", `EthLib.Consensus.Exports.remoteSignerSignExport,
+    "(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, " ++
+      "document: Any) -> tuple[int, bytes | None, bytes]",
+    [], some "RemoteSigningError"⟩,
+  ⟨"consensus_remote_signer_public_keys", `EthLib.Consensus.Exports.remoteSignerPublicKeysExport,
+    "(keys: list[bytes]) -> Any", [], some "RemoteSigningError"⟩,
   ⟨"consensus_check_block_signing", `EthLib.Consensus.Exports.checkBlockSigningExport,
     "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",
     [`EthLib.Consensus.SlashingProtectionError], some "SlashingProtectionError"⟩,
@@ -1034,6 +1046,15 @@ def bindings : List Binding := [
     "(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, " ++
       "signing_root: bytes) -> bytes",
     [`EthLib.Consensus.SlashingProtectionError], some "SlashingProtectionError"⟩,
+  ⟨"consensus_keymanager_json", `EthLib.Consensus.Exports.keymanagerJsonExport,
+    "(schema: str, document: Any) -> Any",
+    [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
+  ⟨"consensus_keymanager_run", `EthLib.Consensus.Exports.keymanagerRunExport,
+    "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, " ++
+      "protection: str, chain: tuple[str, str, str, bytes] | None, " ++
+      "calls: list[tuple[str, str, Any]]) -> " ++
+      "tuple[list[tuple[int, Any]], dict[str, Any]]",
+    [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_is_execution_block", `EthLib.Consensus.Exports.isExecutionBlockExport,
     "(name: str, fork: str, block: bytes) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,

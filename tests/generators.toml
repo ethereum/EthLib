@@ -340,6 +340,16 @@ cases = ["**"]
 generator = "not established"
 checked = "relay-specs at a4e0a50d holds no generator code, and its README names no tool that writes the examples"
 
+[[directories."tests/consensus/keymanager_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "keymanager-APIs at 51f2a5c9 holds no program that writes the OpenAPI document or the types files, and the README names none"
+
+[[directories."tests/consensus/remote_signing_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "remote-signing-api at 44e9e0dc holds no generator code, its workflows only lint, bundle and release the OpenAPI document, and its README names no tool that writes the examples"
+
 [[directories."tests/consensus/beacon_api"]]
 cases = ["**"]
 generator = "not established"

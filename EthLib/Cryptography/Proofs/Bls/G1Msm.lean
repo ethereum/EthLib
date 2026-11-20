@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Cryptography.Proofs.Bls.G1Order
-public import EthLib.Cryptography.Proofs.IdLoops
 
 /-!
 # Proofs: the Pippenger multi-scalar multiplication computes `Σ [s_i] P_i`
@@ -17,8 +16,6 @@ The proof has two layers.
 @[expose] public section
 
 namespace EthLib.Cryptography.Bls.G1
-
-open EthLib.Cryptography.IdLoops
 
 set_option maxRecDepth 4000
 

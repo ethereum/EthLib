@@ -399,10 +399,16 @@ Not yet released.
   It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
   `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
   `Signatures.SecretKey.fromBytes` keeps its `ByteArray`, and reads 32 bytes of it with `exactBytes?`.
-  `Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
-  `Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
-  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
-  The new `SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+  `Bls.Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Bls.Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
+  `Bls.Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
+  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `Signatures.SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
+  The new `Signatures.SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+
+- In Lean, the module `EthLib.Cryptography.Proofs.IdLoops` is removed, with its seven lemmas in the namespace `Cryptography.IdLoops`.
+  They are `id_pure`, `id_bind`, `forIn_list_yield`, `forIn_range_yield`, `forIn_range_yield_ite`, `forIn_range_yield_ite₂` and `foldl_range'_getElem!`.
+  They turned `for` loops of `Id.run do` blocks into folds.
+  No proof of EthLib uses them, since the last such loop, the tail scan of a compressed BLS point, became a fold ([#2045](https://github.com/ethereum/EthLib/pull/2045)).
+  `Proofs/Bls/G1Msm.lean` and `Proofs/Bls/G2Compress.lean` no longer import the module.
 
 - In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.
