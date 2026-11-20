@@ -491,9 +491,8 @@ private theorem ScheduledFree.effective {f : Fork}
   · exact held j w located future assigned
 
 private theorem ScheduledFree.setValidatorAt {f : Fork}
-    {s t : BeaconState preset f} {i : Nat} {v w : Validator}
-    (held : ScheduledFree s) (_found : getValidatorAt s i = .ok v)
-    (set : s.setValidatorAt i w = .ok t)
+    {s t : BeaconState preset f} {i : Nat} {w : Validator}
+    (held : ScheduledFree s) (set : s.setValidatorAt i w = .ok t)
     (kept : getCurrentEpoch s < w.activationEpoch →
       w.activationEpoch ≠ FAR_FUTURE_EPOCH →
       preset.MAX_EFFECTIVE_BALANCE ≤ w.effectiveBalance ∧
@@ -518,7 +517,7 @@ private theorem ScheduledFree.setValidatorAt_kept {f : Fork}
     (epoch : w.activationEpoch = v.activationEpoch)
     (effective : w.effectiveBalance = v.effectiveBalance)
     (flag : w.slashed = v.slashed) : ScheduledFree t := by
-  apply held.setValidatorAt found set
+  apply held.setValidatorAt set
   intro future assigned
   obtain ⟨minimum, funding, unslashed⟩ := held i v
     (getValidatorAt_eq_ok_iff.mp found)
@@ -2168,7 +2167,6 @@ private theorem CapStep.slash {f : Fork} {s t : BeaconState preset f}
       exact live.1.2
     have markedHeld := ((CapStepR.exit exited).2.2.2.2 held).setValidatorAt
       (w := { v with slashed := true, withdrawableEpoch := max v.withdrawableEpoch withdrawal })
-      (by simpa only [getValidator_eq_getValidatorAt] using found)
       (by simpa only [setValidator_eq_setValidatorAt] using set)
       (fun future _ => (UInt64.not_le.mpr future active).elim)
     have slashingHeld : ScheduledFree { marked with slashings } := markedHeld
@@ -2490,7 +2488,7 @@ private theorem CapStep.activate {f : Fork} {s t : BeaconState preset f}
     exact ⟨far, UInt64.le_refl _, eligible, unslashed⟩
   · intro eligible funded held
     rw [setValidator_eq_setValidatorAt] at set
-    apply held.setValidatorAt (by simpa only [getValidator_eq_getValidatorAt] using found) set
+    apply held.setValidatorAt set
     intro _ _
     obtain ⟨balance, minimum, unslashed⟩ := funded i.toNat old
       (getValidator_eq_ok_iff.mp found) far
@@ -2571,7 +2569,7 @@ private theorem CapStep.registryElectra {f : Fork} {s t : BeaconState preset f}
     · intro finite funded held
       have eligible : isEligibleForActivation s v = true := by assumption
       have pending := activationEpoch_of_isEligibleForActivation eligible
-      apply held.setValidatorAt found set
+      apply held.setValidatorAt set
       intro _ _
       obtain ⟨⟨b, read, low⟩, minimum, unslashed⟩ :=
         funded i v (getValidatorAt_eq_ok_iff.mp found) pending
