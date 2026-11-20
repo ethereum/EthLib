@@ -31,7 +31,7 @@ A first match of a longer array that lies in a prefix is the first match there.
 
 The largest of a list of numbers bounds each of them.
 
-Pieces of one nonzero length, each from one value only, determine the list of values.
+If pieces of one nonzero length determine their values, so do the joined pieces.
 -/
 
 @[expose] public section
@@ -215,7 +215,7 @@ theorem _root_.Array.findIdx?_of_prefix {α : Type} {u s : Array α} {p : α →
   · rw [← get k inside lt]; exact hit
   · rw [← get j (Nat.lt_trans lt' inside) (Nat.lt_trans lt' lt)]; exact earlier j lt'
 
-/-- Pieces of one nonzero length, each from one value only, determine the list of values. -/
+/-- If pieces of one nonzero length determine their values, so do the joined pieces. -/
 theorem flatMap_inj_of_length {α β : Type} {f : α → List β} {n : Nat} (pos : 0 < n)
     (length : ∀ x, (f x).length = n) (inj : ∀ x y, f x = f y → x = y) :
     ∀ {l l' : List α}, l.flatMap f = l'.flatMap f → l = l' := by
