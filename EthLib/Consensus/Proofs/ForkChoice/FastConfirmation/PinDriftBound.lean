@@ -8011,6 +8011,26 @@ private theorem sum_filter_none (events : List (BalanceEvent preset))
   | nil => rfl
   | cons e rest ih => simp
 
+/-- The credits of a block step to a key are within those of `credC`, `whistC` and sync. -/
+private theorem block_credit_split {g : ForkedBeaconState preset} {fork : Fork}
+    {s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
+    {signed : SignedBeaconBlock preset fork} {due : upgradeDue config ⟨fork, s⟩ = false}
+    {ok : applySignedBlock config checks engine s signed true = .ok t}
+    (shared : Run config checks g ⟨fork, s⟩) (genesis : Genesis config checks g)
+    (early : fork < .glamsterdam) (electra : .pectra ≤ fork) (i : ℕ)
+    {events : List (BalanceEvent preset)}
+    (replayed : (Step.block engine signed due ok).balanceEvents = .ok events)
+    (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
+    (events.map (keyCredit i)).sum ≤
+      ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
+        (keyCredit i)).sum +
+      ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
+      (events.map (syncCredit i)).sum := by
+  have each := block_event_credit shared genesis early electra i replayed bounded
+  simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
+    (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
+    (fun e m _ => by simpa using each e m)
+
 /-- The events of a step are within their credit limits. -/
 private theorem step_events_bounded {g m n : ForkedBeaconState preset}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
@@ -8038,15 +8058,7 @@ private theorem block_credit_le_sources {g m n : ForkedBeaconState preset}
   have bounded := step_events_bounded shared genesis step early replayed
   cases step with
   | block engine signed due ok =>
-    have each := block_event_credit shared genesis early electra i replayed bounded
-    have split : (events.map (keyCredit i)).sum ≤
-        ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
-          (keyCredit i)).sum +
-        ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
-        (events.map (syncCredit i)).sum := by
-      simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
-        (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
-        (fun e m _ => by simpa using each e m)
+    have split := block_credit_split shared genesis early electra i replayed bounded
     simp only [stepCredit, replayed, Except.toOption, Option.getD_some, List.filter_true] at split ⊢
     exact split
   | slot ok => exact absurd rfl (notSlot ok)
@@ -8159,15 +8171,7 @@ private theorem step_gross_le_sources {g m n : ForkedBeaconState preset}
   have bounded := step_events_bounded shared genesis step early replayed
   cases step with
   | block engine signed due ok =>
-    have each := block_event_credit shared genesis early electra i replayed bounded
-    have split : (events.map (keyCredit i)).sum ≤
-        ((events.filter fun x => decide (x.source = .rewards ∨ x.source = .consolidations)).map
-          (keyCredit i)).sum +
-        ((events.filter fun x => decide (x.source = .slashings)).map (keyCredit i)).sum +
-        (events.map (syncCredit i)).sum := by
-      simpa using sum_credits_split events (keyCredit i) (syncCredit i) (fun _ => true)
-        (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
-        (fun e m _ => by simpa using each e m)
+    have split := block_credit_split shared genesis early electra i replayed bounded
     have gross := block_balance_le_gross (engine := engine) (signed := signed) (due := due)
       (ok := ok) shared genesis early electra i
     have part : ((events.filter fun x => decide
@@ -10376,6 +10380,16 @@ private theorem segment_potential_slash (h : Setting config checks g split fin p
     h.fulu h.bands (getCurrentEpoch pulled).toNat endEpoch i valW initialW unslashed quotient two
     guards segOk slack ρn ρd start pass
 
+/-- A state between two runs is of the fork of the start.
+
+The end of the runs must not be of a later fork than the start.
+
+A run never moves the fork back. -/
+private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config checks x m)
+    (r2 : Run config checks m y) (back : y.fork ≤ x.fork) : m.fork = x.fork :=
+  Fork.ctorIdx_injective (Nat.le_antisymm
+    (Nat.le_trans (fork_le_of_chainSteps r2.chainSteps) back) (fork_le_of_chainSteps r1.chainSteps))
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a key at every prefix end of C's run is above `floor`.
 
@@ -10425,10 +10439,7 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
       floor ≤ actualBalanceAt p i.toNat := by
   intro p r1 r2 whole
   obtain ⟨pFork, pState⟩ := p
-  have sameFork : pFork = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
-      (fork_le_of_chainSteps r1.chainSteps))
-  obtain rfl : fork = pFork := sameFork.symm
+  obtain rfl : fork = pFork := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
   simp only at order
   have nonDecreasing := UInt64.le_iff_toNat_le.mp
@@ -10502,10 +10513,7 @@ private theorem cfloor_balance_slash (h : Setting config checks g split fin pull
       floor ≤ actualBalanceAt p i.toNat + loss := by
   intro p r1 r2 whole
   obtain ⟨pFork, pState⟩ := p
-  have sameFork : pFork = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps)
-      (fork_le_of_chainSteps r1.chainSteps))
-  obtain rfl : fork = pFork := sameFork.symm
+  obtain rfl : fork = pFork := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
   simp only at order
   obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
@@ -10553,9 +10561,7 @@ private theorem cfloor_origin (h : Setting config checks g split fin pulled anc 
           effectiveAt w i.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨pFork, pState⟩ := p
-  have sameFork : pFork = fork := Fork.ctorIdx_injective
-    (Nat.le_antisymm (fork_le_of_chainSteps r2.chainSteps) (fork_le_of_chainSteps r1.chainSteps))
-  obtain rfl : fork = pFork := sameFork.symm
+  obtain rfl : fork = pFork := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   have early : (⟨fork, pState⟩ : ForkedBeaconState preset).fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
   obtain ⟨before, beforeOk, -⟩ := Run.balanceEvents_prefix r1 r2
@@ -11118,6 +11124,17 @@ private theorem round_add_le {inc x S U : ℕ} (incPos : 0 < inc)
     have := Nat.div_add_mod (x + S) inc
     omega
 
+/-- An aligned start within the floor of the balance and the cap is within the rounded ceiling. -/
+private theorem aligned_le_round {inc e a cap c : ℕ} (aligned : e % inc = 0) (capped : e ≤ cap)
+    (ceiling : min a cap ≤ c) (floorA : e ≤ a - a % inc) : e ≤ c - c % inc := by
+  have within : e ≤ c := by
+    have : e ≤ a := Nat.le_trans floorA (Nat.sub_le _ _)
+    have := Nat.le_min.mpr ⟨this, capped⟩
+    omega
+  have rounded := rounded_mono inc within
+  rw [aligned] at rounded
+  simpa using rounded
+
 /-- A floor start is within the rounded top of R's balance and the slack, from the balance ceiling.
 
 The start is aligned and within the floor of its balance and its cap, so it is within the ceiling.
@@ -11128,12 +11145,7 @@ private theorem short_start_floor {inc e a cap H db S U : ℕ} (incPos : 0 < inc
     (floorA : e ≤ a - a % inc)
     (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
     e ≤ (H + db) - (H + db) % inc + S + U := by
-  have within : e ≤ H + S := by
-    have : e ≤ a := Nat.le_trans floorA (Nat.sub_le _ _)
-    have := Nat.le_min.mpr ⟨this, capped⟩
-    omega
-  have rounded := rounded_mono inc within
-  rw [aligned] at rounded
+  have rounded := aligned_le_round aligned capped ceiling floorA
   have add := round_add_le (x := H) incPos slack
   have band := rounded_mono inc (show H ≤ H + db by omega)
   omega
@@ -13018,16 +13030,6 @@ private theorem charge_unique {x y : ForkedBeaconState preset} (tail : Run confi
     {c d : DepartureCharge} (hc : c ∈ tail.departureCharges) (hd : d ∈ tail.departureCharges)
     (same : c.index = d.index) : c = d :=
   List.inj_on_of_nodup_map (DirectSafety.departureCharges_run_indices tail) hc hd same
-
-/-- A state between two runs is of the fork of the start.
-
-The end of the runs must not be of a later fork than the start.
-
-A run never moves the fork back. -/
-private theorem fork_eq_of_run {x m y : ForkedBeaconState preset} (r1 : Run config checks x m)
-    (r2 : Run config checks m y) (back : y.fork ≤ x.fork) : m.fork = x.fork :=
-  Fork.ctorIdx_injective (Nat.le_antisymm
-    (Nat.le_trans (fork_le_of_chainSteps r2.chainSteps) back) (fork_le_of_chainSteps r1.chainSteps))
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The slashing credits of C's run are paid for each key by its envelope or its charge.
@@ -19395,6 +19397,20 @@ private theorem consAmt_zero (h : Setting config checks g split fin pulled anc c
   simp only [List.filter_append, List.map_append, List.sum_append] at bound
   omega
 
+/-- The caps of a list of validators are at least the maximum effective balance each. -/
+private theorem cap_floor_sum (h : Setting config checks g split fin pulled anc counted V)
+    (l : List Validator) :
+    preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
+      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
+  have := List.length_nsmul_le_sum
+    (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
+    preset.MAX_EFFECTIVE_BALANCE.toNat (by
+      simp only [List.mem_map]
+      rintro _ ⟨v, -, rfl⟩
+      exact UInt64.le_iff_toNat_le.mp
+        (Internal.minimum_cap h.caps.activation h.caps.compounding v))
+  simpa [smul_eq_mul, Nat.mul_comm] using this
+
 /-- The consolidation credits of C's branch, charged to `consolidationsX`.
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
@@ -19556,18 +19572,8 @@ private theorem bud_consolidations_base
     rw [hKall, dueList_length_union fin electra H dC, dueList_length_union fin electra H dS,
       dueList_length_union fin electra H d456, dueList_length_union fin electra H d45]
   -- The caps of the due entries are at least `MAX_EFFECTIVE_BALANCE` each.
-  have floorOf (l : List Validator) : preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
-      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
-    have := List.length_nsmul_le_sum
-      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
-      preset.MAX_EFFECTIVE_BALANCE.toNat (by
-        simp only [List.mem_map]
-        rintro _ ⟨v, -, rfl⟩
-        exact UInt64.le_iff_toNat_le.mp
-          (Internal.minimum_cap h.caps.activation h.caps.compounding v))
-    simpa [smul_eq_mul, Nat.mul_comm] using this
-  have floorC := floorOf (dueList fin electra (getCurrentEpoch pulled).toNat Kall)
-  have floorR := floorOf (dueList fin electra high V)
+  have floorC := cap_floor_sum h (dueList fin electra (getCurrentEpoch pulled).toNat Kall)
+  have floorR := cap_floor_sum h (dueList fin electra high V)
   -- Both runs charge entries of X's queue, at most those that `consolidationsX` counts.
   have total : ((dueList fin electra (getCurrentEpoch pulled).toNat Kall).map fun v =>
         (withdrawalMaxEffectiveBalance preset fork v).toNat).sum +
@@ -22952,6 +22958,15 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
   dsimp only
   rw [sameEpoch]
 
+/-- `syncProposer` is the proposer share of the sync envelope at R's total.
+
+It is paid for each seat in each slot of an epoch. -/
+private theorem syncProposer_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
+    (pinTerms config pulled anc fin).syncProposer =
+      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
+        (PinTerms.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
+          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+
 /-- The sync seats, in the third window: the base bound with the shared segment's K debits.
 
 It also holds the shares of `CS` and of the shared segment's exited keys of `SC`.
@@ -23247,10 +23262,7 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
           preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
             PinTerms.syncEnvelope preset
               ((getTotalActiveBalance pulled).toOption.getD 0).toNat) := rfl
-  have proposer : (pinTerms config pulled anc fin).syncProposer =
-      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-        (PinTerms.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
-          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have proposer := syncProposer_eq config pulled anc fin
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   rw [totalEq] at seats proposer
@@ -23372,10 +23384,7 @@ private theorem syncCredits_le (h : Setting config checks g split fin pulled anc
   have totalEq : ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
     rw [pulledOk]
     rfl
-  have proposer : (pinTerms config pulled anc fin).syncProposer =
-      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-        (PinTerms.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
-          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have proposer := syncProposer_eq config pulled anc fin
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   rw [proposer, totalEq]
@@ -27738,20 +27747,6 @@ private theorem sum_image_ofNat (T : Finset ℕ) (small : ∀ i ∈ T, i < 2 ^ 6
     rw [← UInt64.toNat_ofNat_of_lt' (small a ha), ← UInt64.toNat_ofNat_of_lt' (small b hb), same]]
   exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
 
-/-- The caps of a list of validators are at least the maximum effective balance each. -/
-private theorem cap_floor_sum (h : Setting config checks g split fin pulled anc counted V)
-    (l : List Validator) :
-    preset.MAX_EFFECTIVE_BALANCE.toNat * l.length ≤
-      (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).sum := by
-  have := List.length_nsmul_le_sum
-    (l.map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat)
-    preset.MAX_EFFECTIVE_BALANCE.toNat (by
-      simp only [List.mem_map]
-      rintro _ ⟨v, -, rfl⟩
-      exact UInt64.le_iff_toNat_le.mp
-        (Internal.minimum_cap h.caps.activation h.caps.compounding v))
-  simpa [smul_eq_mul, Nat.mul_comm] using this
-
 /-- The sync flows of any keys on the three runs fit the sync part of the credit total.
 
 C's credits take the seats' envelope and the proposer's share.
@@ -27793,10 +27788,7 @@ private theorem sync_flows_le (h : Setting config checks g split fin pulled anc 
   have epochs : ((getCurrentEpoch pulled).toNat + 1 - (getCurrentEpoch split).toNat) +
       ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch fin).toNat) =
         (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := by omega
-  have proposer : (pinTerms config pulled anc fin).syncProposer =
-      preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-        (PinTerms.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
-          PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
+  have proposer := syncProposer_eq config pulled anc fin
   rw [proposer] at credits ⊢
   rw [totalEq] at credits ⊢
   unfold PinSeatDebits.syncSeatEnvelope at pair
@@ -29917,13 +29909,7 @@ private theorem start_le_round {inc fin e a cap ebUp H S : ℕ}
   rcases start with ⟨-, atFin⟩ | floorA
   · exact Nat.le_trans atFin (Nat.le_max_left _ _)
   · refine Nat.le_trans ?_ (Nat.le_max_right _ _)
-    have within : e ≤ H + S := by
-      have : e ≤ a := Nat.le_trans floorA (Nat.sub_le _ _)
-      have := Nat.le_min.mpr ⟨this, capped⟩
-      omega
-    have rounded := rounded_mono inc within
-    rw [aligned] at rounded
-    simpa using rounded
+    exact aligned_le_round aligned capped ceiling floorA
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The closing of the rise for a key on its kept arm, from a start state `c`, at any end of C.
