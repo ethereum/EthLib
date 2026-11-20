@@ -415,6 +415,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, eight more laws move from the step laws to the base laws, with the same conclusions and a weaker laws premise.
+  Each takes `EpochBaseLaws R` in place of `EpochStepLaws R`, which provides it.
+  `EpochStepLaws.processVoluntaryExit`, `EpochStepLaws.processBlsToExecutionChange`, `EpochStepLaws.applySyncReward`, `EpochStepLaws.processSyncAggregate`, `EpochStepLaws.processHistoricalRootsUpdate`, `EpochStepLaws.processParticipationRecordUpdates`, `EpochStepLaws.processSyncCommitteeUpdates` and `EpochStepLaws.processPtcWindow` are renamed `EpochBaseLaws.processVoluntaryExit`, `EpochBaseLaws.processBlsToExecutionChange`, `EpochBaseLaws.applySyncReward`, `EpochBaseLaws.processSyncAggregate`, `EpochBaseLaws.processHistoricalRootsUpdate`, `EpochBaseLaws.processParticipationRecordUpdates`, `EpochBaseLaws.processSyncCommitteeUpdates` and `EpochBaseLaws.processPtcWindow`.
+  A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws`.
+  `payloadInputs_processVoluntaryExit`, `payloadInputs_processBlsToExecutionChange` and `payloadInputs_processSyncAggregate` are removed; a caller writes `payloadInputsLaws.processVoluntaryExit`, `payloadInputsLaws.processBlsToExecutionChange` or `payloadInputsLaws.processSyncAggregate`.
+  `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
+  That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
+
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
   It no longer asks that the envelope leaves the store unchanged.

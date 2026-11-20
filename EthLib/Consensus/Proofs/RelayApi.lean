@@ -434,21 +434,6 @@ private theorem Kept.trans {first second third : BeaconState preset fork}
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   inputs.proposerLookahead
 
-/-- The sync committee updates keep the lookahead. -/
-private theorem kept_processSyncCommitteeUpdates {altair : .altair ≤ fork}
-    (computed : processSyncCommitteeUpdates state altair = .ok after) : Kept state after := by
-  unfold processSyncCommitteeUpdates at computed
-  simp only [bind, Except.bind, pure, Except.pure] at computed
-  repeat' (split at computed <;> try cases computed)
-  all_goals rfl
-
-/-- The move of the window of payload committees keeps the lookahead. -/
-private theorem kept_processPtcWindow {gloas : .glamsterdam ≤ fork}
-    (computed : processPtcWindow state gloas = .ok after) : Kept state after := by
-  simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  rfl
-
 /-- From Fulu, the epoch transition moves each kept proposer of the lookahead back by one epoch. -/
 theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
     (computed : processEpoch config checks state = .ok after) {position : Nat}
@@ -469,10 +454,10 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
     exact (Kept.of_payloadInputs
       (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
       ((show Kept rooted (processParticipationFlagUpdates rooted altair) from rfl).trans
-        (kept_processSyncCommitteeUpdates syncedOk))
+        (Kept.of_payloadInputs (payloadInputsLaws.processSyncCommitteeUpdates syncedOk)))
   have tail : Kept looked after := by
     split at windowed
-    · exact kept_processPtcWindow windowed
+    · exact Kept.of_payloadInputs (payloadInputsLaws.processPtcWindow windowed)
     · exact windowed ▸ Kept.refl _
   obtain ⟨_, _, _, _, shifted⟩ := processProposerLookahead_spec lookedOk
   have before : synced.proposerLookahead = state.proposerLookahead := head.trans middle
