@@ -389,6 +389,12 @@ Not yet released.
 
 - `effectiveKept_parentPayload` states that the payload of the parent keeps the size of the registry and each effective balance in it.
 
+- `EpochBaseLaws` and `EpochFrameBaseLaws` are the laws of the epoch steps without a write of the RANDAO mixes or of the lookahead of proposers.
+  So a relation that keeps both can satisfy them.
+  `EpochStepLaws` and `EpochFrameLaws` extend them with those two laws, and have the same fields by name.
+  `payloadInputsLaws` gives the frame base laws for `PayloadInputs`.
+  `payloadInputs_epochPrefix` states that the stages of an epoch before the RANDAO reset keep the inputs of a payload.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
@@ -418,6 +424,27 @@ Not yet released.
 - In Lean, `SphincsSecurity.Security.flatMap_ofFn_injective` is removed.
   `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
   The SPHINCS+ and XMSS proofs now use it.
+
+- In Lean, 22 laws of the epoch steps move to the base laws, and three to the frame base laws.
+  `EpochStepLaws.foldlM`, `EpochStepLaws.setValidator`, `EpochStepLaws.setValidator_of_sameBalance`, `EpochStepLaws.setValidatorAt_of_sameBalance`, `EpochStepLaws.applyDeltas`, `EpochStepLaws.applyAllDeltas`, `EpochStepLaws.processRewardsAndPenalties`, `EpochStepLaws.updateRegistryEntry`, `EpochStepLaws.activateValidator`, `EpochStepLaws.updateRegistryEntryElectra`, `EpochStepLaws.processRegistryUpdates`, `EpochStepLaws.applySlashingPenalty`, `EpochStepLaws.applySlashingPenaltyElectra`, `EpochStepLaws.processSlashings`, `EpochStepLaws.processEth1DataReset`, `EpochStepLaws.updateEffectiveBalance`, `EpochStepLaws.processEffectiveBalanceUpdates`, `EpochStepLaws.processSlashingsReset`, `EpochStepLaws.processInactivityUpdates`, `EpochStepLaws.passPendingConsolidations`, `EpochStepLaws.processPendingConsolidations` and `EpochStepLaws.processHistoricalSummariesUpdate` are renamed `EpochBaseLaws.foldlM`, `EpochBaseLaws.setValidator`, `EpochBaseLaws.setValidator_of_sameBalance`, `EpochBaseLaws.setValidatorAt_of_sameBalance`, `EpochBaseLaws.applyDeltas`, `EpochBaseLaws.applyAllDeltas`, `EpochBaseLaws.processRewardsAndPenalties`, `EpochBaseLaws.updateRegistryEntry`, `EpochBaseLaws.activateValidator`, `EpochBaseLaws.updateRegistryEntryElectra`, `EpochBaseLaws.processRegistryUpdates`, `EpochBaseLaws.applySlashingPenalty`, `EpochBaseLaws.applySlashingPenaltyElectra`, `EpochBaseLaws.processSlashings`, `EpochBaseLaws.processEth1DataReset`, `EpochBaseLaws.updateEffectiveBalance`, `EpochBaseLaws.processEffectiveBalanceUpdates`, `EpochBaseLaws.processSlashingsReset`, `EpochBaseLaws.processInactivityUpdates`, `EpochBaseLaws.passPendingConsolidations`, `EpochBaseLaws.processPendingConsolidations` and `EpochBaseLaws.processHistoricalSummariesUpdate`, and each takes `EpochBaseLaws`.
+  `EpochFrameLaws.applyPendingDeposit`, `EpochFrameLaws.passPendingDeposits` and `EpochFrameLaws.processPendingDeposits` are renamed `EpochFrameBaseLaws.applyPendingDeposit`, `EpochFrameBaseLaws.passPendingDeposits` and `EpochFrameBaseLaws.processPendingDeposits`, and each takes `EpochFrameBaseLaws`.
+  A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws` or `laws.toEpochFrameBaseLaws`.
+  `EpochStepLaws.mk` now takes the base laws and its two own laws, not the former flat positional arguments.
+  `EpochFrameLaws.mk` takes the step laws and the two laws of the frame.
+  An instance written with named fields, as a `where` literal, is unchanged.
+  One built with `⟨…⟩` or `.mk` and positional arguments switches to a `where` literal.
+
+- In Lean, six lemmas about `PayloadInputs` are removed in favour of `payloadInputsLaws`.
+  A caller of `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations`, `payloadInputs_processHistoricalSummariesUpdate` or `payloadInputs_applyPendingDeposit` calls `payloadInputsLaws.X`, where `X` is the name after `payloadInputs_`.
+
+- In Lean, five lemmas in `Committees` that state that a step of an epoch keeps the RANDAO mixes and the slot are removed.
+  A caller of `randaoMixes_slot_processRewardsAndPenalties`, `randaoMixes_slot_processSlashings`, `randaoMixes_slot_processEth1DataReset` or `randaoMixes_slot_processEffectiveBalanceUpdates` reads `(payloadInputsLaws.X h).randaoMixes` and `.slot`, where `X` is the name after `randaoMixes_slot_`.
+  Those four replacements need `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
+  A caller passing `(hegota := …)` to the reset of the deposit votes passes `(before := …)`.
+  A caller of `randaoMixes_slot_processJustificationAndFinalization` reads `⟨by rw [processJustificationAndFinalization_eq h], processJustificationAndFinalization_slot h⟩`, whose lemmas `Committees` already imports.
+
+- In Lean, `payloadInputs_processDeposit` holds at every fork before Heze and no longer takes `electra : .pectra ≤ fork`.
+  A caller drops that argument.
 
 - In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
   It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.

@@ -103,45 +103,13 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     simpa only [processEpoch, altair, ↓reduceDIte] using computed
   obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
     syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut epochOk
-  have head : Kept state cleared := by
-    apply initial.transport Kept Kept.refl (fun a b => a.trans b)
-    intro k member a b ok
-    have edge := EpochStage.action_cases.mp ok
-    cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-    · exact Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization edge)
-    · exact Kept.of_payloadInputs (payloadInputs_processInactivityUpdates edge)
-    · exact Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties edge)
-    · exact Kept.of_payloadInputs (payloadInputs_processRegistryUpdates edge)
-    · exact Kept.of_eq (randaoMixes_slot_processSlashings edge)
-    · split at edge
-      · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset edge)
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingDeposits at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        all_goals
-          exact (Kept.of_payloadInputs (payloadInputs_passPendingDeposits ‹_›)).trans ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingConsolidations at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        exact (Kept.of_payloadInputs (payloadInputs_passPendingConsolidations ‹_›)).trans ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · rw [processBuilderPendingPayments_eq edge]
-        exact ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · exact Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates edge)
-    · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-      exact ⟨rfl, rfl⟩
-    all_goals simp [EpochStage.prefixStages] at member
+  have head : Kept state cleared := Kept.of_payloadInputs (payloadInputs_epochPrefix initial)
   have tail : Kept mixed after := by
     simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk lookedOk windowed
     subst rotation
     split at rootedOk
-    · exact (Kept.of_payloadInputs (payloadInputs_processHistoricalSummariesUpdate rootedOk)).trans
+    · exact (Kept.of_payloadInputs
+        (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
     · exact (Kept.of_eq (randaoMixes_slot_processHistoricalRootsUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
@@ -195,19 +163,6 @@ theorem mixesKeptBut_advanceSlot (computed : advanceSlot config checks state = .
 
 /-! ## The steps of a block -/
 
-/-- A deposit of a block keeps the mixes and the slot. -/
-private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (computed : processDeposit config checks before state deposit = .ok after) :
-    Kept state after := by
-  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  have indexed : Kept state { state with eth1DepositIndex := fun _ => next } := ⟨rfl, rfl⟩
-  refine indexed.trans ?_
-  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
-  · exact Kept.refl _
-  · exact ⟨rfl, rfl⟩
-  · exact (Kept.of_payloadInputs (payloadInputs_addValidatorToRegistry added)).trans ⟨rfl, rfl⟩
-  · exact Kept.of_payloadInputs (payloadInputs_applyPendingDeposit applied)
-
 /-- The operations of a block keep the mixes and the slot, at every fork. -/
 private theorem kept_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
@@ -244,7 +199,8 @@ private theorem kept_processOperations {body : BeaconBlockBody preset fork} {par
       Kept.of_payloadInputs (payloadInputs_processAttesterSlashing ok)) attestersOk).trans <|
     (Kept.foldlM (fun _ _ _ ok =>
       Kept.of_payloadInputs (payloadInputs_processAttestation ok)) attestedOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok => kept_processDeposit ok) depositedOk).trans <|
+    (Kept.foldlM (fun _ _ _ ok =>
+      Kept.of_payloadInputs (payloadInputs_processDeposit ok)) depositedOk).trans <|
     (Kept.foldlM (fun _ _ _ ok =>
       Kept.of_payloadInputs (payloadInputs_processVoluntaryExit ok)) exitsOk).trans <|
     changes.trans requests

@@ -430,106 +430,9 @@ private theorem Kept.trans {first second third : BeaconState preset fork}
     (one : Kept first second) (two : Kept second third) : Kept first third :=
   Eq.trans two one
 
-/-- A fold whose every step keeps the lookahead keeps it. -/
-private theorem Kept.foldlM {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (kept : ∀ s x s', step s x = .ok s' → Kept s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : Kept state after :=
-  foldlM_ok_invariant (Kept state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
-    (Kept.refl state) computed
-
 /-- A step that keeps the inputs of a payload keeps the lookahead. -/
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   inputs.proposerLookahead
-
-/-- Justification and finalization keep the lookahead. -/
-private theorem kept_processJustificationAndFinalization
-    (computed : processJustificationAndFinalization state = .ok after) : Kept state after := by
-  obtain rfl | ⟨_, _, _, weighed⟩ := processJustificationAndFinalization_ok computed
-  · exact Kept.refl _
-  · exact congrArg (·.proposerLookahead)
-      (weighJustificationAndFinalization_checkpoints weighed).2.2.2
-
-/-- The rewards and penalties keep the lookahead. -/
-private theorem kept_processRewardsAndPenalties
-    (computed : processRewardsAndPenalties config state = .ok after) : Kept state after := by
-  have deltas : ∀ {state after : BeaconState preset fork} {all : Array Gwei × Array Gwei},
-      applyAllDeltas state all = .ok after → Kept state after := fun computed =>
-    Kept.foldlM (fun _ _ _ ok => by
-      simp only [applyDeltas, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, _, raised, lowered⟩ := ok
-      exact (Kept.of_payloadInputs (payloadInputs_increaseBalance raised)).trans
-        (Kept.of_payloadInputs (payloadInputs_decreaseBalance lowered))) computed
-  unfold processRewardsAndPenalties at computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ Kept.refl _
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact Kept.foldlM (fun _ _ _ ok => deltas ok) applied
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, applied⟩ := computed
-    exact deltas applied
-
-/-- The slashing penalties keep the lookahead. -/
-private theorem kept_processSlashings (computed : processSlashings state = .ok after) :
-    Kept state after := by
-  unfold processSlashings at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff] at computed
-    obtain ⟨_, _, applied⟩ := computed
-    refine Kept.foldlM (fun _ _ _ ok => ?_) applied
-    simp only [applySlashingPenaltyElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, lowered⟩ := ok
-        exact Kept.of_payloadInputs (payloadInputs_decreaseBalance lowered)
-      · simp only [pure, Except.pure, Except.ok.injEq] at ok
-        exact ok ▸ Kept.refl _
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ Kept.refl _
-  · refine Kept.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [applySlashingPenalty, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff] at ok
-      obtain ⟨_, _, ok⟩ := ok
-      split at ok
-      · simp only [bind_ok_iff, liftAccessor_ok] at ok
-        obtain ⟨_, _, _, _, _, _, lowered⟩ := ok
-        exact Kept.of_payloadInputs (payloadInputs_decreaseBalance lowered)
-      · simp only [pure, Except.pure, Except.ok.injEq] at ok
-        exact ok ▸ Kept.refl _
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ Kept.refl _
-
-/-- The reset of the deposit votes keeps the lookahead. -/
-private theorem kept_processEth1DataReset {hegota : fork < .hegota}
-    (computed : processEth1DataReset hegota state = .ok after) : Kept state after := by
-  simp only [processEth1DataReset, bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    rfl
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ Kept.refl _
-
-/-- The updates of the effective balances keep the lookahead. -/
-private theorem kept_processEffectiveBalanceUpdates
-    (computed : processEffectiveBalanceUpdates state = .ok after) : Kept state after := by
-  unfold processEffectiveBalanceUpdates at computed
-  refine Kept.foldlM (fun _ _ _ ok => ?_) computed
-  simp only [updateEffectiveBalance, bind_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, set⟩ := ok
-  exact Kept.of_payloadInputs (payloadInputs_setValidatorAt set)
 
 /-- The sync committee updates keep the lookahead. -/
 private theorem kept_processSyncCommitteeUpdates {altair : .altair ≤ fork}
@@ -557,45 +460,14 @@ theorem processEpoch_proposerLookahead (fulu : .fusaka ≤ fork)
   have capella : Fork.shapella ≤ fork := Nat.le_trans (by decide) fulu
   obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
     syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut computed
-  have head : Kept state cleared := by
-    apply initial.transport Kept Kept.refl (fun a b => a.trans b)
-    intro k member a b ok
-    have edge := EpochStage.action_cases.mp ok
-    cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-    · exact kept_processJustificationAndFinalization edge
-    · exact Kept.of_payloadInputs (payloadInputs_processInactivityUpdates edge)
-    · exact kept_processRewardsAndPenalties edge
-    · exact Kept.of_payloadInputs (payloadInputs_processRegistryUpdates edge)
-    · exact kept_processSlashings edge
-    · split at edge
-      · exact kept_processEth1DataReset edge
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingDeposits at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        all_goals exact (Kept.of_payloadInputs (payloadInputs_passPendingDeposits ‹_›)).trans rfl
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingConsolidations at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        exact (Kept.of_payloadInputs (payloadInputs_passPendingConsolidations ‹_›)).trans rfl
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · rw [processBuilderPendingPayments_eq edge]
-        rfl
-      · exact edge ▸ Kept.refl _
-    · exact kept_processEffectiveBalanceUpdates edge
-    · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-      rfl
-    all_goals simp [EpochStage.prefixStages] at member
+  have head : Kept state cleared := Kept.of_payloadInputs (payloadInputs_epochPrefix initial)
   simp only [EpochStage.Edge, altair, capella, ↓reduceDIte] at rootedOk rotation syncedOk
   simp only [EpochStage.Edge, fulu, ↓reduceDIte] at lookedOk windowed
   have middle : Kept cleared synced := by
     obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq mixedOk
     subst rotation
-    exact (Kept.of_payloadInputs (payloadInputs_processHistoricalSummariesUpdate rootedOk)).trans
+    exact (Kept.of_payloadInputs
+      (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
       ((show Kept rooted (processParticipationFlagUpdates rooted altair) from rfl).trans
         (kept_processSyncCommitteeUpdates syncedOk))
   have tail : Kept looked after := by
