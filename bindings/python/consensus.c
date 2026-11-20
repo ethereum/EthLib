@@ -1330,7 +1330,7 @@ py_consensus_keymanager_run(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_keymanager_run, args, 8, KEYMANAGER_ERROR);
+  return call_pyvalue_export(eth_consensus_keymanager_run, args, 9, KEYMANAGER_ERROR);
 }
 
 extern lean_object*

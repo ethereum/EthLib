@@ -132,14 +132,13 @@ theorem handle_of_isManaged_eq_false {α : Type} {calls : SettingCalls α}
     calls.handle config state method pubkey body = (Setting.notManaged, state) := by
   simp [SettingCalls.handle, unmanaged]
 
-/-- A set through the API that gets HTTP 202, then a get of the key, gives the value set. -/
+/-- A set through the API that gets HTTP 202, then a get of the key, answers the value set. -/
 theorem handle_get_of_handle_set {α : Type} {calls : SettingCalls α} {config : ClientConfig}
     {state : KeyState} {pubkey : BLSPubkey} {body : Json} {value : α}
     (lawful : calls.setting.Lawful) (managed : state.isManaged pubkey = true)
     (read : calls.read body = .ok value) (allowed : calls.refuse value = none) (other : Json) :
     calls.handle config (calls.handle config state "POST" pubkey body).2 "GET" pubkey other =
-      (⟨200, Json.mkObj [("data", calls.write pubkey value)]⟩,
-        calls.setting.set state pubkey value) := by
+      (calls.answer config pubkey value, calls.setting.set state pubkey value) := by
   have stillManaged : (calls.setting.set state pubkey value).isManaged pubkey = true := by
     obtain ⟨-, locals, remotes⟩ := lawful state
       ((pubkey, value) :: (calls.setting.mappings state).filter (·.1 != pubkey))

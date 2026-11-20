@@ -59,6 +59,8 @@ def handle (text : JsonText) (config : ClientConfig) (chain : Option ChainView) 
     withPubkey key state fun pubkey => gasLimitCalls.handle config state method pubkey body
   | method, ["eth", "v1", "validator", key, "graffiti"] =>
     withPubkey key state fun pubkey => graffitiCalls.handle config state method pubkey body
+  | method, ["eth", "v1", "validator", key, "builder_config"] =>
+    withPubkey key state fun pubkey => builderConfigCalls.handle config state method pubkey body
   | "POST", ["eth", "v1", "validator", key, "voluntary_exit"] =>
     withPubkey key state fun pubkey => (postVoluntaryExit chain state pubkey query, state)
   | _, _ => (notFound, state)

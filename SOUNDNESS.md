@@ -6501,7 +6501,6 @@ The source leaves three points about the data API open, and EthLib specifies non
 
 The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
 EthLib cites its commit `3e7c64e`.
-At that commit the source also defines the builder configuration endpoints of a key, which EthLib does not yet specify.
 The source has no test vectors, so the Python suite reads the examples of its schemas; `tests/consensus/README.md` lists them.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#interfaces) accepts this specification only with feedback from the implementers that use it: validator clients and key-management tools.
 The points that the source leaves open are listed below, with the reading that EthLib takes, until they answer.
@@ -6610,6 +6609,32 @@ The source leaves six points about the settings open, and EthLib takes these rea
 - A delete may get HTTP 403 when the setting lives in configuration files; that depends on storage and is not modelled.
 - The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
 - The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
+
+The calls on `/eth/v1/validator/{pubkey}/builder_config` get, set and delete the builder configuration of a key (`Consensus/KeymanagerApi/BuilderConfig.lean`), as [`builder_config.yaml`](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/builder_config.yaml) defines them.
+A stored configuration may leave out any field, and a get answers it resolved against the configuration of the client, which the client fixes at its start.
+An omitted list of builders is that of the client, and an omitted term of an entry is the default of the key and then that of the client.
+Omitted authentication data is the default data of the URL of the entry, and omitted builder keys are the empty list.
+`ResolvedBuilderConfig.resolve_toSetting` (`Consensus/Proofs/KeymanagerApi/BuilderConfig.lean`) shows that a resolved configuration, stored with every value set, resolves to itself.
+`readBuilderConfigSetting_resolvedBuilderConfigJson` shows that the reader reads back a resolved configuration within the bounds of the schema.
+`builderConfigCalls_get_of_set` shows that a set that the rules allow answers HTTP 202, and that a get then answers the configuration set, resolved.
+`builderConfigCalls_get_of_set_resolved` shows that a set of a resolved configuration, then a get, answers it again, when it is within the bounds of the schema and its entries differ in URL or data.
+Through the bindings, the data of a get meets these conditions, since the readers bound the stored values and apply the rules of a set to the configuration of the client too.
+No theorem shows that yet, since the configuration of a client in the Lean model carries no such invariant.
+`builderConfigCalls_get_of_delete` shows that a delete answers HTTP 204 and that a get then answers what a key never set gets, the configuration of the client.
+A set is refused with HTTP 400 when two entries share their URL and their authentication data, omitted data compared as the default data of the URL, as the schema says.
+The Python suite runs the examples of a get and of a set of the source, and the example of issue #3615.
+
+The resolved entry carries the terms of a bid of the Beacon API configuration, with the URL and the data that reach the builder.
+The Beacon API entry also carries a signed authentication for one slot, which the validator client makes for each request, so no stored configuration converts to it alone.
+The calls are an instance of the calls of the other settings, so they share the answers of a set, a delete and a key that the client does not manage.
+
+The source leaves four points about the builder configuration open, and EthLib takes these readings:
+
+- An entry whose URL gives no default authentication data, and that names none, cannot be compared or resolved; EthLib refuses its set with HTTP 400.
+- A client whose own configuration does not resolve has no answer to give; EthLib answers a get with HTTP 500.
+  Through the bindings no get reaches that answer, since a set and the reader of the client's configuration both refuse a configuration that does not resolve.
+- A delete may get HTTP 403 when the configuration lives in files that cannot be updated; that depends on storage and is not modelled.
+- The URL of an entry has the format `uri`; EthLib checks its length only, and reads its host only to derive default authentication data.
 
 The call `POST /eth/v1/validator/{pubkey}/voluntary_exit` signs a voluntary exit with a key of the client (`Consensus/KeymanagerApi/VoluntaryExit.lean`).
 It reads the state that the client takes from its beacon node, which the call takes as a view of the chain.

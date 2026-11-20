@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Consensus.KeymanagerApi.Types
+public import EthLib.Consensus.KeymanagerApi.BuilderConfig
 public import EthLib.Cryptography.Keystore
 
 /-!
@@ -48,6 +48,8 @@ structure KeyState where
   gasLimits : List (BLSPubkey × UInt64) := []
   /-- The graffiti set for each key, latest first. -/
   graffiti : List (BLSPubkey × String) := []
+  /-- The builder configuration set for each key, latest first. -/
+  builderConfigs : List (BLSPubkey × BuilderConfigSetting) := []
 
 /-- Whether a key is active: the client holds it. -/
 def KeyState.isActive (state : KeyState) (pubkey : BLSPubkey) : Bool :=
@@ -67,5 +69,7 @@ structure ClientConfig where
   defaultGasLimit : UInt64
   /-- The graffiti of a key with none set. -/
   defaultGraffiti : String
+  /-- The builder configuration that a key without its own follows. -/
+  builder : ClientBuilderConfig
 
 end EthLib.Consensus.KeymanagerApi
