@@ -25980,6 +25980,76 @@ private theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : 
   obtain ⟨v, voter, i, before, m, sent, data, member, target', slotLt⟩ := signed
   exact ⟨v, voter, i, before, m, sent, data, member, target', slotLt⟩
 
+section Deployed
+
+variable [DecidablePred (· ∈ J)] {anchor : Store preset fork} {g : ForkedBeaconState preset}
+  {horizon anchorEpoch : Epoch} {margin first last : ℕ}
+  (bls : checks = .bls)
+  (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+  (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+  (anchorEpochOk : anchor.justifiedCheckpoint.epoch = anchorEpoch)
+  (anchorHeader : anchorState.latestBlockHeader.slot = anchorBlock.slot ∧
+    anchorState.latestBlockHeader.proposerIndex = anchorBlock.proposerIndex ∧
+    anchorState.latestBlockHeader.parentRoot = anchorBlock.parentRoot ∧
+    SszType.hashTreeRoot anchorBlock.body = .ok anchorState.latestBlockHeader.bodyRoot)
+  (anchorZero : anchorState.latestBlockHeader.stateRoot = Vector.replicate 32 0)
+  (slots : 0 < config.SLOT_DURATION_MS)
+  (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+  (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+  (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+  (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+  (enough : HeldRunStakeFloor (e := e) pre horizon last)
+  (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+  (unslashed : HonestCountedStatesUnslashed (e := e) last)
+  (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+    ∀ (r : Root) (left right : BeaconBlock preset fork),
+    ((e.world i).state a).blocks[r]? = some left →
+    ((e.world j).state b).blocks[r]? = some right → left = right)
+  (finality : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ last → (e.world j).time ≤ last →
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤
+      ((e.world j).state b).justifiedCheckpoint.epoch →
+    ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state a).finalizedCheckpoint.root)
+  (chain : ∀ w ∈ J, ∀ i k, i ≤ k → (e.world k).time ≤ last →
+    ((e.world k).state w).getCheckpointBlock ((e.world k).state w).justifiedCheckpoint.root
+      ((e.world i).state w).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state w).finalizedCheckpoint.root)
+  (guarded : PinGuarded (e := e) last)
+  (preGloas : fork < .glamsterdam) (fusaka : .fusaka ≤ fork)
+  (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
+  (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+
+include bls anchored start anchorSlot anchorEpochOk anchorHeader anchorZero slots genesis pre roots
+  absent heldEarly bounded enough terminal unslashed agree finality chain guarded preGloas fusaka
+  forkWindow withdrawDelay
+
+/-- On the mainnet preset, the voters of a call pin the justified checkpoints of its epoch. -/
+private theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
+    JustifiedPinned (e := e) anchorEpoch margin first last := by
+  subst mainnet
+  exact justifiedPinned_of_setting bls anchored start anchorSlot anchorEpochOk anchorHeader
+    anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_mainnet
+    genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
+    guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_mainnet CapOrder.mainnet
+    ActivationWithinMaxEffective.mainnet Preset.SeedLookaheadAtLeastThree.mainnet
+    maxEffectiveBalancesAligned_mainnet withdrawDelay (by decide) (by decide) (by decide)
+    PinPresetFacts.mainnet
+
+/-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch. -/
+private theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
+    JustifiedPinned (e := e) anchorEpoch margin first last := by
+  subst minimal
+  exact justifiedPinned_of_setting bls anchored start anchorSlot anchorEpochOk anchorHeader
+    anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_minimal
+    genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
+    guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_minimal CapOrder.minimal
+    ActivationWithinMaxEffective.minimal Preset.SeedLookaheadAtLeastThree.minimal
+    maxEffectiveBalancesAligned_minimal withdrawDelay (by decide) (by decide) (by decide)
+    PinPresetFacts.minimal
+
+end Deployed
+
 end PinReader
 -- PIN-READER-END
 
