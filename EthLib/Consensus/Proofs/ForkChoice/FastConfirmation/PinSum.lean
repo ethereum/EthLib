@@ -17172,7 +17172,20 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
     · exact .inl first
     · exact .inr (List.mem_of_mem_tail later)
   rcases ends with before | after
-  · sorry
+  · -- a key that the step slashes was activated by the epoch of `a`, which `z` comes after
+    have bEarly : b.fork < .glamsterdam :=
+      Nat.lt_of_le_of_lt (fork_le_of_chainSteps post'.chainSteps) h.early
+    have finite : getCurrentEpoch a.state < FAR_FUTURE_EPOCH :=
+      UInt64.lt_iff_toNat_lt.mpr (by
+        have := getCurrentEpoch_succ_lt_farFuture h.twoSlots a.state
+        omega)
+    obtain ⟨u, found, far, reached⟩ := Step.slashed_activated step
+      (Nat.le_trans electra (fork_le_of_chainSteps pre'.chainSteps)) bEarly h.caps.activation
+      h.caps.compounding h.delay finite v.toNat
+      (((shared.append fromFin).append pre').exit_activated h.genesis v.toNat) flag
+    have := ahead a before u found far
+    have := UInt64.le_iff_toNat_le.mp reached
+    omega
   have ceiling := bound a after
   have minLe : min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) ≤
