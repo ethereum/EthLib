@@ -2747,7 +2747,16 @@ The topics of the peers also list each peer at most once, so a second run can st
 `steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
 That join keeps every mesh free of a repeated peer, with no hypothesis on the fanout or on the peers of its topic.
 `receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
-No step changes the explicit peers or adds one to a mesh, but no theorem states along a run that they stay outside every mesh.
+Every step keeps the explicit peers (`receiveRpc_explicit_eq`, `join_explicit_eq`, `leave_explicit_eq`, `publish_explicit_eq` and `heartbeat_explicit_eq`).
+If no explicit peer is in a mesh before a step, none is after it (`receiveRpc_explicit`, `join_explicit`, `leave_explicit` and `heartbeat_explicit`).
+An RPC adds to a mesh only a sender that is not explicit (`receiveRpc_mesh`).
+A leave removes at most the mesh of its topic, and a publish keeps every mesh (`publish_mesh`).
+A join and a heartbeat with a lawful choice add only peers that this node may GRAFT, as `join_graftable` states for a join.
+`graftable` excludes every explicit peer.
+`steps_explicit` carries both facts along a run whose start has no explicit peer in a mesh.
+`steps_receiveRpc_forward_nodup` applies it to a run from a router with no mesh, no fanout and no topics of peers, followed by one RPC.
+That RPC sends each message it forwards at most once to each peer, by `receiveRpc_forward_nodup`.
+The result needs a positive lifetime of the seen cache, and the explicit peers of the start listed once each.
 
 The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
 `Select.first_lawful` proves that this choice is lawful.

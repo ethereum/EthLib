@@ -15,7 +15,8 @@ For every standing, message ID and validation that a client passes:
 - A peer below the gossip threshold that is not explicit gets no IWANT and no IWANT answer.
 - A GRAFT from an explicit peer, or within the backoff for a joined topic, is answered with a PRUNE.
   This needs an RPC that the graylist does not drop.
-- If no explicit peer is in a mesh before the RPC, none is after it.
+- An RPC keeps the explicit peers.
+  If no explicit peer is in a mesh before the RPC, none is after it.
 - Every message sent in answer to an IWANT goes to the sender of the RPC.
   The IWANT named it, and the message cache after the RPC holds it.
 - The RPC of a graylisted peer that is not explicit changes nothing and sends nothing.
@@ -1147,6 +1148,17 @@ theorem receiveRpc_graft_prune {g : Graft} (hg : g ∈ rpc.control.graft)
     src rpc s hn _ rfl
   exact P g hg h
 
+/-- An RPC keeps the explicit peers. -/
+theorem receiveRpc_explicit_eq :
+    (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.explicit =
+      s.explicit := by
+  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
+  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
+      hn.2]
+  · obtain ⟨-, -, -, -, E, -⟩ := receiveRpc_facts p backoffMs pruneBackoffMs standing msgId
+      validate now src rpc s hn _ rfl
+    exact E
+
 /-- If no explicit peer is in a mesh before the RPC, none is after it. -/
 theorem receiveRpc_explicit (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
     ∀ t, ∀ q ∈ peersOf
@@ -1154,17 +1166,11 @@ theorem receiveRpc_explicit (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.expl
       q ∉ (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc
         s).1.explicit := by
   intro t q hq
-  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
-  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
-      hn.2] at hq ⊢
-    exact h t q hq
-  · obtain ⟨-, -, -, -, E, -⟩ := receiveRpc_facts p backoffMs pruneBackoffMs standing msgId
-      validate now src rpc s hn _ rfl
-    rw [E]
-    rcases receiveRpc_mesh p backoffMs pruneBackoffMs standing msgId validate now src rpc s hq with
-      h' | ⟨rfl, -, h2, -⟩
-    · exact h t q h'
-    · exact h2
+  rw [receiveRpc_explicit_eq]
+  rcases receiveRpc_mesh p backoffMs pruneBackoffMs standing msgId validate now src rpc s hq with
+    h' | ⟨rfl, -, h2, -⟩
+  · exact h t q h'
+  · exact h2
 
 /-- Every message sent in answer to an IWANT goes to the sender of the RPC.
 
