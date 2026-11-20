@@ -148,34 +148,6 @@ private theorem balanceEvents_of_empty {m y : ForkedBeaconState preset}
   | nil => rfl
   | snoc pre step => exact absurd (.last _ _) (empty step)
 
-/-- A segment of a run that starts in an epoch either stays in it or ends it with one slot.
-
-Every step of the segment `mid` starts at the epoch of its start `m`.
-
-If the segment leaves the epoch, its last step is the slot that ends it, after an inner run. -/
-theorem segment_slot_cases {m n : ForkedBeaconState preset} (mid : Run config checks m n)
-    (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      mid.Contains step → getCurrentEpoch u.state = getCurrentEpoch m.state) :
-    getCurrentEpoch n.state = getCurrentEpoch m.state ∨
-      ∃ (u : ForkedBeaconState preset) (inner : Run config checks m u)
-        (boundary : advanceSlotAcross config checks u = .ok n),
-        mid = inner.snoc (.slot boundary) ∧
-        getCurrentEpoch u.state = getCurrentEpoch m.state ∧
-        getCurrentEpoch u.state < getCurrentEpoch n.state := by
-  by_cases same : getCurrentEpoch n.state = getCurrentEpoch m.state
-  · exact .inl same
-  right
-  cases mid with
-  | nil => exact absurd rfl same
-  | @snoc u _ inner step =>
-  have uEpoch : getCurrentEpoch u.state = getCurrentEpoch m.state := starts step (.last _ _)
-  have crossing : getCurrentEpoch u.state < getCurrentEpoch n.state :=
-    UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
-      (fun equal => same (equal.symm.trans uEpoch))
-  -- The last step leaves the epoch, so it is the slot that ends it.
-  obtain ⟨boundary, rfl⟩ := step.eq_slot_of_crossing crossing
-  exact ⟨u, inner, boundary, rfl, uEpoch, crossing⟩
-
 /-- A segment of a branch that starts in an epoch either stays in it or ends it with one slot.
 
 Every step of the segment `mid` starts at the epoch of its start `m`.
