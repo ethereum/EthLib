@@ -11,7 +11,7 @@ So a versioned answer refuses with any other code exactly when its value does.
 
 A versioned answer passes each refusal of its value on unchanged.
 
-A versioned answer refuses exactly as its value does, when the JSON writer succeeds on that value.
+When the JSON writer succeeds on the value, a versioned answer refuses exactly when the value does.
 -/
 
 @[expose] public section
