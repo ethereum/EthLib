@@ -371,12 +371,8 @@ theorem processSyncAggregate_proposer {altair : .altair ≤ fork}
   -- No member is the proposer, since no key of the committee is its key.
   have seatless : ∀ bit : Bool, ∀ member ∈ (members.zip
       aggregate.syncCommitteeBits.bits.toArray).toList, member.2 = bit →
-      member.1.toNat ≠ proposer.toNat := by
-    intro bit
-    refine signers_elsewhere membersOk found fun member inside _ same => unseated ?_
-    rw [Array.toList_zip] at inside
-    rw [← same, ← Vector.toList_toArray]
-    exact List.of_mem_zip inside |>.1
+      member.1.toNat ≠ proposer.toNat :=
+    fun _ => signers_elsewhere_of_unseated membersOk found unseated
   have length : members.size = preset.SYNC_COMMITTEE_SIZE.toNat := by
     have onList : (state.currentSyncCommittee altair).value.pubkeys.toArray.toList.mapM
         (validatorIndexOfPubkey state) = .ok members.toList := by

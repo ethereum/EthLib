@@ -1350,6 +1350,19 @@ theorem signers_elsewhere {pubkeys : Array Cryptography.Bls.BLSPubkey}
     rwa [Array.toList_zip]
   · cases image
 
+/-- No member of a sync committee takes the position of a validator that the committee lacks. -/
+theorem signers_elsewhere_of_unseated {n : Nat}
+    {pubkeys : Vector Cryptography.Bls.BLSPubkey n} {bits : Array Bool}
+    {members : Array ValidatorIndex} {index : Nat} {validator : Validator} {bit : Bool}
+    (membersOk : pubkeys.toArray.mapM (validatorIndexOfPubkey state) = .ok members)
+    (found : state.validators.data[index]? = some validator)
+    (unseated : validator.pubkey ∉ pubkeys.toList) :
+    ∀ member ∈ (members.zip bits).toList, member.2 = bit → member.1.toNat ≠ index := by
+  refine signers_elsewhere membersOk found fun member inside _ same => unseated ?_
+  rw [Array.toList_zip] at inside
+  rw [← same, ← Vector.toList_toArray]
+  exact List.of_mem_zip inside |>.1
+
 /-- The sync aggregate raises no balance other than the proposer's, whose key never signs. -/
 private theorem down_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset} {proposer : ValidatorIndex} {index : Nat}

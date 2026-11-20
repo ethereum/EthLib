@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `signers_elsewhere_of_unseated` says that no member of a sync committee takes the position of a validator whose key the committee lacks.
+  `processSyncAggregate_proposer` reads it, and the pin's bound on a position that a sync aggregate moves reads it in `PinDriftBound`.
+
 - `DirectSafety.Apriori.Internal.exit_rate_toNat` says that, before Gloas, the exit churn limit of a state is the activation exit cap or the rounded-down churn share of its total, if that is less.
   `exit_rate_le_churn` reads it, and the pin's bound on the exit churn limit of a state with a bounded total reads it in `PinDriftBound`.
 
