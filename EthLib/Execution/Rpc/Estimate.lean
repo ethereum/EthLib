@@ -118,13 +118,19 @@ An address without a storage key is left out when the transaction accesses it fr
 
 Those are the sender, the recipient or the created contract, and the precompiles of the fork.
 
-From Shapella, the beneficiary is one of them.
+From Shapella, the beneficiary is one of them, as [EIP-3651][eip-3651] makes it warm.
+
+The [text of the method][rules] names only the first three, and asks to keep every other address.
+
+Whether it means to keep the beneficiary is an open question of the source.
 
 The authorities and the delegate of EIP-7702 stay in.
 
 So do the contracts that the code of the call creates.
 
 [abi-revert]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_createAccessList/create-al-abi-revert.io
+[eip-3651]: https://eips.ethereum.org/EIPS/eip-3651
+[rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142
 -/
 def accessedList (s : CallSetup) (o : CallOutput) : List Access :=
   let state := o.state
@@ -154,26 +160,28 @@ namespace ChainView
 
 /-- The answer of `eth_createAccessList` for a request on the state after the block `p` names.
 
-It runs the call, then from Berlin runs it again with the addresses and keys it accessed.
+It runs the call, then runs it again with the addresses and keys it accessed.
 
-A request of type 0 runs again as type 1, the first type with an access list.
+The request then has an access list, so it runs again with type 1 or above.
 
-Before Berlin no transaction has an access list, so the list is empty.
+Before Berlin no transaction has an access list, so the [text of the method][rules] rejects it.
+
+The rejection has code -32000, the code of invalid input.
 
 The gas used and the error are those of the last call.
 
 When the call rejects the request before its message runs, the method fails with that rejection.
 
-It also fails when the second call is rejected, such as when the gas no longer covers the list. -/
+It also fails when the second call is rejected, such as when the gas no longer covers the list.
+
+[rules]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/execute.yaml#L122-L142
+-/
 def createAccessList (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
     (c : CallChoices) : Except RpcError AccessListResult := do
   let (s, o) ← v.runCall tx p c
-  if s.fork < .berlin then
-    return { accessList := [], gasUsed := callGasUsed s o, error := callErrorMessage o }
+  ensure (.berlin ≤ s.fork) (callRuleError "no access list before Berlin")
   let accessList := accessedList s o
-  let again := { tx with accessList := some accessList
-                         type := if tx.kind = 0 then some 1 else tx.type }
-  let (s, o) ← v.runCall again p c
+  let (s, o) ← v.runCall { tx with accessList := some accessList } p c
   return { accessList, gasUsed := callGasUsed s o, error := callErrorMessage o }
 
 end ChainView

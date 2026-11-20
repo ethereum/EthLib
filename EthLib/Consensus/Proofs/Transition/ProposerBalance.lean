@@ -368,15 +368,6 @@ theorem processSyncAggregate_proposer {altair : .altair ≤ fork}
         proposerReward.toNat * aggregate.syncCommitteeBits.bits.toArray.countP id := by
   obtain ⟨reward, proposerReward, members, chosen, rewardOk, share, membersOk, chosenOk,
     balances⟩ := processSyncAggregate_balance computed
-  -- No member is the proposer, since no key of the committee is its key.
-  have seatless : ∀ bit : Bool, ∀ member ∈ (members.zip
-      aggregate.syncCommitteeBits.bits.toArray).toList, member.2 = bit →
-      member.1.toNat ≠ proposer.toNat := by
-    intro bit
-    refine signers_elsewhere membersOk found fun member inside _ same => unseated ?_
-    rw [Array.toList_zip] at inside
-    rw [← same, ← Vector.toList_toArray]
-    exact List.of_mem_zip inside |>.1
   have length : members.size = preset.SYNC_COMMITTEE_SIZE.toNat := by
     have onList : (state.currentSyncCommittee altair).value.pubkeys.toArray.toList.mapM
         (validatorIndexOfPubkey state) = .ok members.toList := by
@@ -386,7 +377,8 @@ theorem processSyncAggregate_proposer {altair : .altair ≤ fork}
     simpa using this
   obtain ⟨final, atFinal, value⟩ := balances _ balance held
   refine ⟨reward, proposerReward, final, rewardOk, share, atFinal, ?_⟩
-  rw [value, syncRewards_proposer _ _ (fun member inside => seatless member.2 member inside rfl)
+  -- No member is the proposer, since the committee lacks its key.
+  rw [value, syncRewards_proposer _ _ (signers_elsewhere_of_unseated membersOk found unseated)
     (fun member inside signed => ?_)]
   · rw [Array.toList_zip, countP_zip_snd _ _ (by simp [length]), Array.countP_toList]
   · rw [read] at chosenOk

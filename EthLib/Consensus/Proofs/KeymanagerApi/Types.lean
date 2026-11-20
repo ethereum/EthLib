@@ -77,7 +77,7 @@ theorem readEthAddress_hexCase {path text other : String} (cased : HexCase text 
 
 That is `0` alone, or a digit other than `0` followed by at most 19 digits.
 
-[`uint.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/uint.yaml
+[`uint.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/uint.yaml
 -/
 def Uint64Pattern (text : String) : Prop :=
   text.toList = ['0'] ∨

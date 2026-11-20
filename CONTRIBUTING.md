@@ -58,6 +58,25 @@ A provenance note says where a rule is stated, not which text makes the rule nor
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
 
+## Defects found upstream
+
+Formal work often finds defects in the documents that EthLib specifies.
+A proof that does not close, a vector that disagrees, or a definition that contradicts its source can show a bug in an EIP, a specification, an API or a test suite.
+Such a defect must never stay only in EthLib: report it to the repository that owns the document.
+
+- Confirm the defect first.
+  Reproduce it at the head of the target repository's default branch, and search its open and closed issues and pull requests.
+- If the fix is clear, open one small pull request in the target repository for each defect, in that repository's style.
+  A minor defect, such as a wrong example or a broken constant, gets a pull request too.
+- If the fix needs a design decision, open an issue there with a concrete example instead.
+- If the defect is a security vulnerability, do not disclose it in public.
+  Report it privately through the target repository's security policy, or through the [Ethereum bug bounty program](https://ethereum.org/bug-bounty/) for the protocol specifications.
+- Describe the defect from the documents alone: never name an implementation.
+- Link the upstream pull request or issue from the related EthLib issue, and record any divergence that remains in `SOUNDNESS.md`.
+
+Bugs come from EthLib's own work.
+Do not search the upstream repositories for bugs outside of it.
+
 ## Layout
 
 ```text
@@ -107,8 +126,7 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Do not use `panic!` or the `!` accessors, such as `xs[i]!`, `get!` and `set!`.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
-  Older modules still use these accessors, and pull requests remove them module by module.
-  `lake exe check-accessors` keeps their exact list.
+  No module of the specification uses them, and `lake exe check-accessors` fails on a new one.
 - Remove such an accessor even when no input that the source accepts reaches its default.
   A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
   Change the definition in place, and keep no copy of the old one beside it.
@@ -188,6 +206,7 @@ They may run in three places outside it:
   It reaches an internal step that has no C export, and it runs compiled code, as the Python suite does.
 - A Lean library of kernel vectors, which no default target imports, may prove known answers.
   CI must build it in its own step on every pull request, so that a failure points at the pull request that caused it.
+  It is `KernelVectors`, in `tests/kernel/`, and `lake build KernelVectors` builds it.
 
 In Lean, a known answer is a theorem or an `example` that evaluates a definition on concrete inputs.
 It compares the result with an expected value, by `rfl`, `decide`, `decide +kernel` or `simp`.
@@ -407,8 +426,7 @@ lake exe check-accessors
 ```
 
 It lists each use of a `!` accessor, such as `xs[i]!`, `get!` or `set!`, or of `panic`, in the elaborated declarations of the specification, with its count.
-`scripts/check_accessors_baseline.txt` lists the sites that exist today, and the goal is to remove each one.
-A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
+`scripts/check_accessors_baseline.txt` is the exact list of sites, and it is empty.
 A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.

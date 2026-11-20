@@ -53,6 +53,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.DirectSafety.SourceSafety
+public import EthLib.Consensus.Proofs.KeymanagerApi.BuilderConfig
 public import EthLib.Consensus.Proofs.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.LocalKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.Move
@@ -152,6 +153,7 @@ public import EthLib.Consensus.Proofs.History.Era
 public import EthLib.Consensus.Proofs.InclusionList
 public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.HonestAggregation
+public import EthLib.Consensus.Proofs.HonestAggregateIndex
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.HonestContributionSignatures
 public import EthLib.Consensus.Proofs.HonestValidator
@@ -244,6 +246,7 @@ public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoterRun
 public import EthLib.Consensus.Proofs.Transition.IncludedTargetVotes
 public import EthLib.Consensus.Proofs.Transition.Invariants
+public import EthLib.Consensus.Proofs.Transition.LookaheadActive
 public import EthLib.Consensus.Proofs.Transition.MixesKept
 public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Proofs.Transition.ParentPayload

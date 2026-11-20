@@ -36,6 +36,7 @@ def _header(
     ommers_hash: bytes = EMPTY_OMMERS_HASH,
     transactions_root: bytes = EMPTY_TRIE_ROOT,
     withdrawals_root: bytes | None = None,
+    gas_limit: int = 5000,
 ) -> bytes:
     """A header of the fifteen fields of Frontier, plus a base fee and withdrawals root if given."""
     fields = [
@@ -48,7 +49,7 @@ def _header(
         bytes(256),
         _p(131072),
         _p(number),
-        _p(5000),
+        _p(gas_limit),
         b"",
         _p(number),
         b"",
@@ -345,3 +346,63 @@ def test_mainnet_cancun_body_with_an_ommer_is_refused() -> None:
     with raises(EthWireError, message) as info:
         check_body("dencun", header, rlp.encode([transactions, ommers, withdrawals]))
     assert info.value.code == 608
+
+
+# The gas limit of the block in the example of the gas rule.
+BLOCK_GAS_LIMIT = 30_000_000
+
+
+def _legacy(gas: int) -> list:
+    """A legacy transaction with the gas limit `gas`, a call to the zero address."""
+    return [b"", _p(1), _p(gas), bytes(20), b"", b"", _p(27), _p(1), _p(1)]
+
+
+def _gas_header(transactions: list) -> bytes:
+    """A header of gas limit 30,000,000 that commits to the legacy transactions `transactions`."""
+    root = _root([rlp.encode(tx) for tx in transactions])
+    return _header(transactions_root=root, gas_limit=BLOCK_GAS_LIMIT)
+
+
+def test_gas_limits_that_sum_above_the_block_pass() -> None:
+    # Each gas limit is 20,000,000, at most the block's, though their sum is 40,000,000.
+    transactions = [_legacy(20_000_000), _legacy(20_000_000)]
+    check_body("frontier", _gas_header(transactions), rlp.encode([transactions, []]))
+
+
+def test_gas_limit_equal_to_the_block_passes() -> None:
+    transactions = [_legacy(BLOCK_GAS_LIMIT)]
+    check_body("frontier", _gas_header(transactions), rlp.encode([transactions, []]))
+
+
+def test_gas_limit_above_the_block_is_refused() -> None:
+    transactions = [_legacy(20_000_000), _legacy(BLOCK_GAS_LIMIT + 1)]
+    message = "transaction 1 has gas limit 30000001, above the gas limit 30000000 of the block"
+    with raises(EthWireError, message) as info:
+        check_body("frontier", _gas_header(transactions), rlp.encode([transactions, []]))
+    assert info.value.code == 612
+
+
+def test_transaction_that_does_not_decode_is_refused() -> None:
+    # The empty list has the transactions root of the header, but it is no legacy transaction.
+    transactions = [TRANSACTION]
+    message = (
+        "transaction 0 is not a transaction of the fork: "
+        "EthLib.Execution.Transactions.TransactionError.decoding "
+        "(EthLib.Serialization.Rlp.RlpError.wrongFieldCount 9 0)"
+    )
+    with raises(EthWireError, message) as info:
+        check_body("frontier", _gas_header(transactions), rlp.encode([transactions, []]))
+    assert info.value.code == 611
+
+
+def test_transaction_type_that_the_fork_lacks_is_refused() -> None:
+    # A transaction of type 2, from London, in a Frontier body whose header has its root.
+    typed = b"\x02" + rlp.encode([])
+    header = _header(transactions_root=_root([typed]), gas_limit=BLOCK_GAS_LIMIT)
+    message = (
+        "transaction 0 is not a transaction of the fork: "
+        "EthLib.Execution.Transactions.TransactionError.unsupportedType (type := 2)"
+    )
+    with raises(EthWireError, message) as info:
+        check_body("frontier", header, rlp.encode([[typed], []]))
+    assert info.value.code == 611

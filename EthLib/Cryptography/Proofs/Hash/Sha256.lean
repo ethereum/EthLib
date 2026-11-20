@@ -93,23 +93,23 @@ def rounds (input : Vector Word 16) (initial : State) : Nat → State
 /-- One block: 64 rounds, then the intermediate hash value added in, FIPS 180-4 §6.2.2, step 4. -/
 def compression (input : Vector Word 16) (initial : State) : State :=
   let w := rounds input initial 64
-  ⟨initial.a + w.a, initial.b + w.b, initial.c + w.c, initial.d + w.d,
-    initial.e + w.e, initial.f + w.f, initial.g + w.g, initial.h + w.h⟩
+  ⟨w.a + initial.a, w.b + initial.b, w.c + initial.c, w.d + initial.d,
+    w.e + initial.e, w.f + initial.f, w.g + initial.g, w.h + initial.h⟩
 
 /-- The initial hash value, FIPS 180-4 §5.3.3. -/
 def initial : State :=
   ⟨0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19⟩
 
-/-- The number of zero bytes after the `0x80` byte, FIPS 180-4 §5.1.1. -/
+/-- The number of zero bytes after the `0b10000000` byte, FIPS 180-4 §5.1.1. -/
 def zeroCount (size : Nat) : Nat := (119 - size % 64) % 64
 
 /--
 The padded message, FIPS 180-4 §5.1.1.
 
-It is the message, `0x80`, zeros, and the bit length in eight big-endian bytes.
+It is the message, `0b10000000`, zeros, and the bit length in eight big-endian bytes.
 -/
 def padded (message : ByteArray) : ByteArray :=
-  ⟨message.data ++ #[0x80] ++ Array.replicate (zeroCount message.size) 0 ++
+  ⟨message.data ++ #[0b10000000] ++ Array.replicate (zeroCount message.size) 0 ++
     Array.ofFn fun i : Fin 8 => UInt8.ofNat ((message.size * 8 / 2 ^ (56 - 8 * i.val)) % 256)⟩
 
 /-- The intermediate hash value after the first blocks of a padded message, FIPS 180-4 §6.2.2. -/
@@ -203,19 +203,19 @@ theorem K_from_primes :
 /-- The executable σ0 is σ0 of FIPS 180-4 §4.1.2. -/
 theorem smallSigma0_toBitVec (x : UInt32) : (smallSigma0 x).toBitVec = Spec.small0 x.toBitVec := by
   -- Each pair of shifts joined by an or is a rotation.
-  simp [smallSigma0, rotr, shr, Spec.small0, BitVec.rotateRight_def]
+  simp [smallSigma0, rotr, WORD_BITS, shr, Spec.small0, BitVec.rotateRight_def]
 
 /-- The executable σ1 is σ1 of FIPS 180-4 §4.1.2. -/
 theorem smallSigma1_toBitVec (x : UInt32) : (smallSigma1 x).toBitVec = Spec.small1 x.toBitVec := by
-  simp [smallSigma1, rotr, shr, Spec.small1, BitVec.rotateRight_def]
+  simp [smallSigma1, rotr, WORD_BITS, shr, Spec.small1, BitVec.rotateRight_def]
 
 /-- The executable Σ0 is Σ0 of FIPS 180-4 §4.1.2. -/
 theorem bigSigma0_toBitVec (x : UInt32) : (bigSigma0 x).toBitVec = Spec.large0 x.toBitVec := by
-  simp [bigSigma0, rotr, Spec.large0, BitVec.rotateRight_def]
+  simp [bigSigma0, rotr, WORD_BITS, Spec.large0, BitVec.rotateRight_def]
 
 /-- The executable Σ1 is Σ1 of FIPS 180-4 §4.1.2. -/
 theorem bigSigma1_toBitVec (x : UInt32) : (bigSigma1 x).toBitVec = Spec.large1 x.toBitVec := by
-  simp [bigSigma1, rotr, Spec.large1, BitVec.rotateRight_def]
+  simp [bigSigma1, rotr, WORD_BITS, Spec.large1, BitVec.rotateRight_def]
 
 /-- Four bytes of a byte array, read as one big-endian word, FIPS 180-4 §3.1. -/
 theorem big32_toBitVec (b : ByteArray) (off : Nat) :
@@ -254,6 +254,8 @@ private theorem ofBlock_block (block : ByteArray) (start : Nat) (whole : start +
     simp (disch := omega) only [getElem!_pos] at read
     exact read
   simp (disch := decide) only [Window.ofBlock, windowOf, word]
+  -- The window numbers its words in `Fin 16`, whose values `0` to `15` are those numbers.
+  rfl
 
 /-- Each move of the window is one more word of the schedule, by the recurrence. -/
 private theorem next_windowOf (input : Vector Spec.Word 16) (t : Nat) :
@@ -324,11 +326,11 @@ theorem compress_toState (s : State) (block : ByteArray) (start : Nat)
 @[simp] theorem lengthBytes_size (size : Nat) : (lengthBytes size).size = 8 := by
   simp only [lengthBytes, ByteArray.size, Array.size_ofFn]
 
-/-- Padding adds the `0x80` byte, the zeros, and the eight length bytes. -/
+/-- Padding adds the `0b10000000` byte, the zeros, and the eight length bytes. -/
 theorem pad_size (message : ByteArray) :
     (pad message).size = message.size + 1 + paddingZeros message.size + 8 := by
   simp only [pad, ByteArray.size_append, lengthBytes_size]
-  -- The `0x80` byte is one byte, and the zeros are as many as they count.
+  -- The `0b10000000` byte is one byte, and the zeros are as many as they count.
   show message.size + 1 + (Array.replicate (paddingZeros message.size) (0 : UInt8)).size + 8 = _
   rw [Array.size_replicate]
 
@@ -338,13 +340,13 @@ theorem paddingZeros_lt (size : Nat) : paddingZeros size < 64 := Nat.mod_lt _ (b
 /-- A padded message is whole blocks. -/
 theorem pad_size_mod (message : ByteArray) : (pad message).size % 64 = 0 := by
   rw [pad_size]
-  unfold paddingZeros
+  unfold paddingZeros BLOCK_SIZE LENGTH_SIZE
   omega
 
 /-- No fewer zeros would fill whole blocks. -/
 theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 8) % 64 = 0) :
     paddingZeros size ≤ zeros := by
-  unfold paddingZeros
+  unfold paddingZeros BLOCK_SIZE LENGTH_SIZE
   omega
 
 private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) :
@@ -377,7 +379,7 @@ theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
 theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     pad message = Spec.padded message := by
   have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
-    unfold paddingZeros Spec.zeroCount
+    unfold paddingZeros BLOCK_SIZE LENGTH_SIZE Spec.zeroCount
     omega
   have length : (lengthBytes message.size).data =
       Array.ofFn fun i : Fin 8 =>
@@ -388,7 +390,7 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
       apply UInt8.toNat_inj.mp
       simpa [ByteArray.getElem_eq_getElem_data] using
         lengthBytes_digit message.size admitted ⟨p, by simpa using left⟩
-  -- The message, the `0x80` byte, the zeros and the length agree region by region.
+  -- The message, the `0b10000000` byte, the zeros and the length agree region by region.
   apply ByteArray.ext
   simp [pad, Spec.padded, zeros, length, ByteArray.data_append]
 
@@ -404,7 +406,8 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
 
 /-- The blocks from any block on continue the model's chain of blocks. -/
 theorem chain_toState (block : ByteArray) (initial : Spec.State) :
-    ∀ count first start s (whole : start + 64 * count ≤ block.size), start = 64 * first →
+    ∀ count first start s (whole : start + BLOCK_SIZE * count ≤ block.size),
+      start = BLOCK_SIZE * first →
       interpret s = Spec.blocks block initial first →
       interpret (chain compress block count start whole s)
         = Spec.blocks block initial (first + count) := by
@@ -414,8 +417,11 @@ theorem chain_toState (block : ByteArray) (initial : Spec.State) :
   | succ count ih =>
     intro first start s whole hstart hs
     -- One block, then the rest from the next block on.
+    -- A block is 64 bytes.
+    have blocks : start + 64 * (count + 1) ≤ block.size := whole
+    unfold BLOCK_SIZE at hstart
     rw [chain, show first + (count + 1) = first + 1 + count by omega]
-    apply ih (first + 1) (start + 64) _ _ (by omega)
+    apply ih (first + 1) (start + BLOCK_SIZE) _ _ (by unfold BLOCK_SIZE; omega)
     rw [compress_toState s block start (by omega), hs, hstart, Spec.blocks]
 
 /-- The digest is the model's digest. -/
@@ -440,11 +446,14 @@ theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
   have start : interpret initial = Spec.initial := by decide
   -- The padded bytes are the model's, and the chain then runs over them.
   have padded : ∀ bytes, bytes = Spec.padded message → ∀ whole,
-      digest (chain compress bytes (bytes.size / 64) 0 whole initial) = Spec.hash message := by
+      digest (chain compress bytes (bytes.size / BLOCK_SIZE) 0 whole initial)
+        = Spec.hash message := by
     intro bytes same whole
     subst same
     rw [digest_eq_spec, chain_toState _ Spec.initial _ 0 0 initial whole (by omega) start,
       Nat.zero_add, Spec.hash]
+    -- A block is 64 bytes.
+    rfl
   exact padded (pad message) (pad_eq_spec message admitted) _
 
 /-- The 32-byte digest agrees with FIPS 180-4 on every message shorter than 2^61 bytes. -/

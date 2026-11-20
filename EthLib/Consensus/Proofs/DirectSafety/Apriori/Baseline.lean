@@ -46,7 +46,9 @@ Only the reference clause has the original baseline on its larger side.
 
 The lowered value is either the old one or the funding value itself.
 
-That funding value is the larger of the effective balance and the balance at `u`. -/
+That funding value is the larger of the effective balance and the balance at `u`.
+
+It is at least the potential, which caps the balance before it takes the larger. -/
 private theorem reserveCut_lowerOriginal {x : ForkedBeaconState preset} {high : Nat}
     {u : ForkedBeaconState preset} {demandEpoch : Epoch} {suffix : List PendingConsolidation}
     {o : Ownership} (reserve : ReserveCut x high u demandEpoch suffix o) :
@@ -57,7 +59,12 @@ private theorem reserveCut_lowerOriginal {x : ForkedBeaconState preset} {high : 
   · show min (o.original i) _ = 0
     rw [(original i).2 notReference, Nat.zero_min]
   · have old := reference i ref notRetired relevant
-    show max (effectiveAt u i) (actualBalanceAt u i) ≤
+    -- The potential is at most the funding value, since the capped balance is at most the balance.
+    have capped : potential u i ≤ max (effectiveAt u i) (actualBalanceAt u i) := by
+      unfold potential effectiveAt
+      cases u.state.validators.data[i]? <;> simp
+      omega
+    show potential u i ≤
       min (o.original i) (max (effectiveAt u i) (actualBalanceAt u i)) + (held o i).card
     omega
 
@@ -480,9 +487,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
     · rfl
     · exact absurd unset' (run_slashed_exit_assigned (shared.append (ledger.stops i).pre)
         supported.1 caps.activation caps.compounding early delay i v' atStop flag)
-  have split₁ : pre.append (((Run.nil : Run config checks m m).snoc step).append rest) = tail := by
-    rw [Run.append_assoc]
-    exact split
+  have split₁ := (pre.snoc_append_eq step rest).symm.trans split
   have firstDown : FirstDown (ledger.stops i).pre i := by
     rcases Run.prefix_total pre _ ((ledger.stops i).pre.snoc assigning) remaining split₁ split₂
       with ⟨r, extended⟩ | ⟨r, inside⟩

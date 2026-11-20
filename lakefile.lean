@@ -144,6 +144,18 @@ lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
 
+/-- A library of known answers that the kernel checks.
+
+Each file stays within the budget that `CONTRIBUTING.md` sets.
+
+No default target imports it.
+
+`lake build KernelVectors` builds it, and `scripts/check_memory.py` measures each of its files. -/
+lean_lib «KernelVectors» where
+  requiresModuleSystem := true
+  srcDir := "tests/kernel"
+  globs := #[.submodules `KernelVectors]
+
 /-- Writes the binding contract from the Lean docstrings and error codes.
 
 Run it after `lake build Exports` with `lake exe gen-bindings`.

@@ -1,6 +1,9 @@
 """The checks of AccountRange and StorageRanges answers, built from reference tries."""
 
-# The answers follow caps/snap.md of ethereum/devp2p at commit 88f1c808, which EthLib cites.
+# The answers follow caps/snap.md of ethereum/devp2p, at the commit that EthLib cites.
+#
+# Commit: 277ceb399c15df86efb17d51eb58200c26879784
+#
 # The reference trie in `trie_reference.py` builds each root and proof apart from EthLib.
 
 import pytest
@@ -86,6 +89,27 @@ def test_rejects_a_full_body() -> None:
         SnapError,
         "range answer does not verify: EthLib.Execution.Network.SnapRangeError.slimAccount "
         f"(hash := 0x{plain.hex()})",
+    ) as error:
+        verify_account_range(STATE.root, ZERO, accounts, [])
+    assert error.value.code == 3
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        # A byte string that holds the slim form, as caps/snap.md writes `accBody: B`.
+        rlp.encode(_slim(FULL[HASHES[1]])),
+        # Bytes that are not RLP.
+        b"\xc5\x01",
+    ],
+)
+def test_rejects_a_body_that_is_not_the_slim_list(body: bytes) -> None:
+    accounts = _accounts(0, 60)
+    accounts[1] = (HASHES[1], body)
+    with raises(
+        SnapError,
+        "range answer does not verify: EthLib.Execution.Network.SnapRangeError.slimAccount "
+        f"(hash := 0x{HASHES[1].hex()})",
     ) as error:
         verify_account_range(STATE.root, ZERO, accounts, [])
     assert error.value.code == 3

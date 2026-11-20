@@ -27,7 +27,7 @@ Such a trie has the root of the plain trie of its hashed keys.
 
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 A hash of any input to 32 bytes has collisions, so the theorem names a search that returns one.
 

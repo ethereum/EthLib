@@ -457,12 +457,12 @@ private def WithdrawalExact {f g : Fork} (s : BeaconState preset f)
 /-- Each validator without an assigned exit keeps its withdrawable epoch.
 
 Otherwise it gets one after `bound`. -/
-private def WithdrawalUnassigned {f g : Fork} (bound : Epoch) (s : BeaconState preset f)
+private def WithdrawalUnassigned {f g : Fork} (bound : Nat) (s : BeaconState preset f)
     (t : BeaconState preset g) : Prop :=
   ∀ (i : Nat) (v : Validator), s.validators.data[i]? = some v →
     v.exitEpoch = FAR_FUTURE_EPOCH →
     ∃ w : Validator, t.validators.data[i]? = some w ∧
-      (w.withdrawableEpoch = v.withdrawableEpoch ∨ bound < w.withdrawableEpoch)
+      (w.withdrawableEpoch = v.withdrawableEpoch ∨ bound < w.withdrawableEpoch.toNat)
 
 namespace WithdrawalKept
 
@@ -649,13 +649,13 @@ private theorem compounding {electra : .pectra ≤ fork} {index : ValidatorIndex
     (.setValidator found written ⟨fun _ => rfl, fun _ => rfl⟩)
 
 /-- A later state with the same validators keeps every unassigned withdrawable epoch. -/
-private theorem unassigned_of_data {f g : Fork} {bound : Epoch} {s : BeaconState preset f}
+private theorem unassigned_of_data {f g : Fork} {bound : Nat} {s : BeaconState preset f}
     {t : BeaconState preset g} (same : t.validators.data = s.validators.data := by rfl) :
     WithdrawalUnassigned bound s t :=
   fun _ v found _ => ⟨v, by rw [same]; exact found, .inl rfl⟩
 
 /-- An unassigned exit stays so or gets an exact one, so the two relations compose. -/
-private theorem unassigned_trans {f g h : Fork} {bound : Epoch} {s : BeaconState preset f}
+private theorem unassigned_trans {f g h : Fork} {bound : Nat} {s : BeaconState preset f}
     {t : BeaconState preset g} {u : BeaconState preset h}
     (one : WithdrawalUnassigned bound s t) (exact : WithdrawalExact t u)
     (two : WithdrawalUnassigned bound t u) : WithdrawalUnassigned bound s u := by
@@ -674,22 +674,23 @@ private theorem unassigned_trans {f g h : Fork} {bound : Epoch} {s : BeaconState
 /-- Take a write that keeps an unassigned exit's withdrawable epoch, or sets it after `bound`.
 
 It relates every validator so. -/
-private theorem unassigned_setAt {bound : Epoch} {i : Nat} {old v : Validator}
+private theorem unassigned_setAt {bound : Nat} {i : Nat} {old v : Validator}
     (found : getValidatorAt state i = .ok old) (set : state.setValidatorAt i v = .ok after)
     (kept : old.exitEpoch = FAR_FUTURE_EPOCH →
-      v.withdrawableEpoch = old.withdrawableEpoch ∨ bound < v.withdrawableEpoch) :
+      v.withdrawableEpoch = old.withdrawableEpoch ∨ bound < v.withdrawableEpoch.toNat) :
     WithdrawalUnassigned bound state after := fun j w read far => by
   obtain ⟨w', located, related⟩ := setAt_transport (fun a b => a.exitEpoch = FAR_FUTURE_EPOCH →
-      b.withdrawableEpoch = a.withdrawableEpoch ∨ bound < b.withdrawableEpoch)
+      b.withdrawableEpoch = a.withdrawableEpoch ∨ bound < b.withdrawableEpoch.toNat)
     (fun _ _ => .inl rfl) found set kept j w read
   exact ⟨w', located, related far⟩
 
-/-- Starting an exit sets the withdrawable epoch after the current epoch.
+/-- Starting an exit sets the withdrawable epoch after the current epoch and both delays.
 
-The exit queue gives an exit after the current epoch, and the delay only adds to it. -/
+The exit queue gives an exit after the seed lookahead, and the withdrawal delay adds to it. -/
 private theorem unassigned_exit {i : ValidatorIndex}
     (ok : initiateValidatorExit config state i = .ok after) :
-    WithdrawalUnassigned (getCurrentEpoch state) state after := by
+    WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
   obtain ⟨v, found, ⟨_, rfl⟩ | ⟨_, queued, exitEpoch, withdrawable, queue, summed, written⟩⟩ :=
     initiateValidatorExit_ok ok
   · exact unassigned_of_data
@@ -698,16 +699,18 @@ private theorem unassigned_exit {i : ValidatorIndex}
       rw [← getValidator_eq_getValidatorAt]
       exact (getValidator_of_validators_eq same i).trans found
     rw [setValidator_eq_setValidatorAt] at written
-    have late : getCurrentEpoch state < withdrawable := by
+    have late : (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < withdrawable.toNat := by
       have after := exitQueue_lt queue
       have sum := (Uint64.addChecked_ok_iff.mp summed).2
-      rw [UInt64.lt_iff_toNat_lt]
       omega
     intro j w read' far
     have moved : queued.validators.data[j]? = some w := by rw [same]; exact read'
     obtain ⟨w', located, related⟩ := setAt_transport (fun a b =>
         a.exitEpoch = FAR_FUTURE_EPOCH →
-          b.withdrawableEpoch = a.withdrawableEpoch ∨ getCurrentEpoch state < b.withdrawableEpoch)
+          b.withdrawableEpoch = a.withdrawableEpoch ∨
+            (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+              config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < b.withdrawableEpoch.toNat)
       (fun _ _ => .inl rfl) read written (fun _ => .inr late) j w moved
     exact ⟨w', located, related far⟩
 
@@ -715,18 +718,20 @@ private theorem unassigned_exit {i : ValidatorIndex}
 
 So they keep every assigned exit's withdrawable epoch exactly.
 
-They give each newly assigned exit a withdrawable epoch after the current epoch. -/
+They give each newly assigned exit a withdrawable epoch past the seed lookahead and the delay. -/
 private theorem registry_unassigned (electra : .pectra ≤ fork)
     (ok : processRegistryUpdates config state = .ok after) :
     WithdrawalKept state after ∧ WithdrawalExact state after ∧
-      WithdrawalUnassigned (getCurrentEpoch state) state after := by
+      WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state after := by
   unfold processRegistryUpdates at ok
   rw [ite_eq_left electra] at ok
   simp only [bind_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, ok⟩ := ok
   have all := foldlM_ok_invariant
     (fun s => WithdrawalKept state s ∧ WithdrawalExact state s ∧ RegistryLifecycle state s ∧
-      WithdrawalUnassigned (getCurrentEpoch state) state s ∧ s.slot = state.slot)
+      WithdrawalUnassigned ((getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) state s ∧ s.slot = state.slot)
     (fun a _ b prior ok => by
       have life : RegistryLifecycle a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
@@ -746,7 +751,8 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
               fun _ => rfl⟩
         · cases ok; exact .refl _
       have step : WithdrawalKept a b ∧ WithdrawalExact a b ∧
-          WithdrawalUnassigned (getCurrentEpoch a) a b := by
+          WithdrawalUnassigned ((getCurrentEpoch a).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+            config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) a b := by
         simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
         obtain ⟨v, found, ok⟩ := ok
         split at ok
@@ -767,7 +773,8 @@ private theorem registry_unassigned (electra : .pectra ≤ fork)
       have epoch : getCurrentEpoch a = getCurrentEpoch state := by
         simp only [getCurrentEpoch, prior.2.2.2.2]
       exact ⟨prior.1.trans step.1 prior.2.2.1, exact_trans prior.2.1 step.2.1 prior.2.2.1,
-        prior.2.2.1.trans life, unassigned_trans prior.2.2.2.1 step.2.1 (epoch ▸ step.2.2),
+        prior.2.2.1.trans life,
+        unassigned_trans prior.2.2.2.1 step.2.1 (by rw [← epoch]; exact step.2.2),
         slot.trans prior.2.2.2.2⟩)
     ⟨of_data, exact_of_data, RegistryLifecycle.refl _, unassigned_of_data, rfl⟩ ok
   exact ⟨all.1, all.2.1, all.2.2.2.1⟩
@@ -1151,27 +1158,30 @@ def PendingConsolidationsOrdered (config : Config) (bound : Nat) {fork : Fork}
           v.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) ∧
         bound < v.withdrawableEpoch.toNat
 
-/-- Each pending consolidation names two different validators. -/
+/-- Each pending consolidation names two different validators, and its target is in the registry. -/
 private def PendingApart {f : Fork} (s : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, ∀ c ∈ (s.pendingConsolidations electra).data.toList,
-    c.sourceIndex ≠ c.targetIndex
+    c.sourceIndex ≠ c.targetIndex ∧ c.targetIndex.toNat < s.validators.data.size
 
-/-- A step that keeps the queue keeps it apart. -/
+/-- A step that keeps the queue keeps it apart, and the registry only grows. -/
 private theorem PendingApart.kept {f : Fork} {s t : BeaconState preset f}
-    (queue : QueueKept s t) (holds : PendingApart s) : PendingApart t := by
+    (queue : QueueKept s t) (life : RegistryLifecycle s t) (holds : PendingApart s) :
+    PendingApart t := by
   intro electra c member
   have same : t.pendingConsolidations = s.pendingConsolidations := queue.queue
   rw [same] at member
-  exact holds electra c member
+  exact ⟨(holds electra c member).1, Nat.lt_of_lt_of_le (holds electra c member).2 life.size_le⟩
 
-/-- The pass of an epoch keeps a suffix of the queue, so it keeps it apart. -/
+/-- The pass of an epoch keeps a suffix of the queue and the registry, so it keeps it apart. -/
 private theorem PendingApart.consolidations {electra : .pectra ≤ fork}
     (holds : PendingApart state) (ok : processPendingConsolidations state electra = .ok after) :
     PendingApart after := by
   intro witness c member
   obtain ⟨_, passed, -, queue⟩ := processPendingConsolidations_pass ok
   rw [queue, passPendingConsolidations_drop passed] at member
-  exact holds witness c ((List.dropWhile_suffix _).subset member)
+  have kept := holds witness c ((List.dropWhile_suffix _).subset member)
+  rw [(processPendingConsolidations_kept ok).1]
+  exact kept
 
 /-- Two different pubkeys found in the registry are at two different indices. -/
 private theorem consolidationRequest_indices_ne {state : BeaconState preset fork}
@@ -1312,7 +1322,8 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
     PendingConsolidationsOrdered config (getCurrentEpoch after).toNat after ∧
-      (PendingApart state → sourceIndex ≠ targetIndex → PendingApart after) := by
+      (PendingApart state → sourceIndex ≠ targetIndex →
+        targetIndex.toNat < state.validators.data.size → PendingApart after) := by
   have frame := frame_queueConsolidation found ok
   have sameEpoch : getCurrentEpoch after = getCurrentEpoch state :=
     congrArg (computeEpochAtSlot preset) frame.slot
@@ -1360,7 +1371,8 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
     have same := (getValidator_setValidator_of_ne set distinct).trans
       (getValidator_of_validators_eq churnRegistry c.sourceIndex)
     exact Option.ext fun v => by rw [← getValidator_eq_ok_iff, ← getValidator_eq_ok_iff, same]
-  refine ⟨⟨fun witness => ?_, fun witness => ?_⟩, fun apart distinct witness c member => ?_⟩
+  refine ⟨⟨fun witness => ?_, fun witness => ?_⟩,
+    fun apart distinct inside witness c member => ?_⟩
   · obtain ⟨unique, sources⟩ := holds.1 witness
     have absent : sourceIndex ∉ ((state.pendingConsolidations witness).data.toList.map
         (·.sourceIndex)) := by
@@ -1416,9 +1428,10 @@ private theorem queue {electra : .pectra ≤ fork} {sourceIndex targetIndex : Va
     change c ∈ pending.data.toList at member
     rw [data, queueEq, Array.toList_push] at member
     rcases List.mem_append.mp member with member | member
-    · exact apart witness c member
+    · exact ⟨(apart witness c member).1,
+        Nat.lt_of_lt_of_le (apart witness c member).2 frame.registryGrows⟩
     · rw [List.mem_singleton.mp member]
-      exact distinct
+      exact ⟨distinct, Nat.lt_of_lt_of_le inside frame.registryGrows⟩
 
 private theorem request {electra : .pectra ≤ fork} {request : ConsolidationRequest}
     (holds : PendingConsolidationsOrdered config (getCurrentEpoch state).toNat state ∧
@@ -1433,13 +1446,17 @@ private theorem request {electra : .pectra ≤ fork} {request : ConsolidationReq
   · exact ⟨holds.1.framed (QueueKept.compounding switched)
       (registryLifecycle_switchToCompoundingValidator switched)
       (WithdrawalKept.compounding switched) (frame_switchToCompoundingValidator switched).slot,
-      holds.2.kept (QueueKept.compounding switched)⟩
+      holds.2.kept (QueueKept.compounding switched)
+        (registryLifecycle_switchToCompoundingValidator switched)⟩
   · have active := accepted.sourceActive
     simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
     have queued := holds.1.queue accepted.sourceAt active.1 accepted.sourceStays delay queued
+    -- The target is found in the registry, by its pubkey.
+    obtain ⟨found, -, index⟩ := Option.map_eq_some_iff.mp accepted.targetFirst
+    have targetInside := found.isLt
     -- The request names two different pubkeys, so two different indices.
     exact ⟨queued.1, queued.2 holds.2 (consolidationRequest_indices_ne accepted.different
-      accepted.sourceFirst accepted.targetFirst)⟩
+      accepted.sourceFirst accepted.targetFirst) (by omega)⟩
 
 /-- Every epoch stage keeps the order for a fixed bound. -/
 private theorem stage {stage : EpochStage} {s t : BeaconState preset fork}
@@ -1501,7 +1518,7 @@ private theorem epoch
       exact ⟨(edge.withdrawalFrame electra pass).2.2.2.trans slot,
         fun present => (before (same.mpr present)).stage edge,
         fun absent => (after (mt same.mp absent)).stage edge,
-        apart.kept (edge.withdrawalFrame electra pass).1⟩
+        apart.kept (edge.withdrawalFrame electra pass).1 (edge.withdrawalFrame electra pass).2.1⟩
   exact ⟨done.2.2.1 List.not_mem_nil, done.2.2.2⟩
 
 private theorem executionRequests {body : BeaconBlockBody preset fork}
@@ -1519,11 +1536,13 @@ private theorem executionRequests {body : BeaconBlockBody preset fork}
   have first := foldlM_ok_invariant Held (fun _ _ _ h ok => ⟨h.1.framed
     (QueueKept.depositRequest ok) (registryLifecycle_processDepositRequest ok)
     (WithdrawalKept.depositRequest ok) (frame_processDepositRequest ok).slot,
-    h.2.kept (QueueKept.depositRequest ok)⟩) holds deposits
+    h.2.kept (QueueKept.depositRequest ok) (registryLifecycle_processDepositRequest ok)⟩)
+    holds deposits
   have second := foldlM_ok_invariant Held (fun _ _ _ h ok => ⟨h.1.framed
     (QueueKept.withdrawalRequest ok) (registryLifecycle_processWithdrawalRequest ok)
     (WithdrawalKept.withdrawalRequest ok) (frame_processWithdrawalRequest ok).slot,
-    h.2.kept (QueueKept.withdrawalRequest ok)⟩) first withdrawals
+    h.2.kept (QueueKept.withdrawalRequest ok) (registryLifecycle_processWithdrawalRequest ok)⟩)
+    first withdrawals
   exact foldlM_ok_invariant Held (fun _ _ _ h ok => request h delay ok) second consolidations
 
 /-- A block keeps the invariant and keeps the queue apart, step by step of the block.
@@ -1555,7 +1574,8 @@ private theorem block (early : fork < .glamsterdam)
         (.of_data (congrArg (·.data) (processBlockExecution_validators executed)))
         (WithdrawalKept.blockExecution executed)
         (frame_processBlockExecution executed).slot,
-        h.2.kept (QueueKept.blockExecution early executed)⟩)
+        h.2.kept (QueueKept.blockExecution early executed)
+          (.of_data (congrArg (·.data) (processBlockExecution_validators executed)))⟩)
       (fun revealed => by
         obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealed
         exact id)
@@ -1568,33 +1588,40 @@ private theorem block (early : fork < .glamsterdam)
     processOperations_folds_of Kept (fun _ => id) trans
       (fun deposited h => ⟨h.1.framed (QueueKept.deposit electra deposited)
         (registryLifecycle_processDeposit deposited) (WithdrawalKept.blockDeposit electra deposited)
-        (frame_processDeposit deposited).slot, h.2.kept (QueueKept.deposit electra deposited)⟩)
+        (frame_processDeposit deposited).slot,
+        h.2.kept (QueueKept.deposit electra deposited)
+          (registryLifecycle_processDeposit deposited)⟩)
       (fun exited h => ⟨h.1.framed (QueueKept.voluntary exited)
         (registryLifecycle_processVoluntaryExit exited)
         (WithdrawalKept.exit (processVoluntaryExit_initiates exited))
-        (frame_processVoluntaryExit exited).slot, h.2.kept (QueueKept.voluntary exited)⟩)
+        (frame_processVoluntaryExit exited).slot,
+        h.2.kept (QueueKept.voluntary exited) (registryLifecycle_processVoluntaryExit exited)⟩)
       (fun changed h => ⟨h.1.framed (QueueKept.bls changed)
         (registryLifecycle_processBlsToExecutionChange changed) (WithdrawalKept.bls changed)
-        (frame_processBlsToExecutionChange changed).slot, h.2.kept (QueueKept.bls changed)⟩)
+        (frame_processBlsToExecutionChange changed).slot,
+        h.2.kept (QueueKept.bls changed) (registryLifecycle_processBlsToExecutionChange changed)⟩)
       (fun requested h => executionRequests h delay requested)
       (fun {_ _ gloas} _ => absurd gloas noGloas) operated
   have tail : Kept last after := by
     split at synced
     · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-      exact fun h => ⟨h.1.framed rfl (.of_data rfl) .of_data rfl, h.2.kept rfl⟩
+      exact fun h => ⟨h.1.framed rfl (.of_data rfl) .of_data rfl, h.2.kept rfl (.of_data rfl)⟩
     · cases synced
       exact id
   have p := foldlM_ok_invariant Held (fun _ _ _ h ok => ⟨h.1.framed (QueueKept.proposer ok)
     (registryLifecycle_processProposerSlashing ok) (WithdrawalKept.proposer ok)
-    (frame_processProposerSlashing ok).slot, h.2.kept (QueueKept.proposer ok)⟩)
+    (frame_processProposerSlashing ok).slot,
+    h.2.kept (QueueKept.proposer ok) (registryLifecycle_processProposerSlashing ok)⟩)
     (head holds) proposersOk
   have a := foldlM_ok_invariant Held (fun _ _ _ h ok => ⟨h.1.framed (QueueKept.attester ok)
     (registryLifecycle_processAttesterSlashing ok) (WithdrawalKept.attester ok)
-    (frame_processAttesterSlashing ok).slot, h.2.kept (QueueKept.attester ok)⟩) p slashingsOk
+    (frame_processAttesterSlashing ok).slot,
+    h.2.kept (QueueKept.attester ok) (registryLifecycle_processAttesterSlashing ok)⟩) p slashingsOk
   have att := foldlM_ok_invariant Held (fun _ _ _ h ok => ⟨h.1.framed
     (QueueKept.attestation electra ok) (registryLifecycle_processAttestation ok)
     (WithdrawalKept.attestation ok) (frame_processAttestation ok).slot,
-    h.2.kept (QueueKept.attestation electra ok)⟩) a attestedOk
+    h.2.kept (QueueKept.attestation electra ok) (registryLifecycle_processAttestation ok)⟩)
+    a attestedOk
   exact tail (rest att)
 
 /-- A slot keeps the order at the current epoch, and an epoch boundary moves the bound.
@@ -1650,7 +1677,7 @@ private theorem advance
       exact Nat.le_refl _
   obtain ⟨bound, held, slot, le, apart⟩ := second
   refine ⟨(held.kept (t := { epoched with slot := next }) rfl (.of_data rfl)
-    (WithdrawalKept.of_data rfl) ?_).mono le, apart.kept rfl⟩
+    (WithdrawalKept.of_data rfl) ?_).mono le, apart.kept rfl (.of_data rfl)⟩
   apply UInt64.le_iff_toNat_le.mpr
   rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
   simp only [slot, sum]
@@ -1725,7 +1752,7 @@ theorem EpochStage.Edge.pendingConsolidationsOrdered {stage : EpochStage}
 
 /-- From genesis and before Gloas, the pending consolidations of a run are ordered.
 
-Each names two different validators. -/
+Each names two different validators, and its target is in the registry. -/
 private theorem Run.pendingConsolidationsOrdered_apart {g x : ForkedBeaconState preset}
     (run : Run config checks g x)
     (genesis : Genesis (config := config) (checks := checks) g)
@@ -1769,7 +1796,21 @@ theorem Run.pendingConsolidations_apart {g x : ForkedBeaconState preset}
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
     ∀ electra : .pectra ≤ x.fork, ∀ c ∈ (x.state.pendingConsolidations electra).data.toList,
       c.sourceIndex ≠ c.targetIndex :=
-  (run.pendingConsolidationsOrdered_apart genesis early delay).2
+  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis early delay).2
+    electra c member).1
+
+/-- From genesis and before Gloas, each pending consolidation of a run has a target in the registry.
+
+A request finds its target by pubkey in the registry, which only grows. -/
+theorem Run.pendingConsolidation_targets {g x : ForkedBeaconState preset}
+    (run : Run config checks g x)
+    (genesis : Genesis (config := config) (checks := checks) g)
+    (early : x.fork < .glamsterdam)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    ∀ electra : .pectra ≤ x.fork, ∀ c ∈ (x.state.pendingConsolidations electra).data.toList,
+      c.targetIndex.toNat < x.state.validators.data.size :=
+  fun electra c member => ((run.pendingConsolidationsOrdered_apart genesis early delay).2
+    electra c member).2
 
 /-- Pending sources are distinct and retain their activation and withdrawal ordering. -/
 theorem Run.pendingConsolidation_invariant {g x : ForkedBeaconState preset}
@@ -1820,6 +1861,20 @@ theorem withdrawableKept_processRegistryUpdates {f : Fork} {s t : BeaconState pr
   subst found
   exact ⟨UInt64.le_of_eq same.symm, .inr same⟩
 
+/-- From Electra, registry updates keep an unassigned exit's withdrawable epoch or set it later. -/
+theorem processRegistryUpdates_withdrawableEpoch_of_unassigned_late
+    {preset : Preset} {fork : Fork} {config : Config}
+    {state after : BeaconState preset fork}
+    (electra : .pectra ≤ fork)
+    (ok : processRegistryUpdates config state = .ok after)
+    (i : Nat) (v : Validator) (found : state.validators.data[i]? = some v)
+    (unassigned : v.exitEpoch = FAR_FUTURE_EPOCH) :
+    ∃ w : Validator, after.validators.data[i]? = some w ∧
+      (w.withdrawableEpoch = v.withdrawableEpoch ∨
+        (getCurrentEpoch state).toNat + preset.MAX_SEED_LOOKAHEAD.toNat +
+          config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat < w.withdrawableEpoch.toNat) :=
+  (WithdrawalKept.registry_unassigned electra ok).2.2 i v found unassigned
+
 /-- From Electra, registry updates keep the withdrawable epoch of an unassigned exit.
 
 Otherwise they give it one after the current epoch. -/
@@ -1832,7 +1887,9 @@ theorem processRegistryUpdates_withdrawableEpoch_of_unassigned
     (unassigned : v.exitEpoch = FAR_FUTURE_EPOCH) :
     ∃ w : Validator, after.validators.data[i]? = some w ∧
       (w.withdrawableEpoch = v.withdrawableEpoch ∨ getCurrentEpoch state < w.withdrawableEpoch) :=
-  (WithdrawalKept.registry_unassigned electra ok).2.2 i v found unassigned
+  (processRegistryUpdates_withdrawableEpoch_of_unassigned_late electra ok i v found unassigned).imp
+    fun _ ⟨found', moved⟩ => ⟨found', moved.imp id fun late =>
+      UInt64.lt_iff_toNat_lt.mpr (by omega)⟩
 
 /-! ## The pending consolidations inside one epoch -/
 
@@ -1863,164 +1920,191 @@ def Grows {f : Fork} (s t : BeaconState preset f) : Prop :=
         ∃ w, t.validators.data[c.sourceIndex.toNat]? = some w ∧
           getCurrentEpoch s < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
 
-/-- A step that keeps the queue grows it by nothing. -/
-private theorem Grows.of_same {f : Fork} {s t : BeaconState preset f}
-    (queue : .pectra ≤ f → SamePendingQueue s t) : Grows s t := by
-  intro electra
-  rw [show t.pendingConsolidations electra = s.pendingConsolidations electra from
-    congrFun (queue electra) electra]
-  exact ⟨fun _ h => h, fun _ h => .inl h⟩
+/-- The queue only grows at its end inside a block.
 
-/-- Growths compose: the registry lifecycle keeps each exit that is assigned. -/
-private theorem Grows.trans {f : Fork} {s u t : BeaconState preset f}
-    (one : Grows s u) (two : Grows u t) (life : RegistryLifecycle u t)
-    (slot : u.slot = s.slot) : Grows s t := by
+The entries before keep their order.
+
+Each new entry at the end has a source whose exit is assigned after the current epoch.
+-/
+def Appends {f : Fork} (s t : BeaconState preset f) : Prop :=
+  ∀ electra : .pectra ≤ f, ∃ added : List PendingConsolidation,
+    (t.pendingConsolidations electra).data.toList =
+      (s.pendingConsolidations electra).data.toList ++ added ∧
+    ∀ c ∈ added, ∃ w, t.validators.data[c.sourceIndex.toNat]? = some w ∧
+      getCurrentEpoch s < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
+
+/-- An append grows the queue. -/
+private theorem Appends.grows {f : Fork} {s t : BeaconState preset f} (appends : Appends s t) :
+    Grows s t := by
   intro electra
-  obtain ⟨old, new⟩ := one electra
-  obtain ⟨old', new'⟩ := two electra
+  obtain ⟨added, queue, new⟩ := appends electra
+  rw [queue]
+  refine ⟨fun c member => List.mem_append_left _ member, fun c member => ?_⟩
+  rcases List.mem_append.mp member with old | fresh
+  · exact .inl old
+  · exact .inr (new c fresh)
+
+/-- A step that keeps the queue appends nothing. -/
+private theorem Appends.of_same {f : Fork} {s t : BeaconState preset f}
+    (queue : .pectra ≤ f → SamePendingQueue s t) : Appends s t := by
+  intro electra
+  refine ⟨[], ?_, fun _ member => by simp at member⟩
+  rw [show t.pendingConsolidations electra = s.pendingConsolidations electra from
+    congrFun (queue electra) electra, List.append_nil]
+
+/-- Appends compose: the registry lifecycle keeps each exit that is assigned. -/
+private theorem Appends.trans {f : Fork} {s u t : BeaconState preset f}
+    (one : Appends s u) (two : Appends u t) (life : RegistryLifecycle u t)
+    (slot : u.slot = s.slot) : Appends s t := by
+  intro electra
+  obtain ⟨added, queue, new⟩ := one electra
+  obtain ⟨added', queue', new'⟩ := two electra
   have epoch : getCurrentEpoch u = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
-  refine ⟨fun c member => old' c (old c member), fun c member => ?_⟩
-  rcases new' c member with middle | ⟨w, read, later, assigned⟩
-  · rcases new c middle with first | ⟨w, read, later, assigned⟩
-    · exact .inl first
-    · obtain ⟨w', read', kept⟩ := life.validators _ w read
-      have exit := kept.exitEpoch assigned
-      exact .inr ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
-  · exact .inr ⟨w, read, epoch ▸ later, assigned⟩
+  refine ⟨added ++ added', by rw [queue', queue, List.append_assoc], fun c member => ?_⟩
+  rcases List.mem_append.mp member with old | fresh
+  · obtain ⟨w, read, later, assigned⟩ := new c old
+    obtain ⟨w', read', kept⟩ := life.validators _ w read
+    have exit := kept.exitEpoch assigned
+    exact ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
+  · obtain ⟨w, read, later, assigned⟩ := new' c fresh
+    exact ⟨w, read, epoch ▸ later, assigned⟩
 
 /-- A block step: the frame, the registry lifecycle and the growth of the queue. -/
 def RiseStep {f : Fork} (s t : BeaconState preset f) : Prop :=
   Frame s t ∧ RegistryLifecycle s t ∧ Grows s t
 
+/-- A block step that appends to the queue. -/
+private def AppendStep {f : Fork} (s t : BeaconState preset f) : Prop :=
+  Frame s t ∧ RegistryLifecycle s t ∧ Appends s t
+
 /-- A step that keeps the queue. -/
-private theorem RiseStep.of_same {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
+private theorem AppendStep.of_same {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
     (life : RegistryLifecycle s t) (queue : .pectra ≤ f → SamePendingQueue s t) :
-    RiseStep s t :=
-  ⟨frame, life, Grows.of_same queue⟩
+    AppendStep s t :=
+  ⟨frame, life, Appends.of_same queue⟩
 
 /-- A step that keeps the registry and the queue. -/
-private theorem RiseStep.of_data {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
+private theorem AppendStep.of_data {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
     (same : t.validators.data = s.validators.data)
-    (queue : .pectra ≤ f → SamePendingQueue s t) : RiseStep s t :=
-  RiseStep.of_same frame (RegistryLifecycle.of_data same) queue
+    (queue : .pectra ≤ f → SamePendingQueue s t) : AppendStep s t :=
+  AppendStep.of_same frame (RegistryLifecycle.of_data same) queue
 
 /-- Every state is a step to itself. -/
-private theorem RiseStep.refl {f : Fork} (s : BeaconState preset f) : RiseStep s s :=
-  RiseStep.of_data (Frame.refl s) rfl fun _ => rfl
+private theorem AppendStep.refl {f : Fork} (s : BeaconState preset f) : AppendStep s s :=
+  AppendStep.of_data (Frame.refl s) rfl fun _ => rfl
 
 /-- Steps compose. -/
-private theorem RiseStep.trans {f : Fork} {s u t : BeaconState preset f} (one : RiseStep s u)
-    (two : RiseStep u t) : RiseStep s t :=
+private theorem AppendStep.trans {f : Fork} {s u t : BeaconState preset f}
+    (one : AppendStep s u) (two : AppendStep u t) : AppendStep s t :=
   ⟨one.1.trans two.1, one.2.1.trans two.2.1, one.2.2.trans two.2.2 two.2.1 one.1.slot⟩
 
 /-- A fold of steps is a step. -/
-private theorem RiseStep.fold {f : Fork} {s t : BeaconState preset f} {α ε : Type}
+private theorem AppendStep.fold {f : Fork} {s t : BeaconState preset f} {α ε : Type}
     {step : BeaconState preset f → α → Except ε (BeaconState preset f)} {xs : List α}
-    (kept : ∀ a item b, step a item = .ok b → RiseStep a b)
-    (ok : xs.foldlM step s = .ok t) : RiseStep s t :=
-  foldlM_ok_invariant (RiseStep s)
-    (fun _ _ _ prior computed => prior.trans (kept _ _ _ computed)) (RiseStep.refl s) ok
+    (kept : ∀ a item b, step a item = .ok b → AppendStep a b)
+    (ok : xs.foldlM step s = .ok t) : AppendStep s t :=
+  foldlM_ok_invariant (AppendStep s)
+    (fun _ _ _ prior computed => prior.trans (kept _ _ _ computed)) (AppendStep.refl s) ok
 
 /-! ### The steps of a block that grow the queue
 
 Each step has a frame and a lifecycle, and only a consolidation request grows the queue. -/
 
-section RiseSteps
+section AppendSteps
 
 variable {f : Fork} {s t : BeaconState preset f}
 
-private theorem riseStep_processProposerSlashing {slashing : ProposerSlashing}
-    (ok : processProposerSlashing config checks s slashing = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processProposerSlashing ok).toFrame
+private theorem appendStep_processProposerSlashing {slashing : ProposerSlashing}
+    (ok : processProposerSlashing config checks s slashing = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processProposerSlashing ok).toFrame
     (registryLifecycle_processProposerSlashing ok) (fun _ => SamePendingQueue.proposer ok)
 
-private theorem riseStep_processAttesterSlashing {slashing : AttesterSlashing preset f}
-    (ok : processAttesterSlashing config checks s slashing = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processAttesterSlashing ok).toFrame
+private theorem appendStep_processAttesterSlashing {slashing : AttesterSlashing preset f}
+    (ok : processAttesterSlashing config checks s slashing = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processAttesterSlashing ok).toFrame
     (registryLifecycle_processAttesterSlashing ok) (fun _ => SamePendingQueue.attester ok)
 
-private theorem riseStep_processAttestation {attestation : Attestation preset f} {parent : Slot}
-    (ok : processAttestation config checks s parent attestation = .ok t) : RiseStep s t :=
-  RiseStep.of_data (frame_processAttestation ok)
+private theorem appendStep_processAttestation {attestation : Attestation preset f} {parent : Slot}
+    (ok : processAttestation config checks s parent attestation = .ok t) : AppendStep s t :=
+  AppendStep.of_data (frame_processAttestation ok)
     (congrArg (·.data) (processAttestation_registry ok).1)
     (fun electra => SamePendingQueue.attestation electra ok)
 
-private theorem riseStep_processDeposit {before : f < .hegota} {deposit : Deposit}
-    (ok : processDeposit config checks before s deposit = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processDeposit ok).toFrame (registryLifecycle_processDeposit ok)
+private theorem appendStep_processDeposit {before : f < .hegota} {deposit : Deposit}
+    (ok : processDeposit config checks before s deposit = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processDeposit ok).toFrame (registryLifecycle_processDeposit ok)
     (fun electra => SamePendingQueue.deposit electra ok)
 
-private theorem riseStep_processVoluntaryExit {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processVoluntaryExit ok).toFrame
+private theorem appendStep_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (ok : processVoluntaryExit config checks s signed = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processVoluntaryExit ok).toFrame
     (registryLifecycle_processVoluntaryExit ok) (fun _ => SamePendingQueue.voluntary ok)
 
-private theorem riseStep_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
-    (ok : processBlsToExecutionChange config checks s signed = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processBlsToExecutionChange ok).toFrame
+private theorem appendStep_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (ok : processBlsToExecutionChange config checks s signed = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processBlsToExecutionChange ok).toFrame
     (registryLifecycle_processBlsToExecutionChange ok) (fun _ => SamePendingQueue.bls ok)
 
-private theorem riseStep_processDepositRequest {electra : .pectra ≤ f} {request : DepositRequest}
-    (ok : processDepositRequest s electra request = .ok t) : RiseStep s t :=
-  RiseStep.of_data (frame_processDepositRequest ok).toFrame
+private theorem appendStep_processDepositRequest {electra : .pectra ≤ f} {request : DepositRequest}
+    (ok : processDepositRequest s electra request = .ok t) : AppendStep s t :=
+  AppendStep.of_data (frame_processDepositRequest ok).toFrame
     (congrArg (·.data) (processDepositRequest_ok ok).2.1)
     (fun _ => SamePendingQueue.depositRequest ok)
 
-private theorem riseStep_processWithdrawalRequest {electra : .pectra ≤ f}
+private theorem appendStep_processWithdrawalRequest {electra : .pectra ≤ f}
     {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processWithdrawalRequest ok).toFrame
+    (ok : processWithdrawalRequest config s electra request = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processWithdrawalRequest ok).toFrame
     (registryLifecycle_processWithdrawalRequest ok)
     (fun _ => SamePendingQueue.withdrawalRequest ok)
 
-end RiseSteps
+end AppendSteps
 
 section RiseQueue
 
 variable {f : Fork} {s t : BeaconState preset f}
 
-/-- A queued consolidation assigns its source an exit after the current epoch. -/
-private theorem queueStep_queueConsolidation {electra : .pectra ≤ f}
+/-- A queued consolidation appends one entry.
+
+It assigns its source an exit after the current epoch. -/
+private theorem appends_queueConsolidation {electra : .pectra ≤ f}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
-    Grows s t := by
+    Appends s t := by
   obtain ⟨churned, written, epoch, withdrawal, -, assigned, later, -, set, validators, pushed⟩ :=
     queueConsolidation_queued delay ok
   intro electra'
-  rw [pushed, validators]
-  refine ⟨fun c member => List.mem_append_left _ member, fun c member => ?_⟩
-  rcases List.mem_append.mp member with member | member
-  · exact .inl member
-  · rw [List.mem_singleton] at member
-    subst member
-    exact .inr ⟨_, getValidator_eq_ok_iff.mp (getValidator_setValidator_self set), later,
-      assigned⟩
+  refine ⟨[⟨sourceIndex, targetIndex⟩], pushed, fun c member => ?_⟩
+  rw [List.mem_singleton] at member
+  subst member
+  rw [validators]
+  exact ⟨_, getValidator_eq_ok_iff.mp (getValidator_setValidator_self set), later, assigned⟩
 
 /-- A consolidation request switches credentials or queues a consolidation. -/
-private theorem riseStep_processConsolidationRequest {electra : .pectra ≤ f}
+private theorem appendStep_processConsolidationRequest {electra : .pectra ≤ f}
     {request : ConsolidationRequest}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processConsolidationRequest config s electra request = .ok t) : RiseStep s t := by
+    (ok : processConsolidationRequest config s electra request = .ok t) : AppendStep s t := by
   have frame := (frame_processConsolidationRequest ok).toFrame
   have life := registryLifecycle_processConsolidationRequest ok
-  suffices new : Grows s t from ⟨frame, life, new⟩
+  suffices new : Appends s t from ⟨frame, life, new⟩
   clear frame life
   rcases consolidationRequest_cases ok with rfl | ⟨_, _, -, switched⟩ | ⟨_, _, _, _, -, queued⟩
-  · exact Grows.of_same fun _ => rfl
-  · exact Grows.of_same fun _ => SamePendingQueue.compounding switched
-  · exact queueStep_queueConsolidation delay queued
+  · exact Appends.of_same fun _ => rfl
+  · exact Appends.of_same fun _ => SamePendingQueue.compounding switched
+  · exact appends_queueConsolidation delay queued
 
 /-- The requests of the execution layer keep the frame, the lifecycle and the queue. -/
-private theorem riseStep_processExecutionRequests {body : BeaconBlockBody preset f}
+private theorem appendStep_processExecutionRequests {body : BeaconBlockBody preset f}
     {electra : .pectra ≤ f ∧ f < .glamsterdam}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processExecutionRequests config s body electra = .ok t) : RiseStep s t := by
+    (ok : processExecutionRequests config s body electra = .ok t) : AppendStep s t := by
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
-  exact (RiseStep.fold (fun _ _ _ ok => riseStep_processDepositRequest ok) deposits).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processWithdrawalRequest ok) withdrawals).trans
-      (RiseStep.fold (fun _ _ _ ok => riseStep_processConsolidationRequest delay ok)
+  exact (AppendStep.fold (fun _ _ _ ok => appendStep_processDepositRequest ok) deposits).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processWithdrawalRequest ok) withdrawals).trans
+      (AppendStep.fold (fun _ _ _ ok => appendStep_processConsolidationRequest delay ok)
         consolidations)
 
 end RiseQueue
@@ -2030,37 +2114,40 @@ section RiseBlock
 variable {f : Fork} {s t : BeaconState preset f}
 
 /-- The operations of a block keep the frame, the lifecycle and the queue. -/
-private theorem riseStep_processOperations {body : BeaconBlockBody preset f} {parent : Slot}
+private theorem appendStep_processOperations {body : BeaconBlockBody preset f} {parent : Slot}
     (early : f < .glamsterdam) (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : processOperations config checks s body parent = .ok t) :
-    RiseStep s t := by
+    AppendStep s t := by
   unfold processOperations at ok
   rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at ok
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
     exits, changed, changes, requests⟩ := ok
-  have c : RiseStep exited changed := by
+  have c : AppendStep exited changed := by
     unfold processBlsToExecutionChanges at changes
     split at changes
     · rw [← Array.foldlM_toList] at changes
-      exact RiseStep.fold (fun _ _ _ ok => riseStep_processBlsToExecutionChange ok) changes
-    · cases changes; exact RiseStep.refl _
-  have r : RiseStep changed t := by
+      exact AppendStep.fold (fun _ _ _ ok => appendStep_processBlsToExecutionChange ok) changes
+    · cases changes; exact AppendStep.refl _
+  have r : AppendStep changed t := by
     split at requests
-    · exact riseStep_processExecutionRequests delay requests
-    · cases requests; exact RiseStep.refl _
-  exact (RiseStep.fold (fun _ _ _ ok => riseStep_processProposerSlashing ok) proposers).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processAttesterSlashing ok) attesters).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processAttestation ok) attested).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processDeposit ok) deposits).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processVoluntaryExit ok) exits).trans <|
+    · exact appendStep_processExecutionRequests delay requests
+    · cases requests; exact AppendStep.refl _
+  exact (AppendStep.fold (fun _ _ _ ok => appendStep_processProposerSlashing ok) proposers).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttesterSlashing ok) attesters).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttestation ok) attested).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processDeposit ok) deposits).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processVoluntaryExit ok) exits).trans <|
     c.trans r
 
-/-- A block from Altair and before Gloas keeps the frame, the lifecycle and the queue. -/
-theorem riseStep_processBlock {engine : ExecutionEngine preset f}
+/-- A block from Altair and before Gloas keeps the frame and the lifecycle.
+
+It appends to the queue of pending consolidations. -/
+theorem appendStep_processBlock {engine : ExecutionEngine preset f}
     {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processBlock config checks engine s block = .ok t) : RiseStep s t := by
+    (ok : processBlock config checks engine s block = .ok t) :
+    Frame s t ∧ RegistryLifecycle s t ∧ Appends s t := by
   unfold processBlock at ok
   simp only [altair, ↓reduceDIte] at ok
   unfold processBlockAltair at ok
@@ -2069,30 +2156,38 @@ theorem riseStep_processBlock {engine : ExecutionEngine preset f}
     votedOk, operated, operatedOk, synced⟩ := ok
   rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at paidOk
   cases paidOk
-  have header : RiseStep s headed := by
+  have header : AppendStep s headed := by
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    exact RiseStep.of_data (frame_processBlockHeader headedOk).toFrame rfl fun _ => rfl
-  have e : RiseStep headed executed := by
+    exact AppendStep.of_data (frame_processBlockHeader headedOk).toFrame rfl fun _ => rfl
+  have e : AppendStep headed executed := by
     split at executedOk
-    · exact RiseStep.of_data (frame_processBlockExecution executedOk).toFrame
+    · exact AppendStep.of_data (frame_processBlockExecution executedOk).toFrame
         (congrArg (·.data) (processBlockExecution_validators executedOk))
         (fun _ => SamePendingQueue.blockExecution early executedOk)
-    · cases executedOk; exact RiseStep.refl _
-  have randao : RiseStep executed revealed := by
+    · cases executedOk; exact AppendStep.refl _
+  have randao : AppendStep executed revealed := by
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-    exact RiseStep.of_data (frame_processRandao revealedOk).toFrame rfl fun _ => rfl
-  have v : RiseStep revealed voted := by
+    exact AppendStep.of_data (frame_processRandao revealedOk).toFrame rfl fun _ => rfl
+  have v : AppendStep revealed voted := by
     split at votedOk
     · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-      exact RiseStep.of_data (frame_processEth1Data votedOk).toFrame (by rw [← rest])
+      exact AppendStep.of_data (frame_processEth1Data votedOk).toFrame (by rw [← rest])
         (fun _ => by unfold SamePendingQueue; rw [← rest])
-    · cases votedOk; exact RiseStep.refl _
-  have sync : RiseStep operated t := by
+    · cases votedOk; exact AppendStep.refl _
+  have sync : AppendStep operated t := by
     have frame := (frame_processSyncAggregate synced).toFrame
     obtain ⟨balances, rfl⟩ := processSyncAggregate_eq synced
-    exact RiseStep.of_data frame rfl fun _ => rfl
+    exact AppendStep.of_data frame rfl fun _ => rfl
   exact header.trans <| e.trans <| randao.trans <| v.trans <|
-    (riseStep_processOperations early delay operatedOk).trans sync
+    (appendStep_processOperations early delay operatedOk).trans sync
+
+/-- A block from Altair and before Gloas keeps the frame, the lifecycle and the queue. -/
+theorem riseStep_processBlock {engine : ExecutionEngine preset f}
+    {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
+    (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (ok : processBlock config checks engine s block = .ok t) : RiseStep s t :=
+  let ⟨frame, life, appends⟩ := appendStep_processBlock altair early delay ok
+  ⟨frame, life, appends.grows⟩
 
 end RiseBlock
 

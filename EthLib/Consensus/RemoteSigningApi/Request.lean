@@ -15,8 +15,8 @@ The [schemas] of the Remote-signing API fix each request, and the [sign endpoint
 
 It holds the thirteen kinds of request that exist before Gloas, and the five that Gloas adds.
 
-[schemas]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/schemas.yaml
-[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/sign.yaml
+[schemas]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/schemas.yaml
+[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/sign.yaml
 -/
 
 @[expose] public section

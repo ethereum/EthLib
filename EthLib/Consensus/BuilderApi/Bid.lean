@@ -31,15 +31,13 @@ The fee recipient of the header must be the one the proposer registered.
 
 The signature of the builder must verify.
 
-The source calls the signature check without asserting its result, and EthLib refuses a bid that fails it.
-
 The [builder specification] gives the builder's rules, and its [validator document] the proposer's.
 
 [`header.yaml`] gives the 200, 204, 400 and 500 responses to a request.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#bidding
-[validator document]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/validator.md#bid-processing
-[`header.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/header.yaml
+[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#bidding
+[validator document]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/validator.md#bid-processing
+[`header.yaml`]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/header.yaml
 -/
 
 @[expose] public section
@@ -117,9 +115,7 @@ The state is that of the proposal, before the block under construction.
 
 The fee recipient is the one the proposer registered last.
 
-The rules run in the order of the source, so the first that fails names the error.
-
-The source does not assert the signature check, and EthLib refuses a bid whose signature does not verify. -/
+The rules run in the order of the source, so the first that fails names the error. -/
 def processBid (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (range : HasBuilderApi fork) (signed : SignedBuilderBid preset fork)
     (feeRecipient : ExecutionAddress) : Except BidError Unit := do

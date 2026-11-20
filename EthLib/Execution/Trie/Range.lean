@@ -15,7 +15,7 @@ The snap capability of devp2p sends such ranges, as [`caps/snap.md`][snap] says.
 
 Its sections "AccountRange (0x01)" and "StorageRanges (0x03)" describe the proofs.
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 The first end is a starting key, which the trie may not hold.
 

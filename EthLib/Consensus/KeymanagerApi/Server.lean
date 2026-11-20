@@ -17,7 +17,7 @@ A view of the chain, if the client has one, serves the call that signs a volunta
 
 Every other method and path gets HTTP 404, including calls that this module does not model yet.
 
-[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/keymanager-oapi.yaml
+[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/keymanager-oapi.yaml
 -/
 
 @[expose] public section
@@ -59,6 +59,8 @@ def handle (text : JsonText) (config : ClientConfig) (chain : Option ChainView) 
     withPubkey key state fun pubkey => gasLimitCalls.handle config state method pubkey body
   | method, ["eth", "v1", "validator", key, "graffiti"] =>
     withPubkey key state fun pubkey => graffitiCalls.handle config state method pubkey body
+  | method, ["eth", "v1", "validator", key, "builder_config"] =>
+    withPubkey key state fun pubkey => builderConfigCalls.handle config state method pubkey body
   | "POST", ["eth", "v1", "validator", key, "voluntary_exit"] =>
     withPubkey key state fun pubkey => (postVoluntaryExit chain state pubkey query, state)
   | _, _ => (notFound, state)

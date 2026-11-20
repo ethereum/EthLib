@@ -15,6 +15,10 @@ It is the least positive such limit when the limits that complete form an interv
 The result of `eth_createAccessList` lists what the call read or wrote.
 
 Its gas used and its error are those of the call with that list.
+
+Before Berlin, the method rejects a request whose call runs, with code -32000.
+
+Both methods ignore the type of the request, as `eth_call` does.
 -/
 
 public section
@@ -208,36 +212,65 @@ theorem estimateGas_pred_not_completes {g : Nat} (h : v.estimateGas tx p c = .ok
 
 /-- The result of `eth_createAccessList` reports the call with its own access list.
 
-From Berlin, that list is what the call of the request read or wrote.
+The fork of the call is Berlin or later, and the list is what that call read or wrote.
 
-The gas used and the error message are then those of the call with that list.
-
-Before Berlin, the list is empty, and they are those of the call of the request. -/
+The gas used and the error message are those of the call with that list. -/
 theorem createAccessList_eq_ok {r : AccessListResult} (h : v.createAccessList tx p c = .ok r) :
-    ∃ s₁ o₁, v.runCall tx p c = .ok (s₁, o₁) ∧
-      if s₁.fork < .berlin then
-        r = { accessList := [], gasUsed := callGasUsed s₁ o₁, error := callErrorMessage o₁ }
-      else
-        r.accessList = accessedList s₁ o₁ ∧ ∃ s o,
-          v.runCall { tx with accessList := some r.accessList
-                              type := if tx.kind = 0 then some 1 else tx.type } p c = .ok (s, o) ∧
-          r.gasUsed = callGasUsed s o ∧ r.error = callErrorMessage o := by
+    ∃ s₁ o₁, v.runCall tx p c = .ok (s₁, o₁) ∧ .berlin ≤ s₁.fork ∧
+      r.accessList = accessedList s₁ o₁ ∧ ∃ s o,
+        v.runCall { tx with accessList := some r.accessList } p c = .ok (s, o) ∧
+        r.gasUsed = callGasUsed s o ∧ r.error = callErrorMessage o := by
   unfold createAccessList at h
   rcases h1 : v.runCall tx p c with e | ⟨s₁, o₁⟩
   · simp [h1, bind, Except.bind] at h
   simp only [h1, bind, Except.bind] at h
   refine ⟨s₁, o₁, rfl, ?_⟩
-  by_cases hf : s₁.fork < .berlin
-  · simp only [hf, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h ⊢
-    exact h.symm
-  simp only [hf, ↓reduceIte] at h ⊢
-  rcases h2 : v.runCall { tx with accessList := some (accessedList s₁ o₁)
-                                  type := if tx.kind = 0 then some 1 else tx.type } p c
-    with e | ⟨s, o⟩
-  · simp [h2] at h
-  simp only [h2, pure, Except.pure, Except.ok.injEq] at h
-  subst h
-  exact ⟨rfl, s, o, h2, rfl, rfl⟩
+  by_cases hf : .berlin ≤ s₁.fork
+  · simp only [hf, Base.ensure, ↓reduceIte] at h
+    rcases h2 : v.runCall { tx with accessList := some (accessedList s₁ o₁) } p c
+      with e | ⟨s, o⟩
+    · simp [h2] at h
+    simp only [h2, pure, Except.pure, Except.ok.injEq] at h
+    subst h
+    exact ⟨hf, rfl, s, o, h2, rfl, rfl⟩
+  · simp [hf, Base.ensure] at h
+
+/-- Before Berlin, `eth_createAccessList` rejects a request whose call runs, with code -32000. -/
+theorem createAccessList_before_berlin {s : CallSetup} {o : Transactions.CallOutput}
+    (h : v.runCall tx p c = .ok (s, o)) (hf : s.fork < .berlin) :
+    v.createAccessList tx p c = .error (callRuleError "no access list before Berlin") := by
+  have hf' : ¬(.berlin ≤ s.fork) := Nat.not_le.mpr hf
+  simp [createAccessList, h, hf', Base.ensure, bind, Except.bind]
+
+/-- The search of a gas limit ignores the type of the request, as each call that it runs does. -/
+private theorem searchGas_type (type : Option UInt8) (lo hi : Nat) :
+    v.searchGas { tx with type } p c lo hi = v.searchGas tx p c lo hi := by
+  rw [searchGas, searchGas]
+  split
+  · -- Each call drops the type first, so it completes exactly when the call of no type does.
+    have hc : v.Completes { tx with type } p c ((lo + hi) / 2) ↔
+        v.Completes tx p c ((lo + hi) / 2) := Iff.rfl
+    by_cases h : v.Completes tx p c ((lo + hi) / 2)
+    · rw [ite_eq_left (hc.mpr h), ite_eq_left h]
+      exact searchGas_type type lo _
+    · rw [ite_eq_right (fun h' => h (hc.mp h')), ite_eq_right h]
+      exact searchGas_type type _ hi
+  · rfl
+termination_by hi - lo
+
+/-- `eth_estimateGas` ignores the type of the request: any type gives the answer of no type. -/
+theorem estimateGas_type (type : Option UInt8) :
+    v.estimateGas { tx with type } p c = v.estimateGas tx p c := by
+  have hprepare : v.prepareCall { tx with type } p c = v.prepareCall tx p c := rfl
+  have hrun : ∀ g, v.runCall { { tx with type } with gas := some g } p c =
+      v.runCall { tx with gas := some g } p c := fun _ => rfl
+  unfold estimateGas
+  simp only [hprepare, hrun, searchGas_type]
+
+/-- `eth_createAccessList` ignores the type of the request: any type gives the answer of no type.
+-/
+theorem createAccessList_type (type : Option UInt8) :
+    v.createAccessList { tx with type } p c = v.createAccessList tx p c := rfl
 
 end ChainView
 

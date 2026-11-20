@@ -20,7 +20,10 @@ from ethlib.networking.forkid import BLOCK
 from ethlib.serialization import rlp
 from raising import raises
 
-# The rules come from caps/eth.md of ethereum/devp2p at commit 88f1c808.
+# The rules come from caps/eth.md of ethereum/devp2p.
+#
+# Commit: 277ceb399c15df86efb17d51eb58200c26879784
+#
 # The sections are "Basic Operation", "Protocol Messages" and "Transactions (0x02)".
 # No official vectors exist, so each message is RLP built here.
 

@@ -190,7 +190,7 @@ def mainnet : ChainConfig where
     (.bpo1, .time 1765290071),
     (.bpo2, .time 1767747671)]
 
-/-- The configuration of the Hoodi test network, from Frontier to Glamsterdam.
+/-- The configuration of the Hoodi test network, from Frontier to BPO2.
 
 Its chain ID is 560048, as its [genesis file][hoodi] gives.
 
@@ -204,13 +204,23 @@ Shapella and Dencun activate at time 0, so Hoodi starts with the rules of Dencun
 
 The genesis file lists no DAO fork and no fork that only delays the difficulty bomb.
 
-The meta EIP of each later fork gives its time: EIP-7600, EIP-7607 (BPO1, BPO2) and EIP-7773.
+The meta EIP of each later fork gives its time: EIP-7600 and EIP-7607 (BPO1, BPO2).
 
-The genesis file gives each fork from Dencun to BPO2 the blob schedule of its EIPs.
+The genesis file schedules no fork after BPO2.
+
+The Hoodi row of [EIP-7773][eip-7773], the meta EIP of Glamsterdam, gives no time either.
+
+A later fork comes from a later genesis file, once the meta EIP of that fork gives the same time.
+
+The genesis file gives Dencun, Pectra, BPO1 and BPO2 the blob schedules of their EIPs.
+
+Fusaka keeps the schedule of Pectra.
 
 So Hoodi sets no blob schedule of its own.
 
-[hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json -/
+[hoodi]: https://github.com/eth-clients/hoodi/blob/2a7efb3c530cce7c71702cc98d0f965df2411c11/metadata/genesis.json
+[eip-7773]: https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-7773.md#activation
+-/
 def hoodi : ChainConfig where
   chainId := 560048
   depositContractAddress := #v[0x00, 0x00, 0x00, 0x00, 0x21, 0x9a, 0xb5, 0x40, 0x35, 0x6c, 0xbb,
@@ -232,8 +242,7 @@ def hoodi : ChainConfig where
     (.pectra, .time 1742999832),
     (.fusaka, .time 1761677592),
     (.bpo1, .time 1762365720),
-    (.bpo2, .time 1762955544),
-    (.glamsterdam, .time 1793036568)]
+    (.bpo2, .time 1762955544)]
 
 end ChainConfig
 

@@ -124,7 +124,9 @@ private theorem initialOwnership_valid (x : ForkedBeaconState preset) (high : Na
 
 /-- The initial ownership issues one token per unit of each of its pots.
 
-Its first pot is the balance above the effective balance of the keys active at `x`.
+Its first pot is the capped excess of the keys active at `x`.
+
+For each key it is its balance capped at its largest effective balance, minus its effective balance.
 
 The next two are the pre-active stake `Pre` and the due consolidation credits `Pi_c`.
 
@@ -133,7 +135,7 @@ The last is the excess of the pending sources inactive at `x` and withdrawable i
 So it issues at most their sum. -/
 private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat)
     (early : x.fork < .glamsterdam) :
-    (initialOwnership x high).issued.card ≤ initialExcess x + preActiveStake x +
+    (initialOwnership x high).issued.card ≤ initialCappedExcess x + preActiveStake x +
         dueConsolidationCredits x (driftHorizon x high) + pendingSourceExcess x high := by
   have potCard : ∀ p, ((Finset.range (if p < 2 then x.state.validators.data.size
       else (pendingQueue x).length)).biUnion fun idx =>
@@ -161,18 +163,18 @@ private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat
     simp only [show (0 : Nat) < 2 from by decide, show (1 : Nat) < 2 from by decide,
       show ¬ (2 : Nat) < 2 from by decide, show ¬ (3 : Nat) < 2 from by decide, ↓reduceIte]
     omega
-  -- Pot 0: the active excess.
+  -- Pot 0: the active excess, with each balance capped.
   have excess : (∑ i ∈ Finset.range x.state.validators.data.size, (initialPot x high 0 i).2) ≤
-      initialExcess x := by
+      initialCappedExcess x := by
     have rewrite : (∑ i ∈ Finset.range x.state.validators.data.size, (initialPot x high 0 i).2) =
         ∑ i ∈ (Finset.range x.state.validators.data.size).filter (fun i =>
           (x.state.validators.data[i]?).any fun v =>
             isActiveValidator v (getCurrentEpoch x.state)),
-          (actualBalanceAt x i - effectiveAt x i) := by
+          (potential x i - effectiveAt x i) := by
       rw [Finset.sum_filter]
       exact Finset.sum_congr rfl fun i _ => by simp [initialPot]
     rw [rewrite]
-    apply initial_active_sum_le _ early _ fun i => actualBalanceAt x i - effectiveAt x i
+    apply initial_active_sum_le _ early _ fun i => potential x i - effectiveAt x i
     intro i member
     obtain ⟨_, active⟩ := Finset.mem_filter.mp member
     cases found : x.state.validators.data[i]? with
@@ -266,19 +268,21 @@ private theorem supportedAt_current {x : ForkedBeaconState preset} {v : Validato
       rw [equal]
       exact previous
 
-/-- The active excess of a key at the start is held at its endpoint. -/
+/-- The capped excess of an active key at the start is held at its endpoint.
+
+It is the key's balance capped at its largest effective balance, minus its effective balance. -/
 private theorem initialOwnership_excess {x : ForkedBeaconState preset} {high i : Nat}
     {v : Validator} (found : x.state.validators.data[i]? = some v)
     (active : isActiveValidator v (getCurrentEpoch x.state) = true) :
-    actualBalanceAt x i - effectiveAt x i ≤
+    potential x i - effectiveAt x i ≤
       (held (initialOwnership x high) i ∩ (initialOwnership x high).endpoint).card := by
     have inside : i < x.state.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
     obtain ⟨heldIn, front, size⟩ := initialOwnership_block (x := x) (high := high) (p := 0)
       (idx := i) (by omega) (by simpa using inside)
     have value : initialPot x high 0 i =
-        (i, actualBalanceAt x i - effectiveAt x i) := by simp [initialPot, found, active]
+        (i, potential x i - effectiveAt x i) := by simp [initialPot, found, active]
     have owner : (initialPot x high 0 i).1 = i := by rw [value]
-    have units : (initialPot x high 0 i).2 = actualBalanceAt x i - effectiveAt x i := by
+    have units : (initialPot x high 0 i).2 = potential x i - effectiveAt x i := by
       rw [value]
     rw [owner] at heldIn
     have bound := Finset.card_le_card (Finset.subset_inter heldIn (front (by omega)))
@@ -335,7 +339,7 @@ The reserve cut reads the actual pending queue.
 
 Each clause reads at most two pot entries of one key.
 
-The entries are its active excess, its potential, and its due pending principal and headroom. -/
+The entries are its capped excess, its potential, and its due pending principal and headroom. -/
 theorem initialOwnership_exists {g x : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (early : x.fork < .glamsterdam) (high : Nat) :
@@ -344,10 +348,10 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
   have valid := initialOwnership_valid x high
   have within := x.state.validators.bound early
   have unique := shared.pubkeysDistinct genesis
-  -- The active excess of a key is held at its endpoint.
+  -- The capped excess of an active key is held at its endpoint.
   have excess : ∀ i v, x.state.validators.data[i]? = some v →
       isActiveValidator v (getCurrentEpoch x.state) = true →
-      actualBalanceAt x i - effectiveAt x i ≤
+      potential x i - effectiveAt x i ≤
         (held (initialOwnership x high) i ∩ (initialOwnership x high).endpoint).card :=
     fun _ _ found active => initialOwnership_excess found active
   -- A due pending source holds at least its balance, up to its cap.
@@ -375,8 +379,12 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
       obtain ⟨zeroHeld, _, zeroSize⟩ := initialOwnership_block (x := x) (high := high) (p := 0)
         (idx := c.sourceIndex.toNat) (by omega) (by simpa using inside)
       have zeroValue : initialPot x high 0 c.sourceIndex.toNat = (c.sourceIndex.toNat,
-          actualBalanceAt x c.sourceIndex.toNat - effectiveAt x c.sourceIndex.toNat) := by
+          potential x c.sourceIndex.toNat - effectiveAt x c.sourceIndex.toNat) := by
         simp [initialPot, found, active]
+      have capped : potential x c.sourceIndex.toNat = max v.effectiveBalance.toNat
+          (min (actualBalanceAt x c.sourceIndex.toNat)
+            (withdrawalMaxEffectiveBalance preset x.fork v).toNat) := by
+        simp only [potential, found, Option.map_some, Option.getD_some]
       have zeroOwner : (initialPot x high 0 c.sourceIndex.toNat).1 =
           c.sourceIndex.toNat := by rw [zeroValue]
       have zeroUnits := congrArg Prod.snd zeroValue
@@ -399,7 +407,7 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
         (initialPot_blocks_disjoint (x := x) (high := high) (by decide : (2 : Nat) ≠ 3))
       simp only at twoUnits threeUnits
       omega
-  -- An active key's full stake sits below its effective balance plus its endpoint tokens.
+  -- An active key's capped stake sits below its effective balance plus its endpoint tokens.
   have inter : ∀ i, (held (initialOwnership x high) i ∩ (initialOwnership x high).endpoint).card ≤
       (held (initialOwnership x high) i).card := fun i =>
     Finset.card_le_card Finset.inter_subset_left
@@ -439,7 +447,7 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
     split_ifs with ref
     · exact ⟨le_rfl, fun absent => absurd ref absent⟩
     · exact ⟨Nat.zero_le _, fun _ => rfl⟩
-  · -- A new reference key holds its excess above its effective balance.
+  · -- A new reference key holds its capped excess above its effective balance.
     rw [original]
     simp only [ref, ↓reduceIte]
     cases found : x.state.validators.data[i]? with
@@ -453,8 +461,7 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
       omega
   · obtain rfl := read found readU
     have kept := excess i v found active
-    have capped := Nat.min_le_left (actualBalanceAt x i)
-      (withdrawalMaxEffectiveBalance preset x.fork v).toNat
+    simp only [potential, found, Option.map_some, Option.getD_some] at kept
     omega
   · obtain ⟨c, member, rfl, due⟩ := pending
     obtain ⟨j, entry⟩ := position c member
@@ -476,8 +483,7 @@ theorem initialOwnership_exists {g x : ForkedBeaconState preset}
     · exact absurd queued absent
   · obtain rfl := read readX readU
     have kept := excess i v readX active
-    have capped := Nat.min_le_left (actualBalanceAt x i)
-      (withdrawalMaxEffectiveBalance preset x.fork v).toNat
+    simp only [potential, readX, Option.map_some, Option.getD_some] at kept
     constructor <;> omega
   · -- A supported key outside the previous-only keys is an unslashed key active at `x`.
     have member := Array.mem_toList_iff.mpr (Array.mem_of_getElem? found)
@@ -946,8 +952,11 @@ private theorem reserveCut_balance_hidden_append {x u v : ForkedBeaconState pres
       -- A hidden validator is not funding-relevant, so its balance grew within its tokens.
       have ⟨w, found, _⟩ := wasRelevant
       have change := (balances i).resolve_right fun hidden => (hidden w found).1 wasRelevant
+      have rise := capped i w change
       have tokens := heldGrowth i
-      rw [effective i inside, original]
+      have foundV := (lookup i inside).trans found
+      rw [original]
+      simp only [potential, found, foundV, Option.map_some, Option.getD_some] at old ⊢
       omega
     · obtain ⟨w, found, _⟩ := support
       exact absurd ref (notReference i w inside found)
@@ -1598,7 +1607,7 @@ open Cryptography.Bls
 /-- A deposit to a key no validator has raises no balance inside the registry.
 
 It changes nothing, or appends one validator with its balance. -/
-private theorem applyPendingDeposit_absent_balances {fork : Fork}
+theorem applyPendingDeposit_absent_balances {fork : Fork}
     {u v : BeaconState preset fork} {deposit : PendingDeposit} (altair : .altair ≤ fork)
     (absent : u.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
     (ok : applyPendingDeposit config checks u deposit = .ok v) {i : Nat}
@@ -2045,7 +2054,7 @@ def EndpointCoverAll (x u : ForkedBeaconState preset) (o : Ownership) : Prop :=
 
 /-- The initial ownership covers every unslashed validator that has not exited.
 
-An active key is supported at its effective balance and holds its excess at the endpoint.
+An active key is supported at its effective balance and holds its capped excess at the endpoint.
 
 A key still to activate holds its potential at the endpoint. -/
 theorem initialOwnership_endpointCover {g x : ForkedBeaconState preset}
@@ -2053,11 +2062,10 @@ theorem initialOwnership_endpointCover {g x : ForkedBeaconState preset}
     (early : x.fork < .glamsterdam) (high : Nat) :
     EndpointCoverAll x x (initialOwnership x high) := by
   intro i v found clean notExited _
-  have capped := Nat.min_le_left (actualBalanceAt x i)
-    (withdrawalMaxEffectiveBalance preset x.fork v).toNat
   by_cases now : isActiveValidator v (getCurrentEpoch x.state) = true
   · have weight := initialOwnership_weight shared genesis early found now clean
     have kept := initialOwnership_excess (high := high) found now
+    simp only [potential, found, Option.map_some, Option.getD_some] at kept
     have effective : effectiveAt x i = v.effectiveBalance.toNat := by simp [effectiveAt, found]
     rw [weight]
     omega
@@ -3829,8 +3837,9 @@ theorem reserveCut_of_kept {x : ForkedBeaconState preset} {high : Nat} {fork : F
   · intro i ref notRetired support
     have old := reference i ref notRetired (relevant i support)
     obtain ⟨w, found, _⟩ := support
-    obtain ⟨w₀, foundU, _, effective, _, _, _, _⟩ := lookup i w found
-    rw [effectiveEq i w w₀ found foundU effective, balanceEq]
+    obtain ⟨w₀, foundU, _, effective, cap, _, _, _⟩ := lookup i w found
+    simp only [potential, found, foundU, Option.map_some, Option.getD_some] at old ⊢
+    rw [effective, cap, balanceEq]
     exact old
   · intro i initial w found active clean finite located support
     obtain ⟨w₀, foundU, _, effective, credentials, slashed, life, _⟩ := lookup i w located
@@ -4534,9 +4543,12 @@ private theorem reserveCut_transfer {x u v : ForkedBeaconState preset} {high pos
   · intro i ref notRetired support
     obtain ⟨source, old⟩ := remains i notRetired
     have bound := reference i ref old (relevant i support)
-    have change := balances i source
     have gain := heldGrowth i source
-    rw [effective i, originalOther i source]
+    obtain ⟨w', located, _⟩ := support
+    have rise := capped i w' source
+    rw [originalOther i source]
+    simp only [potential, located, (lookup i).symm.trans located, Option.map_some,
+      Option.getD_some] at bound ⊢
     omega
   · intro i initial validator located active clean finite current support
     by_cases source : i = p.source
@@ -4654,9 +4666,9 @@ private theorem reserveCut_payment_funded {x : ForkedBeaconState preset} {fork :
   · have relevant : FundingRelevant ⟨fork, s⟩ next (c :: suffix) c.sourceIndex.toNat :=
       ⟨w, read, Or.inr (Or.inr ⟨c, List.mem_cons_self, rfl⟩)⟩
     have funded := reserve.2.2.2.1 _ fresh unretired relevant
-    rw [actual] at funded
+    simp only [potential, read, Option.map_some, Option.getD_some] at funded
     rw [amount]
-    exact (Nat.min_le_left _ _).trans ((Nat.le_max_right _ _).trans funded)
+    exact (Nat.min_le_right _ _).trans ((Nat.le_max_left _ _).trans funded)
   · have funded := reserve.2.2.2.2.2.2.1 c List.mem_cons_self w read due fresh
     rw [actual] at funded
     change min b.toNat (withdrawalMaxEffectiveBalance preset fork w).toNat ≤

@@ -46,8 +46,8 @@ This library writes each timestamp in decimal, as the example of [`misc.yaml`] d
 Delivered payloads may also be sorted by value, lowest or highest first, as [`misc.yaml`] says.
 
 [submission endpoint]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/blocks.yaml
-[Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding
-[Electra bid]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/electra/builder.md#builderbid
+[Deneb relaying rules]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#bidding
+[Electra bid]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/electra/builder.md#builderbid
 [`validators.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/builder/validators.yaml
 [`responses.yaml`]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
 [EIP-7917]: https://eips.ethereum.org/EIPS/eip-7917#specification

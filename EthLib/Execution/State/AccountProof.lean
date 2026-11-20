@@ -39,45 +39,20 @@ A proof can also show that the address has no account, or that the slot is not s
 
 The word of a slot that is not set is the storage value `0`, so the answer must give `0`.
 
-EIP-1186 does not say which fields the answer holds for an address without an account.
+The [text of the method][method] fixes the answer for an address without an account.
 
-It refers the balance to `eth_getBalance`, and the nonce to `eth_getTransactionCount`.
+Its code hash and storage root are zero, and each slot has the word `0` and no proof node.
 
-The tests of execution-apis give such an address a [balance][balance] and a [nonce][nonce] of `0`.
-
-They give the [word][word] `0` for a slot of it, so the answer must give `0` for each slot.
-
-An address without an account has no storage, so the proofs of those slots are not read.
-
-No source fixes which code hash or storage root the answer gives for an absent account.
-
-This specification decides to accept two readings of each, and to reject any other value.
-
-One reading is the zero hash, which [EIP-1052][eip-1052] gives as the code hash of no account.
-
-The other reading is the value of an account with no code and no storage.
-
-The tests give such an address the [empty code][code], whose hash is the hash of the empty string.
-
-EIP-1186 also gives that code hash for an account without code.
-
-The storage root of an account without storage is the root of the empty trie.
+Its [fixture][missing] of execution-apis also gives such an address a balance and a nonce of `0`.
 
 A node builds its answer from a state, with the proofs that the tries of the state give.
 
-For an address with no account, it gives the fields of the empty account.
-
-That is the reading of an account with no code and no storage.
-
-It agrees with the empty code that the tests expect.
+For an address with no account, it reads no storage and gives that answer.
 
 [eip-1186]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1186.md
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
-[balance]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getBalance/get-balance-unknown-account.io
-[nonce]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getTransactionCount/get-nonce-unknown-account.io
-[word]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getStorageAt/get-storage-unknown-account.io
-[code]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/tests/eth_getCode/get-code-unknown-account.io
-[eip-1052]: https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-1052.md#specification
+[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/state.yaml#L1-L62
+[method]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml#L161-L200
+[missing]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/tests/eth_getProof/get-account-proof-missing-account.io
 -/
 
 @[expose] public section
@@ -88,10 +63,21 @@ open EthLib.Base
 open EthLib.Execution.Trie
 open EthLib.Serialization.Rlp
 
-/-- One slot of the answer: the slot on 32 bytes, the word that the answer gives, and its proof. -/
-structure StorageProof where
+/-- A storage key of a request, with the form in which the answer gives it back.
+
+A key of 63 or 64 hex digits comes back as 32 bytes, and any other key as a number. -/
+structure StorageKey where
   /-- The slot, as 32 big-endian bytes. -/
-  key : Bytes32
+  slot : Bytes32
+  /-- Whether the answer gives the key back as 32 bytes, rather than as a number. -/
+  asBytes : Bool
+  deriving DecidableEq
+
+/-- One slot of the answer: the key as the request gave it, the word of the answer, and its proof.
+-/
+structure StorageProof where
+  /-- The key, as the request gave it. -/
+  key : StorageKey
   /-- The word that the answer gives for the slot. -/
   value : U256
   /-- The encodings of the nodes on the path of the slot, from the storage root down. -/
@@ -123,7 +109,7 @@ inductive AccountProofError where
   | accountEncoding
   /-- The fields of the answer are not those that the account proof shows.
 
-  For an absent account, a number is not `0`, or a hash is neither zero nor the empty value. -/
+  For an absent account, a number is not `0`, or a hash is not zero. -/
   | accountMismatch
   /-- The proof of the slot at an index, from 0, does not verify against the storage root. -/
   | slot (index : Nat) (error : ProofError)
@@ -134,6 +120,8 @@ inductive AccountProofError where
   A slot that is not set, by its proof or since the account has no storage, has the word `0`.
   -/
   | slotMismatch (index : Nat) (expected actual : U256)
+  /-- The slot at an index, from 0, of an absent account has a proof node. -/
+  | absentSlotProof (index : Nat)
   deriving DecidableEq
 
 /-- A constructor of the error, named in full, applied to its arguments. -/
@@ -151,6 +139,8 @@ def AccountProofError.reprPrec : AccountProofError → Nat → Std.Format
   | .slotMismatch index expected actual, p =>
     accountProofErrorFormat "slotMismatch"
       [namedArg "index" index, namedArg "expected" expected, namedArg "actual" actual] p
+  | .absentSlotProof index, p =>
+    accountProofErrorFormat "absentSlotProof" [namedArg "index" index] p
 
 instance : Repr AccountProofError := ⟨AccountProofError.reprPrec⟩
 
@@ -166,6 +156,7 @@ def AccountProofError.code : AccountProofError → UInt32
   | .slot .. => 504
   | .slotEncoding _ => 505
   | .slotMismatch .. => 506
+  | .absentSlotProof _ => 507
 
 /-- What the proof of a slot shows: the slot is set, or it is not. -/
 inductive SlotOutcome where
@@ -179,7 +170,7 @@ inductive SlotOutcome where
 inductive AccountOutcome where
   /-- The account exists with the fields of the answer, and each slot is as the outcome says. -/
   | present (slots : List SlotOutcome)
-  /-- The address has no account, the answer gives it no value, and each slot gives the word `0`. -/
+  /-- No account at the address: zero fields, and each slot the word `0` with no proof node. -/
   | absent
   deriving DecidableEq, Repr
 
@@ -188,19 +179,12 @@ namespace AccountProof
 /-- The account that an answer gives, without its storage. -/
 def account (p : AccountProof) : Account := ⟨p.nonce, p.balance, p.codeHash⟩
 
-/-- Whether the fields of an answer fit an address with no account.
+/-- Whether the fields of an answer are those of an address with no account.
 
-The nonce and the balance are `0`.
-
-The code hash is zero or the Keccak-256 hash of the empty string.
-
-The storage root is zero or the root of the empty trie.
-
-The two hashes are judged apart, so a zero code hash may come with the root of the empty trie. -/
-def absentFields (hash : ByteArray → Hash32) (p : AccountProof) : Bool :=
-  p.nonce == 0 && p.balance == 0 &&
-    (p.codeHash == Vector.replicate 32 0 || p.codeHash == EMPTY_CODE_HASH) &&
-    (p.storageHash == Vector.replicate 32 0 || p.storageHash == emptyTrieRoot hash)
+The nonce and the balance are `0`, and the code hash and the storage root are zero. -/
+def absentFields (p : AccountProof) : Bool :=
+  p.nonce == 0 && p.balance == 0 && p.codeHash == Vector.replicate 32 0 &&
+    p.storageHash == Vector.replicate 32 0
 
 /-- Check the account of an answer against the state root.
 
@@ -210,7 +194,7 @@ The fields and the storage root of the account must then be those of the answer.
 
 It is `false` when the proof shows that the address has no account.
 
-The fields of the answer must then fit an address with no account. -/
+The fields of the answer must then be those of an address with no account. -/
 def verifyAccount (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof) :
     Except AccountProofError Bool := do
   let value ← (verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof).mapError
@@ -221,7 +205,7 @@ def verifyAccount (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : Accoun
     unless account = p.account ∧ storageRoot = p.storageHash do throw .accountMismatch
     return true
   | none =>
-    unless p.absentFields hash do throw .accountMismatch
+    unless p.absentFields do throw .accountMismatch
     return false
 
 /-- Check the slot at an index against the storage root.
@@ -231,7 +215,7 @@ A set slot must hold the word of the answer.
 A slot that is not set is absent, and the answer must give it the word `0`. -/
 def verifySlot (hash : ByteArray → Hash32) (storageRoot : Hash32) (index : Nat)
     (s : StorageProof) : Except AccountProofError SlotOutcome := do
-  let value ← (verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof).mapError
+  let value ← (verifyProof hash storageRoot true ⟨s.key.slot.toArray⟩ s.proof).mapError
     (.slot index)
   match value with
   | some bytes =>
@@ -250,20 +234,19 @@ def verifySlots (hash : ByteArray → Hash32) (storageRoot : Hash32) :
     let outcome ← verifySlot hash storageRoot index s
     return outcome :: (← verifySlots hash storageRoot (index + 1) rest)
 
-/-- Check that each slot of an absent account gives the word `0`, in order.
-
-The account has no storage, so the proofs of its slots are not read. -/
+/-- Check that each slot of an absent account gives the word `0` and no proof node, in order. -/
 def verifyAbsentSlots : Nat → List StorageProof → Except AccountProofError Unit
   | _, [] => pure ()
   | index, s :: rest => do
     unless s.value = 0 do throw (.slotMismatch index 0 s.value)
+    unless s.proof.isEmpty do throw (.absentSlotProof index)
     verifyAbsentSlots (index + 1) rest
 
 /-- Check a whole answer of `eth_getProof` against a state root: the account, then each slot.
 
 The slots of an existing account are checked against its storage root.
 
-Those of an absent account must each give the word `0`. -/
+Those of an absent account must each give the word `0` and no proof node. -/
 def verify (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof) :
     Except AccountProofError AccountOutcome := do
   if ← p.verifyAccount hash stateRoot then
@@ -276,26 +259,27 @@ def verify (hash : ByteArray → Hash32) (stateRoot : Hash32) (p : AccountProof)
 
 The account proof is the proof of the address in the state trie.
 
-An address with no account has the fields of the empty account, and the root of the empty trie.
+For an account, each slot gives its word in the storage, and its proof in the storage trie.
 
-Each slot gives its word in the storage of the address, and its proof in the storage trie.
-
-The words of an address with no account are read from the state as well.
+An address with no account has zero fields, and each slot the word `0` with no proof node.
 
 It fails when a trie of the state cannot be encoded. -/
 def ofState (hash : ByteArray → Hash32) (state : State) (address : Address)
-    (keys : List Bytes32) : Except TrieError AccountProof := do
+    (keys : List StorageKey) : Except TrieError AccountProof := do
   let accountProof ← getProof hash ⟨true, ← stateEntries hash state⟩ ⟨address.toArray⟩
-  let storage := state.storage.getD address ∅
-  let storageTrie : Trie := ⟨true, ← (storageEntries storage).mapError .rlp⟩
-  let account := state.accounts[address]?.getD EMPTY_ACCOUNT
-  let storageHash ← match state.accounts[address]? with
-    | some _ => root hash storageTrie
-    | none => pure (emptyTrieRoot hash)
-  let storageProof ← keys.mapM fun key => do
-    return (⟨key, storage.getD key 0, ← getProof hash storageTrie ⟨key.toArray⟩⟩ : StorageProof)
-  return ⟨address, account.nonce, account.balance, account.codeHash, storageHash, accountProof,
-    storageProof⟩
+  match state.accounts[address]? with
+  | some account =>
+    let storage := state.storage.getD address ∅
+    let storageTrie : Trie := ⟨true, ← (storageEntries storage).mapError .rlp⟩
+    let storageHash ← root hash storageTrie
+    let storageProof ← keys.mapM fun key => do
+      let proof ← getProof hash storageTrie ⟨key.slot.toArray⟩
+      return (⟨key, storage.getD key.slot 0, proof⟩ : StorageProof)
+    return ⟨address, account.nonce, account.balance, account.codeHash, storageHash, accountProof,
+      storageProof⟩
+  | none =>
+    return ⟨address, 0, 0, Vector.replicate 32 0, Vector.replicate 32 0, accountProof,
+      keys.map fun key => ⟨key, 0, []⟩⟩
 
 end AccountProof
 

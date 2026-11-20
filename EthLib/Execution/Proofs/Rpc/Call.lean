@@ -44,6 +44,10 @@ That transaction has the kind, the value, the recipient, the data and the lists 
 The blobs, the commitments and the proofs of the request are not checked and change no transaction.
 
 Nor do they change the answer of the call.
+
+The call ignores the type of the request, so any type gives the answer of no type.
+
+An empty list of blob hashes, or a blob fee cap without blob hashes, is rejected with code -32000.
 -/
 
 public section
@@ -522,7 +526,7 @@ private theorem prepareCall_error {v : ChainView} {tx : GenericTransaction} {p :
         (by decide) (by decide)
     | -- Only a named fee can fail for the balance while it is paid.
       obtain ⟨hb, s, rfl⟩ := bought_error (by assumption)
-      refine ⟨?_, fun hf => absurd hb (by simp [hf])⟩
+      refine ⟨?_, fun hf => absurd (hb.symm.trans hf) (by decide)⟩
       cases s <;>
         simp [callInternalError, internalError, insufficientFunds, ErrorCode.toRpcError]
     | -- A value check fails only when the sender holds less than the value.
@@ -536,6 +540,7 @@ private theorem prepareCall_error {v : ChainView} {tx : GenericTransaction} {p :
         | rw [(bought_ok (by assumption)).2 hf] at hn
         | skip
       rw [getAccount_ofBlock, hval] at hn
+      dsimp only at hn
       omega
 
 /-- What a call ready to run holds.
@@ -569,7 +574,37 @@ private theorem prepareCall_ok {v : ChainView} {tx : GenericTransaction} {p : Bl
     · rw [(bought_ok (by assumption)).1]
       rfl
     · rw [getAccount_ofBlock] at hbal
+      dsimp only at hval
       omega
+
+/-- The call ignores the type of the request: with any type, it prepares the call of no type. -/
+theorem prepareCall_type (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
+    (c : CallChoices) (type : Option UInt8) :
+    v.prepareCall { tx with type } p c = v.prepareCall tx p c := rfl
+
+/-- `eth_call` ignores the type of the request: any type gives the answer of no type. -/
+theorem ethCall_type (v : ChainView) (tx : GenericTransaction) (p : BlockParam)
+    (c : CallChoices) (type : Option UInt8) :
+    v.ethCall { tx with type } p c = v.ethCall tx p c := rfl
+
+/-- A request with an empty list of blob hashes is rejected with code -32000.
+
+This holds at every fork that EthLib specifies, on a block that the view holds. -/
+theorem prepareCall_emptyBlobHashes {v : ChainView} {tx : GenericTransaction} {p : BlockParam}
+    {c : CallChoices} {r : BlockRecord} (hr : v.resolve p = .ok (some r))
+    (hfork : (c.environment v r).fork < .hegota) (h : tx.blobVersionedHashes = some []) :
+    v.prepareCall tx p c = .error (callRuleError "blobVersionedHashes: empty") := by
+  simp [prepareCall, ofBlock, hr, hfork, h, ensure, bind, Except.bind]
+
+/-- A request with a blob fee cap and no blob hashes is rejected with code -32000.
+
+This holds at every fork that EthLib specifies, on a block that the view holds. -/
+theorem prepareCall_blobFeeWithoutHashes {v : ChainView} {tx : GenericTransaction}
+    {p : BlockParam} {c : CallChoices} {r : BlockRecord} (hr : v.resolve p = .ok (some r))
+    (hfork : (c.environment v r).fork < .hegota) (hfee : tx.maxFeePerBlobGas.isSome)
+    (h : tx.blobVersionedHashes = none) :
+    v.prepareCall tx p c = .error (callRuleError "maxFeePerBlobGas: no blobVersionedHashes") := by
+  simp [prepareCall, ofBlock, hr, hfork, hfee, h, ensure, bind, Except.bind]
 
 /-- The request with the gas limit of its prepared call prepares the same call. -/
 theorem prepareCall_gas_self {v : ChainView} {tx : GenericTransaction} {p : BlockParam}

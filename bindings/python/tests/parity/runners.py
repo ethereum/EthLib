@@ -748,13 +748,18 @@ def _container_forks(container: str) -> tuple[str, ...]:
     return tuple(forks[forks.index(first) : forks.index(dropped) if dropped else len(forks)])
 
 
-# The runner of each group, by format or by runner and handler.
-RUNNERS = {
+# The runner of each format of execution-spec-tests.
+FORMAT_RUNNERS = {
     "transaction_test": _transaction,
     "state_test": _state_test,
     "blockchain_test": _blockchain_test,
     "blockchain_test_engine": _blockchain_test_engine,
     "blockchain_test_engine_x": _blockchain_test_engine_x,
+}
+
+# The runner of each group, by format or by runner and handler.
+RUNNERS = {
+    **FORMAT_RUNNERS,
     "shuffling/core": _shuffle,
     "networking/get_custody_groups": _custody_groups,
     "networking/compute_columns_for_custody_group": _custody_columns,

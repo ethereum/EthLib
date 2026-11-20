@@ -10,7 +10,7 @@ public import EthLib.Cryptography.Secp256k1.Ecdh
 
 The ECIES encryption of RLPx, from the section "ECIES Encryption" of [`rlpx.md`][rlpx].
 
-[rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#ecies-encryption
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#ecies-encryption
 
 A ciphertext of the message `m` is `R || iv || c || d`:
 

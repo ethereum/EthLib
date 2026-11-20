@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.ValidatorData
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
 public import EthLib.Consensus.Proofs.Transition.StateTransition
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
+import EthLib.Consensus.Proofs.ForkChoice.Head
 
 /-!
 # Proofs: the data that the Beacon API hands a validator
@@ -11,6 +12,12 @@ public import EthLib.Consensus.Proofs.BeaconApi.Responses
 The attestation data votes for the head of the store, at the requested slot.
 
 For a store in Electra or Fulu its index is 0.
+
+Once the checks before a step pass, the attestation data gets code 500 exactly when that step fails.
+
+The steps are the head with its block and state, the current slot, the empty slots and the target.
+
+From Gloas, the payload attestation data refuses with code 500 exactly when the store has no head.
 
 An aggregate has the requested data root, slot and committee, and joins the messages that match.
 
@@ -21,6 +28,10 @@ It needs each signer's key in the registry, and secret keys that do not sum to z
 A bit of a contribution is set exactly when the key of that seat signed a matching message.
 
 Each refusal of an aggregate or a contribution with a code other than 500 is stated with its cause.
+
+Once its checks pass, an aggregate refuses with code 500 exactly when its construction fails.
+
+A contribution gets code 500 only on a signature, or at the largest slot, whose next overflows.
 -/
 
 @[expose] public section
@@ -64,6 +75,23 @@ private theorem mapError_constructionError_iff {β : Type} {built : Except Valid
   · rintro ⟨rfl, index, limit, rfl⟩
     exact ⟨_, rfl, rfl⟩
 
+/-- A failed construction refuses with code 500 for every fault but an index out of range. -/
+private theorem mapError_constructionError_internal_iff {β : Type}
+    {built : Except ValidatorDutyError β} :
+    (∃ error, built.mapError constructionError = .error error ∧ error.code = 500) ↔
+      ∃ fault, built = .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit := by
+  constructor
+  · rintro ⟨error, failed, code⟩
+    obtain ⟨fault, rfl, rfl⟩ := mapError_eq_error_iff.mp failed
+    refine ⟨fault, rfl, fun index limit same => ?_⟩
+    subst same
+    simp [constructionError] at code
+  · rintro ⟨fault, rfl, inRange⟩
+    refine ⟨_, rfl, ?_⟩
+    cases fault
+    case indexOutOfRange index limit => exact absurd rfl (inRange index limit)
+    all_goals simp [constructionError, internalError]
+
 /-! ## Attestation data -/
 
 /-- The state taken to a slot is at that slot. -/
@@ -74,6 +102,23 @@ theorem stateAtSlot_slot {config : Config} {state after : BeaconState preset for
   · simp [Except.ok.injEq] at computed; subst computed; exact same.symm
   · obtain ⟨_, advanced⟩ := processSlots_slot (mapError_ok_iff.mp computed)
     exact advanced
+
+/-- Taking a state to a slot gets code 500 exactly when the empty slots up to that slot fail.
+
+For that refusal, the slot must be after the slot of the state. -/
+theorem stateAtSlot_internal_iff {config : Config} {state : BeaconState preset fork}
+    {slot : Slot} :
+    (∃ error, stateAtSlot config state slot = .error error ∧ error.code = 500) ↔
+      state.slot < slot ∧ ∃ fault, processSlots config .bls state slot = .error fault := by
+  unfold stateAtSlot
+  by_cases below : slot < state.slot
+  · simp [below, slotBeforeHead, UInt64.not_lt.mpr (UInt64.le_of_lt below)]
+  by_cases same : slot = state.slot
+  · simp [same]
+  have after : state.slot < slot :=
+    UInt64.lt_of_le_of_ne (UInt64.not_lt.mp below) (Ne.symm same)
+  simp only [below, same, after, ite_false, true_and]
+  cases processSlots config .bls state slot <;> simp [Except.mapError, internalError]
 
 /-- A produced attestation data comes from the head state taken to the slot. -/
 private theorem produceAttestationData_spec {config : Config} {store : Store preset fork}
@@ -153,6 +198,157 @@ theorem producePayloadAttestationData_block {config : Config} {store : Store pre
       simp [gloas, hr, hb, pure, Except.pure] at produced
       subst produced
       exact ⟨head, rfl, hb, rfl, rfl, rfl⟩
+
+/-- Computing the index in attestation data never fails.
+
+From Gloas, the payload status must not be pending. -/
+private theorem attestationDataIndex_ok_exists {slot headSlot : Slot}
+    {committeeIndex : CommitteeIndex} {payloadStatus : PayloadStatus}
+    (settled : .glamsterdam ≤ fork → payloadStatus ≠ .pending) :
+    ∃ index, attestationDataIndex fork slot headSlot committeeIndex payloadStatus = .ok index := by
+  unfold attestationDataIndex
+  split_ifs with gloas <;> cases payloadStatus <;> simp_all
+
+/-- Building attestation data never fails for an index out of range. -/
+private theorem getAttestationData_ne_indexOutOfRange {state : BeaconState preset fork}
+    {headRoot : Root} {headSlot : Slot} {committeeIndex : CommitteeIndex}
+    {payloadStatus : PayloadStatus} {index limit : UInt64} :
+    getAttestationData state headRoot headSlot committeeIndex payloadStatus ≠
+      .error (.indexOutOfRange index limit) := by
+  intro failed
+  unfold getAttestationData at failed
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · unfold attestationDataIndex at failed
+    split_ifs at failed
+    cases payloadStatus <;> simp at failed
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · unfold getEpochBoundaryBlockRoot at failed
+    rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+    · obtain ⟨_, -, mapped⟩ := mapError_eq_error_iff.mp failed
+      cases mapped
+    split at failed
+    · simp [pure, Except.pure] at failed
+    · obtain ⟨_, -, mapped⟩ := mapError_eq_error_iff.mp failed
+      cases mapped
+  · simp [pure, Except.pure] at failed
+
+/-- Building attestation data gets code 500 exactly when the root of its target fails.
+
+From Gloas, the payload status must not be pending. -/
+private theorem getAttestationData_internal_iff {state : BeaconState preset fork}
+    {headRoot : Root} {headSlot : Slot} {committeeIndex : CommitteeIndex}
+    {payloadStatus : PayloadStatus} (settled : .glamsterdam ≤ fork → payloadStatus ≠ .pending) :
+    (∃ error, (getAttestationData state headRoot headSlot committeeIndex payloadStatus).mapError
+      constructionError = .error error ∧ error.code = 500) ↔
+      ∃ fault, getEpochBoundaryBlockRoot state headRoot = .error fault := by
+  have anyFault : (∃ fault, getAttestationData state headRoot headSlot committeeIndex
+      payloadStatus = .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+      ∃ fault, getAttestationData state headRoot headSlot committeeIndex payloadStatus =
+        .error fault :=
+    ⟨fun ⟨fault, failed, _⟩ => ⟨fault, failed⟩, fun ⟨fault, failed⟩ => ⟨fault, failed,
+      fun _ _ same => getAttestationData_ne_indexOutOfRange (same ▸ failed)⟩⟩
+  rw [mapError_constructionError_internal_iff, anyFault]
+  obtain ⟨index, indexed⟩ := attestationDataIndex_ok_exists (slot := state.slot)
+    (headSlot := headSlot) (committeeIndex := committeeIndex) settled
+  unfold getAttestationData
+  rw [indexed]
+  cases getEpochBoundaryBlockRoot state headRoot <;> simp [bind, Except.bind, pure, Except.pure]
+
+/-- Once the checks before a step pass, the answer gets code 500 exactly when that step fails.
+
+The answer is the attestation data at the head of the store.
+
+The first steps find the head of the store, then the block and the state of that head.
+
+The next step reads the current slot of the store, and needs a verified head block.
+
+The later steps also need a requested slot not after the current slot.
+
+The step of the empty slots takes the head state up to the requested slot.
+
+That step needs a requested slot after the slot of the head state.
+
+The last step takes the root of the target.
+
+It needs a requested slot not before the slot of the head state.
+
+Computing the index of the data never fails, since from Gloas the head is never a pending node. -/
+theorem produceAttestationData_internal_iff {config : Config} {store : Store preset fork}
+    {optimistic : OptimisticStore preset fork} {slot : Slot} {committeeIndex : CommitteeIndex} :
+    (∃ error, produceAttestationData config store optimistic slot committeeIndex =
+      .error error ∧ error.code = 500) ↔
+      (∃ fault, store.getHead config = .error fault) ∨
+      ∃ head, store.getHead config = .ok head ∧
+        (store.blocks[head.root]? = none ∨ store.blockStates[head.root]? = none ∨
+          ∃ block headState, store.blocks[head.root]? = some block ∧
+            store.blockStates[head.root]? = some headState ∧
+            isExecutionOptimistic optimistic head.root = false ∧
+            ((∃ fault, store.getCurrentSlot config = .error fault) ∨
+              ∃ current, store.getCurrentSlot config = .ok current ∧ slot ≤ current ∧
+                ((headState.slot < slot ∧
+                    ∃ fault, processSlots config .bls headState slot = .error fault) ∨
+                  ∃ state, stateAtSlot config headState slot = .ok state ∧
+                    ∃ fault, getEpochBoundaryBlockRoot state head.root = .error fault))) := by
+  unfold produceAttestationData
+  cases got : store.getHead config with
+  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
+  | ok head =>
+    simp only [Except.mapError, bind, Except.bind, reduceCtorEq, exists_false, false_or,
+      Except.ok.injEq, exists_eq_left']
+    cases store.blocks[head.root]? with
+    | none => simp [internalError]
+    | some block =>
+      cases store.blockStates[head.root]? with
+      | none => simp [internalError]
+      | some headState =>
+        simp only [reduceCtorEq, false_or, Option.some.injEq, exists_and_left, exists_eq_left']
+        unfold checkVerified
+        cases isExecutionOptimistic optimistic head.root with
+        | true => simp [optimisticBlock]
+        | false =>
+          simp only [Bool.false_eq_true, ite_false, true_and]
+          cases store.getCurrentSlot config with
+          | error fault => simp [internalError]
+          | ok current =>
+            simp only [reduceCtorEq, exists_false, false_or, Except.ok.injEq, exists_eq_left']
+            by_cases late : current < slot
+            · simp [late, UInt64.not_le.mpr late, throw, throwThe, MonadExceptOf.throw]
+            have notLate : slot ≤ current := UInt64.not_lt.mp late
+            simp only [late, ite_false, notLate, true_and]
+            cases atSlot : stateAtSlot config headState slot with
+            | error fault =>
+              have internal := stateAtSlot_internal_iff (config := config) (state := headState)
+                (slot := slot)
+              rw [atSlot] at internal
+              simp only [reduceCtorEq, false_and, exists_false, or_false, Except.error.injEq,
+                exists_eq_left'] at internal ⊢
+              exact internal
+            | ok state =>
+              have notInternal : ¬ (headState.slot < slot ∧
+                  ∃ fault, processSlots config .bls headState slot = .error fault) := by
+                intro failed
+                obtain ⟨_, refused, -⟩ := stateAtSlot_internal_iff.mpr failed
+                rw [atSlot] at refused
+                cases refused
+              simp only [notInternal, Except.ok.injEq, exists_eq_left', false_or]
+              simpa only [Except.mapError] using
+                getAttestationData_internal_iff fun gloas => Store.getHead_ne_pending gloas got
+
+/-- The payload attestation data answer gets code 500 exactly when the store has no head.
+
+For that refusal, the fork must be from Gloas. -/
+theorem producePayloadAttestationData_internal_iff {config : Config}
+    {store : Store preset fork} {slot : Slot} {payloadPresent blobDataAvailable : Bool} :
+    (∃ error, producePayloadAttestationData config store slot payloadPresent blobDataAvailable =
+      .error error ∧ error.code = 500) ↔
+      .glamsterdam ≤ fork ∧ ∃ fault, store.getHead config = .error fault := by
+  unfold producePayloadAttestationData headRoot
+  by_cases gloas : .glamsterdam ≤ fork
+  swap
+  · simp [gloas, beforeFork, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  cases store.getHead config with
+  | error fault => simp [gloas, internalError, Except.toOption]
+  | ok head => simp [gloas, Except.toOption, pure, Except.pure]
 
 /-! ## Aggregates -/
 
@@ -492,6 +688,77 @@ theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fo
       constructAggregateOfSingleAttestations_indexOutOfRange_iff]
     simp
 
+/-- Before Electra, the aggregate answer refuses with code 500 exactly when its construction fails.
+
+The construction joins the attestations with the data of the first match.
+
+That refusal also needs a match whose block is verified. -/
+theorem aggregateAttestation_internal_iff_of_lt_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (before : fork < .pectra) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        ∃ fault, constructAggregate state before first.data attestations = .error fault := by
+  unfold aggregateAttestation
+  simp only [before, ↓reduceDIte]
+  cases attestations.find? (matchesRequest · dataRoot slot committeeIndex) with
+  | none => simp [noMatch]
+  | some first =>
+    have anyFault : (∃ fault, constructAggregate state before first.data attestations =
+        .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+        ∃ fault, constructAggregate state before first.data attestations = .error fault :=
+      ⟨fun ⟨fault, failed, _⟩ => ⟨fault, failed⟩, fun ⟨fault, failed⟩ => ⟨fault, failed,
+        fun _ _ same => constructAggregate_ne_indexOutOfRange (same ▸ failed)⟩⟩
+    simp only [checkVerified_bind_error_iff, mapError_constructionError_internal_iff, anyFault]
+    simp
+
+/-- From Electra, the aggregate answer refuses with code 500 exactly when its construction fails.
+
+The construction joins the single attestations of the committee with the data of the first match.
+
+That refusal also needs a match whose block is verified.
+
+It also needs a committee index below the most committees a slot can have. -/
+theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (electra : .pectra ≤ fork) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
+        ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex singles =
+          .error fault := by
+  unfold aggregateAttestation
+  have notBefore : ¬ fork < .pectra := fun h => Nat.not_le_of_lt h electra
+  simp only [notBefore, ↓reduceDIte]
+  cases singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) with
+  | none => simp [noMatch]
+  | some first =>
+    have outside := constructAggregateOfSingleAttestations_indexOutOfRange_iff (state := state)
+      (data := first.data) (committeeIndex := committeeIndex) (singles := singles)
+    have inRangeFault : (∃ fault, constructAggregateOfSingleAttestations state first.data
+        committeeIndex singles = .error fault ∧
+          ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+        committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
+          ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex
+            singles = .error fault := by
+      constructor
+      · rintro ⟨fault, failed, inRange⟩
+        refine ⟨UInt64.not_le.mp fun above => ?_, fault, failed⟩
+        obtain ⟨index, limit, failedIndex⟩ := outside.mpr above
+        exact inRange index limit (Except.error.inj (failed.symm.trans failedIndex))
+      · rintro ⟨inside, fault, failed⟩
+        exact ⟨fault, failed, fun index limit same => UInt64.not_le.mpr inside
+          (outside.mp ⟨index, limit, same ▸ failed⟩)⟩
+    simp only [checkVerified_bind_error_iff, mapError_constructionError_internal_iff,
+      inRangeFault]
+    simp
+
 /-! ## Sync committee contributions -/
 
 /-- From Altair, a bit of a contribution is set exactly when a member of that seat sent a message.
@@ -602,6 +869,62 @@ private theorem constructSyncCommitteeContribution_noMessages_iff
     fun slot root failed => absurd rfl ((never _ failed).1 slot root),
     fun index limit failed => (never _ failed).2 index limit rfl⟩
 
+/-- A contribution of members fails only for want of messages, or on a signature.
+
+A member is a known validator with a key of the subcommittee.
+
+It needs a subcommittee index that names a subnet. -/
+private theorem constructSyncCommitteeContribution_members_error
+    {state : BeaconState preset fork} {committee : SyncCommittee preset} {blockRoot : Root}
+    {subcommitteeIndex : UInt64} {messages : List SyncCommitteeMessage}
+    {fault : ValidatorDutyError} (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT)
+    (failed : constructSyncCommitteeContribution state committee blockRoot subcommitteeIndex
+      (messages.filter (inSubcommittee state
+        (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) = .error fault) :
+    fault = .noMessages state.slot blockRoot ∨ ∃ error, fault = .bls error := by
+  -- Each message that passes the filter comes from a known validator whose key holds a seat.
+  have seated : ∀ message ∈ messages.filter (inSubcommittee state
+      (syncSubcommitteePubkeys committee subcommitteeIndex.toNat)), ∃ validator,
+        getValidator state message.validatorIndex = .ok validator ∧
+          ∃ seat, syncSubcommitteeKey committee subcommitteeIndex inRange seat =
+            validator.pubkey := by
+    intro message member
+    have inside := (List.mem_filter.mp member).2
+    unfold inSubcommittee at inside
+    cases found : getValidator state message.validatorIndex with
+    | error _ => simp [found] at inside
+    | ok validator =>
+      simp only [found, List.contains_iff_mem] at inside
+      obtain ⟨position, below, keyAt⟩ := List.getElem_of_mem inside
+      exact ⟨validator, rfl, ⟨position, Nat.lt_of_lt_of_le below (List.length_take_le _ _)⟩,
+        keyAt⟩
+  unfold constructSyncCommitteeContribution at failed
+  simp only [inRange, dite_true] at failed
+  split at failed
+  · simp only [throw, throwThe, MonadExceptOf.throw, Except.error.injEq] at failed
+    exact .inl failed.symm
+  rcases bind_eq_error failed with failed | ⟨keyed, keyedOk, failed⟩
+  · obtain ⟨message, member, step⟩ := exists_mem_of_mapM_error failed
+    obtain ⟨validator, found, -⟩ := seated message (List.mem_filter.mp member).1
+    simp [found, Except.mapError, bind, Except.bind, pure, Except.pure] at step
+  split at failed
+  -- No message is outside the subcommittee, since its key holds a seat.
+  · rename_i key other found
+    obtain ⟨message, member, step⟩ := mapM_ok_mem keyedOk _ (List.mem_of_find?_eq_some found)
+    obtain ⟨validator, read, step⟩ := bind_ok_iff.mp step
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at step
+    obtain ⟨rfl, -⟩ := step
+    obtain ⟨known, knownOk, seat, keyAt⟩ := seated message (List.mem_filter.mp member).1
+    rw [mapError_ok_iff, knownOk, Except.ok.injEq] at read
+    subst read
+    have unseated := List.find?_some found
+    simp at unseated
+    exact absurd keyAt (unseated seat)
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · obtain ⟨error, -, rfl⟩ := mapError_eq_error_iff.mp failed
+    exact .inr ⟨error, rfl⟩
+  · simp [pure, Except.pure] at failed
+
 /-- From Altair, the contribution answer refuses with a code other than 500 in three cases only.
 
 It refuses with code 400 when the slot is not that of the state, or the index names no subnet.
@@ -690,6 +1013,60 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
         simp [throw, throwThe, MonadExceptOf.throw, noMatch, @eq_comm _ 404 code]
       all_goals simp [throw, throwThe, MonadExceptOf.throw, constructionError,
         internalError, notInternal, @eq_comm _ 500 code]
+
+/-- From Altair, the contribution answer refuses with code 500 in two cases only.
+
+It refuses so when the sync committee of the next slot has no value.
+
+That happens only at the largest 64-bit slot, whose next slot overflows.
+
+Else it refuses so when the construction of the contribution fails on a signature.
+
+Both refusals need a request at the slot of the state, and a root whose block is verified.
+
+They also need an index that names a subnet. -/
+theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
+    {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
+    {root : Root} :
+    (∃ error, produceSyncCommitteeContribution state altair optimistic messages slot
+      subcommitteeIndex root = .error error ∧ error.code = 500) ↔
+      slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
+        isExecutionOptimistic optimistic root = false ∧
+        ((∃ fault, syncCommitteeAtNextSlot state altair = .error fault) ∨
+          ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧ ∃ fault,
+            constructSyncCommitteeContribution state committee root subcommitteeIndex
+              (messages.filter (inSubcommittee state
+                (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) =
+              .error (.bls fault)) := by
+  unfold produceSyncCommitteeContribution
+  by_cases same : slot = state.slot
+  swap
+  · simp [same, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  subst same
+  by_cases inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT
+  swap
+  · simp [inRange, constructionError, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  simp only [inRange, ↓reduceIte, true_and]
+  rw [checkVerified_bind_error_iff]
+  cases isExecutionOptimistic optimistic root
+  swap
+  · simp
+  simp only [Bool.false_eq_true, false_and, false_or, true_and]
+  cases got : syncCommitteeAtNextSlot state altair with
+  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
+  | ok committee =>
+    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left',
+      reduceCtorEq, exists_false, false_or]
+    cases built : constructSyncCommitteeContribution state committee root subcommitteeIndex
+        (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
+          subcommitteeIndex.toNat))) with
+    | ok contribution => simp [pure, Except.pure]
+    | error fault =>
+      rcases constructSyncCommitteeContribution_members_error inRange built with
+        rfl | ⟨error, rfl⟩
+      · simp [throw, throwThe, MonadExceptOf.throw, noMatch]
+      · simp [throw, throwThe, MonadExceptOf.throw, constructionError, internalError]
 
 /-! ## Responses -/
 

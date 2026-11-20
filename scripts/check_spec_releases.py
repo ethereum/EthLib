@@ -1,4 +1,4 @@
-"""Report newer releases of the pinned test suites, and the tests of the next execution fork."""
+"""Report newer releases of the pinned test suites, their unplaced assets and the next fork."""
 
 # uv run --no-project --python 3.12 python scripts/check_spec_releases.py
 
@@ -76,6 +76,29 @@ def holds(repository: str, ref: str, directory: str) -> bool:
     return True
 
 
+def assets(repository: str, tag: str) -> list[str]:
+    """The download URLs of the assets of one release."""
+    release = _get(f"repos/{repository}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+    return [asset["browser_download_url"] for asset in release["assets"]]
+
+
+def placed(root: Path = ROOT) -> set[str]:
+    """The asset URLs that the sources pin as archives or declare unread."""
+    config = tomllib.loads((root / SOURCES).read_text(encoding="utf-8"))
+    pinned = {entry["url"] for entry in config.get("archives", {}).values() if "url" in entry}
+    return pinned | set(config.get("unread_assets", {}))
+
+
+def unplaced(found: dict[tuple[str, str], list[str]], known: set[str]) -> list[str]:
+    """One line for each asset of a pinned release that is neither pinned nor declared unread."""
+    return [
+        f"{repository}: {pinned} has the asset {url}, which {SOURCES} neither pins in archives "
+        "nor declares in unread_assets"
+        for (repository, pinned), urls in sorted(found.items())
+        for url in sorted(set(urls) - known)
+    ]
+
+
 def releases(repository: str) -> list[Release]:
     """The published releases of a repository on GitHub, newest first, at most 100."""
     entries = _get(f"repos/{repository}/releases?per_page=100")
@@ -133,13 +156,15 @@ def next_fork(found: dict[tuple[str, str], list[Release]]) -> list[str]:
 
 
 def main() -> int:
-    """Print the state of each pin, and fail when a newer release or the next fork exists."""
+    """Print the state of each pin, and fail on a newer release, an unplaced asset or the fork."""
     cache: dict[str, list[Release]] = {}
     found = {}
+    downloads = {}
     for repository, pinned in pins():
         published = cache.setdefault(repository, releases(repository))
         found[(repository, pinned)] = newer(pinned, published)
-    lines = next_fork(found)
+        downloads[(repository, pinned)] = assets(repository, pinned)
+    lines = unplaced(downloads, placed()) + next_fork(found)
     for line in report(found) + lines:
         print(line)
     return 1 if any(found.values()) or lines else 0

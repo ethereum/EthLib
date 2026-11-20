@@ -10,7 +10,7 @@ The receipt exchange of the eth capability, from two sections of [`caps/eth.md`]
 
 They are "Receipt Encoding and Validity" and "Protocol Messages".
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#receipt-encoding-and-validity
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#receipt-encoding-and-validity
 
 - GetReceipts (0x0f) asks for the receipts of blocks by hash.
 - Receipts (0x10) answers with one list of receipts for each block.

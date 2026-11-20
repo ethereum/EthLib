@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.TweakableHash
+public import EthLib.Cryptography.Proofs.Xmss.Words
 
 /-!
 # Proofs: WOTS+C one-time signatures
@@ -32,52 +33,12 @@ variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {layer : Layer} 
 
 /-! ## Randomizer trials -/
 
-/-- Writing byte `i` changes the little-endian integer by the byte's weight. -/
-private theorem foldr_set (l : List UInt8) (i : Nat) (hi : i < l.length) (b : UInt8) :
-    (l.set i b).foldr (fun byte acc => byte.toNat + 256 * acc) 0 + l[i].toNat * 256 ^ i
-      = l.foldr (fun byte acc => byte.toNat + 256 * acc) 0 + b.toNat * 256 ^ i := by
-  induction l generalizing i with
-  | nil => simp at hi
-  | cons x xs ih =>
-    cases i with
-    | zero => simp only [List.set_cons_zero, List.foldr_cons, List.getElem_cons_zero]; ring
-    | succ i =>
-      have := ih i (by simpa using hi)
-      simp only [List.set_cons_succ, List.foldr_cons, List.getElem_cons_succ, pow_succ]
-      linear_combination 256 * this
-
-/-- Bytes keep only the integer modulo `256^k`. -/
-private theorem uintToBytes_mod_pow (k n : Nat) :
-    uintToBytes k (n % 256 ^ k) = uintToBytes k n := by
-  conv_rhs => rw [← Base.uintToBytes_bytesToUint (uintToBytes k n), Base.bytesToUint_uintToBytes]
-
-/-- Adding a carry from byte `i` up gives the bytes of the integer plus `carry * 256^i`. -/
-private theorem trialRandomizer_go (acc : Randomizer) (carry i : Nat) (hi : i ≤ RANDOMIZER_LEN) :
-    trialRandomizer.go acc carry i
-      = uintToBytes RANDOMIZER_LEN (bytesToUint acc + carry * 256 ^ i) := by
-  fun_induction trialRandomizer.go acc carry i with
-  | case1 acc carry i h sum ih =>
-    rw [ih h]
-    congr 1
-    -- The new byte holds the sum modulo 256, and the next carry holds the rest.
-    have hset := foldr_set acc.toList i (by simpa using h) (UInt8.ofNat sum)
-    rw [← Vector.toList_set h, ← Base.bytesToUint_eq_foldr, ← Base.bytesToUint_eq_foldr,
-      Vector.getElem_toList, UInt8.toNat_ofNat'] at hset
-    have hdiv := Nat.mod_add_div sum 256
-    simp only [sum] at hset hdiv ⊢
-    rw [pow_succ]
-    linear_combination hset + 256 ^ i * hdiv
-  | case2 acc carry i h =>
-    -- Every byte is written, so the carry past the top byte is dropped.
-    obtain rfl : i = RANDOMIZER_LEN := by omega
-    rw [← uintToBytes_mod_pow, Nat.add_mul_mod_self_right, uintToBytes_mod_pow,
-      Base.uintToBytes_bytesToUint]
-
 /-- The randomizer of trial `c` is the little-endian bytes of `R_0 + c` modulo `2^128`. -/
 theorem trialRandomizer_eq (base : Randomizer) (c : Nat) :
     trialRandomizer base c = uintToBytes RANDOMIZER_LEN ((bytesToUint base + c) % 2 ^ 128) := by
-  rw [trialRandomizer, trialRandomizer_go _ _ _ (Nat.zero_le _), pow_zero, mul_one,
-    show (2 : Nat) ^ 128 = 256 ^ RANDOMIZER_LEN by norm_num [RANDOMIZER_LEN], uintToBytes_mod_pow]
+  rw [trialRandomizer, WordPair.bytes_eq, toNat_trialWords,
+    show (WordPair.ofBytes base).toNat = bytesToUint base from WordPair.toNat_ofBytes base]
+  rfl
 
 /-- The search tests trial `c` on the digest of its randomizer `rho_c`, in any monad.
 
@@ -90,7 +51,16 @@ theorem Internal.findCodeword_eq {m : Type → Type} [Monad m] (H : ByteArray �
     Internal.findCodeword H pp layer e msg base c fuel =
       Wots.findFirst (trialRandomizer base)
         (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel := by
-  simp only [Internal.findCodeword, messageDigest, th, thInput, ByteArray.append_assoc]
+  simp only [Internal.findCodeword, hashTrials, messageDigest, th, thInput,
+    ByteArray.append_assoc]
+  rfl
+
+/-- The one-time signer with the trials of `H` is the one-time signer over `H`. -/
+theorem Internal.otsSignTrials_hashTrials {m : Type → Type} [Monad m]
+    (H : ByteArray → m (Vector UInt8 32)) (pp : PublicParam) (prf : SeedPrf m) (layer : Layer)
+    (e : UInt32) (msg : ByteArray) :
+    Internal.otsSignTrials H pp prf layer e msg (hashTrials H) = otsSign H pp prf layer e msg :=
+  rfl
 
 /-! ## Derivations from the seed -/
 
@@ -137,7 +107,7 @@ theorem otsSign_run {prf : SeedPrf Id} {msg : ByteArray} :
         fun found => (found.1, Vector.ofFn fun i => (chain (pureHash f) pp layer e i 0
           (found.2[i]).val (by have := (found.2[i]).isLt; omega)
           (chainStarts pp prf layer e).run[i]).run) := by
-  rw [otsSign, Id.run_bind, Id.run_bind]
+  rw [otsSign, Internal.otsSignTrials, Id.run_bind, Id.run_bind]
   cases (Internal.findCodeword (pureHash f) pp layer e msg
       (randomizerBase pp prf layer e msg).run 0 MAX_RANDOMIZER_TRIALS).run with
   | none => rfl

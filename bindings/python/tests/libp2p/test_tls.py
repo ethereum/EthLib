@@ -7,7 +7,7 @@ import pytest
 from ethlib.networking.libp2p import tls
 from raising import raises
 
-# libp2p/specs c750236de43cd8b246a824b377dfdb26bae686db, tls/tls.md, "Test vectors" 1 to 4.
+# libp2p/specs 4facaf9876da1eb7d6e066982010c81495ebb965, tls/tls.md, "Test vectors" 1 to 4.
 # Vector 3 authenticates a secp256k1 identity.
 # Vector 4 pairs a peer ID with a key that did not sign it, so its host signature fails.
 CERTIFICATE = bytes.fromhex(

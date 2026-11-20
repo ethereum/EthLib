@@ -10,7 +10,7 @@ When an AccountRange or StorageRanges answer of a snap peer is valid.
 
 The source is [`caps/snap.md`][snap] of the devp2p specifications.
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 Each range must pass the range check of the trie against its proof.
 
@@ -37,13 +37,13 @@ namespace EthLib.Execution.Network
 
 open EthLib.Base
 open EthLib.Execution.Trie
+open EthLib.Serialization.Rlp (Item)
 
 /-- Why an AccountRange or StorageRanges answer is rejected. -/
 inductive SnapRangeError where
   /-- A range fails the range check of its trie. -/
   | range (error : RangeError)
-  /-- The body of the account with hash `hash` is not the slim form of an account, byte for byte.
-  -/
+  /-- The body of the account with hash `hash` is not the slim form of an account itself. -/
   | slimAccount (hash : Hash32)
   /-- A StorageRanges answer proves `ranges` ranges, more than the `accounts` its request names.
 
@@ -96,7 +96,7 @@ Each account is a hash of an address and the account in slim form.
 The account must be the slim form itself, and its value in the trie is its full form.
 
 No account and no proof is the empty reply of a peer without the state. -/
-def verifyAccountRange (root start : Hash32) (accounts : List RangeEntry)
+def verifyAccountRange (root start : Hash32) (accounts : List (RangeEntry Item))
     (proof : List ByteArray) : Except SnapRangeError RangeAnswer := do
   if accounts.isEmpty && proof.isEmpty then return .noState
   let entries ← accounts.mapM fun entry => do
@@ -129,14 +129,15 @@ No range and no proof is the empty reply of a peer without the state.
 A proof with no range shows that the first account holds no slot from the start on.
 
 Otherwise the answer is that of the last range. -/
-def verifyStorageRanges (roots : List Hash32) (start : Hash32) (slots : List (List RangeEntry))
-    (proof : List ByteArray) : Except SnapRangeError RangeAnswer := do
+def verifyStorageRanges (roots : List Hash32) (start : Hash32)
+    (slots : List (List (RangeEntry ByteArray))) (proof : List ByteArray) :
+    Except SnapRangeError RangeAnswer := do
   if slots.isEmpty && proof.isEmpty then return .noState
   -- A proof with no range proves an empty range of the first account.
   let slots := if slots.isEmpty then [[]] else slots
   if roots.length < slots.length then throw (.tooManyRanges slots.length roots.length)
   let first := if roots.length = 1 then start else Vector.replicate 32 0
-  let check (root : Hash32) (range : List RangeEntry) (proof : List ByteArray) :=
+  let check (root : Hash32) (range : List (RangeEntry ByteArray)) (proof : List ByteArray) :=
     (verifyRange Cryptography.Hash.Keccak.keccak256 root first
       (range.map fun entry => (entry.hash, entry.data)) proof).mapError .range
   let ranges := roots.zip slots

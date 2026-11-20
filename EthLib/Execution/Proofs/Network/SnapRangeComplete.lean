@@ -7,7 +7,7 @@ public import EthLib.Execution.Proofs.Trie.RangeComplete
 /-!
 # Proofs: honest snap ranges pass the checks
 
-An honest AccountRange answer sends the slim encodings of accounts of a secured state trie.
+An honest AccountRange answer sends the slim forms of accounts of a secured state trie.
 
 The check converts them to their full encodings before checking the range.
 
@@ -27,11 +27,11 @@ The answers are in [AccountRange (0x01)][account] and [StorageRanges (0x03)][sto
 
 The slim form of an account is in [Data format][format].
 
-[get-account]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#getaccountrange-0x00
-[account]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#accountrange-0x01
-[get-storage]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#getstorageranges-0x02
-[storage]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#storageranges-0x03
-[format]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#data-format
+[get-account]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#getaccountrange-0x00
+[account]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#accountrange-0x01
+[get-storage]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#getstorageranges-0x02
+[storage]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#storageranges-0x03
+[format]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#data-format
 -/
 
 @[expose] public section
@@ -43,7 +43,7 @@ open EthLib.Execution.Trie
 open EthLib.Cryptography.Hash.Keccak
 open EthLib.Serialization.Rlp
 
-/-- An account, its key, and its successful slim and full encodings.
+/-- An account, its key, and its successful full encoding.
 
 Encoding success is explicit because an account nonce is an unbounded natural number. -/
 structure AccountRangeWitness where
@@ -53,12 +53,8 @@ structure AccountRangeWitness where
   account : State.Account
   /-- The root of the account's storage trie. -/
   storageRoot : Hash32
-  /-- The slim encoding sent by the peer. -/
-  slim : ByteArray
   /-- The full encoding held in the state trie. -/
   full : ByteArray
-  /-- The sent bytes encode the account in slim form. -/
-  encode_slim : encode (slimAccount account storageRoot) = .ok slim
   /-- The stored bytes encode the same account in full form. -/
   encode_full : State.encodeAccount account storageRoot = .ok full
 
@@ -70,13 +66,13 @@ def AccountRangeWitness.trieEntry (a : AccountRangeWitness) : ByteArray × ByteA
 def AccountRangeWitness.hashedEntry (a : AccountRangeWitness) : Hash32 × ByteArray :=
   (keccak256 a.key, a.full)
 
-/-- The hashed key and slim encoding sent in an AccountRange answer. -/
-def AccountRangeWitness.rangeEntry (a : AccountRangeWitness) : RangeEntry :=
-  ⟨keccak256 a.key, a.slim⟩
+/-- The hashed key and slim form sent in an AccountRange answer. -/
+def AccountRangeWitness.rangeEntry (a : AccountRangeWitness) : RangeEntry Item :=
+  ⟨keccak256 a.key, slimAccount a.account a.storageRoot⟩
 
 /-- The account check accepts a range whose conversion and trie check succeed. -/
 private theorem verifyAccountRange_of_checks {root' start : Hash32}
-    {accounts : List RangeEntry} {entries : List (Hash32 × ByteArray)}
+    {accounts : List (RangeEntry Item)} {entries : List (Hash32 × ByteArray)}
     {proof : List ByteArray} {more : Bool}
     (hstate : accounts ≠ [] ∨ proof ≠ [])
     (hconvert : accounts.mapM (fun entry => do
@@ -102,7 +98,7 @@ private theorem mapM_accountRangeWitness (data : List AccountRangeWitness) :
   apply mapM_eq_ok_map
   intro a _
   simp [AccountRangeWitness.rangeEntry, AccountRangeWitness.hashedEntry,
-    fullAccount_encode_slimAccount a.encode_slim a.encode_full]
+    fullAccount_slimAccount a.encode_full]
 
 /-- The honest nonempty AccountRange from a secured trie passes, or a node collision is found.
 
@@ -237,7 +233,7 @@ theorem verifyAccountRange_whole {data : List AccountRangeWitness} {root' : Hash
 /-! ## Storage ranges -/
 
 /-- The slots of a storage trie with hashed keys, as a StorageRanges answer sends them. -/
-def storageRangeEntries (data : List (ByteArray × ByteArray)) : List RangeEntry :=
+def storageRangeEntries (data : List (ByteArray × ByteArray)) : List (RangeEntry ByteArray) :=
   data.map fun entry => ⟨keccak256 entry.1, entry.2⟩
 
 /-- The whole secured storage trie passes the range check without a proof. -/
@@ -261,8 +257,8 @@ private theorem verifyRange_storage_whole {data : List (ByteArray × ByteArray)}
 
 /-- The storage check passes when each earlier range is whole and the last range passes. -/
 private theorem verifyStorageRanges_of_checks {roots : List Hash32} {start first : Hash32}
-    {slots : List (List RangeEntry)} {proof : List ByteArray}
-    {lastRoot : Hash32} {lastRange : List RangeEntry} {more : Bool}
+    {slots : List (List (RangeEntry ByteArray))} {proof : List ByteArray}
+    {lastRoot : Hash32} {lastRange : List (RangeEntry ByteArray)} {more : Bool}
     (hslots : slots ≠ []) (hlength : slots.length ≤ roots.length)
     (hfirst : first = if roots.length = 1 then start else Vector.replicate 32 0)
     (hlast : (roots.zip slots).getLast? = some (lastRoot, lastRange))
@@ -273,11 +269,11 @@ private theorem verifyStorageRanges_of_checks {roots : List Hash32} {start first
       (lastRange.map fun entry => (entry.hash, entry.data)) proof = .ok more) :
     verifyStorageRanges roots start slots proof = .ok (.ofMore more) := by
   have hloop : forIn (roots.zip slots).dropLast PUnit.unit
-      (fun (pair : Hash32 × List RangeEntry) (_ : PUnit) => (do
+      (fun (pair : Hash32 × List (RangeEntry ByteArray)) (_ : PUnit) => (do
         discard ((verifyRange keccak256 pair.1 first
           (pair.2.map fun entry => (entry.hash, entry.data)) []).mapError SnapRangeError.range)
         pure (.yield PUnit.unit) : Except SnapRangeError (ForInStep PUnit))) = .ok PUnit.unit := by
-    have hnd : ∀ pair : Hash32 × List RangeEntry,
+    have hnd : ∀ pair : Hash32 × List (RangeEntry ByteArray),
         (do
           discard ((verifyRange keccak256 pair.1 first
             (pair.2.map fun entry => (entry.hash, entry.data)) []).mapError SnapRangeError.range)
@@ -302,7 +298,7 @@ private theorem verifyStorageRanges_of_checks {roots : List Hash32} {start first
 private theorem verifyStorageRanges_of_secured_last
     (whole : List (Hash32 × List (ByteArray × ByteArray)))
     (root' start first : Hash32) (remaining : List Hash32)
-    (lastRange : List RangeEntry) (proof : List ByteArray) (more : Bool)
+    (lastRange : List (RangeEntry ByteArray)) (proof : List ByteArray) (more : Bool)
     (hfirst : first = if (whole.map Prod.fst ++ root' :: remaining).length = 1 then start
       else Vector.replicate 32 0)
     (hwhole : ∀ entry ∈ whole, root keccak256 ⟨true, entry.2⟩ = .ok entry.1 ∧

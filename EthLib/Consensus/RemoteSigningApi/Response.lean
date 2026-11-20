@@ -11,8 +11,8 @@ The [sign endpoint] answers with the signature as JSON under `signature`, or as 
 
 The [public keys endpoint] answers with a JSON array of keys as hex.
 
-[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/sign.yaml
-[public keys endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/public_keys.yaml
+[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/sign.yaml
+[public keys endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/public_keys.yaml
 -/
 
 @[expose] public section

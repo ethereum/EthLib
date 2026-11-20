@@ -91,6 +91,7 @@ public import EthLib.Consensus.HonestAggregation
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.HonestProposer
 public import EthLib.Consensus.InclusionListCommittee
+public import EthLib.Consensus.KeymanagerApi.BuilderConfig
 public import EthLib.Consensus.KeymanagerApi.Client
 public import EthLib.Consensus.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.KeymanagerApi.LocalKeys

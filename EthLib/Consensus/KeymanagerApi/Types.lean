@@ -52,8 +52,8 @@ The reader of a signed voluntary exit, as said above, refuses them.
 
 A name that the schema marks optional may be absent, and its writer leaves it out when unset.
 
-[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/keymanager-oapi.yaml
-[types]: https://github.com/ethereum/keymanager-APIs/tree/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types
+[OpenAPI document]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/keymanager-oapi.yaml
+[types]: https://github.com/ethereum/keymanager-APIs/tree/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types
 -/
 
 @[expose] public section
@@ -88,21 +88,21 @@ def ofProtection {α : Type} : Except SlashingProtectionError α → Except Keym
 
 /-- A string: `Graffiti` and `Url` of the [types], and the message of an error.
 
-[types]: https://github.com/ethereum/keymanager-APIs/tree/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types
+[types]: https://github.com/ethereum/keymanager-APIs/tree/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types
 -/
 def readString (path : String) (document : Json) : Except KeymanagerError String :=
   ofProtection (Interchange.readString path document)
 
 /-- A 64-bit integer, `Uint64` of [`uint.yaml`], below 2^64.
 
-[`uint.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/uint.yaml
+[`uint.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/uint.yaml
 -/
 def readUint64 (path : String) (document : Json) : Except KeymanagerError UInt64 :=
   ofProtection (Interchange.readUInt64 path document)
 
 /-- A BLS public key of 48 bytes, from [`public_key.yaml`].
 
-[`public_key.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/public_key.yaml
+[`public_key.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/public_key.yaml
 -/
 def readPubkey (path : String) (document : Json) : Except KeymanagerError BLSPubkey :=
   ofProtection (Interchange.readBytes path 48 document)
@@ -111,14 +111,14 @@ def readPubkey (path : String) (document : Json) : Except KeymanagerError BLSPub
 
 The source states no checksum rule for the letter case, so none is checked.
 
-[`eth_address.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/eth_address.yaml
+[`eth_address.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/eth_address.yaml
 -/
 def readEthAddress (path : String) (document : Json) : Except KeymanagerError ExecutionAddress :=
   ofProtection (Interchange.readBytes path 20 document)
 
 /-- A BLS signature of 96 bytes, from [`signature.yaml`].
 
-[`signature.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/signature.yaml
+[`signature.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/signature.yaml
 -/
 def readSignature (path : String) (document : Json) : Except KeymanagerError BLSSignature :=
   ofProtection (Interchange.readBytes path 96 document)
@@ -161,7 +161,7 @@ def embeddedJson (text : JsonText) (inner : Json) : Json := .str (text.print inn
 
 Decryption reads its fields, so this reader asks only for JSON.
 
-[`keystore.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/keystore.yaml
+[`keystore.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/keystore.yaml
 -/
 def readKeystore (text : JsonText) (path : String) (document : Json) :
     Except KeymanagerError Json :=
@@ -173,7 +173,7 @@ def slashingProtectionOfDocument (document : Json) : Except KeymanagerError Inte
 
 /-- EIP-3076 slashing protection data, held as text, from [`slashing_protection.yaml`].
 
-[`slashing_protection.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/slashing_protection.yaml
+[`slashing_protection.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/slashing_protection.yaml
 -/
 def readSlashingProtection (text : JsonText) (path : String) (document : Json) :
     Except KeymanagerError Interchange :=
@@ -204,7 +204,7 @@ def optionalFields {α : Type} (name : String) (write : α → Json) : Option α
 
 /-- The definition of a remote key, from [`signer_definition.yaml`].
 
-[`signer_definition.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/signer_definition.yaml
+[`signer_definition.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/signer_definition.yaml
 -/
 structure SignerDefinition where
   /-- The public key. -/
@@ -217,7 +217,7 @@ structure SignerDefinition where
 
 /-- A remote key to import, from [`import_remote_signer_definition.yaml`].
 
-[`import_remote_signer_definition.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/import_remote_signer_definition.yaml
+[`import_remote_signer_definition.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/import_remote_signer_definition.yaml
 -/
 structure ImportRemoteSignerDefinition where
   /-- The public key. -/
@@ -228,7 +228,7 @@ structure ImportRemoteSignerDefinition where
 
 /-- The address that receives the fees of a proposer, from [`fee_recipient.yaml`].
 
-[`fee_recipient.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/fee_recipient.yaml
+[`fee_recipient.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/fee_recipient.yaml
 -/
 structure FeeRecipient where
   /-- The public key of the validator, if given. -/
@@ -239,7 +239,7 @@ structure FeeRecipient where
 
 /-- The gas limit that a proposer asks of an external builder, from [`gas_limit.yaml`].
 
-[`gas_limit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/gas_limit.yaml
+[`gas_limit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/gas_limit.yaml
 -/
 structure GasLimit where
   /-- The public key of the validator, if given. -/
@@ -250,7 +250,7 @@ structure GasLimit where
 
 /-- The body of an error response, from [`error_response.yaml`].
 
-[`error_response.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/error_response.yaml
+[`error_response.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/error_response.yaml
 -/
 structure ErrorResponse where
   /-- What went wrong. -/
@@ -321,7 +321,7 @@ That reader also takes an integer as a bare JSON number, and refuses a name it d
 
 It requires every field, where the source lists none as required, since the container has all.
 
-[`voluntary_exit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/types/voluntary_exit.yaml
+[`voluntary_exit.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/types/voluntary_exit.yaml
 -/
 def readSignedVoluntaryExit (path : String) (document : Json) :
     Except KeymanagerError SignedVoluntaryExit :=

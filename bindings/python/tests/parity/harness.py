@@ -12,8 +12,8 @@ import pytest
 
 import archives
 
-from .catalogue import DEVNETS, Case
-from .runners import RUNNERS, plan, reads, runner
+from .catalogue import DEVNETS, EXCLUDED_FORMATS, Case
+from .runners import FORMAT_RUNNERS, NOT_YET, RUNNERS, plan, reads, runner
 
 # The environment variable that names the shard of a run, as `k/n` with 1 <= k <= n.
 # Without it a run takes every case, as the one shard of one.
@@ -124,6 +124,13 @@ def check_groups(cases: list[Case]) -> None:
         {case.group for case in cases if case.group not in RUNNERS and plan(case) is None}
     )
     assert missing == []
+
+
+def unplaced_formats(index: list[dict]) -> list[str]:
+    """The formats of a release index that are neither run, planned nor left out, by name."""
+    # A plan for one fork or network does not place a format; only an entry of NOT_YET does.
+    formats = {entry["format"] for entry in index}
+    return sorted(formats - FORMAT_RUNNERS.keys() - NOT_YET.keys() - EXCLUDED_FORMATS.keys())
 
 
 def case_id(suite: str, ident: str, group: str | None) -> str:

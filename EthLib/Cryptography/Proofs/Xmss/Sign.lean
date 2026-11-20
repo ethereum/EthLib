@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Reference
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots
+public import EthLib.Cryptography.Proofs.Xmss.Trials
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
 public import EthLib.Cryptography.Proofs.Xmss.Tree
 
@@ -278,6 +279,7 @@ theorem signRootWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ L
       (layer := .top) b
     rwa [Nat.div_eq_of_lt hb, ← h.top_eq] at this
   unfold signRootWith signLayer
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [Id.run_bind, Id.run_bind]
   -- Name the top search, so no tree is evaluated.
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .top (UInt32.ofNat b)
@@ -322,7 +324,8 @@ theorem fetchTreeWith_run (h : sk.IsStatelessOf H seed) {b : Nat} (hb : b < 2 ^ 
 theorem isStatelessOf_signWith (h : sk.IsStatelessOf H seed) (idx : LeafIndex) (msg : Message) :
     (signWith H sk idx msg).run.2.IsStatelessOf H seed := by
   have hfetch := (fetchTreeWith_run h (bottomTree_lt idx)).2.2
-  unfold signWith
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [Id.run_bind]
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
       (packBytes msg)).run with
@@ -347,7 +350,8 @@ theorem signWith_fst_of_isStatelessOf (h : sk.IsStatelessOf H seed) (idx : LeafI
     rw [h.publicParam_eq, h.schemeSeed_eq]
     rfl
   rw [hs]
-  unfold signWith signDerived
+  unfold signWith Internal.signWithTrials signDerived
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [Id.run_bind, Id.run_bind]
   -- Name the bottom search, so no tree is evaluated.
   cases (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
@@ -394,10 +398,18 @@ theorem SecretKey.Reachable.signWith_fst {H : ByteArray → Id (Vector UInt8 32)
     (signWith H sk idx msg).run.1 = (statelessSignWith H seed idx msg).run :=
   signWith_fst_of_isStatelessOf h.isStatelessOf idx msg
 
+/-- **Signing with Keccak-256 is the signer over the hash, byte for byte, key included.**
+
+Its randomizer trials permute a state built once per search, and give what hashing gives. -/
+theorem sign_eq (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+    Xmss.sign sk idx msg = (signWith hashId sk idx msg).run := by
+  rw [Xmss.sign, keccakTrials_eq, signWith]
+
 /-- **With Keccak-256, a reachable key signs as the stateless signer, byte for byte.** -/
 theorem SecretKey.Reachable.sign_fst {seed : Seed} {sk : SecretKey} (h : sk.Reachable hashId seed)
-    (idx : LeafIndex) (msg : Message) : (Xmss.sign sk idx msg).1 = statelessSign seed idx msg :=
-  h.signWith_fst idx msg
+    (idx : LeafIndex) (msg : Message) : (Xmss.sign sk idx msg).1 = statelessSign seed idx msg := by
+  rw [sign_eq]
+  exact h.signWith_fst idx msg
 
 /-- **Key generation gives the public key of the stateless scheme.**
 
@@ -413,7 +425,8 @@ theorem keyGenWith_fst (H : ByteArray → Id (Vector UInt8 32)) (seed : Seed) :
 theorem leafIndex_signWith {H : ByteArray → Id (Vector UInt8 32)} {sk : SecretKey}
     {idx : LeafIndex} {m : Message} {σ : Signature} (h : (signWith H sk idx m).run.1 = .ok σ) :
     σ.leafIndex = idx := by
-  unfold signWith at h
+  unfold signWith Internal.signWithTrials at h
+  simp only [Internal.otsSignTrials_hashTrials] at h
   rw [Id.run_bind] at h
   generalize (otsSign H sk.publicParam (seedPrf H sk.schemeSeed) .bottom (UInt32.ofNat idx.toNat)
       (packBytes m)).run = found at h
@@ -438,6 +451,7 @@ So a verifier that reads the index from the bytes learns which one-time key sign
 theorem signatureIndex_sign {sk : SecretKey} {idx : LeafIndex} {m : Message} {σ : Signature}
     (h : (sign sk idx m).1 = .ok σ) :
     signatureIndex (encodeSignature σ) = .ok idx := by
+  rw [sign_eq] at h
   rw [signatureIndex_encodeSignature, leafIndex_signWith h]
 
 /-- With a reachable key, signing fails only when one layer's one-time key finds no codeword. -/

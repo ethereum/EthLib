@@ -1003,15 +1003,10 @@ private theorem churn_le_windowCount {x : ForkedBeaconState preset} {s : BeaconS
     obtain ⟨inside, activeAt⟩ := member
     obtain ⟨v, found⟩ : ∃ v, s.validators.data[i]? = some v :=
       ⟨_, Array.getElem?_eq_getElem inside⟩
-    simp only [found, Option.any_some, isActiveValidator, Bool.and_eq_true,
-      decide_eq_true_eq] at activeAt
+    simp only [found, Option.any_some] at activeAt
+    have assigned := Internal.assigned_of_active activeAt
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeAt
     have exitBound := UInt64.lt_iff_toNat_lt.mp activeAt.2
-    have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-      intro far
-      have reached := UInt64.le_iff_toNat_le.mp activeAt.1
-      have exitBelow := v.exitEpoch.toNat_lt
-      rw [far, farNat] at reached
-      omega
     refine ⟨inside, by simp [found, assigned], ?_⟩
     cases old : x.state.validators.data[i]? with
     | none => rfl

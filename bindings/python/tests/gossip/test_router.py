@@ -28,7 +28,7 @@ from ethlib.networking.gossip.rpc import (
 )
 from raising import raises
 
-# The rules are in libp2p/specs at commit c750236de43cd8b246a824b377dfdb26bae686db.
+# The rules are in libp2p/specs at commit 4facaf9876da1eb7d6e066982010c81495ebb965.
 # Message handling is "Message Processing" of pubsub/gossipsub/gossipsub-v1.0.md.
 # The v1.1 rules are six sections of pubsub/gossipsub/gossipsub-v1.1.md.
 # The first two are "Extended Validators" and "PRUNE Backoff and Peer Exchange".

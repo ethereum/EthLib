@@ -20,8 +20,8 @@ A deposit and a registration are signed outside any fork, at the genesis fork ve
 
 The [schemas] fix the requests, and the examples of the [sign endpoint] carry their roots.
 
-[schemas]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/schemas.yaml
-[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/sign.yaml
+[schemas]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/schemas.yaml
+[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/sign.yaml
 -/
 
 @[expose] public section

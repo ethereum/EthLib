@@ -253,10 +253,19 @@ def keymanager_run(
     protection: str,
     chain: tuple[str, str, str, bytes] | None,
     calls: list[tuple[str, str, Any]],
+    builder: dict[str, Any] | None = None,
 ) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
+    # The builder configuration of the client; without one, no builder, no floor and a cap of 0.
+    if builder is None:
+        builder = {
+            "min_bid": "0",
+            "builder_boost_factor": "100",
+            "max_execution_payment": "0",
+            "builders": [],
+        }
     return _native.consensus_keymanager_run(
-        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls
+        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls, builder
     )
 
 
@@ -1132,6 +1141,23 @@ def api_payload_envelope_ssz(
     return _native.consensus_api_payload_envelope_ssz(
         name, fork, anchor_state, anchor_block, steps, verify, root, envelope
     )
+
+
+def api_cached_envelope(
+    name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes
+) -> dict[str, Any]:
+    """The Beacon API envelope that a node built for its proposer, or ConsensusError."""
+    # The cache is the slot and the SSZ bytes of the one envelope that the node built, or None.
+    # It is answered when its slot and its block root are those of the request.
+    # Otherwise, and before Gloas, it raises ConsensusError with code 404.
+    return _native.consensus_api_cached_envelope(name, fork, cached, slot, root)
+
+
+def api_cached_envelope_ssz(
+    name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes
+) -> bytes:
+    """The Beacon API SSZ body of the envelope that a node built, or ConsensusError."""
+    return _native.consensus_api_cached_envelope_ssz(name, fork, cached, slot, root)
 
 
 # A light client update that a node knows: its period, the name of its fork and its SSZ bytes.
@@ -2294,6 +2320,8 @@ __all__ = [
     "api_columns_ssz",
     "api_payload_envelope",
     "api_payload_envelope_ssz",
+    "api_cached_envelope",
+    "api_cached_envelope_ssz",
     "api_light_client_bootstrap",
     "api_light_client_bootstrap_ssz",
     "api_light_client_decode_updates",

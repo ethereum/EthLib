@@ -337,33 +337,44 @@ private theorem debit_le_balanceDebits {f : Fork} (s t : BeaconState preset f) (
       (fun _ _ => Nat.zero_le _) (Finset.mem_range.mpr inside)
   · simp [actualBalanceAt, Array.getElem?_eq_none (Nat.le_of_not_lt inside)]
 
-/-- One pass of deltas debits each position at most its penalty, in its penalty events.
+/-- The credit of one event at one position, when the event is a reward. -/
+def rewardCredit (j : Nat) (event : BalanceEvent preset) : Nat :=
+  if event.source = .rewards then
+    actualBalanceAt event.after j - actualBalanceAt event.before j
+  else 0
 
-Its reward events debit nothing, and a penalty at another position keeps this balance. -/
-private theorem replayDeltas_debits {fork : Fork} (source : BalanceSource)
+/-- One pass of deltas debits a position at most its penalty and credits it at most its reward. -/
+theorem replayDeltas_flows {fork : Fork} (source : BalanceSource)
     (deltas : Array Gwei × Array Gwei) {pre post : BalanceReplay preset fork}
     (ok : replayDeltas source deltas pre = .ok post) (j : Nat) :
     (post.2.map (penaltyDebit j)).sum ≤
-      (pre.2.map (penaltyDebit j)).sum + (deltas.2.getD j 0).toNat := by
+      (pre.2.map (penaltyDebit j)).sum + (deltas.2.getD j 0).toNat ∧
+    (post.2.map (rewardCredit j)).sum ≤
+      (pre.2.map (rewardCredit j)).sum + (deltas.1.getD j 0).toNat := by
   unfold replayDeltas at ok
   have nodup := List.nodup_range (n := pre.1.validators.data.size)
   generalize List.range pre.1.validators.data.size = indices at ok nodup
-  -- Each position of the list debits `j` only when it is `j`, and the list holds `j` once.
+  -- Each position of the list flows through `j` only when it is `j`, and the list holds `j` once.
   suffices bound : (post.2.map (penaltyDebit j)).sum ≤
-      (pre.2.map (penaltyDebit j)).sum + indices.count j * (deltas.2.getD j 0).toNat by
-    have once := Nat.mul_le_mul_right (deltas.2.getD j 0).toNat
+      (pre.2.map (penaltyDebit j)).sum + indices.count j * (deltas.2.getD j 0).toNat ∧
+      (post.2.map (rewardCredit j)).sum ≤
+      (pre.2.map (rewardCredit j)).sum + indices.count j * (deltas.1.getD j 0).toNat by
+    obtain ⟨debit, credit⟩ := bound
+    have onceDebit := Nat.mul_le_mul_right (deltas.2.getD j 0).toNat
       (List.nodup_iff_count_le_one.mp nodup j)
-    omega
+    have onceCredit := Nat.mul_le_mul_right (deltas.1.getD j 0).toNat
+      (List.nodup_iff_count_le_one.mp nodup j)
+    exact ⟨by omega, by omega⟩
   clear nodup
   induction indices generalizing pre with
   | nil => cases ok; simp
   | cons i rest ih =>
     rw [List.foldlM_cons, bind_ok_iff] at ok
     obtain ⟨middle, stepOk, restOk⟩ := ok
-    have later := ih restOk
+    obtain ⟨laterDebit, laterCredit⟩ := ih restOk
     simp only [recordBalance, bind_ok_iff, liftAccessor_ok, pure, Except.pure,
       Except.ok.injEq, exists_eq_left'] at stepOk
-    obtain ⟨index, indexOk, _, ⟨raised, -, rfl⟩, lowered, loweredOk, rfl⟩ := stepOk
+    obtain ⟨index, indexOk, _, ⟨raised, raisedOk, rfl⟩, lowered, loweredOk, rfl⟩ := stepOk
     have position : index.toNat = i :=
       (ofNatChecked_ok_iff.mp (mapError_ok_iff.mp indexOk)).2
     -- The penalty event debits `j` its penalty when it names `j`, and nothing otherwise.
@@ -376,24 +387,61 @@ private theorem replayDeltas_debits {fork : Fork} (source : BalanceSource)
       · obtain ⟨inside, rfl⟩ := decreaseBalance_eq_ok_iff.mp loweredOk
         have other : j ≠ index.toNat := by omega
         simp [actualBalanceAt, BeaconState.putBalance, Ne.symm other, same]
-    simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
-      List.sum_nil, List.count_cons, beq_iff_eq, penaltyDebit, reduceCtorEq, or_self,
-      ↓reduceIte, Nat.add_zero] at later ⊢
-    have gated : (if source = .penalties ∨ source = .inactivity then
-        actualBalanceAt ⟨fork, raised⟩ j - actualBalanceAt ⟨fork, lowered⟩ j else 0) ≤
-        actualBalanceAt ⟨fork, raised⟩ j - actualBalanceAt ⟨fork, lowered⟩ j := by
-      split <;> omega
-    split at penalty <;> rename_i same
-    · simp only [same, ↓reduceIte]
-      rw [Nat.add_mul, Nat.one_mul]
-      omega
-    · simp only [same, ↓reduceIte, Nat.add_zero]
-      omega
+    -- The reward event credits `j` its reward when it names `j`, and nothing otherwise.
+    have reward : actualBalanceAt ⟨fork, raised⟩ j - actualBalanceAt ⟨fork, pre.1⟩ j ≤
+        if i = j then (deltas.1.getD j 0).toNat else 0 := by
+      have moved := actualBalanceAt_increaseBalance raisedOk j
+      rw [position] at moved
+      by_cases same : i = j
+      · subst same
+        simp only [↓reduceIte] at moved ⊢
+        omega
+      · simp only [same, ↓reduceIte] at moved ⊢
+        omega
+    have lowerKeep : actualBalanceAt ⟨fork, lowered⟩ j ≤ actualBalanceAt ⟨fork, raised⟩ j := by
+      rw [actualBalanceAt_decreaseBalance loweredOk j]
+      exact Nat.sub_le _ _
+    refine ⟨?_, ?_⟩
+    · simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
+        List.sum_nil, List.count_cons, beq_iff_eq, penaltyDebit, reduceCtorEq, or_self,
+        ↓reduceIte, Nat.add_zero] at laterDebit ⊢
+      have gated : (if source = .penalties ∨ source = .inactivity then
+          actualBalanceAt ⟨fork, raised⟩ j - actualBalanceAt ⟨fork, lowered⟩ j else 0) ≤
+          actualBalanceAt ⟨fork, raised⟩ j - actualBalanceAt ⟨fork, lowered⟩ j := by
+        split <;> omega
+      split at penalty <;> rename_i same
+      · simp only [same, ↓reduceIte]
+        rw [Nat.add_mul, Nat.one_mul]
+        omega
+      · simp only [same, ↓reduceIte, Nat.add_zero]
+        omega
+    · simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
+        List.sum_nil, List.count_cons, beq_iff_eq, rewardCredit, eq_self, ↓reduceIte,
+        Nat.add_zero] at laterCredit ⊢
+      have quiet : (if source = .rewards then
+          actualBalanceAt ⟨fork, lowered⟩ j - actualBalanceAt ⟨fork, raised⟩ j else 0) = 0 := by
+        split <;> omega
+      split at reward <;> rename_i same
+      · simp only [same, ↓reduceIte]
+        rw [Nat.add_mul, Nat.one_mul]
+        omega
+      · simp only [same, ↓reduceIte, Nat.add_zero]
+        omega
+
+/-- One pass of deltas debits each position at most its penalty, in its penalty events.
+
+Its reward events debit nothing, and a penalty at another position keeps this balance. -/
+private theorem replayDeltas_debits {fork : Fork} (source : BalanceSource)
+    (deltas : Array Gwei × Array Gwei) {pre post : BalanceReplay preset fork}
+    (ok : replayDeltas source deltas pre = .ok post) (j : Nat) :
+    (post.2.map (penaltyDebit j)).sum ≤
+      (pre.2.map (penaltyDebit j)).sum + (deltas.2.getD j 0).toNat :=
+  (replayDeltas_flows source deltas ok j).1
 
 /-- From Altair and after the first epoch, the replay of the rewards runs four passes of deltas.
 
 They are the passes of the source, target and head flags, and then the inactivity pass. -/
-private theorem replayRewards_passes (altair : .altair ≤ fork)
+theorem replayRewards_passes (altair : .altair ≤ fork)
     (later : getCurrentEpoch state ≠ GENESIS_EPOCH) {post : BalanceReplay preset fork}
     (replayed : replayRewards (config := config) (state, []) = .ok post) :
     ∃ source target head inactivity first second third,
