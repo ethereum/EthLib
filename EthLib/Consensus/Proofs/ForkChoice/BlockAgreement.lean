@@ -217,9 +217,11 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
   induction height using Nat.strong_induction_on generalizing root left right with
   | ind height ih =>
     obtain ⟨lb, lbFound⟩ :=
-      (e.reachable_of_start anchored startFirst n).known_of_blockState leftFound
+      (e.reachable_of_start (startFirst ▸ Store.Reachable.anchor anchored) n).known_of_blockState
+        leftFound
     obtain ⟨rb, rbFound⟩ :=
-      (e.reachable_of_start anchored startSecond k).known_of_blockState rightFound
+      (e.reachable_of_start (startSecond ▸ Store.Reachable.anchor anchored) k).known_of_blockState
+        rightFound
     have message := sameBlocks root lb rb lbFound rbFound
     subst rb
     cases initial : anchor.blocks[root]? with
@@ -496,7 +498,8 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     have memK := sync.2.2 n k ordered v honest u receiver (.block sb) memN late
     obtain ⟨pre, preFound, _, _, _⟩ := Store.validateOnBlock_ok valid
     obtain ⟨other, otherFound, _⟩ :=
-      (e.reachable_of_start anchored startReceiver k).blockStatesFromParents pk
+      Store.Reachable.blockStatesFromParents
+        (e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) k) pk
     have states : pre = other := e.blockStates_eq anchored startSender
       startReceiver (agree i (Nat.le_of_lt before)) preFound (msg ▸ otherFound)
     have otherPre : ((e.world k).state u).blockStates[sb.message.parentRoot]? = some pre := by
@@ -597,8 +600,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   · exact .inr collision
   have oneBlock v hv u hu n k hn hk := agree v hv u hu n k hn hk
   left
-  have reachedSender := e.reachable_of_start anchored startSender
-  have reachedReceiver := e.reachable_of_start anchored startReceiver
+  have reachedSender := e.reachable_of_start (startSender ▸ Store.Reachable.anchor anchored)
+  have reachedReceiver := e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored)
   -- The payload came from an envelope that the sender accepted before.
   rcases e.exists_envelope_of_verified gloas verified with
     initial | ⟨i, before, envelope, _, mem, rfl, handled⟩
@@ -654,7 +657,7 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     simp only [Store.blockState_ok_iff.mpr otherFound, bind, Except.bind]
     rw [dataOk]
     simp only [Except.mapError, envelopeOk, recordHere, pure, Except.pure]
-  -- The receiver holds the payload of each envelope of its view that it accepts.
+  -- The receiver already marks verified the root of each envelope of its view that it accepts.
   exact closed _ _ memK acceptedHere
 
 /-- At every fork, synchrony and compatible finality deliver a block or name a collision.
@@ -713,7 +716,7 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   obtain rfl := agree v honest u receiver i k iBound bounded _ _ _ sentFound parentFound
   refine (Store.validateParentPayload_ok_iff gloas).mpr ⟨sent, parentFound, fun full => ?_⟩
   -- The receiver holds the parent's state, as it holds the parent.
-  have reached := e.reachable_of_start anchored startReceiver k
+  have reached := e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) k
   obtain ⟨parentState, parentStateFound, -⟩ := reached.blockStatesFromParents parentFound
   rcases e.payloadVerified_of_partiallySynchronous sync gloas (anchorSlot gloas) anchored honest
       receiver

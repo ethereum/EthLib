@@ -723,7 +723,11 @@ theorem VoteAt.accepted_at_next_slot_of_payloadVote {anchor : Store preset fork}
 
 /-- From Gloas, a receiver passes the payload check of an honest duty vote for a block it holds.
 
-Otherwise two honest stores collide by `last`. -/
+Both stores start at the anchor store, and the receiver reads the vote a delay after its deadline.
+
+For each envelope in its view that the receiver accepts, its store already marks the root verified.
+
+Otherwise two honest stores at bounded times collide. -/
 theorem VoteAt.validatePayloadVote_or_collision {Δ : ℕ} (sync : e.Synchronous Δ)
     (gloas : .glamsterdam ≤ fork) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     {anchor : Store preset fork}
@@ -767,7 +771,8 @@ theorem VoteAt.validatePayloadVote_or_collision {Δ : ℕ} (sync : e.Synchronous
   have verified := Store.isPayloadVerified_of_getHead gloas headOk status
   rw [← rootEq] at verified
   obtain ⟨st, stFound, -⟩ :=
-    (e.reachable_of_start anchored startReceiver arrival).blockStatesFromParents votedKnown
+    Store.Reachable.blockStatesFromParents
+      (e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) arrival) votedKnown
   rcases e.payloadVerified_of_partiallySynchronous sync gloas anchorSlot anchored honest receiver
       startVoter startReceiver (by rw [vote.atTime, Nat.max_zero]; exact late) arrivalBound
       closed verified ⟨st, stFound⟩ with delivered | collision
