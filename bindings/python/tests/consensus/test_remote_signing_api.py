@@ -455,3 +455,101 @@ def test_electra_aggregate_root(name: str):
     root = consensus.signing_request_root("mainnet", CONFIG, example)
     assert root == _aggregate_signing_root(example)
     assert "0x" + root.hex() != example["signingRoot"]
+
+
+# The examples of the kinds that Gloas adds carry no signing root.
+# The roots of the three plain containers are computed here, with this file's own merkleization.
+# The bid and the envelope are progressive containers (EIP-7688), so the test records their roots.
+# They are the roots that EthLib computed when this test was written, so they detect a change only.
+RECORDED = {
+    "EXECUTION_PAYLOAD_BID (GLOAS)": (
+        "0x7c35a50f96923a7496a65cb6911c0be9541c311c9739d5172092aa3b8533cf1c"
+    ),
+    "EXECUTION_PAYLOAD_ENVELOPE (GLOAS)": (
+        "0xe01b45def569226846f41cd8909a764e615b332b5ee5197e4ea3453b442e0ac2"
+    ),
+}
+
+
+def _fork_domain(domain_type: bytes, info: dict[str, Any], before_fork: bool) -> bytes:
+    """The domain of a domain type under the fork info, before or from its fork epoch."""
+    key = "previous_version" if before_fork else "current_version"
+    version = _hex(info["fork"][key]) + b"\0" * 28
+    fork_data = _merkleize([version, _hex(info["genesis_validators_root"])], 2)
+    return domain_type + fork_data[:28]
+
+
+def _payload_attestation_root(example: dict[str, Any]) -> bytes:
+    data = example["payload_attestation_message"]["data"]
+    root = _merkleize(
+        [
+            _hex(data["beacon_block_root"]),
+            _uint(int(data["slot"])),
+            _uint(int(data["payload_present"])),
+            _uint(int(data["blob_data_available"])),
+        ],
+        4,
+    )
+    # The slot 1 is in epoch 0 under either preset, before the fork epoch 1.
+    domain = _fork_domain(bytes([0x0C, 0, 0, 0]), example["fork_info"], before_fork=True)
+    return _merkleize([root, domain], 2)
+
+
+def _proposer_preferences_root(example: dict[str, Any]) -> bytes:
+    data = example["proposer_preferences"]["data"]
+    root = _merkleize(
+        [
+            _hex(data["dependent_root"]),
+            _uint(int(data["proposal_slot"])),
+            _uint(int(data["validator_index"])),
+            _hex(data["fee_recipient"]) + b"\0" * 12,
+            _uint(int(data["target_gas_limit"])),
+        ],
+        5,
+    )
+    # The slot 32 is in epoch 1 or 4, at or after the fork epoch 1 under either preset.
+    domain = _fork_domain(bytes([0x0D, 0, 0, 0]), example["fork_info"], before_fork=False)
+    return _merkleize([root, domain], 2)
+
+
+def _builder_request_auth_root(example: dict[str, Any]) -> bytes:
+    data = example["builder_request_auth"]["data"]
+    auth = _hex(data["data"])
+    # A byte list of at most 4096 bytes fills 128 chunks, and its length mixes into its root.
+    data_root = _sha(_merkleize(_chunks(auth), 4096 // 32), _uint(len(auth)))
+    root = _merkleize([data_root, _uint(int(data["slot"]))], 2)
+    # The genesis fork version of the minimal configuration, with a zero root of the validators.
+    fork_data = _merkleize([bytes([0, 0, 0, 1]) + b"\0" * 28, b"\0" * 32], 2)
+    domain = bytes([0x0B, 0, 0, 1]) + fork_data[:28]
+    return _merkleize([root, domain], 2)
+
+
+@pytest.mark.parametrize(
+    ("name", "computed"),
+    [
+        ("PAYLOAD_ATTESTATION_MESSAGE (GLOAS)", _payload_attestation_root),
+        ("PROPOSER_PREFERENCES (GLOAS)", _proposer_preferences_root),
+        ("BUILDER_REQUEST_AUTH (GLOAS)", _builder_request_auth_root),
+    ],
+)
+def test_gloas_root(name: str, computed: Any):
+    example = EXAMPLES[name]
+    for preset in ("minimal", "mainnet"):
+        assert consensus.signing_request_root(preset, CONFIG, example) == computed(example)
+
+
+def test_payload_attestation_root_of_the_issue():
+    # The root that issue #2146 traces by hand for this example.
+    root = "0x48eae9e97661ce9af46c3210ac8597bbfa9f59f74b14ed15d68d29ba0f445822"
+    example = EXAMPLES["PAYLOAD_ATTESTATION_MESSAGE (GLOAS)"]
+    assert "0x" + _payload_attestation_root(example).hex() == root
+
+
+@pytest.mark.parametrize("name", sorted(RECORDED))
+def test_gloas_recorded_root(name: str):
+    example = copy.deepcopy(EXAMPLES[name])
+    if name == ENVELOPE:
+        example["execution_payload_envelope"]["data"]["payload"]["logs_bloom"] = "0x" + "00" * 256
+    for preset in ("minimal", "mainnet"):
+        root = consensus.signing_request_root(preset, CONFIG, example)
+        assert "0x" + root.hex() == RECORDED[name]

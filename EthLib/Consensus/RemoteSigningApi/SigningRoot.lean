@@ -46,14 +46,72 @@ def forkInfoDomain (config : Config) (info : ForkInfo) (domainType : DomainType)
     Except Err Domain :=
   computeDomain config domainType (info.fork.versionAt epoch) info.genesisValidatorsRoot
 
-/-- The root of an object under a domain type, at an epoch, under the fork info of a request. -/
-def forkInfoSigningRoot {α : Type} [SszType α] (config : Config) (info : ForkInfo)
-    (domainType : DomainType) (epoch : Epoch) (object : α) : Except Err Root := do
-  computeSigningRoot object (← forkInfoDomain config info domainType epoch)
-
 /-- The deposit message of the consensus layer that a deposit request describes. -/
 def DepositSigningData.message (deposit : DepositSigningData) : DepositMessage :=
   ⟨deposit.pubkey, deposit.withdrawalCredentials, deposit.amount⟩
+
+/-- The domain type of a kind of request.
+
+The source names it for the kinds that Gloas adds, and the duty of each other kind fixes it. -/
+def RequestType.domainType : RequestType → DomainType
+  | .aggregationSlot => DOMAIN_SELECTION_PROOF
+  | .aggregateAndProof | .aggregateAndProofV2 => DOMAIN_AGGREGATE_AND_PROOF
+  | .attestation => DOMAIN_BEACON_ATTESTER
+  | .block | .blockV2 => DOMAIN_BEACON_PROPOSER
+  | .deposit => DOMAIN_DEPOSIT
+  | .randaoReveal => DOMAIN_RANDAO
+  | .voluntaryExit => DOMAIN_VOLUNTARY_EXIT
+  | .syncCommitteeMessage => DOMAIN_SYNC_COMMITTEE
+  | .syncCommitteeSelectionProof => DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
+  | .syncCommitteeContributionAndProof => DOMAIN_CONTRIBUTION_AND_PROOF
+  | .validatorRegistration => DOMAIN_APPLICATION_BUILDER
+  | .executionPayloadBid | .executionPayloadEnvelope => DOMAIN_BEACON_BUILDER
+  | .payloadAttestationMessage => DOMAIN_PTC_ATTESTER
+  | .proposerPreferences => DOMAIN_PROPOSER_PREFERENCES
+  | .builderRequestAuth => DOMAIN_BUILDER_REQUEST_AUTH
+
+/-- The domain under which a remote signer signs a request, of the domain type of its kind.
+
+A kind with fork info takes the domain that its fork info gives at the epoch of its duty.
+
+A deposit takes its own genesis fork version, with a zero root of the validators.
+
+A registration and a Builder API authentication take the domain of the Builder API. -/
+def requestDomain {preset : Preset} (config : Config) (request : SigningRequest preset) :
+    Except Err Domain :=
+  let domainType := request.type.domainType
+  match request with
+  | .aggregationSlot signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .aggregateAndProof signing body | .aggregateAndProofV2 signing _ body =>
+    forkInfoDomain config signing.forkInfo domainType
+      (computeEpochAtSlot preset body.aggregate.data.slot)
+  | .attestation signing body =>
+    forkInfoDomain config signing.forkInfo domainType body.target.epoch
+  | .block signing body | .blockV2 signing (.phase0 body) | .blockV2 signing (.altair body) =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .blockV2 signing (.header _ header) =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset header.slot)
+  | .deposit _ body => computeDomain config domainType body.genesisForkVersion
+  | .randaoReveal signing body => forkInfoDomain config signing.forkInfo domainType body.epoch
+  | .voluntaryExit signing body => forkInfoDomain config signing.forkInfo domainType body.epoch
+  | .syncCommitteeMessage signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .syncCommitteeSelectionProof signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .syncCommitteeContributionAndProof signing body =>
+    forkInfoDomain config signing.forkInfo domainType
+      (computeEpochAtSlot preset body.contribution.slot)
+  | .validatorRegistration .. | .builderRequestAuth .. => builderDomain config domainType
+  | .executionPayloadBid signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .executionPayloadEnvelope signing body =>
+    forkInfoDomain config signing.forkInfo domainType
+      (computeEpochAtSlot preset (body.payload.slotNumber (by decide)))
+  | .payloadAttestationMessage signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.slot)
+  | .proposerPreferences signing body =>
+    forkInfoDomain config signing.forkInfo domainType (computeEpochAtSlot preset body.proposalSlot)
 
 /-- The root that a remote signer signs for a request.
 
@@ -80,60 +138,27 @@ A deposit is signed at its own genesis fork version, with a zero root of the val
 A registration and the authentication of a Builder API request take the domain of the Builder API.
 
 That is the domain at the configured genesis fork version, with a zero root. -/
-def requestSigningRoot {preset : Preset} (config : Config) :
-    SigningRequest preset → Except Err Root
-  | .aggregationSlot signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_SELECTION_PROOF
-      (computeEpochAtSlot preset body.slot) body.slot
-  | .aggregateAndProof signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_AGGREGATE_AND_PROOF
-      (computeEpochAtSlot preset body.aggregate.data.slot) body
-  | .aggregateAndProofV2 signing _ body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_AGGREGATE_AND_PROOF
-      (computeEpochAtSlot preset body.aggregate.data.slot) body
-  | .attestation signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_ATTESTER body.target.epoch body
-  | .block signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_PROPOSER
-      (computeEpochAtSlot preset body.slot) body
-  | .blockV2 signing (.phase0 block) | .blockV2 signing (.altair block) =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_PROPOSER
-      (computeEpochAtSlot preset block.slot) block
-  | .blockV2 signing (.header _ header) =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_PROPOSER
-      (computeEpochAtSlot preset header.slot) header
-  | .deposit _ body => do
-    computeSigningRoot body.message
-      (← computeDomain config DOMAIN_DEPOSIT body.genesisForkVersion)
-  | .randaoReveal signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_RANDAO body.epoch body.epoch
-  | .voluntaryExit signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_VOLUNTARY_EXIT body.epoch body
-  | .syncCommitteeMessage signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_SYNC_COMMITTEE
-      (computeEpochAtSlot preset body.slot) body.beaconBlockRoot
-  | .syncCommitteeSelectionProof signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF
-      (computeEpochAtSlot preset body.slot) body
-  | .syncCommitteeContributionAndProof signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_CONTRIBUTION_AND_PROOF
-      (computeEpochAtSlot preset body.contribution.slot) body
-  | .validatorRegistration _ body => do
-    computeSigningRoot body (← builderDomain config)
-  | .executionPayloadBid signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_BUILDER
-      (computeEpochAtSlot preset body.slot) body
-  | .executionPayloadEnvelope signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_BEACON_BUILDER
-      (computeEpochAtSlot preset (body.payload.slotNumber (by decide))) body
-  | .payloadAttestationMessage signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_PTC_ATTESTER
-      (computeEpochAtSlot preset body.slot) body
-  | .proposerPreferences signing body =>
-    forkInfoSigningRoot config signing.forkInfo DOMAIN_PROPOSER_PREFERENCES
-      (computeEpochAtSlot preset body.proposalSlot) body
-  | .builderRequestAuth _ body _ => do
-    computeSigningRoot body
-      (← builderDomain config DOMAIN_BUILDER_REQUEST_AUTH)
+def requestSigningRoot {preset : Preset} (config : Config) (request : SigningRequest preset) :
+    Except Err Root := do
+  let domain ← requestDomain config request
+  match request with
+  | .aggregationSlot _ body => computeSigningRoot body.slot domain
+  | .aggregateAndProof _ body | .aggregateAndProofV2 _ _ body => computeSigningRoot body domain
+  | .attestation _ body => computeSigningRoot body domain
+  | .block _ body | .blockV2 _ (.phase0 body) | .blockV2 _ (.altair body) =>
+    computeSigningRoot body domain
+  | .blockV2 _ (.header _ header) => computeSigningRoot header domain
+  | .deposit _ body => computeSigningRoot body.message domain
+  | .randaoReveal _ body => computeSigningRoot body.epoch domain
+  | .voluntaryExit _ body => computeSigningRoot body domain
+  | .syncCommitteeMessage _ body => computeSigningRoot body.beaconBlockRoot domain
+  | .syncCommitteeSelectionProof _ body => computeSigningRoot body domain
+  | .syncCommitteeContributionAndProof _ body => computeSigningRoot body domain
+  | .validatorRegistration _ body => computeSigningRoot body domain
+  | .executionPayloadBid _ body => computeSigningRoot body domain
+  | .executionPayloadEnvelope _ body => computeSigningRoot body domain
+  | .payloadAttestationMessage _ body => computeSigningRoot body domain
+  | .proposerPreferences _ body => computeSigningRoot body domain
+  | .builderRequestAuth _ body _ => computeSigningRoot body domain
 
 end EthLib.Consensus.RemoteSigningApi

@@ -6402,7 +6402,20 @@ A sync committee message is signed in the current epoch of the state, so its the
 `getBlockSignature_eq_of_requestSigningRoot_header` shows that from Bellatrix, where a request holds only the header of a block, its root is the root of the block, so the proposer's signature verifies.
 `verifyRegistrationSignature_of_requestSigningRoot` shows that a registration gets the root that the check of a registration verifies.
 `isValidDepositSignature_of_requestSigningRoot` shows the same for a deposit whose genesis fork version is that of the configuration.
-The kinds that Gloas adds sign under the domain types that the source names; whether their roots match their duties is left to the next step, since the preferences and the envelope differ from their duties in the version and the epoch they take.
+The kinds that Gloas adds sign under the domain types that the source names.
+`getExecutionPayloadBidSignature_eq_of_requestSigningRoot` and `getPayloadAttestationMessageSignature_eq_of_requestSigningRoot` show that a bid and the data of a payload attestation get the roots that their duties sign.
+`verifyBuilderRequestAuthSignature_of_requestSigningRoot` shows that the authentication of a Builder API request gets the root that its check verifies.
+Two kinds differ from their duties, and their theorems take a hypothesis each, which Gap A lists.
+An envelope is signed by its builder in the current epoch of the state, and by the request in the epoch of the slot of its payload; `getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot` assumes that the two epochs take the same fork version.
+Proposer preferences are signed at the fork version that the configuration gives to the proposal epoch, and the request takes the version of its fork info; `proposerPreferencesSigningRoot_eq_of_requestSigningRoot` assumes that the two agree.
+
+Each kind has one domain type (`RequestType.domainType`), and `requestDomain_prefix` shows that the domain of a request starts with it, whatever the fork info.
+`requestDomain_ne` shows that two requests whose kinds have different domain types never share a domain.
+`RequestType.domainType_eq_iff` shows that only three pairs of kinds share a domain type: the two block kinds, the two aggregate kinds, and the bid with the envelope.
+So the selection proof of a slot and the RANDAO reveal of an epoch with the same number hash different signing data, and one signature serves for both only through a SHA-256 collision.
+These theorems are about domains, not signing roots; that two different signing data have different roots needs the collision resistance of SHA-256, which EthLib does not assume here.
+The examples of the kinds that Gloas adds carry no signing root.
+The Python suite computes the roots of the payload attestation, the preferences and the authentication with its own merkleization and compares them; the bid and the envelope are progressive containers (EIP-7688), so it records their roots as a change detector.
 The Python suite checks the `signingRoot` of each of the 24 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
 The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
 The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
@@ -6656,6 +6669,10 @@ The theorem also assumes a positive inclusion delay, a positive withdrawal delay
 The root of a voluntary exit request (`voluntaryExitDomain_of_requestSigningRoot`) holds under the hypothesis that the fork info of the request gives, at the epoch of the exit, the version of the exit domain.
 From Deneb that is the version of Capella (EIP-7044), and the Remote-signing API does not say whether the client sends it or the signer substitutes it.
 The hypothesis stays until the implementers of remote signers answer it.
+
+Two roots of the kinds that Gloas adds hold under a hypothesis, which the Remote-signing API leaves open.
+The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot`) assumes that the epoch of the slot of its payload and the current epoch of the state take the same fork version; the source names the domain type of an envelope, not its epoch.
+The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
