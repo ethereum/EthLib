@@ -16006,7 +16006,12 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
           if 0 < syncD eventsF v.toNat + syncD events v.toNat then
             (preset.EFFECTIVE_BALANCE_INCREMENT.toNat +
               (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1) /
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else 0) ≤
+                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat else 0) +
+        3 * (∑ v ∈ cutKeys config pulled anc fin split,
+          (max (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat)
+              (balanceAt fin v.toNat) /
+            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat +
+          slashR (pinTerms config pulled anc fin) v.toNat)) ≤
       (pinTerms config pulled anc fin).branchR := by
   classical
   unfold scSlashedReward
@@ -16016,18 +16021,27 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
   have slashes := weighted_le (A := K4 pulled counted V) (B := K5 counted V)
     (C := K6 pulled counted) (fun v => slashR (pinTerms config pulled anc fin) v.toNat) d45 d46
     d56
+  -- A cut key is slashed at the split, so it is in no class and not in `SC`.
+  have dCut : Disjoint (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪
+      SC pulled counted split) (cutKeys config pulled anc fin split) :=
+    (cut_disjoint h).symm.mono_left fun v member => by
+      simp only [Finset.mem_union] at member ⊢
+      tauto
+  -- Each cut key is read as slashed, so its slash charge is an increment.
+  have cutRB : (cutKeys config pulled anc fin split).filter
+      (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true) =
+        cutKeys config pulled anc fin split :=
+    Finset.filter_true_of_mem fun v cut => (Finset.mem_filter.mp cut).2.2.1
   -- A key of `SC` that R slashes takes an increment of `branchR`'s slashed keys.
   --
   -- A key of the classes takes one too, and the two sets are disjoint.
   have slashBound := slashR_le config pulled anc fin
-    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split)
-  rw [Finset.sum_union dSC] at slashBound
-  have scFloor : ∑ v ∈ (SC pulled counted split).filter
-        (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
-      max (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat)
-          (balanceAt fin v.toNat) /
-        (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ Wh :=
-    floorW (SC pulled counted split)
+    (K4 pulled counted V ∪ K5 counted V ∪ K6 pulled counted ∪ SC pulled counted split ∪
+      cutKeys config pulled anc fin split)
+  rw [Finset.sum_union dCut, Finset.sum_union dSC] at slashBound
+  have scFloor := floorW (SC pulled counted split ∪ cutKeys config pulled anc fin split)
+  rw [Finset.filter_union, cutRB, Finset.sum_union (Finset.disjoint_of_subset_left
+    (Finset.filter_subset _ _) (Finset.disjoint_union_left.mp dCut).2)] at scFloor
   have scReward : ∑ v ∈ (SC pulled counted split).filter
         (fun v => (pinTerms config pulled anc fin).slashedRB v.toNat = true),
       (max (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat)
@@ -16149,7 +16163,141 @@ theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
         3 * (∑ v ∈ cutKeys config pulled anc fin split,
           (syncD eventsF v.toNat + syncD events v.toNat +
             inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat)) := by
-  sorry
+  classical
+  obtain ⟨toPulled⟩ := h.toPulled
+  set q := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat with hq
+  set inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat with hinc
+  -- The bands of `bud_branchR_of` are the seats' bands, within the bound of `roundedKeys`.
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have called := UInt64.le_iff_toNat_le.mp h.called
+  have seats := bands_seats h fromFin tail tailC high highC endEpoch endEpochC toB pre sameEpoch
+    replayed replayedF replayedC replayedP
+  have slots : preset.SLOTS_PER_EPOCH.toNat ≤
+      (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat :=
+    Nat.le_mul_of_pos_left _ (by omega)
+  rw [← depthEq] at seats
+  have of := bud_branchR_of h tailC highC pre (seats.trans (Nat.mul_le_mul_left 3
+    (Nat.mul_le_mul_left _ ?bandsLe)))
+  case bandsLe => omega
+  -- One `cut_whistle` reads the credits of `pre` to the keys of `K5` and of `scCharged`.
+  obtain ⟨dSC, -⟩ := sc_disjoint h
+  have apart : Disjoint (K5 counted V) (scCharged pulled counted split tailC) :=
+    Finset.disjoint_of_subset_right (Finset.filter_subset _ _)
+      (Finset.disjoint_of_subset_left (fun v member => Finset.mem_union.mpr
+        (.inl (Finset.mem_union.mpr (.inr member)))) dSC)
+  have whistle := cut_whistle h toB pre sameEpoch highC
+    ((K5 counted V ∪ scCharged pulled counted split tailC).image UInt64.toNat)
+  rw [Finset.sum_image fun a _ b _ same => UInt64.toNat_inj.mp same,
+    Finset.sum_union apart] at whistle
+  -- Each key that `pre` slashes is a cut key, at most its reserve, increment, seat and debits.
+  have finEpoch : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have each : ∀ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
+      (fun v => ((b.validators.data[v.toNat]?).map (·.slashed)).getD false = false ∧
+        ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+        (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+      v ∈ cutKeys config pulled anc fin split ∧ balanceAt split v.toNat / q ≤
+        (max (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat)
+            (balanceAt fin v.toNat) / q + slashR (pinTerms config pulled anc fin) v.toNat) +
+          (if 0 < syncD eventsF v.toNat + syncD events v.toNat then (inc + q - 1) / q else 0) +
+          (syncD eventsF v.toNat + syncD events v.toNat +
+            inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) := by
+    intro v member
+    obtain ⟨inside, clean, marked, rb⟩ : v ∈ (Finset.range pulled.validators.data.size).image
+        UInt64.ofNat ∧ _ ∧ _ ∧ _ := by simpa only [Finset.mem_filter, and_assoc] using member
+    -- The step of `pre` that slashes the key starts from a record of it.
+    let P : ForkedBeaconState preset → Prop := fun z =>
+      ((z.state.validators.data[v.toNat]?).map (·.slashed)).getD false = true
+    obtain ⟨m, n, before, step, after, -, notM, atN⟩ :=
+      Run.split_at_flip pre P (by simp [P, clean]) marked
+    have mFork : m.fork = fork := fork_eq_of_run before ((Run.nil.snoc step).append after)
+      (Nat.le_refl _)
+    have startB : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch m.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps before.chainSteps)
+    obtain ⟨w, foundN, slashedN⟩ : ∃ w, n.state.validators.data[v.toNat]? = some w ∧
+        w.slashed = true := by
+      cases found : n.state.validators.data[v.toNat]? with
+      | none => simp [P, found] at atN
+      | some w => exact ⟨w, rfl, by simpa [P, found] using atN⟩
+    obtain ⟨u, foundM, unslashedM⟩ : ∃ u, m.state.validators.data[v.toNat]? = some u ∧
+        u.slashed = false := by
+      cases found : m.state.validators.data[v.toNat]? with
+      | some u => exact ⟨u, rfl, by simpa [P, found] using notM⟩
+      | none =>
+        have finite : getCurrentEpoch m.state < FAR_FUTURE_EPOCH := by
+          refine UInt64.lt_iff_le_and_ne.mpr ⟨UInt64.le_iff_toNat_le.mpr ?_,
+            getCurrentEpoch_ne_farFuture h.twoSlots m.state⟩
+          have := (getCurrentEpoch m.state).toNat_lt
+          have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+          omega
+        obtain ⟨_, recorded, -⟩ := step.slashed_activated
+          (by rw [mFork]; exact Nat.le_trans (by decide) h.fulu)
+          (Nat.lt_of_le_of_lt (fork_le_of_chainSteps after.chainSteps) h.early)
+          h.caps.activation h.caps.compounding h.delay finite v.toNat
+          (fun u read => by simp [found] at read) (by simp [found, foundN, slashedN])
+        simp [found] at recorded
+    obtain ⟨wP, foundP, slashedP⟩ :=
+      (after.append toPulled).slashedPersistence v.toNat w foundN slashedN
+    have withdrawable := ((((Run.nil.snoc step).append after).append toPulled)
+      |>.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding h.early h.delay
+        v.toNat u wP foundM foundP unslashedM slashedP).2
+    have cut : v ∈ cutKeys config pulled anc fin split := by
+      refine Finset.mem_filter.mpr ⟨inside, marked, rb, ?_⟩
+      have key : (getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+          wP.withdrawableEpoch.toNat := by
+        have same : (getCurrentEpoch split).toNat = (getCurrentEpoch b).toNat := by
+          rw [sameEpoch]
+        have late : (getCurrentEpoch m.state).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+            wP.withdrawableEpoch.toNat := withdrawable
+        omega
+      simpa [foundP] using key
+    refine ⟨cut, ?_⟩
+    -- The balance at the split is within `cut_balance_le`'s bound, and the quotient splits.
+    have bound := cut_balance_le h fromFin tail high endEpoch replayedF replayed v cut
+    have unit : slashR (pinTerms config pulled anc fin) v.toNat = inc := by simp [slashR, rb, inc]
+    rw [unit]
+    rcases Nat.eq_zero_or_pos q with zero | positive
+    · simp [zero]
+    have lift (a c : ℕ) : (a + c) / q ≤ a + c / q := by
+      have h2 := Nat.lt_mul_div_succ c positive
+      rw [Nat.mul_succ] at h2
+      have ha : a ≤ q * a := Nat.le_mul_of_pos_left a positive
+      apply Nat.le_of_lt_succ
+      rw [Nat.div_lt_iff_lt_mul positive, Nat.succ_mul, Nat.add_mul, Nat.mul_comm a q,
+        Nat.mul_comm (c / q)]
+      omega
+    generalize balanceAt split v.toNat = x at bound ⊢
+    generalize hP : balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat = p
+      at bound ⊢
+    generalize syncD eventsF v.toNat + syncD events v.toNat +
+      inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat = r at bound ⊢
+    generalize syncD eventsF v.toNat + syncD events v.toNat = d at bound ⊢
+    generalize balanceAt fin v.toNat = f at bound ⊢
+    by_cases debited : 0 < d
+    · simp only [debited, ↓reduceIte] at bound ⊢
+      have within : x ≤ max p f + ((inc + r) + inc) := by omega
+      have one := (Nat.div_le_div_right (c := q) within).trans
+        (floor_add_ceil_le _ _ q positive)
+      have two := lift (inc + r) (inc + q - 1)
+      rw [show inc + r + inc + q - 1 = inc + r + (inc + q - 1) by omega] at one
+      omega
+    · simp only [debited, ↓reduceIte] at bound ⊢
+      have within : x ≤ max p f + (inc + r) := by omega
+      have one := (Nat.div_le_div_right (c := q) within).trans
+        (floor_add_ceil_le _ _ q positive)
+      have two := lift (inc + r) (q - 1)
+      have zero : (q - 1) / q = 0 := Nat.div_eq_of_lt (by omega)
+      rw [show inc + r + q - 1 = inc + r + (q - 1) by omega] at one
+      omega
+  -- The keys that `pre` slashes fit the cut keys' reserves, increments, seats and debits.
+  have cutSum := (Finset.sum_le_sum fun v member => (each v member).2).trans
+    (Finset.sum_le_sum_of_subset_of_nonneg (fun v member => (each v member).1)
+      fun _ _ _ => Nat.zero_le _)
+  rw [Finset.sum_add_distrib, Finset.sum_add_distrib] at cutSum
+  simp only [hq, hinc] at cutSum whistle
+  linarith
 
 /-- The sync movement of a key is its sync credits plus its sync debits over the events. -/
 private theorem syncF_eq (events : List (BalanceEvent preset)) (v : ℕ) :
