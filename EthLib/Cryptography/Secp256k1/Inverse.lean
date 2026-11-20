@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Secp256k1.RecoveryField
+public import EthLib.Cryptography.Secp256k1.Montgomery
 
 /-!
 # Modular inversion for secp256k1 recovery
@@ -24,9 +24,11 @@ The final check accepts only a canonical residue whose product with the input is
 
 @[expose] public section
 
-namespace EthLib.Cryptography.Secp256k1.RecoveryInverse
+namespace EthLib.Cryptography.Secp256k1
 
-open Fp.RecoveryField (plus minus mac)
+namespace Inverse
+
+open Montgomery (plus minus mac)
 
 private structure Transition where
   delta : UInt64
@@ -140,7 +142,7 @@ private structure Wide where
     ((a.x4.toInt64) >>> (60 : UInt64).toInt64).toUInt64⟩
 
 /-- Accumulate a pair of products with a single carry. -/
-@[inline] private def linWord (a b x y carry : UInt64) : Fp.RecoveryField.Pair :=
+@[inline] private def linWord (a b x y carry : UInt64) : Montgomery.Pair :=
   let t := mac x a 0 carry
   let u := mac y b t.lo 0
   ⟨u.lo, t.hi + u.hi⟩
@@ -201,25 +203,18 @@ private structure Wide where
     -- The attempt is limited to thirteen jumps.
     run Wide.lowNat p pinv 13 1 p (Wide.ofNat a) ⟨0, 0, 0, 0, 0⟩ ⟨1, 0, 0, 0, 0⟩
 
-/-- Accept a canonical inverse candidate, or compute the inverse by exponentiation. -/
-@[inline] def check {m : Nat} (c : Option Nat) (a : Fin m) : Fin m :=
+/-- The candidate when it is the inverse of `a` mod `m`, or else the Euclidean inverse.
+
+A candidate below `m` whose product with `a` is `1` mod `m` is accepted. -/
+@[inline] def check {m : Nat} [NeZero m] (c : Option Nat) (a : Fin m) : Fin m :=
   match c with
-  | none => Fin.inversePrime a
+  | none => Fin.inverse a
   | some v =>
-    if h : v < m ∧ v * a.val % m = 1 then ⟨v, h.1⟩ else Fin.inversePrime a
+    if h : v < m ∧ v * a.val % m = 1 then ⟨v, h.1⟩ else Fin.inverse a
 
-/-- The inverse of the final projective denominator in recovery. -/
-@[no_expose] def invFp (a : Fp) : Fp :=
-  check (candidate (Wide.ofNat Fp.modulus) Fp.RecoveryField.inverseComplement a.val) a
-
-/-- The inverse of the signature component in recovery. -/
-@[no_expose] def invFn (a : Fn) : Fn :=
-  -- The word constant is -n^(-1) mod 2^64.
-  check (candidate (Wide.ofNat Fn.modulus) 0x4b0dff665588b13f a.val) a
-
-open Fp.RecoveryField in
+open Secp256k1.Montgomery in
 /-- Read a 256-bit result of the inversion loop as a canonical residue. -/
-@[inline] private def finishWords (w : Wide) : Element :=
+@[inline] private def finishWords (w : Wide) : Montgomery :=
   let t : Words64 := ⟨w.x0, w.x1, w.x2, w.x3, 0⟩
   finish t (by
     have h0 := w.x0.toNat_lt
@@ -230,47 +225,36 @@ open Fp.RecoveryField in
       Nat.mul_zero, Nat.add_zero]
     omega)
 
-open Fp.RecoveryField in
-/-- The canonical integer R^3 mod p, for converting the candidate to Montgomery form. -/
-private def montgomeryCube : Element := ⟨⟨0x2bb1e33795f671, 0x100000b73, 0, 0⟩, by decide⟩
+/-- The integer `R^3 mod p`, which turns the inverse of `x R` into the form of `x^(-1)`. -/
+private def montgomeryCube : Montgomery := ⟨⟨0x2bb1e33795f671, 0x100000b73, 0, 0⟩, by decide⟩
 
-open Fp.RecoveryField in
-/-- Check a candidate in the same field representation as the input. -/
-@[inline] def checkMontgomery (c : Option Element) (a : Element) : Element :=
-  let fallback := fun () => ofFin (Fin.inversePrime (toFin a))
+/-- The candidate when its product with `a` is one, or else the Euclidean inverse. -/
+@[inline] def checkMontgomery (c : Option Montgomery) (a : Montgomery) : Montgomery :=
+  let fallback := fun () => Montgomery.ofFin (Fin.inverse a.toFin)
   match c with
   | none => fallback ()
   | some b => if b * a = 1 then b else fallback ()
 
-open Fp.RecoveryField in
-/-- Invert the projective denominator using its Montgomery words. -/
-@[no_expose] def invMontgomery (a : Element) : Element :=
+end Inverse
+
+/-- The inverse of `a`, which sends `0` to `0`.
+
+The divsteps give a candidate, and the Euclidean inverse replaces one that fails the check. -/
+@[no_expose] def Fn.inv (a : Fn) : Fn :=
+  -- The word constant is `-n^(-1) mod 2^64`.
+  Inverse.check (Inverse.candidate (.ofNat Fn.modulus) 0x4b0dff665588b13f a.val) a
+
+/-- The inverse of `a`, which sends `0` to `0`.
+
+The divsteps run on the words of `a R`, whose inverse `a^(-1) R^(-1)` a product by `R^3` rescales.
+
+The Euclidean inverse replaces a candidate that fails the check. -/
+@[no_expose] def Montgomery.inv (a : Montgomery) : Montgomery :=
   let w := a.raw
-  let p := Wide.ofNat Fp.modulus
-  -- Inverting the integer x R gives x^-1 R^-1, which a Montgomery product by R^3 rescales.
-  let c := run (fun w => montgomeryCube * finishWords w) p inverseComplement 13 1 p
-    ⟨w.w0, w.w1, w.w2, w.w3, 0⟩ ⟨0, 0, 0, 0, 0⟩ ⟨1, 0, 0, 0, 0⟩
-  checkMontgomery c a
+  let p := Inverse.Wide.ofNat Fp.modulus
+  let c := Inverse.run (fun w => Inverse.montgomeryCube * Inverse.finishWords w) p
+    Montgomery.inverseComplement 13 1 p ⟨w.w0, w.w1, w.w2, w.w3, 0⟩ ⟨0, 0, 0, 0, 0⟩
+    ⟨1, 0, 0, 0, 0⟩
+  Inverse.checkMontgomery c a
 
-/-- Check a candidate for the scalar inverse in the word representation. -/
-@[inline] def checkFnWords (c : Option Fp.RecoveryField.Raw) (a : Fp.RecoveryField.Raw) :
-    Fp.RecoveryField.Raw :=
-  let fallback := fun _ : Unit =>
-    FnRecoveryWords.fromFin (Fin.inversePrime (FnRecoveryWords.toFin a))
-  match c with
-  | none => fallback ()
-  | some b =>
-    let q := FnRecoveryWords.mul b a
-    if q.w0 == 1 && q.w1 == 0 && q.w2 == 0 && q.w3 == 0 && !FnRecoveryWords.geOrder b.words then
-      b
-    else fallback ()
-
-/-- Invert a scalar using its four words directly. -/
-@[no_expose] def invFnWords (a : Fp.RecoveryField.Raw) : Fp.RecoveryField.Raw :=
-  let p := Wide.ofNat Fn.modulus
-  let c := run (fun w => (⟨w.x0, w.x1, w.x2, w.x3⟩ : Fp.RecoveryField.Raw)) p
-    0x4b0dff665588b13f 13 1 p ⟨a.w0, a.w1, a.w2, a.w3, 0⟩
-    ⟨0, 0, 0, 0, 0⟩ ⟨1, 0, 0, 0, 0⟩
-  checkFnWords c a
-
-end EthLib.Cryptography.Secp256k1.RecoveryInverse
+end EthLib.Cryptography.Secp256k1

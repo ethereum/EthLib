@@ -3,8 +3,8 @@ module
 public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256k1.Encoding
+public import EthLib.Cryptography.Proofs.Secp256k1.Sqrt
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
-import EthLib.Base.Proofs.BigEndianWords
 
 /-!
 # Proofs: the point encodings of secp256k1
@@ -141,20 +141,6 @@ theorem decode_encodeCompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p 
       cases this
     simp only [decode, encodeCompressed, List.toList_toArray, Fp.length_toBytes, ite_eq_right hne, ite_eq_left htag,
       Fp.ofBytes_toBytes, prefix_eq_three, hd, bind, Except.bind, ite_true]
-
-/-- The direct writer gives the same SEC 1 encoding for every point. -/
-theorem encodeUncompressedDirect_eq (p : Point) :
-    p.encodeUncompressedDirect = p.encodeUncompressed := by
-  cases p with
-  | infinity => rfl
-  | affine x y =>
-    apply ByteArray.ext
-    apply Array.toList_inj.mp
-    simp only [encodeUncompressedDirect, encodeUncompressed, Base.pushNatBytes32_toList,
-      ByteArray.data_push, Array.toList_push, List.toList_toArray, Fp.toBytes]
-    change ([0x04] ++ Base.natToBytes 32 x.val) ++ Base.natToBytes 32 y.val =
-      0x04 :: Base.natToBytes 32 x.val ++ Base.natToBytes 32 y.val
-    rfl
 
 theorem decode_encodeUncompressed {p : Point} (hp : p.isOnCurve = true) (hinf : p ≠ infinity) :
     decode p.encodeUncompressed = .ok p := by

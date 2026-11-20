@@ -24,8 +24,7 @@ The complement is `2^256 - p = 2^32 + 977`.
 
 namespace EthLib.Cryptography.Secp256k1
 
-namespace Fp.RecoveryField
-open EthLib.Cryptography.Montgomery (Limbs Limbs8 Limbs8.get)
+namespace Montgomery
 
 abbrev wordRadix : Nat := 2^64
 def complement : UInt64 := 4294968273
@@ -235,18 +234,6 @@ private theorem mac_spec (a b w cin : UInt64) :
 
 @[inline] def reduce (r : Words64) : Words64 :=
   if shouldReduce r then addComplement r else r
-
-@[inline] def join (lo hi : UInt32) : UInt64 :=
-  lo.toUInt64 ||| (hi.toUInt64 <<< 32)
-
-@[inline] def wide (a : Limbs8) : Words64 :=
-  ⟨join a.l0 a.l1, join a.l2 a.l3, join a.l4 a.l5, join a.l6 a.l7, 0⟩
-
-@[inline] def narrow (p : Words64) : Limbs8 :=
-  ⟨p.w0.toUInt32, (p.w0 >>> 32).toUInt32,
-    p.w1.toUInt32, (p.w1 >>> 32).toUInt32,
-    p.w2.toUInt32, (p.w2 >>> 32).toUInt32,
-    p.w3.toUInt32, (p.w3 >>> 32).toUInt32⟩
 
 def lowValue (w : Words64) : Nat :=
   w.w0.toNat + wordRadix*w.w1.toNat + wordRadix^2*w.w2.toNat + wordRadix^3*w.w3.toNat
@@ -523,47 +510,6 @@ theorem reduce_spec (r : Words64) (hbound : value r < 2*Fp.modulus) :
     (fun h => reduce_yes r ((reduce_condition_iff r).1 h) hbound)
     (fun h => reduce_no r (Nat.lt_of_not_ge (fun hc => h ((reduce_condition_iff r).2 hc))))
 
-private theorem join_value (lo hi : UInt32) : (join lo hi).toNat = lo.toNat + 2^32*hi.toNat := by
-  have hhi : hi.toNat * 2^32 < 2^64 := Nat.mul_lt_mul_of_pos_right hi.toNat_lt (by decide)
-  unfold join
-  rw [UInt64.toNat_or, UInt64.toNat_shiftLeft, UInt32.toNat_toUInt64, UInt32.toNat_toUInt64]
-  change lo.toNat ||| (hi.toNat <<< 32) % 2^64 = _
-  rw [Nat.shiftLeft_eq, Nat.mod_eq_of_lt hhi, Nat.mul_comm hi.toNat, Nat.or_comm,
-    ← Nat.two_pow_add_eq_or_of_lt lo.toNat_lt, Nat.add_comm]
-
-private theorem split_value (w : UInt64) :
-    w.toUInt32.toNat + 2^32*(w >>> 32).toUInt32.toNat = w.toNat := by
-  rw [UInt64.toNat_toUInt32, UInt64.toNat_toUInt32, UInt64.toNat_shiftRight,
-    Nat.shiftRight_eq_div_pow]
-  change w.toNat % 2^32 + 2^32*(w.toNat / 2^32 % 2^32) = w.toNat
-  have h : w.toNat / 2^32 < 2^32 := Nat.div_lt_of_lt_mul w.toNat_lt
-  rw [Nat.mod_eq_of_lt h, Nat.mod_add_div]
-
-private theorem limbs8_value (a : Limbs8) :
-    Limbs.val (n := 8) a = a.l0.toNat + 2^32*a.l1.toNat + 2^64*a.l2.toNat +
-      2^96*a.l3.toNat + 2^128*a.l4.toNat + 2^160*a.l5.toNat +
-      2^192*a.l6.toNat + 2^224*a.l7.toNat := by
-  change a.l0.toNat + 2^32*(a.l1.toNat + 2^32*(a.l2.toNat + 2^32*(a.l3.toNat +
-    2^32*(a.l4.toNat + 2^32*(a.l5.toNat + 2^32*(a.l6.toNat + 2^32*(a.l7.toNat + 2^32*0))))))) = _
-  omega
-
-private theorem value_wide (a : Limbs8) : value (wide a) = Limbs.val (n := 8) a := by
-  simp only [value, lowValue, wide, join_value, limbs8_value, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
-
-private theorem val_narrow (w : Words64) (h : w.top = 0) :
-    Limbs.val (n := 8) (narrow w) = value w := by
-  have h0 := split_value w.w0
-  have h1 := split_value w.w1
-  have h2 := split_value w.w2
-  have h3 := split_value w.w3
-  simp only [limbs8_value, narrow, value, lowValue, h, UInt64.toNat_zero,
-    Nat.mul_zero, Nat.add_zero, wordRadix]
-  omega
-
-
-
 /-- A 256-bit integer in four words, with the least significant word first. -/
 structure Raw where
   /-- Bits 0 through 63. -/
@@ -593,26 +539,28 @@ theorem Raw.fromWords_val (w : Words64) (h : w.top = 0) :
   rw [value_low_of_top_zero w h]
   rfl
 
-/-- A residue in Montgomery form, with `R = 2^256`. -/
-structure Element where
+end Montgomery
+
+/-- An element of the base field in Montgomery form, with `R = 2^256`.
+
+The words hold `a R mod p`, below `p`, so each element has one encoding. -/
+structure Montgomery where
   /-- The canonical Montgomery residue. -/
-  raw : Raw
+  raw : Montgomery.Raw
   /-- A residue below the field modulus has a unique encoding. -/
   lt : raw.val < Fp.modulus
 deriving DecidableEq
 
-/-- Read the same Montgomery residue into the general field implementation. -/
-@[inline] def toMont (a : Element) : Fp.Montgomery :=
-  ⟨narrow a.raw.words, by rw [val_narrow _ rfl, ← a.raw.val_eq]; exact a.lt⟩
+/-- An element of the base field held in Montgomery form. -/
+abbrev Fp.Montgomery := Secp256k1.Montgomery
 
-/-- Read four pairs of limbs from the general Montgomery representation. -/
-@[inline] def ofMont (a : Fp.Montgomery) : Element :=
-  ⟨Raw.fromWords (wide a.limbs), by
-    rw [Raw.fromWords_val _ rfl, value_wide]
-    exact a.lt⟩
+namespace Montgomery
 
-instance : OfNat Element 0 := ⟨ofMont 0⟩
-instance : OfNat Element 1 := ⟨ofMont 1⟩
+/-- Zero, whose Montgomery form is zero. -/
+instance : OfNat Montgomery 0 := ⟨⟨⟨0, 0, 0, 0⟩, by decide⟩⟩
+
+/-- One, whose Montgomery form is `R mod p = 2^32 + 977`. -/
+instance : OfNat Montgomery 1 := ⟨⟨⟨0x1000003d1, 0, 0, 0⟩, by decide⟩⟩
 
 /-- Add the masked complement when the words represent an integer at least `p`. -/
 @[inline] def reduceMasked (r : Words64) : Words64 :=
@@ -725,7 +673,7 @@ theorem reduceFast_spec (r : Words64) (h : value r < 2*Fp.modulus) :
   exact reduceMasked_spec r h
 
 /-- Reduce the intermediate words and keep the canonical residue. -/
-@[inline] def finish (t : Words64) (ht : value t < 2*Fp.modulus) : Element :=
+@[inline] def finish (t : Words64) (ht : value t < 2*Fp.modulus) : Montgomery :=
   let u := reduceFast t
   have hu := reduceFast_spec t ht
   ⟨Raw.fromWords u, by
@@ -1509,15 +1457,15 @@ theorem multiplyColumns_bound (a b : Words64) (ha : lowValue a < Fp.modulus)
   exact Nat.mul_lt_mul'' ha hb
 
 /-- The Montgomery product on four 64-bit words. -/
-@[inline] def mul (a b : @& Element) : Element :=
+@[inline] def mul (a b : @& Montgomery) : Montgomery :=
   let w := multiplyColumns a.raw.words b.raw.words
   let h := reduceWideInverse_spec w.1 w.2 (multiplyColumns_bound a.raw.words b.raw.words a.lt b.lt)
   finish (reduceWideInverse w.1 w.2) h.1
 
-instance : Mul Element := ⟨mul⟩
+instance : Mul Montgomery := ⟨mul⟩
 
 /-- Square a Montgomery residue using one product for each pair of words. -/
-@[inline] def square (a : @& Element) : Element :=
+@[inline] def square (a : @& Montgomery) : Montgomery :=
   let w := squareColumns a.raw.words
   let h := reduceWideInverse_spec w.1 w.2 (squareColumns_bound a.raw.words a.lt)
   finish (reduceWideInverse w.1 w.2) h.1
@@ -1545,26 +1493,22 @@ theorem rawToNat_eq (a : Raw) : rawToNat a = a.val := by
   omega
 
 /-- Read the canonical integer before applying the Montgomery scale. -/
-@[inline] def readRaw (a : Fp) : Element :=
+@[inline] def readRaw (a : Fp) : Montgomery :=
   ⟨rawOfNat a.val, by
     rw [rawOfNat_val _ (Nat.lt_trans a.isLt (by decide))]
     exact a.isLt⟩
 
 /-- The raw integer `R^2 mod p`, where `R = 2^256`. -/
-def montgomerySquare : Element := ⟨⟨0x7a2000e90a1, 1, 0, 0⟩, by decide⟩
+def montgomerySquare : Montgomery := ⟨⟨0x7a2000e90a1, 1, 0, 0⟩, by decide⟩
 
 /-- The raw integer one used to remove the Montgomery scale. -/
-def rawOne : Element := ⟨⟨1, 0, 0, 0⟩, by decide⟩
+def rawOne : Montgomery := ⟨⟨1, 0, 0, 0⟩, by decide⟩
 
 /-- Enter the Montgomery representation with a product by the square of the radix. -/
-@[inline] def ofFin (a : Fp) : Element := montgomerySquare * readRaw a
-
-/-- Enter the field directly from the words of a canonical integer. -/
-@[inline] def ofRaw (w : Raw) (h : w.val < Fp.modulus) : Element :=
-  montgomerySquare * ⟨w, h⟩
+@[inline] def ofFin (a : Fp) : Montgomery := montgomerySquare * readRaw a
 
 /-- Leave the Montgomery representation with a product by the word one. -/
-@[inline] def toFin (a : Element) : Fp :=
+@[inline] def toFin (a : Montgomery) : Fp :=
   let x := a * rawOne
   ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
 
@@ -1913,7 +1857,7 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
   exact sub64_spec a b ha hb hpa hpb
 
 /-- Add two canonical residues. -/
-@[inline] def add (a b : @& Element) : Element :=
+@[inline] def add (a b : @& Montgomery) : Montgomery :=
   let u := add64 reduceFast a.raw.words b.raw.words
   have hu := add64_spec reduceFast reduceFast_spec a.raw.words b.raw.words rfl rfl
     (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
@@ -1922,7 +1866,7 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
     exact Nat.mod_lt _ (by decide)⟩
 
 /-- Subtract two canonical residues. -/
-@[inline] def sub (a b : @& Element) : Element :=
+@[inline] def sub (a b : @& Montgomery) : Montgomery :=
   let u := subMasked a.raw.words b.raw.words
   have hu := subMasked_spec a.raw.words b.raw.words rfl rfl
     (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
@@ -1930,8 +1874,8 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
     rw [Raw.fromWords_val u hu.1, hu.2]
     exact Nat.mod_lt _ (by decide)⟩
 
-instance : Add Element := ⟨add⟩
-instance : Sub Element := ⟨sub⟩
+instance : Add Montgomery := ⟨add⟩
+instance : Sub Montgomery := ⟨sub⟩
 
 @[inline] def Words64.rawWords (x : Words64) : Raw := Raw.fromWords x
 abbrev Words64.val (x : Words64) : Nat := value x
@@ -2036,8 +1980,8 @@ theorem scaleInput_lt (s : UInt64) (w : Raw) (hpos : 0 < s.toNat) (hs : s.toNat 
 
 
 /-- Multiplication by `2^s` for shifts of one, two or three bits. -/
-@[inline] def scale (s : UInt64) (w : Element) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    Element :=
+@[inline] def scale (s : UInt64) (w : Montgomery) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
+    Montgomery :=
   let t := scaleInput s w.raw
   let u := reduceMasked t
   have hr := reduceMasked_spec t (scaleInput_lt s w.raw hpos hs)
@@ -2170,7 +2114,7 @@ private theorem halveRaw_val (x : Raw) :
     exact (shiftHalf_val w htop).trans (congrArg (· / 2) he)
 
 /-- Halve a canonical Montgomery residue by making its representative even first. -/
-@[inline] def halve (a : @& Element) : Element :=
+@[inline] def halve (a : @& Montgomery) : Montgomery :=
   ⟨halveRaw a.raw, by
     rw [halveRaw_val]
     have ha := a.lt
@@ -2307,7 +2251,6 @@ private theorem red_bias (mulHi : UInt64 → UInt64 → UInt64) (s0 s1 s2 s3 s4 
   dsimp only
   split <;> simp only [add_swap64 (c := 1), swap]
 
-set_option maxHeartbeats 2000000 in
 private theorem fusedStage_spec (a c : Raw) (b d : UInt64) (t : Words64)
     (ha : a.val < Fp.modulus) (hc : c.val < Fp.modulus)
     (htlo : 2^256 - Fp.modulus ≤ value (bias t))
@@ -2411,7 +2354,6 @@ private theorem fusedStage_spec (a c : Raw) (b d : UInt64) (t : Words64)
   fusedStage a c b.w3 d.w3 (fusedStage a c b.w2 d.w2
     (fusedStage a c b.w1 d.w1 (fusedStage a c b.w0 d.w0 ⟨0,0,0,0,0⟩)))
 
-set_option maxHeartbeats 2000000 in
 theorem fusedAccum_spec (a b c d : Raw) (ha : a.val < Fp.modulus) (hc : c.val < Fp.modulus) :
     (2^256 - Fp.modulus ≤ value (bias (fusedAccum a b c d)) ∧
       value (bias (fusedAccum a b c d)) < 2 * Fp.modulus + 2^256) ∧
@@ -2499,7 +2441,7 @@ theorem fusedFinish_positive (t : Words64) (h : ¬ t.top >>> 63 ≠ 0)
 /-- Convert the signed accumulator to a canonical field residue. -/
 @[inline] def fusedFinishFallback (t : Words64)
     (hlo : 2^256-Fp.modulus ≤ value (bias t)) (hhi : value (bias t) < 2*Fp.modulus+2^256) :
-    Element :=
+    Montgomery :=
   if h : t.top >>> 63 ≠ 0 then
     ⟨Raw.fromWords (correctMasked t.w0 t.w1 t.w2 t.w3 1),
       (fusedFinish_negative t h hlo hhi).1⟩
@@ -2547,7 +2489,7 @@ private theorem fusedFinish_raw_eq_signedFast (t : Words64)
 /-- Correct the low word of a signed product difference when the carry stays in that word. -/
 @[inline] def fusedFinish (t : Words64)
     (hlo : 2^256-Fp.modulus ≤ value (bias t)) (hhi : value (bias t) < 2*Fp.modulus+2^256) :
-    Element :=
+    Montgomery :=
   -- The low word can absorb a correction of either sign within this interval.
   if h : t.w0 - complement < 0xfffffffdfffff85e then
     ⟨signedFastRaw t, by
@@ -2970,9 +2912,8 @@ The top word holds the signed carry in two's complement.
   let z3 := subtractColumnCarry p7.lo n7.lo z2.hi
   ⟨z0.lo, z1.lo, z2.lo, z3.lo, p7.mid - n7.mid - z3.hi⟩
 
-set_option maxRecDepth 4000 in
 /-- The scan gives a bounded signed accumulator and a witness for its Montgomery congruence. -/
-theorem scanProductDiff_spec (a b c d : Element) :
+theorem scanProductDiff_spec (a b c d : Montgomery) :
     (2^256 - Fp.modulus ≤ value (bias (scanProductDiff a.raw b.raw c.raw d.raw)) ∧
       value (bias (scanProductDiff a.raw b.raw c.raw d.raw)) < 2 * Fp.modulus + 2^256) ∧
     ∃ q, 2^256 * value (bias (scanProductDiff a.raw b.raw c.raw d.raw)) + c.raw.val*d.raw.val =
@@ -3045,7 +2986,7 @@ theorem scanProductDiff_spec (a b c d : Element) :
     hAB hCD (lowValue_lt Q) hp hn hc hd
 
 /-- Compute the difference of two products with one shared Montgomery reduction. -/
-@[inline] def productDiff (a b c d : @& Element) : Element :=
+@[inline] def productDiff (a b c d : @& Montgomery) : Montgomery :=
   let t := scanProductDiff a.raw b.raw c.raw d.raw
   let h := (scanProductDiff_spec a b c d).1
   fusedFinish t h.1 h.2
@@ -3074,107 +3015,14 @@ private theorem fusedSquareAccum_eq (a b c : Raw) :
     ← wordProduct_comm c.w1 c.w3, ← wordProduct_comm c.w2 c.w3]
 
 /-- Compute a product minus a square with one shared Montgomery reduction. -/
-@[inline] def productSubSquare (a b c : @& Element) : Element :=
+@[inline] def productSubSquare (a b c : @& Montgomery) : Montgomery :=
   let t := fusedSquareAccum a.raw b.raw c.raw
   let h := (fusedAccum_spec a.raw b.raw c.raw c.raw a.lt c.lt).1
   fusedFinish t (by simpa only [t, fusedSquareAccum_eq] using h.1)
     (by simpa only [t, fusedSquareAccum_eq] using h.2)
 
-end Fp.RecoveryField
+end Montgomery
 
-namespace FnRecoveryWords
-open Fp.RecoveryField
 
-/-- The scalar modulus complement, `2^256 - n`, as three words. -/
-@[inline] def complementWords : Words64 := ⟨0x402da1732fc9bebf,0x4551231950b75fc4,1,0,0⟩
-
-/-- Add the low four words and retain the carry. -/
-@[inline] def sumWords (a b : Words64) : Words64 :=
-  let s0 := plus a.w0 b.w0 0
-  let s1 := plus a.w1 b.w1 s0.hi
-  let s2 := plus a.w2 b.w2 s1.hi
-  let s3 := plus a.w3 b.w3 s2.hi
-  ⟨s0.lo,s1.lo,s2.lo,s3.lo,s3.hi⟩
-
-/-- Replace the high half of an integer by its product with `2^256 - n`. -/
-@[inline] def foldWords (lo hi : Words64) : Words64 × Words64 :=
-  let product := multiplyColumns hi complementWords
-  let next := sumWords lo product.1
-  (next, addLow (.fromWords product.2) next.top)
-
-/-- Test whether the words represent an integer at least `n`. -/
-@[inline] def geOrder (t : Words64) : Bool :=
-  t.top != 0 || (t.w3 == 0xffffffffffffffff &&
-    (t.w2 == 0xffffffffffffffff ||
-      (t.w2 == 0xfffffffffffffffe &&
-        (t.w1 > 0xbaaedce6af48a03b ||
-          (t.w1 == 0xbaaedce6af48a03b && t.w0 ≥ 0xbfd25e8cd0364141)))))
-
-/-- Test whether all four words are zero. -/
-@[inline] def isZero (a : Raw) : Bool :=
-  (a.w0 ||| a.w1 ||| a.w2 ||| a.w3) == 0
-
-/-- Subtract `n` when the input is at least `n`. -/
-@[inline] def reduceOrder (t : Words64) : Raw :=
-  if geOrder t then .fromWords (sumWords t complementWords) else .fromWords t
-
-/-- Multiply two four-word integers modulo the scalar field order. -/
-@[inline] def mul (a b : Raw) : Raw :=
-  let p := multiplyColumns a.words b.words
-  let v := foldWords p.1 p.2
-  let t := foldWords v.1 v.2
-  let k := t.2.w0
-  let w0 := wordProduct k 0x402da1732fc9bebf
-  let w1 := mac k 0x4551231950b75fc4 0 w0.hi
-  reduceOrder (sumWords t.1 ⟨w0.lo,w1.lo,k+w1.hi,0,0⟩)
-
-/-- Negate a canonical scalar residue. -/
-@[inline] def negate (a : Raw) : Raw :=
-  if a.w0 == 0 && a.w1 == 0 && a.w2 == 0 && a.w3 == 0 then a
-  else
-    let d0 := minus 0xbfd25e8cd0364141 a.w0 0
-    let d1 := minus 0xbaaedce6af48a03b a.w1 d0.hi
-    let d2 := minus 0xfffffffffffffffe a.w2 d1.hi
-    let d3 := minus 0xffffffffffffffff a.w3 d2.hi
-    ⟨d0.lo,d1.lo,d2.lo,d3.lo⟩
-
-/-- Read the canonical scalar value into four words. -/
-@[inline] def fromFin (a : Fn) : Raw :=
-  rawOfNat a.val
-
-/-- Read four words as a scalar field residue. -/
-@[inline] def toFin (a : Raw) : Fn := Fin.ofNat _ (rawToNat a)
-
-private theorem order_eq :
-    Fn.modulus = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141 :=
-  rfl
-
-/-- The order test agrees with the integer comparison. -/
-theorem geOrder_iff (t : Words64) : geOrder t = true ↔ Fn.modulus ≤ value t := by
-  have h0 := t.w0.toNat_lt
-  have h1 := t.w1.toNat_lt
-  have h2 := t.w2.toNat_lt
-  have h3 := t.w3.toNat_lt
-  have htop : (t.top != 0) = true ↔ t.top.toNat ≠ 0 := by
-    simp only [bne_iff_ne]
-    have e : t.top.toNat = (0 : UInt64).toNat ↔ t.top = 0 := UInt64.toNat_inj
-    rw [UInt64.toNat_zero] at e
-    exact not_congr e.symm
-  simp only [geOrder, Bool.or_eq_true, Bool.and_eq_true, htop, beq_iff_eq,
-    decide_eq_true_eq, ← UInt64.toNat_inj, UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt,
-    UInt64.toNat_ofNat, order_eq, value, lowValue, wordRadix]
-  omega
-
-private theorem words_zero_iff (a : Raw) :
-    a.w0 = 0 ∧ a.w1 = 0 ∧ a.w2 = 0 ∧ a.w3 = 0 ↔ a.val = 0 := by
-  simp only [← UInt64.toNat_inj, UInt64.toNat_zero, Raw.val, Raw.words, lowValue, wordRadix]
-  omega
-
-/-- The zero test reads as an integer equality. -/
-theorem isZero_iff (a : Raw) : isZero a = true ↔ a.val = 0 := by
-  simp only [isZero, beq_iff_eq, UInt64.or_eq_zero_iff, and_assoc]
-  exact words_zero_iff a
-
-end FnRecoveryWords
 
 end EthLib.Cryptography.Secp256k1

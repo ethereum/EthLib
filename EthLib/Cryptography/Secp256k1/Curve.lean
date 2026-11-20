@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Secp256k1.Field
+public import EthLib.Cryptography.Secp256k1.Inverse
 public import EthLib.Cryptography.Jacobian
 
 /-!
@@ -124,13 +124,6 @@ def mulBits (fuel k : Nat) (p : Point) : Point :=
 
 `n` has 256 bits, so 256 steps cover every scalar. -/
 def mul (k : Fn) (p : Point) : Point := mulBits 256 k.val p
-
-/-- `k P + l Q`, for scalars mod `n`, with one chain of doublings for both.
-
-On points of the curve it is the sum of the two products. -/
-def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  ofMontgomeryCoords
-    (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q))
 
 end Point
 

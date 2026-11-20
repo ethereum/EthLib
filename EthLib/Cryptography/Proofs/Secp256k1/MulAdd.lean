@@ -1,12 +1,12 @@
 module
 
-public import EthLib.Cryptography.Secp256k1.RecoveryMul
-public import EthLib.Cryptography.Proofs.Secp256k1.RecoveryInverse
+public import EthLib.Cryptography.Secp256k1.MulAdd
+public import EthLib.Cryptography.Proofs.Secp256k1.Inverse
 -- The refinement reads the body of the recovery scalar multiplication.
-import all EthLib.Cryptography.Secp256k1.RecoveryMul
-import all EthLib.Cryptography.Secp256k1.RecoveryField
+import all EthLib.Cryptography.Secp256k1.MulAdd
+import all EthLib.Cryptography.Secp256k1.Montgomery
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
-import EthLib.Cryptography.Proofs.Secp256k1.RecoveryField
+import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
 
 /-!
 # Proofs: the scalar multiplication used by public key recovery
@@ -22,14 +22,16 @@ The signed digits preserve the four scalar products as they share the doubling c
 
 open EthLib.Cryptography EthLib.Cryptography.Secp256k1 WeierstrassCurve
 
-namespace EthLib.Cryptography.Secp256k1.RecoveryMul
+namespace EthLib.Cryptography.Secp256k1
+
+namespace MulAdd
 
 /-- A canonical residue is zero exactly when all four words are zero. -/
-theorem zeroElement_eq_true (x : Fp.RecoveryField.Element) : zeroElement x = true ↔ x = 0 := by
+theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 := by
   obtain ⟨⟨a,b,c,d⟩, h⟩ := x
-  rw [show (0 : Fp.RecoveryField.Element) = ⟨⟨0,0,0,0⟩, by decide⟩ from rfl]
+  rw [show (0 : Montgomery) = ⟨⟨0,0,0,0⟩, by decide⟩ from rfl]
   simp only [zeroElement, Bool.and_eq_true, beq_iff_eq, and_assoc,
-    Fp.RecoveryField.Element.mk.injEq, Fp.RecoveryField.Raw.mk.injEq]
+    Montgomery.mk.injEq, Montgomery.Raw.mk.injEq]
 
 
 /-! ## The endomorphism and its action on the group -/
@@ -120,7 +122,6 @@ private def scaleHom : curve.Point →+ curve.Point where
   map_zero' := rfl
   map_add' := scale_add
 
-set_option maxRecDepth 8000 in
 private theorem scale_generator :
     scaleHom (Point.toPoint .generator) = lambda.val • Point.toPoint .generator := by
   let x : Fp := 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798
@@ -142,29 +143,13 @@ private theorem scale_eq_nsmul (X : curve.Point) : scale X = lambda.val • X :=
   rw [map_nsmul, scale_generator, smul_smul, smul_smul, Nat.mul_comm]
 
 /-- Read a Montgomery form as a Jacobian form over `Fp`. -/
-private abbrev RecoveryElement := Fp.RecoveryField.Element
+private abbrev RecoveryElement := Montgomery
 
-private theorem readOfFin (a : Fp) : Fp.RecoveryField.toFin (Fp.RecoveryField.ofFin a) = a :=
-  (Fp.RecoveryField.toFin_eq _).trans
-    ((congrArg Montgomery.toFin (Fp.RecoveryField.toMont_ofFin a)).trans
-      (Montgomery.toFin_ofFin (M := Fp.params) a))
+private theorem readOfFin (a : Fp) : Montgomery.toFin (Montgomery.ofFin a) = a :=
+  Montgomery.toFin_ofFin a
 
-private theorem toFin_embedding : Jacobian.Coords.Embedding Fp.RecoveryField.toFin := by
-  let previous := Point.toFin_embedding
-  simp only [show Fp.RecoveryField.toFin = _ from funext Fp.RecoveryField.toFin_eq]
-  constructor
-  · exact (congrArg Montgomery.toFin Fp.RecoveryField.toMont_zero).trans previous.map_zero
-  · exact (congrArg Montgomery.toFin Fp.RecoveryField.toMont_one).trans previous.map_one
-  · intro x y
-    exact (congrArg Montgomery.toFin (Fp.RecoveryField.toMont_add x y)).trans
-      (previous.map_add (Fp.RecoveryField.toMont x) (Fp.RecoveryField.toMont y))
-  · intro x y
-    exact (congrArg Montgomery.toFin (Fp.RecoveryField.toMont_sub x y)).trans
-      (previous.map_sub (Fp.RecoveryField.toMont x) (Fp.RecoveryField.toMont y))
-  · intro x y
-    exact (congrArg Montgomery.toFin (Fp.RecoveryField.toMont_mul x y)).trans
-      (previous.map_mul (Fp.RecoveryField.toMont x) (Fp.RecoveryField.toMont y))
-  · exact previous.injective.comp Fp.RecoveryField.toMont_injective
+private theorem toFin_embedding : Jacobian.Coords.Embedding Montgomery.toFin :=
+  Point.toFin_embedding
 
 private theorem map_map_eq {A B C : Type} (f : A → B) (g : B → C) (h : A → C)
     (hh : ∀ x, g (f x) = h x) (p : Jacobian.Coords A) :
@@ -172,21 +157,17 @@ private theorem map_map_eq {A B C : Type} (f : A → B) (g : B → C) (h : A →
   simp only [Jacobian.Coords.map, hh]
 
 private noncomputable def readCoords (p : Coordinates) : Jacobian Fp.modulus :=
-  Jacobian.ofCoords (p.map Fp.RecoveryField.toFin)
+  Jacobian.ofCoords (p.map Montgomery.toFin)
 
 private theorem read_toRecoveryCoords (p : Point) :
-    readCoords (toRecoveryCoords p) = Point.toJacobian p := by
+    readCoords (Point.toMontgomeryCoords p) = Point.toJacobian p := by
   exact congrArg (Jacobian.ofCoords : Jacobian.Coords Fp → _)
-    (map_map_eq Fp.RecoveryField.ofFin Fp.RecoveryField.toFin id readOfFin
+    (map_map_eq Montgomery.ofFin Montgomery.toFin id readOfFin
       (Point.toJacobian p).toCoords)
 
 private theorem ofRecoveryCoords_eq (p : Coordinates) :
-    ofRecoveryCoords p = Point.ofJacobian (readCoords p) := by
-  unfold ofRecoveryCoords Point.ofJacobian readCoords
-  refine Point.ofCoords_map toFin_embedding ?_ p
-  intro z
-  rw [RecoveryInverse.invMontgomery_eq, readOfFin, RecoveryInverse.invFp_eq,
-    Fin.inversePrime_eq_inverse (by decide)]
+    Point.ofMontgomeryCoords p = Point.ofJacobian (readCoords p) :=
+  Point.ofMontgomeryCoords_eq p
 
 /-- A recovery form is on the curve when its read-back form is on the curve. -/
 private abbrev OnCurve (p : Coordinates) : Prop := Jacobian.OnCurve 0 7 (readCoords p)
@@ -215,33 +196,33 @@ private theorem scaleX_x {F : Type} [Mul F] (factor : F) (p : Jacobian.Coords F)
 
 private theorem scaleX_read_z (factor : RecoveryElement) (p : Coordinates) :
     (readCoords (scaleX factor p)).z = (readCoords p).z :=
-  congrArg Fp.RecoveryField.toFin (scaleX_z factor p)
+  congrArg Montgomery.toFin (scaleX_z factor p)
 
 private theorem endomorphism_read_z (p : Coordinates) :
     (readCoords (endomorphism p)).z = (readCoords p).z :=
-  scaleX_read_z (Fp.RecoveryField.ofFin beta) p
+  scaleX_read_z (Montgomery.ofFin beta) p
 
 private theorem scaleX_affY (factor : RecoveryElement) (p : Coordinates) :
     Jacobian.affY (readCoords (scaleX factor p)) = Jacobian.affY (readCoords p) := by
   have hy : (readCoords (scaleX factor p)).y = (readCoords p).y :=
-    congrArg Fp.RecoveryField.toFin (scaleX_y factor p)
+    congrArg Montgomery.toFin (scaleX_y factor p)
   unfold Jacobian.affY
   rw [hy, scaleX_read_z]
 
 private theorem endomorphism_affY (p : Coordinates) :
     Jacobian.affY (readCoords (endomorphism p)) = Jacobian.affY (readCoords p) :=
-  scaleX_affY (Fp.RecoveryField.ofFin beta) p
+  scaleX_affY (Montgomery.ofFin beta) p
 
 private theorem scaleX_affX (factor : RecoveryElement) (p : Coordinates) :
     Jacobian.affX (readCoords (scaleX factor p)) =
-      Fp.toZMod (Fp.RecoveryField.toFin factor) * Jacobian.affX (readCoords p) :=
+      Fp.toZMod (Montgomery.toFin factor) * Jacobian.affX (readCoords p) :=
   affX_of_scaleX (p := readCoords p) (q := readCoords (scaleX factor p))
-    ((congrArg Fp.RecoveryField.toFin (scaleX_x factor p)).trans
+    ((congrArg Montgomery.toFin (scaleX_x factor p)).trans
       (toFin_embedding.map_mul factor p.x)) (scaleX_read_z factor p)
 
 private theorem endomorphism_affX (p : Coordinates) :
     Jacobian.affX (readCoords (endomorphism p)) = β * Jacobian.affX (readCoords p) :=
-  (scaleX_affX (Fp.RecoveryField.ofFin beta) p).trans
+  (scaleX_affX (Montgomery.ofFin beta) p).trans
     (congrArg (fun x : Fp => Fp.toZMod x * Jacobian.affX (readCoords p))
       (readOfFin beta))
 
@@ -280,18 +261,18 @@ private theorem negate_z {F : Type} [OfNat F 0] [Sub F] (p : Jacobian.Coords F) 
 
 private theorem negate_read_z (p : Coordinates) :
     (readCoords (negate p)).z = (readCoords p).z :=
-  congrArg Fp.RecoveryField.toFin (negate_z p)
+  congrArg Montgomery.toFin (negate_z p)
 
 private theorem negate_affX (p : Coordinates) :
     Jacobian.affX (readCoords (negate p)) = Jacobian.affX (readCoords p) := by
   have hX : (readCoords (negate p)).x = (readCoords p).x :=
-    congrArg Fp.RecoveryField.toFin (negate_x p)
+    congrArg Montgomery.toFin (negate_x p)
   unfold Jacobian.affX
   rw [hX, negate_read_z]
 
 private theorem negate_affY (p : Coordinates) :
     Jacobian.affY (readCoords (negate p)) = -Jacobian.affY (readCoords p) := by
-  have hm := congrArg Fp.RecoveryField.toFin (negate_y p)
+  have hm := congrArg Montgomery.toFin (negate_y p)
   have hY : (readCoords (negate p)).y = 0 - (readCoords p).y :=
     hm.trans ((toFin_embedding.map_sub 0 p.y).trans
       (congrArg (fun y : Fp => y - (readCoords p).y) toFin_embedding.map_zero))
@@ -333,18 +314,12 @@ open Jacobian
 private theorem two_ne_zero : (2 : ZMod Fp.modulus) ≠ 0 := by decide
 
 private theorem point_spec {p : Point} (hp : p.isOnCurve = true) :
-    OnCurve (toRecoveryCoords p) ∧
-      groupValue (toRecoveryCoords p) = Point.toPoint p := by
-  change Jacobian.OnCurve 0 7 (readCoords (toRecoveryCoords p)) ∧
-    Jacobian.toPoint 0 7 (readCoords (toRecoveryCoords p)) = _
+    OnCurve (Point.toMontgomeryCoords p) ∧
+      groupValue (Point.toMontgomeryCoords p) = Point.toPoint p := by
+  change Jacobian.OnCurve 0 7 (readCoords (Point.toMontgomeryCoords p)) ∧
+    Jacobian.toPoint 0 7 (readCoords (Point.toMontgomeryCoords p)) = _
   rw [read_toRecoveryCoords]
   exact Point.toJacobian_spec hp
-
-private theorem normalize_spec {p : Coordinates} (hp : OnCurve p) :
-    OnCurve (normalize p) ∧ groupValue (normalize p) = groupValue p := by
-  rw [normalize, ofRecoveryCoords_eq]
-  obtain ⟨h, e⟩ := Point.ofJacobian_spec hp
-  exact ⟨(point_spec h).1, (point_spec h).2.trans e⟩
 
 private theorem infinity_spec :
     OnCurve (Coords.infinity : Coordinates) ∧ groupValue (Coords.infinity : Coordinates) = 0 := by
@@ -377,12 +352,12 @@ private theorem double_coordinates (p : Coordinates) :
     Jacobian.toZ u.x = 4 * Jacobian.toZ v.x ∧
       Jacobian.toZ u.y = 8 * Jacobian.toZ v.y ∧
       Jacobian.toZ u.z = 2 * Jacobian.toZ v.z := by
-  let r := Jacobian.toZ ∘ Fp.RecoveryField.toFin
-  have hh := congrArg r (Fp.RecoveryField.halve_add_self (p.x * p.x))
+  let r := Jacobian.toZ ∘ Montgomery.toFin
+  have hh := congrArg r (Montgomery.halve_add_self (p.x * p.x))
   simp only [r, Function.comp_apply, toFin_embedding.map_add, toFin_embedding.map_mul,
     Jacobian.toZ_add, Jacobian.toZ_mul] at hh
-  simp only [readCoords, double, doubleCore, Fp.RecoveryField.productSubSquare_eq,
-    Fp.RecoveryField.square_eq_mul, Coords.double, ite_true,
+  simp only [readCoords, double, doubleCore, Montgomery.productSubSquare_eq,
+    Montgomery.square_eq_mul, Coords.double, ite_true,
     Coords.map, Jacobian.ofCoords, toFin_embedding.map_add,
     toFin_embedding.map_mul, toFin_embedding.map_sub, Jacobian.toZ_add, Jacobian.toZ_mul,
     Jacobian.toZ_sub]
@@ -447,52 +422,84 @@ private theorem prepared_mul (a b : RecoveryElement) :
   simp only [toFin_embedding.map_mul, Jacobian.toZ_mul]
   ring
 
-private theorem addCached_eq (p q : Coordinates) :
-    addCached p q (Fp.RecoveryField.square q.z) (Fp.RecoveryField.square q.z * q.z) =
-      Coords.add 0 p q := by
-  simp only [addCached, Coords.add, Fp.RecoveryField.square_eq_mul, prepared_mul]
-
-private theorem oddMultiples_eq (p : Coordinates) :
-    oddMultiples p = oddMultiplesBy p (fun q => Coords.add 0 q (Coords.double 0 p)) := by
-  unfold oddMultiples
-  exact congrArg (oddMultiplesBy p) (funext fun q => addCached_eq q (Coords.double 0 p))
-
-private theorem oddMultiplesBy_spec {p twice : Coordinates} {P : curve.Point}
-    (hp : Represents p P) (hd : Represents twice (P + P)) :
-    TableSpec (oddMultiplesBy p (fun q => Coords.add 0 q twice)) P := by
-  have h1 : Represents p ((1 : Nat) • P) := by simpa only [one_nsmul] using hp
-  have d : Represents twice ((2 : Nat) • P) := by simpa only [two_nsmul] using hd
-  have h3 := h1.add d
-  have h5 := h3.add d
-  have h7 := h5.add d
-  have h9 := h7.add d
-  have h11 := h9.add d
-  have h13 := h11.add d
-  have h15 := h13.add d
-  intro i
-  fin_cases i <;> simp only [oddMultiplesBy, Vector.getElem_mk, List.getElem_toArray,
-    List.getElem_cons_zero, List.getElem_cons_succ, Nat.reduceMul, Nat.reduceAdd]
-  · exact h1
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h3
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h5
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h7
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h9
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h11
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h13
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h15
-
-private theorem oddMultiples_spec {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
-    TableSpec (oddMultiples p) P := by
-  rw [oddMultiples_eq]
-  exact oddMultiplesBy_spec hp hp.double
-
-private theorem normalizeTable_spec {t : Vector Coordinates 8} {P : curve.Point}
-    (h : TableSpec t P) : TableSpec (t.map normalize) P := by
-  intro i
-  rw [Vector.getElem_map]
-  exact ⟨(normalize_spec (h i).1).1, (normalize_spec (h i).1).2.trans (h i).2⟩
-
 /-! ## Signed digits and the doubling chain -/
+
+/-! ## Models of the recoding
+
+The proofs read the packed recoding through these unpacked forms.
+-/
+
+/-- The index of an odd multiple and whether to subtract it. -/
+private abbrev Digit (n : Nat) := Fin n × Bool
+
+/-- Shift both words right by one bit. -/
+private def WordPair.half (w : WordPair) : WordPair :=
+  ⟨(w.lo >>> 1) + (w.hi <<< 63), w.hi >>> 1⟩
+
+/-- Round down to a multiple of the pivot. -/
+private def WordPair.roundDown (w : WordPair) (pivot : UInt64) : WordPair :=
+  ⟨w.lo - w.lo % pivot, w.hi⟩
+
+/-- Add a word with carry. -/
+private def WordPair.addWord (w : WordPair) (increment : UInt64) : WordPair :=
+  let lo := w.lo + increment
+  ⟨lo, w.hi + (if lo < increment then 1 else 0)⟩
+
+/-- Read one signed digit from the two-word scalar. -/
+private def recodeWords (window : Window) (w : WordPair) :
+    WordPair × Option (Digit window.entries) :=
+  let low := (w.lo &&& window.mask).toNat
+  let half := w.half
+  if he : low % 2 = 0 then (half, none)
+  else
+    have hlow : low < 4 * window.entries := by
+      change (w.lo &&& window.mask).toNat < 4 * window.entries
+      rw [UInt64.toNat_and]
+      cases window with
+      | width14 =>
+        change w.lo.toNat &&& (2^14 - 1) < 2^14
+        rw [Nat.and_two_pow_sub_one_eq_mod]
+        exact Nat.mod_lt _ (by decide)
+    let down := half.roundDown window.pivot
+    if hr : low < 2 * window.entries then (down, some (⟨low / 2, by omega⟩, false))
+    else
+      (down.addWord window.pivot, some (⟨(4 * window.entries - low) / 2, by omega⟩, true))
+
+/-- Add or subtract the selected odd multiple. -/
+private def addDigit {n : Nat} (p : Coordinates) (table : Vector Coordinates n) :
+    Option (Digit n) → Coordinates
+  | none => p
+  | some (i, negative) =>
+    let q := table[i.val]
+    Coords.add 0 p (if negative then negate q else q)
+
+/-- Add a generator table entry using mixed addition when its Z coordinate is one. -/
+private def addGenerator (p : Coordinates) (q : @& Coordinates) (negative : Bool) :
+    Coordinates :=
+  let y := if negative then (0 : Montgomery) - q.y else q.y
+  if q.z = 1 then
+    if p.z = 0 then ⟨q.x, y, q.z⟩ else
+      let zz := Montgomery.square p.z
+      let h := q.x * zz - p.x
+      let r := y * (p.z * zz) - p.y
+      if h = 0 then
+        if r = 0 then Coords.double 0 p else Coords.infinity
+      else
+        let hh := Montgomery.square h
+        let hhh := h * hh
+        let v := p.x * hh
+        let x := Montgomery.square r - hhh - (v + v)
+        ⟨x, r * (v - x) - p.y * hhh, p.z * h⟩
+  else Coords.add 0 p ⟨q.x, y, q.z⟩
+
+/-- Add the selected generator multiple with the digit's sign. -/
+private def addPacked (p : Coordinates) (window : Window)
+    (table : Vector Coordinates window.entries) (digit : UInt64) : Coordinates :=
+  if digit == 0 then p else
+    let i := packedIndex window digit
+    let q := table[i.val]
+    addGenerator p q (digit >= window.pivot)
+
 
 /-- The signed value of an odd-multiple index, or zero when no multiple is selected. -/
 private def digitValue {n : Nat} : Option (Digit n) → Int
@@ -506,7 +513,7 @@ private def recode (window : Window) (k : Nat) : Nat × Option (Digit window.ent
   if he : k % 2 = 0 then (k / 2, none)
   else
     let r := k % (4 * window.entries)
-    have hpar : r % 2 = k % 2 := Nat.mod_mod_of_dvd k (by cases window <;> decide)
+    have hpar : r % 2 = k % 2 := Nat.mod_mod_of_dvd k (by cases window; decide)
     if hr : r < 2 * window.entries then ((k - r) / 2, some (⟨r / 2, by omega⟩, false))
     else ((k + (4 * window.entries - r)) / 2,
       some (⟨(4 * window.entries - r) / 2, by
@@ -515,7 +522,7 @@ private def recode (window : Window) (k : Nat) : Nat × Option (Digit window.ent
           have hr' : r = 2 * window.entries := by omega
           rw [hr'] at hpar
           omega
-        have hsize : 0 < window.entries := by cases window <;> decide
+        have hsize : 0 < window.entries := by cases window; decide
         omega⟩, true))
 
 private theorem WordPair.toNat_ofNat (k : Nat) (hk : k < 2^128) : (WordPair.ofNat k).toNat = k := by
@@ -545,7 +552,7 @@ private theorem word_half_lo (w : WordPair) :
 
 private theorem window_pivot (window : Window) :
     window.pivot.toNat = 2 * window.entries := by
-  cases window <;> decide
+  cases window; decide
 
 private theorem word_round_down (lo pivot : UInt64) :
     (lo - lo % pivot).toNat = lo.toNat - lo.toNat % pivot.toNat := by
@@ -562,21 +569,6 @@ private theorem word_low (window : Window) (w : WordPair) :
     (w.lo &&& window.mask).toNat = w.toNat % (4 * window.entries) := by
   have h := UInt64.toNat_and w.lo window.mask
   cases window with
-  | width5 =>
-    calc
-      _ = w.lo.toNat &&& (2^5 - 1) := h
-      _ = w.lo.toNat % 32 := Nat.and_two_pow_sub_one_eq_mod _ 5
-      _ = _ := (mul_mod_radix w.lo.toNat w.hi.toNat 32 (by decide)).symm
-  | width8 =>
-    calc
-      _ = w.lo.toNat &&& (2^8 - 1) := h
-      _ = w.lo.toNat % 256 := Nat.and_two_pow_sub_one_eq_mod _ 8
-      _ = _ := (mul_mod_radix w.lo.toNat w.hi.toNat 256 (by decide)).symm
-  | width12 =>
-    calc
-      _ = w.lo.toNat &&& (2^12 - 1) := h
-      _ = w.lo.toNat % 4096 := Nat.and_two_pow_sub_one_eq_mod _ 12
-      _ = _ := (mul_mod_radix w.lo.toNat w.hi.toNat 4096 (by decide)).symm
   | width14 =>
     calc
       _ = w.lo.toNat &&& (2^14 - 1) := h
@@ -599,7 +591,7 @@ private theorem WordPair.roundDown_toNat (window : Window) (w : WordPair) :
     (w.roundDown window.pivot).toNat = w.toNat - w.toNat % (2 * window.entries) := by
   change (w.lo - w.lo % window.pivot).toNat + w.hi.toNat * 2^64 =
     w.lo.toNat + w.hi.toNat * 2^64 - (w.lo.toNat + w.hi.toNat * 2^64) % (2 * window.entries)
-  rw [word_round_down, window_pivot, mul_mod_radix _ _ _ (by cases window <;> decide)]
+  rw [word_round_down, window_pivot, mul_mod_radix _ _ _ (by cases window; decide)]
   have := Nat.mod_le w.lo.toNat (2 * window.entries)
   omega
 
@@ -628,19 +620,23 @@ private theorem WordPair.addWord_toNat (w : WordPair) (a : UInt64)
 private theorem recodeWords_eq (window : Window) (w : WordPair) :
     Prod.map WordPair.toNat id (recodeWords window w) = recode window w.toNat := by
   unfold recodeWords recode
-  have hdiv : 2 ∣ 4 * window.entries := by cases window <;> decide
+  have hdiv : 2 ∣ 4 * window.entries := by cases window; decide
   simp only [word_low, Nat.mod_mod_of_dvd w.toNat hdiv]
   split
   · simp only [Prod.map, id, WordPair.half_toNat]
   · split
     · simp only [Prod.map, id, WordPair.roundDown_toNat, WordPair.half_toNat]
       congr 1
-      cases window <;> simp only [Window.entries] at * <;> omega
+      cases window
+      simp only [Window.entries] at *
+      omega
     · have hb : (w.half.roundDown window.pivot).hi.toNat + 1 < 2^64 := w.half_hi_bound
       simp only [Prod.map, id, WordPair.addWord_toNat _ _ hb, WordPair.roundDown_toNat,
         WordPair.half_toNat, window_pivot]
       congr 1
-      cases window <;> simp only [Window.entries] at * <;> omega
+      cases window
+      simp only [Window.entries] at *
+      omega
 
 private theorem recodeWords_scalar (window : Window) (w : WordPair) :
     (recodeWords window w).1.toNat = (recode window w.toNat).1 :=
@@ -654,15 +650,15 @@ private theorem recodeWords_digit (window : Window) (w : WordPair) :
 private theorem recode_eq (window : Window) (k : Nat) :
     (k : Int) = 2 * (recode window k).1 + digitValue (recode window k).2 := by
   have hmod : (k % (4 * window.entries)) % 2 = k % 2 :=
-    Nat.mod_mod_of_dvd k (by cases window <;> decide)
-  cases window <;> simp only [Window.entries] at hmod
-  all_goals
-    unfold recode
-    split
-    · simp only [digitValue]
-      omega
-    · dsimp only
-      split <;> simp only [digitValue, Bool.false_eq_true, ↓reduceIte, Window.entries] <;> omega
+    Nat.mod_mod_of_dvd k (by cases window; decide)
+  cases window
+  simp only [Window.entries] at hmod
+  unfold recode
+  split
+  · simp only [digitValue]
+    omega
+  · dsimp only
+    split <;> simp only [digitValue, Bool.false_eq_true, ↓reduceIte, Window.entries] <;> omega
 
 /-- Recoding reduces a bound by a power of two by one bit. -/
 private theorem recode_next_le (window : Window) (k m : Nat) (hk : k ≤ 2 ^ (m + 1)) :
@@ -679,48 +675,20 @@ private theorem recode_next_le (window : Window) (k m : Nat) (hk : k ≤ 2 ^ (m 
       omega
     · rename_i hr
       cases window
-      · simp only [Window.entries] at hr ⊢
-        by_cases hm : 4 ≤ m
-        · have hpow : 2 ^ m = 16 * 2 ^ (m - 4) := calc
-            _ = 2 ^ (4 + (m - 4)) := congrArg (2 ^ ·) (by omega)
-            _ = _ := Nat.pow_add 2 4 (m - 4)
-          rw [hpow] at hk ⊢
-          omega
-        · have hsmall : 2 ^ m ≤ 8 := Nat.pow_le_pow_right (by decide) (show m ≤ 3 by omega)
-          omega
-      · simp only [Window.entries] at hr ⊢
-        by_cases hm : 7 ≤ m
-        · have hpow : 2 ^ m = 128 * 2 ^ (m - 7) := calc
-            _ = 2 ^ (7 + (m - 7)) := congrArg (2 ^ ·) (by omega)
-            _ = _ := Nat.pow_add 2 7 (m - 7)
-          rw [hpow] at hk ⊢
-          omega
-        · have hsmall : 2 ^ m ≤ 64 := Nat.pow_le_pow_right (by decide) (show m ≤ 6 by omega)
-          omega
-      · simp only [Window.entries] at hr ⊢
-        by_cases hm : 11 ≤ m
-        · have hpow : 2 ^ m = 2048 * 2 ^ (m - 11) := calc
-            _ = 2 ^ (11 + (m - 11)) := congrArg (2 ^ ·) (by omega)
-            _ = _ := Nat.pow_add 2 11 (m - 11)
-          rw [hpow] at hk ⊢
-          omega
-        · have hsmall : 2 ^ m ≤ 1024 := Nat.pow_le_pow_right (by decide) (show m ≤ 10 by omega)
-          omega
-      · simp only [Window.entries] at hr ⊢
-        by_cases hm : 13 ≤ m
-        · have hpow : 2 ^ m = 8192 * 2 ^ (m - 13) := calc
-            _ = 2 ^ (13 + (m - 13)) := congrArg (2 ^ ·) (by omega)
-            _ = _ := Nat.pow_add 2 13 (m - 13)
-          rw [hpow] at hk ⊢
-          omega
-        · have hsmall : 2 ^ m ≤ 4096 := Nat.pow_le_pow_right (by decide) (show m ≤ 12 by omega)
-          omega
-
+      simp only [Window.entries] at hr ⊢
+      by_cases hm : 13 ≤ m
+      · have hpow : 2 ^ m = 8192 * 2 ^ (m - 13) := calc
+          _ = 2 ^ (13 + (m - 13)) := congrArg (2 ^ ·) (by omega)
+          _ = _ := Nat.pow_add 2 13 (m - 13)
+        rw [hpow] at hk ⊢
+        omega
+      · have hsmall : 2 ^ m ≤ 4096 := Nat.pow_le_pow_right (by decide) (show m ≤ 12 by omega)
+        omega
 /-- A scalar at most one has no bits left after its first digit. -/
 private theorem recode_next_eq_zero (window : Window) (k : Nat) (hk : k ≤ 1) :
     (recode window k).1 = 0 := by
   have h : k = 0 ∨ k = 1 := by omega
-  rcases h with rfl | rfl <;> cases window <;> decide
+  rcases h with rfl | rfl <;> (cases window; decide)
 
 private theorem digitMagnitude_cast {n : Nat} (i : Fin n) :
     (2 * (i.val : Int) + 1) = ((2 * i.val + 1 : Nat) : Int) := by omega
@@ -759,56 +727,26 @@ private theorem recode_bound (window : Window) (k n : Nat) (hk : k ≤ scalarBou
   | zero => exact (recode_next_eq_zero window k hk).le
   | succ n => exact recode_next_le window k n hk
 
-private theorem chain_spec
-    (window : Window) (fuel : Nat) (p q : Stream 8) (r s : Stream window.entries)
-    (P Q R S : curve.Point) (hp : TableSpec p.table P) (hq : TableSpec q.table Q)
-    (hr : TableSpec r.table R) (hs : TableSpec s.table S)
-    (hpb : p.scalar.toNat ≤ scalarBound fuel) (hqb : q.scalar.toNat ≤ scalarBound fuel)
-    (hrb : r.scalar.toNat ≤ scalarBound fuel) (hsb : s.scalar.toNat ≤ scalarBound fuel) :
-    Represents (chainFor window fuel p q r s)
-      (p.scalar.toNat • P + q.scalar.toNat • Q + r.scalar.toNat • R + s.scalar.toNat • S) := by
-  induction fuel generalizing p q r s with
-  | zero =>
-    have hp0 : p.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hpb
-    have hq0 : q.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hqb
-    have hr0 : r.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hrb
-    have hs0 : s.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hsb
-    simpa only [chainFor, chainWordsFor, hp0, hq0, hr0, hs0, zero_nsmul, add_zero]
-      using infinity_spec
-  | succ fuel ih =>
-    let a := recodeWords .width5 p.scalar
-    let b := recodeWords .width5 q.scalar
-    let c := recodeWords window r.scalar
-    let d := recodeWords window s.scalar
-    have h := ih ⟨a.1, p.table⟩ ⟨b.1, q.table⟩ ⟨c.1, r.table⟩ ⟨d.1, s.table⟩ hp hq hr hs
-      (by simpa only [Stream.scalar, a, recodeWords_scalar] using recode_bound .width5 _ _ hpb)
-      (by simpa only [Stream.scalar, b, recodeWords_scalar] using recode_bound .width5 _ _ hqb)
-      (by simpa only [Stream.scalar, c, recodeWords_scalar] using recode_bound window _ _ hrb)
-      (by simpa only [Stream.scalar, d, recodeWords_scalar] using recode_bound window _ _ hsb)
-    let V := a.1.toNat • P + b.1.toNat • Q + c.1.toNat • R + d.1.toNat • S
-    have hd := recovery_double_spec h.1
-    have hdbl : Represents (double _) (V + V) := ⟨hd.1, by rw [hd.2, h.2]⟩
-    have h1 := addDigit_spec hdbl hp a.2
-    have h2 := addDigit_spec h1 hq b.2
-    have h3 := addDigit_spec h2 hr c.2
-    have h4 := addDigit_spec h3 hs d.2
-    have he :
-        V + V + digitValue a.2 • P + digitValue b.2 • Q +
-            digitValue c.2 • R + digitValue d.2 • S =
-          p.scalar.toNat • P + q.scalar.toNat • Q + r.scalar.toNat • R + s.scalar.toNat • S := by
-      rw [recode_smul .width5 p.scalar.toNat P, recode_smul .width5 q.scalar.toNat Q,
-        recode_smul window r.scalar.toNat R, recode_smul window s.scalar.toNat S]
-      dsimp only [V, a, b, c, d]
-      simp only [recodeWords_scalar, recodeWords_digit]
-      abel
-    have : Represents (chainFor window (fuel + 1) p q r s) _ := h4
-    exact he ▸ this
-
 /-! ## The lattice split and recovery equation -/
 
 private abbrev order : Int := Fn.modulus
 
 private theorem order_pos : 0 < order := by decide
+
+/-- Round `x / n` to the nearest integer. -/
+private def roundQuotient (x : Int) : Int := (x + (Fn.modulus : Int) / 2) / (Fn.modulus : Int)
+
+/-- Split a scalar using the lattice with basis `(a, -b)` and `(a + b, a)`.
+
+Both vectors give zero under `(u, v) -> u + lambda v` modulo `n`.
+
+The second vector comes from the preceding Euclidean remainder.
+
+Subtract the nearest basis multiples, as in Algorithm 3.74. -/
+private def splitScalar (k : Nat) : Int × Int :=
+  let u := roundQuotient (basisA * k)
+  let v := roundQuotient (basisB * k)
+  (k - u * basisA - v * (basisA + basisB), u * basisB - v * basisA)
 
 private theorem roundQuotient_error (x : Int) :
     -(order / 2) ≤ x - order * roundQuotient x ∧ x - order * roundQuotient x ≤ order / 2 := by
@@ -942,7 +880,7 @@ private theorem split_components_bound (k u v : Nat)
 
 section SplitWords
 
-open Fp.RecoveryField
+open Montgomery
 
 /-- Interpret a scalar magnitude and its sign as an integer. -/
 def componentValue (w : WordPair × Bool) : Int :=
@@ -1240,14 +1178,13 @@ end SplitWords
 
 section WeightProof
 
-open Fp.RecoveryField
+open Montgomery
 
-set_option exponentiation.threshold 512
 
 private def upperProduct (k c : Raw) : Nat :=
   (k.w1.toNat*c.w2.toNat + k.w2.toNat*c.w1.toNat + k.w3.toNat*c.w0.toNat)*2^192 +
   (k.w2.toNat*c.w2.toNat + k.w3.toNat*c.w1.toNat)*2^256 +
-    k.w3.toNat*c.w2.toNat*2^320
+    k.w3.toNat*c.w2.toNat*(2^64*2^256)
 
 private def lowerProduct (k c : Raw) : Nat :=
   k.w0.toNat*c.w0.toNat +
@@ -1280,7 +1217,7 @@ private theorem lowerProduct_lt (k c : Raw) : lowerProduct k c < 6*2^256 := by
   omega
 
 private theorem upperProduct_limit (k c : Raw) (hc : c.w3 = 0)
-    (hc2 : c.w2.toNat < 65535) : upperProduct k c < 2^400 - 2^384 := by
+    (hc2 : c.w2.toNat < 65535) : upperProduct k c < (2^144*2^256) - (2^128*2^256) := by
   have hk : k.val < 2^256 := lowValue_lt k.words
   have hc0 := c.w0.toNat_lt
   have hc1 := c.w1.toNat_lt
@@ -1289,7 +1226,7 @@ private theorem upperProduct_limit (k c : Raw) (hc : c.w3 = 0)
       Nat.add_zero]
     omega
   have htotal : k.val*c.val < 2^256 * (2^144-2^128) := Nat.mul_lt_mul'' hk hcval
-  change k.val*c.val < 2^400 - 2^384 at htotal
+  change k.val*c.val < (2^144*2^256) - (2^128*2^256) at htotal
   have h := upper_add_lower k c hc
   omega
 
@@ -1299,14 +1236,14 @@ private theorem approximateColumns (k c : Raw) :
       (wordProduct k.w3 c.w0)
     let c4 := (c3.next.add (wordProduct k.w2 c.w2)).add (wordProduct k.w3 c.w1)
     let c5 := c4.next.add (wordProduct k.w3 c.w2)
-    upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*2^320 := by
+    upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*(2^64*2^256) := by
   let zero : ProductColumn := ⟨0, 0, 0⟩
   let k3 := [(k.w1,c.w2),(k.w2,c.w1),(k.w3,c.w0)]
   let c3 := addProducts zero k3
   let k4 := [(k.w2,c.w2),(k.w3,c.w1)]
   let c4 := addProducts c3.next k4
   let c5 := c4.next.add (wordProduct k.w3 c.w2)
-  change upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*2^320
+  change upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*(2^64*2^256)
   have h3 := (addProducts_spec zero k3 (by dsimp [zero,k3]; decide)).1
   have h4 := (addProducts_spec c3.next k4 (by change (0:UInt64).toNat + 2*2 < 16; decide)).1
   have h5 := (ProductColumn.product_spec c4.next k.w3 c.w2
@@ -1358,7 +1295,7 @@ private theorem roundWordPair (lo hi flag : UInt64)
 
 private theorem approximateWeight_value (k c : Raw) (hc : c.w3 = 0)
     (hc2 : c.w2.toNat < 65535) :
-    (approximateWeight k c).toNat = (upperProduct k c + 2^271) / 2^272 := by
+    (approximateWeight k c).toNat = (upperProduct k c + (2^15*2^256)) / (2^16*2^256) := by
   let zero : ProductColumn := ⟨0, 0, 0⟩
   let c3 := ((zero.add (wordProduct k.w1 c.w2)).add (wordProduct k.w2 c.w1)).add
     (wordProduct k.w3 c.w0)
@@ -1368,7 +1305,7 @@ private theorem approximateWeight_value (k c : Raw) (hc : c.w3 = 0)
   let hi := (c5.lo >>> 16) ||| (c5.mid <<< 48)
   let flag := (c4.lo >>> 15) &&& 1
   have hv := approximateColumns k c
-  change upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*2^320 at hv
+  change upperProduct k c = c3.lo.toNat*2^192 + c4.lo.toNat*2^256 + c5.val*(2^64*2^256) at hv
   have ht := upperProduct_limit k c hc hc2
   have h0 := c3.lo.toNat_lt
   have h1 := c4.lo.toNat_lt
@@ -1383,7 +1320,7 @@ private theorem approximateWeight_value (k c : Raw) (hc : c.w3 = 0)
     rw [weightWord, Nat.mod_eq_of_lt hc5.1]
   have hFlag := weightRound c4.lo
   change flag.toNat = _ at hFlag
-  have hquot : lo.toNat + 2^64*hi.toNat + flag.toNat = (upperProduct k c + 2^271) / 2^272 := by
+  have hquot : lo.toNat + 2^64*hi.toNat + flag.toNat = (upperProduct k c + (2^15*2^256)) / (2^16*2^256) := by
     rw [hLo,hHi,hFlag]
     omega
   change (⟨lo+flag, hi+yes (lo+flag < lo)⟩ : WordPair).toNat = _
@@ -1407,19 +1344,28 @@ private theorem abs_difference_le (x y bound : Nat) (hx : x ≤ y+bound) (hy : y
     ((x : Int)-(y : Int)).natAbs ≤ bound := by omega
 
 private theorem weight_error_interval (a b remQ lo extra : Nat)
-    (h : 2^272*a + 2^271*Fn.modulus =
-      2^272*b + (remQ+lo)*Fn.modulus + extra)
-    (hq : remQ < 2^272) (hl : lo < 6*2^256) (he : extra < 2^256*Fn.modulus) :
+    (h : (2^16*2^256)*a + (2^15*2^256)*Fn.modulus =
+      (2^16*2^256)*b + (remQ+lo)*Fn.modulus + extra)
+    (hq : remQ < (2^16*2^256)) (hl : lo < 6*2^256) (he : extra < 2^256*Fn.modulus) :
     a ≤ b + 3*Fn.modulus/4 ∧ b ≤ a + 3*Fn.modulus/4 := by
-  have hUpper : (2^271 + 7*2^256)*Fn.modulus ≤ 2^272*(3*Fn.modulus/4) := by decide
-  have hLower : 2^271*Fn.modulus ≤ 2^272*(3*Fn.modulus/4) := by decide
-  simp only [Fn.modulus] at h he hUpper hLower ⊢
-  constructor <;> omega
+  have hUpper : ((2^15*2^256) + 7*2^256)*Fn.modulus ≤ (2^16*2^256)*(3*Fn.modulus/4) := by decide
+  have hLower : (2^15*2^256)*Fn.modulus ≤ (2^16*2^256)*(3*Fn.modulus/4) := by decide
+  have hn : 0 < Fn.modulus := by decide
+  -- The digits `remQ` and `lo` bound their product with `n`, so every remaining term is linear.
+  have hX : (remQ + lo) * Fn.modulus < ((2^16*2^256) + 6*2^256) * Fn.modulus :=
+    Nat.mul_lt_mul_of_pos_right (by omega) hn
+  constructor
+  · by_contra hc
+    have hm := Nat.mul_le_mul_left ((2^16*2^256)) (show b + 3*Fn.modulus/4 + 1 ≤ a by omega)
+    linarith
+  · by_contra hc
+    have hm := Nat.mul_le_mul_left ((2^16*2^256)) (show a + 3*Fn.modulus/4 + 1 ≤ b by omega)
+    have h0 : 0 ≤ (remQ + lo) * Fn.modulus := Nat.zero_le _
+    linarith
 
-set_option maxRecDepth 1024 in
 private theorem reciprocalWeight_error (w c : Raw) (a : Nat)
     (hw : w.val < Fn.modulus) (hc : c.w3 = 0) (hc2 : c.w2.toNat < 65535)
-    (hrecip : c.val = (a*2^272)/Fn.modulus) :
+    (hrecip : c.val = (a*(2^16*2^256))/Fn.modulus) :
     (((w.val : Int) * (a : Int)) -
       (Fn.modulus : Int) * ((approximateWeight w c).toNat : Int)).natAbs ≤
       (3*(Fn.modulus : Int)/4).natAbs := by
@@ -1427,22 +1373,22 @@ private theorem reciprocalWeight_error (w c : Raw) (a : Nat)
   let q := (approximateWeight w c).toNat
   let top := upperProduct w c
   let low := lowerProduct w c
-  let remK := (a*2^272) % n
-  let remQ := (top + 2^271) % 2^272
-  have hrec : c.val*n + remK = a*2^272 := by
-    change c.val*Fn.modulus + (a*2^272)%Fn.modulus = _
+  let remK := (a*(2^16*2^256)) % n
+  let remQ := (top + (2^15*2^256)) % (2^16*2^256)
+  have hrec : c.val*n + remK = a*(2^16*2^256) := by
+    change c.val*Fn.modulus + (a*(2^16*2^256))%Fn.modulus = _
     rw [hrecip]
     exact Nat.div_add_mod' _ _
-  have hdiv : q*2^272 + remQ = top + 2^271 := by
-    change (approximateWeight w c).toNat*2^272 + (top + 2^271)%2^272 = _
+  have hdiv : q*(2^16*2^256) + remQ = top + (2^15*2^256) := by
+    change (approximateWeight w c).toNat*(2^16*2^256) + (top + (2^15*2^256))%(2^16*2^256) = _
     rw [approximateWeight_value w c hc hc2]
     exact Nat.div_add_mod' _ _
   have hfull : top + low = w.val*c.val := upper_add_lower w c hc
-  have hbalance := weight_balance (2^272) (2^271) w.val a c.val n q top low remK remQ
+  have hbalance := weight_balance ((2^16*2^256)) ((2^15*2^256)) w.val a c.val n q top low remK remQ
     hrec hdiv hfull
   have hlow : low < 6*2^256 := lowerProduct_lt w c
   have hremK : remK < n := Nat.mod_lt _ (by decide)
-  have hremQ : remQ < 2^272 := Nat.mod_lt _ (by decide)
+  have hremQ : remQ < (2^16*2^256) := Nat.mod_lt _ (by decide)
   have hwide : w.val < 2^256 := Nat.lt_trans hw (by decide)
   have hpr : w.val*remK < 2^256*n := Nat.mul_lt_mul'' hwide hremK
   obtain ⟨h1, h2⟩ := weight_error_interval (w.val*a) (q*n) remQ low (w.val*remK)
@@ -1456,9 +1402,8 @@ end WeightProof
 
 section
 
-open Fp.RecoveryField
+open Montgomery
 
-set_option exponentiation.threshold 512 in
 private theorem splitScalarWords_components_raw (w : Raw) (hw : w.val < Fn.modulus) :
     let u := (approximateWeight w splitConstants.aRecip).toNat
     let v := (approximateWeight w splitConstants.bRecip).toNat
@@ -1477,7 +1422,7 @@ private theorem splitScalarWords_components_raw (w : Raw) (hw : w.val < Fn.modul
 
 end
 
-private abbrev zValue (x : RecoveryElement) := Jacobian.toZ (Fp.RecoveryField.toFin x)
+private abbrev zValue (x : RecoveryElement) := Jacobian.toZ (Montgomery.toFin x)
 
 private theorem zValue_mul (x y : RecoveryElement) : zValue (x * y) = zValue x * zValue y := by
   simp only [zValue, toFin_embedding.map_mul, Jacobian.toZ_mul]
@@ -1493,24 +1438,22 @@ private theorem zValue_ne_zero {x : RecoveryElement} (h : x ≠ 0) : zValue x �
   exact Jacobian.toZ_eq_zero.mp hx
 
 private theorem batchInverse_mul (x : RecoveryElement) (h : x ≠ 0) :
-    zValue (batchInverse x) * zValue x = 1 := by
+    zValue (Montgomery.inv x) * zValue x = 1 := by
   have hneg := zValue_ne_zero h
   simp only [zValue] at hneg ⊢
-  rw [batchInverse, RecoveryInverse.invMontgomery_eq, readOfFin, RecoveryInverse.invFp_eq,
-    Fin.inversePrime_eq_inverse (by decide),
-    Jacobian.toZ_inverse, inv_mul_cancel₀ hneg]
+  rw [Montgomery.toFin_inv, Jacobian.toZ_inverse, inv_mul_cancel₀ hneg]
 
 private theorem affineWithInverse_spec {p : Coordinates} {iv : RecoveryElement}
     (hp : OnCurve p) (hi : zValue iv * zValue p.z = 1) :
     Represents (affineWithInverse iv p) (groupValue p) := by
   have hz : (readCoords p).z ≠ 0 := by
     intro h
-    change Fp.RecoveryField.toFin p.z = 0 at h
+    change Montgomery.toFin p.z = 0 at h
     simp only [zValue, h, Jacobian.toZ_zero, mul_zero, zero_ne_one] at hi
   have hInv := eq_inv_of_mul_eq_one_left hi
   let q := readCoords (affineWithInverse iv p)
   have hqz : q.z ≠ 0 := by
-    change Fp.RecoveryField.toFin 1 ≠ (0 : Fp)
+    change Montgomery.toFin 1 ≠ (0 : Fp)
     rw [toFin_embedding.map_one]
     decide
   have hx : Jacobian.affX q = Jacobian.affX (readCoords p) := by
@@ -1583,7 +1526,7 @@ private theorem oddSequence_spec {step current : Coordinates} {R Q : curve.Point
 private theorem generatedMultiples_spec (count : Nat) {p : Point} (hp : p.isOnCurve = true) :
     TableSpec (generatedMultiples count p) (Point.toPoint p) := by
   intro i
-  let first := toRecoveryCoords p
+  let first := Point.toMontgomeryCoords p
   let step := double first
   let ps := oddSequence step first count
   let table := batchNormalize ps.val
@@ -1626,17 +1569,6 @@ private theorem endomorphismTable_spec
   refine ⟨h.1, ?_⟩
   rw [h.2, (ht i).2, smul_smul, smul_smul, Nat.mul_comm]
 
-private theorem signedTable_spec
-    {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (k : Int) :
-    TableSpec (signedTable k t) (if k < 0 then -P else P) := by
-  unfold signedTable
-  split
-  · intro i
-    rw [Vector.getElem_map]
-    have h := negate_spec (ht i).1
-    exact ⟨h.1, by rw [h.2, (ht i).2, neg_nsmul]⟩
-  · exact ht
-
 private theorem signed_smul (k : Int) (P : curve.Point) :
     k.natAbs • (if k < 0 then -P else P) = k • P := by
   by_cases h : k < 0
@@ -1650,7 +1582,7 @@ private theorem generator_split_smul (l : Nat) (G : curve.Point) :
   rw [smul_smul, ← add_nsmul, Nat.mul_comm (l / 2^128), Nat.mod_add_div]
 private theorem ofRecoveryCoords_eq_of_represents {r : Coordinates} {q : Point}
     (hr : Represents r (Point.toPoint q)) (hq : q.isOnCurve = true) :
-    ofRecoveryCoords r = q := by
+    Point.ofMontgomeryCoords r = q := by
   rw [ofRecoveryCoords_eq]
   have hs := Point.ofJacobian_spec hr.1
   exact (Point.toPoint_inj hs.1 hq).mp (hs.2.trans hr.2)
@@ -1660,13 +1592,6 @@ private def signedPoint (negative : Bool) (p : Coordinates) : Coordinates :=
 
 private def selectedPoint (phi : Bool) (p : Coordinates) : Coordinates :=
   if phi then endomorphism p else p
-
-private theorem addPrepared_eq (p q : Coordinates) (phi negative : Bool) :
-    addPrepared p (prepare q) phi negative =
-      Coords.add 0 p (signedPoint negative (selectedPoint phi q)) := by
-  cases q
-  cases phi <;> cases negative <;> simp only [addPrepared, prepare, signedPoint, selectedPoint,
-    endomorphism, scaleX, negate, Bool.false_eq_true, ↓reduceIte, Coords.add, prepared_mul]
 
 private theorem negate_negate (p : Coordinates) : negate (negate p) = p := by
   have hh : (0 : RecoveryElement) - (0 - p.y) = p.y := by
@@ -1686,35 +1611,6 @@ private def selectedTable (table : Vector Coordinates 8) (phi negative : Bool) :
     Vector Coordinates 8 :=
   table.map (fun p => signedPoint negative (selectedPoint phi p))
 
-private theorem addPreparedDigit_eq (p : Coordinates) (table : Vector Coordinates 8)
-    (phi negative : Bool) (digit : Option (Digit 8)) :
-    addPreparedDigit p (table.map prepare) phi negative digit =
-      addDigit p (selectedTable table phi negative) digit := by
-  cases digit with
-  | none => rfl
-  | some digit =>
-    obtain ⟨i, sign⟩ := digit
-    simp only [addPreparedDigit, addDigit, selectedTable, Vector.getElem_map, addPrepared_eq]
-    change _ = Coords.add 0 p (signedPoint sign (signedPoint negative (selectedPoint phi _)))
-    rw [signedPoint_twice]
-
-private theorem preparedChain_eq (window : Window) (table : Vector Coordinates 8)
-    (pn qn : Bool) (rt st : Vector Coordinates window.entries)
-    (fuel : Nat) (a b c d : WordPair) :
-    preparedChain window (table.map prepare) pn qn rt st fuel a b c d =
-      chainWordsFor window (selectedTable table false pn) (selectedTable table true qn)
-        rt st fuel a b c d := by
-  induction fuel generalizing a b c d with
-  | zero => rfl
-  | succ fuel ih =>
-    simp only [preparedChain, chainWordsFor, ih]
-    erw [addPreparedDigit_eq _ table true qn, addPreparedDigit_eq _ table false pn]
-
-private theorem selectedTable_sgn (t : Vector Coordinates 8) (phi : Bool) (n : Int) :
-    selectedTable t phi (n < 0) = signedTable n (if phi then t.map endomorphism else t) := by
-  cases phi <;> by_cases h : n < 0 <;>
-    simp [selectedTable, selectedPoint, signedPoint, signedTable, h, Vector.map_map, Function.comp]
-
 private def decodeDigit (window : Window) (digit : UInt64) : Option (Digit window.entries) :=
   if digit == 0 then none else some (packedIndex window digit, digit >= window.pivot)
 
@@ -1726,7 +1622,7 @@ private theorem low_bit_eq (word : UInt64) : (word &&& 1 == 0) = decide (word.to
 
 private theorem window_mask_succ (window : Window) :
     (window.mask + 1).toNat = 4 * window.entries := by
-  cases window <;> decide
+  cases window; decide
 
 private theorem packedIndex_pos (window : Window) (digit : UInt64)
     (h : digit < window.pivot) : (packedIndex window digit).val = digit.toNat / 2 := by
@@ -1755,7 +1651,7 @@ private theorem recodeRaw_eq (window : Window) (w : WordPair) :
     let old := recodeWords window w
     raw.lo = old.1.lo ∧ raw.hi = old.1.hi ∧ decodeDigit window raw.digit = old.2 := by
   have hlt : (w.lo &&& window.mask).toNat < 4 * window.entries := by
-    rw [word_low window w]; exact Nat.mod_lt _ (by cases window <;> decide)
+    rw [word_low window w]; exact Nat.mod_lt _ (by cases window; decide)
   unfold recodeRaw recodeWords
   dsimp only
   have hp : (w.lo &&& window.mask) < window.pivot ↔
@@ -1797,7 +1693,7 @@ private theorem addGenerator_eq (p q : Coordinates) (negative : Bool) :
     | rfl
     | rename_i hz
       subst hz
-      simp only [Coords.add, hone, ↓reduceIte, Fp.RecoveryField.square_eq_mul, hassoc]
+      simp only [Coords.add, hone, ↓reduceIte, Montgomery.square_eq_mul, hassoc]
 
 private theorem addPacked_eq (p : Coordinates) (window : Window)
     (table : Vector Coordinates window.entries) (digit : UInt64) :
@@ -1808,100 +1704,14 @@ private theorem addPacked_eq (p : Coordinates) (window : Window)
   · rfl
   · by_cases h : digit ≥ window.pivot <;> simp [addDigit, h]
 
-private theorem addPackedPrepared_eq (p : Coordinates) (table : Vector Prepared 8)
-    (phi negative : Bool) (digit : UInt64) :
-    addPackedPrepared p table phi negative digit =
-      addPreparedDigit p table phi negative (decodeDigit .width5 digit) := by
-  unfold addPackedPrepared decodeDigit
-  split <;> rfl
-
--- The single-step chain models each grouped doubling.
-private def packedChainSingle (window : Window) (table : Vector Prepared 8)
-    (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
-    Nat → UInt64 → UInt64 → UInt64 → UInt64 →
-      UInt64 → UInt64 → UInt64 → UInt64 → Coordinates
-  | 0, _, _, _, _, _, _, _, _ => Coords.infinity
-  | fuel + 1, xa0, xa1, xb0, xb1, xc0, xc1, xd0, xd1 =>
-    let ⟨al,ah,da⟩ := recodeRaw .width5 xa0 xa1
-    let ⟨bl,bh,db⟩ := recodeRaw .width5 xb0 xb1
-    let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
-    let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
-    let rest := packedChainSingle window table pn qn rt st fuel al ah bl bh cl ch dl dh
-    let acc := double rest
-    let acc := addPackedPrepared acc table false pn da
-    let acc := addPackedPrepared acc table true qn db
-    addPacked (addPacked acc window rt dc) window st dd
-
-set_option maxRecDepth 2048 in
-private theorem packedChainSingle_eq (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
-    (rt st : Vector Coordinates window.entries) (fuel : Nat) (a b c d : WordPair) :
-    packedChainSingle window table pn qn rt st fuel a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
-      preparedChain window table pn qn rt st fuel a b c d := by
-  induction fuel generalizing a b c d with
-  | zero => rfl
-  | succ fuel ih =>
-    have ha := recodeRaw_eq .width5 a
-    have hb := recodeRaw_eq .width5 b
-    have hc := recodeRaw_eq window c
-    have hd := recodeRaw_eq window d
-    dsimp only at ha hb hc hd
-    simp only [packedChainSingle, preparedChain, addPacked_eq]
-    erw [addPackedPrepared_eq, addPackedPrepared_eq]
-    rw [ha.1, ha.2.1, hb.1, hb.2.1, hc.1, hc.2.1, hd.1, hd.2.1,
-      ha.2.2, hb.2.2, hc.2.2, hd.2.2]
-    erw [ih]
-
 private theorem recodeRaw_even (window : Window) (lo hi : UInt64) (h : lo &&& 1 = 0) :
     recodeRaw window lo hi = ⟨(lo >>> 1) + (hi <<< 63), hi >>> 1, 0⟩ := by
-  have hm : window.mask &&& 1 = 1 := by cases window <;> decide
+  have hm : window.mask &&& 1 = 1 := by cases window; decide
   simp only [recodeRaw, UInt64.and_assoc, hm, h, beq_self_eq_true, ↓reduceIte]
 
 private theorem and_distrib (a b c : UInt64) : (a ||| b) &&& c = (a &&& c) ||| (b &&& c) := by
   apply UInt64.toNat_inj.mp
   simp only [UInt64.toNat_and, UInt64.toNat_or, Nat.and_or_distrib_right]
-
-private theorem packedChain_even (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
-    (rt st : Vector Coordinates window.entries) (n : Nat)
-    (a b c d : Recoded) (h : ((a.lo ||| b.lo ||| c.lo ||| d.lo) &&& 1) == 0) :
-    packedChainSingle window table pn qn rt st (n + 1) a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
-      double (packedChainSingle window table pn qn rt st n
-        ((a.lo >>> 1) + (a.hi <<< 63)) (a.hi >>> 1)
-        ((b.lo >>> 1) + (b.hi <<< 63)) (b.hi >>> 1)
-        ((c.lo >>> 1) + (c.hi <<< 63)) (c.hi >>> 1)
-        ((d.lo >>> 1) + (d.hi <<< 63)) (d.hi >>> 1)) := by
-  simp only [beq_iff_eq, and_distrib, UInt64.or_eq_zero_iff] at h
-  obtain ⟨⟨⟨ha, hb⟩, hc⟩, hd⟩ := h
-  rw [packedChainSingle]
-  simp only [recodeRaw_even .width5 _ _ ha, recodeRaw_even .width5 _ _ hb,
-    recodeRaw_even window _ _ hc, recodeRaw_even window _ _ hd, addPackedPrepared,
-    addPacked, beq_self_eq_true, ↓reduceIte]
-
-set_option maxRecDepth 2048 in
-private theorem packedChain_eq_single (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
-    (rt st : Vector Coordinates window.entries) (fuel : Nat)
-    (a0 a1 b0 b1 c0 c1 d0 d1 : UInt64) :
-    packedChain window table pn qn rt st fuel a0 a1 b0 b1 c0 c1 d0 d1 =
-      packedChainSingle window table pn qn rt st fuel a0 a1 b0 b1 c0 c1 d0 d1 := by
-  induction fuel using Nat.twoStepInduction generalizing a0 a1 b0 b1 c0 c1 d0 d1 with
-  | zero => rfl
-  | one => rfl
-  | more n ih0 ih1 =>
-    rw [packedChain, packedChainSingle]
-    generalize recodeRaw .width5 a0 a1 = a
-    generalize recodeRaw .width5 b0 b1 = b
-    generalize recodeRaw window c0 c1 = c
-    generalize recodeRaw window d0 d1 = d
-    cases a with | mk al ah da =>
-      cases b with | mk bl bh db =>
-        cases c with | mk cl ch dc =>
-          cases d with | mk dl dh dd =>
-            dsimp only
-            split
-            · rename_i h
-              rw [ih0, packedChain_even window table pn qn rt st n
-                ⟨al, ah, da⟩ ⟨bl, bh, db⟩ ⟨cl, ch, dc⟩ ⟨dl, dh, dd⟩ h]
-              rfl
-            · rw [ih1]
 
 /-! ## Shared denominators -/
 
@@ -1954,11 +1764,10 @@ private theorem recovery_mul_assoc (x y z : RecoveryElement) : (x * y) * z = x *
 
 section
 
-attribute [local irreducible] Fp.RecoveryField.square Fp.RecoveryField.halve
-  Fp.RecoveryField.productSubSquare Fp.RecoveryField.mul Fp.RecoveryField.add
-  Fp.RecoveryField.sub
+attribute [local irreducible] Montgomery.square Montgomery.halve
+  Montgomery.productSubSquare Montgomery.mul Montgomery.add
+  Montgomery.sub
 
-set_option maxHeartbeats 30000 in
 private theorem restore_double (z : RecoveryElement) (p : Coordinates) :
     restoreZ z (double p) = double (restoreZ z p) := by
   have hx : (restoreZ z (double p)).x = (double (restoreZ z p)).x := by
@@ -2029,11 +1838,11 @@ private theorem scale_spec {p q : Coordinates} {P : curve.Point} {u : F}
 private theorem restore_scaleNumerators {p : Coordinates} {P : curve.Point} (hp : Represents p P)
     {z : RecoveryElement} (hz : z ≠ 0) : Represents (restoreZ z (scaleNumerators z p)) P := by
   apply scale_spec hp (zValue_ne_zero hz)
-  · simp only [restoreZ, scaleNumerators, zValue_mul, Fp.RecoveryField.square_eq_mul]
+  · simp only [restoreZ, scaleNumerators, zValue_mul, Montgomery.square_eq_mul]
     ring
-  · simp only [restoreZ, scaleNumerators, zValue_mul, Fp.RecoveryField.square_eq_mul]
+  · simp only [restoreZ, scaleNumerators, zValue_mul, Montgomery.square_eq_mul]
     ring
-  · simp only [restoreZ, scaleNumerators, zValue_mul, Fp.RecoveryField.square_eq_mul]
+  · simp only [restoreZ, scaleNumerators, zValue_mul, Montgomery.square_eq_mul]
     ring
 
 private theorem signedPoint_eq_fields (q : Coordinates) (neg : Bool) :
@@ -2048,11 +1857,10 @@ private theorem sign_fixed_eq (z : RecoveryElement) (p q : Coordinates) (negativ
 
 section
 
-attribute [local irreducible] Fp.RecoveryField.square Fp.RecoveryField.halve
-  Fp.RecoveryField.productSubSquare Fp.RecoveryField.productDiff Fp.RecoveryField.mul
-  Fp.RecoveryField.add Fp.RecoveryField.sub
+attribute [local irreducible] Montgomery.square Montgomery.halve
+  Montgomery.productSubSquare Montgomery.productDiff Montgomery.mul
+  Montgomery.add Montgomery.sub
 
-set_option maxHeartbeats 35000
 
 private theorem restore_doubleStd (z : RecoveryElement) (p : Coordinates) :
     restoreZ z (Coords.double 0 p) = Coords.double 0 (restoreZ z p) := by
@@ -2105,13 +1913,13 @@ private theorem coords_add_eq_addWeighted {p q : Coordinates} (hp : p.z ≠ 0) (
       (q.y * p.z * (p.z * p.z) - p.y * q.z * (q.z * q.z)) := by
   simp only [Coords.add, ite_eq_right hp, ite_eq_right hq, weightedLeft_full]
   unfold addWeighted addFromDifferences
-  simp only [Fp.RecoveryField.square_eq_mul, Fp.RecoveryField.productDiff_eq]
+  simp only [Montgomery.square_eq_mul, Montgomery.productDiff_eq]
 
 private theorem addCommon_eq_addWeighted {p : Coordinates}
     (hp : p.z ≠ 0) (qx qy : RecoveryElement) :
     addCommon p qx qy = addWeighted p p.x p.y p.z
       (qx * (p.z * p.z) - p.x) (qy * p.z * (p.z * p.z) - p.y) := by
-  simp only [addCommon, zeroElement_eq_true, ite_eq_right hp, Fp.RecoveryField.square_eq_mul,
+  simp only [addCommon, zeroElement_eq_true, ite_eq_right hp, Montgomery.square_eq_mul,
     addWeighted]
 
 private theorem recovery_one_mul (x : RecoveryElement) : (1 : RecoveryElement) * x = x := by
@@ -2136,23 +1944,23 @@ private theorem addFixed_eq_addWeighted {z : RecoveryElement} {p q : Coordinates
       (q.y * (p.z * z) * ((p.z * z) * (p.z * z)) - p.y * q.z * (q.z * q.z)) := by
   by_cases hq1 : q.z = 1
   · simp only [addFixed, zeroElement_eq_true, Bool.false_eq_true, ite_false, ite_eq_right hp,
-      hq1, ite_eq_right recovery_one_ne_zero, ite_true, Fp.RecoveryField.square_eq_mul,
+      hq1, ite_eq_right recovery_one_ne_zero, ite_true, Montgomery.square_eq_mul,
       addWeighted, recovery_mul_one, recovery_mul_assoc]
   · simp only [addFixed, zeroElement_eq_true, Bool.false_eq_true, ite_false, ite_eq_right hp,
-      ite_eq_right hq, ite_eq_right hq1, Fp.RecoveryField.square_eq_mul,
+      ite_eq_right hq, ite_eq_right hq1, Montgomery.square_eq_mul,
       addWeighted, recovery_mul_assoc]
 
 private theorem groupValue_of_z_zero {p : Coordinates} (h : p.z = 0) : groupValue p = 0 := by
   have h' : (readCoords p).z = 0 :=
-    (congrArg Fp.RecoveryField.toFin h).trans toFin_embedding.map_zero
+    (congrArg Montgomery.toFin h).trans toFin_embedding.map_zero
   exact Jacobian.toPoint_of_z_eq_zero h'
 
 end
 
 section
-attribute [local irreducible] Fp.RecoveryField.square Fp.RecoveryField.halve
-  Fp.RecoveryField.productSubSquare Fp.RecoveryField.productDiff Fp.RecoveryField.mul
-  Fp.RecoveryField.add Fp.RecoveryField.sub
+attribute [local irreducible] Montgomery.square Montgomery.halve
+  Montgomery.productSubSquare Montgomery.productDiff Montgomery.mul
+  Montgomery.add Montgomery.sub
 
 private theorem unscale_spec {p q : Coordinates} {P : curve.Point} {u : F}
     (hp : Represents p P) (hu : u ≠ 0)
@@ -2182,10 +1990,10 @@ private theorem addWeighted_spec_of_scale (p : Coordinates)
     simp only [addWeighted, ite_eq_right h0]
     apply unscale_spec href (pow_ne_zero 3 hs)
     · simp only [addFromDifferences, zValue_mul, zValue_sub, zValue_add,
-        Fp.RecoveryField.square_eq_mul, hx, hh, hr]
+        Montgomery.square_eq_mul, hx, hh, hr]
       ring
-    · simp only [addFromDifferences, Fp.RecoveryField.productDiff_eq, zValue_mul, zValue_sub,
-        zValue_add, Fp.RecoveryField.square_eq_mul, hx, hy, hh, hr]
+    · simp only [addFromDifferences, Montgomery.productDiff_eq, zValue_mul, zValue_sub,
+        zValue_add, Montgomery.square_eq_mul, hx, hy, hh, hr]
       ring
     · simp only [addFromDifferences, zValue_mul, hd, hh]
       ring
@@ -2289,9 +2097,9 @@ end
 
 section
 
-attribute [local irreducible] Fp.RecoveryField.square Fp.RecoveryField.halve
-  Fp.RecoveryField.productSubSquare Fp.RecoveryField.productDiff Fp.RecoveryField.mul
-  Fp.RecoveryField.add Fp.RecoveryField.sub
+attribute [local irreducible] Montgomery.square Montgomery.halve
+  Montgomery.productSubSquare Montgomery.productDiff Montgomery.mul
+  Montgomery.add Montgomery.sub
 
 private theorem restore_fixed_weighted_eq {z : RecoveryElement} {p q : Coordinates}
     (hp : p.z ≠ 0) (hq : q.z ≠ 0) :
@@ -2366,15 +2174,15 @@ private theorem addFixed_spec {z : RecoveryElement} {p q : Coordinates} {P Q : c
 end
 
 section
-attribute [local irreducible] Fp.RecoveryField.mul Fp.RecoveryField.sub
-  Fp.RecoveryField.add Fp.RecoveryField.square Fp.RecoveryField.halve
-  Fp.RecoveryField.productDiff Fp.RecoveryField.productSubSquare
+attribute [local irreducible] Montgomery.mul Montgomery.sub
+  Montgomery.add Montgomery.square Montgomery.halve
+  Montgomery.productDiff Montgomery.productSubSquare
 
 private theorem restore_scale_swap (z f : RecoveryElement) (p : Coordinates) :
     restoreZ (f * z) (scaleNumerators f p) = restoreZ f (scaleNumerators f (restoreZ z p)) := by
   cases p with
   | mk x y w =>
-    let f2 := Fp.RecoveryField.square f
+    let f2 := Montgomery.square f
     change (⟨x * f2, y * f2 * f, w * (f * z)⟩ : Coordinates) =
       ⟨x * f2, y * f2 * f, (w * z) * f⟩
     apply congrArg (Coords.mk (x * f2) (y * f2 * f))
@@ -2394,15 +2202,15 @@ private theorem coAdd_x_coordinate (a b c : RecoveryElement) :
 
 private theorem coAdd_retained_x (a b : RecoveryElement) :
     let h := b - a
-    let h2 := Fp.RecoveryField.square h
+    let h2 := Montgomery.square h
     zValue (a*h2 + h*h2) = zValue h ^ 2 * zValue b := by
   dsimp only
-  simp only [Fp.RecoveryField.square_eq_mul, zValue_add, zValue_mul, zValue_sub]
+  simp only [Montgomery.square_eq_mul, zValue_add, zValue_mul, zValue_sub]
   ring
 
 private theorem coAdd_retained_y (y h : RecoveryElement) :
-    zValue (y*(h*Fp.RecoveryField.square h)) = zValue h ^ 3 * zValue y := by
-  simp only [Fp.RecoveryField.square_eq_mul, zValue_mul]
+    zValue (y*(h*Montgomery.square h)) = zValue h ^ 3 * zValue y := by
+  simp only [Montgomery.square_eq_mul, zValue_mul]
   ring
 
 private theorem coAdd_sum_eq (px py qx qy z : RecoveryElement) (hh : qx-px ≠ 0) :
@@ -2413,22 +2221,22 @@ private theorem coAdd_sum_eq (px py qx qy z : RecoveryElement) (hh : qx-px ≠ 0
   let q : Coordinates := ⟨qx, qy, 1⟩
   let h := qx-px
   let r := qy-py
-  let h2 := Fp.RecoveryField.square h
+  let h2 := Montgomery.square h
   let h3 := h*h2
   let v := px*h2
-  let x' := Fp.RecoveryField.square r - (v+h3) - v
-  let x := Fp.RecoveryField.square r - h3 - (v+v)
+  let x' := Montgomery.square r - (v+h3) - v
+  let x := Montgomery.square r - h3 - (v+v)
   have hd : addCommon p qx qy = addFromDifferences px py 1 h r := by
     dsimp only [addCommon, zeroElement_eq_true, p, Coords.x, Coords.y, Coords.z]
     simp only [zeroElement_eq_true, ite_eq_right recovery_one_ne_zero,
-      Fp.RecoveryField.square_eq_mul,
+      Montgomery.square_eq_mul,
       recovery_mul_one, h, r, ite_eq_right hh]
   change restoreZ ((coAdd p q).2.2*z) (coAdd p q).1 = restoreZ z (addCommon p qx qy)
   rw [hd]
   change (⟨x', r*(v-x') - py*h3, (1 : RecoveryElement)*(h*z)⟩ : Coordinates) =
-    ⟨x, Fp.RecoveryField.productDiff r (v-x) py h3, ((1 : RecoveryElement)*h)*z⟩
-  have hx : x' = x := coAdd_x_coordinate v h3 (Fp.RecoveryField.square r)
-  rw [Fp.RecoveryField.productDiff_eq, hx, recovery_one_mul, recovery_one_mul]
+    ⟨x, Montgomery.productDiff r (v-x) py h3, ((1 : RecoveryElement)*h)*z⟩
+  have hx : x' = x := coAdd_x_coordinate v h3 (Montgomery.square r)
+  rw [Montgomery.productDiff_eq, hx, recovery_one_mul, recovery_one_mul]
 
 private theorem coAdd_spec
     {z : RecoveryElement} {p q : Coordinates} {P Q : curve.Point}
@@ -2468,14 +2276,6 @@ private theorem coAdd_unit_first (p q : Coordinates) : (coAdd p q).1.z = 1 := rf
 
 private theorem coAdd_unit_second (p q : Coordinates) : (coAdd p q).2.1.z = 1 := rfl
 
-private theorem collectOdd_step (p q : Coordinates) (n : Nat) :
-    let step := coAdd p q
-    let rest := collectOdd step.1 step.2.1 n
-    let d := rest.2 * step.2.2
-    collectOdd p q (n + 1) =
-      (⟨scaleNumerators d p :: rest.1.val, congrArg Nat.succ rest.1.property⟩, d) := by
-  rw [collectOdd]
-
 private theorem table_factors_ne_zero {a b : RecoveryElement} (h : a * b ≠ 0) :
     a ≠ 0 ∧ b ≠ 0 := by
   constructor
@@ -2495,27 +2295,6 @@ private theorem table_mul_ne_zero {a b : RecoveryElement} (ha : a ≠ 0) (hb : b
   rw [zValue_mul, zValue_zero] at h
   exact mul_ne_zero (zValue_ne_zero ha) (zValue_ne_zero hb) h
 
-private abbrev CollectOddValid (more : Nat) (Q : curve.Point) : Prop :=
-  ∀ {z : RecoveryElement} {p q : Coordinates} {P : curve.Point},
-    z ≠ 0 → p.z = 1 → q.z = 1 →
-    Represents (restoreZ z p) P → Represents (restoreZ z q) Q →
-    (collectOdd p q more).2 ≠ 0 → ∀ (i : Nat) (entry : Coordinates),
-      (collectOdd p q more).1.val[i]? = some entry →
-      entry.z = 1 ∧ Represents (restoreZ ((collectOdd p q more).2 * z) entry) (P + i • Q)
-
-private theorem collectOdd_zero_spec (Q : curve.Point) : CollectOddValid 0 Q := by
-  intro z p q P hz hpz hqz hp hq hf i entry hentry
-  cases i with
-  | zero =>
-    simp only [collectOdd, List.getElem?_cons_zero, Option.some.injEq] at hentry
-    subst entry
-    change p.z = 1 ∧ Represents (restoreZ ((1 : RecoveryElement) * z) p) (P + (0 : Nat) • Q)
-    rw [recovery_one_mul, zero_nsmul, add_zero]
-    exact ⟨hpz, hp⟩
-  | succ i =>
-    simp only [collectOdd, List.getElem?_cons_succ, List.getElem?_nil] at hentry
-    cases hentry
-
 private theorem collectOdd_prepend_spec
     {d z : RecoveryElement} {p entry : Coordinates} {P : curve.Point}
     (hd : d ≠ 0) (hpz : p.z = 1) (hp : Represents (restoreZ z p) P)
@@ -2532,95 +2311,9 @@ private theorem collectOdd_prepend_spec
       @restore_scaleNumerators (restoreZ z p) P hp d hd
     exact ⟨hez, Eq.mpr (congrArg (fun q => Represents q P) hcoords) hs⟩
 
-private theorem collectOdd_succ_spec
-    (more : Nat) (Q : curve.Point) (ih : CollectOddValid more Q) :
-    CollectOddValid (more + 1) Q := by
-  intro z p q P hz hpz hqz hp hq hf i entry hentry
-  generalize hstep : coAdd p q = step
-  rcases step with ⟨p', q', h⟩
-  generalize hrest : collectOdd p' q' more = rest
-  let d := rest.2 * h
-  have hout : collectOdd p q (more + 1) =
-      (⟨scaleNumerators d p :: rest.1.val, congrArg Nat.succ rest.1.property⟩, d) := by
-    have ho := collectOdd_step p q more
-    dsimp only at ho
-    rw [hstep] at ho
-    exact ho.trans (by rw [hrest])
-  have hden : (collectOdd p q (more + 1)).2 = d := congrArg Prod.snd hout
-  have hlook (j : Nat) :
-      (collectOdd p q (more+1)).1.val[j]? = (scaleNumerators d p :: rest.1.val)[j]? :=
-    congrArg (fun o => o.1.val[j]?) hout
-  have hd : d ≠ 0 := hden ▸ hf
-  rw [hden]
-  have hf' := @table_factors_ne_zero rest.2 h hd
-  cases i with
-  | zero =>
-    have hlookup : (scaleNumerators d p :: rest.1.val)[0]? = some (scaleNumerators d p) :=
-      List.getElem?_cons_zero
-    have he : scaleNumerators d p = entry := Option.some.inj
-      ((hlookup.symm.trans (hlook 0).symm).trans hentry)
-    rw [zero_nsmul, add_zero]
-    exact @collectOdd_prepend_spec d z p entry P hd hpz hp he
-  | succ i =>
-    have ha : (coAdd p q).2.2 ≠ 0 := by rw [hstep]; exact hf'.2
-    have hh := @coAdd_spec z p q P Q hz hpz hqz hp hq ha
-    rw [hstep] at hh
-    have hp1 : p'.z = 1 := by
-      have h := coAdd_unit_first p q
-      rw [hstep] at h
-      exact h
-    have hq1 : q'.z = 1 := by
-      have h := coAdd_unit_second p q
-      rw [hstep] at h
-      exact h
-    have hf0 : (collectOdd p' q' more).2 ≠ 0 := by rw [hrest]; exact hf'.1
-    have hentry' : (collectOdd p' q' more).1.val[i]? = some entry := by
-      rw [hrest]
-      exact List.getElem?_cons_succ.symm.trans ((hlook (i+1)).symm.trans hentry)
-    have hrec := @ih (h*z) p' q' (P+Q) (@table_mul_ne_zero h z hf'.2 hz)
-      hp1 hq1 hh.1 hh.2 hf0 i entry hentry'
-    rw [hrest] at hrec
-    rw [show d*z = rest.2*(h*z) from recovery_mul_assoc _ _ _, succ_nsmul]
-    have hgroup : (P+Q)+i • Q = P+(i • Q+Q) := by
-      rw [add_assoc, add_comm Q (i • Q)]
-    rw [← hgroup]
-    exact hrec
-
-private theorem collectOdd_valid
-    (more : Nat) (Q : curve.Point) : CollectOddValid more Q := by
-  induction more with
-  | zero => exact collectOdd_zero_spec Q
-  | succ n ih => exact collectOdd_succ_spec n Q ih
-
-private theorem collectOdd_spec
-    (more : Nat) {z : RecoveryElement} {p q : Coordinates}
-    {P Q : curve.Point} (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
-    (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q)
-    (hf : (collectOdd p q more).2 ≠ 0)
-    (i : Nat) (hi : i < (collectOdd p q more).1.val.length) :
-    let out := collectOdd p q more
-    let entry := out.1.val[i]'hi
-    entry.z = 1 ∧ Represents (restoreZ (out.2 * z) entry) (P + i • Q) :=
-  @collectOdd_valid more Q z p q P hz hpz hqz hp hq hf i _
-    (List.getElem?_eq_getElem hi)
-
 private theorem restore_unit_z (p : Coordinates) : restoreZ p.z {p with z := 1} = p := by
   cases p
   simp only [restoreZ, recovery_one_mul]
-
-private theorem commonTable_scale (p : Coordinates) :
-    let d := double p
-    let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
-    let q' : Coordinates := { d with z := 1 }
-    (commonTable p).2 = (collectOdd p' q' 7).2 * d.z :=
-  rfl
-
-private theorem commonTable_array (p : Coordinates) :
-    let d := double p
-    let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
-    let q' : Coordinates := { d with z := 1 }
-    (commonTable p).1.toArray = (collectOdd p' q' 7).1.val.toArray :=
-  rfl
 
 private theorem commonTable_seed_first
     {p : Coordinates} {P : curve.Point} (hpz : p.z = 1) (hp : Represents p P)
@@ -2636,65 +2329,6 @@ private theorem commonTable_seed_second {p : Coordinates} {P : curve.Point}
     (hp : Represents p P) : Represents (restoreZ p.z {p with z := 1}) P := by
   rw [restore_unit_z]
   exact hp
-
-private theorem collectOdd_vector_spec
-    (more : Nat) {z : RecoveryElement} {p q : Coordinates}
-    {P Q : curve.Point} (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
-    (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q)
-    (hf : (collectOdd p q more).2 ≠ 0)
-    (table : Vector Coordinates (more + 1)) (den : RecoveryElement)
-    (harray : table.toArray = (collectOdd p q more).1.val.toArray)
-    (hden : den = (collectOdd p q more).2*z)
-    (i : Fin (more + 1)) :
-    table[i.val].z = 1 ∧ Represents (restoreZ den table[i.val]) (P + i.val • Q) := by
-  have hi : i.val < (collectOdd p q more).1.val.length := by
-    rw [(collectOdd p q more).1.property]
-    exact i.isLt
-  have hentry : table[i.val] = (collectOdd p q more).1.val[i.val]'hi := by
-    have hb : i.val < table.toArray.size := table.size_toArray.symm ▸ i.isLt
-    calc
-      _ = table.toArray[i.val]'hb := (Vector.getElem_toArray hb).symm
-      _ = _ := by simp only [harray, List.getElem_toArray]
-  rw [hden, hentry]
-  exact @collectOdd_spec more z p q P Q hz hpz hqz hp hq hf i.val hi
-
-private theorem commonTable_spec_with_double
-    {p d : Coordinates} {P : curve.Point} (hpz : p.z = 1)
-    (hp : Represents p P) (hd : Represents d (P + P))
-    (table : Vector Coordinates 8) (den : RecoveryElement) (hz : den ≠ 0)
-    (hden :
-      den = (collectOdd { scaleNumerators d.z p with z := 1 } {d with z := 1} 7).2 * d.z)
-    (harray :
-      table.toArray =
-        (collectOdd { scaleNumerators d.z p with z := 1 } {d with z := 1} 7).1.val.toArray) :
-    ∀ i : Fin 8, table[i.val].z = 1 ∧
-      Represents (restoreZ den table[i.val]) ((2*i.val+1) • P) := by
-  let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
-  let q' : Coordinates := { d with z := 1 }
-  let out := collectOdd p' q' 7
-  have hnonzero : out.2*d.z ≠ 0 :=
-    Eq.mp (congrArg (fun w : RecoveryElement => w ≠ 0) hden) hz
-  have hz' := @table_factors_ne_zero out.2 d.z hnonzero
-  have h1 : Represents (restoreZ d.z p') P :=
-    @commonTable_seed_first p P hpz hp d.z hz'.2
-  have h2 : Represents (restoreZ d.z q') (P + P) := @commonTable_seed_second d (P + P) hd
-  intro i
-  have hgroup : ((2*i.val+1) • P) = P + i.val • (P + P) := by
-    rw [Nat.mul_comm 2 i.val, add_nsmul, mul_nsmul, one_nsmul, two_nsmul, add_comm, nsmul_add]
-  have h := @collectOdd_vector_spec 7 d.z p' q' P (P+P)
-    hz'.2 rfl rfl h1 h2 hz'.1 table den harray hden i
-  exact ⟨h.1, Eq.mpr (congrArg (fun P' => Represents (restoreZ den table[i.val]) P')
-    hgroup) h.2⟩
-
-private theorem commonTable_spec
-    {p : Coordinates} {P : curve.Point} (hpz : p.z = 1)
-    (hp : Represents p P) (hz : (commonTable p).2 ≠ 0) :
-    ∀ i : Fin 8, (commonTable p).1[i.val].z = 1 ∧
-      Represents (restoreZ (commonTable p).2 (commonTable p).1[i.val]) ((2*i.val+1) • P) := by
-  have hd := @recovery_double_spec p hp.1
-  have hdRep : Represents (double p) (P+P) := ⟨hd.1, hd.2.trans (congrArg₂ (·+·) hp.2 hp.2)⟩
-  exact @commonTable_spec_with_double p (double p) P hpz hp hdRep
-    (commonTable p).1 (commonTable p).2 hz (commonTable_scale p) (commonTable_array p)
 
 end
 
@@ -2731,48 +2365,12 @@ private theorem restoreZ_selected_signed (z : RecoveryElement) (p : Coordinates)
     simp only [restoreZ, signedPoint, selectedPoint, endomorphism, scaleX, negate,
       Bool.false_eq_true, ↓reduceIte]
 
-private theorem addCommon_eq_selected (p t : Coordinates) (phi neg : Bool) :
-    addCommon p
-      (if phi then (prepareCommon t).phiX else (prepareCommon t).point.x)
-      (if neg then (0 : RecoveryElement) - (prepareCommon t).point.y
-        else (prepareCommon t).point.y) =
-    addCommon p (signedPoint neg (selectedPoint phi t)).x
-      (signedPoint neg (selectedPoint phi t)).y := by
-  cases t
-  cases phi <;> cases neg <;>
-    simp only [prepareCommon, signedPoint, selectedPoint, endomorphism, scaleX, negate,
-      Bool.false_eq_true, ↓reduceIte]
-
 private theorem selected_signed_z (p : Coordinates) (phi neg : Bool) :
     (signedPoint neg (selectedPoint phi p)).z = p.z := by
   cases p
   cases phi <;> cases neg <;>
     simp only [signedPoint, selectedPoint, endomorphism, scaleX, negate,
       Bool.false_eq_true, ↓reduceIte]
-
-private theorem addPackedCommon_agrees
-    {z : RecoveryElement} (hz : z ≠ 0) {t : Vector Coordinates 8}
-    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
-    {p q : Coordinates} (hp : PointAgreement (restoreZ z p) q)
-    (phi neg : Bool) (digit : UInt64) :
-    PointAgreement (restoreZ z (addPackedCommon p (t.map prepareCommon) phi neg digit))
-      (addPackedPrepared q ((t.map (restoreZ z)).map prepare) phi neg digit) := by
-  by_cases hd : digit = 0
-  · simpa only [addPackedCommon, addPackedPrepared, beq_iff_eq, hd, ↓reduceIte] using hp
-  · let i : Fin 8 := packedIndex .width5 digit
-    let flip : Bool := neg != (digit >= Window.pivot .width5)
-    let v := signedPoint flip (selectedPoint phi t[i.val])
-    have hvz : v.z = 1 := (selected_signed_z t[i.val] phi flip).trans (ht i).1
-    have hv : OnCurve (restoreZ z v) := by
-      change OnCurve (restoreZ z (signedPoint flip (selectedPoint phi t[i.val])))
-      rw [restoreZ_selected_signed]
-      exact selected_signed_onCurve (ht i).2 phi flip
-    have ho := @addCommon_spec p v (groupValue q) (groupValue (restoreZ z v)) z
-      hz hvz ⟨hp.1, hp.2.2⟩ ⟨hv, rfl⟩
-    have hr := @add_spec q (restoreZ z v) hp.2.1 hv
-    simp only [addPackedCommon, addPackedPrepared, beq_iff_eq, hd, ↓reduceIte, Vector.getElem_map]
-    rw [addCommon_eq_selected, addPrepared_eq, ← restoreZ_selected_signed]
-    exact PointAgreement.of_represents ho hr
 
 private theorem signedPoint_represents (neg : Bool) {v : Coordinates} (hv : OnCurve v) :
     Represents (signedPoint neg v) (if neg then -groupValue v else groupValue v) := by
@@ -2862,179 +2460,6 @@ private theorem packedLowTwoZero (al ah bl bh cl ch dl dh : UInt64)
   have hd := low dl dh hd
   exact ⟨⟨⟨⟨ha.1, hb.1⟩, hc.1⟩, hd.1⟩, ⟨⟨⟨ha.2, hb.2⟩, hc.2⟩, hd.2⟩⟩
 
-private theorem packedChain_even_step (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
-    (rt st : Vector Coordinates window.entries) (n : Nat)
-    (a b c d : WordPair) (h : ((a.lo ||| b.lo ||| c.lo ||| d.lo) &&& 1) == 0) :
-    packedChain window table pn qn rt st (n + 1) a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
-      double (packedChain window table pn qn rt st n
-        ((a.lo >>> 1) + (a.hi <<< 63)) (a.hi >>> 1)
-        ((b.lo >>> 1) + (b.hi <<< 63)) (b.hi >>> 1)
-        ((c.lo >>> 1) + (c.hi <<< 63)) (c.hi >>> 1)
-        ((d.lo >>> 1) + (d.hi <<< 63)) (d.hi >>> 1)) := by
-  simp only [packedChain_eq_single]
-  exact packedChain_even window table pn qn rt st n
-    ⟨a.lo, a.hi, 0⟩ ⟨b.lo, b.hi, 0⟩ ⟨c.lo, c.hi, 0⟩ ⟨d.lo, d.hi, 0⟩ h
-
-private theorem packedCommonChain_agrees
-    (window : Window) {z : RecoveryElement} (hz : z ≠ 0)
-    {t : Vector Coordinates 8}
-    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
-    (pn qn : Bool) (rt st : Vector Coordinates window.entries)
-    (hr : ∀ i : Fin window.entries, OnCurve rt[i.val])
-    (hs : ∀ i : Fin window.entries, OnCurve st[i.val])
-    (fuel : Nat) (a0 a1 b0 b1 c0 c1 d0 d1 : UInt64) :
-    PointAgreement
-      (restoreZ z (packedCommonChain window z (t.map prepareCommon) pn qn rt st fuel
-        a0 a1 b0 b1 c0 c1 d0 d1))
-      (packedChain window ((t.map (restoreZ z)).map prepare) pn qn rt st fuel
-        a0 a1 b0 b1 c0 c1 d0 d1) := by
-  have hinf : PointAgreement (Coords.infinity : Coordinates) Coords.infinity :=
-    ⟨infinity_spec.1, infinity_spec.1, rfl⟩
-  have hdouble {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
-      PointAgreement (restoreZ z (double p)) (double q) := by
-    rw [restore_double]
-    exact PointAgreement.double h
-  have double_z_zero {p : Coordinates} (hp : p.z = 0) : (double p).z = 0 := by
-    change p.y * p.z = 0
-    apply toFin_embedding.injective
-    rw [toFin_embedding.map_mul, hp, toFin_embedding.map_zero, mul_zero]
-  have hskip {p p' q : Coordinates} (h : PointAgreement (restoreZ z p') q)
-      (hz' : p.z = 0 → p'.z = 0) :
-      PointAgreement
-        (restoreZ z (if p.z.raw.w0 == 0 && decide (p.z = 0) then Coords.infinity else p')) q := by
-    split
-    · next htest =>
-      have htest' : (p.z.raw.w0 == 0) ∧ p.z = 0 := by
-        simpa only [Bool.and_eq_true, decide_eq_true_eq] using htest
-      have hp := htest'.2
-      have hzero := groupValue_of_z_zero ((restore_zero_iff p' hz).2 (hz' hp))
-      rw [restore_infinity]
-      exact ⟨infinity_spec.1, h.2.1, infinity_spec.2.trans (hzero.symm.trans h.2.2)⟩
-    · exact h
-  have hsingle {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
-      PointAgreement (restoreZ z (doubleUnlessInfinity double p)) (double q) :=
-    hskip (hdouble h) double_z_zero
-  have htwice {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
-      PointAgreement (restoreZ z (doubleUnlessInfinity doubleTwice p)) (double (double q)) :=
-    hskip (hdouble (hdouble h)) (fun hp => double_z_zero (double_z_zero hp))
-  have hthrice {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
-      PointAgreement (restoreZ z (doubleUnlessInfinity doubleThrice p))
-        (double (double (double q))) :=
-    hskip (hdouble (hdouble (hdouble h)))
-      (fun hp => double_z_zero (double_z_zero (double_z_zero hp)))
-  have hstart : PointAgreement (restoreZ z Coords.infinity) (double Coords.infinity) := by
-    rw [restore_infinity]
-    obtain ⟨hc, hv⟩ := recovery_double_spec infinity_spec.1
-    exact ⟨infinity_spec.1, hc, by rw [hv, infinity_spec.2, add_zero]⟩
-  have hadd {p q : Coordinates} (h : PointAgreement (restoreZ z p) q)
-      (da db dc dd : UInt64) :
-      PointAgreement
-        (restoreZ z (addPackedFixed z
-          (addPackedFixed z (addPackedCommon (addPackedCommon p (t.map prepareCommon) false pn da)
-            (t.map prepareCommon) true qn db) window rt dc) window st dd))
-        (addPacked (addPacked (addPackedPrepared
-          (addPackedPrepared q ((t.map (restoreZ z)).map prepare) false pn da)
-          ((t.map (restoreZ z)).map prepare) true qn db) window rt dc) window st dd) :=
-    addPackedFixed_agrees hz window hs
-      (addPackedFixed_agrees hz window hr
-        (addPackedCommon_agrees hz ht
-          (addPackedCommon_agrees hz ht h false pn da) true qn db) dc) dd
-  induction fuel using Nat.strongRecOn generalizing a0 a1 b0 b1 c0 c1 d0 d1 with
-  | _ fuel ih =>
-    cases fuel with
-    | zero =>
-      simpa only [packedCommonChain, packedChain, restore_infinity] using hinf
-    | succ fuel =>
-      cases ha : recodeRaw .width5 a0 a1 with | mk al ah da =>
-        cases hb : recodeRaw .width5 b0 b1 with | mk bl bh db =>
-          cases hc : recodeRaw window c0 c1 with | mk cl ch dc =>
-            cases hd : recodeRaw window d0 d1 with | mk dl dh dd =>
-              rw [packedCommonChain, packedChain]
-              simp only [ha, hb, hc, hd]
-              apply hadd
-              cases fuel with
-              | zero => exact hstart
-              | succ next =>
-                by_cases ht : decide (0 < next) && (((al ||| bl ||| cl ||| dl) &&& 3) == 0)
-                · have ht' : 0 < next ∧ ((al ||| bl ||| cl ||| dl) &&& 3) == 0 := by
-                    simpa only [Bool.and_eq_true, decide_eq_true_eq] using ht
-                  obtain ⟨he, he'⟩ := packedLowTwoZero al ah bl bh cl ch dl dh ht'.2
-                  cases next with
-                  | zero => omega
-                  | succ n =>
-                    simp only [ite_eq_left ht, ite_eq_left he,
-                      doubleTwice_eq, Nat.succ_sub_one]
-                    have step := packedChain_even_step window ((t.map (restoreZ z)).map prepare)
-                      pn qn rt st n
-                      ⟨(al >>> 1) + (ah <<< 63), ah >>> 1⟩
-                      ⟨(bl >>> 1) + (bh <<< 63), bh >>> 1⟩
-                      ⟨(cl >>> 1) + (ch <<< 63), ch >>> 1⟩
-                      ⟨(dl >>> 1) + (dh <<< 63), dh >>> 1⟩ he'
-                    rw [step]
-                    simp only [shiftWords_two, shiftHigh_two]
-                    exact hthrice (ih n (by omega) _ _ _ _ _ _ _ _)
-                · by_cases he : ((al ||| bl ||| cl ||| dl) &&& 1) == 0
-                  · simp only [ite_eq_right ht, ite_eq_left he, doubleTwice_eq]
-                    exact htwice (ih next (by omega) _ _ _ _ _ _ _ _)
-                  · simp only [ite_eq_right ht, ite_eq_right he]
-                    exact hsingle (ih (next + 1) (by omega) _ _ _ _ _ _ _ _)
-
-private theorem packedRecovery_represents {t : Vector Coordinates 8} {P : curve.Point}
-    (ht : TableSpec t P) (k l : Fn) :
-    let (a, b) := splitScalar k.val
-    let aw := WordPair.ofNat a.natAbs
-    let bw := WordPair.ofNat b.natAbs
-    let rw := WordPair.ofNat (l.val % 2^128)
-    let sw := WordPair.ofNat (l.val / 2^128)
-    Represents
-      (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
-        129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi)
-      (k.val • P + l.val • Point.toPoint .generator) := by
-  let a := (splitScalar k.val).1
-  let b := (splitScalar k.val).2
-  let aw := WordPair.ofNat a.natAbs
-  let bw := WordPair.ofNat b.natAbs
-  let rw := WordPair.ofNat (l.val % 2^128)
-  let sw := WordPair.ofNat (l.val / 2^128)
-  change Represents
-    (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
-      129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi) _
-  have hb := splitScalar_bound k.val
-  have hm : l.val % 2^128 < 2^128 := Nat.mod_lt _ (by decide)
-  have hq : l.val / 2^128 < 2^128 :=
-    Nat.div_lt_of_lt_mul (Nat.lt_trans l.isLt (by decide))
-  have haNat : aw.toNat = a.natAbs := WordPair.toNat_ofNat _ hb.1
-  have hbNat : bw.toNat = b.natAbs := WordPair.toNat_ofNat _ hb.2
-  have hmNat : rw.toNat = l.val % 2^128 := WordPair.toNat_ofNat _ hm
-  have hqNat : sw.toNat = l.val / 2^128 := WordPair.toNat_ofNat _ hq
-  have h := chain_spec .width14 129
-    ⟨aw, signedTable a t⟩
-    ⟨bw, signedTable b (t.map endomorphism)⟩
-    ⟨rw, generatorTable14⟩
-    ⟨sw, generatorHighTable14⟩ _ _ _ _
-    (signedTable_spec ht a)
-    (signedTable_spec (endomorphismTable_spec ht) b)
-    generatorTable_spec generatorHighTable_spec
-    (by simp only [haNat]; exact hb.1.le)
-    (by simp only [hbNat]; exact hb.2.le)
-    (by simp only [hmNat]; exact hm.le)
-    (by simp only [hqNat]; exact hq.le)
-  dsimp only [Stream.scalar] at h
-  have hv := h.2
-  rw [haNat, hbNat, hmNat, hqNat, signed_smul, signed_smul, add_assoc (_ + _),
-    generator_split_smul] at hv
-  have he := splitScalar_smul k.val P
-  rw [natCast_zsmul, smul_eq_val_nsmul, ZMod.val_natCast_of_lt k.isLt] at he
-  rw [he] at hv
-  erw [packedChain_eq_single, packedChainSingle_eq, preparedChain_eq,
-    selectedTable_sgn, selectedTable_sgn]
-  exact ⟨h.1, hv⟩
-
-private theorem mulProjectivePrepared_represents (k l : Fn) {p : Coordinates} {P : curve.Point}
-    (hp : Represents p P) :
-    Represents (mulProjectivePrepared k p l) (k.val • P + l.val • Point.toPoint .generator) :=
-  packedRecovery_represents (oddMultiples_spec hp) k l
-
 private theorem component_nsmul (w : WordPair × Bool) (P : curve.Point) :
     w.1.toNat • (if w.2 then -P else P) = componentValue w • P := by
   obtain ⟨words, sign⟩ := w
@@ -3048,61 +2473,7 @@ private theorem wordPair_bound (w : WordPair) : w.toNat ≤ 2^128 := by
   change w.lo.toNat + w.hi.toNat * 2^64 ≤ 2^128
   omega
 
-private theorem selectedTable_component_spec
-    {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (phi neg : Bool) :
-    TableSpec (selectedTable t phi neg)
-      (if neg then -(if phi then lambda.val • P else P) else
-        (if phi then lambda.val • P else P)) := by
-  let r : Int := if neg then -1 else 0
-  have hsgn : decide (r < 0) = neg := by cases neg <;> rfl
-  have ht' : TableSpec (if phi then t.map endomorphism else t)
-      (if phi then lambda.val • P else P) := by
-    cases phi
-    · exact ht
-    · exact endomorphismTable_spec ht
-  have htable := selectedTable_sgn t phi r
-  rw [hsgn] at htable
-  rw [htable]
-  have h := signedTable_spec ht' r
-  cases neg <;> simpa [r] using h
-
-private theorem packedComponents_represents {t : Vector Coordinates 8} {P : curve.Point}
-    (ht : TableSpec t P) (a b : WordPair × Bool) (c d : WordPair) :
-    Represents
-      (packedChain .width14 (t.map prepare) a.2 b.2 generatorTable14 generatorHighTable14
-        129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi)
-      (componentValue a • P + componentValue b • (lambda.val • P) +
-        c.toNat • Point.toPoint .generator +
-          d.toNat • ((2^128 : Nat) • Point.toPoint .generator)) := by
-  have ha : TableSpec (selectedTable t false a.2) (if a.2 then -P else P) :=
-    selectedTable_component_spec ht false a.2
-  have hb : TableSpec (selectedTable t true b.2)
-      (if b.2 then -(lambda.val • P) else lambda.val • P) :=
-    selectedTable_component_spec ht true b.2
-  have h := chain_spec .width14 129 ⟨a.1, selectedTable t false a.2⟩
-    ⟨b.1, selectedTable t true b.2⟩ ⟨c, generatorTable14⟩ ⟨d, generatorHighTable14⟩
-    _ _ _ _ ha hb generatorTable_spec generatorHighTable_spec
-    (wordPair_bound a.1) (wordPair_bound b.1) (wordPair_bound c) (wordPair_bound d)
-  erw [packedChain_eq_single, packedChainSingle_eq, preparedChain_eq]
-  simpa only [chainFor, Stream.scalar, component_nsmul] using h
-
-private theorem packedCommonComponents_represents {t : Vector Coordinates 8}
-    {z : RecoveryElement} {P : curve.Point} (hz : z ≠ 0)
-    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
-    (hv : TableSpec (t.map (restoreZ z)) P) (a b : WordPair × Bool) (c d : WordPair) :
-    Represents
-      (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
-        generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi))
-      (componentValue a • P + componentValue b • (lambda.val • P) +
-        c.toNat • Point.toPoint .generator +
-          d.toNat • ((2^128 : Nat) • Point.toPoint .generator)) := by
-  have h := packedCommonChain_agrees .width14 hz ht a.2 b.2 generatorTable14 generatorHighTable14
-    (fun i => (generatorTable_spec i).1) (fun i => (generatorHighTable_spec i).1)
-    129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi
-  have hRef := packedComponents_represents hv a b c d
-  exact ⟨h.1, h.2.2.trans hRef.2⟩
-
-private theorem raw_fixed_words (l : Fp.RecoveryField.Raw) :
+private theorem raw_fixed_words (l : Montgomery.Raw) :
     (⟨l.w0,l.w1⟩ : WordPair).toNat = l.val % 2^128 ∧
       (⟨l.w2,l.w3⟩ : WordPair).toNat = l.val / 2^128 := by
   have h0 := l.w0.toNat_lt_size
@@ -3113,106 +2484,9 @@ private theorem raw_fixed_words (l : Fp.RecoveryField.Raw) :
   change l.w1.toNat < 2^64 at h1
   change l.w2.toNat < 2^64 at h2
   change l.w3.toNat < 2^64 at h3
-  simp only [WordPair.toNat, Fp.RecoveryField.Raw.val, Fp.RecoveryField.Raw.words,
-    Fp.RecoveryField.lowValue, Fp.RecoveryField.wordRadix]
+  simp only [WordPair.toNat, Montgomery.Raw.val, Montgomery.Raw.words,
+    Montgomery.lowValue, Montgomery.wordRadix]
   omega
-
-private theorem packedApproxRawComponents_represents
-    {t : Vector Coordinates 8} {z : RecoveryElement} {P : curve.Point} (hz : z ≠ 0)
-    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
-    (hv : TableSpec (t.map (restoreZ z)) P) (k l : Fp.RecoveryField.Raw) (a b : WordPair × Bool)
-    (hVar : componentValue a • P + componentValue b • (lambda.val • P) = k.val • P) :
-    Represents (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
-      generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
-      l.w0 l.w1 l.w2 l.w3)) (k.val • P + l.val • Point.toPoint .generator) := by
-  let c : WordPair := ⟨l.w0,l.w1⟩
-  let d : WordPair := ⟨l.w2,l.w3⟩
-  let G := Point.toPoint .generator
-  have hFixed : c.toNat • G + d.toNat • ((2^128 : Nat) • G) = l.val • G := by
-    have h := raw_fixed_words l
-    change c.toNat = l.val % 2^128 ∧ d.toNat = l.val / 2^128 at h
-    rw [h.1,h.2,generator_split_smul]
-  have hGroup : componentValue a • P + componentValue b • (lambda.val • P) +
-      c.toNat • G + d.toNat • ((2^128 : Nat) • G) = k.val • P + l.val • G := by
-    rw [hVar, add_assoc, hFixed]
-  change Represents (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
-    generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi))
-      (k.val • P + l.val • G)
-  rw [← hGroup]
-  exact packedCommonComponents_represents hz ht hv a b c d
-
-section
-attribute [local irreducible] splitScalarWords commonTable mulProjectivePrepared
-
-set_option maxHeartbeats 50000 in
-private theorem mulProjectiveWordsIndependent_affine_eq
-    (k l : Fp.RecoveryField.Raw) (p : Coordinates) {t : Vector Coordinates 8}
-    {z : RecoveryElement} (hp : p.z = 1) (ht : commonTable p = (t,z)) (hz : z ≠ 0) :
-    let a := (splitScalarWords k).1
-    let b := (splitScalarWords k).2
-    mulProjectiveWordsIndependent k p l =
-      restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
-        generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
-        l.w0 l.w1 l.w2 l.w3) := by
-  dsimp only
-  rw [mulProjectiveWordsIndependent, ite_eq_left hp, ht]
-  simp only [ite_eq_right hz]
-
-private theorem mulProjectiveWordsIndependent_represents_of_smul
-    (hScalar : ∀ (k : Fp.RecoveryField.Raw) (_hk : k.val < Fn.modulus) (P : curve.Point),
-      componentValue (splitScalarWords k).1 • P +
-        componentValue (splitScalarWords k).2 • (lambda.val • P) = k.val • P)
-    (hFin : ∀ k : Fp.RecoveryField.Raw, k.val < Fn.modulus →
-      (FnRecoveryWords.toFin k).val = k.val)
-    (k l : Fp.RecoveryField.Raw) (hk : k.val < Fn.modulus) (hl : l.val < Fn.modulus)
-    {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
-    Represents (mulProjectiveWordsIndependent k p l)
-      (k.val • P + l.val • Point.toPoint .generator) := by
-  have hFallback := mulProjectivePrepared_represents
-    (FnRecoveryWords.toFin k) (FnRecoveryWords.toFin l) hp
-  rw [hFin k hk, hFin l hl] at hFallback
-  by_cases hpz : p.z = 1
-  · cases hTable : commonTable p with
-    | mk t z =>
-      by_cases hz : z = 0
-      · simpa only [mulProjectiveWordsIndependent, ite_eq_left hpz, hTable, ite_eq_left hz]
-          using hFallback
-      · have hzn : (commonTable p).2 ≠ 0 := by rw [hTable]; exact hz
-        have ht := commonTable_spec hpz hp hzn
-        rw [hTable] at ht
-        have ht' (i : Fin 8) : t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]) :=
-          ⟨(ht i).1, (ht i).2.1⟩
-        have htable : TableSpec (t.map (restoreZ z)) P := by
-          intro i
-          rw [Vector.getElem_map]
-          exact (ht i).2
-        rw [mulProjectiveWordsIndependent_affine_eq k l p hpz hTable hz]
-        exact packedApproxRawComponents_represents hz ht' htable k l
-          (splitScalarWords k).1 (splitScalarWords k).2 (hScalar k hk P)
-  · simpa only [mulProjectiveWordsIndependent, ite_eq_right hpz] using hFallback
-
-end
-
-private theorem splitScalarWords_smul_raw
-    (k : Fp.RecoveryField.Raw) (hk : k.val < Fn.modulus) (P : curve.Point) :
-    componentValue (splitScalarWords k).1 • P +
-      componentValue (splitScalarWords k).2 • (lambda.val • P) = k.val • P := by
-  let u := (approximateWeight k splitConstants.aRecip).toNat
-  let v := (approximateWeight k splitConstants.bRecip).toNat
-  have hComp := splitScalarWords_components_raw k hk
-  dsimp only at hComp
-  rw [hComp.1, hComp.2]
-  have h := displacedScalar_smul (FnRecoveryWords.toFin k) u v P
-  rw [FnRecoveryWords.toFin_val_of_lt k hk] at h
-  exact h
-
-private theorem mulProjectiveWordsIndependent_represents
-    (k l : Fp.RecoveryField.Raw) (hk : k.val < Fn.modulus) (hl : l.val < Fn.modulus)
-    {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
-    Represents (mulProjectiveWordsIndependent k p l)
-      (k.val • P + l.val • Point.toPoint .generator) :=
-  mulProjectiveWordsIndependent_represents_of_smul splitScalarWords_smul_raw
-    FnRecoveryWords.toFin_val_of_lt k l hk hl hp
 
 private def signedValue (w : WordPair) : Int :=
   (w.lo.toNat : Int) + w.hi.toInt64.toInt * 2^64
@@ -3743,16 +3017,16 @@ private theorem jointAction_turn (P : curve.Point) (c : Int × Int) :
   simp only [neg_zsmul, sub_zsmul]
   abel
 
-private theorem jointZValue_ofFin (a : Fp) : zValue (Fp.RecoveryField.ofFin a) = Fp.toZMod a :=
+private theorem jointZValue_ofFin (a : Fp) : zValue (Montgomery.ofFin a) = Fp.toZMod a :=
   (congrArg Jacobian.toZ (readOfFin a)).trans (coordinateToZ_eq a)
 
 section
-attribute [local irreducible] Fp.RecoveryField.square Fp.RecoveryField.mul
-  Fp.RecoveryField.add Fp.RecoveryField.sub
+attribute [local irreducible] Montgomery.square Montgomery.mul
+  Montgomery.add Montgomery.sub
 
 private theorem ofFin_mul_assoc (a b : Fp) (c : RecoveryElement) :
-    Fp.RecoveryField.ofFin (a * b) * c =
-      Fp.RecoveryField.ofFin a * (Fp.RecoveryField.ofFin b * c) := by
+    Montgomery.ofFin (a * b) * c =
+      Montgomery.ofFin a * (Montgomery.ofFin b * c) := by
   apply zValue_injective
   simp only [zValue_mul, jointZValue_ofFin, map_mul, mul_assoc]
 
@@ -3919,7 +3193,7 @@ private theorem descriptor_coefficients_eq : ∀ i : Fin 64,
 
 section
 attribute [local irreducible] coAdd scaleNumerators jointAction jointEntryCoords
-  Fp.RecoveryField.square Fp.RecoveryField.mul Fp.RecoveryField.add Fp.RecoveryField.sub
+  Montgomery.square Montgomery.mul Montgomery.add Montgomery.sub
 
 private theorem commonJointTable_shape (p : Coordinates) :
   let p0 : Coordinates := {p with z := 1}
@@ -3958,8 +3232,6 @@ private theorem commonJointTable_shape (p : Coordinates) :
   dsimp only
   rw [commonJointTable]
 
-set_option maxRecDepth 1500 in
-set_option maxHeartbeats 600000 in
 private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     (hpz : p.z = 1) (hp : Represents p P) (hz : (commonJointTable p).2 ≠ 0) :
     JointTableSpec (commonJointTable p).2 (commonJointTable p).1 P := by
@@ -4342,7 +3614,6 @@ private theorem jointAdd_agrees (window : Window) {z : RecoveryElement} (hz : z 
     (addPackedFixed_represents hz window (addPackedFixed_represents hz window ha hr dr) hs ds)
     (addPackedFixed_represents hz window (addPackedFixed_represents hz window hb hr dr) hs ds)
 
-set_option maxHeartbeats 800000 in
 private theorem packedJointChain_agrees (window : Window) {z : RecoveryElement} (hz : z ≠ 0)
     {t : Vector JointEntry 6} {rt st : Vector Coordinates window.entries}
     {B R S : curve.Point} (ht : JointTableSpec z t B) (hr : TableSpec rt R) (hs : TableSpec st S)
@@ -4479,7 +3750,7 @@ private theorem signedComponent_spec (w : WordPair × Bool)
 
 private theorem packedJointWords_represents {z : RecoveryElement}
     (hz : z ≠ 0) {table : Vector JointEntry 6} {P : curve.Point}
-    (ht : JointTableSpec z table P) (k l : Fp.RecoveryField.Raw) (a b : WordPair × Bool)
+    (ht : JointTableSpec z table P) (k l : Montgomery.Raw) (a b : WordPair × Bool)
     (ha : a.1.hi < 0x7fffffffffffffff) (hb : b.1.hi < 0x7fffffffffffffff)
     (hvar : componentValue a • P + componentValue b • (lambda.val • P) = k.val • P) :
     let aw := signedComponent a
@@ -4511,95 +3782,196 @@ private theorem packedJointWords_represents {z : RecoveryElement}
     rw [jointAction, hav, hbv, hvar, add_assoc, hFixed]
   exact ⟨hAgree.1, hAgree.2.2.trans (hRep.2.trans hGroup)⟩
 
-section
-attribute [local irreducible] splitScalarWords commonJointTable mulProjectiveWordsIndependent
+private theorem splitScalarWords_smul_raw
+    (k : Montgomery.Raw) (hk : k.val < Fn.modulus) (P : curve.Point) :
+    componentValue (splitScalarWords k).1 • P +
+      componentValue (splitScalarWords k).2 • (lambda.val • P) = k.val • P := by
+  let u := (approximateWeight k splitConstants.aRecip).toNat
+  let v := (approximateWeight k splitConstants.bRecip).toNat
+  have hComp := splitScalarWords_components_raw k hk
+  dsimp only at hComp
+  rw [hComp.1, hComp.2]
+  exact displacedScalar_smul ⟨k.val, hk⟩ u v P
 
-private theorem mulProjectiveWords_hybrid_eq
-    (k l : Fp.RecoveryField.Raw) (p : Coordinates) {t : Vector JointEntry 6}
-    {z : RecoveryElement} (hp : p.z = 1) (ht : commonJointTable p = (t,z)) (hz : z ≠ 0)
-    (ha : (splitScalarWords k).1.1.hi < 0x7fffffffffffffff)
-    (hb : (splitScalarWords k).2.1.hi < 0x7fffffffffffffff) :
-    let a := signedComponent (splitScalarWords k).1
-    let b := signedComponent (splitScalarWords k).2
-    mulProjectiveWords k p l = restoreZ z (packedJointChain .width14 z t
-      generatorTable14 generatorHighTable14 129 a.lo a.hi b.lo b.hi l.w0 l.w1 l.w2 l.w3) := by
-  have hguard : (decide ((splitScalarWords k).1.1.hi < 0x7fffffffffffffff) &&
-      decide ((splitScalarWords k).2.1.hi < 0x7fffffffffffffff)) = true := by
-    exact Bool.and_eq_true_iff.mpr ⟨decide_eq_true ha, decide_eq_true hb⟩
+/-- The shared chain of doublings computes `k P + l G` on a form of `P`. -/
+private theorem fallback_represents (k l : Fn) {p : Coordinates} {P : curve.Point}
+    (hp : Represents p P) :
+    Represents (Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator))
+      (k.val • P + l.val • Point.toPoint .generator) := by
+  have hg := point_spec Point.isOnCurve_generator
+  have hread : readCoords (Coords.mulAdd 0 256 k.val p l.val
+      (Point.toMontgomeryCoords .generator)) = Jacobian.mulAdd 0 256 k.val (readCoords p) l.val
+        (readCoords (Point.toMontgomeryCoords .generator)) := by
+    have h := Coords.map_mulAdd toFin_embedding (0 : RecoveryElement) 256 k.val p l.val
+      (Point.toMontgomeryCoords .generator)
+    rw [toFin_embedding.map_zero] at h
+    exact congrArg (Jacobian.ofCoords : Coords Fp → _) h
+  unfold Represents OnCurve groupValue
+  rw [hread]
+  refine ⟨Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero 256 k.val
+    l.val hp.1 hg.1, ?_⟩
+  rw [Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) two_ne_zero 256 k.val l.val
+    hp.1 hg.1 (Nat.lt_trans k.isLt (by decide)) (Nat.lt_trans l.isLt (by decide))]
+  exact congrArg₂ (k.val • · + l.val • ·) hp.2 hg.2
+
+private theorem rawOfNat_val_of_lt (k : Fn) : (Montgomery.rawOfNat k.val).val = k.val :=
+  Montgomery.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
+
+section
+attribute [local irreducible] splitScalarWords commonJointTable
+
+/-- On the joint branch, the multiplication is the joint chain with its denominator restored. -/
+private theorem mulProjective_joint_eq
+    (k l : Fn) (p : Coordinates) {t : Vector JointEntry 6}
+    {z : RecoveryElement} (hp : p.z = 1)
+    (ht : commonJointTable p = (t,z)) (hz : z ≠ 0)
+    (ha : (splitScalarWords (Montgomery.rawOfNat k.val)).1.1.hi < 0x7fffffffffffffff)
+    (hb : (splitScalarWords (Montgomery.rawOfNat k.val)).2.1.hi < 0x7fffffffffffffff) :
+    let a := signedComponent (splitScalarWords (Montgomery.rawOfNat k.val)).1
+    let b := signedComponent (splitScalarWords (Montgomery.rawOfNat k.val)).2
+    let lw := Montgomery.rawOfNat l.val
+    mulProjective k p l = restoreZ z (packedJointChain .width14 z t
+      generatorTable14 generatorHighTable14 129 a.lo a.hi b.lo b.hi lw.w0 lw.w1 lw.w2 lw.w3) := by
+  have hguard : (decide ((splitScalarWords (Montgomery.rawOfNat k.val)).1.1.hi <
+      0x7fffffffffffffff) && decide ((splitScalarWords (Montgomery.rawOfNat k.val)).2.1.hi <
+        0x7fffffffffffffff)) = true :=
+    Bool.and_eq_true_iff.mpr ⟨decide_eq_true ha, decide_eq_true hb⟩
   dsimp only
-  simp only [mulProjectiveWords, ite_eq_left hp, hguard, ↓reduceIte, ht, ite_eq_right hz,
+  simp only [mulProjective, ite_eq_left hp, hguard, ↓reduceIte, ht, ite_eq_right hz,
     signedComponent]
 
-private theorem mulProjectiveWords_represents
-    (k l : Fp.RecoveryField.Raw) (hk : k.val < Fn.modulus) (hl : l.val < Fn.modulus)
-    {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
-    Represents (mulProjectiveWords k p l) (k.val • P + l.val • Point.toPoint .generator) := by
-  have hFallback := mulProjectiveWordsIndependent_represents k l hk hl hp
-  by_cases hpz : p.z = 1
-  · by_cases ha : (splitScalarWords k).1.1.hi < 0x7fffffffffffffff
-    · by_cases hb : (splitScalarWords k).2.1.hi < 0x7fffffffffffffff
-      · have hguard : (decide ((splitScalarWords k).1.1.hi < 0x7fffffffffffffff) &&
-            decide ((splitScalarWords k).2.1.hi < 0x7fffffffffffffff)) = true := by
-          exact Bool.and_eq_true_iff.mpr ⟨decide_eq_true ha, decide_eq_true hb⟩
-        cases hTable : commonJointTable p with
-        | mk t z =>
-          by_cases hz : z = 0
-          · simpa only [mulProjectiveWords, ite_eq_left hpz, hguard, ↓reduceIte,
-              hTable, ite_eq_left hz]
-          using hFallback
-          · have hzn : (commonJointTable p).2 ≠ 0 := by rw [hTable]; exact hz
-            have hTableSpec := commonJointTable_spec hpz hp hzn
-            rw [hTable] at hTableSpec
-            rw [mulProjectiveWords_hybrid_eq k l p hpz hTable hz ha hb]
-            exact packedJointWords_represents hz hTableSpec k l (splitScalarWords k).1
-              (splitScalarWords k).2 ha hb (splitScalarWords_smul_raw k hk P)
-      · simpa only [mulProjectiveWords, ite_eq_left hpz, decide_eq_false hb,
-          Bool.and_false, Bool.false_eq_true, ↓reduceIte] using hFallback
-    · simpa only [mulProjectiveWords, ite_eq_left hpz, decide_eq_false ha,
-        Bool.false_and, Bool.false_eq_true, ↓reduceIte] using hFallback
-  · simpa only [mulProjectiveWords, ite_eq_right hpz] using hFallback
-
-end
-
-/-- Canonical scalar words use the same recovery chain as their finite field values. -/
-theorem mulProjectiveWords_eq_mulProjective (k l : Fp.RecoveryField.Raw) (p : Coordinates)
-    (hk : k.val < Fn.modulus) (hl : l.val < Fn.modulus) :
-    mulProjectiveWords k p l =
-      mulProjective (FnRecoveryWords.toFin k) p (FnRecoveryWords.toFin l) := by
-  rw [mulProjective, FnRecoveryWords.fromFin_toFin_of_lt k hk,
-    FnRecoveryWords.fromFin_toFin_of_lt l hl]
-
+/-- The multiplication computes `k P + l G` on a form of a point `P`, on every branch. -/
 private theorem mulProjective_represents
     (k l : Fn) {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
     Represents (mulProjective k p l) (k.val • P + l.val • Point.toPoint .generator) := by
-  rw [mulProjective]
-  have hk : (FnRecoveryWords.fromFin k).val < Fn.modulus := by
-    rw [FnRecoveryWords.fromFin_val]
-    exact k.isLt
-  have hl : (FnRecoveryWords.fromFin l).val < Fn.modulus := by
-    rw [FnRecoveryWords.fromFin_val]
-    exact l.isLt
-  have h := mulProjectiveWords_represents (FnRecoveryWords.fromFin k)
-    (FnRecoveryWords.fromFin l) hk hl hp
-  simpa only [FnRecoveryWords.fromFin_val] using h
+  have hFallback := fallback_represents k l hp
+  have hk := rawOfNat_val_of_lt k
+  have hl := rawOfNat_val_of_lt l
+  by_cases hpz : p.z = 1
+  · by_cases ha : (splitScalarWords (Montgomery.rawOfNat k.val)).1.1.hi < 0x7fffffffffffffff
+    · by_cases hb : (splitScalarWords (Montgomery.rawOfNat k.val)).2.1.hi < 0x7fffffffffffffff
+      · have hguard : (decide ((splitScalarWords (Montgomery.rawOfNat k.val)).1.1.hi <
+            0x7fffffffffffffff) && decide ((splitScalarWords (Montgomery.rawOfNat k.val)).2.1.hi <
+              0x7fffffffffffffff)) = true :=
+          Bool.and_eq_true_iff.mpr ⟨decide_eq_true ha, decide_eq_true hb⟩
+        cases hTable : commonJointTable p with
+        | mk t z =>
+          by_cases hz : z = 0
+          · simpa only [mulProjective, ite_eq_left hpz, hguard, ↓reduceIte,
+              hTable, ite_eq_left hz] using hFallback
+          · have hzn : (commonJointTable p).2 ≠ 0 := by rw [hTable]; exact hz
+            have hTableSpec := commonJointTable_spec hpz hp hzn
+            rw [hTable] at hTableSpec
+            rw [mulProjective_joint_eq k l p hpz hTable hz ha hb]
+            have h := packedJointWords_represents hz hTableSpec (Montgomery.rawOfNat k.val)
+              (Montgomery.rawOfNat l.val) (splitScalarWords (Montgomery.rawOfNat k.val)).1
+              (splitScalarWords (Montgomery.rawOfNat k.val)).2 ha hb
+              (splitScalarWords_smul_raw (Montgomery.rawOfNat k.val) (by rw [hk]; exact k.isLt) P)
+            rw [hk, hl] at h
+            exact h
+      · simpa only [mulProjective, ite_eq_left hpz, decide_eq_false hb,
+          Bool.and_false, Bool.false_eq_true, ↓reduceIte] using hFallback
+    · simpa only [mulProjective, ite_eq_left hpz, decide_eq_false ha,
+        Bool.false_and, Bool.false_eq_true, ↓reduceIte] using hFallback
+  · simpa only [mulProjective, ite_eq_right hpz] using hFallback
 
-/-- The point entry point encodes its input before calling the coordinate entry point. -/
-theorem mulCoords_toRecovery (k l : Fn) (p : Point) :
-    mulCoords k (toRecoveryCoords p) l = mul k p l := by
-  rw [mul]
+end
 
-/-- The recovery chain computes the same point as the joint multiplication. -/
-theorem mul_eq
-    (k l : Fn) {p : Point} (hp : p.isOnCurve = true) :
-    mul k p l = Point.mulAdd k p l .generator := by
-  rw [← mulCoords_toRecovery]
-  change ofRecoveryCoords (mulProjective k (toRecoveryCoords p) l) = Point.mulAdd k p l .generator
-  have h := mulProjective_represents k l (p := toRecoveryCoords p)
+/-- The joint chain computes `k P + l G`, for a point `P` on the curve. -/
+private theorem toPoint_mul {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
+    (mul k p l).isOnCurve = true ∧
+      Point.toPoint (mul k p l) = k.val • Point.toPoint p + l.val • Point.toPoint .generator := by
+  have h := mulProjective_represents k l (p := Point.toMontgomeryCoords p)
     (P := Point.toPoint p) (point_spec hp)
-  have hGroup := Point.toPoint_mulAdd k l hp Point.isOnCurve_generator
-  have hRep : Represents (mulProjective k (toRecoveryCoords p) l)
-      (Point.toPoint (Point.mulAdd k p l .generator)) := ⟨h.1, h.2.trans hGroup.symm⟩
-  exact ofRecoveryCoords_eq_of_represents hRep
-    (Point.isOnCurve_mulAdd k l hp Point.isOnCurve_generator)
+  rw [mul, ofRecoveryCoords_eq]
+  have hs := Point.ofJacobian_spec h.1
+  exact ⟨hs.1, hs.2.trans h.2⟩
 
-end EthLib.Cryptography.Secp256k1.RecoveryMul
+theorem isOnCurve_mul {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
+    (mul k p l).isOnCurve = true :=
+  (toPoint_mul hp).1
+
+end MulAdd
+
+namespace Point
+
+/-- The shared chain of doublings, as a point. -/
+private abbrev chain (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
+  ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q))
+
+/-- The shared chain on Montgomery form is the shared chain on `Fp`, for every input. -/
+private theorem general_eq (k : Fn) (p : Point) (l : Fn) (q : Point) :
+    ofMontgomeryCoords
+        (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q)) =
+      chain k p l q := by
+  rw [ofMontgomeryCoords_eq]
+  have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 256 k.val (toMontgomeryCoords p) l.val
+    (toMontgomeryCoords q)
+  rw [toFin_embedding.map_zero, map_toMontgomeryCoords, map_toMontgomeryCoords] at h
+  exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
+
+/-- On points of the curve, the shared chain lies on the curve and computes `k P + l Q`. -/
+private theorem chain_spec (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+    (hq : q.isOnCurve = true) :
+    (chain k p l q).isOnCurve = true ∧
+      toPoint (chain k p l q) = k.val • toPoint p + l.val • toPoint q := by
+  have hJp := toJacobian_spec hp
+  have hJq := toJacobian_spec hq
+  have hon := Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) MulAdd.two_ne_zero 256
+    k.val l.val hJp.1 hJq.1
+  refine ⟨(ofJacobian_spec hon).1, ?_⟩
+  rw [(ofJacobian_spec hon).2, Jacobian.toPoint_mulAdd (Jacobian.toZ_zero (m := Fp.modulus))
+    MulAdd.two_ne_zero 256 k.val l.val hJp.1 hJq.1 (Nat.lt_trans k.isLt (by decide))
+    (Nat.lt_trans l.isLt (by decide))]
+  exact congrArg₂ (k.val • · + l.val • ·) hJp.2 hJq.2
+
+/-- The joint chain, which the generator selects, gives the point of the shared chain. -/
+private theorem mul_eq_chain (k l : Fn) {p : Point} (hp : p.isOnCurve = true) :
+    MulAdd.mul k p l = chain k p l generator := by
+  have h := MulAdd.toPoint_mul (k := k) (l := l) hp
+  have hc := chain_spec k l hp isOnCurve_generator
+  exact (toPoint_inj h.1 hc.1).mp (h.2.trans hc.2.symm)
+
+/-- `k P + l Q` is the shared chain of doublings on `Fp`, for every input.
+
+The joint chain that the generator selects gives the same point, by the group law. -/
+theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
+    mulAdd k p l q =
+      ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q)) := by
+  unfold mulAdd
+  split
+  · rename_i h
+    obtain ⟨rfl, hp⟩ := h
+    exact mul_eq_chain k l hp
+  · split
+    · rename_i h
+      obtain ⟨rfl, hq⟩ := h
+      -- `l Q + k G` and `k G + l Q` are one point, by commutativity in the group.
+      have h1 := MulAdd.toPoint_mul (k := l) (l := k) hq
+      have h2 := chain_spec k l isOnCurve_generator hq
+      refine (toPoint_inj h1.1 h2.1).mp (h1.2.trans (h2.2.trans ?_).symm)
+      exact add_comm _ _
+    · exact general_eq k p l q
+
+theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+    (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
+  rw [mulAdd_eq_jacobian]
+  exact (chain_spec k l hp hq).1
+
+/-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
+theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+    (hq : q.isOnCurve = true) :
+    toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
+  rw [mulAdd_eq_jacobian]
+  exact (chain_spec k l hp hq).2
+
+/-- On points of the curve, the shared chain gives the sum of the two products. -/
+theorem mulAdd_eq (k l : Fn) {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
+    mulAdd k p l q = mul k p + mul l q := by
+  rw [← toPoint_inj (isOnCurve_mulAdd k l hp hq) (isOnCurve_add (isOnCurve_mul k hp)
+    (isOnCurve_mul l hq)), toPoint_mulAdd k l hp hq, toPoint_add (isOnCurve_mul k hp)
+    (isOnCurve_mul l hq), toPoint_mul k hp, toPoint_mul l hq]
+
+end Point
+
+end EthLib.Cryptography.Secp256k1

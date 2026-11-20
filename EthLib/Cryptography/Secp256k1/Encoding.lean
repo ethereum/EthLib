@@ -2,7 +2,8 @@ module
 
 public import EthLib.Cryptography.Secp256k1.Curve
 public import EthLib.Cryptography.Secp256k1.Errors
-public import EthLib.Base.BigEndianWords
+public import EthLib.Cryptography.Secp256k1.Sqrt
+public import EthLib.Base.BigEndian
 
 /-!
 # `Secp256k1.Encoding`
@@ -61,14 +62,6 @@ def encodeCompressed : Point → ByteArray
 def encodeUncompressed : Point → ByteArray
   | infinity => ⟨#[0x00]⟩
   | affine x y => ⟨(0x04 :: x.toBytes ++ y.toBytes).toArray⟩
-
-/-- Write the SEC 1 uncompressed point directly into a byte array. -/
-def encodeUncompressedDirect : Point → ByteArray
-  | infinity => ⟨#[0x00]⟩
-  | affine x y =>
-    let out := (ByteArray.emptyWithCapacity 65).push 0x04
-    let out := Base.pushNatBytes32 out x.val
-    Base.pushNatBytes32 out y.val
 
 /-- The point with coordinate `x` whose `y` has parity `odd`, by SEC 1 v2 §2.3.4 step 2.4.1.
 

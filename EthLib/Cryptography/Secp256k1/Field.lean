@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Cryptography.Inverse
-public import EthLib.Cryptography.Montgomery.Fin
 
 /-!
 # `Secp256k1.Field`
@@ -65,49 +64,13 @@ def Fin.powBits {m : Nat} [NeZero m] : Nat → Fin m → Nat → Fin m
 
 namespace Fp
 
-/-- The Montgomery constants of `p`, with radix `R = 2^256`.
-
-Each one derives from `p` and `R`, and is checked against its defining equation. -/
-@[inline] def params : Montgomery.Modulus 8 where
-  p := modulus
-  pLimbs := ⟨0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
-  r1 := ⟨0x3d1, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0⟩
-  r2 := ⟨0xe90a1, 0x7a2, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0⟩
-  pm2 := ⟨0xfffffc2d, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
-    0xffffffff, 0xffffffff⟩
-  pinv := 0xd2253531
-  pLimbs_spec := by decide
-  pinv_spec := by decide
-  r1_spec := by decide
-  r2_spec := by decide
-  pm2_spec := by decide
-
-/-- A base-field element held in eight Montgomery limbs. -/
-abbrev Montgomery := EthLib.Cryptography.Montgomery params
-
-/-- `a^e`, for an exponent below `2^256`.
-
-The exponent is cut into eight limbs, and the products run on Montgomery limbs. -/
-def pow (a : Fp) (e : Nat) : Fp :=
-  Montgomery.toFin
-    (Montgomery.powLimbs (Montgomery.ofFin (M := params) a) (Montgomery.Limbs.ofNat e))
+/-- `a^e`, for an exponent below `2^256`. -/
+def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
 
 /-- The inverse of `a`, by the extended Euclidean algorithm.
 
 It sends `0` to `0`. -/
 def inv (a : Fp) : Fp := Fin.inverse a
-
-/-- A square root of `a`, or `none` when `a` is not a square.
-
-Since `p = 3 mod 4`, a square `a` has the root `c = a^((p + 1) / 4)`.
-
-By Euler's criterion, `c^2 = a^((p + 1) / 2) = a * a^((p - 1) / 2) = a`.
-
-When `a` is not a square, `c^2 != a`, so the check rejects it. -/
-def sqrt (a : Fp) : Option Fp :=
-  let c := a.pow ((modulus + 1) / 4)
-  if c * c = a then some c else none
 
 end Fp
 
@@ -115,11 +78,6 @@ namespace Fn
 
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fn) (e : Nat) : Fn := Fin.powBits 256 a e
-
-/-- The inverse of `a`, by the extended Euclidean algorithm.
-
-It sends `0` to `0`. -/
-def inv (a : Fn) : Fn := Fin.inverse a
 
 end Fn
 

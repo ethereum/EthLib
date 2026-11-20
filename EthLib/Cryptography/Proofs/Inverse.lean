@@ -86,20 +86,4 @@ theorem Fin.inverse_map {m : Nat} [NeZero m] [Fact m.Prime] (f : Fin m → ZMod 
     (hf : ∀ x, f x = (x.val : ZMod m)) (a : Fin m) : f (Fin.inverse a) = (f a)⁻¹ := by
   rw [hf, hf, Fin.inverse_val]
 
-/-- For an odd prime, the Fermat and Euclidean inverses agree, including at zero. -/
-theorem Fin.inversePrime_eq_inverse {m : Nat} [NeZero m] [Fact m.Prime] (hm : 2 < m) (a : Fin m) :
-    Fin.inversePrime a = Fin.inverse a := by
-  have h : ((Fin.inversePrime a).val : ZMod m) = ((Fin.inverse a).val : ZMod m) := by
-    rw [Fin.inverse_val]
-    change (Nat.powMod a.val (m - 2) m : ZMod m) = (a.val : ZMod m)⁻¹
-    rw [Nat.powMod_def, ZMod.natCast_mod, Nat.cast_pow]
-    by_cases ha : (a.val : ZMod m) = 0
-    · rw [ha, inv_zero, zero_pow (by omega)]
-    · refine eq_inv_of_mul_eq_one_left ?_
-      rw [← pow_succ, show m - 2 + 1 = m - 1 by omega]
-      exact ZMod.pow_card_sub_one_eq_one ha
-  apply Fin.ext
-  simpa only [ZMod.val_natCast, Nat.mod_eq_of_lt (Fin.inversePrime a).isLt,
-    Nat.mod_eq_of_lt (Fin.inverse a).isLt] using congrArg ZMod.val h
-
 end EthLib.Cryptography

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Ecdsa
+public import EthLib.Cryptography.Proofs.Secp256k1.MulAdd
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
 /-!

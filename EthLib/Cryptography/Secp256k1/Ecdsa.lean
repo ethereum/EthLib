@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Secp256k1.Encoding
+public import EthLib.Cryptography.Secp256k1.MulAdd
 
 /-!
 # `Secp256k1.Ecdsa`
