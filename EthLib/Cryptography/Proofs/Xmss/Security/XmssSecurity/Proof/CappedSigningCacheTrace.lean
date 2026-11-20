@@ -61,6 +61,19 @@ theorem mem_support_range_inr {σ : Type} (request : SignRequest)
       @support ProbComp ((OracleWorld + SigningSpec).Range (.inr request) × σ) _ c) :
     @Prod.mk (Option Signature) σ output state ∈ support c := h
 
+/-- An output of a traced signing query, read at the query's answer type, is one at the signer's.
+
+It reads the output and the support at the answer type.
+
+It holds for any computation, so the kernel checks it without running one. -/
+theorem mem_support_range_inr_traced {σ ω : Type} (request : SignRequest)
+    (c : ProbComp ((Option Signature × σ) × ω))
+    (raw : ((OracleWorld + SigningSpec).Range (.inr request) × σ) × ω)
+    (h : raw ∈ @support ProbComp (((OracleWorld + SigningSpec).Range (.inr request) × σ) × ω) _
+      c) :
+    @Membership.mem ((Option Signature × σ) × ω) _ _ (support c) raw :=
+  h
+
 /-- An output of a signing query, answered without logging, is an output of the capped signer.
 
 It holds for any query and cache, so the kernel checks it without running the signer. -/
