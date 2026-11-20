@@ -719,7 +719,11 @@ theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
     by decide, by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.mainnet⟩
 
-/-- The minimal preset has the preset facts of the pin. -/
+/-- The minimal preset has the preset facts of the pin.
+
+On minimal, half the slashings vector is 32 epochs.
+
+So the pin's guard holds only at a call at most 27 epochs past the finalized state. -/
 theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     fun fork => by cases fork <;> decide, fun fork => by cases fork <;> decide, by decide,
