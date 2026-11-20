@@ -594,6 +594,78 @@ theorem simulateBlocks_glamsterdam_le_or_nil {v : ChainView} {payload : Simulate
     exact .inl hFork
   · exact .inr (simulateBlock_transactions hBlk hNil)
 
+/-! ## No sender with code stops a simulated call -/
+
+/-- A call whose sender is given never fails for the code of its sender.
+
+The overrides give the sender at the index of the call, as a simulation does.
+
+The rule on the code of a sender then never runs. -/
+theorem applyTransaction_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {index : Nat} {before : BodyOutput fork} {tx : Transaction} {overrides : BodyOverrides}
+    {sender : Address} (hs : overrides.senders index = some sender) (i : Nat)
+    (address : Address) :
+    applyTransaction env index before tx overrides ≠
+      .error (.invalidTransaction i (.senderNotEoa address)) := by
+  unfold applyTransaction
+  rw [hs]
+  cases hc : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx (some sender)
+      overrides.lifted with
+  | error e =>
+    -- The check fails with its own error, which is never the rule on the code of the sender.
+    simp only [Except.mapError, bind, Except.bind, ne_eq, Except.error.injEq,
+      BlockError.invalidTransaction.injEq, not_and]
+    rintro - rfl
+    exact checkInclusion_ne_senderNotEoa address hc
+  | ok included =>
+    -- Past the check, every failure is an abort, a state error or a trie error.
+    intro h
+    simp only [Except.mapError, bind, Except.bind] at h
+    cases hp : processTransaction env before.block included tx overrides.precompiles
+        overrides.lifted with
+    | error e' => simp [hp] at h
+    | ok out =>
+      simp only [hp] at h
+      cases hj : (before.body.beginIndex (index + 1)).join out.state with
+      | error e' => simp [hj] at h
+      | ok body =>
+        simp only [hj] at h
+        split at h
+        · simp [pure, Except.pure] at h
+        · cases hr : State.stateRoot Cryptography.Hash.Keccak.keccak256 body.block.applyChanges <;>
+            simp [hr, Functor.map, Except.map, pure, Except.pure] at h
+
+/-- The calls from index `n` on never fail for the code of a sender, when each has its sender. -/
+private theorem foldlM_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {overrides : BodyOverrides} (i : Nat) (address : Address) :
+    ∀ (txs : List Transaction) (n : Nat) (init : BodyOutput fork),
+    (∀ j, n ≤ j → j < n + txs.length → ∃ sender, overrides.senders j = some sender) →
+    (txs.zipIdx n).foldlM (fun before (tx, index) => applyTransaction env index before tx overrides)
+      init ≠ .error (.invalidTransaction i (.senderNotEoa address))
+  | [], _, _, _ => nofun
+  | tx :: rest, n, init, hs => by
+    obtain ⟨sender, hSender⟩ := hs n (Nat.le_refl n) (by simp)
+    simp only [List.zipIdx_cons, List.foldlM_cons, bind, Except.bind]
+    cases hStep : applyTransaction env n init tx overrides with
+    | error e =>
+      rintro ⟨⟩
+      exact applyTransaction_ne_senderNotEoa hSender i address hStep
+    | ok mid =>
+      exact foldlM_ne_senderNotEoa i address rest (n + 1) mid fun j hj hlt =>
+        hs j (by omega) (by simp at hlt ⊢; omega)
+
+/-- The calls of a body never fail for the code of a sender, when each call has its sender.
+
+A simulated block runs its body with the sender of each of its calls. -/
+theorem applyTransactions_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {body : BodyState} {txs : List Transaction} {overrides : BodyOverrides}
+    (hs : ∀ j < txs.length, ∃ sender, overrides.senders j = some sender) (i : Nat)
+    (address : Address) :
+    applyTransactions env body txs overrides ≠
+      .error (.invalidTransaction i (.senderNotEoa address)) := by
+  unfold applyTransactions
+  exact foldlM_ne_senderNotEoa i address txs 0 _ fun j _ hj => hs j (by simpa using hj)
+
 /-! ## Agreement with the state transition -/
 
 /-- A recovered sender passes the checks of a given sender, then the rule on its code. -/

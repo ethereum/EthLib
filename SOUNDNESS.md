@@ -5115,17 +5115,18 @@ Once it is, a transaction whose fee cap is 0 pays at a base fee of 0 (`paidBaseF
 The check of the base fee, the purchase of the gas and the settlement read that base fee, by definition.
 The base fee of the block, which BASEFEE reads, stays unchanged, since the block environment is not modified.
 
+Block times strictly increase, and a block without a time comes a block time after the block before it, as the notes and the [schema of the time](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/execute.yaml#L116-L119) say.
+The block time is 12 seconds by default, that of Mainnet.
+
 Where the source is silent or conflicts with itself, EthLib follows the fixtures, else decides:
 
 - a call without a type is type 2, and type 3 with blob hashes, as the fixtures show; a blob fee cap alone keeps type 2;
 - the source is silent on a call without a type that type 2 cannot carry, so EthLib makes authorizations type 4, and a gas price type 0, or type 1 with an access list;
 - a call without `from` comes from the zero address and one without `to` creates, as the notes say, though the schema gives the reverse;
-- times strictly increase, as the notes say, though the schema lets a time stay the same;
-- a block without a time comes 12 seconds after the block before it, as the notes say, though the schema says one second;
 - a gap block comes a block time after the block before it, 12 seconds by default, and counts toward the limit of 256 blocks;
 - an unknown base block, and a move of an address that is not a precompile, get `-32000`;
 - a precompile moved to its own address gets `-38022`;
-- the text of `-38023` is ambiguous, and the fixtures move two precompiles to one address without an error, so EthLib never gives it;
+- the fixtures move two precompiles to one address without an error, and the source lists no `-38023`, so EthLib never gives it;
 - `state` with `stateDiff` gets `-32602`, for which the source gives no code;
 - an address or a slot given twice, in hex digits of another case, gets `-32602`;
 - block and account overrides support no key beyond their schema, `difficulty` included, nor a key that differs from one only in case;
@@ -5137,6 +5138,7 @@ A simulated block differs from a real one in these places:
 - its header takes the defaults of the notes and the overrides of the request, and is not checked against its parent;
 - without validation, its base fee and its base fee per blob gas are 0, unless the request sets them;
 - each call runs from its given sender with `r`, `s` and `yParity` 0, so it needs no signature and may come from an account with code;
+- no call fails for the code of its sender (`applyTransactions_ne_senderNotEoa`), so EthLib has no code for that case, as the source lists none;
 - the cap at `2^32 - 1` on the gas limit never applies, and without validation the nonce check and the caps at `2^24` of EIP-8037 do not either;
 - without validation, a call whose fee cap is 0 pays nothing for its gas, apart from its blob gas, even below a base fee that the request sets;
 - the overrides of the accounts change the state before the block, and are not in its access list;

@@ -61,9 +61,6 @@ def insufficientFunds : ErrorCode :=
 /-- The code of a call that does not fit in what its block has left. -/
 def blockGasLimit : ErrorCode := ⟨-38015, "Block gas limit exceeded by the block's transactions"⟩
 
-/-- The code of a sender with code. -/
-def senderNotEoa : ErrorCode := ⟨-38024, "Sender is not an EOA"⟩
-
 /-- The code of init code above the limit. -/
 def initCodeTooLarge : ErrorCode := ⟨-38025, "Max init code size exceeded"⟩
 
@@ -72,6 +69,10 @@ end SimulateCode
 /-- The error of a call that cannot enter its simulated block.
 
 A nonce at the limit of EIP-2681 gives an internal error, as the fixtures show.
+
+A simulation gives the sender of each call, so the rule on the code of the sender never runs.
+
+That error cannot occur, and EthLib maps it to an internal error.
 
 The source gives no code to the other rules, so EthLib reads them as invalid parameters. -/
 def simulateInclusionError (e : InclusionError) : RpcError :=
@@ -84,9 +85,9 @@ def simulateInclusionError (e : InclusionError) : RpcError :=
   | .insufficientBalance .. => SimulateCode.insufficientFunds.toRpcError data
   | .gasAllowanceExceeded .. | .blobGasLimitExceeded .. =>
     SimulateCode.blockGasLimit.toRpcError data
-  | .senderNotEoa _ => SimulateCode.senderNotEoa.toRpcError data
   | .transaction (.initCodeTooLarge _) => SimulateCode.initCodeTooLarge.toRpcError data
-  | .transaction (.nonceOverflow _) | .missingCode _ => internalError.toRpcError data
+  | .transaction (.nonceOverflow _) | .missingCode _ | .senderNotEoa _ =>
+    internalError.toRpcError data
   | _ => RpcError.invalidParams (inclusionErrorText e)
 
 /-- The error of a simulated block whose body fails: that of its call, else an internal error. -/
