@@ -129,6 +129,15 @@ private theorem prefix_facts (start steps : Nat) (h : start + steps ≤ n)
       obtain ⟨w, _, hw⟩ := hz
       exact next_cell S e j w.2 hw
 
+/-- Hiding the chain result turns both halves of every edge into touches.
+
+The equality keeps the public and private cache contents for any initially recorded start. -/
+theorem chain_touches_run (start steps : Nat) (h : start + steps ≤ n)
+    (d : D) (st : RelabelState pub X K R) (initial : st.2 (S.cell start) = some (e d)) :
+    (fun z => ((), z.2)) <$> (simulateQ G.eagerImpl (chain step start steps h d)).run st =
+      (simulateQ G.eagerImpl (chain (touchStep S) start steps h ())).run st :=
+  (prefix_facts S e step hstep start steps h d st initial).1
+
 /-- Every supported walk caches its returned digest at the destination position. -/
 theorem chain_records_result (start steps : Nat) (h : start + steps ≤ n)
     (d : D) (st : RelabelState pub X K R) (initial : st.2 (S.cell start) = some (e d)) {z}
