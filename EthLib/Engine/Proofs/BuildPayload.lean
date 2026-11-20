@@ -164,16 +164,15 @@ private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : m
     rw [List.reverse_cons]
     exact append_singleton _ _ ih
 
-/-- A run of transactions adds one receipt each, the last with the cumulative gas of the run.
+/-- In a run of transactions, the last receipt has the cumulative gas of the run.
 
-Its priority fees sum those of the output of each transaction, at the gas that output used.
+The priority fees of the run sum those of the output of each transaction, at the gas it used.
 
 The run of each transaction follows the run of those before it. -/
 private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {body : BodyState}
     (baseFee : Nat) {l : List Transaction} {output : BodyOutput fork}
     (h : applyTransactions env body l = .ok output) :
-    output.receipts.length = l.length ∧
-      (output.receipts.map (·.2.cumulativeGasUsed)).getLast?.getD 0 = output.cumulativeGasUsed ∧
+    (output.receipts.map (·.2.cumulativeGasUsed)).getLast?.getD 0 = output.cumulativeGasUsed ∧
       ∃ outs : List TransactionOutput, outs.length = l.length ∧
         priorityFees baseFee l output.receipts =
           (List.zipWith (fun tx out => priorityFeeOf baseFee out.gasUsed tx) l outs).sum ∧
@@ -186,15 +185,15 @@ private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {bo
     simp only [applyTransactions, List.zipIdx_nil, List.foldlM_nil, pure, Except.pure,
       Except.ok.injEq] at h
     subst h
-    exact ⟨rfl, rfl, [], rfl, rfl, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
+    exact ⟨rfl, [], rfl, rfl, fun i hi => absurd hi (Nat.not_lt_zero i)⟩
   | append_singleton l tx ih =>
     rw [applyTransactions_append] at h
     obtain ⟨before, hBefore, hStep⟩ := bind_ok_iff.mp h
-    obtain ⟨hLen, hLast, outs, hOuts, hSum, hRuns⟩ := ih hBefore
+    obtain ⟨hLast, outs, hOuts, hSum, hRuns⟩ := ih hBefore
+    have hLen := applyTransactions_receipts_length hBefore
     obtain ⟨included, out, hInc, hProc, -, hCum, -⟩ := applyTransaction_eq_ok hStep
     obtain ⟨outcome, logs, hReceipts⟩ := applyTransaction_receipts hStep
-    refine ⟨by simp [hReceipts, hLen], by simp [hReceipts, makeReceipt], outs ++ [out],
-      by simp [hOuts], ?_, ?_⟩
+    refine ⟨by simp [hReceipts, makeReceipt], outs ++ [out], by simp [hOuts], ?_, ?_⟩
     · have hUsed : (List.zipWith (· - ·) (before.receipts.map (·.2.cumulativeGasUsed))
           (0 :: before.receipts.map (·.2.cumulativeGasUsed))).length = l.length := by
         simp [hLen]
@@ -254,7 +253,7 @@ theorem blockValue_of_buildPayload
   obtain ⟨hashes, hHashes, hApply, -⟩ := runBody_eq_ok.mp hR
   obtain ⟨state, body, txs, hDao, hStart, hTxs, hReceipts⟩ := applyBody_receipts hApply
   rw [hBlock]
-  obtain ⟨-, -, outs, hOuts, hSum, hRuns⟩ :=
+  obtain ⟨-, outs, hOuts, hSum, hRuns⟩ :=
     applyTransactions_priorityFees (baseFeeOf (blockEnvironment chain.config hashes
       (buildHeader chain.config parent parentHash attributes choices))) hTxs
   refine ⟨hashes, state, body, outs, hHashes, hDao, hStart, hOuts, ?_, fun i hi => ?_⟩

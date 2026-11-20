@@ -4927,8 +4927,19 @@ It reports `2^17` blob gas for each versioned hash.
 From Dencun, its blob gas price is the base fee per blob gas that the blob schedule of the chain, at the fork, number and timestamp of the block, gives for the excess blob gas of its header.
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
-They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
-No theorem yet shows that they succeed on the blocks of a valid view.
+They are built exactly when the block has one receipt for each transaction, and each transaction has a hash and a sender (`exists_receiptInfos_eq_ok_iff`).
+That sender is the one that the signature names at the fork of the block.
+Otherwise they fail with `-32603`.
+Computing the contract address of a creation never fails, since each nonce is below `2^256` (`createAddress_ok`, `Proofs/Evm/Call/ContractAddress.lean`).
+In a valid view, a canonical block after the lowest has one receipt for each transaction (`Valid.length_receipts`), since it keeps the receipts of its run.
+The run of a body gives one receipt for each transaction (`applyTransactions_receipts_length`, `Proofs/Blocks/Transition.lean`).
+Each signature of the block names a sender (`Valid.exists_recoverSender`, `Proofs/Rpc/Block.lean`).
+Each transaction of the block has a hash (`Valid.exists_transactionHash`), since the run computes the transactions root from their bytes (`transactionsRoot_eq_ok_iff`, `Proofs/Blocks/TypedRoots.lean`).
+So the receipt objects of the block are built (`Valid.exists_receiptInfos`).
+The method for the receipts of a block answers them for a parameter that resolves to that block (`Valid.exists_blockReceipts`).
+The method for one receipt answers the object at the index of a transaction that the lookup by hash finds there (`Valid.exists_transactionReceipt`).
+The lowest block, the blocks off the canonical chain and the pending block are inputs of the view.
+So no theorem says that their receipt objects are built.
 From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success (`outcomeOf_of_byzantium`), which the object writes as `status` `0x1`; before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
 In a valid view, take a canonical block after the lowest.
 Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
