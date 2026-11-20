@@ -1,8 +1,10 @@
 """Signing gives the same bytes on every call, whatever secret keys the extension keeps."""
 
+import re
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
@@ -13,9 +15,15 @@ from . import fixtures
 # The extension keeps the secret keys of the last few seeds, which only the time of a call shows.
 # A seed it does not keep builds the top tree and a bottom tree, each costing a key generation.
 # A signature in a bottom tree it keeps makes one one-time signature.
+# Each test builds trees, so the module runs only with the slow cases.
+pytestmark = fixtures.slow
 
-# The number of seeds the extension keeps: update it with `XMSS_KEY_CACHE_SEEDS` in `xmss.c`.
-CACHE_SEEDS = 2
+# The number of seeds the extension keeps, read from `xmss.c`.
+_SLOTS = re.search(
+    r"#define XMSS_KEY_CACHE_SEEDS (\d+)", (Path(__file__).parents[2] / "xmss.c").read_text()
+)
+assert _SLOTS is not None
+CACHE_SEEDS = int(_SLOTS[1])
 
 SEED = fixtures.SEED_KNOWN_ANSWER
 MESSAGE = fixtures.MESSAGE_KNOWN_ANSWER
@@ -52,7 +60,8 @@ def run_threads(work: Callable[[int], bytes], count: int) -> list[bytes]:
         except BaseException as error:
             errors.append(error)
 
-    threads = [threading.Thread(target=run, args=(i,)) for i in range(count)]
+    # Daemon threads, so a hung one fails the test without keeping the process alive.
+    threads = [threading.Thread(target=run, args=(i,), daemon=True) for i in range(count)]
     for thread in threads:
         thread.start()
     deadline = time.monotonic() + 1800
