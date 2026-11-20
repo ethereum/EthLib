@@ -2827,16 +2827,18 @@ The next committee at the start of a run is the current one at its end, if it cr
 private theorem seat_union_card (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high highC : ℕ)
     {events eventsF eventsC : List (BalanceEvent preset)}
     (replayed : tail.balanceEvents high = .ok events)
-    (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (replayedC : tailC.balanceEvents high = .ok eventsC)
-    (AV AK : Finset ℕ)
+    (replayedF : fromFin.balanceEvents highC = .ok eventsF)
+    (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (altairF : .altair ≤ fork) (AV AK : Finset ℕ)
     (debitsC : ∀ i ∈ AV, 0 < ((eventsF ++ eventsC).map (syncDebit i)).sum ∨
-      (0 < grossScan i high (fromFin.append tailC) ∧
+      (0 < grossScan i highC (fromFin.append tailC) ∧
         ∀ (u : ForkedBeaconState preset) (_ : Run config checks ⟨fork, fin⟩ u) (p : ValidatorIndex),
-          u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i))
+          u.fork < .glamsterdam → getBeaconProposerIndex u.state = .ok p → p.toNat ≠ i) ∨
+      ∃ w, split.validators.data[i]? = some w ∧
+        w.pubkey ∈ (split.currentSyncCommittee altairF).value.pubkeys.toList)
     (debitsR : ∀ i ∈ AK, 0 < (events.map (syncDebit i)).sum) :
     (AV ∪ AK).card ≤ preset.SYNC_COMMITTEE_SIZE.toNat *
       (((getCurrentEpoch pulled).toNat + 1) /
@@ -2847,7 +2849,6 @@ private theorem seat_union_card (h : Setting config checks g split fin pulled an
   classical
   obtain ⟨toFin⟩ := h.toFin
   have apart := h.parameters.lookahead
-  have altairF : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
   have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
   have splitPulled := UInt64.le_iff_toNat_le.mp h.called
   have pulledCounted := UInt64.le_iff_toNat_le.mp h.later
@@ -2890,13 +2891,13 @@ private theorem seat_union_card (h : Setting config checks g split fin pulled an
         (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
       (toFin.append fromFin) tail h.fulu (by rw [hP]; exact periodsR)
   obtain ⟨LsC, BC, SC, DC, -, -, -, -, -, grossC, propC, debitC, familyC⟩ :=
-    credited_pieces_seated h.genesis apart (y := ⟨fork, counted⟩) h.early h.delay high
+    credited_pieces_seated h.genesis apart (y := ⟨fork, counted⟩) h.early h.delay highC
       ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
         (getCurrentEpoch fin).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
       toFin (fromFin.append tailC) h.fulu (by rw [hP]; exact periodsC)
   simp only [hP] at familyR familyC debitR debitC grossC
-  have replayedRC : (fromFin.append tailC).balanceEvents high = .ok (eventsF ++ eventsC) :=
-    DirectSafety.Apriori.Internal.balanceEvents_append fromFin tailC high replayedF replayedC
+  have replayedRC : (fromFin.append tailC).balanceEvents highC = .ok (eventsF ++ eventsC) :=
+    DirectSafety.Apriori.Internal.balanceEvents_append fromFin tailC highC replayedF replayedC
   have arith : ((getCurrentEpoch counted).toNat / P - (getCurrentEpoch fin).toNat / P + 1) +
       ((getCurrentEpoch pulled).toNat / P - (getCurrentEpoch split).toNat / P - 1) ≤
       ((getCurrentEpoch pulled).toNat + 1) / P - (getCurrentEpoch fin).toNat / P + 1 +
@@ -3000,13 +3001,17 @@ private theorem seat_union_card (h : Setting config checks g split fin pulled an
     · -- a key debited or credited on C's run holds a seat, unless it is a proposer
       obtain ⟨w, j, found, hj, mem⟩ : ∃ (w : Validator) (j : ℕ),
           counted.validators.data[i]? = some w ∧ j ≤ nC ∧ w.pubkey ∈ LsC j := by
-        rcases debitsC i inV with spent | ⟨seen, notProposer⟩
+        rcases debitsC i inV with spent | ⟨seen, notProposer⟩ | ⟨ws, foundS, memS⟩
         · obtain ⟨-, w, j, found, hj, mem⟩ := debitC (eventsF ++ eventsC) replayedRC i spent
           exact ⟨w, j, found, hj, mem⟩
         · rcases grossC i seen with proposed | ⟨w, j, found, hj, mem⟩
           · obtain ⟨u, q, p, early', found, same⟩ := propC i proposed
             exact absurd same (notProposer u q p early' found)
           · exact ⟨w, j, found, hj, mem⟩
+        · -- a seat of the split's current committee, which C's committees hold
+          obtain ⟨jc, hjc, e⟩ := firstC
+          obtain ⟨c, foundC, sameC⟩ := validators_getElem?_of_validatorKeys_prefix keptC foundS
+          exact ⟨c, jc, foundC, hjc, by rw [sameC, e]; exact memS⟩
       exact Finset.mem_union_left _ (Finset.mem_filter.mpr
         ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, w, found, LsC j,
           List.mem_map.mpr ⟨j, List.mem_range.mpr (by omega), rfl⟩, mem⟩)
@@ -11920,8 +11925,8 @@ private theorem debit_keys_le (h : Setting config checks g split fin pulled anc 
   obtain ⟨eventsC, replayedC⟩ := tailC.balanceEvents_ok h.early high
   have inj : Function.Injective fun v : ValidatorIndex => v.toNat := fun a b same =>
     UInt64.toNat_inj.mp same
-  have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
-    (A.image fun v => v.toNat) (B.image fun v => v.toNat)
+  have union := seat_union_card h fromFin tail tailC high high replayed replayedF replayedC
+    (Nat.le_trans (by decide) h.fulu) (A.image fun v => v.toNat) (B.image fun v => v.toNat)
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       have := debitsF v hv
@@ -14180,6 +14185,26 @@ private theorem exited_not_proposer (h : Setting config checks g split fin pulle
   rw [same, inactive] at active
   exact Bool.false_ne_true active
 
+/-- A key with a sync credit over a run's replayed events has a gross credit on the run. -/
+private theorem syncCr_gross {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+    (early : y.fork < .glamsterdam) (tailC : Run config checks x y) (highC : ℕ)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
+  obtain ⟨-, sync⟩ := creditScan_bounds (∅ : Finset ValidatorIndex) UInt64.toNat
+    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
+    (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
+  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
+      simp only [decide_eq_true_eq] at covered ⊢
+      exact Or.inr (Or.inr covered))
+    (Or.inr fun ok _ fork early replayed i =>
+      (sum_map_sync _ (keyCredit i)).symm.trans
+        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra early v
+  have conv : syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map (keyCredit v)).sum :=
+    sum_map_sync _ (keyCredit v)
+  unfold grossScan
+  rw [conv] at positive
+  omega
+
 /-- A key with a sync credit over the events of the shared segment has a gross credit on a run.
 
 The run is the shared segment followed by a tail from the split. -/
@@ -14189,22 +14214,11 @@ private theorem syncCr_gross_shared (h : Setting config checks g split fin pulle
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (v : ℕ) (positive : 0 < syncCr eventsF v) :
     0 < grossScan v high (fromFin.append tailC) := by
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨-, sync⟩ := creditScan_bounds (∅ : Finset ValidatorIndex) UInt64.toNat
-    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) high
-    (fun _ => 0) fromFin replayedF (fun e _ _ => by simp)
-  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
-      simp only [decide_eq_true_eq] at covered ⊢
-      exact Or.inr (Or.inr covered))
-    (Or.inr fun ok _ fork early replayed i =>
-      (sum_map_sync _ (keyCredit i)).symm.trans
-        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
-  have conv : syncCr eventsF v = ((eventsF.filter (·.source = .sync)).map (keyCredit v)).sum :=
-    sum_map_sync _ (keyCredit v)
+  have shared := syncCr_gross (Nat.le_trans (by decide) h.fulu) h.early fromFin high replayedF v
+    positive
   have split := creditScan_append (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
     (fun _ => false) v high fromFin tailC
-  unfold grossScan
-  rw [conv] at positive
+  unfold grossScan at shared ⊢
   omega
 
 /-- The rounding bands of a set of keys are the band for each key with a sync debit. -/
@@ -14354,8 +14368,8 @@ private theorem bands_seats_base (h : Setting config checks g split fin pulled a
   --
   -- A key that exited by the finalized epoch and has a shared credit holds a seat of C's run.
   obtain ⟨everyone, hEveryone⟩ : ∃ everyone, everyone = fV ∪ (f4 ∪ f5 ∪ f6 ∪ U) := ⟨_, rfl⟩
-  have union := seat_union_card h fromFin tail tailC high replayed replayedF replayedC
-    ((everyone.filter fun v =>
+  have union := seat_union_card h fromFin tail tailC high high replayed replayedF replayedC
+    (Nat.le_trans (by decide) h.fulu) ((everyone.filter fun v =>
       0 < ((eventsF ++ eventsC).map (syncDebit v.toNat)).sum ∨
         ((pinTerms config pulled anc fin).exitBeforeFin v.toNat = true ∧
           0 < syncCr eventsF v.toNat)).image fun v => v.toNat)
@@ -14366,9 +14380,9 @@ private theorem bands_seats_base (h : Setting config checks g split fin pulled a
       rcases (Finset.mem_filter.mp hv).2 with debit | ⟨exit, credit⟩
       · exact .inl debit
       · obtain ⟨w, found, exited⟩ := exitedOf v exit
-        exact .inr ⟨syncCr_gross_shared h fromFin tailC high replayedF v.toNat credit,
+        exact .inr (.inl ⟨syncCr_gross_shared h fromFin tailC high replayedF v.toNat credit,
           fun u run p early proposer => exited_not_proposer h found exited u run p early
-            proposer⟩)
+            proposer⟩))
     (fun i hi => by
       obtain ⟨v, hv, rfl⟩ := Finset.mem_image.mp hi
       exact (Finset.mem_filter.mp hv).2)
@@ -18130,28 +18144,6 @@ private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run confi
   unfold grossScan
   omega
 
-/-- A key with a sync credit over C's replayed events has a gross credit on C's run. -/
-private theorem syncCr_gross (h : Setting config checks g split fin pulled anc counted V)
-    {ending : BeaconState preset fork}
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, ending⟩) (highC : ℕ)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨-, sync⟩ := creditScan_bounds (∅ : Finset ValidatorIndex) UInt64.toNat
-    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
-    (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
-  have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
-      simp only [decide_eq_true_eq] at covered ⊢
-      exact Or.inr (Or.inr covered))
-    (Or.inr fun ok _ fork early replayed i =>
-      (sum_map_sync _ (keyCredit i)).symm.trans
-        (PinSplit5.slot_syncDebit_zero fork ok early replayed i).2) electra h.early v
-  have conv : syncCr eventsC v = ((eventsC.filter (·.source = .sync)).map (keyCredit v)).sum :=
-    sum_map_sync _ (keyCredit v)
-  unfold grossScan
-  rw [conv] at positive
-  omega
-
 /-- A key that R holds withdrawable by the next epoch is a key with `withdrawnRB`. -/
 private theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
     {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
@@ -18619,7 +18611,8 @@ private theorem credit_band_bounds (h : Setting config checks g split fin pulled
       fun s h => by simp at h; simp [h]
   · rcases Nat.eq_zero_or_pos (syncCr eventsC i) with none | positive
     · exact .inl none
-    · exact .inr (syncCr_gross h tailC highC replayedC i positive)
+    · exact .inr (syncCr_gross (Nat.le_trans (by decide) h.fulu) h.early tailC highC replayedC i
+        positive)
   · unfold bandC
     split_ifs <;> omega
   · rcases Nat.eq_zero_or_pos (consAmt eventsC i) with none | positive
@@ -21674,7 +21667,8 @@ private theorem registry_exited
     rcases positive credited with sharedSync | sync | cons
     · simp only [sharedSync, ↓reduceIte]
       omega
-    · have gross := syncCr_gross h tailC highC replayedC i sync
+    · have gross := syncCr_gross (Nat.le_trans (by decide) h.fulu) h.early tailC highC replayedC i
+        sync
       unfold bandC
       split_ifs <;> omega
     · have index : i.toUInt64.toNat = i := toNat_toUInt64_of_lt
@@ -21735,7 +21729,8 @@ private theorem unit_gate (h : Setting config checks g split fin pulled anc coun
         (scan_le_events _ _ (· = .consolidations) (by intro s; simp) tailC highC v replayedC)))
   by_cases seat : 0 < syncCr eventsC v.toNat
   · left
-    have := syncCr_gross h tailC highC replayedC v.toNat seat
+    have := syncCr_gross (Nat.le_trans (by decide) h.fulu) h.early tailC highC replayedC
+      v.toNat seat
     simp only [creditedKey, decide_eq_true_eq]
     omega
   by_cases debitF : 0 < syncD eventsF v.toNat
@@ -23358,7 +23353,8 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         omega
       · omega
     have noSeat : ¬ 0 < syncCr eventsC v.toNat := fun pos => by
-      have := syncCr_gross h tailC highC replayedC v.toNat pos
+      have := syncCr_gross (Nat.le_trans (by decide) h.fulu) h.early tailC highC replayedC
+        v.toNat pos
       omega
     unfold syncCr at noSeat
     omega
