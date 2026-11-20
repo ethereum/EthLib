@@ -21951,7 +21951,6 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
         (syncD eventsF v.toNat + syncD events v.toNat +
           inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat)) := by
   classical
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨-, flagS, rb, frozenFlag⟩ := Finset.mem_filter.mp member
   have rb' := rb
   rw [slashedRB_eq] at rb'
@@ -24167,6 +24166,13 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     have outside := (Finset.mem_filter.mp inNew).2
     simp [outside, hcr i, act]
 
+/-- The sum of a function of the positions over the images of the positions of a set is its sum. -/
+private theorem sum_image_ofNat (T : Finset ℕ) (small : ∀ i ∈ T, i < 2 ^ 64) (f : ℕ → ℕ) :
+    ∑ v ∈ T.image UInt64.ofNat, f v.toNat = ∑ i ∈ T, f i := by
+  rw [Finset.sum_image fun a ha b hb same => by
+    rw [← UInt64.toNat_ofNat_of_lt' (small a ha), ← UInt64.toNat_ofNat_of_lt' (small b hb), same]]
+  exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
+
 /-- The keys of `SC` are the keys of `slashedOnC` inside the split's registry, read at positions. -/
 private theorem sum_SC_positions (h : Setting config checks g split fin pulled anc counted V)
     (f : ℕ → ℕ) :
@@ -24287,7 +24293,6 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
         ∀ u, m.state.validators.data[i.toNat]? = some u →
           (getCurrentEpoch pulled).toNat + 1 < u.withdrawableEpoch.toNat) := by
   classical
-  obtain ⟨toFin⟩ := h.toFin
   obtain ⟨hLt, hSplit, hCount⟩ : i.toNat < counted.validators.data.size ∧
       (split.validators.data[i.toNat]?.map (·.slashed)).getD false = false ∧
       (counted.validators.data[i.toNat]?.map (·.slashed)).getD false = true := by
@@ -24418,24 +24423,16 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A bound along R's run from the first state of a key holds on the whole run.
 
 Before the first state `c` the key is absent, so its effective balance is zero there. -/
-private theorem path_le_of_start
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) {c : BeaconState preset fork}
-    (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
-    (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) (cutC : toC.append fromC = fromFin)
-    (i X : ℕ)
+private theorem path_le_of_start {a e : ForkedBeaconState preset} {c : BeaconState preset fork}
+    (toC : Run config checks a ⟨fork, c⟩) (fromC : Run config checks ⟨fork, c⟩ e) (i X : ℕ)
     (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
-    (after : ∀ z ∈ (fromC.append tail).balancePath, effectiveAt z i ≤ X) :
-    ∀ z ∈ (fromFin.append tail).balancePath, effectiveAt z i ≤ X := by
+    (after : ∀ z ∈ fromC.balancePath, effectiveAt z i ≤ X) :
+    ∀ z ∈ (toC.append fromC).balancePath, effectiveAt z i ≤ X := by
   intro z member
-  have path := Run.balancePath_append toC (fromC.append tail)
-  have cut : toC.append (fromC.append tail) = fromFin.append tail := by
-    rw [← cutC, Run.append_assoc]
-  rw [cut] at path
-  rw [path] at member
+  rw [Run.balancePath_append] at member
   rcases List.mem_append.mp member with front | later
   · rcases before z front with atC | zero
-    · obtain ⟨rest, head⟩ := Run.balancePath_head (fromC.append tail)
+    · obtain ⟨rest, head⟩ := Run.balancePath_head fromC
       rw [atC]
       exact after _ (by rw [head]; exact List.mem_cons_self)
     · rw [zero]
@@ -24667,14 +24664,8 @@ private theorem envelope_of_clean_fin (h : Setting config checks g split fin pul
     have envC := envelope_of_voter h fromFin tail replayedF replayed v toC fromC cutC clean
       slashedLate insideC (Or.inr floorStart) (fun w fw clean' =>
         late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw))
-    rw [← cutC, Run.balancePath_append] at inPath
-    rcases List.mem_append.mp inPath with onTo | onFrom
-    · rcases before z onTo with rfl | zero
-      · obtain ⟨rest, head⟩ := Run.balancePath_head fromC
-        exact envC _ (by rw [head]; exact List.mem_cons_self)
-      · rw [zero]
-        exact Nat.zero_le _
-    · exact envC z (List.mem_of_mem_tail onFrom)
+    rw [← cutC] at inPath
+    exact path_le_of_start toC fromC v.toNat _ before envC z inPath
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The replays of the branch from `fin` to the split and of R's run, read at R's epoch.
@@ -24710,7 +24701,6 @@ private theorem induced_debited (h : Setting config checks g split fin pulled an
     (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
     (positive : 0 < inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i) :
     0 < syncD eventsF i + syncD events i := by
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
   obtain ⟨replayedF', replayed'⟩ :=
     replays_at_pulled tail high endEpoch replayed fromFin replayedF
   by_contra none
@@ -24920,7 +24910,6 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
       (Nat.le_add_left 2 ((pinTerms config pulled anc fin).perIncrement *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat))
     omega
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
   obtain ⟨-, unslashedS, -⟩ := Finset.mem_filter.mp inSlashed
@@ -25573,7 +25562,6 @@ private theorem cs_key_round (h : Setting config checks g split fin pulled anc c
   have up := h.bands.2
   have incBig := h.facts.incrementSize
   have below := h.facts.below
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨inSlashed, created⟩ := Finset.mem_filter.mp member
   obtain ⟨-, -, slashedC⟩ := Finset.mem_filter.mp inSlashed
   have limit := BeaconState.registryWithinLimit_of_lt h.early counted
@@ -26007,9 +25995,8 @@ private theorem charged_window (h : Setting config checks g split fin pulled anc
     rw [UInt64.toNat_ofNat_of_lt' (small i inT)]
     exact ⟨inT, keys i inT⟩
   have image : ∑ v ∈ T.image (fun i => (UInt64.ofNat i : ValidatorIndex)),
-      chargeAmt tailC v.toNat = ∑ i ∈ T, chargeAmt tailC i := by
-    rw [Finset.sum_image injective]
-    exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
+      chargeAmt tailC v.toNat = ∑ i ∈ T, chargeAmt tailC i :=
+    sum_image_ofNat T small (chargeAmt tailC)
   refine ⟨image ▸ charge_amounts_le_queueWindow h tailC _ fun v member => ?_, ?_⟩
   · obtain ⟨-, inactive, c, inRun, index⟩ := back v member
     exact ⟨c, inRun, index, (charge_due h tailC inactive inRun index).2.1⟩
@@ -26387,7 +26374,6 @@ private theorem free_key (h : Setting config checks g split fin pulled anc count
       (((pinTerms config pulled anc fin).rise v.toNat + 2 * balanceAt counted v.toNat) +
         2 * syncD eventsF v.toNat + 2 * syncD eventsC v.toNat) := by
   classical
-  obtain ⟨fin0⟩ := h.toFin
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have below : v.toNat < 2 ^ 64 := v.toNat_lt
   obtain ⟨w, foundR, -, -, -⟩ := free_slashable h inside below unslashedS slashedC notSlashedR
@@ -27337,23 +27323,7 @@ private theorem flow_key (h : Setting config checks g split fin pulled anc count
       simp only [pinTerms, Bool.and_eq_true, decide_eq_true_eq] at this
       exact this.2
     exact rate_per_increment _ _ _ _ _ _ incPos wdPos (ebUp_aligned h i) rateLow
-  · have rateLow : 11 * (pinTerms config pulled anc fin).depth *
-        ((pinTerms config pulled anc fin).perIncrement *
-          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
-        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-      have test : 11 * (pinTerms config pulled anc fin).depth *
-          ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
-          preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-        have shown : (!decide (11 * (pinTerms config pulled anc fin).depth *
-            ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
-              preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = false := low
-        simpa using shown
-      have aligned : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat %
-          preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-        have := congrArg UInt64.toNat h.aligned.2.2
-        simpa [UInt64.toNat_mod] using this
-      exact rate_per_increment _ _ _ _ _ _ incPos wdPos aligned test
-    exact rateLow
+  · exact wide_of_lowGain h low
 
 /-- The rate of one increment, at the pin's base reward, is at least two.
 
@@ -27468,13 +27438,6 @@ private theorem whistleEnv_sum_le (h : Setting config checks g split fin pulled 
           ((pinTerms config pulled anc fin).bF i) := (Finset.mul_sum _ _ _).symm
     _ ≤ _ := Nat.mul_le_mul_left _ (Finset.sum_le_sum_of_subset fun i member =>
         Finset.mem_range.mpr (inside i member))
-
-/-- The sum of a function of the positions over the images of the positions of a set is its sum. -/
-private theorem sum_image_ofNat (T : Finset ℕ) (small : ∀ i ∈ T, i < 2 ^ 64) (f : ℕ → ℕ) :
-    ∑ v ∈ T.image UInt64.ofNat, f v.toNat = ∑ i ∈ T, f i := by
-  rw [Finset.sum_image fun a ha b hb same => by
-    rw [← UInt64.toNat_ofNat_of_lt' (small a ha), ← UInt64.toNat_ofNat_of_lt' (small b hb), same]]
-  exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
 
 /-- The sync flows of any keys on the three runs fit the sync part of the credit total.
 
@@ -27667,7 +27630,6 @@ private theorem slack_le (h : Setting config checks g split fin pulled anc count
         (pinTerms config pulled anc fin).depth * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat) +
       SB + SU := by
   classical
-  obtain ⟨toPulled⟩ := h.toPulled
   have grows : split.validators.data.size ≤ counted.validators.data.size := by
     have := registryGrows_of_chainSteps tailC.chainSteps
     exact this
@@ -27985,18 +27947,15 @@ private theorem flow_whist_of (h : Setting config checks g split fin pulled anc 
   have within := BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted
   have credits : ∑ i ∈ T1.filter (fun i => ¬ 0 < depPre eventsC i), whistC tailC highC i ≤
       N / W := by
-    have ofNat : ∀ i ∈ T1.filter (fun i => ¬ 0 < depPre eventsC i),
-        (UInt64.ofNat i).toNat = i := fun i member => by
-      have inT1 := (Finset.mem_filter.mp member).1
-      rw [hT1] at inT1
-      have inSlashed := (Finset.mem_filter.mp inT1).1
-      unfold slashedOnC at inSlashed
-      exact UInt64.toNat_ofNat_of_lt'
-        (Nat.lt_trans (Finset.mem_range.mp (Finset.mem_filter.mp inSlashed).1) within)
+    have small : ∀ i ∈ T1.filter (fun i => ¬ 0 < depPre eventsC i), i < 2 ^ 64 :=
+      fun i member => by
+        have inT1 := (Finset.mem_filter.mp member).1
+        rw [hT1] at inT1
+        have inSlashed := (Finset.mem_filter.mp inT1).1
+        unfold slashedOnC at inSlashed
+        exact Nat.lt_trans (Finset.mem_range.mp (Finset.mem_filter.mp inSlashed).1) within
     have image := bound ((T1.filter (fun i => ¬ 0 < depPre eventsC i)).image UInt64.ofNat)
-    rw [Finset.sum_image fun a ha b hb same => by
-      rw [← ofNat a ha, ← ofNat b hb, same]] at image
-    exact le_of_eq_of_le (Finset.sum_congr rfl fun i member => by rw [ofNat i member]) image
+    rwa [sum_image_ofNat _ small] at image
   -- `N` is at most the numerator that `otherCredits` pays, with the credits counted twice
   have numerator : N ≤ 2 * (Sx + (11 * Y + 9) / 10 +
       Ck) + 2 * (N / W) := by
@@ -29875,7 +29834,8 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     refine Nat.max_le.2 ⟨Nat.zero_le _, (List.max_le_iff (List.ne_nil_of_mem mapped)).2 ?_⟩
     intro x hx
     obtain ⟨z, hz, rfl⟩ := List.mem_map.mp hx
-    exact path_le_of_start fromFin tail toC fromC cutC v.toNat _ before envAll z hz
+    rw [← cutC, ← Run.append_assoc] at hz
+    exact path_le_of_start toC (fromC.append tail) v.toNat _ before envAll z hz
   have noCredit : bandC tailC highC v.toNat = 0 → bandX fin highC v.toNat = 0 → Cr = 0 := by
     intro hbC hbX
     have up := h.bands.2
