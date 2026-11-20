@@ -17074,6 +17074,37 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
   · have stays := same (by omega)
     omega
 
+/-- Off the high gain rate, the depth of the window is small against the rate.
+
+It is below an eleventh of an increment.
+
+It is the rate premise of `created_ceiling` and `created_key_ceiling`. -/
+private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc counted V)
+    (lowGain : (pinTerms config pulled anc fin).gainHigh = false) :
+    11 * (min (pinTerms config pulled anc fin).depth
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+        ((pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+      WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  have low : 11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+    have notHigh : (!decide (11 * (pinTerms config pulled anc fin).depth *
+      ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+        preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = false := lowGain
+    simpa using notHigh
+  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+        (pinTerms config pulled anc fin).perIncrement *
+          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
+  have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
+    (pinTerms config pulled anc fin).perIncrement
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat (pinTerms config pulled anc fin).depth
+    h.bands.1 (by decide) (cap_values_aligned h.aligned).2 (by rw [← gainMax]; exact low)
+  exact Nat.lt_of_le_of_lt
+    (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _))) wide
+
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
 Its credits since its creation are credits of C's branch, which P's `created_ceiling` reads.
@@ -17094,8 +17125,62 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
     (active : isActiveAt counted (getCurrentEpoch counted) i = true)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
       (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
-    effectiveAt a i ≤ createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i :=
-  sorry
+    effectiveAt a i ≤ createdCeil (pinTerms config pulled anc fin) tailC highC eventsC i := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  obtain ⟨pre', post', cut', aEarly, -⟩ := Run.contains_step_facts member h.early
+  by_cases high : (pinTerms config pulled anc fin).gainHigh = true
+  · simp only [createdCeil, high, ↓reduceIte]
+    exact PinSplit5.effectiveAt_le_capMax ((shared.append fromFin).append pre') h.genesis h.caps
+      aEarly i
+  have lowGain : (pinTerms config pulled anc fin).gainHigh = false := by simpa using high
+  -- the key as a validator index
+  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
+  unfold BeaconState.RegistryWithinLimit at limit
+  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  obtain ⟨w, found, -⟩ := isActiveAt_eq_true_iff.mp active
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  have below : i < 2 ^ 64 := by omega
+  obtain ⟨v, hvi⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' below⟩
+  subst hvi
+  have member_active : v ∈ activeVoters counted :=
+    List.mem_toFinset.mpr (mem_getActiveValidatorIndices_of_isActiveAt active)
+  have activated := activated_of_activeVoters h.early member_active
+  have absent : split.validators.data.size ≤ v.toNat := Nat.le_of_not_lt created
+  have key := key_of_lowGain h lowGain
+  -- the credits of the run are in the flows
+  obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
+    syncCr eventsC v.toNat := ⟨_, rfl⟩
+  have flows : grossScan v.toNat highC tailC +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z :=
+    hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
+      (by simpa using electra) v.toNat highC replayedC).1
+  obtain ⟨z, pre, post, cut, positive, ahead, bound⟩ := created_ceiling h tailC highC endEpochC
+    activated absent (pinTerms config pulled anc fin).perIncrement rfl key flows
+  -- the state `a` is a state of the run, so it is before `z` or after it
+  have inPath : a ∈ tailC.balancePath := by
+    rw [cut', Run.balancePath_append]
+    refine List.mem_append_left _ ?_
+    simp only [Run.balancePath, List.mem_append]
+    exact .inr (List.mem_of_mem_head? (Step.balancePath_ends step).1)
+  have ends : a ∈ pre.balancePath ∨ a ∈ post.balancePath := by
+    rw [cut, Run.balancePath_append] at inPath
+    rcases List.mem_append.mp inPath with first | later
+    · exact .inl first
+    · exact .inr (List.mem_of_mem_tail later)
+  rcases ends with before | after
+  · sorry
+  have ceiling := bound a after
+  have minLe : min (pinTerms config pulled anc fin).depth
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) ≤
+        (pinTerms config pulled anc fin).depth := Nat.min_le_left _ _
+  simp only [createdCeil, lowGain, Bool.false_eq_true, ↓reduceIte]
+  rw [← hZ, Nat.mul_assoc (11 * Z / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat))] at *
+  exact ceiling.trans (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add_left
+    (Nat.mul_le_mul_right _ minLe) _) (Nat.mul_le_mul_right _ minLe)) le_rfl)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The whistleblower credits of any set of keys on C's branch are at most the reward base.
@@ -23335,28 +23420,10 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
           bandR (eventsF ++ events) v.toNat)) + bandX fin highC v.toNat := by
   classical
   obtain ⟨toPulled⟩ := h.toPulled
-  have incPos := h.bands.1
-  have alignedMax := (cap_values_aligned h.aligned).2
   have grows : split.validators.data.size ≤ pulled.validators.data.size :=
     registryGrows_of_chainSteps toPulled.chainSteps
   have activated := activated_of_activeVoters h.early (Finset.mem_filter.mp member).1
   have absent := Nat.le_trans grows created
-  -- the rate premise of the ceiling, at the depth of the window
-  have gainMax : (pinTerms config pulled anc fin).gainRateMax =
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-        (pinTerms config pulled anc fin).perIncrement *
-          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
-  have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
-    (pinTerms config pulled anc fin).perIncrement
-    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat (pinTerms config pulled anc fin).depth incPos
-    (by decide) alignedMax (by rw [← gainMax]; exact low)
-  have key : 11 * (min (pinTerms config pulled anc fin).depth
-      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
-        ((pinTerms config pulled anc fin).perIncrement *
-          (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
-      WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-    Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _))) wide
   -- the key is beyond R's registry, so its flow gain is charged while the rate is low
   have notPosition : v.toNat ∉ (pinTerms config pulled anc fin).positions := by
     show v.toNat ∉ Finset.range pulled.validators.data.size
@@ -23367,8 +23434,8 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
       ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
         preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = false
     simp [low]
-  exact created_key_ceiling h tail fromFin tailC highC endEpochC replayedC activated absent key
-    (Or.inr ⟨notPosition, lowGain⟩)
+  exact created_key_ceiling h tail fromFin tailC highC endEpochC replayedC activated absent
+    (key_of_lowGain h lowGain) (Or.inr ⟨notPosition, lowGain⟩)
     (created_band h fromFin high endEpoch replayedF tailC highC endEpochC replayedC activated
       absent)
 
