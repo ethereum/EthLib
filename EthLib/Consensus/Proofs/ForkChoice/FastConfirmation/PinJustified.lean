@@ -19,7 +19,9 @@ import EthLib.Consensus.Proofs.Transition.FfgJustification
 
 The pin of a fast-confirmation call bounds the drift of its quorum.
 
-This file turns that bound into the reader `justifiedPinned_of_setting`, which proves `JustifiedPinned`.
+This file turns that bound into the reader `justifiedPinned_of_setting`.
+
+The reader proves `JustifiedPinned`.
 -/
 
 @[expose] public section
