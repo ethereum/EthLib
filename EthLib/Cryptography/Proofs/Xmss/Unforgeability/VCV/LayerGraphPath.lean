@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraphLeaf
 # Honest authentication paths in the layer graph
 
 The leanXMSS draft, section "Trees", orders the siblings from the leaf to the root.
+
 At height `k`, the sibling index is the leaf index divided by `2^k` with the low bit flipped.
 -/
 
@@ -24,7 +25,8 @@ theorem siblings_in_order {m : Type → Type} [Monad m] {α : Type}
   | zero => rfl
   | succ n ih =>
     rw [Merkle.siblings, ofFnInOrder, Merkle.Position.parent, ih]
-    simp only [Merkle.Position.sibling, Fin.val_zero, Fin.val_succ, Nat.add_zero, Nat.pow_zero, Nat.div_one,
+    simp only [Merkle.Position.sibling, Fin.val_zero, Fin.val_succ, Nat.add_zero,
+      Nat.pow_zero, Nat.div_one,
       Nat.div_div_eq_div_mul, Nat.pow_succ', Nat.add_assoc, Nat.add_comm 1]
 
 /-- The returned sibling at each height is present in the final cache. -/
@@ -47,6 +49,7 @@ theorem siblings_recorded (pp : PublicParam) (layer : Layer) (other : SeedPrf (O
     (fun k s _ => (node_settles pp layer other k.val _ ((Nat.le_of_lt k.isLt).trans bound)).2 s) run
 
 /-- Every sibling returned by the actual honest path remains in its graph row at the end.
+
 This includes the low digest from each earlier subtree after all later subtrees have run. -/
 theorem path_recorded (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec))
     (e : Nat) : PathRecorded pp layer LAYER_HEIGHT e

@@ -42,16 +42,21 @@ def schedule (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V) :
 
 theorem chainStep_eq (pp : PublicParam) (layer : Layer) (e : UInt32) (i : Fin V)
     (j : Fin (CHAIN_LENGTH - 1)) (d : Digest) :
-    chainStep hash pp layer e i j d = GraphChain.publicStep (schedule pp layer e i) digestEquiv j d := by
-  let bytes := (thInput pp (addrChain layer e j) (packBytes d ++ packBytes (uintToBytes 16 i.val))).data.toList
+    chainStep hash pp layer e i j d =
+      GraphChain.publicStep (schedule pp layer e i) digestEquiv j d := by
+  let bytes := (thInput pp (addrChain layer e j)
+    (packBytes d ++ packBytes (uintToBytes 16 i.val))).data.toList
   have raw : input pp layer (.chain e i j) [digestEquiv d] = bytes := by
-    change (thInput pp _ (packBytes (ofBV 16 (digestEquiv d)) ++ packBytes (uintToBytes 16 i.val))).data.toList = _
+    change (thInput pp _
+      (packBytes (ofBV 16 (digestEquiv d)) ++ packBytes (uintToBytes 16 i.val))).data.toList = _
     rw [show ofBV 16 (digestEquiv d) = d from digestEquiv.symm_apply_apply d]
     rfl
   unfold GraphChain.publicStep
   change _ = (do
-    let lo ← query (spec := Spec) (.inl (.inl (.inr (.inl (input pp layer (.chain e i j) [digestEquiv d])))))
-    let _ ← query (spec := Spec) (.inl (.inl (.inr (.inr (input pp layer (.chain e i j) [digestEquiv d])))))
+    let lo ← query (spec := Spec)
+      (.inl (.inl (.inr (.inl (input pp layer (.chain e i j) [digestEquiv d])))))
+    let _ ← query (spec := Spec)
+      (.inl (.inl (.inr (.inr (input pp layer (.chain e i j) [digestEquiv d])))))
     pure (digestEquiv.symm lo))
   rw [raw]
   simp only [chainStep, th, hash_eq, bind_assoc, pure_bind, PairedHashWord.first_half_bytes,
@@ -98,13 +103,15 @@ theorem leafHash_of_recorded (pp : PublicParam) (layer : Layer) (e : UInt32)
     have value {a b : Cell} (same : a = b) : st.2 a = st.2 b := by cases same; rfl
     refine (value slot).trans ?_
     simpa only [endWords, List.get_eq_getElem, List.getElem_ofFn, Recorded] using record ⟨i,bound⟩
-  · change (thInput pp (addrLeaf layer e) (packDigests (LeafGraph.digests V (endWords ends)))).data.toList = _
+  · change (thInput pp (addrLeaf layer e)
+    (packDigests (LeafGraph.digests V (endWords ends)))).data.toList = _
     rw [endWords_digests]
 
 private theorem settles_sequence {α β : Type} (pp : PublicParam) (layer : Layer) (r : Role)
     (first : OracleComp Spec α) (walk : α → OracleComp Spec β) (finish : β → OracleComp Spec Digest)
     (ready : α → State → Prop) (done_ : β → State → Prop)
-    (startReady : ∀ (st : State) (z : α × State), z ∈ support ((simulateQ (graph pp layer).eagerImpl first).run st) → ready z.1 z.2)
+    (startReady : ∀ (st : State) (z : α × State),
+      z ∈ support ((simulateQ (graph pp layer).eagerImpl first).run st) → ready z.1 z.2)
     (walkDone : ∀ a st, ready a st → ∀ z ∈ support
       ((simulateQ (graph pp layer).eagerImpl (walk a)).run st), done_ z.1 z.2)
     (finishDone : ∀ b st, done_ b st → ∀ z ∈ support
@@ -115,13 +122,16 @@ private theorem settles_sequence {α β : Type} (pp : PublicParam) (layer : Laye
   obtain ⟨a, ha, b, hb, last⟩ := hz
   exact finishDone b.1 b.2 (walkDone a.1 a.2 (startReady st a ha) b hb) z last
 
-/-- An honest leaf reads its 29 private words, walks each of its 58 chains for three steps,
-then stores the returned leaf digest in the row read by its Merkle parent. -/
+/-- An honest leaf reads 29 private words and walks all 58 chains for three steps.
+
+Its parent can read the returned leaf digest from the cache. -/
 theorem otsPublicLeaf_settles (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec))
-    (e : UInt32) : Settles pp layer (.leaf e) (otsPublicLeaf hash pp (startPrf pp layer other) layer e) := by
+    (e : UInt32) : Settles pp layer (.leaf e)
+      (otsPublicLeaf hash pp (startPrf pp layer other) layer e) := by
   apply settles_sequence pp layer (.leaf e)
     (chainStarts pp (startPrf pp layer other) layer e)
-    (fun starts => ofFnInOrder V fun i => chain hash pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i])
+    (fun starts => ofFnInOrder V fun i =>
+      chain hash pp layer e i 0 (CHAIN_LENGTH - 1) (by decide) starts[i])
     (otsLeafHash hash pp layer e)
     (fun starts st => ∀ i : Fin V, st.2 (.inl (e,i)) = some (digestEquiv (starts[i.val]'i.isLt)))
     (fun ends st => ∀ i : Fin V, Recorded (.chain e i ⟨CHAIN_LENGTH - 2, by decide⟩) ends[i] st)
@@ -136,8 +146,7 @@ theorem otsPublicLeaf_settles (pp : PublicParam) (layer : Layer) (other : SeedPr
     rw [leafHash_of_recorded pp layer e ends st last]
     exact readOutput_recorded pp layer (.leaf e) st
 
-/-- Every original node and layer root built with the paired private interface has the same
-output and complete caches as the recursively normalized Merkle walk, with no leaf premise. -/
+/-- The normalized walk preserves the root digest and complete caches at every valid depth. -/
 theorem node_settles (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec))
     (l j : Nat) (valid : l ≤ LAYER_HEIGHT) :
     let prf := startPrf pp layer other

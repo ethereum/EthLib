@@ -6,6 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraph
 # Merkle subtrees in the leanXMSS layer graph
 
 The leanXMSS draft, section "Trees", computes a node by hashing its left and right subtrees.
+
 Both subtrees retain their low output at a known row.
 -/
 
@@ -25,7 +26,8 @@ def liftRows : QueryImpl (unifSpec + Public) (OracleComp Spec) :=
 
 /-- A physical full-word call, translated into the public rows of the common layer graph. -/
 def hash (bytes : ByteArray) : OracleComp Spec (Vector UInt8 32) :=
-  simulateQ liftRows (simulateQ PairedHashWord.readHalves (queryH (m := OracleComp OracleWorld) bytes))
+  simulateQ liftRows (simulateQ PairedHashWord.readHalves
+    (queryH (m := OracleComp OracleWorld) bytes))
 
 theorem hash_eq (bytes : ByteArray) : hash bytes = (do
     let lo ← query (spec := Spec) (.inl (.inl (.inr (.inl bytes.data.toList))))
@@ -81,7 +83,8 @@ theorem node_input (pp : PublicParam) (layer : Layer) (l j : Nat) (h : l < LAYER
   rw [LeafGraph.pack_pair, first, second]
   rfl
 
-def Recorded (r : Role) (d : Digest) (st : State) : Prop := st.2 (.inr (.inl r)) = some (digestEquiv d)
+def Recorded (r : Role) (d : Digest) (st : State) : Prop :=
+    st.2 (.inr (.inl r)) = some (digestEquiv d)
 
 theorem readOutput_recorded (pp : PublicParam) (layer : Layer) (r : Role) (st : State) {z}
     (hz : z ∈ support ((simulateQ (graph pp layer).eagerImpl (readOutput r)).run st)) :
@@ -106,7 +109,8 @@ theorem th_of_ready (pp : PublicParam) (layer : Layer) (r : Role) (vs : List Wor
   let bytes := input pp layer r vs
   let askLow : OracleComp Spec Word := query (spec := Spec) (.inl (.inl (.inr (.inl bytes))))
   let askHigh : OracleComp Spec Word := query (spec := Spec) (.inl (.inl (.inr (.inr bytes))))
-  change (simulateQ G.eagerImpl (do let m ← askLow; let n ← askHigh; pure (m, n))).run st = _ at both
+  change (simulateQ G.eagerImpl
+    (do let m ← askLow; let n ← askHigh; pure (m, n))).run st = _ at both
   have physical : th hash pp addr data =
       (do let lo ← askLow; let _ ← askHigh; pure (digestEquiv.symm lo)) := by
     dsimp only [askLow, askHigh, bytes]
@@ -114,7 +118,8 @@ theorem th_of_ready (pp : PublicParam) (layer : Layer) (r : Role) (vs : List Wor
     simp only [th, hash_eq, bind_assoc, pure_bind, PairedHashWord.first_half_bytes,
       Equiv.apply_symm_apply]
     rfl
-  have eqn := congrArg (fun body => (fun p : (Word × Word) × State => (digestEquiv.symm p.1.1, p.2)) <$> body) both
+  let observe := fun p : (Word × Word) × State => (digestEquiv.symm p.1.1, p.2)
+  have eqn := congrArg (fun body => observe <$> body) both
   rw [physical, readOutput]
   simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure, map_bind, map_pure,
     CanonicalGraph.simulateQ_eagerImpl_touchCell, bind_map_left] at eqn ⊢
@@ -140,17 +145,20 @@ def Settles (pp : PublicParam) (layer : Layer) (r : Role) (op : OracleComp Spec 
 
 /-- Running any continuation in the eager graph preserves all recorded words. -/
 theorem state_extends (pp : PublicParam) (layer : Layer) {α : Type} (op : OracleComp Spec α)
-    (st : State) {z} (run : z ∈ support ((simulateQ (graph pp layer).eagerImpl op).run st)) : st ≤ z.2 :=
+    (st : State) {z} (run : z ∈ support ((simulateQ (graph pp layer).eagerImpl op).run st)) :
+      st ≤ z.2 :=
   simulateQ_run_preservesInv _ (st ≤ ·)
     (fun _ _ prev _ hz => prev.trans ((graph pp layer).le_of_mem_support_eagerImpl hz))
     op st le_rfl z run
 
 /-- The normalized recursion evaluates each subtree in library order before reading its parent. -/
-noncomputable def normalizedNode (base : Nat → OracleComp Spec Digest) (l j : Nat) : OracleComp Spec Digest :=
+noncomputable def normalizedNode (base : Nat → OracleComp Spec Digest)
+    (l j : Nat) : OracleComp Spec Digest :=
   Merkle.node (fun p _ _ => readOutput (treeRole p.level p.index)) base ⟨l, j⟩
 
-/-- After the leaves have recorded their low outputs, every subtree can replace its internal
-physical hashes by reads of their parent roles. The complete final caches and root digest agree. -/
+/-- Each internal hash can read its parent role once the leaves have recorded their outputs.
+
+The final caches and the root digest agree. -/
 theorem subtree (pp : PublicParam) (layer : Layer) (base : Nat → OracleComp Spec Digest)
     (baseRecords : ∀ j, Settles pp layer (treeRole 0 j) (base j)) :
     ∀ (l j : Nat), l ≤ LAYER_HEIGHT →
@@ -184,13 +192,15 @@ theorem subtree (pp : PublicParam) (layer : Layer) (base : Nat → OracleComp Sp
       intro b hr
       exact last st hl hr
     · intro st z hz
-      simp only [Merkle.node, Merkle.node.go, simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hz
+      simp only [Merkle.node, Merkle.node.go, simulateQ_bind, StateT.run_bind,
+        mem_support_bind_iff] at hz
       obtain ⟨a, ha, b, hb, parent⟩ := hz
       rw [last st ha hb] at parent
       exact readOutput_recorded pp layer (treeRole (l + 1) j) b.2 parent
 
-/-- The actual leanXMSS tree computation uses the same recursion, including height 16 and every
-32-bit index chosen by the library. The leaf premise concerns only its honest leaf computation. -/
+/-- The honest node uses the same recursion through height 16 at every library index.
+
+Only its leaf computation has to record an output. -/
 theorem node_of_settled_leaves (pp : PublicParam) (layer : Layer) (prf : SeedPrf (OracleComp Spec))
     (leafRecords : ∀ j, Settles pp layer (treeRole 0 j) (leaves hash pp prf layer j))
     (l j : Nat) (valid : l ≤ LAYER_HEIGHT) :
@@ -200,11 +210,13 @@ theorem node_of_settled_leaves (pp : PublicParam) (layer : Layer) (prf : SeedPrf
   subtree pp layer _ leafRecords l j valid
 
 /-- All heights also admit a closed boundary computation which reads the actual low leaf rows. -/
-theorem subtree_from_read_leaves (pp : PublicParam) (layer : Layer) (l j : Nat) (valid : l ≤ LAYER_HEIGHT) :
+theorem subtree_from_read_leaves (pp : PublicParam) (layer : Layer) (l j : Nat)
+    (valid : l ≤ LAYER_HEIGHT) :
     let base := fun index => readOutput (treeRole 0 index)
     simulateQ (graph pp layer).eagerImpl (Merkle.node (nodeHash hash pp layer) base ⟨l, j⟩) =
       simulateQ (graph pp layer).eagerImpl (normalizedNode base l j) ∧
     Settles pp layer (treeRole l j) (Merkle.node (nodeHash hash pp layer) base ⟨l, j⟩) :=
-  subtree pp layer _ (fun index st _ => readOutput_recorded pp layer (treeRole 0 index) st) l j valid
+  subtree pp layer _
+    (fun index st _ => readOutput_recorded pp layer (treeRole 0 index) st) l j valid
 
 end EthLib.Cryptography.Xmss.Unforgeability.VCV.LayerGraph

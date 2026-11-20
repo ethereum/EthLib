@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Proofs.HashSig.Option
 # Starting cells of the leanXMSS chain graph
 
 The leanXMSS draft, section "WOTS+C", derives starts `2j` and `2j+1` from one PRF word.
+
 An honest layer signature leaves each of the 29 words in its full private cache.
+
 Their halves supply the inputs for the actual 58 chain walks.
 -/
 
@@ -59,8 +61,10 @@ theorem startTable_pair (cache : PrivateWords) (pp : PublicParam) (layer : Layer
     (j : Fin (V / 2)) :
     (startTable cache pp ⟨layer, epoch, indexAt j 0⟩,
       startTable cache pp ⟨layer, epoch, indexAt j 1⟩) =
-    ((cache (pp, addrPrf layer epoch j, ByteArray.empty)).map (fun w => (PairedHashWord.halves w).1),
-      (cache (pp, addrPrf layer epoch j, ByteArray.empty)).map (fun w => (PairedHashWord.halves w).2)) := by
+    ((cache (pp, addrPrf layer epoch j, ByteArray.empty)).map
+      (fun w => (PairedHashWord.halves w).1),
+      (cache (pp, addrPrf layer epoch j, ByteArray.empty)).map
+        (fun w => (PairedHashWord.halves w).2)) := by
   have pair (h : Fin 2) : pairIndex (indexAt j h) = j := Fin.ext (by
     change (2 * j.val + h.val) / 2 = j.val
     omega)
@@ -75,7 +79,8 @@ theorem startTable_pair (cache : PrivateWords) (pp : PublicParam) (layer : Layer
 /-- Storing a physical word changes exactly its pair's start lookups at this parameter. -/
 theorem startTable_store (cache : PrivateWords) (pp : PublicParam) (layer : Layer)
     (epoch : UInt32) (j : Fin (V / 2)) (word : HashOutput) (key : Chain) :
-    startTable (Function.update cache (pp, addrPrf layer epoch j, ByteArray.empty) (some word)) pp key =
+    startTable (Function.update cache (pp, addrPrf layer epoch j, ByteArray.empty)
+      (some word)) pp key =
       if key.layer = layer ∧ key.epoch = epoch ∧ pairIndex key.index = j then
         some (startHalf key.index word)
       else startTable cache pp key := by
@@ -83,14 +88,16 @@ theorem startTable_store (cache : PrivateWords) (pp : PublicParam) (layer : Laye
   split <;> rfl
 
 /-- Initializing the start rows leaves the public hash cache and all chain-step rows arbitrary. -/
-@[expose] def stateOfStarts (cache : PrivateWords) (pp : PublicParam) (publicCache : Public.QueryCache)
+@[expose] def stateOfStarts (cache : PrivateWords) (pp : PublicParam)
+    (publicCache : Public.QueryCache)
     (rowCache : (Row →ₒ Word).QueryCache) : RelabelState Public Chain Row Word :=
   (publicCache, .ofFn (Sum.elim (startTable cache pp) fun r => rowCache r))
 
 /-- The actual collector returns 58 starts from 29 full private words in the same cache. -/
 theorem chainStarts_words (pp : PublicParam) (layer : Layer) (epoch : UInt32)
     (cache : PrivateWords) (starts : Vector Digest V)
-    (completed : chainStarts pp (fun p a b => ofOutput <$> cache (p, a, b)) layer epoch = some starts) :
+    (completed : chainStarts pp (fun p a b => ofOutput <$> cache (p, a, b))
+      layer epoch = some starts) :
     ∃ words : Fin (V / 2) → HashOutput,
       (∀ j, cache (pp, addrPrf layer epoch j, ByteArray.empty) = some (words j)) ∧
       (∀ i : Fin V, starts[i] = ofBV 16 (startHalf i (words (pairIndex i)))) := by
@@ -112,7 +119,8 @@ theorem chainStarts_words (pp : PublicParam) (layer : Layer) (epoch : UInt32)
 /-- The graph's starting tables contain the values passed by the original chain computation. -/
 theorem chainStarts_table (pp : PublicParam) (layer : Layer) (epoch : UInt32)
     (cache : PrivateWords) (starts : Vector Digest V)
-    (completed : chainStarts pp (fun p a b => ofOutput <$> cache (p, a, b)) layer epoch = some starts) :
+    (completed : chainStarts pp (fun p a b => ofOutput <$> cache (p, a, b))
+      layer epoch = some starts) :
     ∀ i : Fin V, (startTable cache pp ⟨layer, epoch, i⟩).map (ofBV 16) = some starts[i] := by
   obtain ⟨words, atWord, startsAt⟩ := chainStarts_words pp layer epoch cache starts completed
   intro i

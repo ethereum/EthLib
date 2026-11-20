@@ -7,6 +7,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraphLeaf
 # Authentication paths from the tree stored by the signer
 
 The leanXMSS draft, section "The scheme", returns the bottom tree path and its signed root.
+
 EthLib builds that tree once and reads its paths without further oracle calls.
 -/
 
@@ -51,7 +52,8 @@ private theorem parent_recorded {l j : Nat} {a b : Built Digest} {d : Digest} {s
       exact left.1
 
 /-- Every supported return of the given computation has a tree recorded in its final cache. -/
-@[expose] def ProducesBuild (pp : PublicParam) (layer : Layer) (l j : Nat) (op : OracleComp Spec (Built Digest)) : Prop :=
+@[expose] def ProducesBuild (pp : PublicParam) (layer : Layer) (l j : Nat)
+    (op : OracleComp Spec (Built Digest)) : Prop :=
   ∀ (st : State) (z : Built Digest × State),
     z ∈ support ((simulateQ (graph pp layer).eagerImpl op).run st) → BuildRecorded l j z.1 z.2
 
@@ -64,7 +66,8 @@ private theorem build_leaf (pp : PublicParam) (layer : Layer) (j : Nat)
   obtain ⟨d, hd, rfl⟩ := run
   exact ⟨ready st d hd, fun _ _ i => Fin.elim0 i⟩
 
-private theorem build_parent (pp : PublicParam) (layer : Layer) (l j : Nat) (bound : l < LAYER_HEIGHT)
+private theorem build_parent (pp : PublicParam) (layer : Layer) (l j : Nat)
+    (bound : l < LAYER_HEIGHT)
     (left right : OracleComp Spec (Built Digest))
     (hl : ProducesBuild pp layer l (2*j) left) (hr : ProducesBuild pp layer l (2*j+1) right) :
     ProducesBuild pp layer (l+1) j (do
@@ -85,6 +88,7 @@ private theorem build_parent (pp : PublicParam) (layer : Layer) (l j : Nat) (bou
     (readOutput_recorded pp layer _ b.2 hd)
 
 /-- Every supported execution of the signer's actual tree build records all of its paths.
+
 Later updates to the graph preserve the root and every one of these path coordinates. -/
 theorem build_recorded (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec)) :
     ∀ l j, l ≤ LAYER_HEIGHT → ProducesBuild pp layer l j

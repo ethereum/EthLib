@@ -49,6 +49,7 @@ noncomputable def readPair (key : PairKey) : OracleComp Spec (Vector UInt8 32) :
   pure (ofOutput (PairedHashWord.halves.symm (lo, hi)))
 
 /-- Translate the chain-start requests for this parameter and layer.
+
 All other full-word requests go through the supplied private oracle. -/
 noncomputable def startPrf (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec)) :
     SeedPrf (OracleComp Spec) := open Classical in fun p a suffix =>
@@ -64,7 +65,8 @@ theorem startPrf_pair (pp : PublicParam) (layer : Layer) (other : SeedPrf (Oracl
   have eqn := addrPrf_inj.mp h.choose_spec.2.1
   exact (dite_eq_left h).trans (congrArg readPair (Prod.ext eqn.2.1.symm eqn.2.2.symm))
 
-private def PairStored (e : UInt32) (j : Fin (V / 2)) (full : Vector UInt8 32) (st : State) : Prop :=
+private def PairStored (e : UInt32) (j : Fin (V / 2)) (full : Vector UInt8 32)
+    (st : State) : Prop :=
   ∀ h : Fin 2, st.2 (.inl (e, indexAt j h)) = some (digestEquiv (halfOf h full))
 
 private theorem pair_low (a b : Word) :
@@ -81,7 +83,8 @@ private theorem pair_high (a b : Word) :
 
 private theorem readPair_stored (pp : PublicParam) (layer : Layer) (e : UInt32) (j : Fin (V / 2))
     (st : State) {z} (run : z ∈ support
-      ((simulateQ (graph pp layer).eagerImpl (readPair (e,j))).run st)) : PairStored e j z.1 z.2 := by
+      ((simulateQ (graph pp layer).eagerImpl (readPair (e,j))).run st)) :
+        PairStored e j z.1 z.2 := by
   simp only [readPair, simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
     CanonicalGraph.eagerImpl_readCell_run, mem_support_bind_iff, mem_support_pure_iff] at run
   obtain ⟨a, ha, b, hb, rfl⟩ := run
@@ -103,7 +106,8 @@ private theorem split_recorded (pp : PublicParam) (layer : Layer) (e : UInt32)
     (p : OracleComp Spec (Vector (Vector UInt8 32) (V / 2))) (st : State)
     (stored : ∀ w ∈ support ((simulateQ (graph pp layer).eagerImpl p).run st),
       ∀ j : Fin (V / 2), PairStored e j w.1[j] w.2) {z : Vector Digest V × State}
-    (run : z ∈ support ((simulateQ (graph pp layer).eagerImpl (do let w ← p; pure (splitWords w))).run st)) :
+    (run : z ∈ support ((simulateQ (graph pp layer).eagerImpl
+      (do let w ← p; pure (splitWords w))).run st)) :
     ∀ i : Fin V, z.2.2 (.inl (e, i)) = some (digestEquiv (z.1[i.val]'i.isLt)) := by
   simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
     mem_support_bind_iff, mem_support_pure_iff] at run
