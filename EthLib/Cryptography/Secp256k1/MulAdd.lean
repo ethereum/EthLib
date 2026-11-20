@@ -5,9 +5,11 @@ public import EthLib.Cryptography.Secp256k1.Montgomery
 public import EthLib.Cryptography.Secp256k1.Inverse
 
 /-!
-# Simultaneous scalar multiplication for public key recovery
+# `Secp256k1.MulAdd`
 
-Recovery multiplies a point whose coordinates come from the signature, and the fixed generator.
+`k P + l Q`, the double scalar multiplication of verification and of public key recovery.
+
+Both take `Q = G`, the generator, and then a faster method applies.
 
 The endomorphism `(x, y) -> (beta x, y)` acts on this curve as multiplication by `lambda`.
 
@@ -23,7 +25,8 @@ For an affine variable point, a six-entry table shares one denominator.
 
 The two signed components select a joint digit and can use one addition.
 
-The fallback uses five-bit windows with eight odd multiples.
+Any other input takes the shared chain of doublings in Jacobian coordinates, which the
+multiplication of two arbitrary points uses too.
 
 The variable scalar uses the endomorphism method of Gallant, Lambert and Vanstone.
 
@@ -63,14 +66,11 @@ def basisB : Int := 0xe4437ed6010e88286f547fa90abfe4c3
 /-- Projective coordinates in the base field of secp256k1. -/
 abbrev Coordinates := Coords Montgomery
 
-/-- Double using `Z' = Y Z` and a slope numerator of `3 X^2 / 2`.
+/-- `2 P`, with `Z' = Y Z` and the slope numerator `3 X^2 / 2`.
 
-The [libsecp256k1 doubling formula][double] uses the same scaling.
+It is formula (6) of Cohen, Miyaji and Ono for `a = 0`, scaled by `1/2` in `Z`.
 
-Scaling the resulting X, Y and Z coordinates by 4, 8 and 2 gives `Coords.double 0`.
-
-[double]: <https://github.com/bitcoin-core/secp256k1/blob/v0.6.0/src/group_impl.h#L395-L425>
--/
+So its `X`, `Y` and `Z` times 4, 8 and 2 are those of the shared doubling. -/
 @[inline] def doubleCore (p : Coordinates) : Coordinates :=
   let xx := Montgomery.square p.x
   let l := xx + Montgomery.halve xx
@@ -82,7 +82,7 @@ Scaling the resulting X, Y and Z coordinates by 4, 8 and 2 gives `Coords.double 
   let y := Montgomery.productSubSquare l (xyy - x) yy
   ⟨x, y, z⟩
 
-/-- Double a point in the recovery field. -/
+/-- `2 P`, kept out of line so the chain calls one copy. -/
 @[noinline] def double (p : Coordinates) : Coordinates := doubleCore p
 
 /-- Apply two doublings without allocating the intermediate point. -/

@@ -3,11 +3,13 @@ module
 public import EthLib.Cryptography.Secp256k1.Montgomery
 
 /-!
-# Modular inversion for secp256k1 recovery
+# `Secp256k1.Inverse`
 
-Recovery inverts a signature component and the final projective denominator.
+The inverses mod `n` and mod `p`, by the divsteps of Bernstein and Yang, checked.
 
-Both inputs are public, so the jump loop can stop when the second remainder is zero.
+The loop stops when the second remainder is zero, so its time depends on the input.
+
+EthLib makes no constant-time claim (SOUNDNESS.md A3).
 
 The divstep transition comes from [Bernstein and Yang][safegcd] §8.1.
 
@@ -18,6 +20,9 @@ Each jump uses a table of 6-step matrices generated from the scalar divstep recu
 A jump then applies that matrix to the full remainders and residues.
 
 The final check accepts only a canonical residue whose product with the input is one.
+
+Any other outcome gives way to the extended Euclidean algorithm, so the result never depends on
+the loop being right.
 
 [safegcd]: <https://gcd.cr.yp.to/safegcd-20190413.pdf>
 -/

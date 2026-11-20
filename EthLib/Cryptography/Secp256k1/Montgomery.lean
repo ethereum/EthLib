@@ -3,7 +3,11 @@ module
 public import EthLib.Cryptography.Secp256k1.Field
 
 /-!
-# Montgomery products for secp256k1
+# `Secp256k1.Montgomery`
+
+The base field of secp256k1 in Montgomery form, on four 64-bit words, with `R = 2^256`.
+
+An element holds `a R mod p`, below `p`, so equality of words is equality in the field.
 
 Multiplication and squaring sum word products by output column.
 

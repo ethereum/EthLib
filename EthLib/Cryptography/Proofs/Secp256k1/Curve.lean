@@ -233,7 +233,7 @@ theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve 0 7 p) 
     simp only [hx, hy]
     rfl
 
-/-- Reading Montgomery limbs back is a change of field representation. -/
+/-- Reading the Montgomery form back is a change of field representation. -/
 theorem toFin_embedding : Jacobian.Coords.Embedding (Montgomery.toFin : Fp.Montgomery → Fp) :=
   ⟨Montgomery.toFin_zero, Montgomery.toFin_one, Montgomery.toFin_add, Montgomery.toFin_sub,
     Montgomery.toFin_mul, Montgomery.toFin_injective⟩
@@ -249,7 +249,7 @@ theorem ofCoords_map {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] 
   rw [← Jacobian.Coords.map_toAffine hf hinv q]
   cases q.toAffine inv <;> rfl
 
-/-- Normalizing on Montgomery limbs gives the point of the form read back into `Fp`. -/
+/-- Normalizing in Montgomery form gives the point of the form read back into `Fp`. -/
 theorem ofMontgomeryCoords_eq (q : Jacobian.Coords Fp.Montgomery) :
     ofMontgomeryCoords q = ofJacobian (Jacobian.ofCoords (q.map Montgomery.toFin)) := by
   exact ofCoords_map toFin_embedding (fun x => Montgomery.toFin_inv x) q
@@ -260,7 +260,7 @@ theorem map_toMontgomeryCoords (p : Point) :
   show Jacobian.Coords.mk _ _ _ = Jacobian.Coords.mk _ _ _
   congr 1 <;> exact Montgomery.toFin_ofFin _
 
-/-- Double and add on Montgomery limbs is double and add on `Fp`, for every input. -/
+/-- Double and add in Montgomery form is double and add on `Fp`, for every input. -/
 theorem mulBits_eq_jacobian (fuel k : Nat) (p : Point) :
     mulBits fuel k p = ofJacobian (Jacobian.mulBits 0 fuel k (toJacobian p)) := by
   rw [mulBits, ofMontgomeryCoords_eq]

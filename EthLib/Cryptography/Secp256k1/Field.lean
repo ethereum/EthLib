@@ -16,11 +16,9 @@ Each field is `Fin` of its modulus, so every element is below the modulus by con
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
-An inverse comes from the extended Euclidean algorithm.
+The inverse of `Fp` here comes from the extended Euclidean algorithm.
 
-Point multiplication and the power of `Fp` hold their values in Montgomery limbs.
-
-A square root is a power too, because `p = 3 mod 4`.
+The inverse of `Fn`, the Montgomery form of `Fp` and the square root of `Fp` come later.
 
 No division is defined.
 

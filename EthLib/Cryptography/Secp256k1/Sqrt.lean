@@ -40,8 +40,7 @@ Up to `x223`, each `x_k` is `a^(2^k - 1)`: `x_j` squared `k` times, times `x_k`,
 
 The last three steps append the remaining bits of the exponent, in the same way.
 
-The chain is the one of libsecp256k1, in `field_impl.h` at v0.6.0:
-<https://github.com/bitcoin-core/secp256k1/blob/v0.6.0/src/field_impl.h#L49-L122> -/
+So the power takes 253 squarings and 13 products. -/
 @[inline] def sqrtCandidate (a : Montgomery) : Montgomery :=
   let x2 := squareTimes 1 a * a
   let x3 := squareTimes 1 x2 * a

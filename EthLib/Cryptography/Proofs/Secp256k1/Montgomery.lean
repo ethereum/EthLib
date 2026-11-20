@@ -9,9 +9,11 @@ public import EthLib.Cryptography.Proofs.Montgomery.Core
 public import EthLib.Cryptography.Proofs.Montgomery.Fin
 
 /-!
-# Proofs: the recovery field of secp256k1
+# Proofs: the Montgomery form of the secp256k1 base field
 
-The four-word recovery field agrees with the shared Montgomery field.
+The four words hold the same residue as the shared Montgomery field on eight 32-bit limbs.
+
+So reading back into `Fp` keeps zero, one, sums, differences and products, and it is injective.
 
 Its specialized square, shifts and fused operations give the corresponding field operations.
 -/

@@ -25,16 +25,23 @@ Each part of the module follows the standard that defines it:
 ## Reading this module
 
 The specification is written to be read first.
-Where it runs on Montgomery limbs for speed, theorems tie each step to the plain computation.
+Where it computes in another form for speed, theorems tie each step to the plain computation.
 Points are in affine coordinates, as SEC 1 prints them.
-Scalar multiplication works on Jacobian coordinates, on Montgomery limbs, and converts back once.
-Inverses are computed by the extended Euclidean algorithm.
+The base field also has a Montgomery form on four 64-bit words, in which products need no division.
+Scalar multiplication works on Jacobian coordinates in that form, and converts back once.
+When one of the two points of `k P + l Q` is the generator, it splits the other scalar with the curve's endomorphism, and the four parts share one chain of doublings.
+The square root of the base field is a fixed chain of squarings and products in Montgomery form.
+The inverses mod `n` and mod `p` come from the divsteps of Bernstein and Yang, and the extended Euclidean algorithm replaces any result that fails its check.
 The files build on one another in this order:
 
 | File | Contents |
 | --- | --- |
 | `Field.lean` | the base field mod `p` and the scalar field mod `n` |
+| `Montgomery.lean` | the base field in Montgomery form |
+| `Inverse.lean` | the checked inverses mod `n` and mod `p` |
+| `Sqrt.lean` | the square root of the base field |
 | `Curve.lean` | the points, and the addition rule of SEC 1 §2.2.1 |
+| `MulAdd.lean` | `k P + l Q`, with the endomorphism when one point is the generator |
 | `Encoding.lean` | the 33-byte and 65-byte encodings, and their decoding |
 | `Ecdsa.lean` | verification, and the low-s rule of EIP-2 |
 | `Recovery.lean` | public key recovery |

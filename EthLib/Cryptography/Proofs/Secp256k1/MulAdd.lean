@@ -2,20 +2,25 @@ module
 
 public import EthLib.Cryptography.Secp256k1.MulAdd
 public import EthLib.Cryptography.Proofs.Secp256k1.Inverse
--- The refinement reads the body of the recovery scalar multiplication.
+-- The proofs read the bodies of the joint chain and of the field operations.
 import all EthLib.Cryptography.Secp256k1.MulAdd
 import all EthLib.Cryptography.Secp256k1.Montgomery
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 import EthLib.Cryptography.Proofs.Secp256k1.Montgomery
 
 /-!
-# Proofs: the scalar multiplication used by public key recovery
+# Proofs: the double scalar multiplication of secp256k1
 
 The endomorphism scales the affine x coordinate by a cube root of unity.
 
 Since the generator spans the group, the map's effect on the generator determines its action.
 
 The signed digits preserve the four scalar products as they share the doubling chain.
+
+So on a point of the curve the joint chain computes `k P + l G`, and the shared chain gives the
+same point.
+
+The double scalar multiplication then equals the shared chain on `Fp` for every input.
 -/
 
 @[expose] public section
@@ -142,9 +147,6 @@ private theorem scale_eq_nsmul (X : curve.Point) : scale X = lambda.val • X :=
   change scaleHom (k.val • Point.toPoint .generator) = _
   rw [map_nsmul, scale_generator, smul_smul, smul_smul, Nat.mul_comm]
 
-/-- Read a Montgomery form as a Jacobian form over `Fp`. -/
-private abbrev RecoveryElement := Montgomery
-
 private theorem readOfFin (a : Fp) : Montgomery.toFin (Montgomery.ofFin a) = a :=
   Montgomery.toFin_ofFin a
 
@@ -159,20 +161,20 @@ private theorem map_map_eq {A B C : Type} (f : A → B) (g : B → C) (h : A →
 private noncomputable def readCoords (p : Coordinates) : Jacobian Fp.modulus :=
   Jacobian.ofCoords (p.map Montgomery.toFin)
 
-private theorem read_toRecoveryCoords (p : Point) :
+private theorem read_toMontgomeryCoords (p : Point) :
     readCoords (Point.toMontgomeryCoords p) = Point.toJacobian p := by
   exact congrArg (Jacobian.ofCoords : Jacobian.Coords Fp → _)
     (map_map_eq Montgomery.ofFin Montgomery.toFin id readOfFin
       (Point.toJacobian p).toCoords)
 
-private theorem ofRecoveryCoords_eq (p : Coordinates) :
+private theorem ofMontgomeryCoords_eq_read (p : Coordinates) :
     Point.ofMontgomeryCoords p = Point.ofJacobian (readCoords p) :=
   Point.ofMontgomeryCoords_eq p
 
-/-- A recovery form is on the curve when its read-back form is on the curve. -/
+/-- A Montgomery form is on the curve when its read-back form is on the curve. -/
 private abbrev OnCurve (p : Coordinates) : Prop := Jacobian.OnCurve 0 7 (readCoords p)
 
-/-- The secp256k1 group element represented by a recovery form. -/
+/-- The secp256k1 group element represented by a Montgomery form. -/
 private noncomputable def groupValue (p : Coordinates) : curve.Point :=
   Jacobian.toPoint 0 7 (readCoords p)
 
@@ -194,7 +196,7 @@ private theorem scaleX_y {F : Type} [Mul F] (factor : F) (p : Jacobian.Coords F)
 private theorem scaleX_x {F : Type} [Mul F] (factor : F) (p : Jacobian.Coords F) :
     (scaleX factor p).x = factor * p.x := rfl
 
-private theorem scaleX_read_z (factor : RecoveryElement) (p : Coordinates) :
+private theorem scaleX_read_z (factor : Montgomery) (p : Coordinates) :
     (readCoords (scaleX factor p)).z = (readCoords p).z :=
   congrArg Montgomery.toFin (scaleX_z factor p)
 
@@ -202,7 +204,7 @@ private theorem endomorphism_read_z (p : Coordinates) :
     (readCoords (endomorphism p)).z = (readCoords p).z :=
   scaleX_read_z (Montgomery.ofFin beta) p
 
-private theorem scaleX_affY (factor : RecoveryElement) (p : Coordinates) :
+private theorem scaleX_affY (factor : Montgomery) (p : Coordinates) :
     Jacobian.affY (readCoords (scaleX factor p)) = Jacobian.affY (readCoords p) := by
   have hy : (readCoords (scaleX factor p)).y = (readCoords p).y :=
     congrArg Montgomery.toFin (scaleX_y factor p)
@@ -213,7 +215,7 @@ private theorem endomorphism_affY (p : Coordinates) :
     Jacobian.affY (readCoords (endomorphism p)) = Jacobian.affY (readCoords p) :=
   scaleX_affY (Montgomery.ofFin beta) p
 
-private theorem scaleX_affX (factor : RecoveryElement) (p : Coordinates) :
+private theorem scaleX_affX (factor : Montgomery) (p : Coordinates) :
     Jacobian.affX (readCoords (scaleX factor p)) =
       Fp.toZMod (Montgomery.toFin factor) * Jacobian.affX (readCoords p) :=
   affX_of_scaleX (p := readCoords p) (q := readCoords (scaleX factor p))
@@ -226,7 +228,7 @@ private theorem endomorphism_affX (p : Coordinates) :
     (congrArg (fun x : Fp => Fp.toZMod x * Jacobian.affX (readCoords p))
       (readOfFin beta))
 
-/-- The endomorphism in recovery coordinates preserves the curve and acts as `lambda`. -/
+/-- The endomorphism in Montgomery coordinates preserves the curve and acts as `lambda`. -/
 private theorem endomorphism_spec {p : Coordinates} (hp : OnCurve p) :
     OnCurve (endomorphism p) ∧ groupValue (endomorphism p) = lambda.val • groupValue p := by
   by_cases hz : (readCoords p).z = 0
@@ -279,7 +281,7 @@ private theorem negate_affY (p : Coordinates) :
   unfold Jacobian.affY
   rw [hY, negate_read_z, Jacobian.toZ_sub, Jacobian.toZ_zero, zero_sub, neg_div]
 
-/-- Negating recovery coordinates preserves the curve and negates the group element. -/
+/-- Negating Montgomery coordinates preserves the curve and negates the group element. -/
 private theorem negate_spec {p : Coordinates} (hp : OnCurve p) :
     OnCurve (negate p) ∧ groupValue (negate p) = -groupValue p := by
   by_cases hz : (readCoords p).z = 0
@@ -307,7 +309,7 @@ private theorem negate_spec {p : Coordinates} (hp : OnCurve p) :
         exact ⟨rfl, (negY_eq _ _).symm⟩
       _ = -groupValue p := congrArg Neg.neg hpval.symm
 
-/-! ## Arithmetic on the recovery coordinates -/
+/-! ## Arithmetic on the Montgomery coordinates -/
 
 open Jacobian
 
@@ -318,7 +320,7 @@ private theorem point_spec {p : Point} (hp : p.isOnCurve = true) :
       groupValue (Point.toMontgomeryCoords p) = Point.toPoint p := by
   change Jacobian.OnCurve 0 7 (readCoords (Point.toMontgomeryCoords p)) ∧
     Jacobian.toPoint 0 7 (readCoords (Point.toMontgomeryCoords p)) = _
-  rw [read_toRecoveryCoords]
+  rw [read_toMontgomeryCoords]
   exact Point.toJacobian_spec hp
 
 private theorem infinity_spec :
@@ -330,13 +332,13 @@ private theorem infinity_spec :
 
 private theorem read_double (p : Coordinates) :
     readCoords (Coords.double 0 p) = Jacobian.double 0 (readCoords p) := by
-  have h := Coords.map_double toFin_embedding (0 : RecoveryElement) p
+  have h := Coords.map_double toFin_embedding (0 : Montgomery) p
   rw [toFin_embedding.map_zero] at h
   exact congrArg (Jacobian.ofCoords : Coords Fp → _) h
 
 private theorem read_add (p q : Coordinates) :
     readCoords (Coords.add 0 p q) = Jacobian.add 0 (readCoords p) (readCoords q) := by
-  have h := Coords.map_add toFin_embedding (0 : RecoveryElement) p q
+  have h := Coords.map_add toFin_embedding (0 : Montgomery) p q
   rw [toFin_embedding.map_zero] at h
   exact congrArg (Jacobian.ofCoords : Coords Fp → _) h
 
@@ -363,7 +365,7 @@ private theorem double_coordinates (p : Coordinates) :
     Jacobian.toZ_sub]
   refine ⟨?_, ?_, by ring⟩ <;> rw [← hh] <;> ring
 
-private theorem recovery_double_spec {p : Coordinates} (hp : OnCurve p) :
+private theorem fastDouble_spec {p : Coordinates} (hp : OnCurve p) :
     OnCurve (double p) ∧
       groupValue (double p) = groupValue p + groupValue p := by
   let u := readCoords (Coords.double 0 p)
@@ -415,7 +417,7 @@ private theorem Represents.add {p q : Coordinates} {P Q : curve.Point}
 private def TableSpec {n : Nat} (t : Vector Coordinates n) (P : curve.Point) : Prop :=
   ∀ i : Fin n, Represents t[i.val] ((2 * i.val + 1) • P)
 
-private theorem prepared_mul (a b : RecoveryElement) :
+private theorem prepared_mul (a b : Montgomery) :
     a * ((b * b) * b) = (a * b) * (b * b) := by
   apply toFin_embedding.injective
   apply Jacobian.toZ_injective
@@ -727,7 +729,7 @@ private theorem recode_bound (window : Window) (k n : Nat) (hk : k ≤ scalarBou
   | zero => exact (recode_next_eq_zero window k hk).le
   | succ n => exact recode_next_le window k n hk
 
-/-! ## The lattice split and recovery equation -/
+/-! ## The lattice split -/
 
 private abbrev order : Int := Fn.modulus
 
@@ -1422,28 +1424,28 @@ private theorem splitScalarWords_components_raw (w : Raw) (hw : w.val < Fn.modul
 
 end
 
-private abbrev zValue (x : RecoveryElement) := Jacobian.toZ (Montgomery.toFin x)
+private abbrev zValue (x : Montgomery) := Jacobian.toZ (Montgomery.toFin x)
 
-private theorem zValue_mul (x y : RecoveryElement) : zValue (x * y) = zValue x * zValue y := by
+private theorem zValue_mul (x y : Montgomery) : zValue (x * y) = zValue x * zValue y := by
   simp only [zValue, toFin_embedding.map_mul, Jacobian.toZ_mul]
 
 private theorem zValue_one : zValue 1 = 1 := by
   simp only [zValue, toFin_embedding.map_one, Jacobian.toZ_one]
 
-private theorem zValue_ne_zero {x : RecoveryElement} (h : x ≠ 0) : zValue x ≠ 0 := by
+private theorem zValue_ne_zero {x : Montgomery} (h : x ≠ 0) : zValue x ≠ 0 := by
   intro hx
   apply h
   apply toFin_embedding.injective
   rw [toFin_embedding.map_zero]
   exact Jacobian.toZ_eq_zero.mp hx
 
-private theorem batchInverse_mul (x : RecoveryElement) (h : x ≠ 0) :
+private theorem batchInverse_mul (x : Montgomery) (h : x ≠ 0) :
     zValue (Montgomery.inv x) * zValue x = 1 := by
   have hneg := zValue_ne_zero h
   simp only [zValue] at hneg ⊢
   rw [Montgomery.toFin_inv, Jacobian.toZ_inverse, inv_mul_cancel₀ hneg]
 
-private theorem affineWithInverse_spec {p : Coordinates} {iv : RecoveryElement}
+private theorem affineWithInverse_spec {p : Coordinates} {iv : Montgomery}
     (hp : OnCurve p) (hi : zValue iv * zValue p.z = 1) :
     Represents (affineWithInverse iv p) (groupValue p) := by
   have hz : (readCoords p).z ≠ 0 := by
@@ -1476,7 +1478,7 @@ private theorem affineWithInverse_spec {p : Coordinates} {iv : RecoveryElement}
 private abbrev SamePoint (p q : Coordinates) : Prop :=
   OnCurve p → Represents q (groupValue p)
 
-private theorem prepareBatch_spec (ps : List Coordinates) (iv : RecoveryElement)
+private theorem prepareBatch_spec (ps : List Coordinates) (iv : Montgomery)
     (hi : zValue iv * zValue (prepareBatch ps).1 = 1) :
     List.Forall₂ SamePoint ps ((prepareBatch ps).2 iv).val := by
   induction ps generalizing iv with
@@ -1531,7 +1533,7 @@ private theorem generatedMultiples_spec (count : Nat) {p : Point} (hp : p.isOnCu
   let ps := oddSequence step first count
   let table := batchNormalize ps.val
   have hfirst : Represents first (Point.toPoint p) := point_spec hp
-  have hd := recovery_double_spec hfirst.1
+  have hd := fastDouble_spec hfirst.1
   have hstep : Represents step (Point.toPoint p + Point.toPoint p) :=
     ⟨hd.1, by rw [hd.2, hfirst.2]⟩
   have hraw := oddSequence_spec hstep hfirst count i
@@ -1580,10 +1582,10 @@ private theorem signed_smul (k : Int) (P : curve.Point) :
 private theorem generator_split_smul (l : Nat) (G : curve.Point) :
     (l % 2^128) • G + (l / 2^128) • ((2^128 : Nat) • G) = l • G := by
   rw [smul_smul, ← add_nsmul, Nat.mul_comm (l / 2^128), Nat.mod_add_div]
-private theorem ofRecoveryCoords_eq_of_represents {r : Coordinates} {q : Point}
+private theorem ofMontgomeryCoords_eq_of_represents {r : Coordinates} {q : Point}
     (hr : Represents r (Point.toPoint q)) (hq : q.isOnCurve = true) :
     Point.ofMontgomeryCoords r = q := by
-  rw [ofRecoveryCoords_eq]
+  rw [ofMontgomeryCoords_eq_read]
   have hs := Point.ofJacobian_spec hr.1
   exact (Point.toPoint_inj hs.1 hq).mp (hs.2.trans hr.2)
 
@@ -1594,7 +1596,7 @@ private def selectedPoint (phi : Bool) (p : Coordinates) : Coordinates :=
   if phi then endomorphism p else p
 
 private theorem negate_negate (p : Coordinates) : negate (negate p) = p := by
-  have hh : (0 : RecoveryElement) - (0 - p.y) = p.y := by
+  have hh : (0 : Montgomery) - (0 - p.y) = p.y := by
     apply toFin_embedding.injective
     apply Jacobian.toZ_injective
     simp only [toFin_embedding.map_sub, toFin_embedding.map_zero, Jacobian.toZ_sub,
@@ -1682,11 +1684,11 @@ private theorem recodeRaw_eq (window : Window) (w : WordPair) :
 
 private theorem addGenerator_eq (p q : Coordinates) (negative : Bool) :
     addGenerator p q negative = Coords.add 0 p (if negative then negate q else q) := by
-  have hassoc (a b c : RecoveryElement) : a * (b * c) = a * b * c := by
+  have hassoc (a b c : Montgomery) : a * (b * c) = a * b * c := by
     apply toFin_embedding.injective
     apply Jacobian.toZ_injective
     simp only [toFin_embedding.map_mul, Jacobian.toZ_mul, mul_assoc]
-  have hone : (1 : RecoveryElement) ≠ 0 := by decide
+  have hone : (1 : Montgomery) ≠ 0 := by decide
   cases q
   cases negative <;> simp only [addGenerator, negate, Bool.false_eq_true, ↓reduceIte] <;> split
   all_goals first
@@ -1720,16 +1722,16 @@ private theorem and_distrib (a b c : UInt64) : (a ||| b) &&& c = (a &&& c) ||| (
 private theorem zValue_zero : zValue 0 = 0 := by
   simp only [zValue, toFin_embedding.map_zero, Jacobian.toZ_zero]
 
-private theorem zValue_add (x y : RecoveryElement) : zValue (x + y) = zValue x + zValue y := by
+private theorem zValue_add (x y : Montgomery) : zValue (x + y) = zValue x + zValue y := by
   simp only [zValue, toFin_embedding.map_add, Jacobian.toZ_add]
 
-private theorem zValue_sub (x y : RecoveryElement) : zValue (x - y) = zValue x - zValue y := by
+private theorem zValue_sub (x y : Montgomery) : zValue (x - y) = zValue x - zValue y := by
   simp only [zValue, toFin_embedding.map_sub, Jacobian.toZ_sub]
 
 private theorem zValue_injective : Function.Injective zValue :=
   Jacobian.toZ_injective.comp toFin_embedding.injective
 
-private theorem zValue_eq_zero (x : RecoveryElement) : zValue x = 0 ↔ x = 0 := by
+private theorem zValue_eq_zero (x : Montgomery) : zValue x = 0 ↔ x = 0 := by
   rw [← zValue_zero]
   exact zValue_injective.eq_iff
 
@@ -1744,20 +1746,20 @@ private theorem coords_ext_read {p q : Coordinates}
   simp only [Coords.mk.injEq]
   exact ⟨hx', hy', hz'⟩
 
-private theorem recovery_one_ne_zero : (1 : RecoveryElement) ≠ 0 := by
+private theorem montgomery_one_ne_zero : (1 : Montgomery) ≠ 0 := by
   intro h
   have hm := congrArg zValue h
   rw [zValue_one, zValue_zero] at hm
   exact one_ne_zero hm
 
-private theorem recovery_mul_one (x : RecoveryElement) : x * 1 = x := by
+private theorem montgomery_mul_one (x : Montgomery) : x * 1 = x := by
   apply zValue_injective
   calc
     _ = zValue x * zValue 1 := zValue_mul _ _
     _ = zValue x * 1 := congrArg (zValue x * ·) zValue_one
     _ = _ := mul_one _
 
-private theorem recovery_mul_assoc (x y z : RecoveryElement) : (x * y) * z = x * (y * z) := by
+private theorem montgomery_mul_assoc (x y z : Montgomery) : (x * y) * z = x * (y * z) := by
   apply toFin_embedding.injective
   apply Jacobian.toZ_injective
   simp only [toFin_embedding.map_mul, Jacobian.toZ_mul, mul_assoc]
@@ -1768,7 +1770,7 @@ attribute [local irreducible] Montgomery.square Montgomery.halve
   Montgomery.productSubSquare Montgomery.mul Montgomery.add
   Montgomery.sub
 
-private theorem restore_double (z : RecoveryElement) (p : Coordinates) :
+private theorem restore_double (z : Montgomery) (p : Coordinates) :
     restoreZ z (double p) = double (restoreZ z p) := by
   have hx : (restoreZ z (double p)).x = (double (restoreZ z p)).x := by
     unfold restoreZ double doubleCore
@@ -1778,13 +1780,13 @@ private theorem restore_double (z : RecoveryElement) (p : Coordinates) :
     rfl
   have hz : (restoreZ z (double p)).z = (double (restoreZ z p)).z := by
     unfold restoreZ double doubleCore
-    exact recovery_mul_assoc p.y p.z z
+    exact montgomery_mul_assoc p.y p.z z
   exact @coords_ext_read (restoreZ z (double p)) (double (restoreZ z p))
     (congrArg zValue hx) (congrArg zValue hy) (congrArg zValue hz)
 
 end
 
-private theorem recovery_zero_mul (z : RecoveryElement) : (0 : RecoveryElement) * z = 0 := by
+private theorem montgomery_zero_mul (z : Montgomery) : (0 : Montgomery) * z = 0 := by
   apply zValue_injective
   calc
     _ = zValue 0 * zValue z := zValue_mul _ _
@@ -1792,12 +1794,12 @@ private theorem recovery_zero_mul (z : RecoveryElement) : (0 : RecoveryElement) 
     _ = 0 := zero_mul _
     _ = _ := zValue_zero.symm
 
-private theorem restore_infinity (z : RecoveryElement) :
+private theorem restore_infinity (z : Montgomery) :
     restoreZ z Coords.infinity = Coords.infinity := by
-  change (⟨1, 1, (0 : RecoveryElement) * z⟩ : Coordinates) = ⟨1, 1, 0⟩
-  rw [recovery_zero_mul]
+  change (⟨1, 1, (0 : Montgomery) * z⟩ : Coordinates) = ⟨1, 1, 0⟩
+  rw [montgomery_zero_mul]
 
-private theorem restore_zero_iff (p : Coordinates) {z : RecoveryElement} (hz : z ≠ 0) :
+private theorem restore_zero_iff (p : Coordinates) {z : Montgomery} (hz : z ≠ 0) :
     (restoreZ z p).z = 0 ↔ p.z = 0 := by
   rw [← zValue_eq_zero (restoreZ z p).z, ← zValue_eq_zero p.z]
   change (zValue (p.z * z) = 0 ↔ zValue p.z = 0)
@@ -1836,7 +1838,7 @@ private theorem scale_spec {p q : Coordinates} {P : curve.Point} {u : F}
     exact ⟨hax, hay⟩
 
 private theorem restore_scaleNumerators {p : Coordinates} {P : curve.Point} (hp : Represents p P)
-    {z : RecoveryElement} (hz : z ≠ 0) : Represents (restoreZ z (scaleNumerators z p)) P := by
+    {z : Montgomery} (hz : z ≠ 0) : Represents (restoreZ z (scaleNumerators z p)) P := by
   apply scale_spec hp (zValue_ne_zero hz)
   · simp only [restoreZ, scaleNumerators, zValue_mul, Montgomery.square_eq_mul]
     ring
@@ -1850,7 +1852,7 @@ private theorem signedPoint_eq_fields (q : Coordinates) (neg : Bool) :
   cases q
   cases neg <;> simp only [signedPoint, negate, Bool.false_eq_true, ↓reduceIte]
 
-private theorem sign_fixed_eq (z : RecoveryElement) (p q : Coordinates) (negative : Bool) :
+private theorem sign_fixed_eq (z : Montgomery) (p q : Coordinates) (negative : Bool) :
     addFixed z p q negative = addFixed z p (signedPoint negative q) false := by
   rw [signedPoint_eq_fields]
   simp only [addFixed, zeroElement_eq_true, Bool.false_eq_true, ↓reduceIte]
@@ -1862,7 +1864,7 @@ attribute [local irreducible] Montgomery.square Montgomery.halve
   Montgomery.add Montgomery.sub
 
 
-private theorem restore_doubleStd (z : RecoveryElement) (p : Coordinates) :
+private theorem restore_doubleStd (z : Montgomery) (p : Coordinates) :
     restoreZ z (Coords.double 0 p) = Coords.double 0 (restoreZ z p) := by
   apply @coords_ext_read (restoreZ z (Coords.double 0 p)) (Coords.double 0 (restoreZ z p))
   · have e : (restoreZ z (Coords.double 0 p)).x = (Coords.double 0 (restoreZ z p)).x := by
@@ -1878,13 +1880,13 @@ private theorem restore_doubleStd (z : RecoveryElement) (p : Coordinates) :
     simp only [zValue_add, zValue_mul]
     ring
 
-private def addWeighted (p : Coordinates) (x y d h r : RecoveryElement) : Coordinates :=
+private def addWeighted (p : Coordinates) (x y d h r : Montgomery) : Coordinates :=
   if h = 0 then
     if r = 0 then Coords.double 0 p else Coords.infinity
   else addFromDifferences x y d h r
 
-private theorem addWeighted_restore (z : RecoveryElement) (p : Coordinates)
-    (x y d h r : RecoveryElement) :
+private theorem addWeighted_restore (z : Montgomery) (p : Coordinates)
+    (x y d h r : Montgomery) :
     restoreZ z (addWeighted p x y d h r) =
       addWeighted (restoreZ z p) x y (d * z) h r := by
   by_cases hh : h = 0
@@ -1903,7 +1905,7 @@ private theorem weightedLeft_full (p q : Coordinates) :
         (p.x * (q.z * q.z), p.y * q.z * (q.z * q.z), p.z * q.z) := by
   split
   · rename_i hz
-    simp only [hz, recovery_mul_one]
+    simp only [hz, montgomery_mul_one]
   · rfl
 
 private theorem coords_add_eq_addWeighted {p q : Coordinates} (hp : p.z ≠ 0) (hq : q.z ≠ 0) :
@@ -1916,27 +1918,27 @@ private theorem coords_add_eq_addWeighted {p q : Coordinates} (hp : p.z ≠ 0) (
   simp only [Montgomery.square_eq_mul, Montgomery.productDiff_eq]
 
 private theorem addCommon_eq_addWeighted {p : Coordinates}
-    (hp : p.z ≠ 0) (qx qy : RecoveryElement) :
+    (hp : p.z ≠ 0) (qx qy : Montgomery) :
     addCommon p qx qy = addWeighted p p.x p.y p.z
       (qx * (p.z * p.z) - p.x) (qy * p.z * (p.z * p.z) - p.y) := by
   simp only [addCommon, zeroElement_eq_true, ite_eq_right hp, Montgomery.square_eq_mul,
     addWeighted]
 
-private theorem recovery_one_mul (x : RecoveryElement) : (1 : RecoveryElement) * x = x := by
+private theorem montgomery_one_mul (x : Montgomery) : (1 : Montgomery) * x = x := by
   apply zValue_injective
   simp only [zValue_mul, zValue_one, one_mul]
 
-private theorem restore_eq_zero {z : RecoveryElement} {p : Coordinates} (hp : p.z = 0) :
+private theorem restore_eq_zero {z : Montgomery} {p : Coordinates} (hp : p.z = 0) :
     (restoreZ z p).z = 0 := by
   change p.z * z = 0
-  rw [hp, recovery_zero_mul]
+  rw [hp, montgomery_zero_mul]
 
-private theorem restore_eq_of_one {z : RecoveryElement} {p : Coordinates} (hp : p.z = 1) :
+private theorem restore_eq_of_one {z : Montgomery} {p : Coordinates} (hp : p.z = 1) :
     (restoreZ z p).z = z := by
   change p.z * z = z
-  rw [hp, recovery_one_mul]
+  rw [hp, montgomery_one_mul]
 
-private theorem addFixed_eq_addWeighted {z : RecoveryElement} {p q : Coordinates}
+private theorem addFixed_eq_addWeighted {z : Montgomery} {p q : Coordinates}
     (hp : p.z ≠ 0) (hq : q.z ≠ 0) :
     addFixed z p q false = addWeighted p
       (p.x * (q.z * q.z)) (p.y * q.z * (q.z * q.z)) (p.z * q.z)
@@ -1944,11 +1946,11 @@ private theorem addFixed_eq_addWeighted {z : RecoveryElement} {p q : Coordinates
       (q.y * (p.z * z) * ((p.z * z) * (p.z * z)) - p.y * q.z * (q.z * q.z)) := by
   by_cases hq1 : q.z = 1
   · simp only [addFixed, zeroElement_eq_true, Bool.false_eq_true, ite_false, ite_eq_right hp,
-      hq1, ite_eq_right recovery_one_ne_zero, ite_true, Montgomery.square_eq_mul,
-      addWeighted, recovery_mul_one, recovery_mul_assoc]
+      hq1, ite_eq_right montgomery_one_ne_zero, ite_true, Montgomery.square_eq_mul,
+      addWeighted, montgomery_mul_one, montgomery_mul_assoc]
   · simp only [addFixed, zeroElement_eq_true, Bool.false_eq_true, ite_false, ite_eq_right hp,
       ite_eq_right hq, ite_eq_right hq1, Montgomery.square_eq_mul,
-      addWeighted, recovery_mul_assoc]
+      addWeighted, montgomery_mul_assoc]
 
 private theorem groupValue_of_z_zero {p : Coordinates} (h : p.z = 0) : groupValue p = 0 := by
   have h' : (readCoords p).z = 0 :=
@@ -1973,7 +1975,7 @@ private theorem unscale_spec {p q : Coordinates} {P : curve.Point} {u : F}
   · rw [hz, ← mul_assoc, inv_mul_cancel₀ hu, one_mul]
 
 private theorem addWeighted_spec_of_scale (p : Coordinates)
-    {x y d h r X Y D H R : RecoveryElement} {T : curve.Point} {s : F}
+    {x y d h r X Y D H R : Montgomery} {T : curve.Point} {s : F}
     (hs : s ≠ 0)
     (hx : zValue X = zValue x * s^2) (hy : zValue Y = zValue y * s^3)
     (hd : zValue D = zValue d * s)
@@ -2000,7 +2002,7 @@ private theorem addWeighted_spec_of_scale (p : Coordinates)
 
 private theorem addCommon_spec_of_z_zero
     {p q : Coordinates} {P Q : curve.Point}
-    {z : RecoveryElement} (hpz : p.z = 0) (hqz : q.z = 1)
+    {z : Montgomery} (hpz : p.z = 0) (hqz : q.z = 1)
     (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q) :
     Represents (restoreZ z (addCommon p q.x q.y)) (P + Q) := by
   have hpz' := restore_eq_zero (z := z) hpz
@@ -2018,7 +2020,7 @@ private theorem addCommon_spec_of_z_zero
   exact hq
 
 private theorem restore_common_weighted_eq
-    (z : RecoveryElement) {p : Coordinates} (hp : p.z ≠ 0) (x y : RecoveryElement) :
+    (z : Montgomery) {p : Coordinates} (hp : p.z ≠ 0) (x y : Montgomery) :
     restoreZ z (addCommon p x y) =
       addWeighted (restoreZ z p) p.x p.y (p.z * z)
         (x * (p.z * p.z) - p.x) (y * p.z * (p.z * p.z) - p.y) :=
@@ -2026,7 +2028,7 @@ private theorem restore_common_weighted_eq
     (addWeighted_restore z p p.x p.y p.z _ _)
 
 private theorem coords_add_weighted_with_z
-    {z : RecoveryElement} {p q : Coordinates} (hp : p.z ≠ 0)
+    {z : Montgomery} {p q : Coordinates} (hp : p.z ≠ 0)
     (hq : q.z ≠ 0) (hqz : q.z = z) :
     Coords.add 0 p q =
       addWeighted p (p.x * (z * z)) (p.y * z * (z * z)) (p.z * z)
@@ -2041,7 +2043,7 @@ private theorem coords_add_weighted_with_z
 
 private theorem addShared_compat
     (p : Coordinates) {f g : Coordinates} {T : curve.Point} {v : F}
-    {x y d h r X Y D H R : RecoveryElement}
+    {x y d h r X Y D H R : Montgomery}
     (he : f = addWeighted p x y d h r) (hE : g = addWeighted p X Y D H R)
     (hz : v ≠ 0)
     (hx : zValue X = zValue x * v^2) (hy : zValue Y = zValue y * v^3)
@@ -2054,7 +2056,7 @@ private theorem addShared_compat
   rwa [← hE]
 
 private theorem addCommon_spec_of_z_ne_zero
-    {p q : Coordinates} {P Q : curve.Point} {z : RecoveryElement}
+    {p q : Coordinates} {P Q : curve.Point} {z : Montgomery}
     (hz : z ≠ 0) (hpz : p.z ≠ 0) (hqz : q.z = 1) (hp : Represents (restoreZ z p) P)
     (hq : Represents (restoreZ z q) Q) : Represents (restoreZ z (addCommon p q.x q.y)) (P + Q) := by
   have hqz' : (restoreZ z q).z = z := restore_eq_of_one hqz
@@ -2086,7 +2088,7 @@ private theorem addCommon_spec_of_z_ne_zero
     (zValue_ne_zero hz) hx hy (zValue_mul dp.z z) hh hr (hp.add hq)
 
 private theorem addCommon_spec
-    {p q : Coordinates} {P Q : curve.Point} {z : RecoveryElement}
+    {p q : Coordinates} {P Q : curve.Point} {z : Montgomery}
     (hz : z ≠ 0) (hqz : q.z = 1) (hp : Represents (restoreZ z p) P)
     (hq : Represents (restoreZ z q) Q) : Represents (restoreZ z (addCommon p q.x q.y)) (P + Q) := by
   by_cases hpz : p.z = 0
@@ -2101,7 +2103,7 @@ attribute [local irreducible] Montgomery.square Montgomery.halve
   Montgomery.productSubSquare Montgomery.productDiff Montgomery.mul
   Montgomery.add Montgomery.sub
 
-private theorem restore_fixed_weighted_eq {z : RecoveryElement} {p q : Coordinates}
+private theorem restore_fixed_weighted_eq {z : Montgomery} {p q : Coordinates}
     (hp : p.z ≠ 0) (hq : q.z ≠ 0) :
     restoreZ z (addFixed z p q false) = addWeighted (restoreZ z p)
       (p.x * (q.z * q.z)) (p.y * q.z * (q.z * q.z)) ((p.z * q.z) * z)
@@ -2111,7 +2113,7 @@ private theorem restore_fixed_weighted_eq {z : RecoveryElement} {p q : Coordinat
     (addWeighted_restore z p _ _ _ _ _)
 
 private theorem addFixed_spec_of_z_ne_zero
-    {p q : Coordinates} {P Q : curve.Point} {z : RecoveryElement}
+    {p q : Coordinates} {P Q : curve.Point} {z : Montgomery}
     (hz : z ≠ 0) (hpz : p.z ≠ 0) (hqz : q.z ≠ 0)
     (hp : Represents (restoreZ z p) P) (hq : Represents q Q) :
     Represents (restoreZ z (addFixed z p q false)) (P + Q) := by
@@ -2144,7 +2146,7 @@ private theorem addFixed_spec_of_z_ne_zero
     (restore_fixed_weighted_eq hpz hqz)
     (@coords_add_eq_addWeighted dp q hpz' hqz) one_ne_zero hx hy hd hh hr (hp.add hq)
 
-private theorem addFixed_spec {z : RecoveryElement} {p q : Coordinates} {P Q : curve.Point}
+private theorem addFixed_spec {z : Montgomery} {p q : Coordinates} {P Q : curve.Point}
     (hz : z ≠ 0) (hp : Represents (restoreZ z p) P) (hq : Represents q Q) (neg : Bool) :
     Represents (restoreZ z (addFixed z p q neg)) (P + if neg then -Q else Q) := by
   rw [sign_fixed_eq]
@@ -2178,7 +2180,7 @@ attribute [local irreducible] Montgomery.mul Montgomery.sub
   Montgomery.add Montgomery.square Montgomery.halve
   Montgomery.productDiff Montgomery.productSubSquare
 
-private theorem restore_scale_swap (z f : RecoveryElement) (p : Coordinates) :
+private theorem restore_scale_swap (z f : Montgomery) (p : Coordinates) :
     restoreZ (f * z) (scaleNumerators f p) = restoreZ f (scaleNumerators f (restoreZ z p)) := by
   cases p with
   | mk x y w =>
@@ -2194,13 +2196,13 @@ private theorem restore_scale_swap (z f : RecoveryElement) (p : Coordinates) :
       _ = zValue (w * z) * zValue f := congrArg (· * zValue f) (zValue_mul w z).symm
       _ = _ := (zValue_mul _ _).symm
 
-private theorem coAdd_x_coordinate (a b c : RecoveryElement) :
+private theorem coAdd_x_coordinate (a b c : Montgomery) :
     c - (a+b) - a = c - b - (a+a) := by
   apply zValue_injective
   simp only [zValue_add, zValue_sub]
   ring
 
-private theorem coAdd_retained_x (a b : RecoveryElement) :
+private theorem coAdd_retained_x (a b : Montgomery) :
     let h := b - a
     let h2 := Montgomery.square h
     zValue (a*h2 + h*h2) = zValue h ^ 2 * zValue b := by
@@ -2208,12 +2210,12 @@ private theorem coAdd_retained_x (a b : RecoveryElement) :
   simp only [Montgomery.square_eq_mul, zValue_add, zValue_mul, zValue_sub]
   ring
 
-private theorem coAdd_retained_y (y h : RecoveryElement) :
+private theorem coAdd_retained_y (y h : Montgomery) :
     zValue (y*(h*Montgomery.square h)) = zValue h ^ 3 * zValue y := by
   simp only [Montgomery.square_eq_mul, zValue_mul]
   ring
 
-private theorem coAdd_sum_eq (px py qx qy z : RecoveryElement) (hh : qx-px ≠ 0) :
+private theorem coAdd_sum_eq (px py qx qy z : Montgomery) (hh : qx-px ≠ 0) :
     let p : Coordinates := ⟨px, py, 1⟩
     let q : Coordinates := ⟨qx, qy, 1⟩
     restoreZ ((coAdd p q).2.2*z) (coAdd p q).1 = restoreZ z (addCommon p qx qy) := by
@@ -2228,18 +2230,18 @@ private theorem coAdd_sum_eq (px py qx qy z : RecoveryElement) (hh : qx-px ≠ 0
   let x := Montgomery.square r - h3 - (v+v)
   have hd : addCommon p qx qy = addFromDifferences px py 1 h r := by
     dsimp only [addCommon, zeroElement_eq_true, p, Coords.x, Coords.y, Coords.z]
-    simp only [zeroElement_eq_true, ite_eq_right recovery_one_ne_zero,
+    simp only [zeroElement_eq_true, ite_eq_right montgomery_one_ne_zero,
       Montgomery.square_eq_mul,
-      recovery_mul_one, h, r, ite_eq_right hh]
+      montgomery_mul_one, h, r, ite_eq_right hh]
   change restoreZ ((coAdd p q).2.2*z) (coAdd p q).1 = restoreZ z (addCommon p qx qy)
   rw [hd]
-  change (⟨x', r*(v-x') - py*h3, (1 : RecoveryElement)*(h*z)⟩ : Coordinates) =
-    ⟨x, Montgomery.productDiff r (v-x) py h3, ((1 : RecoveryElement)*h)*z⟩
+  change (⟨x', r*(v-x') - py*h3, (1 : Montgomery)*(h*z)⟩ : Coordinates) =
+    ⟨x, Montgomery.productDiff r (v-x) py h3, ((1 : Montgomery)*h)*z⟩
   have hx : x' = x := coAdd_x_coordinate v h3 (Montgomery.square r)
-  rw [Montgomery.productDiff_eq, hx, recovery_one_mul, recovery_one_mul]
+  rw [Montgomery.productDiff_eq, hx, montgomery_one_mul, montgomery_one_mul]
 
 private theorem coAdd_spec
-    {z : RecoveryElement} {p q : Coordinates} {P Q : curve.Point}
+    {z : Montgomery} {p q : Coordinates} {P Q : curve.Point}
     (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
     (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q)
     (hh : (coAdd p q).2.2 ≠ 0) :
@@ -2264,8 +2266,8 @@ private theorem coAdd_spec
       have hy : zValue q'.y = zValue h ^ 3 * zValue (restoreZ z q).y :=
         coAdd_retained_y qy h
       have hz' : zValue q'.z = zValue h * zValue (restoreZ z q).z := by
-        change zValue ((1 : RecoveryElement)*(h*z)) = zValue h * zValue ((1 : RecoveryElement)*z)
-        simp only [recovery_one_mul, zValue_mul]
+        change zValue ((1 : Montgomery)*(h*z)) = zValue h * zValue ((1 : Montgomery)*z)
+        simp only [montgomery_one_mul, zValue_mul]
       change Represents (restoreZ ((coAdd p q).2.2*z) (coAdd p q).1) (P+Q) ∧ Represents q' Q
       constructor
       · rw [coAdd_sum_eq px py qx qy z hh0]
@@ -2276,7 +2278,7 @@ private theorem coAdd_unit_first (p q : Coordinates) : (coAdd p q).1.z = 1 := rf
 
 private theorem coAdd_unit_second (p q : Coordinates) : (coAdd p q).2.1.z = 1 := rfl
 
-private theorem table_factors_ne_zero {a b : RecoveryElement} (h : a * b ≠ 0) :
+private theorem table_factors_ne_zero {a b : Montgomery} (h : a * b ≠ 0) :
     a ≠ 0 ∧ b ≠ 0 := by
   constructor
   · intro ha
@@ -2288,7 +2290,7 @@ private theorem table_factors_ne_zero {a b : RecoveryElement} (h : a * b ≠ 0) 
     apply zValue_injective
     rw [zValue_mul, hb, zValue_zero, mul_zero]
 
-private theorem table_mul_ne_zero {a b : RecoveryElement} (ha : a ≠ 0) (hb : b ≠ 0) :
+private theorem table_mul_ne_zero {a b : Montgomery} (ha : a ≠ 0) (hb : b ≠ 0) :
     a*b ≠ 0 := by
   intro hz
   have h := congrArg zValue hz
@@ -2296,7 +2298,7 @@ private theorem table_mul_ne_zero {a b : RecoveryElement} (ha : a ≠ 0) (hb : b
   exact mul_ne_zero (zValue_ne_zero ha) (zValue_ne_zero hb) h
 
 private theorem collectOdd_prepend_spec
-    {d z : RecoveryElement} {p entry : Coordinates} {P : curve.Point}
+    {d z : Montgomery} {p entry : Coordinates} {P : curve.Point}
     (hd : d ≠ 0) (hpz : p.z = 1) (hp : Represents (restoreZ z p) P)
     (he : scaleNumerators d p = entry) :
     entry.z = 1 ∧ Represents (restoreZ (d*z) entry) P := by
@@ -2313,11 +2315,11 @@ private theorem collectOdd_prepend_spec
 
 private theorem restore_unit_z (p : Coordinates) : restoreZ p.z {p with z := 1} = p := by
   cases p
-  simp only [restoreZ, recovery_one_mul]
+  simp only [restoreZ, montgomery_one_mul]
 
 private theorem commonTable_seed_first
     {p : Coordinates} {P : curve.Point} (hpz : p.z = 1) (hp : Represents p P)
-    {z : RecoveryElement} (hz : z ≠ 0) :
+    {z : Montgomery} (hz : z ≠ 0) :
     Represents (restoreZ z { scaleNumerators z p with z := 1 }) P := by
   cases p with
   | mk x y w =>
@@ -2342,8 +2344,8 @@ private theorem PointAgreement.of_represents {p q : Coordinates} {P : curve.Poin
 
 private theorem PointAgreement.double {p q : Coordinates} (h : PointAgreement p q) :
     PointAgreement (double p) (double q) := by
-  have hp := recovery_double_spec h.1
-  have hq := recovery_double_spec h.2.1
+  have hp := fastDouble_spec h.1
+  have hq := fastDouble_spec h.2.1
   exact ⟨hp.1, hq.1, by rw [hp.2, hq.2, h.2.2]⟩
 
 private theorem selected_signed_onCurve {p : Coordinates} (hp : OnCurve p)
@@ -2356,7 +2358,7 @@ private theorem selected_signed_onCurve {p : Coordinates} (hp : OnCurve p)
   · exact he
   · exact (negate_spec he).1
 
-private theorem restoreZ_selected_signed (z : RecoveryElement) (p : Coordinates)
+private theorem restoreZ_selected_signed (z : Montgomery) (p : Coordinates)
     (phi neg : Bool) :
     restoreZ z (signedPoint neg (selectedPoint phi p)) =
       signedPoint neg (selectedPoint phi (restoreZ z p)) := by
@@ -2384,7 +2386,7 @@ private theorem addGenerator_eq_signedPoint (p q : Coordinates) (neg : Bool) :
   simpa only [signedPoint] using addGenerator_eq p q neg
 
 private theorem addPackedFixed_agrees
-    {z : RecoveryElement} (hz : z ≠ 0) (window : Window)
+    {z : Montgomery} (hz : z ≠ 0) (window : Window)
     {t : Vector Coordinates window.entries}
     (ht : ∀ i : Fin window.entries, OnCurve t[i.val])
     {p q : Coordinates} (hp : PointAgreement (restoreZ z p) q) (digit : UInt64) :
@@ -3024,7 +3026,7 @@ section
 attribute [local irreducible] Montgomery.square Montgomery.mul
   Montgomery.add Montgomery.sub
 
-private theorem ofFin_mul_assoc (a b : Fp) (c : RecoveryElement) :
+private theorem ofFin_mul_assoc (a b : Fp) (c : Montgomery) :
     Montgomery.ofFin (a * b) * c =
       Montgomery.ofFin a * (Montgomery.ofFin b * c) := by
   apply zValue_injective
@@ -3038,37 +3040,37 @@ private theorem endomorphismSquared_eq (p : Coordinates) :
 
 end
 
-private theorem restoreZ_endomorphism (z : RecoveryElement) (p : Coordinates) :
+private theorem restoreZ_endomorphism (z : Montgomery) (p : Coordinates) :
     restoreZ z (endomorphism p) = endomorphism (restoreZ z p) := by
   cases p
   rfl
 
-private theorem restoreZ_negate (z : RecoveryElement) (p : Coordinates) :
+private theorem restoreZ_negate (z : Montgomery) (p : Coordinates) :
     restoreZ z (negate p) = negate (restoreZ z p) := by
   cases p
   rfl
 
-private theorem jointRep_turn {z : RecoveryElement} {p : Coordinates}
+private theorem jointRep_turn {z : Montgomery} {p : Coordinates}
     {P : curve.Point} {c : Int × Int} (h : Represents (restoreZ z p) (jointAction P c)) :
     Represents (restoreZ z (endomorphism p)) (jointAction P (jointTurn c)) := by
   rw [restoreZ_endomorphism]
   have he := endomorphism_spec h.1
   exact ⟨he.1, by rw [he.2, h.2, jointAction_turn]⟩
 
-private theorem jointRep_turnTwice {z : RecoveryElement} {p : Coordinates}
+private theorem jointRep_turnTwice {z : Montgomery} {p : Coordinates}
     {P : curve.Point} {c : Int × Int} (h : Represents (restoreZ z p) (jointAction P c)) :
     Represents (restoreZ z (endomorphismSquared p)) (jointAction P (jointTurn (jointTurn c))) := by
   rw [endomorphismSquared_eq]
   exact jointRep_turn (jointRep_turn h)
 
-private theorem jointRep_neg {z : RecoveryElement} {p : Coordinates}
+private theorem jointRep_neg {z : Montgomery} {p : Coordinates}
     {P : curve.Point} {c : Int × Int} (h : Represents (restoreZ z p) (jointAction P c)) :
     Represents (restoreZ z (negate p)) (jointAction P (jointNeg c)) := by
   rw [restoreZ_negate]
   have he := negate_spec h.1
   exact ⟨he.1, by rw [he.2, h.2, jointAction_neg]⟩
 
-private theorem jointRep_coAdd {z : RecoveryElement} {p q : Coordinates}
+private theorem jointRep_coAdd {z : Montgomery} {p q : Coordinates}
     {P : curve.Point} {a b : Int × Int} (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
     (hp : Represents (restoreZ z p) (jointAction P a))
     (hq : Represents (restoreZ z q) (jointAction P b)) (hh : (coAdd p q).2.2 ≠ 0) :
@@ -3090,7 +3092,7 @@ private theorem jointEntry_phi2X (p : Coordinates) :
 
 private def jointEntryCoords (q : JointEntry) (rotation : UInt64) (negative : Bool) : Coordinates :=
   let x := if rotation == 0 then q.x else if rotation == 1 then q.phiX else q.phi2X
-  let y := if negative then (0 : RecoveryElement) - q.y else q.y
+  let y := if negative then (0 : Montgomery) - q.y else q.y
   ⟨x, y, 1⟩
 
 private def jointPower (p : Coordinates) (rotation : UInt64) : Coordinates :=
@@ -3117,7 +3119,7 @@ private theorem jointEntryCoords_eq (p : Coordinates) (hp : p.z = 1)
         simp only [jointEntryCoords, jointPower, beq_iff_eq, h0, h1, ↓reduceIte, he]
         rfl
 
-private theorem jointPower_represents {z : RecoveryElement} {p : Coordinates}
+private theorem jointPower_represents {z : Montgomery} {p : Coordinates}
     {P : curve.Point} {c : Int × Int} (h : Represents (restoreZ z p) (jointAction P c))
     (r : UInt64) :
     Represents (restoreZ z (jointPower p r)) (jointAction P (jointOriented r false c)) := by
@@ -3130,7 +3132,7 @@ private theorem jointPower_represents {z : RecoveryElement} {p : Coordinates}
     · simpa only [jointPower, jointOriented, beq_iff_eq, h0, h1, Bool.false_eq_true, ↓reduceIte]
         using jointRep_turnTwice h
 
-private theorem jointEntry_represents {z : RecoveryElement} {p : Coordinates}
+private theorem jointEntry_represents {z : Montgomery} {p : Coordinates}
     {P : curve.Point} {c : Int × Int} (hp : p.z = 1)
     (h : Represents (restoreZ z p) (jointAction P c)) (r : UInt64) (n : Bool) :
     Represents (restoreZ z (jointEntryCoords (JointEntry.ofCoords p) r n))
@@ -3143,7 +3145,7 @@ private theorem jointEntry_represents {z : RecoveryElement} {p : Coordinates}
     rw [signedPoint, ite_eq_left rfl, ← ho]
     exact jointRep_neg (jointPower_represents h r)
 
-private abbrev JointTableSpec (z : RecoveryElement) (table : Vector JointEntry 6)
+private abbrev JointTableSpec (z : Montgomery) (table : Vector JointEntry 6)
     (P : curve.Point) : Prop :=
   ∀ (i : Fin 6) (r : UInt64) (n : Bool),
     Represents (restoreZ z (jointEntryCoords table[i.val] r n))
@@ -3162,7 +3164,7 @@ private def jointDigitCoefficients (d : UInt64) : Int × Int :=
     (jointBasis (jointDescriptorIndex d))
 
 private theorem addPackedJoint_represents {p : Coordinates} {P B : curve.Point}
-    {z : RecoveryElement} {t : Vector JointEntry 6} (hz : z ≠ 0)
+    {z : Montgomery} {t : Vector JointEntry 6} (hz : z ≠ 0)
     (hp : Represents (restoreZ z p) P) (ht : JointTableSpec z t B) (d : UInt64) :
     Represents (restoreZ z (addPackedJoint p t d))
       (P + jointAction B (jointDigitCoefficients d)) := by
@@ -3176,7 +3178,7 @@ private theorem addPackedJoint_represents {p : Coordinates} {P B : curve.Point}
     have hq := ht i r n
     have ha : addPackedJoint p t d = addCommon p q.x q.y := by
       have hd' : ¬(d == 0) = true := fun h => hd (beq_iff_eq.mp h)
-      have hflip (b : Bool) (y : RecoveryElement) :
+      have hflip (b : Bool) (y : Montgomery) :
           (if b then y else 0 - y) = (if !b then 0 - y else y) := by
         cases b <;> rfl
       simp only [addPackedJoint, ite_eq_right hd', q, jointEntryCoords, i, r, n,
@@ -3271,16 +3273,16 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
   obtain ⟨nz4, nh3⟩ : z4 ≠ 0 ∧ h3 ≠ 0 := table_factors_ne_zero nz3
   obtain ⟨nz5, nh4⟩ : z5 ≠ 0 ∧ h4 ≠ 0 := table_factors_ne_zero nz4
   have nh5 : h5 ≠ 0 := nz5
-  let u0 : RecoveryElement := 1
-  have nu0 : u0 ≠ 0 := recovery_one_ne_zero
+  let u0 : Montgomery := 1
+  have nu0 : u0 ≠ 0 := montgomery_one_ne_zero
   have hp0 : Represents (restoreZ u0 p0) (jointAction P (1, 0)) := by
     have he : restoreZ u0 p0 = p := by
       cases p with
       | mk x y z =>
         change z = 1 at hpz
         subst z
-        change (⟨x, y, (1 : RecoveryElement) * 1⟩ : Coordinates) = ⟨x, y, 1⟩
-        rw [recovery_mul_one]
+        change (⟨x, y, (1 : Montgomery) * 1⟩ : Coordinates) = ⟨x, y, 1⟩
+        rw [montgomery_mul_one]
     rw [he]
     simpa only [jointAction, one_zsmul, zero_zsmul, add_zero] using hp
   have hq0 : Represents (restoreZ u0 q0) (jointAction P (1, 1)) :=
@@ -3334,7 +3336,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     have h := @collectOdd_prepend_spec z1 u0 p0 (scaleNumerators z1 p0)
       (jointAction P (1, 0)) hz zp0 hp0 rfl
     have hden : z1 * u0 = z1 := by
-      simp only [u0, recovery_mul_one]
+      simp only [u0, montgomery_mul_one]
     let moved := jointEntryCoords (JointEntry.ofCoords (scaleNumerators z1 p0)) r n
     have hm := @jointEntry_represents (z1 * u0) (scaleNumerators z1 p0) P (1, 0) h.1 h.2 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3345,7 +3347,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     have h := @collectOdd_prepend_spec z2 u1 p1 (scaleNumerators z2 p1)
       (jointAction P (2, 1)) nz2 zp1 hp1 rfl
     have hden : z2 * u1 = z1 := by
-      simp only [z1, u1, u0, recovery_mul_one]
+      simp only [z1, u1, u0, montgomery_mul_one]
     let moved := jointEntryCoords (JointEntry.ofCoords (scaleNumerators z2 p1)) r n
     have hm := @jointEntry_represents (z2 * u1) (scaleNumerators z2 p1) P (2, 1) h.1 h.2 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3356,7 +3358,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     have h := @collectOdd_prepend_spec z3 u2 p2 (scaleNumerators z3 p2)
       (jointAction P (3, 2)) nz3 zp2 hp2 rfl
     have hden : z3 * u2 = z1 := by
-      simp only [z1, z2, u2, u1, u0, recovery_mul_one, ← recovery_mul_assoc]
+      simp only [z1, z2, u2, u1, u0, montgomery_mul_one, ← montgomery_mul_assoc]
     let moved := jointEntryCoords (JointEntry.ofCoords (scaleNumerators z3 p2)) r n
     have hm := @jointEntry_represents (z3 * u2) (scaleNumerators z3 p2) P (3, 2) h.1 h.2 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3367,7 +3369,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     have h := @collectOdd_prepend_spec z4 u3 p3 (scaleNumerators z4 p3)
       (jointAction P (3, 1)) nz4 zp3 hp3 rfl
     have hden : z4 * u3 = z1 := by
-      simp only [z1, z2, z3, u3, u2, u1, u0, recovery_mul_one, ← recovery_mul_assoc]
+      simp only [z1, z2, z3, u3, u2, u1, u0, montgomery_mul_one, ← montgomery_mul_assoc]
     let moved := jointEntryCoords (JointEntry.ofCoords (scaleNumerators z4 p3)) r n
     have hm := @jointEntry_represents (z4 * u3) (scaleNumerators z4 p3) P (3, 1) h.1 h.2 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3378,7 +3380,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
     have h := @collectOdd_prepend_spec z5 u4 p4 (scaleNumerators z5 p4)
       (jointAction P (3, 0)) nz5 zp4 hp4 rfl
     have hden : z5 * u4 = z1 := by
-      simp only [z1, z2, z3, z4, u4, u3, u2, u1, u0, recovery_mul_one, ← recovery_mul_assoc]
+      simp only [z1, z2, z3, z4, u4, u3, u2, u1, u0, montgomery_mul_one, ← montgomery_mul_assoc]
     let moved := jointEntryCoords (JointEntry.ofCoords (scaleNumerators z5 p4)) r n
     have hm := @jointEntry_represents (z5 * u4) (scaleNumerators z5 p4) P (3, 0) h.1 h.2 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3388,7 +3390,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
       (jointAction P (jointOriented r n (3, -1)))
     have hden : u5 = z1 := by
       simp only [u5, u4, u3, u2, u1, u0, z1, z2, z3, z4, z5,
-        recovery_mul_one, ← recovery_mul_assoc]
+        montgomery_mul_one, ← montgomery_mul_assoc]
     let moved := jointEntryCoords (JointEntry.ofCoords p5) r n
     have hm := @jointEntry_represents u5 p5 P (3, -1) zp5 hp5 r n
     exact (congrArg (fun z => Represents (restoreZ z moved)
@@ -3396,7 +3398,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
 
 end
 
-private def jointChainSingle (window : Window) (z : RecoveryElement)
+private def jointChainSingle (window : Window) (z : Montgomery)
     (table : Vector JointEntry 6) (rt st : Vector Coordinates window.entries) :
     Nat → WordPair → WordPair → WordPair → WordPair → Coordinates
   | 0, _, _, _, _ => Coords.infinity
@@ -3419,7 +3421,7 @@ private theorem recodeJoint_even (a b : WordPair)
     rfl
   simp only [recodeJoint, h, ↓reduceIte]
 
-private theorem jointChainSingle_even (window : Window) (z : RecoveryElement)
+private theorem jointChainSingle_even (window : Window) (z : Montgomery)
     (table : Vector JointEntry 6) (rt st : Vector Coordinates window.entries)
     (n : Nat) (a b c d : WordPair) (h : ((a.lo ||| b.lo ||| c.lo ||| d.lo) &&& 1) == 0) :
     jointChainSingle window z table rt st (n+1) a b c d =
@@ -3459,7 +3461,7 @@ private theorem signedHalf_twice (lo hi : UInt64) :
   rw [signedHalf_eq]
   omega
 
-private theorem addPackedFixed_represents {z : RecoveryElement} (hz : z ≠ 0)
+private theorem addPackedFixed_represents {z : Montgomery} (hz : z ≠ 0)
     (window : Window) {t : Vector Coordinates window.entries}
     {p : Coordinates} {P Q : curve.Point} (hp : Represents (restoreZ z p) P)
     (ht : TableSpec t Q) (d : UInt64) :
@@ -3498,7 +3500,7 @@ private theorem fixedRecode_model (window : Window) (c : WordPair) :
   rw [h.1,h.2.1,h.2.2,recodeWords_scalar,recodeWords_digit]
   exact ⟨rfl,rfl⟩
 
-private theorem jointChainSingle_represents (window : Window) {z : RecoveryElement} (hz : z ≠ 0)
+private theorem jointChainSingle_represents (window : Window) {z : Montgomery} (hz : z ≠ 0)
     {table : Vector JointEntry 6} {rt st : Vector Coordinates window.entries}
     {P G H : curve.Point} (ht : JointTableSpec z table P)
     (hr : TableSpec rt G) (hs : TableSpec st H)
@@ -3550,7 +3552,7 @@ private theorem jointChainSingle_represents (window : Window) {z : RecoveryEleme
     let out := jointChainSingle window z table rt st fuel a' b' c' d'
     have hDbl : Represents (restoreZ z (double out)) (v+v) := by
       rw [restore_double]
-      have h := recovery_double_spec hn.1
+      have h := fastDouble_spec hn.1
       exact ⟨h.1, by rw [h.2,hn.2]⟩
     have hJoint := addPackedJoint_represents hz hDbl ht j.digit
     have hFixed1 := addPackedFixed_represents hz window hJoint hr r.digit
@@ -3572,7 +3574,7 @@ private theorem wordHalf_twice (w : WordPair) :
   cases w
   simp only [WordPair.half, shiftWords_two, shiftHigh_two]
 
-private theorem jointSkip_agrees {z : RecoveryElement} (hz : z ≠ 0)
+private theorem jointSkip_agrees {z : Montgomery} (hz : z ≠ 0)
     {p p' q : Coordinates} (h : PointAgreement (restoreZ z p') q)
     (hp : p.z = 0 → p'.z = 0) :
     PointAgreement
@@ -3591,13 +3593,13 @@ private theorem jointDouble_zero {p : Coordinates} (hp : p.z = 0) : (double p).z
   apply toFin_embedding.injective
   rw [toFin_embedding.map_mul, hp, toFin_embedding.map_zero, mul_zero]
 
-private theorem jointDouble_agrees {z : RecoveryElement} {p q : Coordinates}
+private theorem jointDouble_agrees {z : Montgomery} {p q : Coordinates}
     (h : PointAgreement (restoreZ z p) (restoreZ z q)) :
     PointAgreement (restoreZ z (double p)) (restoreZ z (double q)) := by
   simp only [restore_double]
   exact PointAgreement.double h
 
-private theorem jointAdd_agrees (window : Window) {z : RecoveryElement} (hz : z ≠ 0)
+private theorem jointAdd_agrees (window : Window) {z : Montgomery} (hz : z ≠ 0)
     {t : Vector JointEntry 6} {rt st : Vector Coordinates window.entries}
     {B R S : curve.Point} (ht : JointTableSpec z t B) (hr : TableSpec rt R) (hs : TableSpec st S)
     {p q : Coordinates} (h : PointAgreement (restoreZ z p) (restoreZ z q)) (dv dr ds : UInt64) :
@@ -3614,7 +3616,7 @@ private theorem jointAdd_agrees (window : Window) {z : RecoveryElement} (hz : z 
     (addPackedFixed_represents hz window (addPackedFixed_represents hz window ha hr dr) hs ds)
     (addPackedFixed_represents hz window (addPackedFixed_represents hz window hb hr dr) hs ds)
 
-private theorem packedJointChain_agrees (window : Window) {z : RecoveryElement} (hz : z ≠ 0)
+private theorem packedJointChain_agrees (window : Window) {z : Montgomery} (hz : z ≠ 0)
     {t : Vector JointEntry 6} {rt st : Vector Coordinates window.entries}
     {B R S : curve.Point} (ht : JointTableSpec z t B) (hr : TableSpec rt R) (hs : TableSpec st S)
     (fuel : Nat) (a b c d : WordPair) :
@@ -3624,7 +3626,7 @@ private theorem packedJointChain_agrees (window : Window) {z : RecoveryElement} 
   have hstart : PointAgreement (restoreZ z (Coords.infinity : Coordinates))
       (restoreZ z (double Coords.infinity)) := by
     rw [restore_double, restore_infinity]
-    obtain ⟨hc,hv⟩ := recovery_double_spec infinity_spec.1
+    obtain ⟨hc,hv⟩ := fastDouble_spec infinity_spec.1
     exact ⟨infinity_spec.1,hc,by rw [hv,infinity_spec.2,add_zero]⟩
   have hsingle {p q : Coordinates} (h : PointAgreement (restoreZ z p) (restoreZ z q)) :
       PointAgreement (restoreZ z (doubleUnlessInfinity double p)) (restoreZ z (double q)) :=
@@ -3748,7 +3750,7 @@ private theorem signedComponent_spec (w : WordPair × Bool)
   have hv : signedValue (signedComponent w) = componentValue w := by omega
   exact ⟨hv, hv ▸ hComp⟩
 
-private theorem packedJointWords_represents {z : RecoveryElement}
+private theorem packedJointWords_represents {z : Montgomery}
     (hz : z ≠ 0) {table : Vector JointEntry 6} {P : curve.Point}
     (ht : JointTableSpec z table P) (k l : Montgomery.Raw) (a b : WordPair × Bool)
     (ha : a.1.hi < 0x7fffffffffffffff) (hb : b.1.hi < 0x7fffffffffffffff)
@@ -3802,7 +3804,7 @@ private theorem fallback_represents (k l : Fn) {p : Coordinates} {P : curve.Poin
   have hread : readCoords (Coords.mulAdd 0 256 k.val p l.val
       (Point.toMontgomeryCoords .generator)) = Jacobian.mulAdd 0 256 k.val (readCoords p) l.val
         (readCoords (Point.toMontgomeryCoords .generator)) := by
-    have h := Coords.map_mulAdd toFin_embedding (0 : RecoveryElement) 256 k.val p l.val
+    have h := Coords.map_mulAdd toFin_embedding (0 : Montgomery) 256 k.val p l.val
       (Point.toMontgomeryCoords .generator)
     rw [toFin_embedding.map_zero] at h
     exact congrArg (Jacobian.ofCoords : Coords Fp → _) h
@@ -3823,7 +3825,7 @@ attribute [local irreducible] splitScalarWords commonJointTable
 /-- On the joint branch, the multiplication is the joint chain with its denominator restored. -/
 private theorem mulProjective_joint_eq
     (k l : Fn) (p : Coordinates) {t : Vector JointEntry 6}
-    {z : RecoveryElement} (hp : p.z = 1)
+    {z : Montgomery} (hp : p.z = 1)
     (ht : commonJointTable p = (t,z)) (hz : z ≠ 0)
     (ha : (splitScalarWords (Montgomery.rawOfNat k.val)).1.1.hi < 0x7fffffffffffffff)
     (hb : (splitScalarWords (Montgomery.rawOfNat k.val)).2.1.hi < 0x7fffffffffffffff) :
@@ -3883,7 +3885,7 @@ private theorem toPoint_mul {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
       Point.toPoint (mul k p l) = k.val • Point.toPoint p + l.val • Point.toPoint .generator := by
   have h := mulProjective_represents k l (p := Point.toMontgomeryCoords p)
     (P := Point.toPoint p) (point_spec hp)
-  rw [mul, ofRecoveryCoords_eq]
+  rw [mul, ofMontgomeryCoords_eq_read]
   have hs := Point.ofJacobian_spec h.1
   exact ⟨hs.1, hs.2.trans h.2⟩
 
