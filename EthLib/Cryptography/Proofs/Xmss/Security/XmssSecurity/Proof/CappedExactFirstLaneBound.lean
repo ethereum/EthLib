@@ -1061,11 +1061,10 @@ theorem relTriple_sourceGlobalExact_firstLane_program_boundedHit_sub_keygen
       hrightSupport
   have hleftKeyResult :=
     trajectoryProgrammedGlobalChainKeygen_support_keyResult left hleftSupport
-  have hmaterializedKeyResult :
-      Concrete.materializeCachedKeyResult left.keyResult ∈ support
-        ((simulateQ romImpl Concrete.scheme.keygen).run ∅) := by
-    exact Concrete.oldKeygen_support_materializedPrecomputedKeygen
-      left.keyResult hleftKeyResult
+  -- Rewrite by the key generation equation: the kernel would run key generation to fold it.
+  have hmaterializedKeyResult := Concrete.oldKeygen_support_materializedPrecomputedKeygen
+    left.keyResult hleftKeyResult
+  rw [← Concrete.scheme_keygen] at hmaterializedKeyResult
   have hsourceBound :=
     sourceUnloggedDetailedGameAfterKeygen_hashQueryBound_sub_keygen
       q adversary hbound (Concrete.materializeCachedKeyResult left.keyResult)
@@ -1356,14 +1355,14 @@ theorem globalFirstLaneExactCoupledProgram_support_info
         ((globalFirstLaneExactTracedDetailedExecution adversary result.1.1.1
           result.1.2).run (GlobalHighDirectTracedState.initial
             (globalFilteredCausalKeygenState result.1.1.1)))).run) := by
-  unfold globalFirstLaneExactCoupledProgram at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨right, hright, htail⟩ := hresult
-  rw [mem_support_bind_iff] at htail
-  obtain ⟨execution, hexecution, hpure⟩ := htail
-  simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst result
-  exact ⟨hright, hexecution⟩
+  -- Step on any computation and move outputs by equations, so the kernel runs no game.
+  rw [globalFirstLaneExactCoupledProgram] at hresult
+  obtain ⟨right, hright, hrest⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  obtain ⟨execution, hexecution, hpure⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
+  rw [mem_support_pure_iff] at hpure
+  exact ⟨mem_support_congr hright rfl (by rw [hpure]),
+    mem_support_congr hexecution (by rw [hpure]) (by rw [hpure])⟩
 
 theorem exists_globalHighMonitored_of_coupled_support
     (adversary : Adversary)
@@ -1377,32 +1376,37 @@ theorem exists_globalHighMonitored_of_coupled_support
             result.2.2.chainActions)) := by
   obtain ⟨hkey, hexecution⟩ :=
     globalFirstLaneExactCoupledProgram_support_info adversary result hresult
-  have hmapped : (result.2.1, result.2.2.chainActions) ∈ support
-      ((fun execution => (execution.1, execution.2.chainActions)) <$>
+  -- Map and bind on any computation through equations, so the kernel runs no game.
+  have hcomputation :
+      (fun execution : (_ × FirstLaneOracleSimulation.ActionTrace GlobalChainValueIndex) =>
+          (execution.1, execution.2.chainActions)) <$>
         (simulateQ
           (FirstLaneOracleSimulation.eagerTraceImpl result.1.1.2)
           ((globalFirstLaneExactTracedDetailedExecution adversary
             result.1.1.1 result.1.2).run (GlobalHighDirectTracedState.initial
-              (globalFilteredCausalKeygenState result.1.1.1)))).run) := by
-    rw [support_map]
-    exact ⟨result.2, hexecution, rfl⟩
-  rw [simulate_globalFirstLaneEagerTrace_chainProjection] at hmapped
-  rw [globalFirstLaneErase_exactTracedDetailedExecution adversary
-    result.1.1.1 result.1.2 (GlobalHighDirectTracedState.initial
-      (globalFilteredCausalKeygenState result.1.1.1))] at hmapped
-  rw [← map_globalHighMonitoredDetailedExecution_full_projection]
-    at hmapped
-  rw [support_map] at hmapped
-  obtain ⟨highExecution, hhighExecution, hprojection⟩ := hmapped
+              (globalFilteredCausalKeygenState result.1.1.1)))).run =
+        (fun result : (Forgery × Bool) × GlobalMonitoredTracedState =>
+          ((result.1, GlobalHighDirectTracedState.mk result.2.1.causal result.2.2),
+            result.2.1.trace)) <$>
+          globalHighMonitoredDetailedExecution adversary
+            ((result.1.1.1, result.1.1.2), result.1.2) := by
+    rw [simulate_globalFirstLaneEagerTrace_chainProjection,
+      globalFirstLaneErase_exactTracedDetailedExecution adversary
+        result.1.1.1 result.1.2 (GlobalHighDirectTracedState.initial
+          (globalFilteredCausalKeygenState result.1.1.1)),
+      ← map_globalHighMonitoredDetailedExecution_full_projection]
+  have hmapped := mem_support_of_map_eq _ hcomputation hexecution rfl
+  obtain ⟨highExecution, hhighExecution, hprojection⟩ :=
+    exists_eq_of_mem_support_map _ _ hmapped
   let highResult : GlobalHighMonitoredProgramResult :=
     (result.1, highExecution)
   have hhighResult : highResult ∈ support
       (globalHighMonitoredProgram adversary) := by
-    unfold globalHighMonitoredProgram
-    rw [mem_support_bind_iff]
-    refine ⟨result.1, hkey, ?_⟩
-    rw [mem_support_bind_iff]
-    exact ⟨highExecution, hhighExecution, by simp [highResult]⟩
+    rw [globalHighMonitoredProgram]
+    refine mem_support_bind_of_eq _ _ hkey fun _ same => same ▸ ?_
+    refine mem_support_bind_of_eq _ _ (mem_support_congr hhighExecution rfl rfl)
+      fun _ same => same ▸ ?_
+    rw [mem_support_pure_iff]
   refine ⟨highResult, hhighResult, ?_⟩
   simpa [highResult, globalHighMonitoredFullProjection] using
     congrArg (fun execution =>
@@ -1498,6 +1502,312 @@ theorem sourceFirstLaneExactGood_to_globalHighRelation
     rw [hattacker]
     exact hwitnessValidLeafIndices
 
+/-- A monitored hit carries over to equal tables and traces. -/
+private theorem runObserved_eq_true_congr {table table' : GlobalChainValueIndex → Digest}
+    {trace trace' : RevealProbeOracleSimulation.ActionTrace GlobalChainValueIndex}
+    (h : RevealProbeOracleSimulation.runObserved table AdaptiveRevealMonitor.State.empty trace =
+      true)
+    (sameTable : table = table') (sameTrace : trace = trace') :
+    RevealProbeOracleSimulation.runObserved table' AdaptiveRevealMonitor.State.empty trace' =
+      true :=
+  sameTable ▸ sameTrace ▸ h
+
+/-- A hit of the chain monitor on the chain actions is a combined hit. -/
+private theorem combinedHit_of_runObserved (table : GlobalChainValueIndex → Digest)
+    (trace : FirstLaneOracleSimulation.ActionTrace GlobalChainValueIndex)
+    (h : RevealProbeOracleSimulation.runObserved table AdaptiveRevealMonitor.State.empty
+      trace.chainActions = true) :
+    FirstLaneOracleSimulation.CombinedHit table trace :=
+  Or.inr h
+
+/-- A public monitored hit of the high program gives a combined hit on the coupled right side.
+
+It moves the hit along equations of its table and trace, so the kernel runs no monitor. -/
+private theorem combinedHit_of_publicObservedHit
+    (right : GlobalFirstLaneExactCoupledProgramResult)
+    (highResult : GlobalHighMonitoredProgramResult)
+    (hprojection : globalHighMonitoredFullProjection highResult =
+      (right.1.1.2, ((right.1.1.1, right.1.2), right.2.1), right.2.2.chainActions))
+    (hobserved : RevealProbeOracleSimulation.ObservedHit
+      (globalHighMonitoredPublicProjection highResult)) :
+    FirstLaneOracleSimulation.CombinedHit
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).1
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).2.2 := by
+  unfold RevealProbeOracleSimulation.ObservedHit at hobserved
+  have hpublic := globalHighMonitored_fullProjection_public_eq highResult
+  rw [← hpublic, hprojection] at hobserved
+  refine combinedHit_of_runObserved _ _ ?_
+  exact runObserved_eq_true_congr hobserved
+    (by simp [appendGlobalHighDirectExactPublicTrace, appendGlobalFirstLaneExactPublicTrace,
+      globalFirstLaneExactCoupledProjection])
+    (by simp [appendGlobalHighDirectExactPublicTrace, appendGlobalFirstLaneExactPublicTrace,
+      globalFirstLaneExactCoupledProjection,
+      FirstLaneOracleSimulation.ActionTrace.chainActions_append])
+
+/-- A winning revealed chain value of the source program gives a combined hit on the right. -/
+private theorem sourceWinningExactFirstLane_chain_implies_public_combinedHit
+    (adversary : Adversary)
+    (left : SourceGlobalExactTracedProgramResult)
+    (right : GlobalFirstLaneExactCoupledProgramResult)
+    (highResult : GlobalHighMonitoredProgramResult)
+    (hleftSupport : left ∈ support
+      (sourceGlobalExactTracedProgram adversary))
+    (hhighSupport : highResult ∈ support (globalHighMonitoredProgram adversary))
+    (hhighRelation : SourceGlobalHighMonitoredProgramRelation
+      (sourceGlobalExactErasedResult left) highResult)
+    (hprojection : globalHighMonitoredFullProjection highResult =
+      (right.1.1.2, ((right.1.1.1, right.1.2), right.2.1), right.2.2.chainActions))
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left)
+    (hboth : both ∈ support
+      (cappedDetailedGameWithKeygenCacheAndBothTraces adversary))
+    (hchain : GlobalWinningChainValueRevealed
+      (cappedBothEncodingProjection both).2.1.1
+      (cappedBothEncodingProjection both).1) :
+    FirstLaneOracleSimulation.CombinedHit
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).1
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).2.2 := by
+  -- Name results by equations, not local names, so the kernel never unfolds one in a support.
+  obtain ⟨chain, hwinning, hrevealed⟩ := hchain
+  have hkeygen := cappedBothTraceGameResult_keyResult_mem_support
+    adversary both hboth
+  have hafter := cappedBothTraceGameResult_cacheExecution_mem_support
+    adversary both hboth
+  have horiginChain := chainValueRevealed_afterKeygen_has_origin adversary
+    both.1 hkeygen (both.2.1, both.2.2.1.1.1) hafter chain hrevealed
+  have hleftOld : sourceGlobalExactErasedResult left ∈ support
+      (sourceGlobalTracedProgram adversary) :=
+    sourceGlobalExactErasedResult_mem_support adversary hleftSupport
+  have hrightOld : highResult ∈ support
+      (globalHighMonitoredProgram adversary) :=
+    hhighSupport
+  have houtcome :=
+    cappedDetailedGameWithKeygenCacheAndBothTraces_outcome_eq
+      adversary both hboth
+  have hwinningAction : WinningOutcomeBadEventOccurs
+      (cappedBothActionProjection both).1.2.2
+      (cappedBothActionProjection both).1.2.1 (.chain chain) := by
+    rw [← houtcome]
+    exact hwinning
+  have horiginAction : OutcomeChainValueHasKeygenOrigin
+      both.1.2 (cappedBothActionProjection both).1.2.2
+      both.1.1.2 (cappedBothActionProjection both).1.2.1 chain := by
+    rw [← houtcome]
+    exact horiginChain
+  have horiginOld : GlobalWinningOutcomeChainValueHasKeygenOrigin
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.1.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.2.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.1.1.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.2.1 := by
+    refine ⟨chain, ?_, ?_⟩
+    · simpa [hbothEq, sourceGlobalExactErasedResult,
+        sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
+        sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
+        cappedBothActionProjection, sourceGlobalExactProgramResult,
+        sourceGlobalExactExecutionResult,
+        ProgrammedGlobalChainKeygenView.keyResult,
+        Concrete.materializeCachedKeyResult, Prod.eta] using hwinningAction
+    · simpa [hbothEq, sourceGlobalExactErasedResult,
+        sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
+        sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
+        cappedBothActionProjection, sourceGlobalExactProgramResult,
+        sourceGlobalExactExecutionResult,
+        ProgrammedGlobalChainKeygenView.keyResult,
+        Concrete.materializeCachedKeyResult, Prod.eta] using horiginAction
+  have hobserved := sourceGlobal_origin_implies_right_publicObservedHit
+    adversary (sourceGlobalExactErasedResult left) highResult hleftOld hrightOld hhighRelation
+      horiginOld
+  exact combinedHit_of_publicObservedHit right highResult hprojection hobserved
+
+/-- A winning top guess of the source program gives a combined hit on the right. -/
+private theorem sourceWinningExactFirstLane_top_implies_public_combinedHit
+    (adversary : Adversary)
+    (left : SourceGlobalExactTracedProgramResult)
+    (right : GlobalFirstLaneExactCoupledProgramResult)
+    (highResult : GlobalHighMonitoredProgramResult)
+    (hleftSupport : left ∈ support
+      (sourceGlobalExactTracedProgram adversary))
+    (hhighSupport : highResult ∈ support (globalHighMonitoredProgram adversary))
+    (hhighRelation : SourceGlobalHighMonitoredProgramRelation
+      (sourceGlobalExactErasedResult left) highResult)
+    (hprojection : globalHighMonitoredFullProjection highResult =
+      (right.1.1.2, ((right.1.1.1, right.1.2), right.2.1), right.2.2.chainActions))
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left)
+    (hboth : both ∈ support
+      (cappedDetailedGameWithKeygenCacheAndBothTraces adversary))
+    (htop : WinningTopGuessOccurs
+      (cappedBothEncodingProjection both).2.1.1
+      (cappedBothEncodingProjection both).1) :
+    FirstLaneOracleSimulation.CombinedHit
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).1
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).2.2 := by
+  -- Name results by equations, not local names, so the kernel never unfolds one in a support.
+  have hkeygen := cappedBothTraceGameResult_keyResult_mem_support
+    adversary both hboth
+  have hafter := cappedBothTraceGameResult_cacheExecution_mem_support
+    adversary both hboth
+  have horiginTop := topGuess_afterKeygen_has_origin adversary both.1 hkeygen
+    (both.2.1, both.2.2.1.1.1) hafter htop
+  have hleftOld : sourceGlobalExactErasedResult left ∈ support
+      (sourceGlobalTracedProgram adversary) :=
+    sourceGlobalExactErasedResult_mem_support adversary hleftSupport
+  have hrightOld : highResult ∈ support
+      (globalHighMonitoredProgram adversary) :=
+    hhighSupport
+  have houtcome :=
+    cappedDetailedGameWithKeygenCacheAndBothTraces_outcome_eq
+      adversary both hboth
+  have horiginAction : GlobalWinningOutcomeTopChainValueHasKeygenOrigin
+      both.1.2 (cappedBothActionProjection both).1.2.2
+      both.1.1.2 (cappedBothActionProjection both).1.2.1 := by
+    rw [← houtcome]
+    exact horiginTop
+  have horiginOld : GlobalWinningOutcomeTopChainValueHasKeygenOrigin
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.1.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.2.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.1.1.2
+      (eraseGlobalChainKeygenView
+        (sourceGlobalProgramResult (sourceGlobalExactErasedResult left))).1.2.1 := by
+    simpa [hbothEq, sourceGlobalExactErasedResult,
+      sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
+      sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
+      cappedBothActionProjection, sourceGlobalExactProgramResult,
+      sourceGlobalExactExecutionResult,
+      ProgrammedGlobalChainKeygenView.keyResult,
+      Concrete.materializeCachedKeyResult, Prod.eta] using horiginAction
+  have hobserved := sourceGlobal_topOrigin_implies_right_publicObservedHit
+    adversary (sourceGlobalExactErasedResult left) highResult hleftOld hrightOld hhighRelation
+      horiginOld
+  exact combinedHit_of_publicObservedHit right highResult hprojection hobserved
+
+/-- An output read at the named execution type is one at its unfolded type. -/
+private theorem mem_support_of_encodingTraceExecution
+    (y : ProbComp (GameOutcome × ((QueryCache HashSpec × SigningCacheTrace) × EncodingActionTrace)))
+    (x : CappedEncodingTraceExecution)
+    (h : @Membership.mem CappedEncodingTraceExecution (Set CappedEncodingTraceExecution) _
+      (@support ProbComp CappedEncodingTraceExecution _ y) x) :
+    x ∈ support y :=
+  h
+
+/-- Its encoding projection carries an output of the game with both traces to the encoding game. -/
+private theorem cappedBothEncodingProjection_mem_support (adversary : Adversary)
+    (both : CappedBothTraceGameResult)
+    (hboth : both ∈ support (cappedDetailedGameWithKeygenCacheAndBothTraces adversary)) :
+    cappedBothEncodingProjection both ∈ support (cappedDetailedGameWithEncodingTrace adversary) :=
+  -- Read the output at the game's type, so the kernel never matches two names of it.
+  mem_support_of_encodingTraceExecution _ _ (mem_support_of_map_eq _
+    (cappedDetailedGameWithKeygenCacheAndBothTraces_encodingProjection_eq adversary) hboth rfl)
+
+/-- The encoding trace of the source result is the source's encoding trace. -/
+private theorem cappedBothEncodingProjection_trace_eq (left : SourceGlobalExactTracedProgramResult)
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left) :
+    (cappedBothEncodingProjection both).2.2 = left.2.2.1.2 := by
+  simp [hbothEq, cappedBothEncodingProjection,
+    sourceGlobalExactProgramResult, sourceGlobalExactExecutionResult]
+
+/-- A hit of the encoding monitor carries over to an equal trace. -/
+private theorem encodingRunObserved_eq_true_congr {trace trace' : EncodingActionTrace}
+    (h : CappedEncodingMonitor.runObserved EncodingMonitor.State.empty trace = true)
+    (same : trace = trace') :
+    CappedEncodingMonitor.runObserved EncodingMonitor.State.empty trace' = true :=
+  same ▸ h
+
+/-- A winning encoding event of the source program is a hit of the encoding monitor. -/
+private theorem sourceWinningExactFirstLane_encoding_monitorHit
+    (adversary : Adversary)
+    (left : SourceGlobalExactTracedProgramResult)
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left)
+    (hboth : both ∈ support
+      (cappedDetailedGameWithKeygenCacheAndBothTraces adversary))
+    (hencoding : WinningOutcomeBadEventOccurs (cappedBothEncodingProjection both).2.1.1
+      (cappedBothEncodingProjection both).1 .encoding ∧
+        ¬WinningCachedSelectionOccurs (cappedBothEncodingProjection both)) :
+    CappedEncodingMonitor.runObserved EncodingMonitor.State.empty left.2.2.1.2 = true :=
+  -- Move the hit along an equation of its trace, so the kernel runs no monitor.
+  encodingRunObserved_eq_true_congr
+    (cappedExactEncodingBranch_implies_monitorHit adversary (cappedBothEncodingProjection both)
+      (cappedBothEncodingProjection_mem_support adversary both hboth) hencoding)
+    (cappedBothEncodingProjection_trace_eq left both hbothEq)
+
+/-- A winning encoding event of the source program has a valid signing transcript. -/
+private theorem sourceWinningExactFirstLane_encoding_transcriptValid
+    (adversary : Adversary)
+    (left : SourceGlobalExactTracedProgramResult)
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left)
+    (hboth : both ∈ support
+      (cappedDetailedGameWithKeygenCacheAndBothTraces adversary))
+    (hencoding : WinningOutcomeBadEventOccurs (cappedBothEncodingProjection both).2.1.1
+      (cappedBothEncodingProjection both).1 .encoding ∧
+        ¬WinningCachedSelectionOccurs (cappedBothEncodingProjection both)) :
+    SigningTranscript.Valid left.2.2.2.toSigningLog := by
+  have hbothExecution :=
+    cappedDetailedGameWithKeygenCacheAndBothTraces_support_execution
+      adversary both hboth
+  have hlogs := cappedDetailedGameAfterKeygenWithBothTraces_logs_eq
+    adversary both.1.1.1 both.1.1.2 both.1.2 both.2 hbothExecution
+  have hvalidBoth : SigningTranscript.Valid
+      both.2.2.2.toSigningLog := by
+    rw [← hlogs]
+    exact hencoding.1.signingTranscript_valid
+  -- Move the transcript along an equation, so the kernel runs no transcript check.
+  have hlogEq : both.2.2.2 = left.2.2.2 := by
+    simp [hbothEq, sourceGlobalExactProgramResult, sourceGlobalExactExecutionResult]
+  rw [← hlogEq]
+  exact hvalidBoth
+
+/-- A winning encoding event of the source program gives a combined hit on the right. -/
+private theorem sourceWinningExactFirstLane_encoding_implies_public_combinedHit
+    (adversary : Adversary)
+    (left : SourceGlobalExactTracedProgramResult)
+    (right : GlobalFirstLaneExactCoupledProgramResult)
+    (both : CappedBothTraceGameResult) (hbothEq : both = sourceGlobalExactProgramResult left)
+    (hboth : both ∈ support
+      (cappedDetailedGameWithKeygenCacheAndBothTraces adversary))
+    (hencodingSub : List.Sublist left.2.2.1.2 right.2.2.encodingActions)
+    (hvalidSub : (CappedEncodingMonitor.validObservedSignLeafIndices
+      right.2.2.encodingActions).Sublist
+        (left.2.2.2.toSigningLog.map fun entry => entry.1.leafIndex))
+    (hencoding : WinningOutcomeBadEventOccurs (cappedBothEncodingProjection both).2.1.1
+      (cappedBothEncodingProjection both).1 .encoding ∧
+        ¬WinningCachedSelectionOccurs (cappedBothEncodingProjection both)) :
+    FirstLaneOracleSimulation.CombinedHit
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).1
+      (appendGlobalFirstLaneExactPublicTrace
+        (globalFirstLaneExactCoupledProjection right)).2.2 := by
+  apply globalHighExactEncodingEvent_implies_combinedHit
+    (appendGlobalFirstLaneExactPublicTrace
+      (globalFirstLaneExactCoupledProjection right)).1
+    left.2.2.1.2 left.2.2.2
+    (appendGlobalFirstLaneExactPublicTrace
+      (globalFirstLaneExactCoupledProjection right)).2.2
+  · simpa [appendGlobalFirstLaneExactPublicTrace,
+      globalFirstLaneExactCoupledProjection, liftGlobalChainTrace,
+      FirstLaneOracleSimulation.ActionTrace.encodingActions,
+      FirstLaneOracleSimulation.ActionTrace.encodingActions_append] using
+        hencodingSub
+  · simpa [appendGlobalFirstLaneExactPublicTrace,
+      globalFirstLaneExactCoupledProjection, liftGlobalChainTrace,
+      FirstLaneOracleSimulation.ActionTrace.encodingActions,
+      FirstLaneOracleSimulation.ActionTrace.encodingActions_append] using
+        hvalidSub
+  · exact sourceWinningExactFirstLane_encoding_transcriptValid adversary left both hbothEq hboth
+      hencoding
+  · exact sourceWinningExactFirstLane_encoding_monitorHit adversary left both hbothEq hboth
+      hencoding
+
 theorem sourceWinningExactFirstLane_good_implies_public_combinedHit
     (adversary : Adversary)
     (left : SourceGlobalExactTracedProgramResult)
@@ -1521,162 +1831,30 @@ theorem sourceWinningExactFirstLane_good_implies_public_combinedHit
     hencodingSub, hvalidSub⟩ :=
     sourceFirstLaneExactGood_to_globalHighRelation adversary left right
       hrightSupport hkey hgood
-  let both := sourceGlobalExactProgramResult left
+  -- Name the source result by an equation, so the kernel never unfolds a local name.
+  obtain ⟨both, hbothEq⟩ : ∃ both, both = sourceGlobalExactProgramResult left := ⟨_, rfl⟩
+  -- Map on any computation and through equations, so the kernel runs no game.
   have hbothMapped : both ∈ support
       (sourceGlobalExactProgramResult <$>
-        sourceGlobalExactTracedProgram adversary) := by
-    rw [support_map]
-    exact ⟨left, hleftSupport, rfl⟩
+        sourceGlobalExactTracedProgram adversary) :=
+    mem_support_map_of_eq _ _ hleftSupport hbothEq.symm
   have hboth : both ∈ support
       (cappedDetailedGameWithKeygenCacheAndBothTraces adversary) :=
     (OracleComp.support_eq_of_evalDistEq
       (evalDist_sourceGlobalExact_eq_cappedBothTraces adversary)).subset
         hbothMapped
-  have hencodingSupport : cappedBothEncodingProjection both ∈ support
-      (cappedDetailedGameWithEncodingTrace adversary) := by
-    rw [← cappedDetailedGameWithKeygenCacheAndBothTraces_encodingProjection_eq,
-      support_map]
-    exact ⟨both, hboth, rfl⟩
   unfold SourceWinningExactFirstLaneEvent at hevent
   unfold WinningExactFirstLaneBadEventOccurs at hevent
+  rw [← hbothEq] at hevent
   rcases hevent with hencoding | hchain | htop
-  · have hhit := cappedExactEncodingBranch_implies_monitorHit adversary
-      (cappedBothEncodingProjection both) hencodingSupport hencoding
-    have hbothExecution :=
-      cappedDetailedGameWithKeygenCacheAndBothTraces_support_execution
-        adversary both hboth
-    have hlogs := cappedDetailedGameAfterKeygenWithBothTraces_logs_eq
-      adversary both.1.1.1 both.1.1.2 both.1.2 both.2 hbothExecution
-    have hvalidBoth : SigningTranscript.Valid
-        both.2.2.2.toSigningLog := by
-      rw [← hlogs]
-      exact hencoding.1.signingTranscript_valid
-    have hvalidLeft : SigningTranscript.Valid
-        left.2.2.2.toSigningLog := by
-      simpa [both, sourceGlobalExactProgramResult,
-        sourceGlobalExactExecutionResult] using hvalidBoth
-    apply globalHighExactEncodingEvent_implies_combinedHit
-      (appendGlobalFirstLaneExactPublicTrace
-        (globalFirstLaneExactCoupledProjection right)).1
-      left.2.2.1.2 left.2.2.2
-      (appendGlobalFirstLaneExactPublicTrace
-        (globalFirstLaneExactCoupledProjection right)).2.2
-    · simpa [appendGlobalFirstLaneExactPublicTrace,
-        globalFirstLaneExactCoupledProjection, liftGlobalChainTrace,
-        FirstLaneOracleSimulation.ActionTrace.encodingActions,
-        FirstLaneOracleSimulation.ActionTrace.encodingActions_append] using
-          hencodingSub
-    · simpa [appendGlobalFirstLaneExactPublicTrace,
-        globalFirstLaneExactCoupledProjection, liftGlobalChainTrace,
-        FirstLaneOracleSimulation.ActionTrace.encodingActions,
-        FirstLaneOracleSimulation.ActionTrace.encodingActions_append] using
-          hvalidSub
-    · exact hvalidLeft
-    · simpa [both, cappedBothEncodingProjection,
-        sourceGlobalExactProgramResult, sourceGlobalExactExecutionResult] using
-          hhit
-  · obtain ⟨chain, hwinning, hrevealed⟩ := hchain
-    have hkeygen := cappedBothTraceGameResult_keyResult_mem_support
-      adversary both hboth
-    have hafter := cappedBothTraceGameResult_cacheExecution_mem_support
-      adversary both hboth
-    have horiginChain := chainValueRevealed_afterKeygen_has_origin adversary
-      both.1 hkeygen (both.2.1, both.2.2.1.1.1) hafter chain hrevealed
-    let leftOld := sourceGlobalExactErasedResult left
-    let rightOld := highResult
-    have hleftOld : leftOld ∈ support
-        (sourceGlobalTracedProgram adversary) :=
-      sourceGlobalExactErasedResult_mem_support adversary hleftSupport
-    have hrightOld : rightOld ∈ support
-        (globalHighMonitoredProgram adversary) :=
-      hhighSupport
-    have houtcome :=
-      cappedDetailedGameWithKeygenCacheAndBothTraces_outcome_eq
-        adversary both hboth
-    have hwinningAction : WinningOutcomeBadEventOccurs
-        (cappedBothActionProjection both).1.2.2
-        (cappedBothActionProjection both).1.2.1 (.chain chain) := by
-      rw [← houtcome]
-      exact hwinning
-    have horiginAction : OutcomeChainValueHasKeygenOrigin
-        both.1.2 (cappedBothActionProjection both).1.2.2
-        both.1.1.2 (cappedBothActionProjection both).1.2.1 chain := by
-      rw [← houtcome]
-      exact horiginChain
-    have horiginOld : GlobalWinningOutcomeChainValueHasKeygenOrigin
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.1.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.2.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.1.1.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.2.1 := by
-      refine ⟨chain, ?_, ?_⟩
-      · simpa [leftOld, both, sourceGlobalExactErasedResult,
-          sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
-          sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
-          cappedBothActionProjection, sourceGlobalExactProgramResult,
-          sourceGlobalExactExecutionResult,
-          ProgrammedGlobalChainKeygenView.keyResult,
-          Concrete.materializeCachedKeyResult, Prod.eta] using hwinningAction
-      · simpa [leftOld, both, sourceGlobalExactErasedResult,
-          sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
-          sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
-          cappedBothActionProjection, sourceGlobalExactProgramResult,
-          sourceGlobalExactExecutionResult,
-          ProgrammedGlobalChainKeygenView.keyResult,
-          Concrete.materializeCachedKeyResult, Prod.eta] using horiginAction
-    have hobserved := sourceGlobal_origin_implies_right_publicObservedHit
-      adversary leftOld rightOld hleftOld hrightOld hhighRelation horiginOld
-    apply Or.inr
-    unfold RevealProbeOracleSimulation.ObservedHit at hobserved
-    have hpublic := globalHighMonitored_fullProjection_public_eq highResult
-    rw [← hpublic, hprojection] at hobserved
-    simpa [appendGlobalHighDirectExactPublicTrace,
-      appendGlobalFirstLaneExactPublicTrace,
-      globalFirstLaneExactCoupledProjection,
-      FirstLaneOracleSimulation.ActionTrace.chainActions_append] using hobserved
-  · have hkeygen := cappedBothTraceGameResult_keyResult_mem_support
-      adversary both hboth
-    have hafter := cappedBothTraceGameResult_cacheExecution_mem_support
-      adversary both hboth
-    have horiginTop := topGuess_afterKeygen_has_origin adversary both.1 hkeygen
-      (both.2.1, both.2.2.1.1.1) hafter htop
-    let leftOld := sourceGlobalExactErasedResult left
-    let rightOld := highResult
-    have hleftOld : leftOld ∈ support
-        (sourceGlobalTracedProgram adversary) :=
-      sourceGlobalExactErasedResult_mem_support adversary hleftSupport
-    have hrightOld : rightOld ∈ support
-        (globalHighMonitoredProgram adversary) :=
-      hhighSupport
-    have houtcome :=
-      cappedDetailedGameWithKeygenCacheAndBothTraces_outcome_eq
-        adversary both hboth
-    have horiginAction : GlobalWinningOutcomeTopChainValueHasKeygenOrigin
-        both.1.2 (cappedBothActionProjection both).1.2.2
-        both.1.1.2 (cappedBothActionProjection both).1.2.1 := by
-      rw [← houtcome]
-      exact horiginTop
-    have horiginOld : GlobalWinningOutcomeTopChainValueHasKeygenOrigin
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.1.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.2.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.1.1.2
-        (eraseGlobalChainKeygenView (sourceGlobalProgramResult leftOld)).1.2.1 := by
-      simpa [leftOld, both, sourceGlobalExactErasedResult,
-        sourceGlobalExactErasedExecution, sourceGlobalProgramResult,
-        sourceGlobalExecutionResult, eraseGlobalChainKeygenView,
-        cappedBothActionProjection, sourceGlobalExactProgramResult,
-        sourceGlobalExactExecutionResult,
-        ProgrammedGlobalChainKeygenView.keyResult,
-        Concrete.materializeCachedKeyResult, Prod.eta] using horiginAction
-    have hobserved := sourceGlobal_topOrigin_implies_right_publicObservedHit
-      adversary leftOld rightOld hleftOld hrightOld hhighRelation horiginOld
-    apply Or.inr
-    unfold RevealProbeOracleSimulation.ObservedHit at hobserved
-    have hpublic := globalHighMonitored_fullProjection_public_eq highResult
-    rw [← hpublic, hprojection] at hobserved
-    simpa [appendGlobalHighDirectExactPublicTrace,
-      appendGlobalFirstLaneExactPublicTrace,
-      globalFirstLaneExactCoupledProjection,
-      FirstLaneOracleSimulation.ActionTrace.chainActions_append] using hobserved
+  · exact sourceWinningExactFirstLane_encoding_implies_public_combinedHit adversary left right
+      both hbothEq hboth hencodingSub hvalidSub hencoding
+  · exact sourceWinningExactFirstLane_chain_implies_public_combinedHit adversary left right
+      highResult hleftSupport hhighSupport hhighRelation hprojection both hbothEq hboth
+      hchain
+  · exact sourceWinningExactFirstLane_top_implies_public_combinedHit adversary left right
+      highResult hleftSupport hhighSupport hhighRelation hprojection both hbothEq hboth
+      htop
 
 theorem observedProbeCount_exactForgeryPrimaryProbeTrace
     (result : GlobalExactTracedResult) :

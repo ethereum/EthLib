@@ -11,19 +11,6 @@ open OracleComp OracleSpec
 
 namespace XmssSecurity
 
-/-- An output of a simulated bind comes from an output of its first step.
-
-It is an output of the continuation on that step's value, from that step's cache.
-
-The continuation applied appears only inside an equation, so the kernel never runs it. -/
-private theorem exists_eq_of_mem_support_romImpl_bind {α β : Type} (x : OracleComp OracleWorld α)
-    (k : α → OracleComp OracleWorld β) (cache : QueryCache HashSpec)
-    {y : β × QueryCache HashSpec} (h : y ∈ support ((simulateQ romImpl (x >>= k)).run cache)) :
-    ∃ a ∈ support ((simulateQ romImpl x).run cache),
-      ∀ c, (simulateQ romImpl (k a.1)).run a.2 = c → y ∈ support c := by
-  rw [simulateQ_bind, StateT.run_bind] at h
-  exact exists_eq_of_mem_support_bind _ _ h
-
 /-- An output of a logged computation, with its log dropped, is an output of the computation.
 
 It holds for any computation, so the kernel checks it without running one. -/
@@ -49,8 +36,8 @@ theorem exists_of_mem_support_detailedGameWithCache (scheme : Scheme SecretKey)
       execution ∈ support ((simulateQ romImpl
         (detailedGameAfterKeygen scheme adversary publicKey secretKey)).run keyCache) := by
   unfold detailedGameWithCache detailedGameCore at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, hkeygen, hrest⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ hmem
+  obtain ⟨⟨publicKey, secretKey⟩, keyCache, hkeygen, hrest⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hmem
   exact ⟨publicKey, secretKey, keyCache, hkeygen, hrest _ rfl⟩
 
 /-- An execution of the game after key generation runs the adversary, then the verifier.
@@ -72,10 +59,10 @@ theorem exists_of_mem_support_detailedGameAfterKeygen (scheme : Scheme SecretKey
           adversaryCache) ∧
       outcome = ⟨publicKey, secretKey, forgery, signingLog, verified⟩ := by
   unfold detailedGameAfterKeygen at hmem
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, hadversary, hrest⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ hmem
-  obtain ⟨⟨verified, verifyCache⟩, hverify, hout⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ (hrest _ rfl)
+  obtain ⟨⟨forgery, signingLog⟩, adversaryCache, hadversary, hrest⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hmem
+  obtain ⟨verified, verifyCache, hverify, hout⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hrest _ rfl)
   have hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff,
     Prod.mk.injEq] at hout
@@ -175,16 +162,16 @@ theorem capped_detailed_execution_keygen_eval
   have hkeyCacheLe : keyCache ≤ finalCache :=
     xmssRom_cache_le _ keyCache (outcome, finalCache) hrest
   rw [Concrete.scheme_keygen, Concrete.precomputedKeygen.eq_1] at hkeygen
-  obtain ⟨⟨parameter, parameterCache⟩, -, hkeygen⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ hkeygen
-  obtain ⟨⟨secret, secretCache⟩, -, hkeygen⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
-  obtain ⟨⟨topSecret, topSecretCache⟩, -, hkeygen⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
-  obtain ⟨⟨topBase, topBaseCache⟩, -, hkeygen⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
-  obtain ⟨⟨treeResult, rootCache⟩, hroot, hout⟩ :=
-    exists_eq_of_mem_support_romImpl_bind _ _ _ (hkeygen _ rfl)
+  obtain ⟨parameter, parameterCache, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hkeygen
+  obtain ⟨secret, secretCache, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hkeygen _ rfl)
+  obtain ⟨topSecret, topSecretCache, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hkeygen _ rfl)
+  obtain ⟨topBase, topBaseCache, -, hkeygen⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hkeygen _ rfl)
+  obtain ⟨treeResult, rootCache, hroot, hout⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hkeygen _ rfl)
   have hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure, Set.mem_singleton_iff] at hout
   cases hout

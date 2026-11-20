@@ -565,8 +565,8 @@ theorem sourceGlobalExactErasedResult_mem_support
     (hleft : left ∈ support (sourceGlobalExactTracedProgram adversary)) :
     sourceGlobalExactErasedResult left ∈
       support (sourceGlobalTracedProgram adversary) := by
-  rw [← sourceGlobalExactTracedProgram_projection, support_map]
-  exact ⟨left, hleft, rfl⟩
+  -- Map through the projection's equation: the kernel would run key generation to match two forms.
+  exact mem_support_of_map_eq _ (sourceGlobalExactTracedProgram_projection adversary) hleft rfl
 
 def sourceGlobalExactExecutionResult
     (keyView : ProgrammedGlobalChainKeygenView)
@@ -677,10 +677,10 @@ theorem cappedExactEncodingBranch_implies_monitorHit
         .encoding ∧ ¬WinningCachedSelectionOccurs execution) :
     CappedEncodingMonitor.runObserved EncodingMonitor.State.empty
       execution.2.2 = true := by
+  -- Map through the projection's equation: the kernel would run the game to match two forms.
   have hsigningMem : (execution.1, execution.2.1) ∈
-      support (cappedDetailedGameWithSigningTrace adversary) := by
-    rw [← cappedDetailedGameWithEncodingTrace_projection, support_map]
-    exact ⟨execution, hmem, rfl⟩
+      support (cappedDetailedGameWithSigningTrace adversary) :=
+    mem_support_of_map_eq _ (cappedDetailedGameWithEncodingTrace_projection adversary) hmem rfl
   obtain ⟨entry, hentry, hprehit | hsigning | hpostSigning⟩ :=
     cappedWinning_encoding_event_trace_postSigning_decomposition adversary
       (execution.1, execution.2.1) hsigningMem hbranch.1
@@ -700,14 +700,13 @@ theorem cappedBothTraceGameResult_keyResult_mem_support
       (cappedDetailedGameWithKeygenCacheAndBothTraces adversary)) :
     result.1 ∈ support
       ((simulateQ romImpl Concrete.scheme.keygen).run ∅) := by
-  unfold cappedDetailedGameWithKeygenCacheAndBothTraces at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨keyResult, hkeyResult, hrest⟩ := hresult
-  rw [mem_support_bind_iff] at hrest
-  obtain ⟨execution, _hexecution, hpure⟩ := hrest
-  simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst result
-  exact hkeyResult
+  -- Step through both binds on any computation, so the kernel runs no key generation.
+  rw [cappedDetailedGameWithKeygenCacheAndBothTraces] at hresult
+  obtain ⟨keyResult, hkeyResult, hrest⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  obtain ⟨execution, -, hpure⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
+  rw [mem_support_pure_iff] at hpure
+  exact mem_support_congr hkeyResult rfl (by rw [hpure])
 
 theorem cappedBothTraceGameResult_cacheExecution_mem_support
     (adversary : Adversary)

@@ -34,6 +34,27 @@ def programmedGlobalChainMaterialBaseHighView
       (GlobalChainEdgeIndex → Digest) :=
   (result.1.2, result.2)
 
+/-- The material of an output of the sampler with base and high is one of the material sampler.
+
+It steps through each bind on any computation, as the kernel would otherwise run the sampler. -/
+private theorem programmedGlobalChainTrajectoryMaterialWithBaseHigh_support_material
+    (parameter : PublicParameter)
+    (result : (GlobalChainTrajectoryMaterial × (GlobalChainValueIndex → Digest)) ×
+      (GlobalChainEdgeIndex → Digest))
+    (hresult : result ∈ support (programmedGlobalChainTrajectoryMaterialWithBaseHigh parameter)) :
+    result.1.1 ∈ support (programmedGlobalChainTrajectoryMaterial parameter) := by
+  rw [programmedGlobalChainTrajectoryMaterialWithBaseHigh.eq_def] at hresult
+  obtain ⟨materialBase, hmaterialBase, hrest⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  obtain ⟨high, -, hpure⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
+  rw [mem_support_pure_iff] at hpure
+  rw [programmedGlobalChainTrajectoryMaterialWithBase.eq_def] at hmaterialBase
+  obtain ⟨base, -, hrest⟩ := exists_eq_of_mem_support_bind _ _ hmaterialBase
+  obtain ⟨material, hmaterial, hpureMaterial⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpureMaterial := hpureMaterial _ rfl
+  rw [mem_support_pure_iff] at hpureMaterial
+  exact mem_support_congr hmaterial rfl (by rw [hpure, hpureMaterial])
+
 theorem evalDist_programmedGlobalChainMaterialBaseHighView_eq_independent
     (parameter : PublicParameter) :
     (programmedGlobalChainMaterialBaseHighView <$>
@@ -192,23 +213,10 @@ theorem relTriple_coupledGlobalChainKeygen_withBaseHigh
   intro leftMaterial rightMaterialBaseHigh hmaterial
   rcases hmaterial with ⟨⟨htable, hhigh⟩, hleftSupport,
     hrightSupport⟩
-  have hrightMaterialSupport : rightMaterialBaseHigh.1.1 ∈ support
-      (programmedGlobalChainTrajectoryMaterial parameter) := by
-    unfold programmedGlobalChainTrajectoryMaterialWithBaseHigh at hrightSupport
-    rw [mem_support_bind_iff] at hrightSupport
-    obtain ⟨materialBase, hmaterialBase, hhighBind⟩ := hrightSupport
-    rw [mem_support_bind_iff] at hhighBind
-    obtain ⟨sampledHigh, _hsampledHigh, hpure⟩ := hhighBind
-    simp only [support_pure, Set.mem_singleton_iff] at hpure
-    rw [hpure]
-    unfold programmedGlobalChainTrajectoryMaterialWithBase at hmaterialBase
-    rw [mem_support_bind_iff] at hmaterialBase
-    obtain ⟨base, _hbase, hmaterialBind⟩ := hmaterialBase
-    rw [mem_support_bind_iff] at hmaterialBind
-    obtain ⟨material, hmaterial, hpureMaterial⟩ := hmaterialBind
-    simp only [support_pure, Set.mem_singleton_iff] at hpureMaterial
-    rw [hpureMaterial]
-    exact hmaterial
+  -- Read the material's support through a lemma: the kernel would run the sampler otherwise.
+  have hrightMaterialSupport :=
+    programmedGlobalChainTrajectoryMaterialWithBaseHigh_support_material parameter _
+      hrightSupport
   apply relTriple_bind (relTriple_refl Concrete.sampleTopBase)
   intro leftTopBase rightTopBase htopBase
   have htopBase' : leftTopBase = rightTopBase := htopBase
@@ -303,61 +311,43 @@ theorem coupledGlobalChainKeygenWithBaseHighFull_support_keyView
     (hresult : result ∈ support
       coupledGlobalChainKeygenWithBaseHighFull) :
     result.1.1 ∈ support trajectoryProgrammedGlobalChainKeygen := by
-  unfold coupledGlobalChainKeygenWithBaseHighFull at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨parameter, hparameter, hparameterBind⟩ := hresult
-  rw [mem_support_bind_iff] at hparameterBind
-  obtain ⟨viewBaseHigh, hviewBaseHigh, hpureView⟩ := hparameterBind
-  simp only [support_pure, Set.mem_singleton_iff] at hpureView
-  unfold coupledGlobalChainKeygenWithBaseHigh at hviewBaseHigh
-  rw [mem_support_bind_iff] at hviewBaseHigh
-  obtain ⟨materialBaseHigh, hmaterialBaseHigh, htopBaseBind⟩ := hviewBaseHigh
-  rw [mem_support_bind_iff] at htopBaseBind
-  obtain ⟨topBase, htopBase, hrunBind⟩ := htopBaseBind
-  rw [mem_support_bind_iff] at hrunBind
-  obtain ⟨run, hrun, hpureRun⟩ := hrunBind
-  simp only [support_pure, Set.mem_singleton_iff] at hpureRun
-  unfold programmedGlobalChainTrajectoryMaterialWithBaseHigh at hmaterialBaseHigh
-  rw [mem_support_bind_iff] at hmaterialBaseHigh
-  obtain ⟨materialBase, hmaterialBase, hhighBind⟩ := hmaterialBaseHigh
-  rw [mem_support_bind_iff] at hhighBind
-  obtain ⟨high, _hhigh, hpureHigh⟩ := hhighBind
-  simp only [support_pure, Set.mem_singleton_iff] at hpureHigh
-  unfold programmedGlobalChainTrajectoryMaterialWithBase at hmaterialBase
-  rw [mem_support_bind_iff] at hmaterialBase
-  obtain ⟨base, _hbase, hmaterialBind⟩ := hmaterialBase
-  rw [mem_support_bind_iff] at hmaterialBind
-  obtain ⟨material, hmaterial, hpureMaterial⟩ := hmaterialBind
-  simp only [support_pure, Set.mem_singleton_iff] at hpureMaterial
-  subst hpureMaterial
-  subst hpureHigh
-  let expectedCoupled : CoupledGlobalChainKeygenView := {
-    start := material.1
-    table := globalChainTrajectoryMaterialTable material
-    run := run
-  }
-  have hparameterView : expectedCoupled ∈ support
+  -- Bind on any computation and move outputs by equations, so the kernel runs no key generation.
+  rw [coupledGlobalChainKeygenWithBaseHighFull.eq_def] at hresult
+  obtain ⟨parameter, hparameter, hrest⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  obtain ⟨viewBaseHigh, hviewBaseHigh, hpureView⟩ :=
+    exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpureView := hpureView _ rfl
+  rw [mem_support_pure_iff] at hpureView
+  rw [coupledGlobalChainKeygenWithBaseHigh.eq_def] at hviewBaseHigh
+  obtain ⟨materialBaseHigh, hmaterialBaseHigh, hrest⟩ :=
+    exists_eq_of_mem_support_bind _ _ hviewBaseHigh
+  obtain ⟨topBase, htopBase, hrest⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  obtain ⟨run, hrun, hpureRun⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpureRun := hpureRun _ rfl
+  rw [mem_support_pure_iff] at hpureRun
+  have hmaterial := programmedGlobalChainTrajectoryMaterialWithBaseHigh_support_material
+    parameter _ hmaterialBaseHigh
+  have hparameterView : ({
+      start := materialBaseHigh.1.1.1
+      table := globalChainTrajectoryMaterialTable materialBaseHigh.1.1
+      run := run } : CoupledGlobalChainKeygenView) ∈ support
       (coupledGlobalChainKeygenExperiment parameter) := by
-    unfold coupledGlobalChainKeygenExperiment
-    rw [mem_support_bind_iff]
-    refine ⟨material, hmaterial, ?_⟩
-    rw [mem_support_bind_iff]
-    refine ⟨topBase, htopBase, ?_⟩
-    rw [mem_support_bind_iff]
-    exact ⟨run, hrun, by simp [expectedCoupled]⟩
-  have hcoupled : expectedCoupled.toProgrammedView parameter ∈
-      support coupledGlobalChainKeygen := by
-    unfold coupledGlobalChainKeygen
-    rw [mem_support_bind_iff]
-    refine ⟨parameter, hparameter, ?_⟩
-    rw [mem_support_bind_iff]
-    exact ⟨expectedCoupled, hparameterView, by simp⟩
-  have hexpected : expectedCoupled.toProgrammedView parameter ∈ support
-      trajectoryProgrammedGlobalChainKeygen :=
-    (OracleComp.support_eq_of_evalDistEq
-      evalDist_coupledGlobalChainKeygen_eq_trajectoryProgrammed).subset hcoupled
-  rw [hpureView, hpureRun]
-  exact hexpected
+    rw [coupledGlobalChainKeygenExperiment.eq_def]
+    refine mem_support_bind_of_eq _ _ hmaterial fun _ same => same ▸ ?_
+    refine mem_support_bind_of_eq _ _ htopBase fun _ same => same ▸ ?_
+    refine mem_support_bind_of_eq _ _ hrun fun _ same => same ▸ ?_
+    rw [mem_support_pure_iff]
+  have hcoupled : CoupledGlobalChainKeygenView.toProgrammedView parameter {
+      start := materialBaseHigh.1.1.1
+      table := globalChainTrajectoryMaterialTable materialBaseHigh.1.1
+      run := run } ∈ support coupledGlobalChainKeygen := by
+    rw [coupledGlobalChainKeygen.eq_def]
+    refine mem_support_bind_of_eq _ _ hparameter fun _ same => same ▸ ?_
+    refine mem_support_bind_of_eq _ _ hparameterView fun _ same => same ▸ ?_
+    rw [mem_support_pure_iff]
+  have hexpected := (OracleComp.support_eq_of_evalDistEq
+    evalDist_coupledGlobalChainKeygen_eq_trajectoryProgrammed).subset hcoupled
+  exact mem_support_congr hexpected rfl (by rw [hpureView, hpureRun])
 
 def ProgrammedGlobalChainKeygenBaseHighStableRelation
     (left : ProgrammedGlobalChainKeygenView)
@@ -1062,6 +1052,18 @@ theorem simulate_eagerTrace_globalFilteredCausalSignBoundedAttempts_succ
   | some signature =>
       simp [globalFilteredCausalSignTraceContinuation]
 
+/-- A uniform computation lifted into the traced simulation leaves an empty trace. -/
+private theorem eagerTrace_liftProbComp_trace_eq_nil {α : Type}
+    (table : GlobalChainValueIndex → Digest)
+    (computation : ProbComp α) {a : α}
+    {trace : RevealProbeOracleSimulation.ActionTrace GlobalChainValueIndex}
+    (h : (a, trace) ∈ support (simulateQ (RevealProbeOracleSimulation.eagerTraceImpl table)
+      (RevealProbeOracleSimulation.liftProbComp computation)).run) :
+    trace = [] := by
+  rw [RevealProbeOracleSimulation.simulate_eagerTrace_liftProbComp, support_map] at h
+  obtain ⟨_, -, h⟩ := h
+  exact (Prod.mk.inj h).2.symm
+
 theorem mem_support_globalFilteredCausalSigningQuery
     {table : GlobalChainValueIndex → Digest} {keyView : ProgrammedGlobalChainKeygenView}
     {request : SignRequest} {state : GlobalCausalHashState}
@@ -1075,22 +1077,21 @@ theorem mem_support_globalFilteredCausalSigningQuery
         (globalFilteredCausalSignBoundedAttempts keyView request base signingAttemptLimit 0
           state)).run) ∧
       result = (topSignedResult keyView request attemptResult.1, attemptResult.2) := by
-  unfold globalFilteredCausalSigningQuery at hresult
-  rw [simulateQ_bind, WriterT.run_bind',
-    RevealProbeOracleSimulation.simulate_eagerTrace_liftProbComp,
-    mem_support_bind_iff] at hresult
-  obtain ⟨baseTrace, hbaseTrace, hresult⟩ := hresult
-  rw [support_map] at hbaseTrace
-  obtain ⟨base, _hbase, rfl⟩ := hbaseTrace
-  simp only [List.nil_append] at hresult
-  rw [support_map] at hresult
-  obtain ⟨attemptTrace, hattempt, rfl⟩ := hresult
-  rw [simulateQ_bind, WriterT.run_bind', mem_support_bind_iff] at hattempt
-  obtain ⟨attempt, hattemptMem, hpure⟩ := hattempt
-  simp only [simulateQ_pure, WriterT.run_pure, support_map, support_pure,
-    Set.image_singleton, Set.mem_singleton_iff] at hpure
-  subst hpure
-  exact ⟨base, attempt, hattemptMem, by simp⟩
+  -- Unfold by the equation and step on any computation, so the kernel runs no signer.
+  rw [globalFilteredCausalSigningQuery.eq_def] at hresult
+  obtain ⟨base, baseTrace, hbase, hrest⟩ :=
+    exists_eq_of_mem_support_simulateQ_writerT_bind _ _ _ hresult
+  have hbaseTrace := eagerTrace_liftProbComp_trace_eq_nil _ _ hbase
+  obtain ⟨output, outputTrace, houtput, hresultEq⟩ := hrest _ rfl
+  obtain ⟨attempt, attemptTrace, hattempt, hrest⟩ :=
+    exists_eq_of_mem_support_simulateQ_writerT_bind _ _ _ houtput
+  obtain ⟨pureOutput, pureTrace, hpure, houtputEq⟩ := hrest _ rfl
+  refine ⟨base, (attempt, attemptTrace), hattempt, ?_⟩
+  simp only [simulateQ_pure, WriterT.run_pure, support_pure, Set.mem_singleton_iff,
+    Prod.mk.injEq] at hpure
+  simp only [Prod.mk.injEq] at houtputEq
+  rw [hresultEq, hbaseTrace, houtputEq.1, houtputEq.2, hpure.1, hpure.2]
+  simp
 
 def GlobalFilteredSigningResultRelation
     (left : ProgrammedGlobalChainKeygenView)

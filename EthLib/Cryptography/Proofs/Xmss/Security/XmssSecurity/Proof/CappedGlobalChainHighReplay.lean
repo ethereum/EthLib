@@ -1268,6 +1268,25 @@ theorem simulate_eagerTrace_globalFilteredCausalSigningQuery_support_replays
     simulate_eagerTrace_globalFilteredCausalSignBoundedAttempts_support_replays
       signingAttemptLimit 0 base table keyView request state attemptResult hattempt
 
+/-- The traced filtered signing query, as a function of the causal state. -/
+private noncomputable def tracedFilteredSigningQuery (table : GlobalChainValueIndex → Digest)
+    (keyView : ProgrammedGlobalChainKeygenView) (request : SignRequest)
+    (causalState : GlobalCausalHashState) :
+    ProbComp ((Option Signature × GlobalCausalHashState) ×
+      RevealProbeOracleSimulation.ActionTrace GlobalChainValueIndex) :=
+  (simulateQ (RevealProbeOracleSimulation.eagerTraceImpl table)
+    (globalFilteredCausalSigningQuery keyView request causalState)).run
+
+/-- The traced filtered signing query names the function of the causal state it abbreviates.
+
+A proof rewrites with it, so the kernel never applies that function inside a support. -/
+private theorem tracedFilteredSigningQuery_eq (table : GlobalChainValueIndex → Digest)
+    (keyView : ProgrammedGlobalChainKeygenView) (request : SignRequest) :
+    (fun causalState => (simulateQ (RevealProbeOracleSimulation.eagerTraceImpl table)
+      (globalFilteredCausalSigningQuery keyView request causalState)).run) =
+      tracedFilteredSigningQuery table keyView request :=
+  rfl
+
 theorem relTriple_programmed_monitoredGlobalSigningQuery
     (left : ProgrammedGlobalChainKeygenView)
     (right : (ProgrammedGlobalChainKeygenView ×
@@ -1297,6 +1316,8 @@ theorem relTriple_programmed_monitoredGlobalSigningQuery
             rightResult.2) ∨ rightResult.2.bad right.1.2) := by
   rcases hstate with
     ⟨monitor, hmonitor, hmonitorAgrees, hrevealed, hcausal, hretained⟩
+  -- Name the signing function: the kernel would run signing to apply it inside a support.
+  rw [tracedFilteredSigningQuery_eq]
   apply relTriple_monitorGlobalCausalTrace_of_filtered_until_hit left right.1
     _ _ rightState monitor hmonitor hmonitorAgrees hrevealed
   · apply relTriple_post_mono
@@ -1305,6 +1326,7 @@ theorem relTriple_programmed_monitoredGlobalSigningQuery
     intro leftResult rightResult hresult
     exact Or.inl hresult
   · intro result hresult
+    rw [tracedFilteredSigningQuery] at hresult
     constructor
     · exact RevealProbeOracleSimulation.simulate_eagerTrace_support_traceAgrees
         right.1.2 _ result hresult
@@ -1312,6 +1334,7 @@ theorem relTriple_programmed_monitoredGlobalSigningQuery
         simulate_eagerTrace_globalFilteredCausalSigningQuery_support_replays
           right.1.2 right.1.1 request rightState.causal result hresult
   · intro result hresult
+    rw [tracedFilteredSigningQuery] at hresult
     exact simulate_eagerTrace_globalFilteredCausalSigningQuery_merkleRetained
       right.1.2 right.1.1 request rightState.causal hretained result hresult
 
