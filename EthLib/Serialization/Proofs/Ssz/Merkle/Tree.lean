@@ -3,6 +3,7 @@ module
 public import EthLib.Serialization.Ssz.Merkle.Tree
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Hasher
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
+import EthLib.Base.Proofs.Bytes
 
 /-! Laws of the concrete SHA-256 trees: node widths, zero subtrees, and windowed roots. -/
 
@@ -338,14 +339,15 @@ theorem merkleizeProgressiveUnchecked_eq (chunks : List Bytes) (level : Nat) :
 theorem toChunk_ok_iff {node : Bytes} {chunk : Vector UInt8 bytesPerChunk} :
     toChunk node = .ok chunk ↔ node = chunk.toArray := by
   unfold toChunk
-  constructor
-  · intro made
-    split at made
-    · cases made
-      rfl
-    · cases made
-  · rintro rfl
-    simp
+  exact Base.exactArray_eq_ok_iff.trans eq_comm
+
+/-- A node passes the width check exactly when it is 32 bytes wide; otherwise it gets the error. -/
+theorem checkChunk_eq (node : Bytes) : checkChunk node =
+    if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size) := by
+  unfold checkChunk toChunk
+  by_cases width : node.size = bytesPerChunk
+  · simp [Base.exactArray_of_size_eq _ width, width, Except.map]
+  · simp [Base.exactArray_of_size_ne _ width, width, Except.map]
 
 /-- A node that reads as a 32-byte vector holds the bytes of that vector. -/
 theorem eq_ok_of_bind_toChunk {root : Except Err Bytes} {chunk : Vector UInt8 bytesPerChunk}

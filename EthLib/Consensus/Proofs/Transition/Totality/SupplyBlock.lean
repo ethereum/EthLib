@@ -1805,14 +1805,10 @@ private theorem attestationsStart_same {engine : ExecutionEngine preset fork}
   have paid {a b : BeaconState preset fork} (gloas : .glamsterdam ≤ fork)
       (ok : processParentExecutionPayload config checks a gloas block.body = .ok b) :
       Steady a b :=
-    processParentExecutionPayload_step_of Steady Steady.refl Steady.trans
-      (fun frame validators => Steady.of_validators validators frame.slot)
-      (fun requested => ⟨activeStep_processWithdrawalRequest requested,
-        effectiveKept_withdrawalRequest requested,
-        (sameSizes_processWithdrawalRequest requested).1⟩)
-      (fun requested => ⟨activeStep_processConsolidationRequest requested,
-        effectiveKept_consolidationRequest requested,
-        (sameSizes_processConsolidationRequest requested).1⟩) ok
+    ⟨processParentExecutionPayload_step_of ActiveStep ActiveStep.refl ActiveStep.trans
+      (fun frame validators => ActiveStep.of_validators (congrArg (·.data) validators) frame.slot)
+      activeStep_processWithdrawalRequest activeStep_processConsolidationRequest ok,
+      effectiveKept_parentPayload ok⟩
   have head := started.step_of Steady Steady.refl Steady.trans paid
     (fun headed => by
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed

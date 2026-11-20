@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoad
+import EthLib.Consensus.Proofs.Transition.BalanceDrift
 
 /-!
 # Proofs: a block raises the validators plus the pending deposits by a bounded amount
@@ -652,16 +653,6 @@ private theorem processDeposit_size_le {before : fork < .hegota} {deposit : Depo
   · simp [addValidatorToRegistry_validators_eq_push added]
   · exact (applyPendingDeposit_validators_size_le_and_mem applied).1
 
-/-- The parent payload from Gloas keeps the registry size. -/
-private theorem processParentExecutionPayload_size {gloas : .glamsterdam ≤ fork}
-    {body : BeaconBlockBody preset fork}
-    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
-    after.validators.data.size = state.validators.data.size :=
-  processParentExecutionPayload_step_of (fun s t => t.validators.data.size = s.validators.data.size)
-    (fun _ => rfl) (fun one two => two.trans one) (fun _ same => by rw [same])
-    (fun ok => (sameSizes_processWithdrawalRequest ok).1)
-    (fun ok => (sameSizes_processConsolidationRequest ok).1) computed
-
 /-- The operations add at most one validator for each deposit, and none from Gloas. -/
 private theorem processOperations_size_le {body : BeaconBlockBody preset fork}
     {parentSlot : Slot}
@@ -695,7 +686,7 @@ private theorem operationsInput_size {block : BeaconBlock preset fork}
   obtain ⟨parented, paidOk, kept⟩ := operationsInput_parented started
   have paid : parented.validators.data.size = state.validators.data.size := by
     split at paidOk
-    · exact processParentExecutionPayload_size paidOk
+    · exact (effectiveKept_parentPayload paidOk).2
     · cases paidOk
       rfl
   have rest := kept.1

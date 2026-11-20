@@ -1,0 +1,4 @@
+type: string
+description: "An address on the execution (Ethereum 1) network."
+example: "0xAbcF8e0d4e9587369b2301D0790347320302cc09"
+pattern: "^0x[a-fA-F0-9]{40}$"

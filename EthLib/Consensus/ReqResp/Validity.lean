@@ -57,7 +57,7 @@ The period of an update is the period of the slot of its attested header.
 
 - The response has at most as many updates as the count, and at most 128.
 - The period of each update lies in the requested periods.
-- Each update has a higher period than the one before it, so no period has two updates.
+- Each update has the period after the period of the update before it.
 - The fork of each update is the fork of the epoch of its attested header, and it is from Altair.
 
 That fork is the one that the context bytes of the chunk of the update name.
@@ -66,9 +66,15 @@ The check compares forks, not digests.
 
 So from Fulu it does not tell apart the digests of the epochs of blob parameters.
 
-The source asks for updates in consecutive order by period, which may also mean periods with no gap.
+The [networking text of Altair light clients] asks for results in consecutive order by period.
 
-The check asks only for increasing periods, so it allows a period with no update.
+EthLib reads that as periods with no gap, so a server that lacks a period stops there.
+
+It also asks for at least the earliest known result of the range, which may come after the start.
+
+The check cannot see which periods the server knows.
+
+So the first update may have any period of the range.
 
 ## Light client bootstrap
 
@@ -159,6 +165,7 @@ A validator may hold several seats, so a seat count bounds the lists, and a list
 [EIP-7594]: https://eips.ethereum.org/EIPS/eip-7594#networking
 [EIP-7732]: https://eips.ethereum.org/EIPS/eip-7732#p2p-changes
 [EIP-7805]: https://eips.ethereum.org/EIPS/eip-7805#p2p-changes
+[networking text of Altair light clients]: https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/light-client/p2p-interface.md#lightclientupdatesbyrange
 -/
 
 @[expose] public section
@@ -284,7 +291,7 @@ def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
       request.startPeriod ≤ update.period preset &&
         (update.period preset).toNat < request.startPeriod.toNat + request.count.toNat &&
         update.forkMatches preset config) &&
-    allAdjacent (fun a b => a.period preset < b.period preset) updates
+    allAdjacent (fun a b => (b.period preset).toNat == (a.period preset).toNat + 1) updates
 
 /-- What a response check reads from a light client bootstrap: its slot, its root and its fork.
 

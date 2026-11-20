@@ -41,19 +41,19 @@ def decodeOpening (bytes : ByteArray) : Option Opening :=
 
 /-- Verification over bytes.
 
-It returns nothing in three cases:
+It returns nothing in four cases, checked in this order:
 
 - The root is not 32 bytes.
-- The opening is not 1056 bytes.
 - The index is outside `[0, 2^32)`.
+- The opening is not 1056 bytes.
+- The opening does not lead to the root.
 -/
 def verifyBytes (root : ByteArray) (index : Nat) (opening : ByteArray) : Option Digest := do
   -- Each check rejects; none pads, truncates or reduces.
-  if hr : root.size = VRF_HASH_SIZE then
-    if index < 2 ^ VRF_TREE_HEIGHT then
-      let o ← decodeOpening opening
-      verify (readBytes root 0 VRF_HASH_SIZE (by omega)) (UInt32.ofNat index) o
-    else none
+  let root ← Base.exactBytes? VRF_HASH_SIZE root
+  if index < 2 ^ VRF_TREE_HEIGHT then
+    let o ← decodeOpening opening
+    verify root (UInt32.ofNat index) o
   else none
 
 end EthLib.Cryptography.Vrf

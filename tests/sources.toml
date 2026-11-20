@@ -55,6 +55,16 @@ directories = ["tests/consensus/builder_api"]
 commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
 directories = ["tests/consensus/relay_api"]
 
+[repositories."ethereum/keymanager-APIs"]
+commit = "51f2a5c90e9d301c3e9980da402ec70ae82f0991"
+release = "v1.1.0"
+directories = ["tests/consensus/keymanager_api"]
+
+[repositories."ethereum/remote-signing-api"]
+commit = "44e9e0dcc115c91f8b739684f4789a8310476bd9"
+release = "v1.4.0"
+directories = ["tests/consensus/remote_signing_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]
@@ -86,6 +96,11 @@ commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
 
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
+
+# A mainnet block after Shapella, which the check of a received body reads.
+[repositories."ethereum/portal-spec-tests"]
+commit = "938744a83d4f85dcdcf9bac12b798e15f2eac2b1"
+directories = ["bindings/python/tests/eth/portal_block_data"]
 
 [repositories."bitcoinjs/tiny-secp256k1"]
 commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"

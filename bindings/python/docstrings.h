@@ -770,6 +770,18 @@
 #define DOC_consensus_import_slashing_interchange \
   "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."
 
+#define DOC_consensus_read_signing_request \
+  "A request of the Remote-signing API, read and written again as the signer reads it."
+
+#define DOC_consensus_signing_request_root \
+  "The root that a remote signer signs for a request of the Remote-signing API."
+
+#define DOC_consensus_remote_signer_sign \
+  "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076."
+
+#define DOC_consensus_remote_signer_public_keys \
+  "The answer of the public keys endpoint of a remote signer: its public keys as hex."
+
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."
 
@@ -781,6 +793,12 @@
 
 #define DOC_consensus_record_attestation_signing \
   "The record after a key signs a vote, as JSON text."
+
+#define DOC_consensus_keymanager_json \
+  "A value of a schema of the Keymanager API, read from its JSON and written back."
+
+#define DOC_consensus_keymanager_run \
+  "The responses of calls made one after another on a validator client, then its state."
 
 #define DOC_consensus_is_execution_block \
   "From Bellatrix: whether a block carries a payload other than the empty one."

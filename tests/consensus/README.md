@@ -283,3 +283,36 @@ Two more tests build the list of validators that a relay serves from the minimal
 The first registers every validator and compares the list with the proposer lookahead of the state, read from its JSON; with no registration the list is empty.
 The second moves the state inside an epoch, replaces the lookahead, registers one validator, and checks that only the slots of that validator have entries.
 A last test checks that the list is refused at the forks before and after Fulu.
+
+The directory `keymanager_api/` holds files of the Keymanager API, from `ethereum/keymanager-APIs` at commit `51f2a5c90e9d301c3e9980da402ec70ae82f0991`, release v1.1.0.
+The files are copied byte for byte under their paths in that repository.
+`keymanager-oapi.yaml` is the OpenAPI document, which names the schemas of the API.
+`types/` holds the files that define those schemas, with an example of most of them.
+The source has no other test vectors.
+
+`bindings/python/tests/consensus/test_keymanager_api.py` reads the example of each schema through the bindings, and checks what the writer gives back.
+A schema with no example of its own takes the examples of its fields.
+The test also checks the letter case of hex, the pattern of an integer, and the codes of the errors.
+The same file runs the call that imports keystores, on keystores that it builds with PBKDF2 and AES-128-CTR, and on the PBKDF2 keystore of ERC-2335 in `tests/cryptography/keystore/`.
+It checks the example of issue #2136 and the cases of the use case "Add a key" in `use-cases/README.md` of the source.
+It also lists the keys of a client, and runs the use case "Delete a key" of the source, with the request `a, a, b, c` and its statuses.
+It runs the calls on remote keys with the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
+It moves a key from one client to another with a delete and an import, as the use case "Move a key" of the source says.
+It runs the example of issue #2140 on the fee recipient, and sets the gas limit and the graffiti of a key, with the examples of the types as the defaults of the client.
+It signs the voluntary exit of the case `basic` of the voluntary exits of `operations/minimal/`, at Capella and at Deneb, with the key of its validator, and checks the signature of the case byte for byte.
+
+The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
+The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.
+It defines the endpoint, and it holds one example request for each kind of request, and for each version of a versioned body.
+`bindings/python/tests/consensus/test_remote_signing_api.py` reads each example that matches the schemas through the bindings, and checks that writing it again gives the same document.
+Two examples do not spell their fields as the schemas do: the fork info of `AGGREGATION_SLOT`, and the whole deprecated `BLOCK` example, write camel case.
+The test checks that the bindings refuse them, and that the first one reads once its fork info takes the spelling of the schema.
+The examples name no preset, and five of them fix the size of a bitfield.
+The Altair block and the sync committee contribution have the sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
+The test reads each example under every preset whose sizes it has, and checks the refusal under the other one.
+The test also computes the root that the signer signs for each example of a kind before Gloas that carries a root and reads, and compares it with the example's `signingRoot`, under the minimal configuration, whose genesis fork version is that of the examples.
+The Electra and Fulu aggregates carry a root that neither preset gives, so the test computes their root under the mainnet preset with its own merkleization, and compares it with that of the bindings.
+The test also reads the examples of the five kinds that Gloas adds, which carry no signing root.
+It computes the roots of the payload attestation, the preferences and the authentication with its own merkleization, and records those of the bid and the envelope, which are progressive containers.
+Finally, it runs the sign endpoint on each example that reads, with a fixed secret key, and checks each signature with `py_ecc`; the Electra and Fulu aggregates are refused, since their roots differ from the signer's.
+The envelope example has a logs bloom of 262 bytes, where the bloom has 256, so the test checks that the bindings refuse it, and that it reads once the bloom has 256 bytes.

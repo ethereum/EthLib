@@ -6,7 +6,6 @@ public import EthLib.Cryptography.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.Fp2
 public import EthLib.Cryptography.Proofs.Bls.Compress
 public import EthLib.Cryptography.Proofs.Bls.G2Equiv
-public import EthLib.Cryptography.Proofs.IdLoops
 -- The closed infinity check reduces the derived `Except` equality and the bounded `all`.
 import all Batteries.Data.Except
 import all Init.Data.Nat.Fold

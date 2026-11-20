@@ -11,6 +11,7 @@ Reading and writing big-endian bytes undo each other.
 - On `a + b` bytes, `n` is `n / 256 ^ b` on the first `a` bytes, then `n` on the last `b`.
 - Zero on `len` bytes is `len` zero bytes.
 - Reading `k` bytes and writing the value back on `k` bytes gives the same bytes.
+- Two numbers below `256 ^ len` that write the same `len` bytes are equal.
 -/
 
 @[expose] public section
@@ -98,6 +99,11 @@ theorem natToBytes_bytesToNat (bytes : List UInt8) :
 theorem bytesToNat_inj {a b : List UInt8} (length : a.length = b.length)
     (same : bytesToNat a = bytesToNat b) : a = b := by
   rw [← natToBytes_bytesToNat a, ← natToBytes_bytesToNat b, length, same]
+
+/-- Two numbers below `256 ^ len` that write the same `len` bytes are equal. -/
+theorem natToBytes_inj {len a b : Nat} (ha : a < 256 ^ len) (hb : b < 256 ^ len)
+    (h : natToBytes len a = natToBytes len b) : a = b := by
+  rw [← bytesToNat_natToBytes_of_lt ha, ← bytesToNat_natToBytes_of_lt hb, h]
 
 /-- The first byte is worth `256` to the power of the number of bytes after it. -/
 theorem bytesToNat_cons (b : UInt8) (rest : List UInt8) :

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Class
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: basic typed SSZ values are lawful
@@ -156,19 +157,20 @@ instance : LawfulSszType Base.U256 :=
 instance {n : Nat} [NeZero n] : LawfulSszType (Vector UInt8 n) where
   wellFormed := by simp [desc, Desc.wellFormed, NeZero.ne n]
   fits v := .byteVector v.size_toArray
-  ofValue_toValue v := by simp [toValue, ofValue, v.size_toArray]
+  ofValue_toValue v := by simp [toValue, ofValue]
   toValue_of_ofValue {value _} made := by
     cases value <;> simp only [ofValue] at made <;> try cases made
     -- Only bytes of the declared count read back, as the vector that holds them.
     rename_i data
     by_cases exact : data.size = n
-    · simp only [exact, dite_true, Except.ok.injEq] at made
+    · rw [Base.exactArray_of_size_eq _ exact, Except.ok.injEq] at made
       subst made
       rfl
-    · simp [exact] at made
+    · rw [Base.exactArray_of_size_ne _ exact] at made
+      cases made
   ofValue_ne_error {value fault} fits made := by
     cases fits with
-    | byteVector exact => simp [ofValue, exact] at made
+    | byteVector exact => simp [ofValue, Base.exactArray_of_size_eq _ exact] at made
   encode_eq v := by
     by_cases wide : n ≥ 2 ^ (8 * bytesPerOffset)
     · simp [encode, desc, toValue, Ssz.serialize, wide, v.size_toArray, bind, Except.bind, throw,

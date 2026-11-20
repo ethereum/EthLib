@@ -114,9 +114,9 @@ def verifyKzgProof (commitment : Bytes48) (z y : Bytes32) (proof : Bytes48) :
   -- The inputs are decoded in the order of EIP-4844.
   let commitmentPoint ←
     (validateKzgG1Point commitment).mapError fun _ => .invalidCommitment commitment
-  let zField ← (Fr.fromBytesBE (packBytes z)).mapError fun _ =>
+  let zField ← (Fr.fromBytesBE z).mapError fun _ =>
     .invalidFieldElement (EthLib.Base.bytesToNat z.toList)
-  let yField ← (Fr.fromBytesBE (packBytes y)).mapError fun _ =>
+  let yField ← (Fr.fromBytesBE y).mapError fun _ =>
     .invalidFieldElement (EthLib.Base.bytesToNat y.toList)
   let proofPoint ← (validateKzgG1Point proof).mapError fun _ => .invalidProof proof
   let tau ← (G2.uncompress KZG_SETUP_G2_MONOMIAL_1).mapError fun _ => .invalidTrustedSetup
