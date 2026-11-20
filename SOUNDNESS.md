@@ -2285,9 +2285,18 @@ So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `app
 The bound on the parent is a hypothesis.
 The rule lets each block raise the gas limit by less than a 1024th, with no cap.
 So no theorem bounds the gas limit along a chain from its genesis.
+
 From Glamsterdam a receipt counts the gas after the refund, state gas included.
-The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
-Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+`processTransaction_gasUsed_le_add` (`Execution/Proofs/Transactions/Process.lean`) proves that a transaction uses at most the execution gas plus the state gas it adds to its block.
+Before Glamsterdam the block counts the gas used as execution gas, and no state gas (`processTransaction_blockGas_execution_of_lt`, `processTransaction_blockGas_state_of_lt`).
+From Glamsterdam it counts as execution gas at least the gas that the sender pays, minus the state gas (`gasUsed_sub_le_transactionBlockGas`).
+So each receipt records at most the execution gas plus the state gas of the body (`applyTransactions_cumulativeGasUsed_le_add`).
+The gas limit bounds each of the two (`applyTransactions_gas_le`), so a receipt records at most twice the gas limit.
+`stateTransition_gas_lt` derives both bounds for a block that passes its transition, at every fork that the transition runs.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^62`.
+The rule then keeps the gas limit of the block below `2^63` (`stateTransition_gasLimit_mul_lt`), so twice that limit stays below `2^64`.
+For a parent from `2^62` up to `2^63`, no theorem keeps the receipts from Glamsterdam below `2^64`.
+`processTransaction_logsWeight` and `encode_makeReceipt_processTransaction` hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
 
