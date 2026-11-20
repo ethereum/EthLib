@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.fail_cpu_seconds is not None:
         limits += f" or {args.fail_cpu_seconds:g} CPU seconds"
     rows = [
-        f"Peak memory of each Lean file ({limits}).",
+        f"Time, CPU time and peak memory of each Lean file ({limits}).",
         "",
         "| File | Time (s) | CPU (s) | Peak memory (GiB) | Result |",
         "| --- | --- | --- | --- | --- |",

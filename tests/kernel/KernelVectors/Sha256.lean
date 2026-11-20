@@ -5,9 +5,9 @@ import EthLib.Cryptography.Hash.Sha256
 /-!
 # SHA-256 known answers in the kernel
 
-Each case is a file of `tests/cryptography/sha256/hash/`, copied byte for byte.
+Each case takes its bytes from a case of `tests/cryptography/sha256/hash/`.
 
-`tests/cryptography/sha256/SHA256SUMS` pins these files.
+`tests/cryptography/sha256/SHA256SUMS` pins the files of those cases.
 
 Their source, as `hash/format.md` says, is FIPS 180-2, Appendix B.
 
