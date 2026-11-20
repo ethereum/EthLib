@@ -661,6 +661,7 @@ Not yet released.
 
 - `PinPresetFacts` is public: the preset facts that the pin's drift bound needs.
   Each field is a fact about the preset alone, and a deployed preset has it.
+  `PinPresetFacts.below`, `PinPresetFacts.reward` and `PinPresetFacts.vectorSmall` follow from its other fields, and the pin's drift bound reads them.
 
 - `PinPresetFacts.mainnet` is public: the mainnet preset has the preset facts of the pin.
 

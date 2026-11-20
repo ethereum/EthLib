@@ -705,8 +705,6 @@ private theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high :
 
 Each field is a fact about the preset alone, and a deployed preset has it. -/
 structure PinPresetFacts (preset : Preset) : Prop where
-  /-- (preset fact) The downward band is below an increment. -/
-  below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) An increment is at least 900 times the slashings vector. -/
   rounding : 900 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -715,8 +713,6 @@ structure PinPresetFacts (preset : Preset) : Prop where
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) The slashings vector has at least four epochs. -/
   vector : 4 ≤ preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat
-  /-- (preset fact) The base reward factor is positive. -/
-  reward : 1 ≤ preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) The slashing quotient is at least two. -/
   quotient : 2 ≤ (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat
   /-- (preset fact) The margin leaves room for the climb after a third of the stake is lost.
@@ -751,8 +747,8 @@ structure PinPresetFacts (preset : Preset) : Prop where
   rewardScale : 2 ^ 35 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) An increment is at least `10 ^ 8` gwei, which rules out a small increment. -/
   incrementSize : 10 ^ 8 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) The preset's divisors, a sync committee period among them, are positive. -/
-  divisors : preset.DivisorsPositive
+  /-- (preset fact) A sync committee period has at least one epoch. -/
+  syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0
   /-- (preset fact) Four downward bands fit in an increment. -/
   quarterBand : 4 * preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) The proposer lookahead ends before activity stops being fixed. -/
@@ -761,32 +757,52 @@ structure PinPresetFacts (preset : Preset) : Prop where
   fits : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
   /-- (preset fact) An increment is at most four downward bands, which rules out a tiny band. -/
   bandLow : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ 4 * preset.downwardBand
-  /-- (preset fact) Forty-four slashings vectors fit in three increments.
-
-  It compares epochs with gwei, since the unit gain adds two gwei of rounding for each epoch.
-
-  It rules out a slashings vector longer than `3 * increment / 44` epochs. -/
-  vectorSmall : 44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-    3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) The activation balance is at most the largest effective balance before Electra.
 
   With the cap order, the two are equal, as the upgrade to Electra needs. -/
   activation : ActivationWithinMaxEffective preset
 
+/-- The downward band is below an increment.
+
+Four bands fit in an increment, and an increment is positive. -/
+theorem PinPresetFacts.below (facts : PinPresetFacts preset) :
+    preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  have := facts.quarterBand
+  have := facts.incrementSize
+  omega
+
+/-- The base reward factor is positive, since its product with an increment is at least `2 ^ 35`. -/
+theorem PinPresetFacts.reward (facts : PinPresetFacts preset) :
+    1 ≤ preset.BASE_REWARD_FACTOR.toNat := by
+  have scale := facts.rewardScale
+  rcases Nat.eq_zero_or_pos preset.BASE_REWARD_FACTOR.toNat with zero | positive
+  · rw [zero, Nat.mul_zero] at scale
+    exact absurd scale (by decide)
+  · exact positive
+
+/-- Forty-four slashings vectors fit in three increments.
+
+It compares epochs with gwei, since the unit gain adds two gwei of rounding for each epoch.
+
+An increment is at least 900 slashings vectors. -/
+theorem PinPresetFacts.vectorSmall (facts : PinPresetFacts preset) :
+    44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  have := facts.rounding
+  omega
+
 /-- The mainnet preset has the preset facts of the pin. -/
 theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
-    by decide, by decide, by decide, by decide, by decide,
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+    fun fork => by cases fork <;> decide, fun fork => by cases fork <;> decide, by decide,
+    by decide, by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.mainnet⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
-    fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
-    by decide, by decide, by decide, by decide, by decide,
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+    fun fork => by cases fork <;> decide, fun fork => by cases fork <;> decide, by decide,
+    by decide, by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.minimal⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
@@ -9488,7 +9504,7 @@ private theorem seat_union_card (h : Setting config checks g split fin pulled an
       Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
     rw [hL, ← hLnext]
     exact r1.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
-      h.facts.divisors.syncPeriod (by rw [hP]; simpa using per) alt altairF
+      h.facts.syncPeriod (by rw [hP]; simpa using per) alt altairF
   -- C's committees hold them too
   have firstC : ∃ j ≤ nC, LsC j = Lcur := by
     refine ⟨(getCurrentEpoch split).toNat / P - (getCurrentEpoch fin).toNat / P, by omega, ?_⟩
@@ -9517,7 +9533,7 @@ private theorem seat_union_card (h : Setting config checks g split fin pulled an
       have := Nat.div_le_div_right (c := P) order
       omega
     · exact r.currentSyncCommittee_eq_nextSyncCommittee_of_next_period earlyZ
-        h.facts.divisors.syncPeriod (by rw [hP]; simp only; omega) alt altairF
+        h.facts.syncPeriod (by rw [hP]; simp only; omega) alt altairF
   -- the positions that hold a key of the committees of each run
   have distinctR : PubkeysDistinct pulled :=
     ((toFin.append fromFin).append tail).pubkeysDistinct h.genesis
