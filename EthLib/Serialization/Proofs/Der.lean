@@ -21,6 +21,8 @@ The reader is stated against X.690 itself, in terms of octets and numbers.
 - The BIT STRING reader accepts only an octet-aligned value: the octet 0, then its octets.
 - BIT STRING contents count at most 7 unused bits, all zero, and none when no octet follows.
 - BMPString and UniversalString pass when they write Unicode scalar values, two or four octets each.
+- An INTEGER passes validation when it is nonempty and its first nine bits are not all equal.
+- An OCTET STRING always passes, and an IA5String passes when each octet is below 80.
 - An OBJECT IDENTIFIER is one or more subidentifiers, each on the fewest base-128 octets.
 - A SEQUENCE passes validation exactly when each value it holds passes.
 - A SET OF also needs the encodings of those values in ascending order.
@@ -1098,6 +1100,55 @@ private theorem validate_go_printableString_ok_iff {value : Value} (fuel : Nat)
   rw [← List.all_eq_true, validate.go, tag]
   split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
+/-- With positive fuel, a value of tag 2 passes validation exactly when it is a DER INTEGER.
+
+Its content has one octet or more (X.690 §8.3.1).
+
+With two octets or more, its first nine bits are neither all zero nor all one (X.690 §8.3.2). -/
+private theorem validate_go_integer_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 2) :
+    validate.go (fuel + 1) value = .ok () ↔ value.content.data.toList ≠ [] ∧
+      ∀ first next rest, value.content.data.toList = first :: next :: rest →
+        ¬(first = 0x00 ∧ next.toNat < 0x80) ∧ ¬(first = 0xFF ∧ 0x80 ≤ next.toNat) := by
+  have step : validate.go (fuel + 1) value = (do let _ ← integer value; pure ()) := by
+    rw [validate.go, tag]
+    rfl
+  rw [step, integer]
+  simp only [tag, bne_self_eq_false, Bool.false_eq_true, ite_false]
+  generalize value.content.data.toList = c
+  rcases c with _ | ⟨first, _ | ⟨next, rest⟩⟩
+  · simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · simp [pure, Except.pure, bind, Except.bind]
+  · by_cases hr : (first = 0 ∧ next.toNat < 128) ∨ (first = 255 ∧ 128 ≤ next.toNat)
+    · simp only [hr, ite_true, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+      simp only [ne_eq, reduceCtorEq, not_false_eq_true, List.cons.injEq, true_and]
+      refine ⟨False.elim, fun h => ?_⟩
+      obtain ⟨zero, one⟩ := h first next rest ⟨rfl, rfl, rfl⟩
+      rcases hr with h | h
+      · exact zero h
+      · exact one h
+    · simp only [hr, ite_false, pure, Except.pure, bind, Except.bind]
+      simp only [ne_eq, reduceCtorEq, not_false_eq_true, List.cons.injEq, true_and]
+      refine ⟨fun _ => ?_, fun _ => trivial⟩
+      rintro f n r ⟨rfl, rfl, rfl⟩
+      exact ⟨fun h => hr (.inl h), fun h => hr (.inr h)⟩
+
+/-- With positive fuel, a value of tag 4 passes validation whatever its content. -/
+private theorem validate_go_octetString {value : Value} (fuel : Nat) (tag : value.tag = 4) :
+    validate.go (fuel + 1) value = .ok () := by
+  rw [validate.go, tag]
+  rfl
+
+/-- With positive fuel, a value of tag 22 passes validation exactly when each octet is below 80.
+
+Those are the 128 characters of IA5, one octet each. -/
+private theorem validate_go_ia5String_ok_iff {value : Value} (fuel : Nat) (tag : value.tag = 22) :
+    validate.go (fuel + 1) value = .ok () ↔ ∀ b ∈ value.content.data.toList, b.toNat < 0x80 := by
+  have hall : (value.content.data.toList.all fun b => decide (b.toNat < 128)) = true ↔
+      ∀ b ∈ value.content.data.toList, b.toNat < 0x80 := by
+    simp only [List.all_eq_true, decide_eq_true_eq]
+  rw [← hall, validate.go, tag]
+  split <;> simp_all [pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
+
 /-- With positive fuel, a value of any tag outside the certificate subset is rejected by its tag.
 
 The subset is BOOLEAN, INTEGER, BIT STRING, OCTET STRING, NULL and OBJECT IDENTIFIER.
@@ -1139,6 +1190,28 @@ theorem validate_printableString_ok_iff {value : Value} (tag : value.tag = 19) :
       (Char.ofNat b.toNat).isAlphanum ∨
         Char.ofNat b.toNat ∈ [' ', '\'', '(', ')', '+', ',', '-', '.', '/', ':', '=', '?'] :=
   validate_go_printableString_ok_iff _ tag
+
+/-- An INTEGER passes validation exactly when its content is the fewest octets of its value.
+
+Its content has one octet or more (X.690 §8.3.1).
+
+With two octets or more, its first nine bits are neither all zero nor all one (X.690 §8.3.2). -/
+theorem validate_integer_ok_iff {value : Value} (tag : value.tag = 2) :
+    validate value = .ok () ↔ value.content.data.toList ≠ [] ∧
+      ∀ first next rest, value.content.data.toList = first :: next :: rest →
+        ¬(first = 0x00 ∧ next.toNat < 0x80) ∧ ¬(first = 0xFF ∧ 0x80 ≤ next.toNat) :=
+  validate_go_integer_ok_iff _ tag
+
+/-- An OCTET STRING passes validation whatever its content (X.690 §8.7). -/
+theorem validate_octetString {value : Value} (tag : value.tag = 4) : validate value = .ok () :=
+  validate_go_octetString _ tag
+
+/-- An IA5String passes validation exactly when each octet is below 80.
+
+Those are the 128 characters of IA5, one octet each (X.680 §41). -/
+theorem validate_ia5String_ok_iff {value : Value} (tag : value.tag = 22) :
+    validate value = .ok () ↔ ∀ b ∈ value.content.data.toList, b.toNat < 0x80 :=
+  validate_go_ia5String_ok_iff _ tag
 
 /-- A value of a tag outside the certificate subset fails validation with a tag error.
 
