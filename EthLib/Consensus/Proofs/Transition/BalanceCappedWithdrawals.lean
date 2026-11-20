@@ -439,16 +439,10 @@ theorem processWithdrawals_capped {state after : BeaconState preset fork}
           rw [equal]
           exact Classical.not_not.mp fun builder => plain ⟨small, builder⟩
       exact kept applied balances earlier (unchanged.trans atEarlier) (Nat.min_le_left _ _)
-  by_cases gloas : .glamsterdam ≤ fork
-  · cases full : isParentBlockFull state gloas
-    · rw [processWithdrawals_of_parentEmpty payload gloas full, Except.ok.injEq] at computed
-      subst computed
-      exact ⟨earlier, atEarlier, UInt64.le_refl _⟩
-    · obtain ⟨expected, expectedOk, appliedOk, -⟩ :=
-        processWithdrawals_recorded gloas full computed
-      exact applies expected expectedOk appliedOk
-  · obtain ⟨expected, expectedOk, -, appliedOk⟩ :=
-      processWithdrawals_expected (Nat.lt_of_not_le gloas) computed
-    exact applies expected expectedOk appliedOk
+  exact processWithdrawals_of
+    (fun _ t => ∃ later, t.balances.data[index]? = some later ∧
+      min earlier (withdrawalMaxEffectiveBalance preset fork validator) ≤
+        min later (withdrawalMaxEffectiveBalance preset fork validator))
+    ⟨earlier, atEarlier, UInt64.le_refl _⟩ (applies _) computed
 
 end EthLib.Consensus

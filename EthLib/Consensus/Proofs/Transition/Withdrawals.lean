@@ -561,22 +561,38 @@ theorem processWithdrawals_recorded {state after : BeaconState preset fork}
     exact ⟨expected, found, applied, (applyExpectedWithdrawals_frame applied).2 gloas⟩
   · contradiction
 
+/-- A relation holds across the withdrawal step when it holds of the state to itself.
+
+It must also hold across the expected withdrawals.
+
+The step either keeps the state or applies the expected withdrawals. -/
+theorem processWithdrawals_of {state after : BeaconState preset fork}
+    (R : BeaconState preset fork → BeaconState preset fork → Prop) (refl : R state state)
+    {capella : .shapella ≤ fork}
+    (applied : ∀ {expected : ExpectedWithdrawals},
+      getExpectedWithdrawals state capella = .ok expected →
+      applyExpectedWithdrawals state capella expected = .ok after → R state after)
+    {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
+    (computed : processWithdrawals state capella payload = .ok after) :
+    R state after := by
+  by_cases gloas : .glamsterdam ≤ fork
+  · cases full : isParentBlockFull state gloas
+    · rw [processWithdrawals_of_parentEmpty payload gloas full] at computed
+      obtain rfl := Except.ok.inj computed
+      exact refl
+    · obtain ⟨_, expectedOk, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
+      exact applied expectedOk appliedOk
+  · obtain ⟨_, expectedOk, _, appliedOk⟩ :=
+      processWithdrawals_expected (Nat.lt_of_not_le gloas) computed
+    exact applied expectedOk appliedOk
+
 /-- The withdrawal step keeps the sizes. -/
 theorem sameSizes_processWithdrawals {state after : BeaconState preset fork}
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    SameSizes state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, applied⟩ := computed
-      exact (applyExpectedWithdrawals_frame applied).1
-    · cases computed
-      exact SameSizes.refl state
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact (applyExpectedWithdrawals_frame applied).1
+    SameSizes state after :=
+  processWithdrawals_of SameSizes (SameSizes.refl state)
+    (fun _ applied => (applyExpectedWithdrawals_frame applied).1) computed
 
 /-! ## The balances that the withdrawals lower -/
 
@@ -978,12 +994,9 @@ theorem processWithdrawals_payments {state after : BeaconState preset fork}
     (gloas : .glamsterdam ≤ fork)
     {capella : .shapella ≤ fork} {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    after.builderPendingPayments = state.builderPendingPayments := by
-  cases full : isParentBlockFull state gloas
-  · rw [processWithdrawals_of_parentEmpty payload gloas full, Except.ok.injEq] at computed
-    rw [computed]
-  · obtain ⟨_, -, appliedOk, -⟩ := processWithdrawals_recorded gloas full computed
-    exact (applyExpectedWithdrawals_builderQueues gloas appliedOk).1
+    after.builderPendingPayments = state.builderPendingPayments :=
+  processWithdrawals_of (fun a b => b.builderPendingPayments = a.builderPendingPayments) rfl
+    (fun _ applied => (applyExpectedWithdrawals_builderQueues gloas applied).1) computed
 
 section
 

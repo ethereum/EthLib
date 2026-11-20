@@ -181,17 +181,7 @@ private theorem same_withdrawals {s t : BeaconState preset fork} {capella : .sha
       (fun _ => rfl) (fun one two => two.trans one)
       (fun withdrawn => by rw [applyWithdrawal_eq withdrawn]) _ _ _ _ _ _ applied
     all_goals exact fun _ _ => rfl
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      rfl
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of (fun a b => b.slashings = a.slashings) rfl (fun _ => expected) ok
 
 private theorem same_blockExecution {s t : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
@@ -486,17 +476,7 @@ private theorem Kept.operationsInput {engine : ExecutionEngine preset fork}
     (fun _ paid => ?_) (fun headed => ?_) (fun _ executed => ?_) (fun revealed => ?_)
     (fun _ voted => ?_)
   · -- The payload of the parent exits and consolidates validators, but adds none.
-    have registry := processParentExecutionPayload_step_of
-      (fun a b => EffectiveKept a b ∧ b.validators.data.size = a.validators.data.size)
-      (fun a => ⟨effectiveKept_refl a, rfl⟩)
-      (fun one two => ⟨effectiveKept_trans one.1 two.1 (Nat.le_of_eq one.2.symm),
-        two.2.trans one.2⟩)
-      (fun _ validators => ⟨effectiveKept_data (congrArg (·.data) validators),
-        by rw [validators]⟩)
-      (fun requested => ⟨effectiveKept_withdrawalRequest requested,
-        (sameSizes_processWithdrawalRequest requested).1⟩)
-      (fun requested => ⟨effectiveKept_consolidationRequest requested,
-        (sameSizes_processConsolidationRequest requested).1⟩) paid
+    have registry := effectiveKept_parentPayload paid
     exact ⟨⟨same_parentPayload paid, registry.1,
       (frame_processParentExecutionPayload paid).toFrame⟩, registry.2⟩
   · have frame := (frame_processBlockHeader headed).toFrame

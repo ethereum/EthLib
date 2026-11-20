@@ -4,6 +4,7 @@ public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Cryptography.Proofs.Aes.Ctr
 public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Networking.Discv5.Packet
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # `Networking.Proofs.Discv5.Packet`
@@ -111,8 +112,7 @@ theorem mask_take (destId : NodeId) (iv : Vector UInt8 16) (data : List UInt8) (
 /-- The bytes of a vector read back as the vector. -/
 theorem vectorOf_toList {n : Nat} (v : Vector UInt8 n) :
     Authdata.vectorOf n v.toList = some v := by
-  obtain ⟨a, h⟩ := v
-  simp [Authdata.vectorOf, Vector.toList, h]
+  rw [Authdata.vectorOf, Vector.toArray_toList, Base.exactArray?_toArray]
 
 /-- The authdata of each flag decodes back from its bytes, when its sizes fit their fields. -/
 theorem Authdata.decode_encode (a : Authdata) (h : a.fits = true) :
@@ -141,11 +141,7 @@ theorem Authdata.decode_encode (a : Authdata) (h : a.fits = true) :
 /-- A vector read from a list of bytes holds exactly those bytes. -/
 theorem toList_of_vectorOf {n : Nat} {bytes : List UInt8} {v : Vector UInt8 n}
     (h : Authdata.vectorOf n bytes = some v) : v.toList = bytes := by
-  unfold Authdata.vectorOf at h
-  split at h
-  · cases h
-    simp [Vector.toList]
-  · cases h
+  exact congrArg Array.toList (Base.toArray_of_exactArray? h)
 
 /-- Authdata that its bytes decode to has the flag it was read under, fits, and encodes back. -/
 private theorem Authdata.encode_of_decode {flag : UInt8} {bytes : List UInt8} {a : Authdata}

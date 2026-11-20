@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Hash.Hkdf
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Sign
+public import EthLib.Cryptography.Ecdsa.Encoding
 public import EthLib.Networking.Discv5.Distance
 
 /-!
@@ -81,14 +82,13 @@ The signature is deterministic, with the nonces of RFC 6979, and its `s` is at m
 def idSign (sk : Fn) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId) :
     Except Secp256k1Error ByteArray := do
   let (r, s, _) ← Ecdsa.sign sk (idSignatureHash challengeData ephemeralPubkey nodeIdB)
-  return ⟨(Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val).toArray⟩
+  return Base.packBytes (Cryptography.Ecdsa.toBytes r.val s.val)
 
 /-- Whether an ID signature of 64 bytes `r || s` verifies under the public key of node A. -/
 def idVerify (pk : Point) (challengeData ephemeralPubkey : ByteArray) (nodeIdB : NodeId)
     (signature : ByteArray) : Bool :=
-  signature.size == 64 &&
-    Ecdsa.verify pk (idSignatureHash challengeData ephemeralPubkey nodeIdB)
-      (Base.bytesToNat (signature.data.toList.take 32))
-      (Base.bytesToNat (signature.data.toList.drop 32))
+  match Cryptography.Ecdsa.read? signature with
+  | some (r, s) => Ecdsa.verify pk (idSignatureHash challengeData ephemeralPubkey nodeIdB) r s
+  | none => false
 
 end EthLib.Networking.Discv5

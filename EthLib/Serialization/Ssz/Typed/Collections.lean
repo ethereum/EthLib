@@ -103,8 +103,7 @@ instance {α : Type} [SszType α] {length : Nat} : SszType (Vector α length) wh
   ofValue
     | .seq elements => do
       let items ← ofElements elements
-      if exact : items.size = length then return ⟨items, exact⟩
-      else throw (.count length items.size)
+      Base.exactArray length items (.count length)
     | _ => .error .typeMismatch
   -- Fixed-size elements need no offset table, so their bytes follow one another.
   encode v :=
@@ -143,9 +142,7 @@ instance {length : Nat} : SszType (Bitvector length) where
   desc := .bitVector length
   toValue b := .bits b.bits.toArray
   ofValue
-    | .bits data =>
-      if exact : data.size = length then .ok ⟨⟨data, exact⟩⟩
-      else .error (.count length data.size)
+    | .bits data => Bitvector.mk <$> Base.exactArray length data (.count length)
     | _ => .error .typeMismatch
 
 instance {limit : Nat} : SszType (Bitlist limit) where

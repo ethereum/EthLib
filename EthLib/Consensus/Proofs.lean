@@ -50,6 +50,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
+public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.DirectSafety.SourceSafety
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation
@@ -166,6 +167,7 @@ public import EthLib.Consensus.Proofs.ReqResp.Validity
 public import EthLib.Consensus.Proofs.Shuffle
 public import EthLib.Consensus.Proofs.SlashingProtection
 public import EthLib.Consensus.Proofs.ShufflePermutation
+public import EthLib.Consensus.Proofs.SignatureChecks
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Consensus.Proofs.SigningRandomOracle
 public import EthLib.Consensus.Proofs.Time

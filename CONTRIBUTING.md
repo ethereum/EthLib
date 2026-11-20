@@ -729,7 +729,9 @@ Workflows label issues and pull requests, so you do not need to set these labels
   After each push, the workflow also removes an area label whose paths the pull request no longer changes.
 - The type of a [title](#titles) gives a label such as `type: proof`, and a `!` before the colon gives `statement-change`.
   On an issue, the scope also gives the area labels, since an issue changes no paths.
-  [`.github/workflows/title-labels.yml`](.github/workflows/title-labels.yml) holds the table of scopes.
+  On an issue, the older prefixes `proofs:`, `specs:`, `specs+proofs:`, `bindings:` and `meta:` also give labels; `meta:` gives `meta`, for a tracking issue.
+  [`.github/workflows/labeler.yml`](.github/workflows/labeler.yml) holds the tables of scopes and prefixes.
+  It sets the title labels after the path labels, so that neither overwrites the other.
 - [`.github/labels.yml`](.github/labels.yml) defines each label with its color and description.
   A change to it on `master` creates or updates labels, and never deletes one.
 

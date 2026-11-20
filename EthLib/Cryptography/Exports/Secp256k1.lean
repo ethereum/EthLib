@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Cryptography.Ecdsa.Encoding
 public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Cryptography.Secp256k1.Recovery
 public import EthLib.Cryptography.Secp256k1.Sign
@@ -25,13 +26,11 @@ public section
 
 namespace EthLib.Cryptography.Secp256k1.Exports
 
-open EthLib.Exports (Result readSignature)
+open EthLib.Exports (Result)
+open EthLib.Cryptography.Ecdsa (SIGNATURE_LEN)
 
 /-- The length of a hash. -/
 def HASH_LEN : Nat := 32
-
-/-- The length of a signature: `r` then `s`, 32 bytes each. -/
-def SIGNATURE_LEN : Nat := 64
 
 /-- Run a fallible computation, with its error as a code and a message. -/
 def runSecp256k1 {α : Type} (act : Except Secp256k1Error α) : Result α :=
@@ -71,13 +70,13 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256k1 do
   let q ← Point.decode publicKey
   let h ← readHash hash
-  let (r, s) ← readSignature signature .badSignatureSize
+  let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
   return if Ecdsa.verify q h r s then 1 else 0
 
 /-- The low-s rule of EIP-2, on the `s` of a signature. -/
 @[export eth_secp256k1_is_low_s]
 def isLowSExport (signature : ByteArray) : Result UInt8 := runSecp256k1 do
-  let (_, s) ← readSignature signature .badSignatureSize
+  let (_, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
   return if Ecdsa.isLowS s then 1 else 0
 
 /-- The public key that signed a hash, from the signature and a recovery id of `0` or `1`.
@@ -87,7 +86,7 @@ It comes back in the 65-byte uncompressed encoding. -/
 def recoverExport (hash signature : ByteArray) (recoveryId : UInt8) : Result ByteArray :=
   runSecp256k1 do
     let h ← readHash hash
-    let (r, s) ← readSignature signature .badSignatureSize
+    let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
     if hid : recoveryId.toNat < 2 then
       let q ← Ecdsa.recover h r s ⟨recoveryId.toNat, hid⟩
       return q.encodeUncompressed
@@ -103,7 +102,7 @@ def signExport (privateKey hash : ByteArray) : Result ByteArray := runSecp256k1 
   let d ← readPrivateKey privateKey .badPrivateKeySize .privateKeyTooLarge
   let h ← readHash hash
   let (r, s, odd) ← Ecdsa.sign d h
-  return ⟨(Base.natToBytes 32 r.val ++ Base.natToBytes 32 s.val ++ [if odd then 1 else 0]).toArray⟩
+  return Base.packBytes (Cryptography.Ecdsa.toRecoverableBytes r.val s.val odd)
 
 /-- The ECDH shared secret of SEC 1 v2 §3.3.1: the 32-byte `x` of `d Q`.
 

@@ -6,6 +6,8 @@ public import EthLib.Consensus.Proofs.Transition.EpochDecomposition
 public import EthLib.Consensus.Proofs.Transition.Totality.Inactivity
 public import EthLib.Consensus.Proofs.Transition.Totality.PendingDeposits
 public import EthLib.Consensus.Proofs.Transition.Totality.Supply
+import EthLib.Consensus.Proofs.Transition.Slot
+import EthLib.Consensus.Proofs.Transition.Totality.RegistryLoadBlock
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.SlashingsHistory
 
@@ -508,6 +510,66 @@ theorem advanceSlot_validators_size_le {fork : Base.Fork} {s t : BeaconState pre
   · cases epochedOk
     dsimp only
     omega
+
+/-- Slots add at most one epoch of pending deposits to the registry for each epoch they cross. -/
+theorem advanceSlots_validators_size_le :
+    ∀ (count : ℕ) {s t : BeaconState preset fork}, advanceSlots config checks count s = .ok t →
+      (getCurrentEpoch s).toNat ≤ (getCurrentEpoch t).toNat ∧
+        t.validators.data.size ≤ s.validators.data.size +
+          ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
+            preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat
+  | 0, s, t, ok => by
+    simp only [advanceSlots, pure, Except.pure, Except.ok.injEq] at ok
+    subst ok
+    simp
+  | count + 1, s, t, ok => by
+    simp only [advanceSlots, bind_ok_iff] at ok
+    obtain ⟨next, step, rest⟩ := ok
+    have slotEq := advanceSlot_slot step
+    have grow := advanceSlot_validators_size_le step
+    obtain ⟨later, growRest⟩ := advanceSlots_validators_size_le count rest
+    have earlier : (getCurrentEpoch s).toNat ≤ (getCurrentEpoch next).toNat := by
+      rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, slotEq]
+      exact Nat.div_le_div_right (Nat.le_succ _)
+    refine ⟨earlier.trans later, ?_⟩
+    have split : (getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat =
+        ((getCurrentEpoch t).toNat - (getCurrentEpoch next).toNat) +
+          ((getCurrentEpoch next).toNat - (getCurrentEpoch s).toNat) := by omega
+    rw [split, Nat.add_mul]
+    omega
+
+/-- Processing slots adds at most one epoch of pending deposits for each epoch it crosses. -/
+theorem processSlots_validators_size_le {s t : BeaconState preset fork} {slot : Slot}
+    (ok : processSlots config checks s slot = .ok t) :
+    (getCurrentEpoch s).toNat ≤ (getCurrentEpoch t).toNat ∧
+      t.validators.data.size ≤ s.validators.data.size +
+        ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  unfold processSlots at ok
+  simp only [bind_ok_iff, ensure_ok_iff] at ok
+  obtain ⟨_, _, advanced⟩ := ok
+  exact advanceSlots_validators_size_le _ advanced
+
+/-- From Gloas, a block adds no validator, so its transition adds only what its slots add. -/
+theorem stateTransition_validators_size_le (gloas : .glamsterdam ≤ fork)
+    {engine : ExecutionEngine preset fork}
+    {s t : BeaconState preset fork} {signed : SignedBeaconBlock preset fork}
+    {validateResult : Bool}
+    (ok : stateTransition config checks engine s signed validateResult = .ok t) :
+    (getCurrentEpoch s).toNat ≤ (getCurrentEpoch t).toNat ∧
+      t.validators.data.size ≤ s.validators.data.size +
+        ((getCurrentEpoch t).toNat - (getCurrentEpoch s).toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  obtain ⟨advanced, slotsOk, -, -, blockOk, -⟩ := stateTransition_ok ok
+  obtain ⟨later, grow⟩ := processSlots_validators_size_le slotsOk
+  have block := processBlock_validators_size_le blockOk
+  have none : blockDepositCount signed.message.body = 0 := by
+    unfold blockDepositCount
+    exact dite_eq_right_of_eq_false (eq_false (Nat.not_lt_of_le gloas))
+  have sameEpoch : getCurrentEpoch t = getCurrentEpoch advanced := by
+    simp only [getCurrentEpoch, processBlock_slot blockOk]
+  rw [sameEpoch]
+  exact ⟨later, by omega⟩
 
 end RegistryGrowth
 

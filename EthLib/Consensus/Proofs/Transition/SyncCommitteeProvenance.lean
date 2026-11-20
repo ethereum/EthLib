@@ -311,16 +311,8 @@ private theorem applyExpectedWithdrawals {capella : .shapella ≤ fork}
 private theorem processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (ok : Consensus.processWithdrawals state capella payload = .ok after) :
-    SameSyncCommittees state after := by
-  unfold Consensus.processWithdrawals at ok
-  split at ok
-  · split at ok
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp ok
-      exact applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases ok; exact .refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact applyExpectedWithdrawals applied
+    SameSyncCommittees state after :=
+  processWithdrawals_of SameSyncCommittees (.refl _) (fun _ => applyExpectedWithdrawals) ok
 
 private theorem processProposerSlashing {slashing : ProposerSlashing}
     (ok : Consensus.processProposerSlashing config checks state slashing = .ok after) :

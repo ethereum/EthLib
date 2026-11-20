@@ -4,6 +4,7 @@ public import EthLib.Networking.Rlpx.Handshake
 public import EthLib.Networking.Proofs.Rlpx.Ecies
 public import EthLib.Cryptography.Proofs.Secp256k1.Sign
 public import EthLib.Serialization.Proofs.Rlp.Codec
+public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 import EthLib.Base.Proofs.Bytes
 
 /-!
@@ -81,11 +82,12 @@ theorem recoverSigner_valid {hash : Vector UInt8 32} {sig : Vector UInt8 65} {p 
     (h : recoverSigner hash sig = .ok p) :
     p.isOnCurve = true ∧ p ≠ .infinity := by
   unfold recoverSigner at h
+  generalize Cryptography.Ecdsa.toNats (sig.take Cryptography.Ecdsa.SIGNATURE_LEN) = rs at h
+  obtain ⟨r, s⟩ := rs
   dsimp only at h
   split at h
   · rename_i hv
-    cases hr : Ecdsa.recover hash (Base.bytesToNat (sig.toList.take 32))
-        (Base.bytesToNat ((sig.toList.drop 32).take 32)) ⟨sig[64].toNat, hv⟩ with
+    cases hr : Ecdsa.recover hash r s ⟨sig[64].toNat, hv⟩ with
     | error e => simp [hr, Except.mapError] at h
     | ok q =>
       simp only [hr, Except.mapError, Except.ok.injEq] at h
@@ -99,16 +101,20 @@ theorem recoverSigner_signatureBytes {sk : Fn} {hash : Vector UInt8 32} {sig : F
     recoverSigner hash (signatureBytes sig) = .ok (mul sk generator) := by
   obtain ⟨r, s, odd⟩ := sig
   have hrec := Ecdsa.recover_sign_rfc6979 h
-  have hlr := Base.natToBytes_length 32 r.val
-  have hls := Base.natToBytes_length 32 s.val
   have hmod (x : Fn) : x.val % 256 ^ 32 = x.val :=
     Nat.mod_eq_of_lt (lt_trans x.isLt (by decide : Fn.modulus < 256 ^ 32))
-  unfold recoverSigner signatureBytes
+  -- The first 64 bytes are `r || s`, and they read back as the two integers.
+  have htake : ((signatureBytes (r, s, odd)).take Cryptography.Ecdsa.SIGNATURE_LEN :
+      Vector UInt8 Cryptography.Ecdsa.SIGNATURE_LEN) = Cryptography.Ecdsa.toBytes r.val s.val :=
+    Cryptography.Ecdsa.take_toRecoverableBytes _ _ _
+  -- The last byte is the recovery id.
+  have hv : (signatureBytes (r, s, odd))[64] = if odd then 1 else 0 :=
+    Cryptography.Ecdsa.getElem_toRecoverableBytes _ _ _
+  unfold recoverSigner
+  rw [htake, Cryptography.Ecdsa.toNats_toBytes, hmod, hmod, hv]
   cases odd <;>
-    simp only [Vector.toList, List.take_left' hlr, List.append_assoc,
-      List.drop_left' hlr, List.take_left' hls, Base.bytesToNat_natToBytes, hmod] <;>
     (simp only [Bool.false_eq_true, ite_false, ite_true] at hrec
-     simp [hlr, hls, Except.mapError, hrec])
+     simp [Except.mapError, hrec])
 
 /-! ## Packets -/
 
