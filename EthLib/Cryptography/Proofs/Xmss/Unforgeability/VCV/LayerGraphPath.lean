@@ -16,7 +16,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability.VCV.LayerGraph
 open Constants HashSig OracleComp
 
 /-- Express the library's bottom-up sibling calls as one ordered vector computation. -/
-private theorem siblings_in_order {m : Type → Type} [Monad m] {α : Type}
+theorem siblings_in_order {m : Type → Type} [Monad m] {α : Type}
     (h : Merkle.Position → α → α → m α) (base : Nat → m α) (n level j : Nat) :
     Merkle.siblings h base ⟨level, j⟩ n = ofFnInOrder n fun k =>
       Merkle.node h base ⟨level + k.val, (j / 2 ^ k.val) ^^^ 1⟩ := by
@@ -28,13 +28,13 @@ private theorem siblings_in_order {m : Type → Type} [Monad m] {α : Type}
       Nat.div_div_eq_div_mul, Nat.pow_succ', Nat.add_assoc, Nat.add_comm 1]
 
 /-- The returned sibling at each height is present in the final cache. -/
-def PathRecorded (pp : PublicParam) (layer : Layer) (n e : Nat)
+@[expose] def PathRecorded (pp : PublicParam) (layer : Layer) (n e : Nat)
     (p : OracleComp Spec (Vector Digest n)) : Prop :=
   ∀ (st : State) (z : Vector Digest n × State),
     z ∈ support ((simulateQ (graph pp layer).eagerImpl p).run st) →
     ∀ k : Fin n, Recorded (treeRole k.val ((e / 2 ^ k.val) ^^^ 1)) z.1[k] z.2
 
-private theorem siblings_recorded (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec))
+theorem siblings_recorded (pp : PublicParam) (layer : Layer) (other : SeedPrf (OracleComp Spec))
     (n e : Nat) (bound : n ≤ LAYER_HEIGHT) :
     PathRecorded pp layer n e (Merkle.path (nodeHash hash pp layer)
       (leaves hash pp (startPrf pp layer other) layer) n e) := by

@@ -17,7 +17,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability.VCV.LayerGraph
 open Constants OracleComp Merkle
 
 /-- The stored tree gives the recorded root and every sibling of each leaf in its subtree. -/
-def BuildRecorded (level index : Nat) (tree : Built Digest) (st : State) : Prop :=
+@[expose] def BuildRecorded (level index : Nat) (tree : Built Digest) (st : State) : Prop :=
   Recorded (treeRole level index) tree.value st ∧
   ∀ e, e / 2 ^ level = index → ∀ k : Fin level,
     Recorded (treeRole k.val ((e / 2 ^ k.val) ^^^ 1)) ((tree.path level e)[k.val]'k.isLt) st
@@ -51,7 +51,7 @@ private theorem parent_recorded {l j : Nat} {a b : Built Digest} {d : Digest} {s
       exact left.1
 
 /-- Every supported return of the given computation has a tree recorded in its final cache. -/
-def ProducesBuild (pp : PublicParam) (layer : Layer) (l j : Nat) (op : OracleComp Spec (Built Digest)) : Prop :=
+@[expose] def ProducesBuild (pp : PublicParam) (layer : Layer) (l j : Nat) (op : OracleComp Spec (Built Digest)) : Prop :=
   ∀ (st : State) (z : Built Digest × State),
     z ∈ support ((simulateQ (graph pp layer).eagerImpl op).run st) → BuildRecorded l j z.1 z.2
 

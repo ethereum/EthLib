@@ -69,9 +69,9 @@ theorem chain_end_recorded (pp : PublicParam) (layer : Layer) (e : UInt32) (i : 
     (fun j v => congrArg (simulateQ (graph pp layer).eagerImpl) (chainStep_eq pp layer e i j v))
     0 (CHAIN_LENGTH - 1) (by decide) d st start run
 
-private def endWords (ends : Vector Digest V) : List Word := List.ofFn fun i : Fin V => digestEquiv ends[i]
+def endWords (ends : Vector Digest V) : List Word := List.ofFn fun i : Fin V => digestEquiv ends[i]
 
-private theorem endWords_digests (ends : Vector Digest V) : LeafGraph.digests V (endWords ends) = ends := by
+theorem endWords_digests (ends : Vector Digest V) : LeafGraph.digests V (endWords ends) = ends := by
   apply Vector.ext
   intro i hi
   have input : (endWords ends)[i]? = some (digestEquiv ends[i]) := by

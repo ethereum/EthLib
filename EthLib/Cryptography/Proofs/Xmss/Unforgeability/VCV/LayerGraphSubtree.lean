@@ -63,7 +63,7 @@ theorem treeRole_children (l j : Nat) (h : l < LAYER_HEIGHT) :
   rw [treeRole_succ _ _ h, treeRole_eq l _ (Nat.le_of_lt h), treeRole_eq l _ (Nat.le_of_lt h)]
   simp [children]
 
-private theorem node_input (pp : PublicParam) (layer : Layer) (l j : Nat) (h : l < LAYER_HEIGHT)
+theorem node_input (pp : PublicParam) (layer : Layer) (l j : Nat) (h : l < LAYER_HEIGHT)
     (a b : Digest) : input pp layer (treeRole (l + 1) j) [digestEquiv a, digestEquiv b] =
       (thInput pp (addrNode layer (Fin.ofNat _ (l + 1)) (UInt32.ofNat j))
         (packBytes a ++ packBytes b)).data.toList := by
