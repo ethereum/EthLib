@@ -12038,20 +12038,26 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       have step := slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle
       exact ⟨by omega, by omega⟩
 
-/-- A voter that is active at a state has its activation assigned and reached. -/
-private theorem activated_of_activeVoters (early : fork < .glamsterdam)
-    {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
-    ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
-      w.activationEpoch ≤ getCurrentEpoch s := by
-  obtain ⟨w, found, active⟩ := active_of_activeVoters early member
+/-- A validator that is active at the current epoch has its activation assigned and reached. -/
+private theorem activated_of_active {s : BeaconState preset fork} {w : Validator}
+    (active : isActiveValidator w (getCurrentEpoch s) = true) :
+    w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch s := by
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  refine ⟨w, found, fun far => ?_, active.1⟩
+  refine ⟨fun far => ?_, active.1⟩
   have low := UInt64.le_iff_toNat_le.mp active.1
   have high := UInt64.lt_iff_toNat_lt.mp active.2
   have bound := w.exitEpoch.toNat_lt
   rw [far] at low
   have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
+
+/-- A voter that is active at a state has its activation assigned and reached. -/
+private theorem activated_of_activeVoters (early : fork < .glamsterdam)
+    {s : BeaconState preset fork} {v : ValidatorIndex} (member : v ∈ activeVoters s) :
+    ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+      w.activationEpoch ≤ getCurrentEpoch s := by
+  obtain ⟨w, found, active⟩ := active_of_activeVoters early member
+  exact ⟨w, found, activated_of_active active⟩
 
 /-- A voter of the quorum has its activation assigned and reached.
 
@@ -22325,6 +22331,69 @@ private theorem bud_csUnits (h : Setting config checks g split fin pulled anc co
       ∑ v ∈ CS counted split,
         unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := sorry
 
+/-- The keys of `K6` beyond R's registry and the active keys of `CS` fit the deposit slots.
+
+Each is created after the split and activated by C, so a deposit of C's run credits it.
+
+The two sets are apart, since the keys of `K6` are unslashed at C and those of `CS` are slashed.
+
+The deposits of C's run credit at most one epoch's slots in each epoch since the split. -/
+private theorem created_slots_le (h : Setting config checks g split fin pulled anc counted V) :
+    ((K6 pulled counted).filter fun v => pulled.validators.data.size ≤ v.toNat).card +
+      ((CS counted split).filter fun v =>
+        isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card ≤
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat := by
+  classical
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨tailC⟩ := h.toCounted
+  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
+    registryGrows_of_chainSteps toPulled.chainSteps
+  have finSplit := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
+  have splitPulled := UInt64.le_iff_toNat_le.mp h.called
+  have pulledCounted := UInt64.le_iff_toNat_le.mp h.later
+  have near := h.near
+  simp only at finSplit
+  have periodLe := Nat.div_le_div_right
+    (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+    (Nat.le_trans splitPulled pulledCounted)
+  obtain ⟨-, -, D, -, -, cardD, -, hD, -⟩ := credited_pieces h.genesis h.parameters.lookahead
+    (y := (⟨fork, counted⟩ : ForkedBeaconState preset)) h.early h.delay
+    (getCurrentEpoch counted).toNat
+    ((getCurrentEpoch counted).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat -
+      (getCurrentEpoch split).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
+    (toFin.append fromFin) tailC h.fulu (by dsimp only; omega)
+  obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  obtain ⟨eventsC, replayedC⟩ := tailC.balanceEvents_ok h.early (getCurrentEpoch counted).toNat
+  have deposit : ∀ v : ValidatorIndex, (∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted) →
+      split.validators.data.size ≤ v.toNat → v.toNat ∈ D := fun v activated absent =>
+    hD v.toNat (created_deposit h fromFin replayedF tailC (getCurrentEpoch counted).toNat
+      (Nat.le_succ _) replayedC activated absent)
+  have apart := (cs_disjoint h).1
+  rw [← Finset.card_union_of_disjoint (Finset.disjoint_left.mpr fun v inK6 inCS =>
+    Finset.disjoint_left.mp apart (Finset.mem_union_left _ (Finset.mem_union_right _
+      (Finset.mem_filter.mp inK6).1)) (Finset.mem_filter.mp inCS).1)]
+  have count : (((K6 pulled counted).filter fun v => pulled.validators.data.size ≤ v.toNat) ∪
+      ((CS counted split).filter fun v =>
+        isActiveAt counted (getCurrentEpoch counted) v.toNat = true)).card ≤ D.card := by
+    refine Finset.card_le_card_of_injOn (fun v : ValidatorIndex => v.toNat) (fun v hv => ?_)
+      (fun a _ b _ same => UInt64.toNat_inj.mp same)
+    rcases Finset.mem_union.mp hv with inK6 | inCS
+    · obtain ⟨member, beyond⟩ := Finset.mem_filter.mp inK6
+      exact deposit v (activated_of_activeVoters h.early (Finset.mem_filter.mp member).1)
+        (Nat.le_trans grows beyond)
+    · obtain ⟨member, active⟩ := Finset.mem_filter.mp inCS
+      obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
+      exact deposit v ⟨w, found, activated_of_active isActive⟩ (Finset.mem_filter.mp member).2.1
+  have cardD' : D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+      ((getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat) := cardD
+  refine Nat.le_trans count (Nat.le_trans cardD' ?_)
+  rw [Nat.mul_comm]
+  exact Nat.mul_le_mul_right _ (by omega)
+
 /-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.
 
 At a high gain rate each takes the largest cap, and `creditCap` is the cap of each deposit slot.
@@ -22338,7 +22407,36 @@ private theorem bud_capSlots (h : Setting config checks g split fin pulled anc c
         ((CS counted split).filter fun v =>
           isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
             preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat else 0) ≤
-      (pinTerms config pulled anc fin).creditCap := sorry
+      (pinTerms config pulled anc fin).creditCap := by
+  classical
+  by_cases high : (pinTerms config pulled anc fin).gainHigh = true
+  · have cap : (pinTerms config pulled anc fin).creditCap =
+        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
+          preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+            preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+      have low : ¬ 11 * (pinTerms config pulled anc fin).depth *
+          ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+            preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
+        have : (!decide (11 * (pinTerms config pulled anc fin).depth *
+            ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+              preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat)) = true := high
+        simpa using this
+      show (if 11 * (pinTerms config pulled anc fin).depth *
+          ((pinTerms config pulled anc fin).gainRateMax + 1) ≤
+            preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat then 0 else
+              (pinTerms config pulled anc fin).depthFin *
+                preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+                  preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) = _
+      rw [ite_eq_right_of_eq_false _ _ (eq_false low)]
+      rfl
+    unfold capUse
+    rw [ite_eq_left high, ite_eq_left high, cap, ← Nat.add_mul]
+    exact Nat.mul_le_mul_right _ (by
+      rw [Nat.mul_comm _ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat]
+      exact (created_slots_le h).trans (Nat.le_of_eq (Nat.mul_comm _ _)))
+  · unfold capUse
+    rw [ite_eq_right high, ite_eq_right high]
+    exact Nat.zero_le _
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
@@ -22391,7 +22489,7 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat fun v _ => capped v
     rw [smul_eq_mul] at total
     unfold capUse
-    rw [if_pos highGain]
+    rw [ite_eq_left highGain]
     exact Nat.le_trans total (Nat.le_add_left _ _)
 
 /-- D-8 (activations): keys counted in C and not active at R.
