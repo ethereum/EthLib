@@ -3109,7 +3109,14 @@ It assumes that every epoch leaks, that the largest effective balance of the val
 Either some epoch of the run does not leak or raises the finalized epoch, or the voters hold two thirds of the active stake at the end.
 The first case is the expected one on mainnet when the voters vote: they should reach two thirds before the bound, and finality should resume; no theorem shows this.
 It reads the balance of the voters in the final state.
-No theorem yet bounds that balance from below by the one at the start of the run.
+`InactivityLeakVoterRun.lean` bounds the effective balance of a voter at the end from below by values read at the start of the run, from Altair (`effectiveBalance_ge_of_voterRun`).
+It assumes that every epoch of the run leaks, that the finalized epoch does not rise, and that the registry stays within its limit.
+The voter stays unslashed and is the source of no pending consolidation.
+Whenever it is eligible, it has the timely source and target flags of the previous epoch.
+Between epoch transitions it takes only steps that cannot lower its capped balance.
+Its effective balance at the end is then at least the lesser of two values at the start.
+They are its effective balance, and its balance capped at its largest effective balance and rounded down to a whole increment.
+`twoThirds_of_leakRun_start` uses that bound to state the two-thirds result with the stake of each voter read at the start of the run.
 
 ### Fast confirmation rule
 
