@@ -309,11 +309,11 @@ So the types that cross a module boundary are fixed here, and `EthLib/Base/` def
   A theorem shows that the production instance meets them.
   Where no theorem does yet, `SOUNDNESS.md` names the missing proof as an assumption.
 - A security property that holds only with high probability is not such a law.
-  The theorems take it as a hypothesis, and `SOUNDNESS.md` names it as an assumption, as it does for `SignatureChecks.AggregateSound`.
+  The theorems take it as a hypothesis, and `SOUNDNESS.md` names it as an assumption, as it does for `SignatureChecks.AggregateSoundOn`.
 - A test stub of a resource is an instance written for tests.
   It has a name, and a docstring that says which answers it fixes.
   Where a theorem can show it, a theorem shows that the stub breaks the laws or the assumptions.
-  `SignatureChecks.acceptAll` accepts every signature, and `SignatureChecks.not_aggregateSound_acceptAll` shows that it fails `AggregateSound` when no key signed anything.
+  `SignatureChecks.acceptAll` accepts every signature, and `SignatureChecks.not_aggregateSoundOn_acceptAll` shows that it fails `AggregateSoundOn` on one call when no key signed anything.
   A C export passes the production instance, unless it replays test vectors built for a stub.
   Its docstring then says so.
 - A gas meter is not a resource.
