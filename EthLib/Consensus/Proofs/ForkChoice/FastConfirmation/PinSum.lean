@@ -22301,7 +22301,7 @@ private theorem dueAt_eq_zero_of_targets (X : BeaconState preset fork) (high : �
     rfl
   · rfl
 
-/-- A key that C's branch holds beyond R's registry has a deposit credit on C's run.
+/-- A key created after the split and activated by C has a deposit credit on C's run.
 
 It holds the activation reserve at its start.
 
@@ -22314,21 +22314,18 @@ private theorem created_deposit (h : Setting config checks g split fin pulled an
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {v : ValidatorIndex} (active : v ∈ activeVoters counted)
-    (created : pulled.validators.data.size ≤ v.toNat) :
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
+    (absent : split.validators.data.size ≤ v.toNat) :
     0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC tailC).1 := by
   classical
   obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨toPulled⟩ := h.toPulled
   by_contra none
   have depZero := Nat.eq_zero_of_not_pos none
-  have grows : split.validators.data.size ≤ pulled.validators.data.size :=
-    registryGrows_of_chainSteps toPulled.chainSteps
   have finGrows : fin.validators.data.size ≤ split.validators.data.size :=
     registryGrows_of_chainSteps fromFin.chainSteps
   obtain ⟨z, pre, post, splitEq, -, -, -, -, funded, -, -, walk, noGross, -⟩ :=
-    created_start h tailC highC endEpochC (activated_of_activeVoters h.early active)
-      (Nat.le_trans grows created)
+    created_start h tailC highC endEpochC activated absent
   have positive := maxEffectiveBalance_pos h
   have consScan : (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat
       highC tailC).1 ≤ consAmt eventsC v.toNat :=
