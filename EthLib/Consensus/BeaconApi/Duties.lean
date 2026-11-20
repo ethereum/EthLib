@@ -21,8 +21,8 @@ The flag `execution_optimistic` comes from the store, not from the state.
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[duties endpoints]: https://github.com/ethereum/beacon-APIs/tree/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/duties
-[types]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/duty.yaml
+[duties endpoints]: https://github.com/ethereum/beacon-APIs/tree/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/duties
+[types]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/duty.yaml
 -/
 
 @[expose] public section

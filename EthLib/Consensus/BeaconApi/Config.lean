@@ -32,10 +32,10 @@ EthLib gives the genesis version of the configuration.
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[spec endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/config/spec.yaml
-[fork schedule endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/config/fork_schedule.yaml
-[deposit contract endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/config/deposit_contract.yaml
-[genesis endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/genesis.yaml
+[spec endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/config/spec.yaml
+[fork schedule endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/config/fork_schedule.yaml
+[deposit contract endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/config/deposit_contract.yaml
+[genesis endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/genesis.yaml
 -/
 
 @[expose] public section

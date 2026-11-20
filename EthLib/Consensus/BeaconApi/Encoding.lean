@@ -20,8 +20,8 @@ The reader of the data still refuses a key that its type does not declare.
 
 The [root file] of the API fixes the envelope, and [`types/http.yaml`] fixes the error bodies.
 
-[root file]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/beacon-node-oapi.yaml
-[`types/http.yaml`]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/http.yaml
+[root file]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/beacon-node-oapi.yaml
+[`types/http.yaml`]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/http.yaml
 -/
 
 @[expose] public section

@@ -32,10 +32,10 @@ Their answer names at most position 0, and the source sends its message in a pla
 
 SOUNDNESS.md records how this module reads the points that the source leaves open.
 
-[attestations endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/pool/attestations.v2.yaml
-[sync committee endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/pool/sync_committees.yaml
-[voluntary exits]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/pool/voluntary_exits.yaml
-[bids]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/execution_payload/bid.yaml
+[attestations endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/pool/attestations.v2.yaml
+[sync committee endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/pool/sync_committees.yaml
+[voluntary exits]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/pool/voluntary_exits.yaml
+[bids]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/beacon/execution_payload/bid.yaml
 -/
 
 @[expose] public section

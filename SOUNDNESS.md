@@ -5336,7 +5336,7 @@ That chain mines its blocks before the merge with a zero mix hash and a zero non
 
 ### Beacon API
 
-The Beacon API is the HTTP interface of a consensus client, as release `v5.0.0-beta.0` of `ethereum/beacon-APIs` defines it.
+The Beacon API is the HTTP interface of a consensus client, as commit `0ed1255` of `ethereum/beacon-APIs` defines it.
 EthLib specifies the consensus version that its responses carry and their JSON encodings; it leaves out the transport.
 
 A response names the fork of its data by a consensus version, one name for each fork of the consensus layer.
@@ -5786,7 +5786,7 @@ A root that the first step removes has neither its block nor its state, so `boot
 No theorem covers a store that the handlers reach after either step.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
-The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
+The file `apis/beacon/light_client/bootstrap.yaml` of that commit lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
 `bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
 `bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets that error.
 `bootstrapFor_of_lt_altair` shows that error for a root whose post state is before the Altair fork epoch, for a store of any fork and under any schedule.
@@ -6262,7 +6262,9 @@ Points that remain open:
 - The source does not say which blocks the equivocation check compares against; EthLib compares against the blocks of the fork choice store, by slot and proposer.
   For a block, the gossip check that it is the first of its slot and proposer covers the blocks that the node saw on gossip.
   For an envelope, a rival block that gossip ignored, and that the store does not hold, goes undetected.
-- The source does not say how the node answers an object that gossip ignores; EthLib refuses it with 400, as the source ties a success to passing gossip validation.
+- The source does not say how the node answers an object that gossip ignores; EthLib refuses it with 400.
+  For a block or an envelope, the source ties a success to passing gossip validation.
+  For a bid, the source still names a failed gossip validation as a cause of 400.
   So an object that the node already holds, and saw on gossip, is refused.
   An error of the fork choice during the gossip checks refuses the object too.
 - Some checks run only when the node integrates the object, so their failure gives 202, not 400.
@@ -6273,6 +6275,7 @@ Points that remain open:
 - The endpoints of attester slashings, proposer slashings, voluntary exits and bids take one object, and the others take a list.
   The source answers a failure of a single object with a plain error body; EthLib reports it at position 0.
   The source bounds the SSZ form of each list; EthLib does not enforce these bounds.
+- The source says a node should run the gossip checks on a bid, and may skip them for a bid of a builder that it configures locally; EthLib runs them on every bid, as the source recommends.
 - The source asks validator clients to submit the preferences of proposers one epoch before Gloas; the topic exists only from Gloas, so EthLib accepts them only from Gloas.
 - The debug state endpoint gives the state that a state identifier names, in the encoding of every other state answer, so it needs no answer of its own.
 

@@ -237,7 +237,7 @@ It checks signed roots against the roots of their message and signature, and Glo
 It also compares a few fields with the JSON form.
 The signatures of the examples are placeholders, so the tests of the signature checks sign their own messages.
 
-The directory `beacon_api/` holds the schemas of the Beacon API, from `ethereum/beacon-APIs` at commit `7911555e6a30c51f9b69bb168111a59f1ff8ee49`, release v5.0.0-beta.0.
+The directory `beacon_api/` holds the schemas of the Beacon API, from `ethereum/beacon-APIs` at commit `0ed12552077c9927ba2599ee632e76b2caf021d7`.
 A schema says how the JSON of the API spells a container: the keys of each object, and the pattern of each string.
 The files are copied byte for byte under their paths in that repository.
 `beacon_api/SHA256SUMS` records the digest of each file.
