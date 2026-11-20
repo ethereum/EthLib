@@ -40,10 +40,6 @@ def gainWithoutPreviousOnly (x y : ForkedBeaconState preset) : Nat :=
   ∑ k ∈ (recentKeys y.state \ previousOnly x), (effectiveWeight y.state k -
     Models.supported (unslashedKeys x.state) (effectiveWeight x.state) k)
 
-def potential (x : ForkedBeaconState preset) (i : Nat) :=
-  (x.state.validators.data[i]?.map fun v => max v.effectiveBalance.toNat
-    (min (actualBalanceAt x i) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)).getD 0
-
 structure SelectedCharge where
   index : Nat
   amount : Nat

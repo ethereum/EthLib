@@ -604,15 +604,25 @@ def pendingSourceExcess (x : ForkedBeaconState preset) (high : Nat) : Nat :=
         else 0).sum
   else 0
 
-/-- The excess of the keys active at `x`, each counted up to its cap at `x`.
+namespace Internal
 
-A key counts its balance capped at its largest effective balance, minus its effective balance. -/
+/-- A key's balance capped at its largest effective balance, or its effective balance if larger.
+
+It is zero at an index with no key. -/
+def potential (x : ForkedBeaconState preset) (i : Nat) :=
+  (x.state.validators.data[i]?.map fun v => max v.effectiveBalance.toNat
+    (min (actualBalanceAt x i) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)).getD 0
+
+end Internal
+
+/-- The excess of the keys active at `x`, with each balance capped at `x`.
+
+A key counts its balance capped at its largest effective balance, minus its effective balance.
+
+The cap applies before the subtraction. -/
 def initialCappedExcess (x : ForkedBeaconState preset) : Nat :=
   ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
-    min (actualBalanceAt x i.toNat)
-        (((x.state.validators.data[i.toNat]?).map fun v =>
-          (withdrawalMaxEffectiveBalance preset x.fork v).toNat).getD 0) -
-      effectiveAt x i.toNat).sum
+    Internal.potential x i.toNat - effectiveAt x i.toNat).sum
 
 /-- The largest growth room of the unslashed keys that exit in one epoch of the window.
 

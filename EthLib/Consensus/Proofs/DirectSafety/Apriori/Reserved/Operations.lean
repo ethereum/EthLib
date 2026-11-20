@@ -126,7 +126,7 @@ private theorem initialOwnership_valid (x : ForkedBeaconState preset) (high : Na
 
 Its first pot is the capped excess of the keys active at `x`.
 
-For each key it is `potential` minus the effective balance.
+For each key it is its balance capped at its largest effective balance, minus its effective balance.
 
 The next two are the pre-active stake `Pre` and the due consolidation credits `Pi_c`.
 
@@ -163,7 +163,7 @@ private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat
     simp only [show (0 : Nat) < 2 from by decide, show (1 : Nat) < 2 from by decide,
       show ¬ (2 : Nat) < 2 from by decide, show ¬ (3 : Nat) < 2 from by decide, ↓reduceIte]
     omega
-  -- Pot 0: the active excess up to the cap.
+  -- Pot 0: the active excess, with each balance capped.
   have excess : (∑ i ∈ Finset.range x.state.validators.data.size, (initialPot x high 0 i).2) ≤
       initialCappedExcess x := by
     have rewrite : (∑ i ∈ Finset.range x.state.validators.data.size, (initialPot x high 0 i).2) =
@@ -173,22 +173,8 @@ private theorem initialOwnership_card {x : ForkedBeaconState preset} (high : Nat
           (potential x i - effectiveAt x i) := by
       rw [Finset.sum_filter]
       exact Finset.sum_congr rfl fun i _ => by simp [initialPot]
-    -- At a present index the potential less the effective balance is the capped excess.
-    have capped : ∀ i : Nat, potential x i - effectiveAt x i =
-        min (actualBalanceAt x i)
-            (((x.state.validators.data[i]?).map fun v =>
-              (withdrawalMaxEffectiveBalance preset x.fork v).toNat).getD 0) -
-          effectiveAt x i := by
-      intro i
-      unfold potential effectiveAt
-      cases x.state.validators.data[i]? <;> simp
-      omega
     rw [rewrite]
-    refine (initial_active_sum_le _ early ?_ fun i => potential x i - effectiveAt x i).trans
-      (le_of_eq ?_)
-    rotate_left
-    · unfold initialCappedExcess
-      exact congrArg List.sum (List.map_congr_left fun i _ => capped i.toNat)
+    apply initial_active_sum_le _ early _ fun i => potential x i - effectiveAt x i
     intro i member
     obtain ⟨_, active⟩ := Finset.mem_filter.mp member
     cases found : x.state.validators.data[i]? with
@@ -284,7 +270,7 @@ private theorem supportedAt_current {x : ForkedBeaconState preset} {v : Validato
 
 /-- The capped excess of an active key at the start is held at its endpoint.
 
-It is the key's `potential` minus its effective balance. -/
+It is the key's balance capped at its largest effective balance, minus its effective balance. -/
 private theorem initialOwnership_excess {x : ForkedBeaconState preset} {high i : Nat}
     {v : Validator} (found : x.state.validators.data[i]? = some v)
     (active : isActiveValidator v (getCurrentEpoch x.state) = true) :
@@ -353,7 +339,7 @@ The reserve cut reads the actual pending queue.
 
 Each clause reads at most two pot entries of one key.
 
-The entries are its active excess, its potential, and its due pending principal and headroom. -/
+The entries are its capped excess, its potential, and its due pending principal and headroom. -/
 theorem initialOwnership_exists {g x : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (early : x.fork < .glamsterdam) (high : Nat) :

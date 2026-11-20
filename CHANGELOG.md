@@ -434,12 +434,13 @@ Not yet released.
 
 ### Changes that break callers
 
-- In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's excess only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+- In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
   The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
   `creditBudget` reads it in place of `initialExcess`.
   `initialExcess` is unchanged.
   `creditBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
-  In `Apriori.Internal`, pot 0 of `initialPot` is `potential x i - effectiveAt x i`, and `OwnedInitial` bounds its tokens with `initialCappedExcess`.
+  `Apriori.Internal.potential` moves from `Apriori/Ownership.lean` to `Apriori/Bound.lean`, where `initialCappedExcess` reads it; its name and value are unchanged.
+  In `Apriori.Internal`, pot 0 of `initialPot` is `potential x i - effectiveAt x i` for a key active at `x`, and `OwnedInitial` bounds its tokens with `initialCappedExcess`.
   The `NewReference` clause of `ReserveCut` bounds `potential u i` in place of `max (effectiveAt u i) (actualBalanceAt u i)`.
   The former clause implies the new one; a caller that read the balance from it reads `potential` instead.
 
