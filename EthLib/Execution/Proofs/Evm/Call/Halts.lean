@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Execution.Proofs.Evm.Call.Run
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: a frame that ends a call or a creation halts only with an error that does not abort
@@ -87,10 +88,6 @@ private theorem keepReads_ok {α : Type} {evm : Evm fork Meter} {halted : Evm fo
       exact .inr ⟨_, Bool.eq_false_iff.mpr ‹_›, rfl⟩
   · cases h
     exact .inl rfl
-
-/-- A bind on a success applies the continuation. -/
-private theorem ok_bind {ε α β : Type} (a : α) (f : α → Except ε β) :
-    (Except.ok a : Except ε α) >>= f = f a := rfl
 
 omit [GasMeter Meter] in
 /-- The pops of the topics of a log keep the error. -/
@@ -282,7 +279,7 @@ private theorem error_popCallOperands {kind : CallKind} {evm : Evm fork Meter}
     r.2.error = evm.error := by
   simp only [popCallOperands, popCallValue, popWord, bind_assoc, pure_bind] at h
   repeat' (first
-    | (split at h <;> try simp only [bind_assoc, pure_bind, ok_bind] at h)
+    | (split at h <;> try simp only [bind_assoc, pure_bind, Base.ok_bind] at h)
     | (obtain ⟨_, _, h⟩ := Base.bind_ok_iff.mp h))
   all_goals cases h; rfl
 

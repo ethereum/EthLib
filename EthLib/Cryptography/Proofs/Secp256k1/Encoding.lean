@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.Except
 public import EthLib.Cryptography.Secp256k1.Encoding
 public import EthLib.Cryptography.Proofs.Secp256k1.Order
 
@@ -77,7 +78,7 @@ theorem decompress_eq_ok_iff {x : Fp} {odd : Bool} {p : Point} :
   unfold Point.decompress
   cases hs : (x * x * x + b).sqrt with
   | none =>
-    dsimp only
+    dsimp only [Option.elim]
     refine ⟨fun h => (by cases h), ?_⟩
     rintro ⟨y, rfl, hc, -⟩
     -- `y` would be a root of `x^3 + 7`.
@@ -85,7 +86,7 @@ theorem decompress_eq_ok_iff {x : Fp} {odd : Bool} {p : Point} :
     rw [toZMod_rhs]
     exact (Point.isOnCurve_affine x y).mp hc
   | some beta =>
-    dsimp only
+    dsimp only [Option.elim]
     have hon := isOnCurve_of_sqrt hs
     have hne := Fp.val_neg_mod_two (sqrt_ne_zero hs)
     have honneg : (Point.affine x (-beta)).isOnCurve = true := Point.isOnCurve_neg hon
@@ -174,8 +175,8 @@ theorem decode_eq_ok_iff (bytes : ByteArray) (p : Point) :
         cases hx : Fp.ofBytes rest with
         | error e => rw [hx] at h; cases h
         | ok x =>
-          rw [hx] at h
-          simp only [bind, Except.bind] at h
+          -- A rewrite, not a reduction, so the kernel never evaluates the square root.
+          rw [hx, Base.ok_bind] at h
           obtain ⟨y, rfl, hc, hpar⟩ := decompress_eq_ok_iff.mp h
           refine ⟨hc, by simp, Or.inl ?_⟩
           -- The prefix is `02` for an even `y` and `03` for an odd one.

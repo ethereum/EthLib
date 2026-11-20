@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Rpc.Json
 public import EthLib.Base.Except
 public import EthLib.Base.Proofs.Fork
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the JSON decoders of the Engine API
@@ -196,10 +197,6 @@ private theorem fields_present {fork : Fork} (p : ExecutionPayload fork) :
   by_cases h1 : Fork.shapella ≤ fork <;> by_cases h2 : Fork.dencun ≤ fork <;>
     simp [h1, h2, dataJson, quantityJson, listJson]
 
-/-- A computation that has succeeded passes its value on. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Decode β) :
-    (Except.ok a >>= f : Decode β) = f a := rfl
-
 /-- Mapping a function over a computation that has succeeded maps its value. -/
 private theorem map_ok {α β : Type} (f : α → β) (a : α) :
     (f <$> (Except.ok a : Decode α) : Decode β) = .ok (f a) := rfl
@@ -295,10 +292,10 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
         (by simp [executionPayloadFields, h1, h2])
       refine ⟨3, ?_⟩
       unfold anyPayload
-      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      simp only [hfs, liftM_ok, Base.ok_bind, pure_bind]
       rw [ite_eq_right ne1, ite_eq_right ne2, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17,
-        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        liftM_ok, Base.ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
         bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true]
@@ -314,10 +311,10 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
         (by simp [executionPayloadFields, h1, h2])
       refine ⟨2, ?_⟩
       unfold anyPayload
-      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      simp only [hfs, liftM_ok, Base.ok_bind, pure_bind]
       rw [ite_eq_right ne1, ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15,
-        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        liftM_ok, Base.ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
         bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, map_ok, Execution.Rpc.array_withdrawal_listJson, hbase, sinceValue, h1, h2,
         dite_true, dite_false]
@@ -330,17 +327,17 @@ private theorem anyPayload_of_perm {fork : Fork} (p : ExecutionPayload fork)
       rw [hn] at hex
       refine ⟨1, ?_⟩
       unfold anyPayload
-      simp only [hfs, liftM_ok, ok_bind, pure_bind]
+      simp only [hfs, liftM_ok, Base.ok_bind, pure_bind]
       rw [ite_eq_left hex]
       simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14,
-        liftM_ok, ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
+        liftM_ok, Base.ok_bind, fixed_dataJson, address_dataJson, uint64_toDigits, quantity_baseFee,
         bytesMax_dataJson _ _ _ extra, array_bytes_listJson, ge_iff_le, Nat.reduceLeDiff,
         reduceIte, hbase, sinceValue, h1, h2, dite_false]
       rfl
   obtain ⟨v, hv⟩ := key
   refine ⟨_, hv, ?_⟩
   -- Each optional field reads back from the value that the payload gives for its fork.
-  simp only [AnyPayload.atFork, since_sinceValue, ok_bind]
+  simp only [AnyPayload.atFork, since_sinceValue, Base.ok_bind]
   rfl
 
 /-- The decoder of payloads of versions 1 to 3 reads back the JSON of a payload, at its fork.
@@ -531,7 +528,7 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
   have hf : field "payloadStatus" fs "status" = .ok (.str s.status.name) := by
     simp [field, l1]; rfl
   have hs : string "status" (.str s.status.name) = .ok s.status.name := rfl
-  simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, l3, hs, statusOfName_name]
+  simp only [hfs, liftM_ok, Base.ok_bind, hall, ite_true, hf, l2, l3, hs, statusOfName_name]
   obtain ⟨st, lvh⟩ := s
   cases lvh <;> cases e <;> simp [lift, fixed_dataJson, string, Option.mapM]
   all_goals rfl

@@ -4,6 +4,7 @@ public import EthLib.Execution.Rpc.Header
 public import EthLib.Serialization.Proofs.JsonRpc
 public import EthLib.Execution.Proofs.Rpc.Base
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the JSON form of a header
@@ -41,10 +42,6 @@ theorem names_headerFields {fork : Fork} (hash : Hash32) (h : Header fork) :
   by_cases h1 : Fork.london ≤ fork <;> by_cases h2 : Fork.shapella ≤ fork <;>
     by_cases h3 : Fork.dencun ≤ fork <;> by_cases h4 : Fork.pectra ≤ fork <;>
     by_cases h5 : Fork.glamsterdam ≤ fork <;> simp [h1, h2, h3, h4, h5]
-
-/-- A computation that has succeeded passes its value on. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Read β) :
-    (Except.ok a >>= f : Read β) = f a := rfl
 
 /-- The reader of hashes reads back a hash that its writer writes. -/
 private theorem hash32_hash32Json (what : String) (x : Hash32) :
@@ -109,7 +106,7 @@ private theorem readSince_of {f fork : Fork} {α : Type} {read : Lean.Json → R
   by_cases h : f ≤ fork
   · refine (dite_eq_left_of_eq_true (eq_true h)).trans ?_
     rw [field_of_perm hp hd (hm h)]
-    simp only [ok_bind, hr h]
+    simp only [Base.ok_bind, hr h]
     exact congrArg Except.ok (funext fun _ => rfl)
   · refine (dite_eq_right_of_eq_false (eq_false h)).trans ?_
     exact congrArg Except.ok (funext fun h' => absurd h' h)
@@ -134,7 +131,7 @@ theorem headerOfJson_headerJson {fork : Fork} {h : Header fork} {j : Lean.Json}
   have rd : ∀ {k : String} {v : Lean.Json}, (k, v) ∈ headerFields hash h →
       field "header" fs k = .ok v := fun hm => field_of_perm hp hd hm
   unfold headerOfJson
-  simp only [hfs, ok_bind]
+  simp only [hfs, Base.ok_bind]
   rw [ite_eq_left hex]
   have r1 := rd (k := "hash") (v := hash32Json hash) (by simp [headerFields])
   have r2 := rd (k := "parentHash") (v := hash32Json h.parentHash) (by simp [headerFields])
@@ -186,12 +183,12 @@ theorem headerOfJson_headerJson {fork : Fork} {h : Header fork} {j : Lean.Json}
       (fun hf => by simp [headerFields, mem_sinceField hf])
       (fun _ => uint64_toDigits _ _)
   simp only [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, s1, s2, s3,
-    s4, s5, s6, s7, s8, ok_bind, hash32_hash32Json, address_dataJson, uint_quantityJson,
+    s4, s5, s6, s7, s8, Base.ok_bind, hash32_hash32Json, address_dataJson, uint_quantityJson,
     uint256_quantityJson, bytes_dataJson]
   have b1 : bytes256 "logsBloom" (dataJson h.bloom.toList) = .ok h.bloom :=
     fixed_dataJson _ _ false
   have b2 : bytes8 "nonce" (dataJson h.nonce.toList) = .ok h.nonce := fixed_dataJson _ _ false
-  simp only [b1, b2, ok_bind, hh, ite_true]
+  simp only [b1, b2, Base.ok_bind, hh, ite_true]
   rfl
 
 end EthLib.Execution.Rpc

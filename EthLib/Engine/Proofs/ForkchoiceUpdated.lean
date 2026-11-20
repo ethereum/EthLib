@@ -6,6 +6,7 @@ public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import EthLib.Base.Proofs.BigEndian
 import EthLib.Base.Proofs.List
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
@@ -961,10 +962,6 @@ theorem checkAttributes_eq_error_of_not_after_head {version : Nat} {head : Known
 
 /-! ## The writers -/
 
-/-- A computation that has succeeded passes its value on. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Json.Decode β) :
-    (Except.ok a >>= f : Json.Decode β) = f a := rfl
-
 /-- The decoder of the forkchoice state reads back the JSON of every state. -/
 theorem forkchoiceStateOfJson_json (state : ForkchoiceState) :
     forkchoiceStateOfJson (forkchoiceStateJson state) = .ok state := by
@@ -1161,9 +1158,9 @@ private theorem payloadAttributesOfJson_json {fork : Fork} (a : PayloadAttribute
     ((isSome_sinceValue a.targetGasLimit).trans s3.symm)
   unfold payloadAttributesOfJson
   rw [payloadAttributesJson_eq]
-  simp only [hfs, liftM_ok, ok_bind]
+  simp only [hfs, liftM_ok, Base.ok_bind]
   rw [ite_eq_left hex]
-  simp only [r1, r2, r3, o1, o2, o3, o4, hx1, hx2, hx3, hx4, liftM_ok, ok_bind,
+  simp only [r1, r2, r3, o1, o2, o3, o4, hx1, hx2, hx3, hx4, liftM_ok, Base.ok_bind,
     uint64_toDigits, fixed_dataJson, address_dataJson]
   exact ⟨_, rfl, rfl, rfl, rfl, sinceValue_of_since hx1, sinceValue_of_since hx2,
     sinceValue_of_since hx3, sinceValue_of_since hx4⟩
@@ -1411,7 +1408,7 @@ theorem forkchoiceUpdatedResponseOfJson_json (s : PayloadStatus) (e : Option Str
       .ok (Json.payloadStatusJson s e) := by
     simp [field, l1]; rfl
   unfold forkchoiceUpdatedResponseOfJson forkchoiceUpdatedResponseJson
-  simp only [hfs, liftM_ok, ok_bind, hall, ite_true, hf, l2, Json.payloadStatusOfJson_json, h]
+  simp only [hfs, liftM_ok, Base.ok_bind, hall, ite_true, hf, l2, Json.payloadStatusOfJson_json, h]
   cases id <;> simp [Json.lift, fixed_dataJson, Option.mapM] <;> rfl
 
 /-- A JSON value reads as a forkchoice response exactly when it is an object of the form below.

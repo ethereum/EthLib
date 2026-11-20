@@ -66,9 +66,9 @@ def encodeUncompressed : Point → ByteArray
 
 `beta` is a square root of `x^3 + 7`, and `p - beta` is the other one, of the other parity. -/
 def decompress (x : Fp) (odd : Bool) : Except Secp256k1Error Point :=
-  match (x * x * x + b).sqrt with
-  | none => .error .noPointWithX
-  | some beta => .ok (affine x (if decide (beta.val % 2 = 1) = odd then beta else -beta))
+  -- The root stays an argument here, so a proof can split on it before anything evaluates it.
+  (x * x * x + b).sqrt.elim (.error .noPointWithX) fun beta =>
+    .ok (affine x (if decide (beta.val % 2 = 1) = odd then beta else -beta))
 
 /-- Decode a public key from either encoding, by SEC 1 v2 §2.3.4.
 
