@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.ReqResp.Validity
 import Mathlib.Data.List.SplitBy
 
@@ -19,9 +20,12 @@ What the validity of a response says about its blocks or sidecars.
 - A valid response to a request for light client updates by range has at most 128 updates.
 - Their periods lie in the requested periods, and each is the period after the one before it.
 - So the period of each update is that of the first update plus its index.
-- The fork of each update is the fork of the epoch of its attested header, from Altair.
+- The digest of each update is the fork digest of the epoch of its attested header, from Altair.
+- On a chain whose digests name their forks, that digest names the fork of that epoch.
 - A valid response to a request for a light client bootstrap has at most one bootstrap.
-- Its root is the requested root, and its fork is the fork of the epoch of its header, from Altair.
+- Its root is the requested root, and its digest is the fork digest of the epoch of its header.
+- That epoch is from Altair.
+- On a chain whose digests name their forks, that digest names the fork of that epoch.
 - A valid response to a request for sidecars by range lies in the requested slots.
 - Along the whole list, its sidecars increase in slot, then in index within one block.
 - Two of its sidecars at the same slot name the same block.
@@ -170,25 +174,33 @@ theorem pairwise_of_isValidBlocksByHeadResponse {config : Config}
     (fun _ _ h => of_decide_eq_true (Bool.and_eq_true _ _ ▸ h).1)
     (fun _ _ _ ab bc => UInt64.lt_trans bc ab) valid.2
 
+/-- A computation gives a digest exactly when its option holds that digest. -/
+private theorem toOption_eq_some_iff {digest : ForkDigest} (computed : Except Err ForkDigest) :
+    computed.toOption = some digest ↔ computed = .ok digest := by
+  cases computed <;> simp [Except.toOption]
+
 /-- The rules that a valid response for light client updates by range meets, and no others. -/
 theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config : Config)
-    (request : LightClientUpdatesByRangeRequest) (updates : List ResponseUpdate) :
-    isValidLightClientUpdatesByRangeResponse preset config request updates = true ↔
+    (genesisValidatorsRoot : Root) (request : LightClientUpdatesByRangeRequest)
+    (updates : List ResponseUpdate) :
+    isValidLightClientUpdatesByRangeResponse preset config genesisValidatorsRoot request updates =
+        true ↔
       updates.length ≤ request.count.toNat ∧ updates.length ≤ 128 ∧
       (∀ update ∈ updates,
         (request.startPeriod.toNat ≤
             (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat ∧
           (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat <
             request.startPeriod.toNat + request.count.toNat) ∧
-        Base.Fork.altair ≤ update.fork ∧
-        update.fork = config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)) ∧
+        Base.Fork.altair ≤ config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot) ∧
+        computeForkDigest config genesisValidatorsRoot
+          (computeEpochAtSlot preset update.attestedSlot) = .ok update.digest) ∧
       (∀ i (h : i + 1 < updates.length),
         (computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot).toNat =
           (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat + 1) := by
   have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
-  simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.forkMatches,
-    lightClientForkMatches, lightClientUpdatesLimit, Bool.and_eq_true, decide_eq_true_eq,
-    List.all_eq_true, allAdjacent_iff, beq_iff_eq, Nat.le_min]
+  simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.digestMatches,
+    lightClientDigestMatches, toOption_eq_some_iff, lightClientUpdatesLimit, Bool.and_eq_true,
+    decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq, Nat.le_min]
   simp only [ResponseUpdate.period, InCountRange, limit, and_assoc]
   constructor <;> exact fun h => ⟨h.2.1, h.1, h.2.2.1, h.2.2.2⟩
 
@@ -210,14 +222,16 @@ private theorem period_eq_of_consecutive {preset : Preset} {updates : List Respo
 
 The period of each update is the period of the first update plus the index of the update. -/
 theorem period_eq_of_isValidLightClientUpdatesByRangeResponse {preset : Preset}
-    {config : Config} {request : LightClientUpdatesByRangeRequest} {updates : List ResponseUpdate}
-    (valid : isValidLightClientUpdatesByRangeResponse preset config request updates = true)
+    {config : Config} {genesisValidatorsRoot : Root} {request : LightClientUpdatesByRangeRequest}
+    {updates : List ResponseUpdate}
+    (valid : isValidLightClientUpdatesByRangeResponse preset config genesisValidatorsRoot request
+      updates = true)
     (i : Nat) (h : i < updates.length) :
     (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat =
       (computeSyncCommitteePeriodAtSlot preset (updates[0]'(by omega)).attestedSlot).toNat + i :=
   period_eq_of_consecutive
-    ((isValidLightClientUpdatesByRangeResponse_iff preset config request updates).mp valid).2.2.2
-    i h
+    ((isValidLightClientUpdatesByRangeResponse_iff preset config genesisValidatorsRoot request
+      updates).mp valid).2.2.2 i h
 
 /-- The check of light client updates by range needs no bound of its length by the count.
 
@@ -225,17 +239,19 @@ Periods in the range with no gap number at most the count, so the other rules im
 
 So the response is valid exactly when it meets the other rules of the check. -/
 theorem isValidLightClientUpdatesByRangeResponse_iff_without_count (preset : Preset)
-    (config : Config) (request : LightClientUpdatesByRangeRequest)
+    (config : Config) (genesisValidatorsRoot : Root) (request : LightClientUpdatesByRangeRequest)
     (updates : List ResponseUpdate) :
-    isValidLightClientUpdatesByRangeResponse preset config request updates = true ↔
+    isValidLightClientUpdatesByRangeResponse preset config genesisValidatorsRoot request updates =
+        true ↔
       updates.length ≤ 128 ∧
       (∀ update ∈ updates,
         (request.startPeriod.toNat ≤
             (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat ∧
           (computeSyncCommitteePeriodAtSlot preset update.attestedSlot).toNat <
             request.startPeriod.toNat + request.count.toNat) ∧
-        Base.Fork.altair ≤ update.fork ∧
-        update.fork = config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)) ∧
+        Base.Fork.altair ≤ config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot) ∧
+        computeForkDigest config genesisValidatorsRoot
+          (computeEpochAtSlot preset update.attestedSlot) = .ok update.digest) ∧
       (∀ i (h : i + 1 < updates.length),
         (computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot).toNat =
           (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat + 1) := by
@@ -253,8 +269,10 @@ theorem isValidLightClientUpdatesByRangeResponse_iff_without_count (preset : Pre
 
 So no two of its updates have the same period. -/
 theorem pairwise_of_isValidLightClientUpdatesByRangeResponse {preset : Preset} {config : Config}
-    {request : LightClientUpdatesByRangeRequest} {updates : List ResponseUpdate}
-    (valid : isValidLightClientUpdatesByRangeResponse preset config request updates = true) :
+    {genesisValidatorsRoot : Root} {request : LightClientUpdatesByRangeRequest}
+    {updates : List ResponseUpdate}
+    (valid : isValidLightClientUpdatesByRangeResponse preset config genesisValidatorsRoot request
+      updates = true) :
     updates.Pairwise (fun a b => computeSyncCommitteePeriodAtSlot preset a.attestedSlot <
       computeSyncCommitteePeriodAtSlot preset b.attestedSlot) := by
   simp only [isValidLightClientUpdatesByRangeResponse, Bool.and_eq_true] at valid
@@ -267,15 +285,53 @@ theorem pairwise_of_isValidLightClientUpdatesByRangeResponse {preset : Preset} {
       omega))
     (fun _ _ _ => UInt64.lt_trans) valid.2
 
+/-- On a chain whose digests name their forks, each digest of a valid response names its fork.
+
+That fork is the fork of the epoch of the attested header of the update.
+
+So a receiver that reads the fork from the digest decodes each update with that fork. -/
+theorem forkOfDigest_of_isValidLightClientUpdatesByRangeResponse {preset : Preset}
+    {config : Config} {genesisValidatorsRoot : Root} {request : LightClientUpdatesByRangeRequest}
+    {updates : List ResponseUpdate}
+    (identify : digestsIdentify config genesisValidatorsRoot = true)
+    (valid : isValidLightClientUpdatesByRangeResponse preset config genesisValidatorsRoot request
+      updates = true)
+    {update : ResponseUpdate} (member : update ∈ updates) :
+    (forkOfDigest config genesisValidatorsRoot update.digest).map config.forkAtEpoch =
+      some (config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)) :=
+  forkOfDigest_recovers identify
+    (((isValidLightClientUpdatesByRangeResponse_iff preset config genesisValidatorsRoot request
+      updates).mp valid).2.2.1 update member).2.2
+
 /-- The rules that a valid response for a light client bootstrap meets, and no others. -/
 theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Config)
-    (request : Root) (bootstraps : List ResponseBootstrap) :
-    isValidLightClientBootstrapResponse preset config request bootstraps = true ↔
+    (genesisValidatorsRoot : Root) (request : Root) (bootstraps : List ResponseBootstrap) :
+    isValidLightClientBootstrapResponse preset config genesisValidatorsRoot request bootstraps =
+        true ↔
       bootstraps.length ≤ 1 ∧
-      ∀ bootstrap ∈ bootstraps, bootstrap.root = request ∧ Base.Fork.altair ≤ bootstrap.fork ∧
-        bootstrap.fork = config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) := by
-  simp only [isValidLightClientBootstrapResponse, lightClientForkMatches, Bool.and_eq_true,
-    decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
+      ∀ bootstrap ∈ bootstraps, bootstrap.root = request ∧
+        Base.Fork.altair ≤ config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) ∧
+        computeForkDigest config genesisValidatorsRoot (computeEpochAtSlot preset bootstrap.slot) =
+          .ok bootstrap.digest := by
+  simp only [isValidLightClientBootstrapResponse, lightClientDigestMatches, toOption_eq_some_iff,
+    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
+
+/-- On a chain whose digests name their forks, the digest of a valid bootstrap names its fork.
+
+That fork is the fork of the epoch of the header of the bootstrap.
+
+So a receiver that reads the fork from the digest decodes the bootstrap with that fork. -/
+theorem forkOfDigest_of_isValidLightClientBootstrapResponse {preset : Preset} {config : Config}
+    {genesisValidatorsRoot : Root} {request : Root} {bootstraps : List ResponseBootstrap}
+    (identify : digestsIdentify config genesisValidatorsRoot = true)
+    (valid : isValidLightClientBootstrapResponse preset config genesisValidatorsRoot request
+      bootstraps = true)
+    {bootstrap : ResponseBootstrap} (member : bootstrap ∈ bootstraps) :
+    (forkOfDigest config genesisValidatorsRoot bootstrap.digest).map config.forkAtEpoch =
+      some (config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot)) :=
+  forkOfDigest_recovers identify
+    (((isValidLightClientBootstrapResponse_iff preset config genesisValidatorsRoot request
+      bootstraps).mp valid).2 bootstrap member).2.2
 
 /-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 

@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- On a chain whose digests name their forks, the digest of each update or bootstrap of a valid light client response names the fork of its epoch ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `forkOfDigest_of_isValidLightClientUpdatesByRangeResponse` and `forkOfDigest_of_isValidLightClientBootstrapResponse` state it.
+  `isValidLightClientUpdatesByRangeResponse_iff_without_count` shows that the updates check needs no bound of its length by the count.
+
 - `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
   An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
   `cappedCalls T r` charges each request `470595 + 3 T` calls and one request `3 * 2^32` more; at `2^30` requests the floor drops from about `2^-63.4` to `2^-73.4`.
@@ -414,6 +418,17 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- The light client checks of req/resp responses compare fork digests, not forks ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  From Fulu, a change of blob parameters changes the digest within one fork, and a fork no longer tells those epochs apart.
+  In Python, `reqresp_is_valid_response` takes a new argument `genesis_validators_root`, which the light client protocols need.
+  An item of `ResponseLightClientUpdate` or `ResponseLightClientBootstrap` now ends with the 4-byte digest of its chunk in place of the name of a fork.
+  In Lean, the update and bootstrap checks take the root of the genesis validators, and their items carry a digest field in place of a fork field.
+  `lightClientForkMatches` and `ResponseUpdate.forkMatches` become `lightClientDigestMatches` and `ResponseUpdate.digestMatches`.
+  `ResponseUpdate.ofUpdate` and `ResponseBootstrap.ofBootstrap` take the digest.
+
+- In Lean, requests by range share one range predicate, `InCountRange`, and the light client updates limit is `lightClientUpdatesLimit` ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `slotInRange`, `slotInRange_iff`, `BeaconApi.InRange` and `BeaconApi.updatesLimit` are removed; a caller writes `decide (InCountRange start count value)`, `InCountRange` or `lightClientUpdatesLimit`.
 
 - In Lean, eight more laws move from the step laws to the base laws, with the same conclusions and a weaker laws premise.
   Each takes `EpochBaseLaws R` in place of `EpochStepLaws R`, which provides it.

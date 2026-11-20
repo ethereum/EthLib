@@ -2547,7 +2547,7 @@ py_consensus_reqresp_response_valid(
   PyObject* self,
   PyObject* args
 ) {
-  return call_pyvalue_export(eth_consensus_reqresp_response_valid, args, 6, CONSENSUS_ERROR);
+  return call_pyvalue_export(eth_consensus_reqresp_response_valid, args, 7, CONSENSUS_ERROR);
 }
 
 PyObject*

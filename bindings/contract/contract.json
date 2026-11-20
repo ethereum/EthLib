@@ -10453,7 +10453,7 @@
    "The smallest and the largest length of the payload of a successful response chunk, as a pair.\n\nThe arguments are the name of the preset and the configuration, the fork of the chunk and the ID.\n\nThat fork is the one that the context bytes of the chunk name, and it must define the protocol."},
   {"summary": "Whether a response is valid for its request, as a Boolean.",
    "signature":
-   "(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes | str, ...]], committee: list[int]) -> bool",
+   "(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int], genesis_validators_root: bytes | None) -> bool",
    "operation": "EthLib.Consensus.Exports.reqRespResponseValidExport",
    "method": "consensus_reqresp_response_valid",
    "errors":
@@ -10542,7 +10542,7 @@
       {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nA light client update is the slot of its attested header and the name of the fork of its chunk.\n\nA light client bootstrap is the slot and root of its beacon header and the fork of its chunk.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
+   "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nA light client update is the slot of its attested header and the fork digest of its chunk.\n\nA light client bootstrap is the slot and root of its beacon header and the fork digest of its chunk.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nThe root of the genesis validators is read only for light clients, and must then be given.\n\nA protocol without a check of its response, such as status, has code 0."},
   {"summary": "The largest length of the payload of a gossip topic at a fork.",
    "signature": "(name: str, fork: str, topic: str) -> int",
    "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",

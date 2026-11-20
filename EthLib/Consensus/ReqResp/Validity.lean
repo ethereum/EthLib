@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Containers.Block
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.ReqResp.Messages
+public import EthLib.Consensus.Signing
 
 /-!
 # `Consensus.ReqResp.Validity`
@@ -58,13 +59,16 @@ The period of an update is the period of the slot of its attested header.
 - The response has at most as many updates as the count, and at most 128.
 - The period of each update lies in the requested periods.
 - Each update has the period after the period of the update before it.
-- The fork of each update is the fork of the epoch of its attested header, and it is from Altair.
+- The epoch of the attested header of each update is from Altair.
+- The context bytes of the chunk of each update are the fork digest of that epoch.
 
-That fork is the one that the context bytes of the chunk of the update name.
+The digest is computed with the root of the genesis validators of the chain.
 
-The check compares forks, not digests.
+From Fulu, it changes with the blob parameters too, so it tells apart more epochs than the fork.
 
-So from Fulu it does not tell apart the digests of the epochs of blob parameters.
+The receiver decodes the payload with the type of the fork that the digest names.
+
+So the check reads the digest, and not a fork that the receiver may have read from it.
 
 The [networking text of Altair light clients] asks for results in consecutive order by period.
 
@@ -84,11 +88,8 @@ The root of a bootstrap is the root of the beacon header of its header.
 
 - The response has at most one bootstrap.
 - Its root is the requested root.
-- Its fork is the fork of the epoch of its header, and it is from Altair.
-
-That fork is the one that the context bytes of its chunk name.
-
-As for updates, the check compares forks, not digests.
+- The epoch of its header is from Altair.
+- The context bytes of its chunk are the fork digest of that epoch.
 
 It does not check the header or the branch of the sync committee, which the light client checks.
 
@@ -242,78 +243,87 @@ def isValidBlocksByHeadResponse (config : Config) (request : BeaconBlocksByHeadR
     blocks.head?.all (fun first => first.root == request.beaconRoot) &&
     ResponseBlock.ancestryLinked blocks
 
-/-- What a response check reads from a light client update: its attested slot and its fork.
+/-- What a response check reads from a light client update: its attested slot and its digest.
 
 The attested slot is the slot of the attested header of the update.
 
-The fork is the one that the context bytes of the chunk of the update name. -/
+The digest is the fork digest that the context bytes of the chunk of the update carry. -/
 structure ResponseUpdate where
   /-- The slot of the attested header. -/
   attestedSlot : Slot
-  /-- The fork that the context bytes of the chunk name. -/
-  fork : Fork
+  /-- The fork digest that the context bytes of the chunk carry. -/
+  digest : ForkDigest
   deriving DecidableEq, Repr
 
-/-- What a response check reads from a light client update of a fork. -/
+/-- What a response check reads from a light client update, sent with a digest. -/
 def ResponseUpdate.ofUpdate {preset : Preset} {fork : Fork}
-    (update : LightClientUpdate preset fork) : ResponseUpdate :=
-  { attestedSlot := update.attestedHeader.beacon.slot, fork }
+    (update : LightClientUpdate preset fork) (digest : ForkDigest) : ResponseUpdate :=
+  { attestedSlot := update.attestedHeader.beacon.slot, digest }
 
 /-- The sync committee period of an update: the period of the slot of its attested header. -/
 def ResponseUpdate.period (preset : Preset) (update : ResponseUpdate) : UInt64 :=
   computeSyncCommitteePeriodAtSlot preset update.attestedSlot
 
-/-- Whether the fork of a light client chunk is the fork of the epoch of a slot, from Altair. -/
-def lightClientForkMatches (preset : Preset) (config : Config) (slot : Slot) (fork : Fork) :
-    Bool :=
-  .altair ≤ fork && fork == config.forkAtEpoch (computeEpochAtSlot preset slot)
+/-- Whether the digest of a light client chunk is the fork digest of the epoch of a slot.
 
-/-- Whether the fork of an update is the fork of the epoch of its attested header, from Altair. -/
-def ResponseUpdate.forkMatches (preset : Preset) (config : Config) (update : ResponseUpdate) :
-    Bool :=
-  lightClientForkMatches preset config update.attestedSlot update.fork
+The fork at that epoch must be from Altair, which adds light clients.
+
+The digest is computed with the root of the genesis validators of the chain. -/
+def lightClientDigestMatches (preset : Preset) (config : Config) (genesisValidatorsRoot : Root)
+    (slot : Slot) (digest : ForkDigest) : Bool :=
+  let epoch := computeEpochAtSlot preset slot
+  .altair ≤ config.forkAtEpoch epoch &&
+    (computeForkDigest config genesisValidatorsRoot epoch).toOption == some digest
+
+/-- Whether the digest of an update is the fork digest of the epoch of its attested header. -/
+def ResponseUpdate.digestMatches (preset : Preset) (config : Config)
+    (genesisValidatorsRoot : Root) (update : ResponseUpdate) : Bool :=
+  lightClientDigestMatches preset config genesisValidatorsRoot update.attestedSlot update.digest
 
 /-- Whether the updates of a response are valid for a request for light client updates by range. -/
 def isValidLightClientUpdatesByRangeResponse (preset : Preset) (config : Config)
-    (request : LightClientUpdatesByRangeRequest) (updates : List ResponseUpdate) : Bool :=
+    (genesisValidatorsRoot : Root) (request : LightClientUpdatesByRangeRequest)
+    (updates : List ResponseUpdate) : Bool :=
   updates.length ≤ lightClientUpdatesLimit request.count &&
     updates.all (fun update =>
       decide (InCountRange request.startPeriod request.count (update.period preset)) &&
-        update.forkMatches preset config) &&
+        update.digestMatches preset config genesisValidatorsRoot) &&
     allAdjacent (fun a b => (b.period preset).toNat == (a.period preset).toNat + 1) updates
 
-/-- What a response check reads from a light client bootstrap: its slot, its root and its fork.
+/-- What a response check reads from a light client bootstrap: its slot, its root and its digest.
 
 The slot and the root are those of the beacon header of its header.
 
-The fork is the one that the context bytes of the chunk of the bootstrap name. -/
+The digest is the fork digest that the context bytes of the chunk of the bootstrap carry. -/
 structure ResponseBootstrap where
   /-- The slot of the header. -/
   slot : Slot
   /-- The root of the beacon header of the header. -/
   root : Root
-  /-- The fork that the context bytes of the chunk name. -/
-  fork : Fork
+  /-- The fork digest that the context bytes of the chunk carry. -/
+  digest : ForkDigest
   deriving DecidableEq, Repr
 
-/-- What a response check reads from a light client bootstrap of a fork.
+/-- What a response check reads from a light client bootstrap, sent with a digest.
 
 It fails when the root of the beacon header cannot be computed. -/
 def ResponseBootstrap.ofBootstrap {preset : Preset} {fork : Fork}
-    (bootstrap : LightClientBootstrap preset fork) : Except Err ResponseBootstrap := do
+    (bootstrap : LightClientBootstrap preset fork) (digest : ForkDigest) :
+    Except Err ResponseBootstrap := do
   let header := bootstrap.header.beacon
   let root ← SszType.hashTreeRoot header
-  return { slot := header.slot, root, fork }
+  return { slot := header.slot, root, digest }
 
 /-- Whether the bootstraps of a response are valid for a request for a light client bootstrap.
 
 The request is the root of the block whose bootstrap it asks for. -/
-def isValidLightClientBootstrapResponse (preset : Preset) (config : Config) (request : Root)
-    (bootstraps : List ResponseBootstrap) : Bool :=
+def isValidLightClientBootstrapResponse (preset : Preset) (config : Config)
+    (genesisValidatorsRoot : Root) (request : Root) (bootstraps : List ResponseBootstrap) : Bool :=
   bootstraps.length ≤ 1 &&
     bootstraps.all (fun bootstrap =>
       bootstrap.root == request &&
-        lightClientForkMatches preset config bootstrap.slot bootstrap.fork)
+        lightClientDigestMatches preset config genesisValidatorsRoot bootstrap.slot
+          bootstrap.digest)
 
 /-- What a response check reads from a sidecar: the slot and root of its block, and its index.
 
