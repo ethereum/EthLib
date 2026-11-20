@@ -409,16 +409,6 @@ private theorem epochBalanceReplay_deposits {checks : SignatureChecks}
     all_goals simp [EpochStage.prefixStages] at member
   exact ⟨done.2.1, fun matched ordered => (done.2.2 matched ordered).2.2⟩
 
-/-- The epoch replay of an ordered state credits no withdrawable pending source.
-
-Each stage keeps the order at the current epoch, so the deposit event starts at an ordered state. -/
-private theorem epochBalanceReplay_withdrawnConsolidationCredit {checks : SignatureChecks}
-    {s : BeaconState preset fork} {post : BalanceReplay preset fork}
-    (holds : PendingConsolidationsOrdered config (getCurrentEpoch s).toNat s)
-    (ok : epochBalanceReplay (config := config) (checks := checks) s = .ok post) :
-    ∀ e ∈ post.2, e.source = .deposits → withdrawnConsolidationCredit e = 0 :=
-  (epochBalanceReplay_deposits holds ok).1
-
 /-- The deposit events of one step before Gloas credit no withdrawable pending source.
 
 A block deposit has no credit limit from Electra, and its credits are within that limit.

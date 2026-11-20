@@ -10442,9 +10442,6 @@ private theorem cfloor_balance (h : Setting config checks g split fin pulled anc
   obtain rfl : fork = pFork := (fork_eq_of_run r1 r2 (Nat.le_refl _)).symm
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps r2.chainSteps)
   simp only at order
-  have nonDecreasing := UInt64.le_iff_toNat_le.mp
-    (currentEpoch_le_of_chainSteps r1.chainSteps)
-  simp only at nonDecreasing
   obtain ⟨before, beforeOk, isPrefix⟩ := Run.balanceEvents_prefix r1 r2
     (getCurrentEpoch pulled).toNat events (by rw [whole]; exact replayed)
   obtain ⟨D, split, closed⟩ := segment_potential h near i clean Run.nil r1 r2 val initial
@@ -29902,11 +29899,11 @@ It is within the finalized effective balance, or within the floor of the balance
 The floor start is within the balance ceiling.
 
 It is aligned, so it is within the rounding of the ceiling. -/
-private theorem start_le_round {inc fin e a cap ebUp H S : ℕ}
+private theorem start_le_round {inc fin e a cap H S : ℕ}
     (aligned : e % inc = 0) (capped : e ≤ cap) (ceiling : min a cap ≤ H + S)
-    (start : (e ≤ ebUp ∧ e ≤ fin) ∨ e ≤ a - a % inc) :
+    (start : e ≤ fin ∨ e ≤ a - a % inc) :
     e ≤ max fin ((H + S) - (H + S) % inc) := by
-  rcases start with ⟨-, atFin⟩ | floorA
+  rcases start with atFin | floorA
   · exact Nat.le_trans atFin (Nat.le_max_left _ _)
   · refine Nat.le_trans ?_ (Nat.le_max_right _ _)
     exact aligned_le_round aligned capped ceiling floorA
@@ -30224,7 +30221,8 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     intro S ceiling
     exact start_le_round
       (FloorTrace.effective_aligned (toFin.append toC) h.genesis h.aligned v.toNat)
-      (effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat) (by omega) start
+      (effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat) (by omega)
+      (start.imp_left And.right)
   -- on the headroom of C's cap, which R's cap may not reach, the cap adds to the rounded credits
   have cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
       balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat +

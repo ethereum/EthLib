@@ -139,15 +139,6 @@ private theorem contains_epochs {g a u w : ForkedBeaconState preset} (run : Run 
   exact ⟨currentEpoch_le_of_chainSteps pre.chainSteps,
     UInt64.le_trans step.chainStep.currentEpoch_le (currentEpoch_le_of_chainSteps post.chainSteps)⟩
 
-/-- A run without a step records no event. -/
-private theorem balanceEvents_of_empty {m y : ForkedBeaconState preset}
-    (rest : Run config checks m y)
-    (empty : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
-      ¬ rest.Contains step) (high : Nat) : rest.balanceEvents high = .ok [] := by
-  cases rest with
-  | nil => rfl
-  | snoc pre step => exact absurd (.last _ _) (empty step)
-
 /-- A segment of a branch that starts in an epoch either stays in it or ends it with one slot.
 
 Every step of the segment `mid` starts at the epoch of its start `m`.

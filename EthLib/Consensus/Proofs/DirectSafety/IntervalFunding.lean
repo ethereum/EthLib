@@ -1240,21 +1240,6 @@ theorem sync_bounds_combined {fork : Fork} {s t : BeaconState preset fork}
     bounds.2.2.1.trans (Nat.mul_le_mul_right _ length),
     bounds.2.2.2.trans (Nat.mul_le_mul_right _ length)⟩
 
-private theorem sync_bounds {fork : Fork} {s t : BeaconState preset fork}
-    (altair : .altair ≤ fork) (aggregate : SyncAggregate preset)
-    (ok : processSyncAggregate config checks s altair aggregate = .ok t) :
-    ∃ reward proposer,
-      syncParticipantReward s = .ok reward ∧
-      liftAccessor (liftArith (do
-        Uint64.divChecked (← Uint64.mulChecked reward PROPOSER_WEIGHT)
-          (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT))) = Except.ok proposer ∧
-      balanceCredits s t ≤
-        preset.SYNC_COMMITTEE_SIZE.toNat * (reward.toNat + proposer.toNat) ∧
-      balanceDebits s t ≤ preset.SYNC_COMMITTEE_SIZE.toNat * reward.toNat := by
-  obtain ⟨reward, proposer, rewardOk, proposerOk, credits, debits, -⟩ :=
-    sync_bounds_combined altair aggregate ok
-  exact ⟨reward, proposer, rewardOk, proposerOk, credits, debits⟩
-
 /-- A proposer slashing moves balances within the limits of its proposer. -/
 theorem proposer_slashing_bounds {fork : Fork} {s t : BeaconState preset fork}
     (sl : ProposerSlashing) (ok : processProposerSlashing config checks s sl = .ok t) :
@@ -1704,14 +1689,15 @@ theorem blockBalanceReplay_bounded {fork : Fork} {s : BeaconState preset fork}
           apply record (fun _ _ ok => (frame_processSyncAggregate ok).balancesMatch) _
             requestedBound rest
           intro site t credit debit _ limits action
-          obtain ⟨reward, proposer, rewardOk, proposerOk, bounds⟩ := sync_bounds _ _ action
+          obtain ⟨reward, proposer, rewardOk, proposerOk, credits, debits, -⟩ :=
+            sync_bounds_combined _ _ action
           rw [rewardOk] at limits
           dsimp only [bind, Except.bind] at limits
           simp only [bind, Except.bind] at proposerOk
           rw [proposerOk] at limits
           simp only [pure, Except.pure, Except.ok.injEq] at limits
           cases limits
-          exact bounds
+          exact ⟨credits, debits⟩
         exact final.2
       · cases rest
         exact requestedBound.2
