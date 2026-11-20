@@ -8,7 +8,9 @@ import EthLib.Cryptography.Proofs.Xmss.Serialization
 # The public hash inputs that can reveal a seed
 
 The leanXMSS draft in "Hashing and parameters" puts eight fixed bytes before the master seed.
+
 Each chain or tree hash has at least 64 input bytes.
+
 The parameter, private chain starts and randomizer base have their own address types.
 -/
 
@@ -65,7 +67,8 @@ theorem private_calls (l : Layer) (e : UInt32) (j : Fin (V / 2)) :
   XmssSecurity.seedHashInput seeds.1 ∈ physicalInputs c ∨
     ∃ x : PrfInput, PrivateAddress x.2.1 ∧ prfEncoding.enc seeds.2 x ∈ physicalInputs c
 
-private theorem master_other (pp : PublicParam) (c : Public.QueryCache) (s : XmssSecurity.MasterSeed)
+private theorem master_other (pp : PublicParam) (c : Public.QueryCache)
+    (s : XmssSecurity.MasterSeed)
     (seen : XmssSecurity.seedHashInput s ∈ physicalInputs c) :
     XmssSecurity.seedHashInput s ∈ otherInputs pp c := by
   refine ⟨seen, ?_⟩
@@ -88,6 +91,7 @@ theorem seedInputs_subset_other (pp : PublicParam) (c : Public.QueryCache) :
   · exact prf_other pp c f x addr seen
 
 /-- An actual digest trial has a message address and a final 16-byte randomizer.
+
 Its input cannot pay for a private derivation or a master-seed guess. -/
 theorem message_not_seed (pp : PublicParam) (c : Public.QueryCache) (l : Layer) (e : UInt32)
     (msg : ByteArray) (rho : Randomizer) :
@@ -105,7 +109,8 @@ theorem message_not_seed (pp : PublicParam) (c : Public.QueryCache) (l : Layer) 
     rcases kind with h | h | h <;> simp [h] at tag
 
 /-- The game draws both hidden values after observing the public cache. -/
-@[expose] noncomputable def drawSeeds : ProbComp (XmssSecurity.MasterSeed × (Unit → HashOutput)) := do
+@[expose] noncomputable def drawSeeds :
+    ProbComp (XmssSecurity.MasterSeed × (Unit → HashOutput)) := do
   let master ← XmssSecurity.sampleMasterSeed
   let table ← $ᵗ (Unit → HashOutput)
   return (master, table)

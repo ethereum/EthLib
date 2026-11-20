@@ -7,7 +7,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.TwoLayerSeedInp
 # A shared physical query bound for graph failures and seed guesses
 
 The graph charges a low row only at a chain, leaf or node address.
+
 A hidden seed guess uses an input outside that set.
+
 Each paid public input therefore contributes at most twice the probability of guessing a digest.
 -/
 
@@ -68,7 +70,9 @@ theorem prEvent_graph_or_seed_and_cost (pp : PublicParam) {α : Type}
   · rcases bad with conflict | off | seed
     · have present := mixed_present (graph pp) PairedHashWord.halves cost body ((∅, ∅), [])
           (by simp [PresentTogether]) (ready_pair pp) _ before
-      exact Or.inl (Or.inl (lowConflict pp _ (by simpa only [PresentTogether, PairedPresence, stable] using present) conflict))
+      have paired : PairedPresence z.2.1 := by
+        simpa only [PresentTogether, PairedPresence, stable] using present
+      exact Or.inl (Or.inl (lowConflict pp _ paired conflict))
     · exact Or.inl (Or.inr (lowCollision pp _ off))
     · exact Or.inr seed
   · apply (total_charge pp _).trans

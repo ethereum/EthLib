@@ -7,10 +7,12 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.TouchRead.Unary
 # WOTS+C chains in the eager graph interpreter
 
 A chain edge has two public hash outputs at the same input digest.
+
 The next edge consumes the low output and the cache retains the high output.
 
-Source: leanXMSS draft, section "WOTS+C", chain equation for `C_(i,mu+1)`
-(leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`).
+Source: leanXMSS draft, section "WOTS+C", chain equation for `C_(i,mu+1)`.
+
+Revision: leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
 -/
 
 public section
@@ -128,8 +130,11 @@ private theorem prefix_facts (start steps : Nat) (h : start + steps ≤ n)
       exact next_cell S e j w.2 hw
 
 /-- Walk a positive number of steps from a cached input digest.
+
 Each earlier step touches both output cells.
+
 Only the low output of the final step is read.
+
 The returned digest and complete public and label caches agree. -/
 theorem chain_succ_run (start steps : Nat) (h : start + (steps + 1) ≤ n)
     (d : D) (st : RelabelState pub X K R) (initial : st.2 (S.cell start) = some (e d)) :
@@ -142,6 +147,7 @@ theorem chain_succ_run (start steps : Nat) (h : start + (steps + 1) ≤ n)
   exact advance S e step hstep ⟨start + steps, by omega⟩ _ _ dropped stored
 
 /-- A read of the start cell supplies the cached input for the entire walk.
+
 The normalized walk operates from every initial state. -/
 theorem chain_succ_from_read (start steps : Nat) (h : start + (steps + 1) ≤ n) :
     simulateQ G.eagerImpl (do
@@ -170,6 +176,7 @@ noncomputable def walkFromRead (start : Nat) :
     finalStep S e ⟨start + steps, by omega⟩
 
 /-- A zero-length walk reads its input directly.
+
 A positive walk touches both halves of intermediate hashes and reads its final low output. -/
 theorem chain_from_read (start steps : Nat) (h : start + steps ≤ n) :
     simulateQ G.eagerImpl (do

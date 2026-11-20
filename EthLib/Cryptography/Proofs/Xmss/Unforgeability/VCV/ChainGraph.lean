@@ -9,12 +9,16 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.Relabel
 /-!
 # Public hash points for the leanXMSS chains
 
-The leanXMSS draft, sections "Hashing and parameters" and "WOTS+C", gives the recurrence
+The leanXMSS draft gives the chain recurrence in "Hashing and parameters" and "WOTS+C".
+
 `C_(i,mu+1) = Th(P, A_chain(layer,e,mu), C_(i,mu) | LE_128(i))`.
 
 At fixed public parameter the two graph rows refer to the same 32-byte reply.
+
 Only its low half feeds the next step.
+
 The starting digest of each chain is a boundary cell supplied by the seed derivation.
+
 The other address types have disjoint inputs by `input_ne_of_address_type`.
 -/
 
@@ -80,6 +84,7 @@ theorem chainStep_at_input {m : Type → Type} [Monad m] (H : HashInput → m (V
       (do return halfOf 0 (← H (input pp s v))) := rfl
 
 /-- Position zero reads a derivation cell.
+
 A later position reads the low half of the preceding step. -/
 def cell (key : Chain) : (pos : Nat) → pos < CHAIN_LENGTH → Chain ⊕ Row
   | 0, _ => .inl key
@@ -90,6 +95,7 @@ def predecessor (s : Step) : Chain ⊕ Row :=
   cell s.1 s.2.val (by have := s.2.isLt; omega)
 
 /-- A public point carries the selected half and the actual query bytes.
+
 The graph calls this function on exactly one child value. -/
 def point (pp : PublicParam) (row : Row) (vs : List Word) : HashInput ⊕ HashInput :=
   row.elim (fun s => .inl (input pp s (vs.headD 0))) (fun s => .inr (input pp s (vs.headD 0)))

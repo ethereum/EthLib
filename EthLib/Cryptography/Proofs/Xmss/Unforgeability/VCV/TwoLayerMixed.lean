@@ -7,6 +7,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.PairedValue.Mixed
 # Interleaved public and private queries in the two-layer graph
 
 Only a public hash can add an ordinary cache entry.
+
 The graph can derive private starts and read or touch its nodes between any two public calls.
 -/
 
@@ -20,6 +21,7 @@ open CanonicalGraph.PairedQueries
 open scoped ENNReal
 
 /-- An adaptive caller can interleave private start derivations, label operations and full hashes.
+
 The bound uses its total recorded charge on the same execution as the bad event. -/
 theorem prEvent_mixed_hash_graph_bad (pp : PublicParam) {α : Type}
     (cost : (Internal Start Row Word).Domain → Nat)

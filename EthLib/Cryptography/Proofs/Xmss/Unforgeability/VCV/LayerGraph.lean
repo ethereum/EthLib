@@ -8,7 +8,9 @@ public import VCVio.OracleComp.Constructions.SampleableType.Measure
 # A layer of the leanXMSS hash graph
 
 The leanXMSS draft, sections "WOTS+C" and "Trees", fixes the order and addresses of the hashes.
+
 An OTS leaf reads the last low row of each chain.
+
 A tree node reads the low rows of its two children.
 -/
 
@@ -20,6 +22,7 @@ open Constants HashSig OracleSpec OracleComp
 open ChainGraph (Word Public)
 
 /-- Each role describes one physical hash within a fixed layer and public parameter.
+
 A node stores its child's level, so its own level ranges from one to the layer height. -/
 inductive Role where
   | chain (epoch : UInt32) (index : Fin V) (step : Fin (CHAIN_LENGTH - 1))
@@ -32,6 +35,7 @@ abbrev Row := Role ⊕ Role
 abbrev Cell := Start ⊕ Row
 
 /-- Position zero of a chain comes from the private derivation.
+
 Every later position is its previous step's low row. -/
 def chainCell (e : UInt32) (i : Fin V) (step : Fin (CHAIN_LENGTH - 1)) : Cell :=
   if h : step.val = 0 then .inl (e, i)
@@ -73,6 +77,7 @@ def input (pp : PublicParam) (layer : Layer) (r : Role) (vs : List Word) : HashI
   (thInput pp (address layer r) (payload r vs)).data.toList
 
 /-- A valid input determines its role and its complete ordered list of children.
+
 The domain tag separates chains, leaves and tree nodes. -/
 theorem input_injective {pp : PublicParam} {layer : Layer} {r s : Role} {vs ws : List Word}
     (hv : vs.length = arity r) (hw : ws.length = arity s)
@@ -113,7 +118,8 @@ def graph (pp : PublicParam) (layer : Layer) : CanonicalGraph Public Start Row W
       exact ⟨rfl, rfl⟩
 
 /-- Decode one target role for any valid physical hash input in the layer. -/
-noncomputable def decode (pp : PublicParam) (layer : Layer) (b : HashInput) : Option Role := open Classical in
+noncomputable def decode (pp : PublicParam) (layer : Layer) (b : HashInput) : Option Role :=
+  open Classical in
   if h : ∃ r, ∃ vs : List Word, vs.length = arity r ∧ input pp layer r vs = b
     then some h.choose else none
 

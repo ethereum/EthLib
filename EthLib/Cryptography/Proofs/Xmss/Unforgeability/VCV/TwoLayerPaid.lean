@@ -23,12 +23,14 @@ theorem ready_pair (pp : PublicParam) (st : RelabelState Public Start Row Word) 
     (h : Ready (graph pp) st (.inl b)) : Ready (graph pp) st (.inr b) := by
   obtain ⟨k | k, vs, children, key⟩ := h
   · have high : (graph pp).childVals st (.inr k) = some vs :=
-      (graph pp).childVals_eq_some_iff.mpr (((graph pp).childVals_eq_some_iff (k := Sum.inl k)).mp children)
+      (graph pp).childVals_eq_some_iff.mpr
+        (((graph pp).childVals_eq_some_iff (k := Sum.inl k)).mp children)
     exact ⟨.inr k, vs, high, congrArg Sum.inr (Sum.inl.inj key)⟩
   · contradiction
 
 /-- A setup may populate secret labels and use public queries before the adaptive caller.
-Every public input in that setup has been paid for, and its high rows have corresponding low rows. -/
+
+Every occupied public input is paid and each occupied high row has a low row. -/
 theorem prEvent_hash_graph_bad (pp : PublicParam) {α β : Type}
     (setup : OracleComp (Public.withLabels Start Row Word) (β × Nat))
     (p : β → OracleComp XmssSecurity.OracleWorld α)

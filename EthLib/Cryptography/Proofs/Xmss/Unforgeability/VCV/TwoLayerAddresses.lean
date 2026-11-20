@@ -21,7 +21,7 @@ open scoped ENNReal
 @[expose] def addressedInputs (pp : PublicParam) (c : Public.QueryCache) : Set HashInput :=
   {b | (c (.inl b)).isSome ∧ (decode pp b).isSome}
 
-/-- Both kinds of graph failure can charge only occupied, well-formed inputs of these three types. -/
+/-- Only occupied, well-formed chain, leaf and node inputs can charge the graph. -/
 theorem potential_le_addressed (pp : PublicParam) (st : RelabelState Public Start Row Word) :
     (keys pp).potential ((subgraph pp).project st) ≤
       2 * ((addressedInputs pp st.1).encard : ℝ≥0∞) / Nat.card Word := by
@@ -49,16 +49,20 @@ theorem decode_otherType (pp other : PublicParam) (tag : AddressType)
     obtain ⟨⟨l, r⟩, vs, _, same⟩ := hit
     have address := (thInput_inj (ByteArray.ext (Array.toList_inj.mp same))).2.1
     cases r with
-    | chain => exact False.elim (chain (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
-    | leaf => exact False.elim (leaf (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
-    | node => exact False.elim (node (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
+    | chain =>
+      exact False.elim (chain (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
+    | leaf =>
+      exact False.elim (leaf (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
+    | node =>
+      exact False.elim (node (AddressType.code_injective (encodeAddress_inj.mp address).1.symm))
   next => rfl
 
-/-- No seed derivation, public parameter, randomizer base or message query pays the graph potential. -/
+/-- Seed, parameter, randomizer and message inputs are outside the charged graph. -/
 theorem other_address_not_charged (pp other : PublicParam) (c : Public.QueryCache)
     (tag : AddressType) (otherType : tag = .prf ∨ tag = .param ∨ tag = .rnd ∨ tag = .msg)
     (mu : Fin 8) (hi : Fin (2 ^ 24)) (lo : UInt32) (payload : ByteArray) :
-    (thInput other (encodeAddress tag.code mu hi lo) payload).data.toList ∉ addressedInputs pp c := by
+    (thInput other (encodeAddress tag.code mu hi lo) payload).data.toList ∉
+      addressedInputs pp c := by
   intro charged
   have bounds : tag ≠ .chain ∧ tag ≠ .leaf ∧ tag ≠ .node := by
     rcases otherType with rfl | rfl | rfl | rfl <;> decide

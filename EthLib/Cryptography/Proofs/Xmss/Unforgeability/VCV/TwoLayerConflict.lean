@@ -23,9 +23,11 @@ theorem restore_children (r : Role) :
   obtain ⟨layer, r⟩ := r
   cases r with
   | chain e i j =>
-    simp [children, LayerGraph.children, LayerGraph.chainCell, apply_ite, inLayer, lowCell, forgetHalf]
+    simp [children, LayerGraph.children, LayerGraph.chainCell, apply_ite, inLayer,
+      lowCell, forgetHalf]
   | leaf e =>
-    simp [children, LayerGraph.children, inLayer, lowCell, forgetHalf, List.map_ofFn, Function.comp_def]
+    simp [children, LayerGraph.children, inLayer, lowCell, forgetHalf,
+      List.map_ofFn, Function.comp_def]
   | node level j =>
     simp [children, LayerGraph.children, inLayer, lowCell, forgetHalf]
 
@@ -65,7 +67,8 @@ theorem lowConflict (pp : PublicParam) (st : RelabelState Public Start Row Word)
   obtain ⟨r | r, vs, ready, present⟩ := conflict
   · exact ⟨r, vs, ((subgraph pp).childVals st r).symm.trans ready, present⟩
   · have low : (graph pp).childVals st (.inl r) = some vs :=
-      (graph pp).childVals_eq_some_iff.mpr (((graph pp).childVals_eq_some_iff (k := Sum.inr r)).mp ready)
+      (graph pp).childVals_eq_some_iff.mpr
+        (((graph pp).childVals_eq_some_iff (k := Sum.inr r)).mp ready)
     exact ⟨r, vs, ((subgraph pp).childVals st r).symm.trans low, paired _ present⟩
 
 /-- An off-path hit uses an ordinary low query at a decoded low label. -/
@@ -96,6 +99,7 @@ private theorem reduced_potential (pp : PublicParam) (st : RelabelState Public S
   exact (Set.encard_le_encard sub).trans (Set.encard_image_le _ _)
 
 /-- Conflicts and off-path hits together cost at most two chances per physical hash input.
+
 The presence condition is needed only to reflect conflicts at a high row. -/
 theorem prEvent_conflict_or_offPath_and_cost (pp : PublicParam) {α β : Type}
     (setup : OracleComp (Public.withLabels Start Row Word) (β × Nat))

@@ -8,7 +8,9 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PairedHashWord
 # Chain walks through the two public hash rows
 
 The leanXMSS draft, section "WOTS+C", defines a walk by repeated calls to the chain step.
+
 Every step uses the first 16 bytes but the hash caller receives all 32 bytes.
+
 The graph reads both halves for each step and carries the low half to the next position.
 -/
 
@@ -24,11 +26,14 @@ def digestEquiv : Digest ≃ Word where
   invFun := ofBV 16
   left_inv bytes := ofBV_ofNat_bytesToUint bytes (by decide)
   right_inv word := (congrArg (BitVec.ofNat digestBits) (bytesToUint_ofBV 16 word)).trans
-    (BitVec.eq_of_toNat_eq ((BitVec.toNat_ofNat word.toNat digestBits).trans (Nat.mod_eq_of_lt word.isLt)))
+    (BitVec.eq_of_toNat_eq ((BitVec.toNat_ofNat word.toNat digestBits).trans
+      (Nat.mod_eq_of_lt word.isLt)))
 
 /-- The recursive proof asks for a total position map.
+
 It reads only positions from zero through the end of the chain. -/
-def schedule (pp : PublicParam) (key : Chain) : GraphChain.Schedule (graph pp) (CHAIN_LENGTH - 1) where
+def schedule (pp : PublicParam) (key : Chain) :
+    GraphChain.Schedule (graph pp) (CHAIN_LENGTH - 1) where
   cell pos := cell key (min pos (CHAIN_LENGTH - 1)) (by simp [CHAIN_LENGTH])
   low j := .inl (key, j)
   high j := .inr (key, j)
@@ -51,19 +56,23 @@ def liftPublic : QueryImpl (unifSpec + Public) (OracleComp (Public.withLabels Ch
 
 /-- The library hash, after splitting each raw reply and lifting both queries into the graph. -/
 def hash (bytes : ByteArray) : OracleComp (Public.withLabels Chain Row Word) (Vector UInt8 32) :=
-  simulateQ liftPublic (simulateQ PairedHashWord.readHalves (queryH (m := OracleComp OracleWorld) bytes))
+  simulateQ liftPublic
+    (simulateQ PairedHashWord.readHalves (queryH (m := OracleComp OracleWorld) bytes))
 
 private theorem hash_eq (bytes : ByteArray) :
     hash bytes = (do
-      let l ← query (spec := Public.withLabels Chain Row Word) (.inl (.inl (.inr (.inl bytes.data.toList))))
-      let h ← query (spec := Public.withLabels Chain Row Word) (.inl (.inl (.inr (.inr bytes.data.toList))))
+      let l ← query (spec := Public.withLabels Chain Row Word)
+        (.inl (.inl (.inr (.inl bytes.data.toList))))
+      let h ← query (spec := Public.withLabels Chain Row Word)
+        (.inl (.inl (.inr (.inr bytes.data.toList))))
       pure (ofOutput (PairedHashWord.halves.symm (l, h)))) := by
   change simulateQ liftPublic (simulateQ PairedHashWord.readHalves (ofOutput <$>
     (liftM (OracleWorld.query (.inr bytes.data.toList)) : OracleComp OracleWorld HashOutput))) = _
   simp [PairedHashWord.readHalves, RandomOraclePairedValue.readHalves, liftPublic, ← bind_pure_comp]
 
 /-- The library and graph steps read the same two public rows in order. -/
-theorem chainStep_eq_publicStep (pp : PublicParam) (key : Chain) (j : Fin (CHAIN_LENGTH - 1)) (d : Digest) :
+theorem chainStep_eq_publicStep (pp : PublicParam) (key : Chain)
+    (j : Fin (CHAIN_LENGTH - 1)) (d : Digest) :
     chainStep hash pp key.layer key.epoch key.index j d =
       GraphChain.publicStep (schedule pp key) digestEquiv j d := by
   -- Reassembling the two halves and taking the first gives the original low row.
@@ -88,7 +97,7 @@ theorem chainStep_eq_publicStep (pp : PublicParam) (key : Chain) (j : Fin (CHAIN
   simp only [pure_bind]
   rfl
 
-/-- Walking the library chain from its recorded digest gives the graph walk's reply and final caches. -/
+/-- The library chain and the graph walk return the same digest and final caches. -/
 theorem chain_from_read (pp : PublicParam) (key : Chain) (start steps : Nat)
     (valid : start + steps < CHAIN_LENGTH) :
     simulateQ (graph pp).eagerImpl (do

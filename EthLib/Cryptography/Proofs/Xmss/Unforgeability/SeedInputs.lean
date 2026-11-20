@@ -9,6 +9,7 @@ public import EthLib.Cryptography.Proofs.DerivationTable
 # Hash inputs of the two hidden seeds
 
 The leanXMSS draft in "Hashing and parameters" puts each secret in a fixed byte range.
+
 A public hash input therefore fixes at most one candidate for each secret.
 -/
 

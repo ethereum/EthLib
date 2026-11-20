@@ -20,7 +20,7 @@ open HashSig OracleComp OracleSpec Constants
 open CanonicalGraph.PairedQueries
 open scoped ENNReal
 
-/-- Reading virtual rows in the graph executes the same free caller as EthLib's paired experiment. -/
+/-- Expanding the virtual rows executes the paired game caller with the original cost. -/
 theorem meteredCaller_eq {α : Type} (p : OracleComp XmssSecurity.OracleWorld α) :
     meteredCaller (X := Start) (K := Row) PairedHashWord.halves p =
       simulateQ liftPublic (simulateQ PairedHashWord.readHalves (PairedGame.meter p)) := by
@@ -30,6 +30,7 @@ theorem meteredCaller_eq {α : Type} (p : OracleComp XmssSecurity.OracleWorld α
   simp only [meteredCaller, PairedGame.meter, PairedHashWord.readHalves, same]
 
 /-- A paid graph setup followed by any adaptive leanXMSS caller has one bound for both layers.
+
 The event includes only runs whose original charge, including setup, is at most q. -/
 theorem prEvent_offPath_and_cost (pp : PublicParam) {α β : Type}
     (setup : OracleComp (ChainGraph.Public.withLabels Start Row ChainGraph.Word) (β × Nat))

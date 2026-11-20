@@ -8,6 +8,7 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.TouchRead.Children
 # Hashing an ordered vector of leanXMSS digests
 
 The leanXMSS draft, section "WOTS+C", hashes 58 ordered chain ends into a leaf.
+
 Sections "Hashing and parameters" and "Trees" use the same full-word hash for a pair of children.
 -/
 
@@ -45,11 +46,13 @@ private theorem digests_injective {n : Nat} {vs ws : List Word} (hv : vs.length 
 
 /-- At its proper arity, the full hash input determines every digest in order. -/
 theorem input_injective {pp : PublicParam} {address : Address} {n : Nat} {vs ws : List Word}
-    (hv : vs.length = n) (hw : ws.length = n) (same : input pp address n vs = input pp address n ws) :
+    (hv : vs.length = n) (hw : ws.length = n)
+    (same : input pp address n vs = input pp address n ws) :
     vs = ws := by
   have raw := ByteArray.ext (Array.toList_inj.mp same)
   have packed := (thInput_inj raw).2.2
-  exact digests_injective hv hw (Vector.eq_iff_flatten_eq.mpr (EthLib.Base.packBytes_injective packed))
+  exact digests_injective hv hw
+    (Vector.eq_iff_flatten_eq.mpr (EthLib.Base.packBytes_injective packed))
 
 /-- The low and high row are the two outputs at exactly the same ordered digest vector. -/
 def graph (pp : PublicParam) (address : Address) (n : Nat) :
@@ -69,19 +72,24 @@ private def liftPublic (n : Nat) :
     (fun b => query (spec := Public.withLabels (Fin n) Bool Word) (.inl (.inl (.inr b))))
 
 /-- The full physical query under the same two-row translation used for chain steps. -/
-def hash (n : Nat) (bytes : ByteArray) : OracleComp (Public.withLabels (Fin n) Bool Word) (Vector UInt8 32) :=
-  simulateQ (liftPublic n) (simulateQ PairedHashWord.readHalves (queryH (m := OracleComp OracleWorld) bytes))
+def hash (n : Nat) (bytes : ByteArray) :
+    OracleComp (Public.withLabels (Fin n) Bool Word) (Vector UInt8 32) :=
+  simulateQ (liftPublic n)
+    (simulateQ PairedHashWord.readHalves (queryH (m := OracleComp OracleWorld) bytes))
 
 private theorem hash_eq (n : Nat) (bytes : ByteArray) : hash n bytes = (do
-    let lo ← query (spec := Public.withLabels (Fin n) Bool Word) (.inl (.inl (.inr (.inl bytes.data.toList))))
-    let hi ← query (spec := Public.withLabels (Fin n) Bool Word) (.inl (.inl (.inr (.inr bytes.data.toList))))
+    let lo ← query (spec := Public.withLabels (Fin n) Bool Word)
+      (.inl (.inl (.inr (.inl bytes.data.toList))))
+    let hi ← query (spec := Public.withLabels (Fin n) Bool Word)
+      (.inl (.inl (.inr (.inr bytes.data.toList))))
     pure (ofOutput (PairedHashWord.halves.symm (lo, hi)))) := by
   change simulateQ (liftPublic n) (simulateQ PairedHashWord.readHalves (ofOutput <$>
     (liftM (OracleWorld.query (.inr bytes.data.toList)) : OracleComp OracleWorld HashOutput))) = _
   simp [PairedHashWord.readHalves, RandomOraclePairedValue.readHalves, liftPublic, ← bind_pure_comp]
 
-/-- Hashing the collected digests has the same reply and complete caches as reading the low
-output and touching the high output, for every initial graph state. -/
+/-- Hashing the children reads the low output and touches the high output.
+
+Both computations preserve the same reply and final caches. -/
 theorem th_from_children (pp : PublicParam) (address : Address) (n : Nat) :
     simulateQ (graph pp address n).eagerImpl (do
       let vs ← (children n).mapM fun c => readCell (some c)
@@ -94,7 +102,8 @@ theorem th_from_children (pp : PublicParam) (address : Address) (n : Nat) :
   let G := graph pp address n
   have eqn := congrArg (fun body => (fun p : Word × Word => ofBV 16 p.1) <$> body)
     (G.simulateQ_eagerImpl_siblings false true (children n) rfl rfl)
-  simp only [th, hash_eq, bind_assoc, pure_bind, PairedHashWord.first_half_bytes, Equiv.apply_symm_apply]
+  simp only [th, hash_eq, bind_assoc, pure_bind, PairedHashWord.first_half_bytes,
+    Equiv.apply_symm_apply]
   simp only [simulateQ_bind, simulateQ_pure, map_bind, map_pure,
     CanonicalGraph.simulateQ_eagerImpl_touchCell, bind_map_left] at eqn ⊢
   exact eqn
@@ -111,10 +120,12 @@ theorem otsLeafHash_from_children (pp : PublicParam) (layer : Layer) (epoch : UI
       pure (ofBV 16 lo)) :=
   th_from_children pp (addrLeaf layer epoch) V
 
-/-- If the preceding computation already returned the endpoint values, the original leaf
-hash consumes them directly. Their recorded values follow from the supported ordered reads. -/
+/-- The leaf hash consumes the ordered digests returned by the previous reads.
+
+The final cache records each digest at its child. -/
 theorem otsLeafHash_after_endpoints (pp : PublicParam) (layer : Layer) (epoch : UInt32)
-    (initial : RelabelState Public (Fin V) Bool Word) {z : List Word × RelabelState Public (Fin V) Bool Word}
+    (initial : RelabelState Public (Fin V) Bool Word)
+    {z : List Word × RelabelState Public (Fin V) Bool Word}
     (run : z ∈ support ((simulateQ (graph pp (addrLeaf layer epoch) V).eagerImpl
       ((children V).mapM fun c => readCell (some c))).run initial)) :
     (simulateQ (graph pp (addrLeaf layer epoch) V).eagerImpl
@@ -126,8 +137,9 @@ theorem otsLeafHash_after_endpoints (pp : PublicParam) (layer : Layer) (epoch : 
   let G := graph pp (addrLeaf layer epoch) V
   have recorded := (G.readCells_recorded (children V) initial run).2
   have ready (row : Bool) : G.childVals z.2 row = some z.1 := G.childVals_eq_some_iff.mpr recorded
-  have eqn := congrArg (fun body => (fun p : (Word × Word) × RelabelState Public (Fin V) Bool Word =>
-    (ofBV 16 p.1.1, p.2)) <$> body)
+  have eqn := congrArg
+    (fun body => (fun p : (Word × Word) × RelabelState Public (Fin V) Bool Word =>
+      (ofBV 16 p.1.1, p.2)) <$> body)
     (G.eagerImpl_siblings_run_of_childVals false true z.1 z.2 (ready false) (ready true))
   simp only [otsLeafHash, th, hash_eq, bind_assoc, pure_bind, PairedHashWord.first_half_bytes,
     Equiv.apply_symm_apply]

@@ -5,7 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.LayerGraph
 /-!
 # One projected target for each public hash input across both leanXMSS layers
 
-The leanXMSS draft, sections "Hashing and parameters" and "Trees", encodes the layer in each address.
+The leanXMSS draft encodes the layer in each address in "Hashing and parameters" and "Trees".
+
 This gives both layers one public oracle and one count of the distinct inputs queried there.
 -/
 
@@ -69,7 +70,8 @@ noncomputable def decode (pp : PublicParam) (b : HashInput) : Option Role := ope
 
 theorem decode_input (pp : PublicParam) (r : Role) (vs : List Word)
     (size : vs.length = LayerGraph.arity r.2) : decode pp (input pp r vs) = some r := by
-  have h : ∃ s, ∃ ws : List Word, ws.length = LayerGraph.arity s.2 ∧ input pp s ws = input pp r vs :=
+  have h : ∃ s, ∃ ws : List Word, ws.length = LayerGraph.arity s.2 ∧
+      input pp s ws = input pp r vs :=
     ⟨r, vs, size, rfl⟩
   obtain ⟨ws, width, same⟩ := h.choose_spec
   exact (dite_eq_left h).trans (congrArg some (input_injective width size same).1)
@@ -80,6 +82,7 @@ noncomputable def lowKeys (pp : PublicParam) : (graph pp).ProjKeys where
   prEvent_proj_le _ _ _ v := (SampleableType.prEvent_uniformSample_eq_singleton_natCard v).le
 
 /-- The off-path input has the right role and arity but at least one different child.
+
 Both its low hash and the genuine low hash yield the same output. -/
 def OffPath (pp : PublicParam) (st : RelabelState Public Start Row Word) : Prop :=
   ∃ r : Role, ∃ vs ws : List Word, ∃ out : Word, (graph pp).childVals st (.inl r) = some vs ∧
@@ -96,7 +99,8 @@ theorem projected_of_offPath (pp : PublicParam) (st : RelabelState Public Start 
   have ordinary : (graph pp).merge st (.inl (input pp r ws)) = st.1 (.inl (input pp r ws)) := by
     apply (graph pp).merge_apply_of_not_exists
     rintro ⟨k, us, enabled, same⟩
-    have size : ws.length = ((graph pp).ch (.inl r)).length := by simpa [graph, children] using width
+    have size : ws.length = ((graph pp).ch (.inl r)).length := by
+      simpa [graph, children] using width
     obtain ⟨rfl, rfl⟩ := (graph pp).pt_inj ((graph pp).length_eq_of_childVals_eq_some enabled)
       (k' := Sum.inl r) (vs' := ws) size same
     exact different (Option.some.inj (ready.symm.trans enabled))
@@ -124,7 +128,8 @@ theorem prEvent_offPath (pp : PublicParam) {α : Type}
     (p : OracleComp (Public.withLabels Start Row Word) α) (q : Nat)
     (budget : ∀ z ∈ support ((simulateQ (graph pp).deferredImpl p).run ((∅, ∅), [])),
       (physicalInputs z.2.1.1).encard ≤ q) :
-    Pr{let z ← (graph pp).deferredFillDraw (pure ()) p}[OffPath pp z.2.1] ≤ (q : ℝ≥0∞) / 2 ^ 128 := by
+    Pr{let z ← (graph pp).deferredFillDraw (pure ()) p}[OffPath pp z.2.1] ≤
+      (q : ℝ≥0∞) / 2 ^ 128 := by
   classical
   have card : (Nat.card Word : ℝ≥0∞) = 2 ^ 128 := by
     rw [Nat.card_eq_fintype_card]
