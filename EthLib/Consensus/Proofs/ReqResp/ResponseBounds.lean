@@ -31,8 +31,8 @@ The fork of a chunk is a parameter, which the caller reads from the context byte
 - On a chain that passes the fork digest check, the receiver reads a chunk at the sender's type.
 - A protocol that serves the object of a gossip topic sends the message of that topic.
   The message is that of the fork of the chunk, and the size limit is that of the topic.
+- At a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
 - At version 1, blocks by range and by root send a Phase 0 block, whatever the fork of the chunk.
-- So the largest length of a chunk of such a protocol is the bound of its topic.
 -/
 
 @[expose] public section
@@ -282,11 +282,11 @@ theorem decodeResponseChunk_forkOfDigest {α : Type} [SszType α] [LawfulSszType
 
 The message has the type of the fork of the chunk, and the protocol has the size limit of the topic.
 
-Blocks by range and by root from version 2, and blocks by head, serve blocks.
+Blocks by range and by root at every version but 1, and blocks by head, serve blocks.
 
-The two light client update protocols serve the updates of their topics.
+Light client finality and optimistic updates serve the updates of their topics.
 
-Blob and data column sidecars by range and by root serve the sidecars of any subnet.
+Blob and data column sidecars by range and by root serve the sidecar type of every subnet topic.
 
 Payload envelopes by range and by root serve payloads.
 
