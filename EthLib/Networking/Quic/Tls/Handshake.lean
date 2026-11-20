@@ -11,7 +11,7 @@ public import EthLib.Networking.Quic.Keys
 
 The pure steps follow [RFC 8446 §4][tls] and [RFC 9001 §4][quic].
 
-Peer authentication and ALPN follow [libp2p TLS at c750236][libp2p].
+Peer authentication and ALPN follow [libp2p TLS at 4facaf9][libp2p].
 
 Every caller supplies its algorithm policy, credentials and ephemeral keys.
 
@@ -29,7 +29,7 @@ CertificateVerify signatures use the deterministic nonce of RFC 6979, so no call
 
 [tls]: https://www.rfc-editor.org/rfc/rfc8446#section-4
 [quic]: https://www.rfc-editor.org/rfc/rfc9001#section-4
-[libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/tls/tls.md
+[libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/tls/tls.md
 -/
 
 @[expose] public section

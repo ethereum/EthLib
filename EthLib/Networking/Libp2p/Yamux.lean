@@ -15,7 +15,7 @@ The version is 0.
 
 The source is [yamux, "Framing"][yamux].
 
-[yamux]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#framing
+[yamux]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#framing
 -/
 
 @[expose] public section

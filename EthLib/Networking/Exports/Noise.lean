@@ -23,7 +23,7 @@ The state carries the remote's extensions; use them only from the completion res
 
 Framing follows [noise-libp2p][libp2p], "Wire Format".
 
-[libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md
+[libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md
 -/
 
 public section

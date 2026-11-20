@@ -21,7 +21,7 @@ Protobuf fields follow the [wire format][protobuf].
 
 Repeated identity fields use the last value, and extension messages merge.
 
-[libp2p]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#the-noise-handshake
+[libp2p]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md#the-noise-handshake
 [protobuf]: https://protobuf.dev/programming-guides/encoding/
 -/
 

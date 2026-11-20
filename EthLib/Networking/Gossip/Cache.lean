@@ -28,7 +28,7 @@ It does not say whether a lookup refreshes the time of an entry.
 
 Here an entry keeps the time when it was inserted.
 
-[mcache]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/pubsub/gossipsub/gossipsub-v1.0.md#message-cache
+[mcache]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/pubsub/gossipsub/gossipsub-v1.0.md#message-cache
 -/
 
 @[expose] public section

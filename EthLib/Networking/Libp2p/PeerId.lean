@@ -17,7 +17,7 @@ Message signatures use SHA-256, low-s ECDSA and strict DER, without a transactio
 
 The DER and low-s rules are rules 1 and 5 of [BIP 62, "New rules"][bip62], which the profile cites.
 
-[peerids]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/peer-ids/peer-ids.md#secp256k1
+[peerids]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/peer-ids/peer-ids.md#secp256k1
 [bip62]: https://github.com/bitcoin/bips/blob/24e96e870fffaa257b465ce1f0370c14aac588e8/bip-0062.mediawiki#new-rules
 -/
 
