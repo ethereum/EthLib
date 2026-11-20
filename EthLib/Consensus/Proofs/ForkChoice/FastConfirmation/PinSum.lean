@@ -2167,6 +2167,62 @@ private theorem list_eq_of_length_le_one {α : Type} {L : List α} (short : L.le
       rw [ha, hb]
     | cons d rest => exact absurd short (by simp)
 
+/-- The scan of a run reads the credit of each step that the run contains.
+
+The run must end within the horizon, so that every step of it is selected. -/
+private theorem stepCredit_le_creditScan (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (within : (getCurrentEpoch y.state).toNat ≤ high + 1)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tail.Contains step) :
+    stepCredit blockP slotP v step ≤ (creditScan blockP slotP v high tail).1 := by
+  obtain ⟨pre, post, same⟩ := tail.contains_split step member
+  subst same
+  have selected : (getCurrentEpoch a.state).toNat ≤ high + 1 :=
+    Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
+      (Relation.ReflTransGen.head step.chainStep post.chainSteps))) within
+  rw [creditScan_append, creditScan_snoc_fst]
+  simp only [selected, ↓reduceIte]
+  omega
+
+/-- A key that a deposit credits on C's run has a positive deposit scan.
+
+A deposit event of a block raises no balance, so a deposit that credits a key is an epoch's.
+
+The scan counts the deposits of a slot step, and the run ends within the horizon. -/
+private theorem depPre_pos_scan (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    (i : ℕ) (pos : 0 < depPre eventsC i) :
+    0 < (creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC).1 := by
+  classical
+  obtain ⟨e, member, dep, credited⟩ : ∃ e ∈ eventsC, e.source = .deposits ∧ 0 < keyCredit i e := by
+    by_contra none
+    have none' : ∀ e ∈ eventsC, e.source = .deposits → keyCredit i e ≤ 0 := fun e member dep =>
+      Nat.le_of_not_lt fun positive => none ⟨e, member, dep, positive⟩
+    have zero : depPre eventsC i = 0 := by
+      unfold depPre
+      refine List.sum_eq_zero fun x mem => ?_
+      obtain ⟨e, filtered, rfl⟩ := List.mem_map.mp mem
+      obtain ⟨inEvents, selected⟩ := List.mem_filter.mp filtered
+      exact Nat.le_zero.mp (none' e inEvents (of_decide_eq_true selected).1)
+    omega
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  rcases (run_located tailC electra h.early highC replayedC).1 e member dep with
+    unconditional | ⟨u, w, ok, es, contains, replayedEs, inEs, -⟩
+  · exfalso
+    have := unconditional i
+    unfold keyCredit at credited
+    omega
+  · have step : keyCredit i e ≤ stepCredit (fun _ => false) (fun s => decide (s = .deposits)) i
+        (Step.slot ok : Step config checks u w) := by
+      simp only [stepCredit, replayedEs, Except.toOption, Option.getD_some]
+      exact List.le_sum_of_mem (List.mem_map.mpr
+        ⟨e, List.mem_filter.mpr ⟨inEs, by simpa using dep⟩, rfl⟩)
+    have scan := stepCredit_le_creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC
+      tailC endEpochC (Step.slot ok) contains
+    omega
+
 /-- The keys that one step credits by a pending-deposit pass.
 
 An epoch pass applies at most `MAX_PENDING_DEPOSITS_PER_EPOCH` deposits, in one slot step.
