@@ -11,7 +11,7 @@ public import EthLib.Serialization.Rlp.Codec
 
 The transaction exchange of the eth capability, from "Protocol Messages" of [`caps/eth.md`][eth].
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#protocol-messages
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages
 
 - Transactions (0x02) sends whole transactions.
 - NewPooledTransactionHashes (0x08) announces transactions by type, size and hash.

@@ -12,7 +12,7 @@ public import EthLib.Serialization.Rlp.Codec
 
 The handshake of RLPx, from the section "Initial Handshake" of [`rlpx.md`][rlpx].
 
-[rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#initial-handshake
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#initial-handshake
 
 The initiator sends `auth`, and the recipient answers with `ack`.
 

@@ -12,7 +12,7 @@ The snap capability, which a node uses to download the state of a recent block.
 
 The source is [`caps/snap.md`][snap] of the devp2p specifications.
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 - snap/1 has the IDs 0x00 to 0x07, as `snap.md` gave them at [`a1d196b`][snap1].
 - snap/2, [EIP-8189][eip-8189], status Last Call, removes GetTrieNodes (0x06) and TrieNodes (0x07).

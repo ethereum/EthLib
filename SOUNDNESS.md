@@ -2448,7 +2448,7 @@ The keys are listed by increasing hash, and the proof contains the proofs of the
 That order assumes the keys of each trie have distinct Keccak-256 hashes; no search returns two keys with one hash.
 The account theorem uses a successful full encoding of each account; `fullAccount_slimAccount` proves that the conversion returns the full form.
 An account body is the slim form nested in its entry as an RLP list, the encoding used on the network.
-[AccountRange (0x01)](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#accountrange-0x01) types it `B`, a byte string, and [ethereum/devp2p#295](https://github.com/ethereum/devp2p/pull/295) proposes the correction.
+[AccountRange (0x01)](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#accountrange-0x01) types it `B`, a byte string, and [ethereum/devp2p#295](https://github.com/ethereum/devp2p/pull/295) proposes the correction.
 `fullAccount_bytes` states that a byte string is never an account body, so the range check refuses an answer in that form.
 The storage theorem assumes whole tries before the last range; every range starts at the requested hash for one account and at the zero hash for several.
 `verifyAccountRange_complete_nil`, `verifyStorageRanges_complete_nil`, `verifyAccountRange_whole` and `verifyStorageRanges_whole` cover empty last ranges and whole tries; whole tries need no proof and no collision alternative.
@@ -2491,7 +2491,7 @@ For an account in the state, it proves that the words are those of `eth_getStora
 ### The RLPx session
 
 `receive` (`Networking/Devp2p/Session.lean`) follows an RLPx session after the handshake, frame by frame.
-It follows ["p2p" Capability](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#p2p-capability), [Message Encoding](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-encoding) and [Message ID-based Multiplexing](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-id-based-multiplexing) in `rlpx.md`.
+It follows ["p2p" Capability](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#p2p-capability), [Message Encoding](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-encoding) and [Message ID-based Multiplexing](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-id-based-multiplexing) in `rlpx.md`.
 Before the peer's Hello, only Hello and Disconnect pass, and Hello opens the session.
 In an active session, a Ping asks for a Pong.
 After a Disconnect, every frame is rejected.
@@ -2520,13 +2520,13 @@ Compressed data is rejected when its Snappy header declares more, before it is d
 ### The eth session
 
 `receiveEth` and `sendEth` (`Execution/Network/Session.lean`) follow an eth session with one peer, message by message, and `EthSession.run` follows a list of sent and received messages.
-They follow [Basic Operation](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#basic-operation), [Protocol Messages](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#protocol-messages) and [Transactions (0x02)](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transactions-0x02) in `caps/eth.md`.
+They follow [Basic Operation](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#basic-operation), [Protocol Messages](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages) and [Transactions (0x02)](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transactions-0x02) in `caps/eth.md`.
 Before the peer's Status, only a Status that passes `checkStatus` is accepted, and until both Status messages have passed, this node sends nothing but Status.
 The session keeps the requests that this node sent and that no response has answered yet, and a response must answer one of them.
 It keeps the hashes of the transactions sent, in Transactions or PooledTransactions, and received, and refuses a Transactions message that would send a transaction twice, or back to the peer that sent it.
 It also refuses an empty Transactions message, which "Transactions (0x02)" forbids.
 On the proof-of-stake networks that the session assumes, NewBlockHashes and NewBlock are discarded.
-`snapAllowed` says whether the shared capabilities meet the requirement of snap, since [Relation to eth](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#relation-to-eth) makes snap "a dependent satellite of eth".
+`snapAllowed` says whether the shared capabilities meet the requirement of snap, since [Relation to eth](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md#relation-to-eth) makes snap "a dependent satellite of eth".
 
 `receiveEth_beforeStatus`, `receiveEth_status_iff`, `receiveEth_response`, `receiveEth_unsolicited`, `receiveEth_discard`, `receiveEth_secondStatus`, `receiveEth_sentTxs` and `receiveEth_receivedTxs` (`Execution/Proofs/Network/Session.lean`) state the receiving steps.
 `sendEth_beforeStatus`, `sendEth_beforeOwnStatus` and `sendEth_pending` state the sending steps.
@@ -2541,14 +2541,14 @@ A snap message on a connection without eth has no reaction in the source, and `s
 A peer that keeps sending NewBlock or NewBlockHashes "should be disconnected", with no count, so each such message is only discarded.
 A peer that sends a transaction twice, or back to this node, breaks the rule of "Transactions (0x02)", but the source fixes no reaction, so the session accepts the message.
 
-The session also leaves out "A node should never send a transaction back to a peer that it can determine already knows of it" ([Transaction Exchange](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transaction-exchange)), which also covers announcements.
+The session also leaves out "A node should never send a transaction back to a peer that it can determine already knows of it" ([Transaction Exchange](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-exchange)), which also covers announcements.
 A PooledTransactions answer is never refused for a resend in an active session, and the session counts its transactions as sent, since "must not resend the same transaction" names no message.
 The session does not track the requests of the peer, so it does not check what a sent response answers, and two answers may carry one transaction.
 The session accepts a message from the peer before this node has sent its own Status, though the peer must wait for it; the source fixes no reaction.
 It reads every message, sent or received, as one of the negotiated version, which the decoder of that version ensures.
 Two pending requests may share a request ID, and a response then removes the oldest one that it answers.
 No decoded item fails to encode, since a length must reach `2^64` for that.
-If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
+If one did, its transaction would have no hash and would reject its whole message, while [Transaction Encoding and Validity](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#transaction-encoding-and-validity) asks only to discard invalid transactions.
 The session accepts an empty Transactions message from the peer, which the source only discourages.
 
 ### multistream-select negotiation and the TCP upgrade
@@ -2873,34 +2873,39 @@ No theorem checks a header against the chain or its validity rules.
 
 A node fetches the bodies of blocks after their headers, with the BlockBodies message of the eth protocol.
 `checkBody` (`Execution/Network/Bodies.lean`) checks such a body against the header that the node asked it for.
-It follows "Block Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#block-encoding-and-validity).
+It follows "Block Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#block-encoding-and-validity).
 The body must be the list of the transactions and the ommers, with the withdrawals from Shapella.
 The transactions and the withdrawals must have the roots of the header.
 The ommers list must hold at most two items, and its Keccak-256 hash must be the ommers hash of the header.
 No ommer may have a number above the block's.
 A transaction sent as a byte string must start with a type below `0x80`, as EIP-2718 asks, so that it cannot stand for a legacy transaction.
+Each transaction must decode at the fork of the header, with a gas limit at most the gas limit of the header.
+The sum of the gas limits may exceed it, since a transaction only has to fit in the gas that the block has left.
 
 `checkBody_complete` (`Execution/Proofs/Network/Bodies.lean`) proves that the body of every block that passes `stateTransition` passes this check.
 So a correct node never rejects it.
 `checkBody_binding` proves that two bodies that pass for one header are equal in each part, or that a Keccak-256 collision is named.
 For the transactions and the withdrawals, the search of the trie binding returns the collision; for the ommers, the two encodings are the collision.
 It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
+`checkBody_gasLimit_le` proves that each transaction of a body that passes decodes at the fork, with a gas limit at most that of the header.
+The step loses no valid block: `checkBody_complete` covers it.
+The proof of `checkBody_complete` uses `stateTransition_fork_le` and `stateTransition_txGas_le` (`Execution/Proofs/Blocks/BodyGas.lean`).
+They show that each transaction of a block that passes has a type of its fork, and a gas limit at most the block's.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
 No theorem bounds the probability of finding two bodies that pass for one header and differ.
 The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
 It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
-The check leaves four rules of that section to other checks.
+The check leaves three rules of that section to other checks.
 It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
-It does not run the transactions or look at the state, so it does not say that the transactions are valid for the block.
+It decodes each transaction at the fork, so it rejects a type that the fork does not have.
+It does not run the transactions or look at the state, so it does not say that they are valid for the block.
 It does not check the ommer headers against the chain, which needs the recent blocks that `validateOmmers` reads.
-It does not ask that the sum of the gas limits of the transactions is at most the gas limit of the block, as `caps/eth.md` says.
-Block validity asks only that each transaction fits in the gas that the block still has, so the stricter rule would reject valid blocks.
 
 ### The receipts of the eth protocol
 
 `receiptsMatch` (`Execution/Network/Receipts.lean`) checks the receipts of one block in a Receipts answer against the receipts root of its header.
-It follows "Receipt Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#receipt-encoding-and-validity).
+It follows "Receipt Encoding and Validity" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#receipt-encoding-and-validity).
 Each receipt is put back in its consensus form.
 On eth/68 it keeps the Bloom filter that the peer sent; from eth/69 on the filter of its logs is computed again.
 The trie root of the list must be the root of the header.
@@ -2919,7 +2924,7 @@ The caller gives the receipts root, the fork of the block and the eth version, a
 ### The block access lists and the cells of the eth protocol
 
 `accessListsResponse` (`Execution/Network/Message.lean`) checks a BlockAccessLists answer of eth/71 against the access list hashes of the requested blocks.
-It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#blockaccesslists-0x13).
+It follows "BlockAccessLists (0x13)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#blockaccesslists-0x13).
 `accessListsResponse_eq_true_iff` (`Execution/Proofs/Network/Message.lean`) states when an answer passes: it repeats the request ID and has one entry for each hash that the caller gives.
 Each entry is the RLP empty string, or its RLP encoding has that hash under Keccak-256.
 `accessListsAnswer_eq_true_iff` (`Execution/Proofs/Network/Snap.lean`) states the check of the entries alone, which snap/2 shares.
@@ -2943,7 +2948,7 @@ The source leaves these points open, and the check takes one reading of each.
 - An empty path is an error, since it is no compact encoding; the root of a trie has the compact path `0x00`.
 
 `checkCellsResponse_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that a Cells answer of eth/72 passes exactly when it repeats the request ID and its cells pass `checkCells` (`Execution/Network/Cells.lean`).
-That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#cells-0x15).
+That check follows "Cells (0x15)" in [`caps/eth.md`](https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#cells-0x15).
 `checkCells_eq_ok_iff` (`Execution/Proofs/Network/Cells.lean`) states the rules of those cells.
 The caller gives the number of blobs of each transaction, and the check trusts it.
 

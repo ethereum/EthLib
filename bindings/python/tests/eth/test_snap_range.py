@@ -1,6 +1,9 @@
 """The checks of AccountRange and StorageRanges answers, built from reference tries."""
 
-# The answers follow caps/snap.md of ethereum/devp2p at commit 88f1c808, which EthLib cites.
+# The answers follow caps/snap.md of ethereum/devp2p, at the commit that EthLib cites.
+#
+# Commit: 277ceb399c15df86efb17d51eb58200c26879784
+#
 # The reference trie in `trie_reference.py` builds each root and proof apart from EthLib.
 
 import pytest

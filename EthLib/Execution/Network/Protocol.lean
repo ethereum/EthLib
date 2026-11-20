@@ -9,7 +9,7 @@ The versions of the eth capability, and the message IDs that each version uses.
 
 The source is [`caps/eth.md`][eth] of the devp2p specifications, with its "Change Log".
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md
 
 EthLib specifies the versions from eth/68 on, which nodes of every current fork speak.
 

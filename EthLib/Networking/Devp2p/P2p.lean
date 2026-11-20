@@ -8,7 +8,7 @@ public import EthLib.Networking.Snappy.Compress
 
 The messages Hello, Disconnect, Ping and Pong of the "p2p" capability, from [`rlpx.md`][rlpx].
 
-[rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#capability-messaging
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#capability-messaging
 
 The data of a frame is the message ID as an RLP integer, then the message as an RLP list.
 

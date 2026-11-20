@@ -8,7 +8,7 @@ public import EthLib.Networking.Rlpx.Handshake
 
 The packets of the Node Discovery Protocol v4, from "Wire Protocol" of [`discv4.md`][discv4].
 
-[discv4]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/discv4.md#wire-protocol
+[discv4]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv4.md#wire-protocol
 
 A packet is `hash || signature || packet-type || packet-data`, at most 1280 bytes.
 

@@ -20,7 +20,7 @@ A body is the RLP list of its transactions and its ommers, then its withdrawals 
 
 A legacy transaction is an RLP list, and a typed one is the byte string of its type and payload.
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#block-encoding-and-validity
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#block-encoding-and-validity
 -/
 
 @[expose] public section
@@ -58,6 +58,10 @@ inductive BodyError where
 
   The first byte is none when the string is empty. -/
   | untypedTransaction (first : Option UInt8)
+  /-- The transaction at `index`, counted from 0, holds no transaction of the fork. -/
+  | invalidTransaction (index : Nat) (error : TransactionError)
+  /-- The transaction at `index` has the gas limit `gas`, above the block's gas limit `limit`. -/
+  | gasLimitAboveBlock (index gas limit : Nat)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -76,6 +80,8 @@ def BodyError.code : BodyError → UInt32
   | .wrongOmmersHash .. => 608
   | .ommerAfterBlock .. => 609
   | .untypedTransaction _ => 610
+  | .invalidTransaction .. => 611
+  | .gasLimitAboveBlock .. => 612
 
 /-- The bytes that a transaction item stands for in the trie of the transactions root.
 
@@ -99,12 +105,26 @@ def transactionBytes : Item → Except BodyError ByteArray
 def transactionValues (transactions : Item) : Except BodyError (List ByteArray) := do
   (← transactions.toItems.mapError .decoding).mapM transactionBytes
 
-/-- The transactions of a body match the transactions root of the header. -/
+/-- Each transaction of a body is one of the fork, with a gas limit at most that of the header.
+
+A transaction only has to fit in the gas that the block has left, so the sum may exceed the limit.
+-/
+def checkGasLimits {fork : Fork} (header : Header fork) (transactions : Item) :
+    Except BodyError Unit := do
+  let items ← transactions.toItems.mapError .decoding
+  (List.range items.length).zip items |>.forM fun (i, item) => do
+    let tx ← (decodeBodyTransaction fork item).mapError (.invalidTransaction i)
+    ensure (tx.gas.toNat ≤ header.gasLimit) (.gasLimitAboveBlock i tx.gas.toNat header.gasLimit)
+
+/-- The transactions of a body match the transactions root of the header.
+
+Each of them is then one of the fork, with a gas limit at most that of the header. -/
 def checkTransactions {fork : Fork} (header : Header fork) (transactions : Item) :
     Except BodyError Unit := do
   let values ← transactionValues transactions
   let root ← (indexedRoot values).mapError .trie
   ensure (root == header.transactionsRoot) (.wrongTransactionsRoot header.transactionsRoot root)
+  checkGasLimits header transactions
 
 /-- The withdrawals of a body, from Shapella, match the withdrawals root of the header. -/
 def checkWithdrawals {fork : Fork} (header : Header fork) (h : .shapella ≤ fork)
@@ -136,10 +156,11 @@ The check fails with the first of the following that does not hold.
 1. The body is a list of 2 items before Shapella and of 3 items from Shapella.
 2. Each transaction sent as a byte string starts with a type below `0x80`.
 3. The trie root of the transactions is the transactions root of the header.
-4. From Shapella, the trie root of the withdrawals is the withdrawals root of the header.
-5. The ommers list holds at most two items.
-6. The Keccak-256 hash of the ommers list is the ommers hash of the header.
-7. Each ommer is a list whose ninth field, the block number, is at most that of the block.
+4. Each transaction decodes at the fork, with a gas limit at most the gas limit of the header.
+5. From Shapella, the trie root of the withdrawals is the withdrawals root of the header.
+6. The ommers list holds at most two items.
+7. The Keccak-256 hash of the ommers list is the ommers hash of the header.
+8. Each ommer is a list whose ninth field, the block number, is at most that of the block.
 
 The check does not decode the ommers further, since their validity is left to the chain.
 
@@ -147,18 +168,19 @@ The check does not decode the ommers further, since their validity is left to th
 
 The check reads only the body and the header.
 
-It leaves out four rules of that section, each for a reason.
+It leaves out three rules of that section, each for a reason.
 
 - "The block `header` must be valid."
   The header checks of the eth protocol decide it before the body is asked for.
 - The transactions "must be valid for inclusion into the chain at the block's number".
-  That needs the state before the block.
+  Step 4 checks only that each decodes at the fork, so a type that the fork lacks is rejected.
+  The rest needs the state before the block.
 - The ommer headers must be valid, and must be recent ancestors not included before.
   That needs the chain.
-- "The sum of the `gas-limit`s of all transactions must not exceed the `gas-limit` of the block."
-  Block validity is weaker, and a stricter rule would reject valid blocks.
 
-Block validity asks only that each transaction fits in the gas that the block still has.
+Step 4 follows "The `gas-limit` of each transaction must not exceed the `gas-limit` of the block."
+
+The sum of the gas limits may exceed that of the block.
 
 Take a block of gas limit 30,000,000 and two transactions of gas limit 20,000,000 each.
 

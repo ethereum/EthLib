@@ -185,6 +185,35 @@ theorem applyTransactions_txGas_le {env : BlockEnvironment fork} {body : BodySta
   · rw [executionCapacity_of_lt (Nat.lt_of_not_le hGlam)] at hFits
     omega
 
+/-- Each transaction of a body that runs has a type that exists at the fork of its block. -/
+theorem applyTransactions_fork_le {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {output : BodyOutput fork}
+    (h : applyTransactions env body transactions = .ok output) :
+    ∀ tx ∈ transactions, tx.fork ≤ fork := by
+  intro tx htx
+  obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem htx
+  obtain ⟨-, hSteps⟩ := applyTransactions_steps (fun _ _ => True) (fun _ => trivial)
+    (fun _ _ => trivial) (fun _ => trivial) h
+  obtain ⟨before, next, -, hNext, -⟩ := hSteps i hi
+  obtain ⟨included, out, hIncluded, -⟩ := applyTransaction_eq_ok hNext
+  exact checkInclusion_fork_le hIncluded
+
+/-- Each transaction of a block that passes its transition has a type that exists at its fork. -/
+theorem stateTransition_fork_le {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State.State} (h : stateTransition chain block checkSeal = .ok post) :
+    ∀ tx ∈ block.transactions, tx.fork ≤ fork := by
+  obtain ⟨-, -, -, hashes, output, roots, -, hApply, -⟩ := stateTransition_eq_ok h
+  obtain ⟨state, body, txs, -, -, hTxs, -⟩ := applyBody_receipts hApply
+  exact applyTransactions_fork_le hTxs
+
+/-- Each transaction of a block that passes its transition has gas limit at most the block's. -/
+theorem stateTransition_txGas_le {chain : BlockChain} {block : Block fork Transaction}
+    {checkSeal : Bool} {post : State.State} (h : stateTransition chain block checkSeal = .ok post) :
+    ∀ tx ∈ block.transactions, tx.gas.toNat ≤ block.header.gasLimit := by
+  obtain ⟨-, -, -, hashes, output, roots, -, hApply, -⟩ := stateTransition_eq_ok h
+  obtain ⟨state, body, txs, -, -, hTxs, -⟩ := applyBody_receipts hApply
+  exact applyTransactions_txGas_le hTxs
+
 /-- Up to BPO5, each receipt of a body that runs records at most the gas limit of its block. -/
 theorem applyTransactions_cumulativeGasUsed_le_of_lt {env : BlockEnvironment fork}
     {body : BodyState} {transactions : List Transaction} {output : BodyOutput fork}

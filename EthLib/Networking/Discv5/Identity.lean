@@ -13,7 +13,7 @@ public import EthLib.Networking.Discv5.Distance
 The cryptography of the discv5 handshake for the "v4" identity scheme.
 
 The source is `discv5-theory.md` in `ethereum/devp2p`:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md>
 
 Its sections are "Identity-Specific Cryptography in the Handshake", and "Step 3" of the handshake.
 

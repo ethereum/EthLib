@@ -4,6 +4,7 @@ public import EthLib.Execution.Network.Bodies
 public import EthLib.Execution.Proofs.Blocks.Roots
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Execution.Proofs.Network.Blocks
+public import EthLib.Execution.Proofs.Blocks.BodyGas
 public import EthLib.Execution.Proofs.Blocks.Ommers
 public import EthLib.Execution.Proofs.Blocks.Transition
 public import EthLib.Execution.Proofs.Blocks.TypedRoots
@@ -16,6 +17,8 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 # Proofs: the check of a block body
 
 The body of every block that passes the state transition passes the check against its header.
+
+Each transaction of a body that passes decodes at the fork, with a gas limit at most the block's.
 
 Two bodies that pass for one header are equal in each part, or a Keccak-256 collision is named.
 
@@ -96,11 +99,54 @@ theorem checkBody_tooManyOmmers_shapella (hfork : .shapella ≤ fork) {header : 
 
 /-! ## What a passing check says -/
 
-/-- The transactions pass exactly when their bytes have the transactions root of the header. -/
+/-- The gas limits pass exactly when the transactions are a list of transactions of the fork.
+
+The gas limit of each is at most that of the header. -/
+theorem checkGasLimits_eq_ok_iff {header : Header fork} {transactions : Item} :
+    checkGasLimits header transactions = .ok () ↔
+      ∃ items, transactions = .list items ∧ ∀ item ∈ items, ∃ tx,
+        decodeBodyTransaction fork item = .ok tx ∧ tx.gas.toNat ≤ header.gasLimit := by
+  -- The check of one item: it decodes, and its gas limit fits.
+  have step : ∀ (i : Nat) (item : Item),
+      (do
+        let tx ← (decodeBodyTransaction fork item).mapError (BodyError.invalidTransaction i)
+        ensure (tx.gas.toNat ≤ header.gasLimit)
+          (BodyError.gasLimitAboveBlock i tx.gas.toNat header.gasLimit)) = .ok () ↔
+        ∃ tx, decodeBodyTransaction fork item = .ok tx ∧ tx.gas.toNat ≤ header.gasLimit := by
+    intro i item
+    cases hd : decodeBodyTransaction fork item with
+    | error e => simp [Except.mapError, bind, Except.bind]
+    | ok tx =>
+      by_cases hg : tx.gas.toNat ≤ header.gasLimit <;>
+        simp [Except.mapError, bind, Except.bind, ensure, hg]
+  unfold checkGasLimits
+  cases hi : transactions.toItems with
+  | error e =>
+    simp only [Except.mapError, bind, Except.bind, reduceCtorEq, false_iff, not_exists, not_and]
+    intro items h
+    simp [h, Item.toItems] at hi
+  | ok items =>
+    rw [Item.toItems_eq_ok.mp hi]
+    simp only [Except.mapError, bind, Except.bind, Item.list.injEq, exists_eq_left']
+    rw [forM_ok_iff]
+    constructor
+    · intro h item hmem
+      obtain ⟨i, hlt, rfl⟩ := List.getElem_of_mem hmem
+      have hz : (i, items[i]) ∈ (List.range items.length).zip items := by
+        have hlen : i < ((List.range items.length).zip items).length := by simp [hlt]
+        simpa using List.getElem_mem hlen
+      exact (step i items[i]).mp (h _ hz)
+    · intro h p hp
+      exact (step p.1 p.2).mpr (h p.2 (List.of_mem_zip hp).2)
+
+/-- The transactions pass exactly when their bytes have the transactions root of the header.
+
+Each of them must also decode at the fork, with a gas limit at most that of the header. -/
 theorem checkTransactions_eq_ok_iff {header : Header fork} {transactions : Item} :
     checkTransactions header transactions = .ok () ↔
-      ∃ values, transactionValues transactions = .ok values ∧
-        indexedRoot values = .ok header.transactionsRoot := by
+      (∃ values, transactionValues transactions = .ok values ∧
+        indexedRoot values = .ok header.transactionsRoot) ∧
+      checkGasLimits header transactions = .ok () := by
   unfold checkTransactions
   cases hv : transactionValues transactions with
   | error e => simp [bind, Except.bind]
@@ -183,6 +229,20 @@ theorem checkBody_eq_ok {header : Header fork} {body : Item}
       | ok u =>
         refine ⟨a, b, ht, by simpa [ht] using h, fun _ => hbody, fun hs => absurd hs hf⟩
 
+/-- Soundness of the gas rule: a body that passes is a list that starts with its transactions.
+
+Each of them is a transaction of the fork, with a gas limit at most that of the header. -/
+theorem checkBody_gasLimit_le {header : Header fork} {body : Item}
+    (h : checkBody header body = .ok ()) :
+    ∃ items rest, body = .list (.list items :: rest) ∧ ∀ item ∈ items, ∃ tx,
+      decodeBodyTransaction fork item = .ok tx ∧ tx.gas.toNat ≤ header.gasLimit := by
+  obtain ⟨transactions, ommers, ht, -, hn, hs⟩ := checkBody_eq_ok h
+  obtain ⟨items, rfl, hgas⟩ := checkGasLimits_eq_ok_iff.mp (checkTransactions_eq_ok_iff.mp ht).2
+  by_cases hf : .shapella ≤ fork
+  · obtain ⟨withdrawals, -, hbody⟩ := hs hf
+    exact ⟨items, [ommers, withdrawals], hbody, hgas⟩
+  · exact ⟨items, [ommers], hn hf, hgas⟩
+
 /-! ## Binding -/
 
 /-- A typed transaction item stands for itself, with a type as its first byte. -/
@@ -258,8 +318,8 @@ theorem checkTransactions_binding {header : Header fork} {t₁ t₂ : Item}
     (h₁ : checkTransactions header t₁ = .ok ()) (h₂ : checkTransactions header t₂ = .ok ()) :
     TransactionsBound t₁ t₂ := by
   unfold TransactionsBound
-  obtain ⟨v₁, hv₁, hr₁⟩ := checkTransactions_eq_ok_iff.mp h₁
-  obtain ⟨v₂, hv₂, hr₂⟩ := checkTransactions_eq_ok_iff.mp h₂
+  obtain ⟨⟨v₁, hv₁, hr₁⟩, -⟩ := checkTransactions_eq_ok_iff.mp h₁
+  obtain ⟨⟨v₂, hv₂, hr₂⟩, -⟩ := checkTransactions_eq_ok_iff.mp h₂
   rcases indexedRoot_binding hr₁ hr₂ with rfl | ⟨pair, hfound, hvalid⟩
   · exact .inl (transactionValues_injective hv₁ hv₂)
   · exact .inr ⟨v₁, v₂, pair, hv₁, hv₂, hfound, hvalid⟩
@@ -381,13 +441,18 @@ theorem checkBody_complete {chain : BlockChain} {block : Block fork Transaction}
   obtain ⟨-, -, hcheck, hashes, output, roots, -, -, hroots, hchecks, -⟩ := stateTransition_eq_ok h
   obtain ⟨items, hitems⟩ := checkBlock_transactions hcheck
   have htx : checkTransactions block.header (.list items) = .ok () := by
-    refine checkTransactions_eq_ok_iff.mpr ?_
-    have hroot := outputRoots_transactions hroots
-    rw [outputChecks_transactions hchecks] at hroot
-    obtain ⟨values, hvalues, hindexed⟩ := transactionsRoot_eq_ok_iff.mp hroot
-    refine ⟨values, ?_, hindexed⟩
-    simp [transactionValues, Item.toItems, Except.mapError, bind, Except.bind,
-      mapM_transactionBytes hitems hvalues]
+    refine checkTransactions_eq_ok_iff.mpr ⟨?_, ?_⟩
+    · have hroot := outputRoots_transactions hroots
+      rw [outputChecks_transactions hchecks] at hroot
+      obtain ⟨values, hvalues, hindexed⟩ := transactionsRoot_eq_ok_iff.mp hroot
+      refine ⟨values, ?_, hindexed⟩
+      simp [transactionValues, Item.toItems, Except.mapError, bind, Except.bind,
+        mapM_transactionBytes hitems hvalues]
+    · -- Each transaction has a type of the fork and a gas limit at most the block's.
+      refine checkGasLimits_eq_ok_iff.mpr ⟨items, rfl, fun item hmem => ?_⟩
+      obtain ⟨tx, htxmem, hitem⟩ := mapM_ok_mem hitems item hmem
+      exact ⟨tx, decodeBodyTransaction_bodyItem hitem (stateTransition_fork_le h tx htxmem),
+        stateTransition_txGas_le h tx htxmem⟩
   have hom : checkOmmers block.header (ommersItem block.ommers) = .ok () := by
     by_cases hp : fork < .paris
     · obtain ⟨⟨e, he, hk⟩, hc, -, hn⟩ := validateOmmers_spec (checkBlock_validateOmmers hp hcheck)
