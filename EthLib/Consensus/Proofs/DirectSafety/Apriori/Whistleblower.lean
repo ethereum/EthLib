@@ -478,7 +478,7 @@ private theorem slashableBase_eq (u : ForkedBeaconState preset) :
     simp only [pooled, found, Option.map_some, Option.getD_some]
 
 /-- The balance at the end of a path is at most the balance at its start and its increases. -/
-private theorem balance_le_pathCredits (i : Nat) :
+theorem balance_le_pathCredits (i : Nat) :
     ∀ (path : List (ForkedBeaconState preset)) (a b : ForkedBeaconState preset),
       path.head? = some a → path.getLast? = some b →
         actualBalanceAt b i ≤ actualBalanceAt a i + pathCredits i path

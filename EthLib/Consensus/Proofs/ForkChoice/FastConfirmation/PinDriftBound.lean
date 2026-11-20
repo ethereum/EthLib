@@ -1901,32 +1901,6 @@ private theorem epochRewards_le {m n : ForkedBeaconState preset}
           rw [balanceAtEq]
           exact envelope))
 
-/-- The balance at the end of a path of states rises by at most the increases between its states. -/
-private theorem balance_le_pathCredits (i : ℕ) :
-    ∀ (path : List (ForkedBeaconState preset)) (x y : ForkedBeaconState preset),
-    path.head? = some x → path.getLast? = some y →
-    actualBalanceAt y i ≤ actualBalanceAt x i + pathCredits i path := by
-  intro path
-  induction path with
-  | nil =>
-    intro x y hx
-    simp at hx
-  | cons a rest ih =>
-    intro x y hx hy
-    simp only [List.head?_cons, Option.some.injEq] at hx
-    subst hx
-    cases rest with
-    | nil =>
-      simp only [List.getLast?_singleton, Option.some.injEq] at hy
-      subst hy
-      simp [pathCredits]
-    | cons b rest' =>
-      have last : (b :: rest').getLast? = some y := by
-        rwa [List.getLast?_cons_cons] at hy
-      have next := ih b y (by simp) last
-      simp only [pathCredits]
-      omega
-
 /-- A step raises the balance of a key by at most the credits of its events. -/
 private theorem step_balance_le_events {m n : ForkedBeaconState preset}
     (step : Step config checks m n) (early : n.fork < .glamsterdam) (i : ℕ)
@@ -1936,7 +1910,7 @@ private theorem step_balance_le_events {m n : ForkedBeaconState preset}
   have cover := coverage_run (Run.nil.snoc step) early (getCurrentEpoch n.state).toNat
     (Nat.le_succ _) run false i
   have ends := Run.balancePath_ends (Run.nil.snoc step)
-  have rise := balance_le_pathCredits i _ m n ends.1 ends.2
+  have rise := Apriori.Internal.balance_le_pathCredits i _ m n ends.1 ends.2
   simp only [coveragePath, Bool.false_eq_true, ↓reduceIte, coverageDelta] at cover
   exact le_trans rise (Nat.add_le_add_left cover _)
 
