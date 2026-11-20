@@ -22320,7 +22320,23 @@ private theorem bud_csUnits (h : Setting config checks g split fin pulled anc co
         isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
           (pinTerms config pulled anc fin).unitGain) ≤
       ∑ v ∈ CS counted split,
-        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := sorry
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := by
+  split_ifs
+  · exact Nat.zero_le _
+  obtain ⟨_, replayedF⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
+  rw [sum_unitK _ tailC highC eventsC events eventsF _ fun v => credC tailC highC v.toNat,
+    Nat.mul_comm]
+  refine Nat.mul_le_mul_left _ (Finset.card_le_card fun v member => ?_)
+  obtain ⟨inCS, active⟩ := Finset.mem_filter.mp member
+  refine Finset.mem_filter.mpr ⟨inCS, ?_⟩
+  obtain ⟨-, absent, -⟩ := Finset.mem_filter.mp inCS
+  obtain ⟨w, found, live⟩ := isActiveAt_eq_true_iff.mp active
+  have deposit := created_deposit h fromFin replayedF tailC highC endEpochC replayedC
+    ⟨w, found, activated_of_active live (UInt64.le_refl _)⟩ absent
+  have cSplit := credC_split tailC highC v.toNat
+  have nSplit := credN_split tailC highC v.toNat
+  unfold flowCredit
+  omega
 
 /-- The keys of `K6` beyond R's registry and the active keys of `CS` fit the deposit slots.
 
