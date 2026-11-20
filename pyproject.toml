@@ -122,13 +122,14 @@ python-version = "3.12"
 root = ["bindings/python", "bindings/python/tests", "scripts"]
 
 [tool.ty.src]
-# The SSZ limit generator imports ssz-specs as `ssz`, which resolves here to the tests.
-# Only its own environment installs ssz-specs.
+# The SSZ limit and proof generators import ssz-specs as `ssz`, which resolves here to the tests.
+# Only their own environments install ssz-specs.
 # The generator of the large-amount vectors runs inside the consensus specification.
 # The extractor of the OpenRPC examples runs in its own environment, with PyYAML.
 exclude = [
   ".claude/",
   "tests/serialization/ssz_limits/generate.py",
+  "tests/serialization/ssz_proofs/generate.py",
   "tests/consensus/large_amounts/generator",
   "tests/engine/extract_openrpc.py",
 ]
