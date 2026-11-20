@@ -770,6 +770,9 @@
 #define DOC_consensus_import_slashing_interchange \
   "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."
 
+#define DOC_consensus_read_signing_request \
+  "A request of the Remote-signing API, read and written again as the signer reads it."
+
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."
 

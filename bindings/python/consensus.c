@@ -716,6 +716,9 @@ extern lean_object*
 eth_consensus_import_slashing_interchange(lean_object* held, lean_object* file);
 
 extern lean_object*
+eth_consensus_read_signing_request(lean_object* args);
+
+extern lean_object*
 eth_consensus_check_block_signing(
   lean_object* text, lean_object* pubkey, uint64_t slot, lean_object* signing_root);
 
@@ -2205,6 +2208,14 @@ py_consensus_import_slashing_interchange(
     eth_consensus_import_slashing_interchange(mk_bytearray(held, held_len),
       mk_bytearray(file, file_len)),
     SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_read_signing_request(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_read_signing_request, args, 2, REMOTE_SIGNING_ERROR);
 }
 
 PyObject*

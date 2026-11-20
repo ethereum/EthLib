@@ -6295,6 +6295,46 @@ The source leaves six points about the import open, and EthLib takes these readi
 - Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
 - For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
 
+### Remote-signing API
+
+The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.
+EthLib cites commit `44e9e0dc`.
+A client sends one JSON request per signature, and the field `type` names its kind.
+The signer must read exactly the object that the client meant, since the root it signs comes from that object.
+
+EthLib defines the thirteen kinds of request that exist before Gloas, with their JSON forms (`Consensus/RemoteSigningApi/Request.lean`).
+Each body is a container of the consensus layer, written in the JSON mapping of SSZ, or a small container of the schemas themselves, such as the slot of an aggregator selection.
+A versioned body names its version in upper case, as `PHASE0` to `GLOAS`, and the aggregate takes the shape of the fork of that version.
+`SigningRequest.toJson_total` (`Consensus/Proofs/RemoteSigningApi/Request.lean`) shows that the writer never fails, and `SigningRequest.ofJson_toJson` that every request it writes reads back as the same request.
+`getObjVal?_type_of_ofJson` shows that a request read from a document has the kind that its `type` names, and `ofJson_unknownType` that a `type` that names no kind is refused with that name.
+`version_of_ofJson_aggregateAndProofV2` and `version_of_ofJson_blockV2` show that a versioned request has the version that its body names.
+The Python suite reads the 25 examples of these kinds that spell their fields as the schemas do, and checks that writing each again gives the same document.
+It checks that the other two examples, named below, are refused.
+The source names no preset, and its examples mix the two.
+The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
+So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
+
+The signer answers with its signature as JSON under `signature`, or as the hex alone, and lists its keys as a JSON array of hex (`Consensus/RemoteSigningApi/Response.lean`).
+The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Response.lean`), so `ofApiJson_toApiJson` reads it back as written.
+`publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
+No export or Python test covers the two responses yet; the sign endpoint will use them.
+
+The source leaves six points about the requests open, and EthLib reads each one as follows:
+
+- The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
+  EthLib follows the schemas, so it refuses both examples.
+- No schema of a body marks a field as required, not even `Fork` or the body of `DEPOSIT`.
+  Only `fork_info`, the top-level objects and the versioned bodies list required fields.
+  EthLib reads each body as its container, which requires every field.
+- The schemas do not forbid keys beyond those they name.
+  EthLib ignores such a key at the top level of a request and in a versioned body, and refuses one inside a container, as its JSON mapping of SSZ does everywhere.
+- The schemas name no version for the forks of the blob schedule, BPO1 to BPO5, which change only blob parameters (EIP-7892).
+  The Beacon API gives them the version of Fulu; the source does not say which version a request at such a fork carries.
+- The source does not say whether a signer must refuse a `version` other than the fork that `fork_info` gives at the epoch of the message.
+  EthLib reads the body under the version it names, whatever the fork info says.
+- The schemas give each integer the type of a string.
+  The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -6681,12 +6721,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 526 operations and 51 size constants.
-The Python extension calls 526 of the operations and 51 of the constants.
+Lean exports 527 operations and 51 size constants.
+The Python extension calls 527 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11818 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2607), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1591), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (825), `x25519.c` (21), `xmss.c` (134).
+11835 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2618), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1595), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (827), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

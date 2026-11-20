@@ -103,6 +103,8 @@ public import EthLib.Consensus.LightClient.Upgrade
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.RelayApi
+public import EthLib.Consensus.RemoteSigningApi.Request
+public import EthLib.Consensus.RemoteSigningApi.Response
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds

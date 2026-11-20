@@ -133,6 +133,10 @@ class KeymanagerError(EthLibError, ValueError):
     """A value or a request of the Keymanager API does not read."""
 
 
+class RemoteSigningError(EthLibError, ValueError):
+    """A document is not a request of the Remote-signing API."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -392,6 +396,7 @@ __all__ = [
     "ProposerError",
     "SlashingProtectionError",
     "KeymanagerError",
+    "RemoteSigningError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

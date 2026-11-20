@@ -60,6 +60,11 @@ commit = "51f2a5c90e9d301c3e9980da402ec70ae82f0991"
 release = "v1.1.0"
 directories = ["tests/consensus/keymanager_api"]
 
+[repositories."ethereum/remote-signing-api"]
+commit = "44e9e0dcc115c91f8b739684f4789a8310476bd9"
+release = "v1.4.0"
+directories = ["tests/consensus/remote_signing_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]
