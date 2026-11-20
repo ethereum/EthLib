@@ -20,8 +20,8 @@ The source fixes these status codes, not the rules of slashing protection.
 
 So the rules are a parameter, with one instance from EIP-3076, which records blocks and votes.
 
-[public keys endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/public_keys.yaml
-[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/sign.yaml
+[public keys endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/public_keys.yaml
+[sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/514525ca961a9d001e96a02bf870285a8ae401a4/signing/paths/sign.yaml
 -/
 
 @[expose] public section

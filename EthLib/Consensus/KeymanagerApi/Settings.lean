@@ -21,17 +21,15 @@ A delete removes the mapping of a key that the client manages, with HTTP 204.
 
 Each call gets HTTP 404 for a key that the client does not manage, local or remote.
 
-The source says so for a delete, and lists HTTP 404 for a get and a set without saying when.
-
-This keeps a set from leaving a mapping that no delete could remove.
+The source gives the get, the set and the delete this one response: the key was not found.
 
 A fee recipient of zero is refused with HTTP 400; the source forbids it and names no code.
 
 The source does not say how a graffiti string fills the 32 bytes of a block, so it is kept as is.
 
-[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/fee_recipient.yaml
-[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/gas_limit.yaml
-[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/graffiti.yaml
+[`feerecipient`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/fee_recipient.yaml
+[`gas_limit`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/gas_limit.yaml
+[`graffiti`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/graffiti.yaml
 -/
 
 @[expose] public section

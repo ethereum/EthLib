@@ -31,8 +31,8 @@ Such a key here stays, with the status error, the only status that fits; `SOUNDN
 
 A record of EIP-3076 is a pure value here, so its export cannot fail, unlike in the flow.
 
-[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/local_keystores.yaml
-[flow]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#delete
+[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/local_keystores.yaml
+[flow]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#delete
 -/
 
 @[expose] public section
