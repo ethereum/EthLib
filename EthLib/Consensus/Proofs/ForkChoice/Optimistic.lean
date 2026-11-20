@@ -19,6 +19,8 @@ So a block that stays never has a dropped parent.
 A linked store therefore stays linked, and before Gloas its head is still the head of LMD-GHOST.
 
 The latest valid hash decides where the removal starts.
+
+Each root keeps both its block and its state, or loses both.
 -/
 
 @[expose] public section
@@ -602,6 +604,31 @@ theorem onInvalidPayload_eq {block : BeaconBlock preset fork} {latestValidHash :
       · simp only [marks, Bool.false_eq_true, ↓reduceIte, pure_bind, bind_ok_iff] at rest
         obtain ⟨found, -, rest⟩ := rest
         exact .inr (.inl ⟨before, _, rest⟩)
+
+/-- After an invalid payload, each root keeps both its block and its state, or loses both. -/
+theorem onInvalidPayload_blocks_blockStates {block : BeaconBlock preset fork}
+    {latestValidHash : Option Hash32} {after : Store preset fork}
+    (invalidated : store.onInvalidPayload block latestValidHash = .ok after) (root : Root) :
+    (after.blocks[root]? = store.blocks[root]? ∧
+        after.blockStates[root]? = store.blockStates[root]?) ∨
+      (after.blocks[root]? = none ∧ after.blockStates[root]? = none) := by
+  -- A removal filters the blocks and the states by the same roots.
+  have removal (roots : List Root) :
+      ((store.removeBlocks roots).blocks[root]? = store.blocks[root]? ∧
+          (store.removeBlocks roots).blockStates[root]? = store.blockStates[root]?) ∨
+        ((store.removeBlocks roots).blocks[root]? = none ∧
+          (store.removeBlocks roots).blockStates[root]? = none) := by
+    rw [removeBlocks_blocks, removeBlocks_blockStates]
+    by_cases removed : root ∈ roots <;> simp [removed]
+  rcases onInvalidPayload_eq invalidated with rfl | ⟨-, first, removed⟩ | ⟨gloas, first, removed⟩
+  · exact .inl ⟨rfl, rfl⟩
+  · rcases removeDescendants_eq removed with ⟨-, rfl⟩ | ⟨roots, -, -, rfl⟩
+    · exact .inl ⟨rfl, rfl⟩
+    · exact removal roots
+  · -- From Gloas the removal also drops votes and a payload, which are neither blocks nor states.
+    rcases removeFullDescendants_eq removed with ⟨-, rfl⟩ | ⟨roots, -, -, -, rfl⟩
+    · exact .inl ⟨rfl, rfl⟩
+    · exact removal roots
 
 /-- From Gloas, without a latest valid hash, the payload of the block itself is the invalid one. -/
 theorem onInvalidPayload_of_gloas_none {block : BeaconBlock preset fork} {root : Root}

@@ -5664,9 +5664,16 @@ The proof also reads `stateRoot_blockStates`, which shows that the state kept un
 
 The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
 From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
-The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
-So both keep the two facts that the proof reads.
-No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
+`Store.onInvalidPayload_blocks_blockStates` (`Consensus/Proofs/ForkChoice/Optimistic.lean`) shows that the first step keeps both the block and the state of each root, or removes both.
+`Store.recordValidatedInclusionListSatisfaction_eq` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) shows that the second touches neither the blocks nor the states.
+The bootstrap answer of a root depends only on the configuration, the block and the state under that root, and the fork of the store.
+`bootstrapFor_onInvalidPayload` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows that the first step keeps the answer of each root whose block stays.
+`bootstrapFor_recordValidatedInclusionListSatisfaction` shows that the second step keeps the answer of every root.
+`bootstrapFor_valid_of_onInvalidPayload` and `bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction` carry `bootstrapFor_valid_of_reachable` over the two steps, through the two theorems above.
+The proof of the first also reads `bootstrapFor_of_missing` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`), since a served root has its block.
+So a bootstrap served after either step starts a light client, with the same assumptions on the schedule, the state type and the preset.
+A root that the first step removes has neither its block nor its state, so `bootstrapFor_of_missing` gives it the error with code 404.
+No theorem covers a store that the handlers reach after either step.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
@@ -5694,8 +5701,8 @@ With Electra after Fulu, a Fulu store can refuse a root before the Electra fork 
 With Gloas after Heze, a Heze store can refuse a root before the Gloas fork epoch.
 No theorem states these refusals.
 Both theorems assume a lawful state type and a preset whose sizes in the block are nonzero.
-After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
-No theorem states that yet.
+After either step that `Store.Reachable` leaves out, each root whose block the store still holds keeps the answer that both theorems give.
+`bootstrapFor_onInvalidPayload` and `bootstrapFor_recordValidatedInclusionListSatisfaction` show this, with the assumptions of both theorems read at the store before the step.
 
 `IsUpdatesAnswer` is the rule of the source for the updates answer.
 It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
