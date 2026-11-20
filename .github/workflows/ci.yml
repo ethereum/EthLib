@@ -140,6 +140,17 @@ jobs:
             | xargs -0 uv run --no-project --python 3.12 python scripts/check_memory.py \
                 --summary "$GITHUB_STEP_SUMMARY"
 
+      # Known answers that the kernel checks, outside the default build.
+      # Each file must elaborate alone in under 20 CPU seconds, with a peak memory under 2 GiB.
+      - name: kernel vectors
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          lake build --wfail KernelVectors
+          find tests/kernel -name '*.lean' -print0 | sort -z \
+            | xargs -0 uv run --no-project --python 3.12 python scripts/check_memory.py \
+                --warn-gib 2 --fail-gib 2 --fail-cpu-seconds 20 --summary "$GITHUB_STEP_SUMMARY"
+
       # Every compiled declaration: its axioms, and anything the kernel cannot
       # unfold or the compiler runs differently. Only the findings that exist
       # today, listed in scripts/check_decls_baseline.txt, pass.
@@ -592,6 +603,8 @@ jobs:
 
       - name: docstrings, unit tests
         run: uv run --no-sync python -m unittest scripts/test_check_docstrings.py
+      - name: memory check, unit tests
+        run: uv run --no-sync python -m unittest scripts/test_check_memory.py
 
   soundness:
     runs-on: ubuntu-latest
