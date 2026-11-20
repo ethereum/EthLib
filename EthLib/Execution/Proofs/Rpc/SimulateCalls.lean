@@ -23,6 +23,8 @@ So does a simulation whose blocks are each from Glamsterdam or without transacti
 It suffices that each block of the plan is from Glamsterdam or has no calls.
 
 A gap block has no calls.
+
+It also suffices that the active fork at the header of the base block is Glamsterdam or later.
 -/
 
 @[expose] public section
@@ -194,5 +196,22 @@ theorem simulate_traceTransfers_of_plan {v : ChainView} {payload : SimulatePaylo
       v.simulate payload p choices :=
   simulate_traceTransfers_of_glamsterdam_le_or_nil
     (simulateBlocks_glamsterdam_le_or_nil hCalls) trace
+
+/-- A simulation gives the same answer with transfers traced or not.
+
+It needs the active fork at the header of the base block to be Glamsterdam or later.
+
+A failed simulation gives the same error both ways. -/
+theorem simulate_traceTransfers_of_base {v : ChainView} {payload : SimulatePayload}
+    {p : BlockParam} {choices : SimulateChoices}
+    (hBase : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∃ fork, v.config.activeFork plan.base.block.header.number
+        plan.base.block.header.timestamp.toNat = some fork ∧ .glamsterdam ≤ fork)
+    (trace : Bool) :
+    v.simulate { payload with traceTransfers := trace } p choices =
+      v.simulate payload p choices :=
+  simulate_traceTransfers_of_plan (fun plan h x hx =>
+    let ⟨_, hFork, hGlamsterdam⟩ := hBase plan h
+    .inl (Nat.le_trans hGlamsterdam (planSimulate_fork_le h hFork x hx))) trace
 
 end EthLib.Execution.Rpc

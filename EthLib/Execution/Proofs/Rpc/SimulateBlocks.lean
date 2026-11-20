@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.Overrides
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.Unsigned
+import EthLib.Base.Proofs.ChainConfig
 
 /-!
 # Proofs: the blocks of `eth_simulateV1`
@@ -32,6 +33,8 @@ Each block of a simulation, gap blocks included, is a simulated block at its own
 A gap block is simulated from an empty request.
 
 A block of the plan is simulated from its request, at its fork.
+
+That fork is no earlier than the active fork of the header of the base block.
 
 A block simulated without calls has no transactions.
 
@@ -152,7 +155,9 @@ theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlo
 
 /-- A plan holds the planned blocks of the request after its base block.
 
-They pass the order check. -/
+They pass the order check.
+
+Each has the fork that is active at its number and time. -/
 private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
     {choices : SimulateChoices} {plan : SimulatePlan}
     (h : v.planSimulate payload p choices = .ok plan) :
@@ -161,7 +166,8 @@ private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p
     checkOrder choices.blockTime plan.base.block.header.number
       plan.base.block.header.timestamp.toNat (planBlocks choices.blockTime
         plan.base.block.header.number plan.base.block.header.timestamp.toNat
-        payload.blockStateCalls) = .ok () := by
+        payload.blockStateCalls) = .ok () ∧
+    ∀ x ∈ plan.blocks, v.config.activeFork x.1.number x.1.time = some x.2 := by
   simp only [ChainView.planSimulate] at h
   obtain ⟨r, -, h⟩ := bind_ok_iff.mp h
   split at h
@@ -171,15 +177,47 @@ private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p
     obtain ⟨blocks, hBlocks, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
-    refine ⟨map_of_mapM_ok (fun x y hxy => ?_) hBlocks |>.trans (List.map_id' _), hOrder⟩
-    split at hxy
-    · obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
-      obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
-      simp only [pure, Except.pure, Except.ok.injEq] at hxy
-      subst hxy
-      rfl
-    · simp [throw, throwThe, MonadExceptOf.throw] at hxy
+    refine ⟨map_of_mapM_ok (fun x y hxy => ?_) hBlocks |>.trans (List.map_id' _), hOrder,
+      fun y hy => ?_⟩
+    · split at hxy
+      · obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        simp only [pure, Except.pure, Except.ok.injEq] at hxy
+        subst hxy
+        rfl
+      · simp [throw, throwThe, MonadExceptOf.throw] at hxy
+    · obtain ⟨x, -, hxy⟩ := mapM_ok_mem hBlocks y hy
+      split at hxy
+      · rename_i fork hFork
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        simp only [pure, Except.pure, Except.ok.injEq] at hxy
+        subst hxy
+        exact hFork
+      · simp [throw, throwThe, MonadExceptOf.throw] at hxy
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- Each block of a plan has a fork no earlier than the given fork.
+
+The given fork must be the active fork of the header of the base block. -/
+theorem planSimulate_fork_le {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices} {plan : SimulatePlan} {fork : Fork}
+    (h : v.planSimulate payload p choices = .ok plan)
+    (hBase : v.config.activeFork plan.base.block.header.number
+      plan.base.block.header.timestamp.toNat = some fork) :
+    ∀ x ∈ plan.blocks, fork ≤ x.2 := by
+  intro x hx
+  obtain ⟨hMap, hOrder, hFork⟩ := planSimulate_spec h
+  have hPlanned : x.1 ∈ planBlocks choices.blockTime plan.base.block.header.number
+      plan.base.block.header.timestamp.toNat payload.blockStateCalls := by
+    rw [← hMap]
+    exact List.mem_map_of_mem hx
+  obtain ⟨hNumber, hTime⟩ := lt_of_checkOrder hOrder x.1 hPlanned
+  obtain ⟨later, hLater, hle⟩ :=
+    ChainConfig.activeFork_mono hBase (Nat.le_of_lt hNumber) (Nat.le_of_lt hTime)
+  rw [hFork x hx, Option.some.injEq] at hLater
+  subst hLater
+  exact hle
 
 /-- A property that each gap block keeps holds after the gap blocks.
 
@@ -399,7 +437,7 @@ theorem simulateBlocks_links {v : ChainView}
           rw [← hBase]
           exact hHash v.canonical[i] (List.getElem_mem _)
       obtain ⟨⟨hLen, hNums, hHead, hLinks, hHashes, -⟩, hCount⟩ := hAll plan.blocks _ _ _ _ s
-        (planSimulate_spec hPlan).1 (planSimulate_spec hPlan).2 hStart rfl hFold
+        (planSimulate_spec hPlan).1 (planSimulate_spec hPlan).2.1 hStart rfl hFold
       exact ⟨by omega, hNums, hHead, hLinks, hHashes⟩
     intro L
     induction L with

@@ -17,6 +17,8 @@ With a positive block time and no number or time override, the numbers and the t
 
 The order check passes exactly when all numbers and times, gap blocks included, strictly increase.
 
+When the blocks pass the order check, each is above the base block in number and in time.
+
 An override sets each field that it gives, and keeps the others and the other accounts.
 
 `stateDiff` keeps the slots that it does not name, and `state` clears them.
@@ -328,6 +330,22 @@ theorem checkOrder_planBlocks_iff {blockTime : Nat} (hbt : 0 < blockTime)
     · simp only [and_assoc]
     · intro h
       omega
+
+/-- When the blocks pass the order check, each has a number above the given number.
+
+Each also has a time above the given time. -/
+theorem lt_of_checkOrder {blockTime number time : Nat} {bs : List PlannedBlock}
+    (h : checkOrder blockTime number time bs = .ok ()) :
+    ∀ b ∈ bs, number < b.number ∧ time < b.time := by
+  induction bs generalizing number time with
+  | nil => simp
+  | cons b bs ih =>
+    obtain ⟨hNumber, hTime, hRest⟩ := checkOrder_cons_iff.mp h
+    intro x hx
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨hNumber, by omega⟩
+    · obtain ⟨hNumber', hTime'⟩ := ih hRest x hx
+      exact ⟨by omega, by omega⟩
 
 /-! ## The overrides of the state -/
 
