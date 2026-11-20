@@ -41,5 +41,10 @@ def test_every_network_is_placed() -> None:
     assert sorted(networks - set(catalogue.EXECUTION_FORKS)) == []
 
 
+def test_every_format_is_placed() -> None:
+    # A format that is neither run, planned nor left out is new upstream.
+    assert harness.unplaced_formats(catalogue.execution_index()) == []
+
+
 def test_disagreements() -> None:
     harness.check_disagreements(CASES, DISAGREEMENTS)
