@@ -151,23 +151,6 @@ theorem Execution.exists_signed_of_blocks
   · exact .inl old
   · exact .inr ⟨sb, pre, post, mem, msg, hash, rest⟩
 
-/-- A store that starts at the anchor store stays reachable from the anchor. -/
-private theorem Execution.reachable_of_start
-    (e : Execution (forkChoice config checks sources signed sends) J)
-    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {v : ν}
-    (start : e.start v = anchor) (i : ℕ) :
-    Store.Reachable config anchorState anchorBlock ((e.world i).state v) := by
-  induction i with
-  | zero =>
-    change Store.Reachable config anchorState anchorBlock (e.start v)
-    exact start ▸ Store.Reachable.anchor anchored
-  | succ i ih =>
-    rcases e.state_succ i v with same | ⟨_, moved⟩
-    · exact same ▸ ih
-    · exact moved.reachable ih
-
 /-- Stores from one anchor agree on states wherever their blocks agree. -/
 theorem Execution.blockStates_eq (e : Execution (forkChoice config checks sources signed sends) J)
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
@@ -234,9 +217,11 @@ theorem Execution.blockStates_eq (e : Execution (forkChoice config checks source
   induction height using Nat.strong_induction_on generalizing root left right with
   | ind height ih =>
     obtain ⟨lb, lbFound⟩ :=
-      (e.reachable_of_start anchored startFirst n).known_of_blockState leftFound
+      (e.reachable_of_start (startFirst ▸ Store.Reachable.anchor anchored) n).known_of_blockState
+        leftFound
     obtain ⟨rb, rbFound⟩ :=
-      (e.reachable_of_start anchored startSecond k).known_of_blockState rightFound
+      (e.reachable_of_start (startSecond ▸ Store.Reachable.anchor anchored) k).known_of_blockState
+        rightFound
     have message := sameBlocks root lb rb lbFound rbFound
     subst rb
     cases initial : anchor.blocks[root]? with
@@ -513,7 +498,8 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
     have memK := sync.2.2 n k ordered v honest u receiver (.block sb) memN late
     obtain ⟨pre, preFound, _, _, _⟩ := Store.validateOnBlock_ok valid
     obtain ⟨other, otherFound, _⟩ :=
-      (e.reachable_of_start anchored startReceiver k).blockStatesFromParents pk
+      Store.Reachable.blockStatesFromParents
+        (e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) k) pk
     have states : pre = other := e.blockStates_eq anchored startSender
       startReceiver (agree i (Nat.le_of_lt before)) preFound (msg ▸ otherFound)
     have otherPre : ((e.world k).state u).blockStates[sb.message.parentRoot]? = some pre := by
@@ -587,7 +573,7 @@ private theorem Execution.blocks_of_partiallySynchronous_core {GST Δ last : ℕ
 
 Both stores start at the anchor store, and the receiver holds the state of the payload's block.
 
-The receiver keeps its store under each envelope of its view, as an up-to-date store does.
+For each envelope in its view that the receiver accepts, its store already marks the root verified.
 
 The anchor block must not be after the anchor state, so that no walk reaches the anchor's parent.
 
@@ -604,7 +590,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     (closed : ∀ (signed : SignedExecutionPayloadEnvelope preset fork) after,
       .envelope gloas signed ∈ (e.world k).view u →
       ((e.world k).state u).onExecutionPayloadEnvelope config checks sources gloas signed =
-        .ok after → after = (e.world k).state u)
+        .ok after →
+      ((e.world k).state u).isPayloadVerified gloas signed.message.beaconBlockRoot = true)
     {root : Root} (verified : ((e.world n).state v).isPayloadVerified gloas root = true)
     (held : ∃ state, ((e.world k).state u).blockStates[root]? = some state) :
     ((e.world k).state u).isPayloadVerified gloas root = true ∨ HonestCollision (e := e) last := by
@@ -613,8 +600,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
   · exact .inr collision
   have oneBlock v hv u hu n k hn hk := agree v hv u hu n k hn hk
   left
-  have reachedSender := e.reachable_of_start anchored startSender
-  have reachedReceiver := e.reachable_of_start anchored startReceiver
+  have reachedSender := e.reachable_of_start (startSender ▸ Store.Reachable.anchor anchored)
+  have reachedReceiver := e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored)
   -- The payload came from an envelope that the sender accepted before.
   rcases e.exists_envelope_of_verified gloas verified with
     initial | ⟨i, before, envelope, _, mem, rfl, handled⟩
@@ -670,10 +657,8 @@ theorem Execution.payloadVerified_of_partiallySynchronous {GST Δ last : ℕ}
     simp only [Store.blockState_ok_iff.mpr otherFound, bind, Except.bind]
     rw [dataOk]
     simp only [Except.mapError, envelopeOk, recordHere, pure, Except.pure]
-  -- The receiver is closed under the envelopes of its view, so this one leaves its store as it is.
-  have fixed := closed _ _ memK acceptedHere
-  rw [← fixed]
-  simp [Store.isPayloadVerified]
+  -- The receiver already marks verified the root of each envelope of its view that it accepts.
+  exact closed _ _ memK acceptedHere
 
 /-- At every fork, synchrony and compatible finality deliver a block or name a collision.
 
@@ -731,12 +716,13 @@ theorem Execution.blocks_of_partiallySynchronous_of_anchorSlot {GST Δ last : �
   obtain rfl := agree v honest u receiver i k iBound bounded _ _ _ sentFound parentFound
   refine (Store.validateParentPayload_ok_iff gloas).mpr ⟨sent, parentFound, fun full => ?_⟩
   -- The receiver holds the parent's state, as it holds the parent.
-  have reached := e.reachable_of_start anchored startReceiver k
+  have reached := e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) k
   obtain ⟨parentState, parentStateFound, -⟩ := reached.blockStatesFromParents parentFound
   rcases e.payloadVerified_of_partiallySynchronous sync gloas (anchorSlot gloas) anchored honest
       receiver
       startSender startReceiver (n := i) (by omega) bounded
-      (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted)) (sentVerified full)
+      (fun _ _ mem accepted => upToDate.2 _ (.envelope mem accepted) ▸
+        Store.onExecutionPayloadEnvelope_verified accepted) (sentVerified full)
       ⟨parentState, parentStateFound⟩ with delivered | collision
   · exact delivered
   · -- A collision of bounded honest stores contradicts their agreement.
