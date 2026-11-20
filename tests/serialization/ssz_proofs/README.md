@@ -37,7 +37,7 @@ uv run --no-project --python 3.12 --with eth-ssz-specs==0.1.0 \
   It asks the proof of every index below 32, of every index of a path of its type, and of the index 2^200.
   For the list of 2^64 chunks, it also asks the index 2^66, inside packed data.
   Each proof gives `gindex`, then `branch` and the node `leaf` that the branch proves.
-  For an index that the package refuses, it gives `fault` instead, with `index` where the fault names it.
+  For an index that the package refuses, it has a `null` branch and gives `fault` instead of `leaf`, with `index` where the fault names it.
 - `chunk_roots` gives `chunks` and `limit`, then their `root`.
   A limit below the number of chunks has a `null` root, the `fault`, and the `count` of chunks.
 
@@ -54,8 +54,8 @@ No case has a negative position, index or limit, since the EthLib bindings refus
 
 `bindings/python/tests/ssz/test_ssz_proof_vectors.py` checks that EthLib gives each index, proof and root, and refuses each case that the package refuses.
 It expects the whole message and the code of EthLib for each fault of the package.
-EthLib refuses a field name on anything but a container as a missing field, with code 0.
-The package calls it not a position on a list or a union, and a value with no parts on a basic value.
+EthLib refuses a field name on a type that the path reaches and that is not a container as a missing field, with code 0.
+The package calls it not a position on any other composite type, and a value with no parts on a basic value.
 The test expects the message of EthLib in each of these cases.
 It reads each value from its bytes, and checks that EthLib gives each value the root of the file.
 It also hashes each branch of the file up from its node, and checks that it reaches the root of the value.

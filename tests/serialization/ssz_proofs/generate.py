@@ -190,6 +190,8 @@ PATHS: dict[str, list[list[int | str]]] = {
         ["slot", "x"],
         ["pairs", "a"],
         ["pair", "b", "a"],
+        ["roots", "a"],
+        ["flags", "a"],
         ["slot", "__len__"],
         ["pairs", "__len__", 0],
         ["__len__"],

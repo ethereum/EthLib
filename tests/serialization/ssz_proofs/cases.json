@@ -545,6 +545,26 @@
   {
    "type": "nested",
    "path": [
+    "roots",
+    "a"
+   ],
+   "gindex": null,
+   "fault": "NOT_A_POSITION",
+   "step": "a"
+  },
+  {
+   "type": "nested",
+   "path": [
+    "flags",
+    "a"
+   ],
+   "gindex": null,
+   "fault": "NOT_A_POSITION",
+   "step": "a"
+  },
+  {
+   "type": "nested",
+   "path": [
     "slot",
     "__len__"
    ],

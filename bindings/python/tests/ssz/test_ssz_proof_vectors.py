@@ -29,7 +29,7 @@ ERR = "EthLib.Serialization.Ssz.Err."
 # The message and the code of EthLib for each fault of the package.
 # The message is filled from the fields of the case.
 # The package calls an unknown field name, or a position given for a field, a missing field.
-# It refuses a field name on a list or a union as not a position, and EthLib as a missing field.
+# It refuses a field name on another composite type as not a position, EthLib as a missing field.
 # EthLib refuses these three when it reads the path, before any SSZ fault, so with code 0.
 FAULTS = {
     "NO_SUCH_POSITION": ("path rejected: " + ERR + "noSuchPosition {step}", 47),
@@ -55,13 +55,14 @@ def _bytes(text: str) -> bytes:
 
 # The package refuses a field name on a basic value as a value with no parts.
 # EthLib refuses it as a missing field, as it does every name outside a container.
-NAME_ON_A_BASIC_VALUE = {"nested/slot/x": ("path: no field x", 0)}
+NAME_ON_A_BASIC_VALUE = {("nested/slot/x", "NO_PARTS"): ("path: no field x", 0)}
 
 
 def _expected(case: dict) -> tuple[str, int]:
     """The whole message and the code of EthLib for the fault of a case."""
-    if "path" in case and _path_id(case) in NAME_ON_A_BASIC_VALUE:
-        return NAME_ON_A_BASIC_VALUE[_path_id(case)]
+    key = (_path_id(case), case["fault"]) if "path" in case else None
+    if key in NAME_ON_A_BASIC_VALUE:
+        return NAME_ON_A_BASIC_VALUE[key]
     template, code = FAULTS[case["fault"]]
     return template.format_map(case), code
 
@@ -105,8 +106,8 @@ def test_digests() -> None:
 
 
 def test_counts() -> None:
-    """The file holds 121 paths, 26 values with 900 indices, and 28 chunk lists."""
-    assert (len(INDICES), len(REFUSED_PATHS)) == (77, 44)
+    """The file holds 123 paths, 26 values with 900 indices, and 28 chunk lists."""
+    assert (len(INDICES), len(REFUSED_PATHS)) == (77, 46)
     assert len(VALUES) == 26
     assert (len(PROOFS), len(REFUSED_PROOFS)) == (243, 657)
     assert (len(ROOTS), len(REFUSED_CHUNKS)) == (25, 3)
