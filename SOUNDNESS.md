@@ -2804,6 +2804,8 @@ For the transactions and the withdrawals, the search of the trie binding returns
 It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
 No theorem bounds the probability of finding two bodies that pass for one header and differ.
+The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
+It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
 The check leaves four rules of that section to other checks.
 It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
