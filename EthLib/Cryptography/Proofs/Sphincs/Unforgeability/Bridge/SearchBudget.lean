@@ -305,6 +305,36 @@ theorem hashCalls_signerOf_le_add (T : Nat) (sk : SecretKey) (msg : Message) :
     hashCalls f (signerOf sk msg) ≤ 470595 + 3 * T + 3 * MAX_COUNTER_TRIALS :=
   (hashCalls_signerOf_le f sk msg).trans (by unfold signCalls; omega)
 
+omit f in
+/-- The wrapped adversary runs the adversary under the wrapper, from the state `false`. -/
+theorem capSearches_main (T : Nat) (adversary : Adversary) (pk : PublicKey) :
+    (capSearches T adversary).main pk = (simulateQ (capImpl T) (adversary.main pk)).run' false :=
+  rfl
+
+omit f in
+/-- The game with the adversary's counter, with the adversary's run in the shape above. -/
+theorem adversaryGameCore_eq_runOf (adversary : Adversary) :
+    adversaryGameCore adversary = (do
+      let seed ← liftM sampleSeed
+      let keys ← liftM (keyGenWith H seed)
+      let run ← runOf (signerOf keys.1) (adversary.main keys.2)
+      let verified ← liftM (verifierOf keys.2 run.1.1)
+      pure (verdictOf run.1.1 run.2 verified, run.1.2, run.2.length)) :=
+  adversaryGameCore_eq adversary
+
+omit f in
+/-- The game of the wrapped adversary, with the wrapped run in the shape above. -/
+theorem adversaryGameCore_capSearches_eq (T : Nat) (adversary : Adversary) :
+    adversaryGameCore (capSearches T adversary) = (do
+      let seed ← liftM sampleSeed
+      let keys ← liftM (keyGenWith H seed)
+      let run ← runOf (signerOf keys.1)
+        ((simulateQ (capImpl T) (adversary.main keys.2)).run' false)
+      let verified ← liftM (verifierOf keys.2 run.1.1)
+      pure (verdictOf run.1.1 run.2 verified, run.1.2, run.2.length)) := by
+  rw [adversaryGameCore_eq_runOf]
+  simp only [capSearches_main]
+
 /-- **The wrapped adversary's runs make at most `q + cappedCalls T r` hash calls in all.**
 
 The adversary makes at most `q` hash calls of its own and `r` signing requests. -/
@@ -312,18 +342,17 @@ theorem hasHashQueryBound_capSearches (T : Nat) (adversary : Adversary) (q r : N
     (h : HasAdversaryQueryBound adversary q r) :
     HasHashQueryBound (capSearches T adversary) (q + cappedCalls T r) := by
   intro result hr
-  obtain ⟨f, hr⟩ := (mem_support_counted_iff _ _ countedOracle_cost result).1 hr
-  change result ∈ support (countedRun f (gameCore (capSearches T adversary))) at hr
-  rw [gameCore_eq_map, countedRun_map, support_map] at hr
-  obtain ⟨run, hrun, rfl⟩ := hr
-  rw [adversaryGameCore_eq] at hrun
+  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (experiment_eq _) result hr
+  rw [gameCore_eq_map] at hr
+  obtain ⟨run, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
+  rw [adversaryGameCore_capSearches_eq] at hrun
   obtain ⟨run', hrun', hle⟩ := calls_capGame f sampleSeed (keyGenWith H) signerOf verifierOf
     verdictOf adversary.main T keyGenCalls (470595 + 3 * T) (3 * MAX_COUNTER_TRIALS) verifyCalls
     (fun seed => (Cost.hashCalls_keyGenWith_eq f H (hashCalls_queryH f) seed).le)
     (fun sk msg => hashCalls_signerOf_le_of_searchesBelow f T sk msg _ rfl)
     (hashCalls_signerOf_le_add f T)
     (fun _ _ => Cost.hashCalls_verifyWith_le f H isTotalQueryBound_H _ _ _) run hrun
-  rw [← adversaryGameCore_eq] at hrun'
+  rw [← adversaryGameCore_eq_runOf] at hrun'
   -- The adversary's run is a run of its experiment, within its budget.
   obtain ⟨hq, hr⟩ := h run'.1 (mem_support_adversaryExperiment f adversary run' hrun')
   have hmul := Nat.mul_le_mul_right (470595 + 3 * T) hr

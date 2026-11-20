@@ -36,6 +36,35 @@ open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open HashSig (HashSpec OracleWorld)
 
+/-- A forging probability over a counted run is an expectation over the plain random oracle. -/
+theorem prEvent_eq_wp_of_eq_withAddCost (oa : OracleComp OracleWorld Bool)
+    (X : ProbComp (Bool × Nat))
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) :
+    Pr{let result ← X}[result.1 = true] =
+      wp ((simulateQ HashSpec.romImpl oa).run ∅) (fun x => propInd (x.1 = true)) := by
+  subst hX
+  refine (HashSig.prEvent_run_withAddCost oa hashCost).trans ?_
+  rw [prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
+  rfl
+
+/-- A counted run within `n` hash calls leaves a failed search with chance `<= n (1 - p)^T`.
+
+A failed search is one whose first `T` trials all failed, with `1 <= T <= 2^32`.
+
+`p` is the chance that one counter gives a codeword, `CODE_SIZE / 2^128`. -/
+theorem wp_failedSearch_le_of_eq {α : Type} (T : Nat) (hT₁ : 1 ≤ T)
+    (hT : T ≤ MAX_COUNTER_TRIALS) (oa : OracleComp OracleWorld α) (X : ProbComp (α × Nat))
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (n : Nat)
+    (hn : ∀ z ∈ support X, z.2 ≤ n) :
+    wp ((simulateQ HashSpec.romImpl oa).run ∅)
+      (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
+      (n : ℝ≥0∞) * (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T := by
+  subst hX
+  rw [← prEvent_eq_wp_propInd, ← prEvent_searchMiss]
+  exact HashSig.prEvent_failedSearch_le searchPoint SearchMiss T hT₁
+    (fun p p' j j' hj hj' he => searchPoint_inj p p' j j' (by omega) (by omega) he)
+    hashCost (fun _ => le_rfl) oa n hn
+
 /-- **The adversary forges at most as often as the wrapped one, plus a long-search term.**
 
 The adversary makes at most `q` hash calls of its own and `r` signing requests.
@@ -52,20 +81,15 @@ theorem forgeAdvantage_le_capSearches (T : Nat) (hT₁ : 1 ≤ T) (hT : T ≤ MA
         (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T := by
   -- Both advantages are expectations over the plain random oracle, from the empty cache.
   have hE : ∀ B, forgeAdvantage B = wp ((simulateQ HashSpec.romImpl (gameCore B)).run ∅)
-      (fun x => propInd (x.1 = true)) := fun B => by
-    refine (HashSig.prEvent_run_withAddCost _ _).trans ?_
-    rw [prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
-    rfl
+      (fun x => propInd (x.1 = true)) := fun B =>
+    prEvent_eq_wp_of_eq_withAddCost (gameCore B) (experiment B) (experiment_eq B)
   -- A long search somewhere in the honest game leaves a failed search in its final cache.
   have hFS : wp ((simulateQ HashSpec.romImpl (gameCore adversary)).run ∅)
       (fun x => propInd (HashSig.FailedSearch searchPoint SearchMiss T x.2)) ≤
       ((q + schemeCalls r : Nat) : ℝ≥0∞) *
-        (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T := by
-    rw [← prEvent_eq_wp_propInd, ← prEvent_searchMiss]
-    exact HashSig.prEvent_failedSearch_le searchPoint SearchMiss T hT₁
-      (fun p p' j j' hj hj' he => searchPoint_inj p p' j j' (by omega) (by omega) he)
-      (fun | .inl _ => (0 : Nat) | .inr _ => 1) (fun _ => le_rfl) (gameCore adversary) _
-      (hasHashQueryBound_of_adversary adversary q r h)
+        (((2 ^ 128 - CODE_SIZE : ℕ) : ℝ≥0∞) / 2 ^ 128) ^ T :=
+    wp_failedSearch_le_of_eq T hT₁ hT (gameCore adversary) (experiment adversary)
+      (experiment_eq adversary) _ (hasHashQueryBound_of_adversary adversary q r h)
   rw [hE, hE]
   refine le_trans ?_ (add_le_add le_rfl hFS)
   rw [wp_run_gameCore, wp_run_gameCore, wp_run_gameCore, ← ExpectationWP.Lower.wp_add_of_oracle]
