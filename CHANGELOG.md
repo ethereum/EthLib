@@ -7,36 +7,10 @@ The version is the same in `pyproject.toml` and `lakefile.lean`.
 
 Not yet released.
 
-### Breaking changes
-
-- `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
-  Its proof does not read it.
-  Migration: a caller drops that argument.
-  The new statement implies the old one, so a caller that proved the hypothesis only for this call can drop its proof.
-
-- `pinReserve` has a new body: it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
-  `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
-  Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
-  `quorumReserve_le_pinReserve` keeps its statement.
-
-- The `withdrawal` field of `EthLib.Consensus.Internal.CapStep` is stronger.
-  For a slashed validator with an assigned exit, it now says that `withdrawableEpoch` is equal after the step.
-  It said that the epoch does not fall.
-  Migration: constructors of `CapStep` must now prove `withdrawableEpoch` is unchanged after slashing.
-  The new field implies the old one, so a reader of the old field reads the new one through `le_of_eq`.
-  `CapStep.refl`, `CapStep.trans` and `CapStep.data` carry the new field, and the readers in this repository keep their statements.
-
-- The result of `Store.Reachable.finalizedState_of_blockState` is stronger.
-  After the anchor epoch, it also says that the store reads the finalized block of the state from the state's own block.
-  That read is `store.getCheckpointBlock root anc.finalizedCheckpoint.epoch = .ok anc.finalizedCheckpoint.root`.
-  Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
-  The new statement implies the old one, so a reader of the old statement drops the last conjunct.
-  The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
-
 ### Proof additions
 
 - `Step.eq_slot_of_crossing` says that a step of a run that crosses an epoch is a slot step, and gives the step as that slot.
-  `slot_of_crossing` now follows from it, and its statement is unchanged.
+  `DirectSafety.Apriori.Internal.slot_of_crossing` now follows from it, and its statement is unchanged.
   The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
 
 - `DirectSafety.Apriori.Internal.segment_slot_cases` splits a segment of a run that starts in an epoch: it stays in its epoch, or it ends with the slot of the epoch boundary after an inner run.
@@ -117,7 +91,7 @@ Not yet released.
   A key that has begun to exit before the step must be activated, as a hypothesis, and a block never appends a slashed key.
   The pin's closure of the created keys reads it.
 
-- `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; PinSum's `created_first_state` reads it.
+- `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; the pin's `created_first_state` reads it.
 
 - `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
   An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
@@ -257,7 +231,7 @@ Not yet released.
   The pin's drift bound reads it.
 
 - `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
-  `slot_of_crossing` says that a step that ends in a later epoch is a slot step.
+  `DirectSafety.Apriori.Internal.slot_of_crossing` says that a step that ends in a later epoch is a slot step.
   The pin's claim about the keys that are pending at the start of an epoch reads them.
 
 - `processEpochAltair_credentials` says that an epoch from Altair keeps the withdrawal credentials of each validator in the registry before it.
@@ -741,6 +715,30 @@ Not yet released.
   The pin's effective-balance bounds read it.
 
 ### Changes that break callers
+
+- In Lean, `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
+  Its proof does not read it.
+  Migration: a caller drops that argument.
+  The new statement implies the old one, so a caller that proved the hypothesis only for this call can drop its proof.
+
+- In Lean, `pinReserve` has a new body: it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
+  `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
+  Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
+  `quorumReserve_le_pinReserve` keeps its statement.
+
+- In Lean, the `withdrawal` field of `EthLib.Consensus.Internal.CapStep` is stronger.
+  For a slashed validator with an assigned exit, it now says that `withdrawableEpoch` is equal after the step.
+  It said that the epoch does not fall.
+  Migration: constructors of `CapStep` must now prove `withdrawableEpoch` is unchanged after slashing.
+  The new field implies the old one, so a reader of the old field reads the new one through `le_of_eq`.
+  `CapStep.refl`, `CapStep.trans` and `CapStep.data` carry the new field, and the readers in this repository keep their statements.
+
+- In Lean, the result of `Store.Reachable.finalizedState_of_blockState` is stronger.
+  After the anchor epoch, it also says that the store reads the finalized block of the state from the state's own block.
+  That read is `store.getCheckpointBlock root anc.finalizedCheckpoint.epoch = .ok anc.finalizedCheckpoint.root`.
+  Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
+  The new statement implies the old one, so a reader of the old statement drops the last conjunct.
+  The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
