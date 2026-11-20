@@ -24,7 +24,7 @@ It suffices that each block of the plan is from Glamsterdam or has no calls.
 
 A gap block has no calls.
 
-It also suffices that the configuration activates Glamsterdam or a later fork at the base block.
+It also suffices that the active fork at the header of the base block is Glamsterdam or later.
 -/
 
 @[expose] public section
@@ -199,7 +199,7 @@ theorem simulate_traceTransfers_of_plan {v : ChainView} {payload : SimulatePaylo
 
 /-- A simulation gives the same answer with transfers traced or not.
 
-It needs the configuration to activate Glamsterdam or a later fork at the header of the base block.
+It needs the active fork at the header of the base block to be Glamsterdam or later.
 
 A failed simulation gives the same error both ways. -/
 theorem simulate_traceTransfers_of_base {v : ChainView} {payload : SimulatePayload}

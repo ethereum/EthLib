@@ -157,7 +157,7 @@ theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlo
 
 They pass the order check.
 
-Each has the fork that the configuration activates at its number and time. -/
+Each has the fork that is active at its number and time. -/
 private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
     {choices : SimulateChoices} {plan : SimulatePlan}
     (h : v.planSimulate payload p choices = .ok plan) :
