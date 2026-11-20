@@ -56,7 +56,7 @@ KINDS = {
     "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF",
     "VALIDATOR_REGISTRATION",
 }
-# The kinds of request that Gloas adds, which this reader does not know yet.
+# The kinds of request that Gloas adds.
 GLOAS_KINDS = {
     "EXECUTION_PAYLOAD_BID",
     "EXECUTION_PAYLOAD_ENVELOPE",
@@ -67,6 +67,8 @@ GLOAS_KINDS = {
 # The two examples whose fields are not spelled as the schemas spell them.
 # Their fork info writes `previousVersion` and `currentVersion`, and the block writes camel case.
 MISSPELLED = {"AGGREGATION_SLOT", "BLOCK (DEPRECATED)"}
+# The envelope example has a logs bloom of 262 bytes, where the bloom has 256.
+ENVELOPE = "EXECUTION_PAYLOAD_ENVELOPE (GLOAS)"
 
 
 def _examples() -> dict[str, Any]:
@@ -78,14 +80,16 @@ def _examples() -> dict[str, Any]:
 
 EXAMPLES = _examples()
 WELL_SPELLED = sorted(
-    name for name, value in EXAMPLES.items() if value["type"] in KINDS and name not in MISSPELLED
+    name
+    for name, value in EXAMPLES.items()
+    if value["type"] in KINDS | GLOAS_KINDS and name not in MISSPELLED | {ENVELOPE}
 )
 
 
 def test_every_kind_has_an_example():
     assert {value["type"] for value in EXAMPLES.values()} == KINDS | GLOAS_KINDS
     assert len(EXAMPLES) == 32
-    assert len(WELL_SPELLED) == 25
+    assert len(WELL_SPELLED) == 29
 
 
 def _presets(name: str) -> set[str]:
@@ -149,15 +153,71 @@ def test_misspelled_block_is_refused():
         consensus.read_signing_request(PRESET, EXAMPLES["BLOCK (DEPRECATED)"])
 
 
-@pytest.mark.parametrize("kind", sorted(GLOAS_KINDS))
-def test_gloas_kinds_are_unknown(kind: str):
-    (example,) = [value for value in EXAMPLES.values() if value["type"] == kind]
-    message = (
-        f'request rejected: EthLib.Consensus.RemoteSigningApi.RequestError.unknownType "{kind}"'
-    )
-    with raises(ERROR, message) as info:
+def test_payload_attestation_example():
+    data = EXAMPLES["PAYLOAD_ATTESTATION_MESSAGE (GLOAS)"]["payload_attestation_message"]["data"]
+    root = "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+    assert data == {
+        "beacon_block_root": root,
+        "slot": "1",
+        "payload_present": True,
+        "blob_data_available": True,
+    }
+
+
+@pytest.mark.parametrize(
+    ("name", "key"),
+    [
+        ("EXECUTION_PAYLOAD_BID (GLOAS)", "execution_payload_bid"),
+        ("EXECUTION_PAYLOAD_ENVELOPE (GLOAS)", "execution_payload_envelope"),
+        ("PAYLOAD_ATTESTATION_MESSAGE (GLOAS)", "payload_attestation_message"),
+        ("PROPOSER_PREFERENCES (GLOAS)", "proposer_preferences"),
+        ("BUILDER_REQUEST_AUTH (GLOAS)", "builder_request_auth"),
+    ],
+)
+def test_gloas_kinds_take_only_gloas(name: str, key: str):
+    example = copy.deepcopy(EXAMPLES[name])
+    example[key]["version"] = "FULU"
+    with raises(ERROR, f'{REJECTED}unknownVersion "{key}" "FULU"') as info:
         consensus.read_signing_request(PRESET, example)
-    assert info.value.code == 4
+    assert info.value.code == 5
+
+
+def test_envelope_example_has_a_long_bloom():
+    example = copy.deepcopy(EXAMPLES[ENVELOPE])
+    message = f'{_BAD} "data" (EthLib.Serialization.Ssz.Err.hexLength 256 262)'
+    for preset in ("minimal", "mainnet"):
+        with raises(ERROR, message):
+            consensus.read_signing_request(preset, example)
+    # With a bloom of 256 bytes, the example reads back under either preset.
+    example["execution_payload_envelope"]["data"]["payload"]["logs_bloom"] = "0x" + "00" * 256
+    for preset in ("minimal", "mainnet"):
+        assert consensus.read_signing_request(preset, example) == example
+
+
+def test_empty_auth_data_is_refused():
+    example = copy.deepcopy(EXAMPLES["BUILDER_REQUEST_AUTH (GLOAS)"])
+    example["builder_request_auth"]["data"]["data"] = "0x"
+    with raises(ERROR, f"{REJECTED}emptyAuthData") as info:
+        consensus.read_signing_request(PRESET, example)
+    assert info.value.code == 6
+
+
+@pytest.mark.parametrize(("size", "reads"), [(1, True), (4096, True), (4097, False)])
+def test_auth_data_size(size: int, reads: bool):
+    example = copy.deepcopy(EXAMPLES["BUILDER_REQUEST_AUTH (GLOAS)"])
+    example["builder_request_auth"]["data"]["data"] = "0x" + "ab" * size
+    if reads:
+        assert consensus.read_signing_request(PRESET, example) == example
+    else:
+        message = f'{_BAD} "data" (EthLib.Serialization.Ssz.Err.documentOverLimit 4096 4097)'
+        with raises(ERROR, message):
+            consensus.read_signing_request(PRESET, example)
+
+
+def test_auth_takes_no_fork_info():
+    example = EXAMPLES["BUILDER_REQUEST_AUTH (GLOAS)"]
+    assert "fork_info" not in example
+    assert consensus.read_signing_request(PRESET, example) == example
 
 
 def test_unknown_keys_are_ignored():

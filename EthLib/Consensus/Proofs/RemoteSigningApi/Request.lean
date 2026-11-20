@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Containers.Attestation
 public import EthLib.Consensus.Proofs.Containers.Block
 public import EthLib.Consensus.Proofs.Containers.BuilderApi
 public import EthLib.Consensus.Proofs.Containers.Misc
+public import EthLib.Consensus.Proofs.Containers.ProposerPreferences
 public import EthLib.Consensus.Proofs.Containers.SyncCommittee
 public import EthLib.Serialization.Proofs.Ssz.Typed.Basic
 public import EthLib.Serialization.Proofs.Ssz.Typed.Container
@@ -84,6 +85,20 @@ theorem readVersion_versionedJson (version : ConsensusVersion) {key : String} (d
 theorem versionedJson_getObjVal? (version : ConsensusVersion) {key : String} (data : Json)
     (distinct : key ≠ "version") : (versionedJson version key data).getObjVal? key = .ok data :=
   getObjVal?_mkObj (by simpa using distinct.symm) (by simp)
+
+/-- The data of a body that Gloas adds reads back from the versioned body that the writer wrote.
+-/
+theorem readGloasData_of_getObjVal? {α : Type} [SszType α] [LawfulSszType α] [ApiSpelling α]
+    {document data : Json} {key : String} {x : α}
+    (h : document.getObjVal? key = .ok (versionedJson .gloas "data" data))
+    (wrote : toApiJson x = .ok data) : readGloasData α document key = .ok x := by
+  have object : readObject document key = .ok (versionedJson .gloas "data" data) := by
+    simp [readObject, field, h, versionedJson, Toolchain.Json.mkObj_eq, bind, Except.bind, pure,
+      Except.pure]
+  have version := readVersion_versionedJson .gloas (key := "data") data key (by decide)
+  have value := readValue_of_getObjVal? (versionedJson_getObjVal? .gloas (key := "data") data
+    (by decide)) wrote
+  simp [readGloasData, object, version, value, bind, Except.bind]
 
 /-- The signing root that the writer wrote, or left out, reads back. -/
 private theorem readSigningRoot_mkObj {pairs : List (String × Json)}
@@ -293,6 +308,30 @@ theorem SigningRequest.toJson_total [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     obtain ⟨j, hj⟩ := toApiJson_total body
     simp [SigningRequest.toJson, SigningRequest.fields, hj, bind, Except.bind,
       pure, Except.pure]
+  case executionPayloadBid signing body =>
+    obtain ⟨j, hj⟩ := toApiJson_total body
+    obtain ⟨l, hl⟩ := shared signing
+    simp [SigningRequest.toJson, SigningRequest.fields, hj, hl, bind, Except.bind,
+      pure, Except.pure, Functor.map, Except.map]
+  case executionPayloadEnvelope signing body =>
+    obtain ⟨j, hj⟩ := toApiJson_total body
+    obtain ⟨l, hl⟩ := shared signing
+    simp [SigningRequest.toJson, SigningRequest.fields, hj, hl, bind, Except.bind,
+      pure, Except.pure, Functor.map, Except.map]
+  case payloadAttestationMessage signing body =>
+    obtain ⟨j, hj⟩ := toApiJson_total body
+    obtain ⟨l, hl⟩ := shared signing
+    simp [SigningRequest.toJson, SigningRequest.fields, hj, hl, bind, Except.bind,
+      pure, Except.pure, Functor.map, Except.map]
+  case proposerPreferences signing body =>
+    obtain ⟨j, hj⟩ := toApiJson_total body
+    obtain ⟨l, hl⟩ := shared signing
+    simp [SigningRequest.toJson, SigningRequest.fields, hj, hl, bind, Except.bind,
+      pure, Except.pure, Functor.map, Except.map]
+  case builderRequestAuth signingRoot body nonEmpty =>
+    obtain ⟨j, hj⟩ := toApiJson_total body
+    simp [SigningRequest.toJson, SigningRequest.fields, hj, bind, Except.bind,
+      pure, Except.pure, Functor.map, Except.map]
   all_goals
     rename_i signing body
     obtain ⟨j, hj⟩ := toApiJson_total body
@@ -343,6 +382,41 @@ theorem SigningRequest.ofJson_toJson [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     simp [SigningRequest.ofJson, SigningRequest.type, ht, hs,
       readValue_of_getObjVal? hb hj, bind, Except.bind, pure,
       Except.pure]
+  case executionPayloadBid signing body =>
+    refine ofJson_of_signing rfl (by decide) wrote fun m j hj ht hs hb => ?_
+    obtain ⟨d, hd⟩ := toApiJson_total body
+    simp only [hd, Functor.map, Except.map, Except.ok.injEq] at hj
+    subst hj
+    simp [SigningRequest.ofJson, SigningRequest.type, ht, hs, readGloasData_of_getObjVal? hb hd,
+      bind, Except.bind, pure, Except.pure]
+  case executionPayloadEnvelope signing body =>
+    refine ofJson_of_signing rfl (by decide) wrote fun m j hj ht hs hb => ?_
+    obtain ⟨d, hd⟩ := toApiJson_total body
+    simp only [hd, Functor.map, Except.map, Except.ok.injEq] at hj
+    subst hj
+    simp [SigningRequest.ofJson, SigningRequest.type, ht, hs, readGloasData_of_getObjVal? hb hd,
+      bind, Except.bind, pure, Except.pure]
+  case payloadAttestationMessage signing body =>
+    refine ofJson_of_signing rfl (by decide) wrote fun m j hj ht hs hb => ?_
+    obtain ⟨d, hd⟩ := toApiJson_total body
+    simp only [hd, Functor.map, Except.map, Except.ok.injEq] at hj
+    subst hj
+    simp [SigningRequest.ofJson, SigningRequest.type, ht, hs, readGloasData_of_getObjVal? hb hd,
+      bind, Except.bind, pure, Except.pure]
+  case proposerPreferences signing body =>
+    refine ofJson_of_signing rfl (by decide) wrote fun m j hj ht hs hb => ?_
+    obtain ⟨d, hd⟩ := toApiJson_total body
+    simp only [hd, Functor.map, Except.map, Except.ok.injEq] at hj
+    subst hj
+    simp [SigningRequest.ofJson, SigningRequest.type, ht, hs, readGloasData_of_getObjVal? hb hd,
+      bind, Except.bind, pure, Except.pure]
+  case builderRequestAuth signingRoot body nonEmpty =>
+    refine ofJson_of_plain rfl (by decide) wrote fun m j hj ht hs hb => ?_
+    obtain ⟨d, hd⟩ := toApiJson_total body
+    simp only [hd, Functor.map, Except.map, Except.ok.injEq] at hj
+    subst hj
+    simp [SigningRequest.ofJson, SigningRequest.type, ht, hs, readGloasData_of_getObjVal? hb hd,
+      nonEmpty, bind, Except.bind, pure, Except.pure]
   all_goals
     refine ofJson_of_signing rfl (by decide) wrote fun m j hj ht hs hb => ?_
     simp [SigningRequest.ofJson, SigningRequest.type, ht, hs,
@@ -494,5 +568,87 @@ theorem version_of_ofJson_blockV2 {document : Json} {signing : Signing}
     exact ⟨body, getObjVal?_of_readObject hb,
       getObjVal?_of_readVersion (BlockV2Body.readVersion_of_ofJson hr)⟩
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- A document whose authentication data reads as empty is refused for that reason. -/
+theorem ofJson_emptyAuthData {m : Std.TreeMap.Raw String Json compare}
+    {signingRoot : Option Root} {body : BuilderRequestAuth}
+    (type : readType (.obj m) = .ok .builderRequestAuth)
+    (root : readSigningRoot (.obj m) = .ok signingRoot)
+    (auth : readGloasData BuilderRequestAuth (.obj m) "builder_request_auth" = .ok body)
+    (empty : body.data.data.size = 0) :
+    SigningRequest.ofJson preset (.obj m) = .error .emptyAuthData := by
+  simp [SigningRequest.ofJson, type, root, auth, empty, bind, Except.bind, throw, throwThe,
+    MonadExceptOf.throw]
+
+/-- Authentication data whose hex holds more than 4096 bytes does not read.
+
+The reader refuses it with the limit and the size, and never cuts it down. -/
+theorem ofApiJson_builderRequestAuth_long {document : Json}
+    {m : Std.TreeMap.Raw String Json compare} {text : String} {data : Bytes}
+    (object : document = .obj m)
+    (names : ∀ name ∈ objectNames document, name = "data" ∨ name = "slot")
+    (hexField : document.getObjVal? "data" = .ok (.str text)) (hex : ofHex text = .ok data)
+    (long : MAX_BUILDER_AUTH_DATA_SIZE < data.size) :
+    ofApiJson BuilderRequestAuth document =
+      .error (.documentOverLimit MAX_BUILDER_AUTH_DATA_SIZE data.size) := by
+  subst object
+  -- The object names no field beyond the two of the container.
+  have undeclared : ((objectNames (Json.obj m)).find? fun name =>
+      !(["data", "slot"] : List String).contains name) = none := by
+    rw [List.find?_eq_none]
+    intro name h
+    rcases names name h with rfl | rfl <;> decide
+  -- The data is the first field, so its refusal is the refusal of the container.
+  have shape : SszType.desc BuilderRequestAuth =
+      .container ["data", "slot"] [.byteList MAX_BUILDER_AUTH_DATA_SIZE, .uint 8] := rfl
+  have spelling : ApiSpelling.spelling BuilderRequestAuth = .opaque := rfl
+  unfold ofApiJson
+  have inner : valueOf (.byteList MAX_BUILDER_AUTH_DATA_SIZE) (.plain []) (.str text) =
+      .error (.documentOverLimit MAX_BUILDER_AUTH_DATA_SIZE data.size) := by
+    rw [valueOf]
+    simp [Spelling.isDigits, Spelling.isText, collectionHex, hex, long, bind, Except.bind,
+      throw, throwThe, MonadExceptOf.throw]
+    -- A string is never an array, which only a spelling as digits would read.
+    intro _ h
+    cases h
+  rw [shape, spelling, valueOf]
+  simp only [undeclared]
+  rw [valueOfFields]
+  simp [hexField, inner, Spelling.part, Spelling.opaque, Except.toOption, bind, Except.bind]
+
+/-- A document whose authentication data holds more than 4096 bytes is refused.
+
+The refusal names the key of the data, the limit and the size. -/
+theorem ofJson_longAuthData {m : Std.TreeMap.Raw String Json compare}
+    {signingRoot : Option Root} {body auth : Json} {n : Std.TreeMap.Raw String Json compare}
+    {text : String} {data : Bytes}
+    (type : readType (.obj m) = .ok .builderRequestAuth)
+    (root : readSigningRoot (.obj m) = .ok signingRoot)
+    (object : readObject (.obj m) "builder_request_auth" = .ok body)
+    (version : readVersion body "builder_request_auth" = .ok .gloas)
+    (dataField : body.getObjVal? "data" = .ok auth) (authObject : auth = .obj n)
+    (names : ∀ name ∈ objectNames auth, name = "data" ∨ name = "slot")
+    (hexField : auth.getObjVal? "data" = .ok (.str text)) (hex : ofHex text = .ok data)
+    (long : MAX_BUILDER_AUTH_DATA_SIZE < data.size) :
+    SigningRequest.ofJson preset (.obj m) =
+      .error (.badField "data" (.documentOverLimit MAX_BUILDER_AUTH_DATA_SIZE data.size)) := by
+  have refused := ofApiJson_builderRequestAuth_long authObject names hexField hex long
+  simp [SigningRequest.ofJson, type, root, readGloasData, object, version, readValue, field,
+    dataField, refused, bind, Except.bind]
+
+/-- The data of a body that Gloas adds is read only from a body that names the version `GLOAS`.
+-/
+theorem version_of_readGloasData {α : Type} [SszType α] [ApiSpelling α] {document : Json}
+    {key : String} {x : α} (h : readGloasData α document key = .ok x) :
+    ∃ body, document.getObjVal? key = .ok body ∧
+      body.getObjVal? "version" = .ok (.str (versionName .gloas)) := by
+  unfold readGloasData at h
+  simp only [bind_ok_iff] at h
+  obtain ⟨body, hb, version, hv, rest⟩ := h
+  refine ⟨body, getObjVal?_of_readObject hb, ?_⟩
+  by_cases gloas : version = .gloas
+  · subst gloas
+    exact getObjVal?_of_readVersion hv
+  · simp [gloas, bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at rest
 
 end EthLib.Consensus.RemoteSigningApi
