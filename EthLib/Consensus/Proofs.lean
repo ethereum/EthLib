@@ -229,6 +229,7 @@ public import EthLib.Consensus.Proofs.Transition.FfgSlackChain
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 public import EthLib.Consensus.Proofs.Transition.FfgVotes
 public import EthLib.Consensus.Proofs.Transition.ForkBoundary
+public import EthLib.Consensus.Proofs.Transition.ForkVersions
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.InactivityLeak
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakBetween

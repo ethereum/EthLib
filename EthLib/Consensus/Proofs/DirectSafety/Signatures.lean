@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
+public import EthLib.Consensus.Proofs.Transition.ForkVersions
 public import EthLib.Consensus.Proofs.SignatureChecks
 
 /-!
@@ -24,7 +25,11 @@ Or they are two different headers of one slot, in proposer domains.
 
 The proposer index of the two headers holds the key in the registry at `x`.
 
-Each domain is that of the genesis validators root of the runs and of some fork version.
+Each domain is that of the genesis validators root of the runs and of a version of the config.
+
+The states of the runs hold only such versions, so their checks read no other.
+
+The two headers are signed under the version of one fork.
 
 Two runs that finalize conflicting checkpoints meet the bound of direct accountable safety.
 
@@ -74,6 +79,13 @@ theorem _root_.EthLib.Consensus.Run.genesisValidatorsRoot {g a : ForkedBeaconSta
   | nil => rfl
   | snoc _ step ih => exact (genesisValidatorsRoot_chainStep step.chainStep).trans ih
 
+/-- A run from a genesis of deposits reaches only states that hold versions of the config. -/
+theorem _root_.EthLib.Consensus.Run.forkVersions_ofConfig {g a : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (run : Run config checks g a) :
+    a.state.forkVersions.OfConfig config := by
+  obtain ⟨hash, time, deposits, initialized⟩ := genesis
+  exact forkVersions_ofConfig_of_genesis_chainSteps initialized run.chainSteps
+
 /-- The state before a block of the run has the genesis validators root of the run. -/
 theorem CheckSite.genesisValidatorsRoot {g a : ForkedBeaconState preset}
     {run : Run config checks g a} (site : CheckSite run) :
@@ -108,14 +120,13 @@ def verifyCalls {g a : ForkedBeaconState preset} (run : Run config checks g a) :
         computeSigningRoot header.message domain = .ok root ∧
         call = (key, packBytes root, header.signature)}
 
-/-- `key` signed the signing root of `object`, in a domain of the given type.
+/-- `key` signed the signing root of `object`, in a domain of the given type and version.
 
-The domain is that of the given genesis validators root and of some fork version.
-
-The version need not be one of the fork versions of the config. -/
+The domain is that of the given genesis validators root and of the given fork version. -/
 def SignedIn (config : Config) (genesisRoot : Root) (signed : BLSPubkey → ByteArray → Prop)
-    (key : BLSPubkey) (domainType : DomainType) {α : Type} [SszType α] (object : α) : Prop :=
-  ∃ version domain root,
+    (key : BLSPubkey) (domainType : DomainType) (version : Version) {α : Type} [SszType α]
+    (object : α) : Prop :=
+  ∃ domain root,
     computeDomain config domainType version genesisRoot = .ok domain ∧
       computeSigningRoot object domain = .ok root ∧ signed key (packBytes root)
 
@@ -127,31 +138,35 @@ Or they are two different headers of one slot, each in a proposer domain.
 
 Their proposer index holds `key` in the registry of the reference state.
 
-Each domain is that of the given genesis validators root, with a fork version of its own.
+Each domain is that of the given genesis validators root and of the version of a fork of the config.
+
+The two attestation data may take two forks, and the two headers take one.
 
 If SHA-256 collides on the two roots, the two signatures may be one. -/
 def SignedConflict (config : Config) (genesisRoot : Root) (reference : ForkedBeaconState preset)
     (signed : BLSPubkey → ByteArray → Prop) (key : BLSPubkey) : Prop :=
-  (∃ d₁ d₂, isSlashableAttestationData d₁ d₂ = true ∧
-      SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER d₁ ∧
-      SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER d₂) ∨
-    ∃ h₁ h₂ : BeaconBlockHeader, h₁.slot = h₂.slot ∧ h₁.proposerIndex = h₂.proposerIndex ∧
-      h₁ ≠ h₂ ∧
+  (∃ (d₁ d₂ : AttestationData) (f₁ f₂ : Fork), isSlashableAttestationData d₁ d₂ = true ∧
+      SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER (config.forkVersion f₁) d₁ ∧
+      SignedIn config genesisRoot signed key DOMAIN_BEACON_ATTESTER (config.forkVersion f₂) d₂) ∨
+    ∃ (h₁ h₂ : BeaconBlockHeader) (f : Fork), h₁.slot = h₂.slot ∧
+      h₁.proposerIndex = h₂.proposerIndex ∧ h₁ ≠ h₂ ∧
       (∃ v, reference.state.validators.data[h₁.proposerIndex.toNat]? = some v ∧
         v.pubkey = key) ∧
-      SignedIn config genesisRoot signed key DOMAIN_BEACON_PROPOSER h₁ ∧
-      SignedIn config genesisRoot signed key DOMAIN_BEACON_PROPOSER h₂
+      SignedIn config genesisRoot signed key DOMAIN_BEACON_PROPOSER (config.forkVersion f) h₁ ∧
+      SignedIn config genesisRoot signed key DOMAIN_BEACON_PROPOSER (config.forkVersion f) h₂
 
 /-- An accepted check of an indexed attestation that names `key` is a signature by `key`.
 
 The key signed the signing root of the data, in the attester domain of the run.
+
+The version is the one that the state before the block reads at the target epoch of the data.
 
 This needs the assumption on the aggregate calls of the run. -/
 theorem AttestationCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config checks g a}
     {key : BLSPubkey} (c : AttestationCheck run key) {signed : BLSPubkey → ByteArray → Prop}
     (sound : checks.AggregateSoundOn (· ∈ aggregateCalls run) signed) :
     SignedIn config g.state.genesisValidatorsRoot signed key DOMAIN_BEACON_ATTESTER
-      c.indexed.data := by
+      (c.before.forkVersions.versionAt c.indexed.data.target.epoch) c.indexed.data := by
   obtain ⟨pubkeys, domain, root, keysOk, domainOk, rootOk, verified⟩ :=
     isValidIndexedAttestation_signature c.valid
   -- The call is one of the aggregate calls of the run.
@@ -179,13 +194,18 @@ theorem AttestationCheck.signedIn {g a : ForkedBeaconState preset} {run : Run co
     (c.site.frame.genesisValidatorsRoot.trans
       (frame_operationsInput c.started).genesisValidatorsRoot).trans
       c.toCheckSite.genesisValidatorsRoot
+  -- The checked state keeps the fork versions of the state before the block.
+  have versions : c.checked.forkVersions = c.before.forkVersions :=
+    c.site.frame.forkVersions.trans (frame_operationsInput c.started).forkVersions
   -- The domain is that of the genesis root of the checked state and of one of its versions.
-  simp only [getDomain, Option.getD_some, mapError_ok_iff, rooted] at domainOk
-  exact ⟨_, domain, root, domainOk, rootOk, sound _ _ _ call verified _ holds⟩
+  simp only [getDomain, Option.getD_some, mapError_ok_iff, rooted, versions] at domainOk
+  exact ⟨domain, root, domainOk, rootOk, sound _ _ _ call verified _ holds⟩
 
 /-- Both headers of a checked proposer slashing are signatures by `key`.
 
 The key signed the signing root of each header, in the proposer domain of the run.
+
+The version is the one that the state before the block reads at the epoch of the slot of the header.
 
 This needs the assumption on the header calls of the run. -/
 theorem HeaderCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config checks g a}
@@ -193,6 +213,7 @@ theorem HeaderCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config 
     (sound : checks.VerifySoundOn (· ∈ verifyCalls run) signed) :
     ∀ header ∈ [c.slashing.signedHeader1, c.slashing.signedHeader2],
       SignedIn config g.state.genesisValidatorsRoot signed key DOMAIN_BEACON_PROPOSER
+        (c.before.forkVersions.versionAt (computeEpochAtSlot preset header.message.slot))
         header.message := by
   -- The checked state follows the state before the block, so it keeps its genesis root.
   have rooted : c.checked.genesisValidatorsRoot = g.state.genesisValidatorsRoot :=
@@ -210,9 +231,22 @@ theorem HeaderCheck.signedIn {g a : ForkedBeaconState preset} {run : Run config 
   -- The call is one of the header calls of the run.
   have call : (key, packBytes root, header.signature) ∈ verifyCalls run :=
     ⟨key, c, header, member, domain, root, domainOk, rootOk, rfl⟩
+  -- The checked state keeps the fork versions of the state before the block.
+  have versions : c.checked.forkVersions = c.before.forkVersions :=
+    (BlockFrame.foldlM (fun _ _ _ ok => frame_processProposerSlashing ok)
+      c.earlier).forkVersions.trans (frame_operationsInput c.started).forkVersions
   -- The domain is that of the genesis root of the checked state and of one of its versions.
-  simp only [getDomain, Option.getD_some, mapError_ok_iff, rooted] at domainOk
-  exact ⟨_, domain, root, domainOk, rootOk, sound _ _ _ call verified⟩
+  simp only [getDomain, Option.getD_some, mapError_ok_iff, rooted, versions] at domainOk
+  exact ⟨domain, root, domainOk, rootOk, sound _ _ _ call verified⟩
+
+/-- The state before a block of a run from a genesis of deposits reads a version of the config.
+
+At each epoch, that version is the version of a fork of the config. -/
+theorem CheckSite.versionAt {g a : ForkedBeaconState preset} {run : Run config checks g a}
+    (site : CheckSite run) (genesis : Genesis config checks g) (epoch : Epoch) :
+    ∃ read : Fork, site.before.forkVersions.versionAt epoch = config.forkVersion read := by
+  obtain ⟨pre, -, -⟩ := run.contains_split _ site.member
+  exact (pre.forkVersions_ofConfig genesis).versionAt epoch
 
 /-- A block step of a tail, read as a block step of the run that the tail ends. -/
 def CheckSite.lift {g x a : ForkedBeaconState preset} (shared : Run config checks g x)
@@ -293,24 +327,44 @@ theorem signedConflict_of_accountable {g x a b : ForkedBeaconState preset}
       (headers : checks.VerifySoundOn (· ∈ verifyCalls (shared.append tail)) signed) :
       SignedConflict config g.state.genesisValidatorsRoot x signed key := by
     rcases checked_of_slashingEvidence evidence with ⟨one, two, conflict⟩ | ⟨c, conflict⟩
-    · exact .inl ⟨_, _, conflict, (one.lift shared).signedIn votes,
-        (two.lift shared).signedIn votes⟩
-    · refine .inr ⟨_, _, conflict.1, conflict.2.1, conflict.2.2, ⟨v, ?_, keyEq⟩,
-        (c.lift shared).signedIn headers _ (by simp [HeaderCheck.lift]),
-        (c.lift shared).signedIn headers _ (by simp [HeaderCheck.lift])⟩
+    · obtain ⟨f₁, read₁⟩ := (one.lift shared).versionAt genesis one.indexed.data.target.epoch
+      obtain ⟨f₂, read₂⟩ := (two.lift shared).versionAt genesis two.indexed.data.target.epoch
+      have first := (one.lift shared).signedIn votes
+      have second := (two.lift shared).signedIn votes
+      simp only [AttestationCheck.lift, CheckSite.lift] at first second read₁ read₂
+      rw [read₁] at first
+      rw [read₂] at second
+      exact Or.inl ⟨_, _, f₁, f₂, conflict, first, second⟩
+    · -- The two headers share a slot, so the state reads one version for both.
+      obtain ⟨f, read⟩ := (c.lift shared).versionAt genesis
+        (computeEpochAtSlot preset c.slashing.signedHeader1.message.slot)
+      have first := (c.lift shared).signedIn headers c.slashing.signedHeader1
+        (by simp [HeaderCheck.lift])
+      have second := (c.lift shared).signedIn headers c.slashing.signedHeader2
+        (by simp [HeaderCheck.lift])
+      simp only [HeaderCheck.lift, CheckSite.lift] at first second read
+      rw [read] at first
+      rw [← conflict.1, read] at second
+      refine Or.inr ⟨_, _, f, conflict.1, conflict.2.1, conflict.2.2, ⟨v, ?_, keyEq⟩, first,
+        second⟩
       rw [c.proposerIndex_eq shared genesis found keyEq]
       exact found
   rcases accountable with ⟨d₁, d₂, first, second, conflict⟩ | evidence | evidence
   · -- Each accepted vote comes with an accepted aggregate check, so the key signed its data.
     have vote {data : AttestationData}
         (accepted : AcceptedEither (shared.append left) (shared.append right) key data) :
-        SignedIn config g.state.genesisValidatorsRoot signed key DOMAIN_BEACON_ATTESTER data := by
+        ∃ f : Fork, SignedIn config g.state.genesisValidatorsRoot signed key
+          DOMAIN_BEACON_ATTESTER (config.forkVersion f) data := by
       rcases accepted with accepted | accepted
       · obtain ⟨c, rfl⟩ := Run.attestationCheck_of_accepted lookahead accepted
-        exact c.signedIn fun _ _ _ call => aggregate _ _ _ (.inl call)
+        obtain ⟨f, read⟩ := c.versionAt genesis c.indexed.data.target.epoch
+        exact ⟨f, read ▸ c.signedIn fun _ _ _ call => aggregate _ _ _ (.inl call)⟩
       · obtain ⟨c, rfl⟩ := Run.attestationCheck_of_accepted lookahead accepted
-        exact c.signedIn fun _ _ _ call => aggregate _ _ _ (.inr call)
-    exact .inl ⟨d₁, d₂, conflict, vote first, vote second⟩
+        obtain ⟨f, read⟩ := c.versionAt genesis c.indexed.data.target.epoch
+        exact ⟨f, read ▸ c.signedIn fun _ _ _ call => aggregate _ _ _ (.inr call)⟩
+    obtain ⟨f₁, one⟩ := vote first
+    obtain ⟨f₂, two⟩ := vote second
+    exact Or.inl ⟨d₁, d₂, f₁, f₂, conflict, one, two⟩
   · exact fromTail left evidence (fun _ _ _ call => aggregate _ _ _ (.inl call))
       (fun _ _ _ call => single _ _ _ (.inl call))
   · exact fromTail right evidence (fun _ _ _ call => aggregate _ _ _ (.inr call))
