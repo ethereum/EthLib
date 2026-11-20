@@ -13346,6 +13346,22 @@ private theorem slashedRB_of_withdrawable (config : Config)
   rw [slashedRB_eq]
   simpa [found, slashed] using late
 
+/-- A key unslashed at the split and slashed at R counts in `slashedRB`.
+
+R slashes it after the split, so its withdrawable epoch is a slashing vector past the split's. -/
+private theorem slashedRB_of_newly_slashed
+    (h : Setting config checks g split fin pulled anc counted V) {i : ℕ} {s w : Validator}
+    (foundS : split.validators.data[i]? = some s)
+    (foundP : pulled.validators.data[i]? = some w) (cleanS : s.slashed = false)
+    (slashedP : w.slashed = true) :
+    (pinTerms config pulled anc fin).slashedRB i = true := by
+  obtain ⟨tail⟩ := h.toPulled
+  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
+  have delayed : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
+      w.withdrawableEpoch.toNat := (tail.newly_slashed_withdrawableEpoch h.caps.activation
+    h.caps.compounding h.early h.delay i s w foundS foundP cleanS slashedP).2
+  exact slashedRB_of_withdrawable config pulled anc fin foundP slashedP (by omega)
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The exit of a counted voter of the finalized registry is late at R.
 
@@ -15340,15 +15356,7 @@ private theorem sc3a_class (h : Setting config checks g split fin pulled anc cou
     · -- An exit by R's next epoch is held by a slashing, or by `exitedSlashable`.
       exfalso
       by_cases slashedW : w.slashed = true
-      · have newly : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-            w.withdrawableEpoch.toNat :=
-          (rp.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
-            h.early h.delay v.toNat s w foundS found cleanS slashedW).2
-        apply notRB
-        rw [slashedRB_eq]
-        have key : anc.finalizedCheckpoint.epoch.toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-            w.withdrawableEpoch.toNat := by omega
-        simpa [found, slashedW] using key
+      · exact notRB (slashedRB_of_newly_slashed h foundS found cleanS slashedW)
       · have cleanW : w.slashed = false := by simpa using slashedW
         have settled : w.withdrawableEpoch.toNat ≤ anc.finalizedCheckpoint.epoch.toNat := by
           by_contra late
@@ -18291,17 +18299,7 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
       · omega
       have unslashedR : wR.slashed = false := by
         by_contra marked
-        have slashedR : wR.slashed = true := by simpa using marked
-        have waited := tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding
-          h.early h.delay i.toNat vS wR foundS foundR unslashedS slashedR
-        simp only at waited
-        apply notR
-        rw [slashedRB_eq]
-        simp only [foundR, Option.map_some, Option.getD_some, Option.any_some, slashedR,
-          decide_eq_true_eq]
-        refine ⟨trivial, ?_⟩
-        have := waited.2
-        omega
+        exact notR (slashedRB_of_newly_slashed h foundS foundR unslashedS (by simpa using marked))
       exfalso
       refine sc3a_unwithdrawn h foundS foundR foundC unslashedS slashedAtC unslashedR ?_
       by_contra waiting
@@ -18556,15 +18554,7 @@ private theorem sc_inactive_charged (h : Setting config checks g split fin pulle
       · rw [exitC]
         exact UInt64.lt_iff_toNat_lt.mpr (by omega)
   · -- R slashes the key after the split, so its withdrawal is a vector past the split
-    apply notRB
-    have delayed : (getCurrentEpoch split).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
-        w.withdrawableEpoch.toNat :=
-      (tail.newly_slashed_withdrawableEpoch h.caps.activation h.caps.compounding h.early h.delay
-        i u w foundS foundP cleanU slashedP).2
-    rw [slashedRB_eq]
-    simp only [foundP, Option.map_some, Option.getD_some, slashedP, Option.any_some,
-      decide_eq_true_eq, true_and]
-    omega
+    exact notRB (slashedRB_of_newly_slashed h foundS foundP cleanU slashedP)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key absent or unslashed at the finalized state is bounded from there or its creation.
