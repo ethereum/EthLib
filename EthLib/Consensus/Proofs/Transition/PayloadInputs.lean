@@ -3,7 +3,6 @@ module
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.Transition.EpochParticipation
 
 /-!
 # Proofs: what the checks of a payload and of a bid read
