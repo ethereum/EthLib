@@ -69,10 +69,8 @@ private theorem pin_finRead {A B : Store preset fork}
     (targetOk : A.getCurrentTarget config head.root = .ok target)
     {anc : BeaconState preset fork}
     (ancLe : anc.finalizedCheckpoint.epoch ≤ A.finalizedCheckpoint.epoch)
-    (ancReads : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
-      A.getCheckpointBlock target.root anc.finalizedCheckpoint.epoch =
-        .ok anc.finalizedCheckpoint.root)
-    (later : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch)
+    (ancRead : A.getCheckpointBlock target.root anc.finalizedCheckpoint.epoch =
+      .ok anc.finalizedCheckpoint.root)
     (finalizedLe : A.finalizedCheckpoint.epoch ≤ epoch) :
     B.getCheckpointBlock B.justifiedCheckpoint.root anc.finalizedCheckpoint.epoch =
       .ok anc.finalizedCheckpoint.root := by
@@ -90,7 +88,6 @@ private theorem pin_finRead {A B : Store preset fork}
       .ok A.finalizedCheckpoint.root :=
     (Store.getCheckpointBlock_trans targetRead finalizedLe) ▸ headRead
   -- The block of the target state reads the finalized block of that state.
-  have ancRead := ancReads later
   have middle : A.getCheckpointBlock A.finalizedCheckpoint.root anc.finalizedCheckpoint.epoch =
       .ok anc.finalizedCheckpoint.root := by
     rw [← Store.getCheckpointBlock_trans targetFinalized ancLe]
@@ -228,7 +225,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
         (finality u caller u caller n n callTime callTime
           (reachedA.reachable.finalized_le_justified sound))
         (finality u caller w receiver n k callTime high justifiedLe) nodeOk epochOk targetOk ancLe
-        ancReads laterAnc finalizedLe
+        (ancReads laterAnc) finalizedLe
       rw [Store.getCheckpointBlock_trans rootRead (UInt64.le_trans ancLe justifiedLe)]
       exact justifiedRead
     have counts : CountedState ((e.world k).state w) config state :=
