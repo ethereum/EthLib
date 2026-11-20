@@ -64,6 +64,7 @@ public import EthLib.Consensus.Proofs.Participation
 public import EthLib.Consensus.Proofs.PayloadTimeliness
 public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.RelayApi
+public import EthLib.Consensus.Proofs.RemoteSigningApi.Endpoints
 public import EthLib.Consensus.Proofs.RemoteSigningApi.Request
 public import EthLib.Consensus.Proofs.RemoteSigningApi.Response
 public import EthLib.Consensus.Proofs.RemoteSigningApi.SigningRoot

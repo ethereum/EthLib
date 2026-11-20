@@ -776,6 +776,12 @@
 #define DOC_consensus_signing_request_root \
   "The root that a remote signer signs for a request of the Remote-signing API."
 
+#define DOC_consensus_remote_signer_sign \
+  "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076."
+
+#define DOC_consensus_remote_signer_public_keys \
+  "The answer of the public keys endpoint of a remote signer: its public keys as hex."
+
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."
 

@@ -1962,6 +1962,25 @@ def signing_request_root(name: str, config: str, document: Any) -> bytes:
     return _native.consensus_signing_request_root(name, config, document)
 
 
+def remote_signer_sign(
+    name: str,
+    config: str,
+    keys: list[bytes],
+    protection: bytes,
+    identifier: str,
+    document: Any,
+) -> tuple[int, bytes | None, bytes]:
+    """The status, signature and slashing protection record of a remote signer's sign endpoint."""
+    return _native.consensus_remote_signer_sign(
+        name, config, keys, protection, identifier, document
+    )
+
+
+def remote_signer_public_keys(keys: list[bytes]) -> Any:
+    """The public keys of a remote signer that holds secret keys, as its endpoint lists them."""
+    return _native.consensus_remote_signer_public_keys(keys)
+
+
 def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
     """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
     _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
@@ -2377,6 +2396,8 @@ __all__ = [
     "RemoteSigningError",
     "read_signing_request",
     "signing_request_root",
+    "remote_signer_sign",
+    "remote_signer_public_keys",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",

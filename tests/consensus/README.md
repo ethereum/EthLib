@@ -314,4 +314,5 @@ The test also computes the root that the signer signs for each example of a kind
 The Electra and Fulu aggregates carry a root that neither preset gives, so the test computes their root under the mainnet preset with its own merkleization, and compares it with that of the bindings.
 The test also reads the examples of the five kinds that Gloas adds, which carry no signing root.
 It computes the roots of the payload attestation, the preferences and the authentication with its own merkleization, and records those of the bid and the envelope, which are progressive containers.
+Finally, it runs the sign endpoint on each example that reads, with a fixed secret key, and checks each signature with `py_ecc`; the Electra and Fulu aggregates are refused, since their roots differ from the signer's.
 The envelope example has a logs bloom of 262 bytes, where the bloom has 256, so the test checks that the bindings refuse it, and that it reads once the bloom has 256 bytes.
