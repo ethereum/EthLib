@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Xmss.Sign
+public import EthLib.Cryptography.Proofs.Xmss.Reference
 public import EthLib.Cryptography.Xmss.Verify
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Merkle.Completeness

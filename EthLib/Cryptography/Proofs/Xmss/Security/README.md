@@ -17,7 +17,8 @@ An adversary that requests all `2^32` signatures of the key has `q > 2^65`, so o
 
 The real game runs EthLib's own algorithms, with the hash a query to the random oracle, and its signer keeps the scheme seed `S` and the parameter `P`.
 The theorem about it is `XmssSecurity.Bridge.realGame_security` (`XmssSecurity/Proof/Bridge/Security.lean`).
-`Proofs/Xmss/Unforgeability.lean` then carries it to EthLib's game, whose signer re-derives `S` and `P` instead of keeping them, as `Unforgeability.unforgeable`.
+`Proofs/Xmss/Unforgeability.lean` then carries it to the game of the note's stateless signer, which derives `S` and `P` again on each request.
+It carries it on to EthLib's game, whose signer keeps its key across requests, as `Unforgeability.unforgeable`.
 The statement uses only EthLib's definitions of the scheme.
 
 ## The route

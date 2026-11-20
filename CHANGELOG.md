@@ -478,6 +478,26 @@ Not yet released.
   `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
   That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
 
+- In Lean, an XMSS secret key holds the trees it signs with, and signing returns the updated key ([#3404](https://github.com/ethereum/EthLib/pull/3404)).
+  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 8` bottom trees, each with the top signature of its root.
+  `Xmss.keyGen seed` returns the public key first, then the secret key, and the secret key keeps the top tree that key generation builds.
+  `Xmss.sign sk idx m` returns the signature with the updated key; in a kept bottom tree it makes one one-time signature and never rebuilds a tree.
+  The stateless signer of the note moves to the proofs as `Xmss.statelessSignWith`, with `signDerived`, `signLayer` and `publicKeyOf`; nothing exports it.
+  `Xmss.SecretKey.Reachable.sign_fst` proves that every key that key generation and any sequence of signatures reach signs as the stateless signer, byte for byte.
+  `Xmss.verify_keyGen_sign`, `Xmss.verifyWith_keyGenWith_signWith` and `Xmss.sign_error` take `sk.Reachable` in place of the key pair of `keyGen`; `Xmss.signatureIndex_sign` reads `(sign sk idx m).1`.
+  `Xmss.prEvent_signWith_error_le` and `..._empty` take `hkept`: a bottom tree of the index that the key keeps holds a top signature.
+  `Xmss.Cost.isQueryBoundP_signWith` and `Xmss.Cost.signCalls_eq` bound signing by `8603369879` calls; `isQueryBoundP_signWith_of_mem` and `signKeptCalls_eq` give `4294967500` in a kept tree.
+  The old statements hold for the stateless signer, under new names: `Xmss.signWith_run`, `sign_eq_ok`, `sign_error`, `prEvent_signWith_error_le` and `..._empty` become `statelessSignWith_run`, `statelessSign_eq_ok`, `statelessSign_error`, `prEvent_statelessSignWith_error_le` and `..._empty`.
+  `Xmss.Cost.isQueryBoundP_signWith` of the old signer becomes `Xmss.Cost.isQueryBoundP_statelessSignWith`, and `Unforgeability.isQueryBoundP_keyGenWith` and `isQueryBoundP_signWith` become `isQueryBoundP_statelessKeyGenWith` and `isQueryBoundP_statelessSignWith`.
+  `Xmss.Cost.isQueryBoundP_keyGenWith` keeps its name and its bound over the new key generation.
+  `Xmss.bottomTree_lt` moves from `Proofs/Xmss/Correctness.lean` to `Proofs/Xmss/Sign.lean`.
+  The unforgeability game's signer keeps its key across requests, and `Unforgeability.HasHashQueryBound` counts the calls of the same game with the stateless signer, `statelessExperiment`.
+  `Unforgeability.unforgeable`, `forgeAdvantage_le_adversaryBudget`, `forgeAdvantage_le_lifetime`, `reasonForgeAdvantage_le`, `reasonForgeAdvantage_le_add`, `signingFailure_le` and `reasonForgeAdvantage_le_bounded` keep their text over the new game.
+  Their old games are named `statelessGameCore`, `statelessExperiment`, `statelessForgeAdvantage`, `statelessReasonRun` and `statelessSigningFailure`, and `forgeAdvantage_eq_statelessForgeAdvantage` proves that both games win equally often.
+  The Python API is unchanged: `xmss.key_gen`, `xmss.sign`, `xmss.verify` and `xmss.signature_index` take and return the same values.
+  The extension keeps the secret keys of the last 2 seeds, so a signature in a kept bottom tree no longer rebuilds two trees.
+  The export `eth_xmss_key_gen` also returns the secret key, and `eth_xmss_sign` takes the secret key and returns the updated key with the result.
+
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
   It no longer asks that the envelope leaves the store unchanged.
