@@ -175,6 +175,32 @@ def newPayloadParamsJson {fork : Fork} (version : Nat) (payload : ExecutionPaylo
       else []) ++
     (if 4 ≤ version then [listJson (dataJson ·.data.toList) requests] else [])).toArray
 
+/-- The parameters of version 6, from Bogota: those of version 5, then an inclusion list.
+
+They are an array of five values, none of them `null`.
+
+The first four read as the parameters of version 5, and the fifth as the inclusion list. -/
+def newPayloadV6Params (params : Json) :
+    Decode ((AnyPayload × Option (ByteArray × UInt64) × Option (List Hash32) × Option Hash32 ×
+      Option (List ByteArray)) × List ByteArray) := do
+  let items ← match params with
+    | .arr items => pure items.toList
+    | _ => invalid "params: not an array"
+  unless items.all (!·.isNull) do invalid "params: not 5 values"
+  let [payload, hashes, beaconRoot, requests, inclusionList] := items
+    | invalid "params: not 5 values"
+  let five ← newPayloadParams 5 (.arr #[payload, hashes, beaconRoot, requests])
+  return (five, ← inclusionListOfJson inclusionList)
+
+/-- The parameters of version 6 as JSON: those of version 5, then the inclusion list. -/
+def newPayloadV6ParamsJson {fork : Fork} (payload : ExecutionPayload fork)
+    (amsterdam : ByteArray × UInt64) (hashes : List Hash32) (beaconRoot : Hash32)
+    (requests : List ByteArray) (inclusionList : List ByteArray) : Json :=
+  -- The parameters of version 5 are an array, and the inclusion list goes at its end.
+  match newPayloadParamsJson 5 payload (some amsterdam) hashes beaconRoot requests with
+  | .arr items => .arr (items.push (inclusionListJson inclusionList))
+  | other => other
+
 /-- Whether request lists have more than one byte each, with strictly increasing types. -/
 def validRequests : List ByteArray → Bool
   | [] => true

@@ -33,6 +33,8 @@ The list is a byte string, and the slot number a 64-bit number, as [`amsterdam.m
 
 A payload without the list is an invalid parameter, by step 2 of `engine_newPayloadV5`.
 
+From Bogota, a payload status may also say whether the payload satisfies its inclusion list.
+
 [types]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/base-types.yaml
 [v3]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/cancun.md#specification
 [v4]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/amsterdam.md#executionpayloadv4
@@ -198,6 +200,13 @@ def executionPayloadV4Json {fork : Fork} (p : ExecutionPayload fork) (blockAcces
 def statusOfName (name : String) : Option Status :=
   [Status.valid, .invalid, .syncing, .accepted, .invalidBlockHash].find? (·.name == name)
 
+/-- The three members of a payload status, with `null` for an absent hash or error. -/
+def payloadStatusPairs (s : PayloadStatus) (validationError : Option String) :
+    List (String × Json) :=
+  [("status", .str s.status.name),
+    ("latestValidHash", optionJson (dataJson ·.toList) s.latestValidHash),
+    ("validationError", optionJson .str validationError)]
+
 /-- A payload status as JSON, with its three fields: `PayloadStatusV1` of [`paris.md`][status].
 
 The latest valid hash and the validation error are `null` when absent.
@@ -209,9 +218,7 @@ That step gives it for an invalid payload; the writer leaves the pairing to its 
 [status]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payloadstatusv1
 [validation]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-validation -/
 def payloadStatusJson (s : PayloadStatus) (validationError : Option String) : Json :=
-  Json.mkObj [("status", .str s.status.name),
-    ("latestValidHash", optionJson (dataJson ·.toList) s.latestValidHash),
-    ("validationError", optionJson .str validationError)]
+  Json.mkObj (payloadStatusPairs s validationError)
 
 /-- The three fields that a payload status may hold. -/
 def payloadStatusFields : List String := ["status", "latestValidHash", "validationError"]
@@ -242,6 +249,56 @@ def payloadStatusOfJson (j : Json) : Decode (PayloadStatus × Option String) := 
   let latestValidHash ← lift ((fs.lookup "latestValidHash").mapM (fixed "latestValidHash" 32))
   let validationError ← lift ((fs.lookup "validationError").mapM (string "validationError"))
   return (⟨status, latestValidHash⟩, validationError)
+
+/-! ## Bogota -/
+
+/-- A payload status of version 2 as JSON: the three fields of version 1, then one more.
+
+That field says whether the payload satisfies its inclusion list, as a boolean or `null`.
+
+`PayloadStatusV2` of [`bogota.md`][status] asks for `null` unless the status is valid.
+
+Its status is never an invalid block hash.
+
+The writer leaves both rules to its caller.
+
+[status]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#payloadstatusv2 -/
+def payloadStatusV2Json (s : PayloadStatus) (validationError : Option String)
+    (inclusionListSatisfied : Option Bool) : Json :=
+  Json.mkObj (payloadStatusPairs s validationError ++
+    [("inclusionListSatisfied", optionJson .bool inclusionListSatisfied)])
+
+/-- A payload status of version 2, with its validation error and its inclusion list verdict.
+
+The verdict is a boolean, and a `null` or absent verdict reads as none.
+
+The other members must read as a payload status of version 1.
+
+Its status must not be an invalid block hash.
+
+As there, the decoder checks the form only, not which verdict goes with which status. -/
+def payloadStatusV2OfJson (j : Json) :
+    Decode (PayloadStatus × Option String × Option Bool) := do
+  let fs ← fields "payloadStatus" j
+  let satisfied ← lift ((fs.lookup "inclusionListSatisfied").mapM (bool "inclusionListSatisfied"))
+  let (s, e) ← payloadStatusOfJson
+    (Json.mkObj (fs.filter fun (name, _) => name != "inclusionListSatisfied"))
+  if s.status = .invalidBlockHash then invalid "payloadStatus: not a status of version 2"
+  return (s, e, satisfied)
+
+/-- The transactions of an inclusion list as JSON: an array of byte strings. -/
+def inclusionListJson (transactions : List ByteArray) : Json :=
+  listJson (dataJson ·.data.toList) transactions
+
+/-- The transactions of an inclusion list: an array of byte strings.
+
+Each entry may be any byte string, by [`bogota.md`][bogota].
+
+So an entry that does not decode as a transaction still reads, and the method must tolerate it.
+
+[bogota]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6 -/
+def inclusionListOfJson (j : Json) : Read (List ByteArray) :=
+  array "inclusionListTransactions" (bytes "inclusionListTransaction") j
 
 end EthLib.Engine.Json
 

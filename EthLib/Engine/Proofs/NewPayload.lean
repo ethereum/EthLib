@@ -28,6 +28,8 @@ Without a JSON-RPC error, the parameters are an array of the values of the versi
 
 The decoder reads back the parameters that the writer writes, at a version that takes the fork.
 
+The decoder of version 6 reads back its parameters too, with their inclusion list.
+
 A payload that fails the checks is invalid, or has an invalid block hash at version 1.
 
 It has an invalid block hash exactly when its block hash is wrong and the version is 1.
@@ -697,6 +699,44 @@ theorem newPayloadParams_json {fork : Fork} {version : Nat} (payload : Execution
     obtain rfl | rfl | rfl | rfl | rfl :
         version = 1 ∨ version = 2 ∨ version = 3 ∨ version = 4 ∨ version = 5 := by omega
     all_goals (cases fork <;> revert accepts <;> decide)
+
+/-- The decoder of version 6 reads back the JSON of its parameters, from Dencun on.
+
+The writer gives the payload the structure of version 4, with its access list and its slot.
+
+Its extra data must hold at most 32 bytes.
+
+The first four values read back as those of version 5, and the fifth as the inclusion list.
+
+The payload reads back as one whose form at its fork is the given payload. -/
+theorem newPayloadV6Params_json {fork : Fork} (payload : ExecutionPayload fork)
+    (amsterdam : ByteArray × UInt64) (hashes : List Hash32) (beaconRoot : Hash32)
+    (requests : List ByteArray) (inclusionList : List ByteArray) (dencun : .dencun ≤ fork)
+    (extra : payload.extraData.size ≤ MAX_EXTRA_DATA_BYTES) :
+    ∃ any, newPayloadV6Params
+        (newPayloadV6ParamsJson payload amsterdam hashes beaconRoot requests inclusionList) =
+        .ok ((any, some amsterdam, some hashes, some beaconRoot, some requests), inclusionList) ∧
+      any.atFork fork = .ok payload := by
+  -- The first four values are the parameters of version 5.
+  obtain ⟨any, h5, hat⟩ := newPayloadParams_json_of_structure (version := 5) payload
+    (some amsterdam) hashes
+    beaconRoot requests (by decide) (fun h => absurd h (by decide)) (fun _ => dencun) extra
+    (by simp)
+  refine ⟨any, ?_, hat⟩
+  obtain ⟨accessList, slot⟩ := amsterdam
+  have nl : (Json.inclusionListJson inclusionList).isNull = false :=
+    Base.Toolchain.Json.isNull_arr _
+  simp [newPayloadParamsJson] at h5
+  simp only [newPayloadV6Params, newPayloadV6ParamsJson, newPayloadParamsJson]
+  have nulls : (Json.executionPayloadV4Json payload accessList slot).isNull = false ∧
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.toList) hashes).isNull =
+        false ∧
+      (Serialization.JsonRpc.dataJson beaconRoot.toList).isNull = false ∧
+      (Serialization.JsonRpc.listJson (Serialization.JsonRpc.dataJson ·.data.toList)
+        requests).isNull = false :=
+    ⟨Base.Toolchain.Json.isNull_mkObj _, Base.Toolchain.Json.isNull_arr _,
+      Base.Toolchain.Json.isNull_str _, Base.Toolchain.Json.isNull_arr _⟩
+  simp [nl, nulls, h5, Json.inclusionListOfJson_json, bind, Except.bind, pure, Except.pure]
 
 /-- Decoded parameters whose first value is a payload decode that payload. -/
 private theorem payloadParam_of_newPayloadParams {version : Nat} {pj : Lean.Json}

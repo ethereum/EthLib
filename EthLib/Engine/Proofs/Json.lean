@@ -44,6 +44,8 @@ The status is one of the five status names, and it must be present.
 The hash is 32 bytes in lowercase hex, and the error a string.
 
 The hash and the error may be absent.
+
+From Bogota, the decoders read back a payload status of version 2 and an inclusion list.
 -/
 
 public section
@@ -524,7 +526,7 @@ theorem payloadStatusOfJson_json (s : PayloadStatus) (e : Option String) :
     obtain ⟨hm, -⟩ := List.mem_filter.mp (hp.mem_iff.mp hm)
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
     rcases hm with rfl | rfl | rfl <;> simp [payloadStatusFields]
-  unfold payloadStatusOfJson payloadStatusJson
+  unfold payloadStatusOfJson payloadStatusJson payloadStatusPairs
   have hf : field "payloadStatus" fs "status" = .ok (.str s.status.name) := by
     simp [field, l1]; rfl
   have hs : string "status" (.str s.status.name) = .ok s.status.name := rfl
@@ -615,6 +617,84 @@ theorem payloadStatusOfJson_eq_ok_iff {j : Lean.Json} {s : PayloadStatus} {e : O
       · cases h
     · rintro ⟨members, -⟩
       exact absurd (allIff.mpr members) hall
+
+/-! ## Bogota -/
+
+/-- The decoder of an inclusion list reads back the JSON of every list of byte strings. -/
+theorem inclusionListOfJson_json (transactions : List ByteArray) :
+    inclusionListOfJson (inclusionListJson transactions) = .ok transactions := by
+  simp only [inclusionListOfJson, inclusionListJson, array_bytes_listJson]
+
+/-- A payload status of version 2 never reads as an invalid block hash. -/
+theorem status_ne_of_payloadStatusV2OfJson {j : Lean.Json} {s : PayloadStatus}
+    {e : Option String} {satisfied : Option Bool}
+    (h : payloadStatusV2OfJson j = .ok (s, e, satisfied)) : s.status ≠ .invalidBlockHash := by
+  unfold payloadStatusV2OfJson at h
+  simp only [bind_ok_iff, liftM_eq_ok_iff] at h
+  obtain ⟨_, -, _, -, ⟨s', e'⟩, -, h⟩ := h
+  by_cases hs : s'.status = .invalidBlockHash
+  · simp [hs, bind, Except.bind] at h
+  · simp only [hs, ite_false, pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, -, -⟩ := h
+    exact hs
+
+/-- The decoder of a payload status of version 2 reads back the JSON of every status it allows.
+
+The status must not be an invalid block hash, which version 2 does not have.
+
+This holds for every validation error and every inclusion list verdict. -/
+theorem payloadStatusV2OfJson_json (s : PayloadStatus) (e : Option String)
+    (satisfied : Option Bool) (h : s.status ≠ .invalidBlockHash) :
+    payloadStatusV2OfJson (payloadStatusV2Json s e satisfied) = .ok (s, e, satisfied) := by
+  cases s with
+  | mk st lvh =>
+    -- The four members have distinct names, and the verdict comes last.
+    have hd : (payloadStatusPairs ⟨st, lvh⟩ e ++
+        [("inclusionListSatisfied", optionJson .bool satisfied)]).Pairwise
+        fun a b => a.1 ≠ b.1 := by simp [payloadStatusPairs]
+    obtain ⟨fs, hfs, hp⟩ := fields_mkObj_filter "payloadStatus" hd
+    have look := lookup_of_perm_filter hp hd
+    have lv : fs.lookup "inclusionListSatisfied" = satisfied.map .bool := by
+      rw [look]
+      cases satisfied <;> simp [payloadStatusPairs, optionJson, List.lookup, Option.filter_some]
+    have hv : lift ((fs.lookup "inclusionListSatisfied").mapM (bool "inclusionListSatisfied")) =
+        .ok satisfied := by
+      rw [lv]
+      cases satisfied <;> rfl
+    -- Without the verdict, the members are those of a status of version 1.
+    have hd1 : (payloadStatusPairs ⟨st, lvh⟩ e).Pairwise fun a b => a.1 ≠ b.1 :=
+      List.Pairwise.sublist (List.sublist_append_left _ _) hd
+    have hflt : ((payloadStatusPairs ⟨st, lvh⟩ e ++
+        [("inclusionListSatisfied", optionJson .bool satisfied)]).filter
+          fun p => !p.2.isNull).filter (fun (name, _) => name != "inclusionListSatisfied") =
+        (payloadStatusPairs ⟨st, lvh⟩ e).filter fun p => !p.2.isNull := by
+      cases lvh <;> cases e <;> cases satisfied <;>
+        simp [payloadStatusPairs, optionJson, dataJson]
+    have hp1 : (fs.filter fun (name, _) => name != "inclusionListSatisfied").Perm
+        ((payloadStatusPairs ⟨st, lvh⟩ e).filter fun p => !p.2.isNull) := hflt ▸ hp.filter _
+    have hdf : ((fs.filter fun (name, _) => name != "inclusionListSatisfied")).Pairwise
+        fun a b => a.1 ≠ b.1 :=
+      (hp1.pairwise_iff fun h => Ne.symm h).mpr (List.Pairwise.sublist List.filter_sublist hd1)
+    obtain ⟨fs', hfs', hp'⟩ := fields_mkObj "payloadStatus" hdf
+      (fun x hx => by simpa using (List.mem_filter.mp (hp1.mem_iff.mp hx)).2)
+    have look1 := lookup_of_perm_filter (hp'.trans hp1) hd1
+    have h1 : payloadStatusOfJson (Lean.Json.mkObj
+        (fs.filter fun (name, _) => name != "inclusionListSatisfied")) = .ok (⟨st, lvh⟩, e) := by
+      refine payloadStatusOfJson_eq_ok_iff.mpr ⟨fs', hfs', fun f hf => ?_, ?_, ?_, ?_⟩
+      · have hm := (List.mem_filter.mp ((hp'.trans hp1).mem_iff.mp hf)).1
+        simp only [payloadStatusPairs, List.mem_cons, List.not_mem_nil, or_false] at hm
+        rcases hm with rfl | rfl | rfl <;> simp
+      · rw [look1]; simp [payloadStatusPairs, Option.filter_some]
+      · rw [look1]
+        cases lvh <;> cases e <;>
+          simp [payloadStatusPairs, optionJson, dataJson, List.lookup, Option.filter_some]
+      · rw [look1]
+        cases lvh <;> cases e <;>
+          simp [payloadStatusPairs, optionJson, dataJson, List.lookup, Option.filter_some]
+    unfold payloadStatusV2OfJson payloadStatusV2Json
+    simp only [hfs, liftM_ok, Base.ok_bind, hv, h1]
+    simp [h]
+    rfl
 
 end EthLib.Engine.Json
 
