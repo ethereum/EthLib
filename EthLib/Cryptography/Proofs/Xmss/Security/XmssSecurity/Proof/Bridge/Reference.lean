@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.RequestSampling
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.ReferenceSource
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Deterministic.MemoGame
@@ -82,8 +83,9 @@ theorem hashQueryBound_reference (adversary : Adversary) (publicKey : PublicKey)
   rw [hashQueryBound_iff_costState]
   intro result hresult
   rw [← OracleComp.support_eq_of_evalDistEq (evalDist_table_memo_run costHash adversary publicKey secretKey
-    (cache, 0)), mem_support_bind_iff] at hresult
-  obtain ⟨randomizers, _, hresult⟩ := hresult
-  exact (hashQueryBound_iff_costState _ cache q).1 (hbound randomizers) result hresult
+    (cache, 0))] at hresult
+  -- Step through the bind by an equation: the kernel would run the draw to match two forms.
+  obtain ⟨randomizers, _, hresult⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  exact (hashQueryBound_iff_costState _ cache q).1 (hbound randomizers) result (hresult _ rfl)
 
 end XmssSecurity.Seeded

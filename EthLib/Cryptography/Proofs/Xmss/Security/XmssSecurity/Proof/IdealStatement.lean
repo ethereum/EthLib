@@ -102,4 +102,14 @@ noncomputable def Concrete.scheme : Scheme SecretKey where
   verify := fun publicKey leafIndex message signature =>
     liftM (Concrete.verify publicKey leafIndex message signature : OracleComp HashSpec Bool)
 
+/-- The key generation of the concrete scheme is the precomputed one.
+
+A proof rewrites with it, so the kernel compares the two forms as computations. -/
+theorem Concrete.scheme_keygen : Concrete.scheme.keygen = Concrete.precomputedKeygen := rfl
+
+/-- The signer of the concrete scheme is the capped retry signer.
+
+A proof rewrites with it, so the kernel compares the two forms as computations. -/
+theorem Concrete.scheme_sign : Concrete.scheme.sign = Concrete.precomputedCappedSign := rfl
+
 end XmssSecurity

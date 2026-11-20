@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Game
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Seeded.Presampling
 
@@ -55,10 +56,11 @@ theorem mem_support_preparation (seed : MasterSeed) (d : Derivations)
     (cache : QueryCache HashSpec)
     (hr : (r, cache) ∈ support ((simulateQ randomOracle (honestRun d).withQueryLog).run (progCache seed d))) :
     ((d, r), cache) ∈ support ((simulateQ randomOracle (preparation seed)).run ∅) := by
-  rw [OracleComp.support_eq_of_evalDistEq (run_preparation seed), mem_support_bind_iff]
-  refine ⟨d, mem_support_drawDerivations d, ?_⟩
-  rw [mem_support_bind_iff]
-  exact ⟨(r, cache), hr, by simp⟩
+  -- Step through each bind by an equation: the kernel would run the draw to match two forms.
+  rw [OracleComp.support_eq_of_evalDistEq (run_preparation seed)]
+  refine mem_support_bind_of_eq _ _ (mem_support_drawDerivations d) fun _ same => same ▸ ?_
+  refine mem_support_bind_of_eq _ _ hr fun _ same => same ▸ ?_
+  rw [mem_support_pure_iff]
 
 /-- The table game reached from a seed.
 
@@ -107,10 +109,11 @@ theorem evalDist_innerGame (adversary : EthAdversary) :
   apply EvalDistEq.bind_right
   intro d
   apply OracleComp.EvalDistEq.bind_congr_of_support
-  intro r hr
-  have h := prepared_of_mem seed d r.1 r.2 hr
+  -- Name both components: the kernel would run the preparation to match a pair with its parts.
+  intro ⟨r, cache⟩ hr
+  have h := prepared_of_mem seed d r cache hr
   rw [StateT.run'_eq, StateT.run'_eq]
-  exact ((erases_afterKeygen adversary h).evalDist_run r.2 le_rfl).map _
+  exact ((erases_afterKeygen adversary h).evalDist_run cache le_rfl).map _
 
 theorem probOutput_countHashQueries (computation : OracleComp OracleWorld Bool) :
     Pr{let result ← (simulateQ romImpl (countHashQueries computation)).run' ∅}[result.1 = true] =
