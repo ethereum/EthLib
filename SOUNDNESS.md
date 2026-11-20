@@ -5155,7 +5155,13 @@ Suppose that each block of the plan is from Glamsterdam or has no calls.
 Then each block of the simulation, gap blocks included, is from Glamsterdam or has no transactions (`simulateBlocks_glamsterdam_le_or_nil`).
 So the answer is the same either way (`simulate_traceTransfers_of_plan`, `Proofs/Rpc/SimulateCalls.lean`).
 A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
-No theorem yet derives the hypothesis on the blocks of the plan from the configuration, the base block and the request.
+The order check makes each block of the plan later than the base block, in number and in time (`lt_of_checkOrder`, `Proofs/Rpc/Simulate.lean`).
+The plan gives each block the active fork at the number and the time of that block.
+Under any configuration, the active fork never decreases as the number and the time grow (`ChainConfig.activeFork_mono`, `Base/Proofs/ChainConfig.lean`).
+So each block of the plan has a fork no earlier than the active fork of the header of the base block (`planSimulate_fork_le`, `Proofs/Rpc/SimulateBlocks.lean`).
+When that fork is Glamsterdam or later, the answer is the same either way (`simulate_traceTransfers_of_base`, `Proofs/Rpc/SimulateCalls.lean`), which combines `planSimulate_fork_le` with `simulate_traceTransfers_of_plan`.
+When that fork is before Glamsterdam, or no fork is active there, no theorem derives the hypothesis on the blocks of the plan.
+The hypothesis then holds only when each block of the plan with calls has an active fork of Glamsterdam or later.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
