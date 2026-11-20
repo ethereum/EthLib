@@ -207,7 +207,7 @@ def call (v : ChainView) (method : String) (params : List Json) : Except RpcErro
   | "eth_getProof" => match params with
     | a :: ks :: rest => do
       let a ← readParam (address "address") a
-      let keys ← readParam (array "storage keys" (bytesMax32 "storage key")) ks
+      let keys ← readParam (array "storage keys" (storageKey "storage key")) ks
       accountProofJson <$> v.accountProof a keys (← optionalBlock rest)
     | _ => .error (RpcError.invalidParams "missing parameter")
   | "eth_getBlockAccessList" => oneParam params fun b => do

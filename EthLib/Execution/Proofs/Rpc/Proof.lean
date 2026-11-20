@@ -16,13 +16,17 @@ The answer agrees with the account queries at the same block.
 
 Its balance and nonce are those of the balance and nonce queries.
 
-It echoes the address and the slots, and its words are those of the one-key storage query.
+It echoes the address and the keys, and the words of an account are those of the storage query.
+
+An address with no account gets zero hashes, and each slot the word zero and no proof node.
 
 At a canonical block of a valid view, the answer passes the check.
 
 The check is against the state root of the header.
 
 The reader of answers reads back what the writer writes, for a nonce below `2^64`.
+
+Each key written as a number must also be below `16^63`.
 -/
 
 public section
@@ -31,7 +35,7 @@ namespace EthLib.Execution.Rpc
 
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
-open EthLib.Execution.State (AccountProof StorageProof State StorageMap EMPTY_ACCOUNT)
+open EthLib.Execution.State (AccountProof StorageKey StorageProof State StorageMap EMPTY_ACCOUNT)
 open EthLib.Execution.Trie (IsCollision)
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
@@ -99,6 +103,43 @@ theorem bytesMax32_quantityJson (what : String) (key : Bytes32) :
     rw [(hexValue_digitChar d hd).1]
     rfl
 
+/-- The digits of a number written as a quantity are those of its base-16 form, in ASCII. -/
+private theorem hexDigits_quantityJson (what : String) (n : Nat) :
+    hexDigits what (quantityJson n) =
+      .ok ((Nat.toDigits 16 n).map fun c => c.val.toUInt8).toByteArray := by
+  obtain ⟨hall, -, -⟩ := toDigits_hex n
+  unfold quantityJson
+  refine hexDigits_ascii _ _ fun c hc => ?_
+  obtain ⟨d, hd, rfl⟩ := hall c hc
+  exact (hexValue_digitChar d hd).2
+
+/-- The reader of answer keys reads back the key that the writer writes.
+
+A key written as a number must be below `16^63`, so that it has at most 63 hex digits. -/
+theorem answerKey_storageKeyJson (what : String) {key : StorageKey}
+    (h : key.asBytes = true ∨ bytesToNat key.slot.toList < 16 ^ 63) :
+    answerKey what (storageKeyJson key) = .ok key := by
+  obtain ⟨slot, asBytes⟩ := key
+  unfold answerKey storageKeyJson
+  cases asBytes with
+  | true =>
+    -- Written as 32 bytes, the key has 64 digits.
+    simp only [↓reduceIte, bytesMax32_dataJson, bind, Except.bind]
+    unfold dataJson
+    rw [hexDigits_hexString]
+    simp [byteHexDigits, pure, Except.pure, List.map_const']
+  | false =>
+    -- Written as a number below `16^63`, the key has at most 63 digits, and reads as a quantity.
+    simp only [Bool.false_eq_true, false_or, ↓reduceIte] at h ⊢
+    have hlen := toDigits_length_le (by decide : 0 < 63) _ h
+    have hbits : bytesToNat slot.toList < 2 ^ 256 := Nat.lt_of_lt_of_le h (by decide)
+    have hsize : ¬(((Nat.toDigits 16 (bytesToNat slot.toList)).map
+        fun c => c.val.toUInt8).toByteArray.size = 64) := by
+      simp only [List.size_toByteArray, List.length_map]
+      omega
+    simp only [bytesMax32_quantityJson, hexDigits_quantityJson, bind, Except.bind, hsize,
+      ↓reduceIte, quantity_toDigits _ hbits, pure, Except.pure]
+
 /-- The fields of an object of distinct names and values other than `null` find each pair. -/
 private theorem lookup_fields_mkObj {pairs : List (String × Lean.Json)} (what : String)
     (distinct : pairs.Pairwise fun a b => a.1 ≠ b.1) (hnn : ∀ p ∈ pairs, p.2.isNull = false) :
@@ -127,13 +168,17 @@ private theorem proofNodes_proofNodesJson (what : String) (nodes : List ByteArra
     rfl
 
 /-- The reader of one slot of an answer reads back what the writer writes. -/
-private theorem storageProofOfJson_storageProofJson (s : StorageProof) :
+private theorem storageProofOfJson_storageProofJson {s : StorageProof}
+    (hkey : s.key.asBytes = true ∨ bytesToNat s.key.slot.toList < 16 ^ 63) :
     storageProofOfJson (storageProofJson s) = .ok s := by
   obtain ⟨fs, hfs, hl⟩ := lookup_fields_mkObj "slot" (pairs := [
-    ("key", quantityJson (bytesToNat s.key.toList)), ("value", quantityJson s.value.toNat),
+    ("key", storageKeyJson s.key), ("value", quantityJson s.value.toNat),
     ("proof", proofNodesJson s.proof)]) (by simp)
-    (by simp [Base.Toolchain.Json.isNull_eq, quantityJson, proofNodesJson, listJson])
-  have f1 : field "slot" fs "key" = .ok (quantityJson (bytesToNat s.key.toList)) :=
+    (by
+      cases hb : s.key.asBytes <;>
+        simp [Base.Toolchain.Json.isNull_eq, storageKeyJson, hb, quantityJson, proofNodesJson,
+          listJson, dataJson])
+  have f1 : field "slot" fs "key" = .ok (storageKeyJson s.key) :=
     field_eq_ok_iff.mpr (hl "key" _ (by simp))
   have f2 : field "slot" fs "value" = .ok (quantityJson s.value.toNat) :=
     field_eq_ok_iff.mpr (hl "value" _ (by simp))
@@ -141,23 +186,29 @@ private theorem storageProofOfJson_storageProofJson (s : StorageProof) :
     field_eq_ok_iff.mpr (hl "proof" _ (by simp))
   unfold storageProofOfJson
   rw [storageProofJson, hfs]
-  simp only [bind, Except.bind, f1, f2, f3, bytesMax32_quantityJson,
+  simp only [bind, Except.bind, f1, f2, f3, answerKey_storageKeyJson _ hkey,
     quantity_toDigits _ (bits := 256) (by simpa using s.value.isLt), proofNodes_proofNodesJson]
   simp [pure, Except.pure]
 
 /-- The reader of the slots of an answer reads back the slots that the writer writes. -/
-private theorem array_storageProofOfJson (what : String) (l : List StorageProof) :
+private theorem array_storageProofOfJson (what : String) {l : List StorageProof}
+    (hkeys : ∀ s ∈ l, s.key.asBytes = true ∨ bytesToNat s.key.slot.toList < 16 ^ 63) :
     array what storageProofOfJson (listJson storageProofJson l) = .ok l := by
   rw [array_listJson]
   induction l with
   | nil => rfl
   | cons s ss ih =>
     simp only [List.mapM_cons]
-    rw [ih, storageProofOfJson_storageProofJson]
+    rw [ih fun s hs => hkeys s (List.mem_cons_of_mem _ hs),
+      storageProofOfJson_storageProofJson (hkeys s List.mem_cons_self)]
     rfl
 
-/-- The reader of answers reads back what the writer writes, for a nonce below `2^64`. -/
-theorem accountProofOfJson_accountProofJson {p : AccountProof} (hnonce : p.nonce < 2 ^ 64) :
+/-- The reader of answers reads back what the writer writes, for a nonce below `2^64`.
+
+Each key written as a number must also be below `16^63`. -/
+theorem accountProofOfJson_accountProofJson {p : AccountProof} (hnonce : p.nonce < 2 ^ 64)
+    (hkeys : ∀ s ∈ p.storageProof,
+      s.key.asBytes = true ∨ bytesToNat s.key.slot.toList < 16 ^ 63) :
     accountProofOfJson (accountProofJson p) = .ok p := by
   obtain ⟨fs, hfs, hl⟩ := lookup_fields_mkObj "answer" (pairs := [
     ("address", dataJson p.address.toList), ("accountProof", proofNodesJson p.accountProof),
@@ -182,7 +233,7 @@ theorem accountProofOfJson_accountProofJson {p : AccountProof} (hnonce : p.nonce
   unfold accountProofOfJson
   rw [accountProofJson, hfs]
   simp only [bind, Except.bind, f1, f2, f3, f4, f5, f6, f7, proofNodes_proofNodesJson,
-    array_storageProofOfJson, quantity_toDigits _ hnonce,
+    array_storageProofOfJson _ hkeys, quantity_toDigits _ hnonce,
     quantity_toDigits _ (bits := 256) (by simpa using p.balance.isLt)]
   unfold dataJson
   simp only [fixed_hexString, address]
@@ -195,33 +246,48 @@ private theorem getD_storage (state : State) (a : Address) (key : Bytes32) :
   rw [Std.ExtTreeMap.getD_eq_getD_getElem?, Std.ExtTreeMap.getD_eq_getD_getElem?]
   cases state.storage[a]? <;> simp
 
-/-- The fields of a built answer: the address, the account fields and the slots in order. -/
+/-- The fields of a built answer: the address, the account fields and the keys in order.
+
+For an account, the words are those of the storage.
+
+For an address with no account, the hashes are zero, and each slot has the word zero and no node.
+-/
 private theorem ofState_spec {hash : ByteArray → Hash32} {state : State} {a : Address}
-    {keys : List Bytes32} {answer : AccountProof}
+    {keys : List StorageKey} {answer : AccountProof}
     (hp : AccountProof.ofState hash state a keys = .ok answer) :
     answer.address = a ∧ answer.nonce = (state.accounts[a]?.getD EMPTY_ACCOUNT).nonce ∧
       answer.balance = (state.accounts[a]?.getD EMPTY_ACCOUNT).balance ∧
       answer.storageProof.map (·.key) = keys ∧
-      answer.storageProof.map (·.value) = keys.map fun key => state.getStorage a key := by
+      (state.accounts[a]?.isSome = true →
+        answer.storageProof.map (·.value) = keys.map fun key => state.getStorage a key.slot) ∧
+      (state.accounts[a]? = none →
+        answer.codeHash = Vector.replicate 32 0 ∧ answer.storageHash = Vector.replicate 32 0 ∧
+          ∀ s ∈ answer.storageProof, s.value = 0 ∧ s.proof = []) := by
   unfold AccountProof.ofState at hp
   obtain ⟨_, _, hp⟩ := bind_ok_iff.mp hp
   obtain ⟨_, _, hp⟩ := bind_ok_iff.mp hp
   try dsimp only at hp
-  obtain ⟨_, _, hp⟩ := bind_ok_iff.mp hp
-  try dsimp only at hp
   rcases hs : state.accounts[a]? with _ | acc <;> rw [hs] at hp <;> dsimp only at hp
-  all_goals
+  · -- No account: the node fills the answer without reading the storage.
+    obtain rfl := Except.ok.inj hp
+    refine ⟨rfl, by simp [EMPTY_ACCOUNT], by simp [EMPTY_ACCOUNT], by simp [Function.comp_def],
+      by simp,
+      fun _ => ⟨rfl, rfl, ?_⟩⟩
+    intro s hs'
+    obtain ⟨key, -, rfl⟩ := List.mem_map.mp hs'
+    exact ⟨rfl, rfl⟩
+  · obtain ⟨_, _, hp⟩ := bind_ok_iff.mp hp
     obtain ⟨_, _, hp⟩ := bind_ok_iff.mp hp
     obtain ⟨sp, hsp, hp⟩ := bind_ok_iff.mp hp
     obtain rfl := Except.ok.inj hp
-    refine ⟨rfl, rfl, rfl, ?_, ?_⟩
+    refine ⟨rfl, rfl, rfl, ?_, fun _ => ?_, by simp⟩
     · rw [map_of_mapM_ok (q := id) ?_ hsp, List.map_id]
       intro x y hy
       obtain ⟨_, _, hy⟩ := bind_ok_iff.mp hy
       obtain rfl := Except.ok.inj hy
       rfl
-    · rw [map_of_mapM_ok (q := fun key => (state.storage.getD a ∅).getD key 0) ?_ hsp]
-      · exact List.map_congr_left fun key _ => getD_storage state a key
+    · rw [map_of_mapM_ok (q := fun key => (state.storage.getD a ∅).getD key.slot 0) ?_ hsp]
+      · exact List.map_congr_left fun key _ => getD_storage state a key.slot
       intro x y hy
       obtain ⟨_, _, hy⟩ := bind_ok_iff.mp hy
       obtain rfl := Except.ok.inj hy
@@ -230,7 +296,7 @@ private theorem ofState_spec {hash : ByteArray → Hash32} {state : State} {a : 
 namespace ChainView
 
 /-- When the proof query answers, a block resolves and the answer is that of the builder. -/
-private theorem accountProof_eq_ok {v : ChainView} {a : Address} {keys : List Bytes32}
+private theorem accountProof_eq_ok {v : ChainView} {a : Address} {keys : List StorageKey}
     {p : BlockParam} {answer : AccountProof} (h : v.accountProof a keys p = .ok answer) :
     ∃ r, v.resolve p = .ok (some r) ∧
       AccountProof.ofState keccak256 r.state a keys = .ok answer := by
@@ -244,24 +310,42 @@ private theorem accountProof_eq_ok {v : ChainView} {a : Address} {keys : List By
 
 Its balance and nonce are the answers of the balance and nonce queries.
 
-It echoes the address and the slots, in order.
+It echoes the address and the keys, in order.
 
-Its words are the answers of the one-key storage query, in order. -/
-theorem accountProof_agree {v : ChainView} {a : Address} {keys : List Bytes32} {p : BlockParam}
-    {answer : AccountProof} (h : v.accountProof a keys p = .ok answer) :
+The block resolves, and when its state has the account, the words come from the storage query.
+
+They are the answers of the one-key storage query, in order. -/
+theorem accountProof_agree {v : ChainView} {a : Address} {keys : List StorageKey}
+    {p : BlockParam} {answer : AccountProof} (h : v.accountProof a keys p = .ok answer) :
     v.balance a p = .ok answer.balance ∧ v.nonce a p = .ok answer.nonce ∧
       answer.address = a ∧ answer.storageProof.map (·.key) = keys ∧
-      keys.mapM (fun key => v.storageAt a key p) = .ok (answer.storageProof.map (·.value)) := by
+      ∃ r, v.resolve p = .ok (some r) ∧ (r.state.accounts[a]?.isSome = true →
+        keys.mapM (fun key => v.storageAt a key.slot p) =
+          .ok (answer.storageProof.map (·.value))) := by
   obtain ⟨r, hr, hp⟩ := accountProof_eq_ok h
-  obtain ⟨h1, h2, h3, h4, h5⟩ := ofState_spec hp
-  refine ⟨ofBlock_eq_ok.mpr ⟨r, hr, ?_⟩, ofBlock_eq_ok.mpr ⟨r, hr, ?_⟩, h1, h4, ?_⟩
+  obtain ⟨h1, h2, h3, h4, h5, -⟩ := ofState_spec hp
+  refine ⟨ofBlock_eq_ok.mpr ⟨r, hr, ?_⟩, ofBlock_eq_ok.mpr ⟨r, hr, ?_⟩, h1, h4, r, hr,
+    fun hsome => ?_⟩
   · rw [h3]
     simp [BlockRecord.account, State.getAccountOptional]
   · rw [h2]
     simp [BlockRecord.account, State.getAccountOptional]
-  · rw [h5]
-    exact mapM_eq_ok_map (g := fun key => r.state.getStorage a key) fun key _ =>
+  · rw [h5 hsome]
+    exact mapM_eq_ok_map (g := fun (key : StorageKey) => r.state.getStorage a key.slot) fun key _ =>
       ofBlock_eq_ok.mpr ⟨r, hr, rfl⟩
+
+/-- For an address with no account after the block, the answer has zero hashes.
+
+Each slot has the word zero and no proof node, whatever the storage of the state holds. -/
+theorem accountProof_absent {v : ChainView} {a : Address} {keys : List StorageKey}
+    {p : BlockParam} {answer : AccountProof} (h : v.accountProof a keys p = .ok answer)
+    {r : BlockRecord} (hres : v.resolve p = .ok (some r)) (hnone : r.state.accounts[a]? = none) :
+    answer.codeHash = Vector.replicate 32 0 ∧ answer.storageHash = Vector.replicate 32 0 ∧
+      ∀ s ∈ answer.storageProof, s.value = 0 ∧ s.proof = [] := by
+  obtain ⟨r', hr', hp⟩ := accountProof_eq_ok h
+  have hrr : r' = r := Option.some.inj (Except.ok.inj (hr'.symm.trans hres))
+  rw [hrr] at hp
+  exact (ofState_spec hp).2.2.2.2.2 hnone
 
 /-- Completeness: at a canonical block of a valid view, the answer passes the check.
 
@@ -269,14 +353,11 @@ The check is against the state root of the header of the block.
 
 It reports the account present exactly when the state after the block has it.
 
-The proof assumes that an address with no account has the word zero at each slot asked for.
-
 When the answer does not pass the check, a search finds two keys with one hash. -/
 theorem Valid.verify_accountProof {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
     {p : BlockParam} {r : BlockRecord} (hres : v.resolve p = .ok (some r)) (hr : r ∈ v.canonical)
-    {a : Address} {keys : List Bytes32} {answer : AccountProof}
-    (h : v.accountProof a keys p = .ok answer)
-    (hstorage : r.state.accounts[a]? = none → ∀ key ∈ keys, r.storage a key = 0) :
+    {a : Address} {keys : List StorageKey} {answer : AccountProof}
+    (h : v.accountProof a keys p = .ok answer) :
     answer.verify keccak256 r.block.header.stateRoot =
         .ok (AccountProof.outcomeOfState r.state a keys) ∨
       ∃ pair, AccountProof.findAnswerCollision keccak256 r.state a keys = some pair ∧
@@ -284,8 +365,7 @@ theorem Valid.verify_accountProof {v : ChainView} {checkSeal : Bool} (hv : v.Val
   obtain ⟨r', hr', hp⟩ := accountProof_eq_ok h
   have hrr : r' = r := Option.some.inj (Except.ok.inj (hr'.symm.trans hres))
   rw [hrr] at hp
-  exact AccountProof.verify_ofState (hv.stateRoot_eq hr) hp fun hnone key hk =>
-    (getD_storage r.state a key).trans (hstorage hnone key hk)
+  exact AccountProof.verify_ofState (hv.stateRoot_eq hr) hp
 
 end ChainView
 

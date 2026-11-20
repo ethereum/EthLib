@@ -2468,23 +2468,25 @@ Otherwise a search returns a collision with the trie's own proof, or two keys wi
 `verifyAccount_getProof` and `verifySlot_getProof` prove that the trie's own proofs pass, with the fields that the trie holds.
 A proof can show that the address has no account, or that a slot is not set.
 The storage value of a slot that is not set is 0, so the answer must give that word.
-EIP-1186 does not say which fields the answer holds for an address without an account.
-So the check judges no field of an absent account, and reports the absence.
+The [text of the method](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml#L161-L200) fixes the answer for an address without an account.
+Its code hash and storage root are zero, and each slot has the word 0 and an empty proof.
+The check accepts only that answer, with a nonce and a balance of 0.
 
 The node's side is `AccountProof.ofState`: the answer that a state gives, with the proofs of its own tries.
-For an address with no account it gives the fields of the empty account and the root of the empty trie, one of the two readings that the check accepts.
+For an address with no account it reads no storage, and gives the answer that the text fixes.
+Each slot gives back its key in the form of the request: 32 bytes for a key of 63 or 64 hex digits, and a number otherwise.
 `ChainView.accountProof` (`Execution/Rpc/Proof.lean`) serves it as `eth_getProof` at the block that the parameter names.
 `verify_ofState` (`Execution/Proofs/State/AccountProofOfState.lean`) proves completeness: the answer passes the check against the state root.
 It reports the account present exactly when the state has it, and, for a present account, each slot set exactly when its word is not zero.
 The theorem does not assume distinct key hashes.
 When the answer does not pass, the search `findAnswerCollision` returns two keys with one hash.
 It reads the address, the addresses of the state, the slots asked for and the storage keys of the address.
-It assumes that an address with no account has the word zero at each slot asked for.
-No theorem shows that the state transition keeps that property, though the fixtures expect the word zero there.
 `Valid.verify_accountProof` applies it to a canonical block of a valid view, against the state root of its header.
 An answer at the pending block or at a block off the canonical chain is not covered, since the view does not check their states.
-`accountProof_agree` proves that the balance, the nonce and the words of the answer are those of `eth_getBalance`, `eth_getTransactionCount` and `eth_getStorageAt` at the same block.
-`accountProofOfJson_accountProofJson` proves that the reader reads back what the writer writes, for a nonce below `2^64`.
+`accountProof_agree` proves that the balance and the nonce of the answer are those of `eth_getBalance` and `eth_getTransactionCount` at the same block.
+For an account in the state, it proves that the words are those of `eth_getStorageAt`.
+`accountProof_absent` proves that for an address with no account, the answer has zero hashes and each slot the word 0 with an empty proof.
+`accountProofOfJson_accountProofJson` proves that the reader reads back what the writer writes, for a nonce below `2^64` and for keys written as numbers below `16^63`.
 
 ### The RLPx session
 

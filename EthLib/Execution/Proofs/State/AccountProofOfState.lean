@@ -15,8 +15,6 @@ It reports the account present exactly when the state has it.
 
 Each slot of a present account is set exactly when the state holds a word other than zero there.
 
-The proof assumes that an address with no account has the word zero at each slot asked for.
-
 When the answer does not pass the check, a search finds two keys with one hash.
 
 It looks among the address, the state's addresses, the slots asked for and the address's storage.
@@ -38,14 +36,14 @@ The first search looks at the address and the addresses of the state.
 
 The second looks at the slots asked for and the keys of the storage of the address. -/
 def findAnswerCollision (hash : ByteArray → Hash32) (state : State) (address : Address)
-    (keys : List Bytes32) : Option (ByteArray × ByteArray) :=
+    (keys : List StorageKey) : Option (ByteArray × ByteArray) :=
   (findKeyCollision hash (⟨address.toArray⟩ :: state.accounts.keys.map fun a => ⟨a.toArray⟩)).or
-    (findKeyCollision hash (keys.map (fun key => ⟨key.toArray⟩) ++
+    (findKeyCollision hash (keys.map (fun key => ⟨key.slot.toArray⟩) ++
       (state.storage.getD address ∅).keys.map fun key => ⟨key.toArray⟩))
 
 /-- Every pair that the search returns is a collision. -/
 theorem findAnswerCollision_valid (hash : ByteArray → Hash32) {state : State} {address : Address}
-    {keys : List Bytes32} {pair : ByteArray × ByteArray}
+    {keys : List StorageKey} {pair : ByteArray × ByteArray}
     (h : findAnswerCollision hash state address keys = some pair) : IsCollision hash pair := by
   unfold findAnswerCollision at h
   cases hfirst : findKeyCollision hash
@@ -120,8 +118,8 @@ private theorem mem_storageEntries_keys {storage : Std.ExtTreeMap Bytes32 U256}
 
 /-- The slot checks pass on proofs that each pass on their own, with the outcome of their key. -/
 private theorem verifySlots_of_mapM {hash : ByteArray → Hash32} {storageRoot : Hash32}
-    {f : Bytes32 → Except TrieError StorageProof} {g : Bytes32 → SlotOutcome} :
-    ∀ {keys : List Bytes32} {slots : List StorageProof} {index : Nat},
+    {f : StorageKey → Except TrieError StorageProof} {g : StorageKey → SlotOutcome} :
+    ∀ {keys : List StorageKey} {slots : List StorageProof} {index : Nat},
       keys.mapM f = .ok slots →
       (∀ key ∈ keys, ∀ s, f key = .ok s → ∀ i, verifySlot hash storageRoot i s = .ok (g key)) →
       verifySlots hash storageRoot index slots = .ok (keys.map g)
@@ -139,10 +137,11 @@ private theorem verifySlots_of_mapM {hash : ByteArray → Hash32} {storageRoot :
 /-- What the check of the answer that a state gives reports.
 
 A present account comes with each slot, set when the state holds a word other than zero there. -/
-def outcomeOfState (state : State) (address : Address) (keys : List Bytes32) : AccountOutcome :=
+def outcomeOfState (state : State) (address : Address) (keys : List StorageKey) :
+    AccountOutcome :=
   match state.accounts[address]? with
   | some _ => .present (keys.map fun key =>
-      if (state.storage.getD address ∅).getD key 0 = 0 then .absent else .set)
+      if (state.storage.getD address ∅).getD key.slot 0 = 0 then .absent else .set)
   | none => .absent
 
 /-- Completeness: the answer that a state gives passes the check against the state root.
@@ -151,29 +150,19 @@ It reports the account present exactly when the state has it.
 
 Each slot of a present account is set exactly when its word is not zero.
 
-The proof assumes that an address with no account has the word zero at each slot asked for.
-
 When the answer does not pass the check, the search finds two keys with one hash. -/
 theorem verify_ofState {hash : ByteArray → Hash32} {state : State} {address : Address}
-    {keys : List Bytes32} {stateRoot' : Hash32} {p : AccountProof}
+    {keys : List StorageKey} {stateRoot' : Hash32} {p : AccountProof}
     (hroot : stateRoot hash state = .ok stateRoot')
-    (hp : ofState hash state address keys = .ok p)
-    (hstorage : state.accounts[address]? = none →
-      ∀ key ∈ keys, (state.storage.getD address ∅).getD key 0 = 0) :
+    (hp : ofState hash state address keys = .ok p) :
     p.verify hash stateRoot' = .ok (outcomeOfState state address keys) ∨
       ∃ pair, findAnswerCollision hash state address keys = some pair ∧ IsCollision hash pair := by
   obtain ⟨entries, hentries, htrie⟩ := stateRoot_eq_ok_iff.mp hroot
-  cases hsentries : storageEntries (state.storage.getD address ∅) with
-  | error e =>
-    cases hg : getProof hash ⟨true, entries⟩ ⟨address.toArray⟩ <;>
-      simp [ofState, hentries, hsentries, hg, bind, Except.bind, Except.mapError] at hp
-  | ok sentries =>
   cases haccProof : getProof hash ⟨true, entries⟩ ⟨address.toArray⟩ with
   | error e =>
     simp [ofState, hentries, haccProof, bind, Except.bind] at hp
   | ok accountProof =>
-  simp only [ofState, hentries, hsentries, haccProof, bind, Except.bind, Except.mapError,
-    pure, Except.pure] at hp
+  simp only [ofState, hentries, haccProof, bind, Except.bind, pure, Except.pure] at hp
   cases hsearch : findAnswerCollision hash state address keys with
   | some pair => exact .inr ⟨pair, rfl, findAnswerCollision_valid hash hsearch⟩
   | none =>
@@ -198,11 +187,7 @@ theorem verify_ofState {hash : ByteArray → Hash32} {state : State} {address : 
   have hfind := find_stateEntries hentries address
   cases hacc : state.accounts[address]? with
   | none =>
-    simp only [hacc] at hp
-    split at hp
-    · cases hp
-    rename_i slots hmap
-    simp only [Except.ok.injEq] at hp
+    simp only [hacc, Except.ok.injEq] at hp
     have hnone : (entries.find? fun entry => entry.1 = ⟨address.toArray⟩).map Prod.snd = none := by
       cases hf : (entries.find? fun entry => entry.1 = ⟨address.toArray⟩).map Prod.snd with
       | none => rfl
@@ -217,15 +202,16 @@ theorem verify_ofState {hash : ByteArray → Hash32} {state : State} {address : 
     rw [hvalue, hnone] at haccount
     simp only [outcomeOfState, hacc]
     refine verify_eq_ok_absent_iff.mpr ⟨haccount ?_, fun s hs => ?_⟩
-    · simp [absentFields, EMPTY_ACCOUNT]
-    · obtain ⟨key, hk, hstep⟩ := mapM_ok_mem hmap s hs
-      split at hstep
-      · cases hstep
-      simp only [Except.ok.injEq] at hstep
-      subst hstep
-      exact hstorage hacc key hk
+    · simp [absentFields]
+    · -- The node gives each slot of an absent account the word zero and no proof node.
+      obtain ⟨key, -, rfl⟩ := List.mem_map.mp hs
+      exact ⟨rfl, rfl⟩
   | some account =>
     simp only [hacc] at hp
+    cases hsentries : storageEntries (state.storage.getD address ∅) with
+    | error e => simp [hsentries, Except.mapError] at hp
+    | ok sentries =>
+    simp only [hsentries, Except.mapError] at hp
     split at hp
     · cases hp
     rename_i storageHash hsroot
@@ -269,8 +255,8 @@ theorem verify_ofState {hash : ByteArray → Hash32} {state : State} {address : 
     rename_i proof hproof
     simp only [Except.ok.injEq] at hs
     subst hs
-    have hvalueS : valueAt hash ⟨true, sentries⟩ ⟨key.toArray⟩ =
-        (sentries.find? fun entry => entry.1 = ⟨key.toArray⟩).map Prod.snd := by
+    have hvalueS : valueAt hash ⟨true, sentries⟩ ⟨key.slot.toArray⟩ =
+        (sentries.find? fun entry => entry.1 = ⟨key.slot.toArray⟩).map Prod.snd := by
       rw [valueAt_secured hash ?_, find_sameBytes]
       intro other hother hne
       obtain ⟨k, hk', rfl⟩ := mem_storageEntries_keys hsentries other hother
@@ -278,10 +264,11 @@ theorem verify_ofState {hash : ByteArray → Hash32} {state : State} {address : 
         (List.mem_append_right _ (List.mem_map_of_mem hk')) _
         (List.mem_append_left _ (List.mem_map_of_mem hk)) hne
     have hslot := verifySlot_getProof (index := i)
-      (s := ⟨key, (state.storage.getD address ∅).getD key 0, proof⟩) hsroot rfl hproof hpathsS
+      (s := ⟨key, (state.storage.getD address ∅).getD key.slot 0, proof⟩) hsroot rfl hproof
+      hpathsS
     rw [hvalueS] at hslot
-    have hfs := find_storageEntries hsentries key
-    cases hfs' : (sentries.find? fun entry => entry.1 = ⟨key.toArray⟩).map Prod.snd with
+    have hfs := find_storageEntries hsentries key.slot
+    cases hfs' : (sentries.find? fun entry => entry.1 = ⟨key.slot.toArray⟩).map Prod.snd with
     | none =>
       rw [hfs'] at hslot hfs
       simp only [hfs, ↓reduceIte]
