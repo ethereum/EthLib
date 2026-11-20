@@ -74,5 +74,26 @@ theorem node_schedule (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleCom
       fun _ => v.exact_pure _
   · exact fun t => congrArg (fun m => StateT.run m t) (LayerGraph.Hidden.node pp l other h j bound)
 
+/-- Each sibling subtree touches its hidden rows and reads the one digest included in the path. -/
+@[expose] noncomputable def pathSchedule (pp : PublicParam) (l : Layer) (e : Nat) :
+    OracleComp SharedSpec (Vector Digest LAYER_HEIGHT) :=
+  ofFnInOrder LAYER_HEIGHT fun k =>
+    let j := (e / 2 ^ k.val) ^^^ 1
+    simulateQ (selection pp l).liftQuery (beforeNode pp l k.val j >>=
+      fun _ => LayerGraph.readOutput (LayerGraph.treeRole k.val j))
+
+/-- The library's actual path releases its sixteen siblings in order and keeps the entire state. -/
+theorem path_schedule (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
+    (e : Nat) :
+    simulateQ (graph pp).eagerImpl (Xmss.path hash pp (prf pp l other) l e) =
+      simulateQ (graph pp).eagerImpl (pathSchedule pp l e) := by
+  unfold Xmss.path Merkle.path pathSchedule
+  rw [LayerGraph.siblings_in_order]
+  simp only [Nat.zero_add, ofFnInOrder_map_monad (fun {_} p => simulateQ (graph pp).eagerImpl p)
+    (simulateQ_pure _) (simulateQ_bind _)]
+  congr 1
+  funext k
+  exact node_schedule pp l other k.val _ (Nat.le_of_lt k.isLt)
+
 end TwoLayerGraph.Honest
 end EthLib.Cryptography.Xmss.Unforgeability.VCV
