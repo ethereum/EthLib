@@ -19,6 +19,10 @@ So a block from Glamsterdam gives the same answer with transfers traced or not.
 A block without transactions reports no call result, so it gives the same answer too.
 
 So does a simulation whose blocks are each from Glamsterdam or without transactions.
+
+It suffices that each block of the plan is from Glamsterdam or has no calls.
+
+A gap block has no calls.
 -/
 
 @[expose] public section
@@ -175,9 +179,13 @@ theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p :
   simulate_traceTransfers_of_glamsterdam_le_or_nil
     (fun blocks h b hb => .inl (hfork blocks h b hb)) trace
 
-/-- A simulation gives the same answer with transfers traced or not, whatever its gap blocks.
+/-- A simulation gives the same answer with transfers traced or not.
 
-It needs each block of the plan to be from Glamsterdam or to have no calls. -/
+It needs each block of the plan to be from Glamsterdam or to have no calls.
+
+A gap block needs nothing, since it has no calls.
+
+A failed simulation gives the same error both ways. -/
 theorem simulate_traceTransfers_of_plan {v : ChainView} {payload : SimulatePayload}
     {p : BlockParam} {choices : SimulateChoices}
     (hCalls : ∀ plan, v.planSimulate payload p choices = .ok plan →

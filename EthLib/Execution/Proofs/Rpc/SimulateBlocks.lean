@@ -29,7 +29,9 @@ That holds whatever the base fee of the block before it.
 
 Each block of a simulation, gap blocks included, is a simulated block at its own fork.
 
-A gap block is simulated from an empty request, a block of the plan from its request at its fork.
+A gap block is simulated from an empty request.
+
+A block of the plan is simulated from its request, at its fork.
 
 A block simulated without calls has no transactions.
 
@@ -141,7 +143,9 @@ theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlo
     obtain ⟨_, -, _, -, _, -, _, -, filled, hFill, _, -, _, -, hEq⟩ := h
     simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
     obtain ⟨-, -, rfl⟩ := hEq
-    simp [fillCalls, hCalls, pure, Except.pure, bind, Except.bind] at hFill
+    simp only [fillCalls, bind, Except.bind, Option.isNone_iff_eq_none, ge_iff_le,
+      Nat.sub_le_iff_le_add, pure, Except.pure, hCalls, List.zipIdx_nil, List.foldlM_nil,
+      Except.ok.injEq] at hFill
     subst hFill
     rfl
   · simp [throw, throwThe, MonadExceptOf.throw] at h
@@ -433,15 +437,16 @@ theorem simulateBlocks_links {v : ChainView}
 
 /-- A property holds for each block of a simulation, gap blocks included.
 
-It needs each block simulated from an empty request, as a gap block is, to have it.
+Each block simulated from the base block with an empty request, as a gap block is, must have it.
 
-It also needs each block of the plan, simulated at its fork with its request, to have it. -/
+Each block of the plan, simulated from the base block at its fork with its request, must have it.
+-/
 theorem simulateBlocks_forall {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
     {choices : SimulateChoices} {blocks : List SimulatedBlock} (P : SimulatedBlock → Prop)
     (h : v.simulateBlocks payload p choices = .ok blocks)
-    (gap : ∀ chain base fork number time budget chain' budget' b,
-      simulateBlock chain base fork number time {} payload.validation budget =
-        .ok (chain', budget', b) → P b)
+    (gap : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∀ chain fork number time budget chain' budget' b, simulateBlock chain plan.base.recent fork
+        number time {} payload.validation budget = .ok (chain', budget', b) → P b)
     (planned : ∀ plan, v.planSimulate payload p choices = .ok plan → ∀ x ∈ plan.blocks,
       ∀ chain budget chain' budget' b, simulateBlock chain plan.base.recent x.2 x.1.number
         x.1.time x.1.request payload.validation budget = .ok (chain', budget', b) → P b) :
@@ -476,7 +481,7 @@ theorem simulateBlocks_forall {v : ChainView} {payload : SimulatePayload} {p : B
         · exact hu c hc
         · rw [List.mem_singleton] at hc
           subst hc
-          exact gap _ _ _ _ _ _ _ _ _ hBlk
+          exact gap plan hPlan _ _ _ _ _ _ _ _ hBlk
       · intro u chain budget blk hu _ hBlk c hc
         rcases List.mem_append.mp hc with hc | hc
         · exact hu c hc
@@ -501,7 +506,7 @@ theorem simulateBlocks_baseFee {v : ChainView} {payload : SimulatePayload} {p : 
         x.1.request.blockOverrides.baseFeePerGas = none) →
       ∀ hLondon : .london ≤ b.record.fork, b.record.block.header.baseFeePerGas hLondon = 0 := by
   refine simulateBlocks_forall _ h ?_ ?_
-  · intro _ _ _ _ _ _ _ _ _ hBlk _ hLondon
+  · intro _ _ _ _ _ _ _ _ _ _ hBlk _ hLondon
     rw [hOff] at hBlk
     exact simulateBlock_baseFee hBlk rfl hLondon
   · intro plan' hPlan' x hx _ _ _ _ _ hBlk hNone hLondon
@@ -529,7 +534,8 @@ theorem simulateBlocks_mem_exists {v : ChainView} {payload : SimulatePayload} {p
     intro _ _ _ _ _ _ _ _ _ _ hBlk
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl, -⟩ := simulateBlock_spec hBlk
     exact ⟨_, _, _, _, _, _, _, _, hBlk⟩
-  exact simulateBlocks_forall _ h (fun _ _ _ _ _ _ _ _ _ hBlk => step _ _ _ _ _ _ _ _ _ _ hBlk)
+  exact simulateBlocks_forall _ h
+    (fun _ _ _ _ _ _ _ _ _ _ hBlk => step _ _ _ _ _ _ _ _ _ _ hBlk)
     fun _ _ _ _ _ _ _ _ _ hBlk => step _ _ _ _ _ _ _ _ _ _ hBlk
 
 /-- Each block of a simulation, gap blocks included, is from Glamsterdam or has no transactions.
@@ -542,7 +548,7 @@ theorem simulateBlocks_glamsterdam_le_or_nil {v : ChainView} {payload : Simulate
     ∀ blocks, v.simulateBlocks payload p choices = .ok blocks →
       ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork ∨ b.record.block.transactions = [] := by
   intro blocks h
-  refine simulateBlocks_forall _ h (fun _ _ _ _ _ _ _ _ _ hBlk =>
+  refine simulateBlocks_forall _ h (fun _ _ _ _ _ _ _ _ _ _ hBlk =>
     .inr (simulateBlock_transactions hBlk rfl)) ?_
   intro plan hPlan x hx _ _ _ _ _ hBlk
   rcases hCalls plan hPlan x hx with hFork | hNil
