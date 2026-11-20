@@ -14167,6 +14167,23 @@ private theorem exited_not_proposer (h : Setting config checks g split fin pulle
   rw [same, inactive] at active
   exact Bool.false_ne_true active
 
+/-- A scan over sources that the gross credits hold is at most the gross credits. -/
+private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (high v : ℕ) (p : BalanceSource → Bool)
+    (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
+    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
+  have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
+    (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
+    (fun _ => false) (fun _ => false)
+    (fun s => by
+      by_cases hp : p s = true
+      · simp [hp, inside s hp]
+      · simp [hp])
+    (fun _ => rfl) (fun s ⟨first, second⟩ => by simp [first] at second)
+    (fun s h => by simp at h) v high tail
+  unfold grossScan
+  omega
+
 /-- A key with a sync credit over a run's replayed events has a gross credit on the run. -/
 private theorem syncCr_gross {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (tailC : Run config checks x y) (highC : ℕ)
@@ -14246,6 +14263,104 @@ private def cutKeys (config : Config) (pulled anc fin split : BeaconState preset
       ((pulled.validators.data[v.toNat]?).any fun w =>
         decide ((getCurrentEpoch fin).toNat + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
           w.withdrawableEpoch.toNat)) = true
+
+/-- A key that exited by the finalized epoch is exited at R's record. -/
+private theorem exited_of_exitBeforeFin {v : ValidatorIndex}
+    (exit : (pinTerms config pulled anc fin).exitBeforeFin v.toNat = true) :
+    ∃ w, pulled.validators.data[v.toNat]? = some w ∧
+      w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat := by
+  have flag : ((pulled.validators.data[v.toNat]?).any fun w =>
+      decide (w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat)) = true := exit
+  cases found0 : pulled.validators.data[v.toNat]? with
+  | none => simp [found0] at flag
+  | some w0 =>
+    simp [found0] at flag
+    exact ⟨w0, rfl, flag⟩
+
+/-- A key that C's run charges to depart has not exited by the finalized epoch.
+
+Its exit is assigned at the finalized state, so it is assigned at the start of C's run.
+
+The charge is of a step that starts with the exit unassigned. -/
+private theorem scCharged_not_exited (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
+    (member : v ∈ scCharged pulled counted split tailC) :
+    (pinTerms config pulled anc fin).exitBeforeFin v.toNat ≠ true := by
+  intro exit
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨-, c, cMember, cIndex⟩ := Finset.mem_filter.mp member
+  obtain ⟨w, foundPulled, exited⟩ := exited_of_exitBeforeFin exit
+  obtain ⟨u, foundFin, kept⟩ := exit_kept_of_le_fin h foundPulled exited
+  have assigned : u.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
+    have := getCurrentEpoch_succ_lt_farFuture h.twoSlots fin
+    have := congrArg UInt64.toNat (kept.symm.trans far)
+    have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+    omega
+  obtain ⟨at_split, foundSplit, life⟩ := fromFin.registryLifecycle.validators v.toNat u foundFin
+  have keptSplit := life.exitEpoch assigned
+  obtain ⟨a, b, front, step, post, site, vv, w2, found, foundB, unset, set, amount, epoch⟩ :=
+    tailC.departure_charge_site c cMember
+  rw [cIndex] at found foundB
+  obtain ⟨at_a, foundA, lifeA⟩ := front.registryLifecycle.validators v.toNat at_split foundSplit
+  have same : at_a = vv := Option.some.inj (foundA.symm.trans found)
+  have assignedSplit : at_split.exitEpoch ≠ FAR_FUTURE_EPOCH := by
+    rw [keptSplit]
+    exact assigned
+  have keptA := lifeA.exitEpoch assignedSplit
+  rw [same] at keptA
+  exact assignedSplit (by rw [← keptA]; exact unset)
+
+/-- A key with a proposer, whistleblower or sync credit on a run has a gross credit. -/
+private theorem credit_gross {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+    (early : y.fork < .glamsterdam) (r : Run config checks x y) (highC : ℕ)
+    {eventsP : List (BalanceEvent preset)} (replayedP : r.balanceEvents highC = .ok eventsP)
+    (v : ℕ) (positive : 0 < propN r highC v + whistC r highC v + syncCr eventsP v) :
+    0 < grossScan v highC r := by
+  have prop := scan_le_gross r highC v (fun s => decide (s = .rewards))
+    fun s h => by simp at h; simp [h]
+  have whist := scan_le_gross r highC v (fun s => decide (s = .slashings))
+    fun s h => by simp at h; simp [h]
+  by_cases sync : 0 < syncCr eventsP v
+  · exact syncCr_gross electra early r highC replayedP v sync
+  · unfold propN whistC at positive
+    omega
+
+/-- A key credited on `pre` is a proposer of its epoch, or holds a seat of the split's committee.
+
+The run `pre` is inside one epoch, from the start `b` of the split's epoch.
+
+At most one block of `pre` is proposed in each of the epoch's slots. -/
+private theorem pre_credit_seat (h : Setting config checks g split fin pulled anc counted V)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b) (highC : ℕ) :
+    ∃ B : Finset ℕ, B.card ≤ preset.SLOTS_PER_EPOCH.toNat ∧
+      ∀ i, 0 < grossScan i highC pre → i ∈ B ∨ ∃ w, split.validators.data[i]? = some w ∧
+        w.pubkey ∈
+          (split.currentSyncCommittee (Nat.le_trans (by decide) h.fulu)).value.pubkeys.toList := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
+  have samePeriod : (getCurrentEpoch split).toNat /
+      max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
+      (getCurrentEpoch b).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat := by
+    rw [sameEpoch]
+  obtain ⟨B, D, cardB, -, gross, -, -, -⟩ := credited_piece h.genesis h.parameters.lookahead toB
+    pre h.fulu altair h.early h.delay highC samePeriod
+  refine ⟨B, ?_, fun i pos => ?_⟩
+  · -- the blocks of `pre` are at most one in each slot of the epoch
+    have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := h.twoSlots; omega
+    have count : pre.blockCount ≤
+        ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch b).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat := PinSplit5.Run.blockCount_le_epochs pre positive
+    have one : (getCurrentEpoch split).toNat + 1 - (getCurrentEpoch b).toNat = 1 := by
+      rw [sameEpoch]
+      omega
+    rw [one, Nat.one_mul] at count
+    exact cardB.trans count
+  · rcases gross i pos with inB | ⟨w, found, mem⟩
+    · exact .inl inB
+    · refine .inr ⟨w, found, ?_⟩
+      rw [pre.currentSyncCommittee_eq_of_same_period h.early samePeriod altair altair]
+      exact mem
 
 /-- The rounding bands of the classes of keys fit the seats of the committees of the periods.
 
@@ -18108,23 +18223,6 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
   intro m n before step after cut w found
   exact retained_of_exit h fromFin tailC _ (Nat.le_refl _) i foundC late before step after cut w
     found
-
-/-- A scan over sources that the gross credits hold is at most the gross credits. -/
-private theorem scan_le_gross {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (high v : ℕ) (p : BalanceSource → Bool)
-    (inside : ∀ s, p s = true → s = .rewards ∨ s = .slashings ∨ s = .sync) :
-    (creditScan p (fun _ => false) v high tail).1 ≤ grossScan v high tail := by
-  have split := creditScan_or (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync))
-    (fun _ => false) p (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync) && !p s)
-    (fun _ => false) (fun _ => false)
-    (fun s => by
-      by_cases hp : p s = true
-      · simp [hp, inside s hp]
-      · simp [hp])
-    (fun _ => rfl) (fun s ⟨first, second⟩ => by simp [first] at second)
-    (fun s h => by simp at h) v high tail
-  unfold grossScan
-  omega
 
 /-- A key that R holds withdrawable by the next epoch is a key with `withdrawnRB`. -/
 private theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
