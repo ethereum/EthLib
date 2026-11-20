@@ -480,9 +480,7 @@ theorem RoundLedger.sourceFalling_of_firstDown
     · rfl
     · exact absurd unset' (run_slashed_exit_assigned (shared.append (ledger.stops i).pre)
         supported.1 caps.activation caps.compounding early delay i v' atStop flag)
-  have split₁ : pre.append (((Run.nil : Run config checks m m).snoc step).append rest) = tail := by
-    rw [Run.append_assoc]
-    exact split
+  have split₁ := (pre.snoc_append_eq step rest).symm.trans split
   have firstDown : FirstDown (ledger.stops i).pre i := by
     rcases Run.prefix_total pre _ ((ledger.stops i).pre.snoc assigning) remaining split₁ split₂
       with ⟨r, extended⟩ | ⟨r, inside⟩

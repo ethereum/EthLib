@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Ceiling
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # The whistleblower allowance
@@ -1472,7 +1473,6 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
   have xEarly : x.fork < .glamsterdam := Nat.lt_of_le_of_lt
     (fork_le_of_chainSteps tail.chainSteps) (Nat.lt_trans early (by decide))
   have finiteX := getCurrentEpoch_ne_farFuture twoSlots x.state
-  have finiteY := getCurrentEpoch_ne_farFuture twoSlots y.state
   have finiteBelow {epoch current : Epoch} (finite : current ≠ FAR_FUTURE_EPOCH)
       (lower : epoch ≤ current) : epoch ≠ FAR_FUTURE_EPOCH := by
     intro far
@@ -1495,9 +1495,7 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
       obtain ⟨z, zFound, zKey⟩ := validators_getElem?_of_validatorKeys_prefix
         (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 before
       have equal : z = w := Option.some.inj (zFound.symm.trans after)
-      have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-        exact finiteBelow finiteX active.1
+      have assigned := Consensus.Internal.assigned_of_active active
       apply Finset.mem_image.mpr
       refine ⟨i, Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
         (Array.getElem?_eq_some_iff.mp after).1, ?_⟩, ?_⟩
@@ -1523,12 +1521,8 @@ private theorem active_recent_window_keys {g x y : ForkedBeaconState preset}
         · obtain ⟨i, w, found, same, active⟩ :=
             (mem_keysAt_epoch (Nat.lt_trans early (by decide)) _ k).mp prev
           exact ⟨i, w, found, same, Or.inr active⟩
-      have assigned : w.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-        have prev := getPreviousEpoch_le y.state
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-        have lower : w.activationEpoch ≤ getCurrentEpoch y.state :=
-          active.elim And.left (fun h => UInt64.le_trans h.1 prev)
-        exact finiteBelow finiteY lower
+      have assigned := active.elim Consensus.Internal.assigned_of_active
+        Consensus.Internal.assigned_of_active
       apply Finset.mem_image.mpr
       refine ⟨i, Finset.mem_filter.mpr ⟨Finset.mem_range.mpr
         (Array.getElem?_eq_some_iff.mp after).1, ?_⟩, by simp [key, keyAt, after, same]⟩

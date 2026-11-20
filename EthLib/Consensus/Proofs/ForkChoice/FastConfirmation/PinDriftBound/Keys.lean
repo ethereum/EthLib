@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Nat
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
@@ -3346,13 +3347,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.start_state
     Run.exists_epoch_split tail (vy.activationEpoch.toNat - 2) (by omega) (by omega)
   have atZ := kept z post (by omega)
   obtain ⟨v0, foundZ, activeZ⟩ := isActiveAt_eq_true_iff.mp atZ
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeZ
-  have assigned : v0.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    intro far
-    have := UInt64.le_iff_toNat_le.mp activeZ.1
-    rw [far] at this
-    have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    omega
+  have assigned := Consensus.Internal.assigned_of_active activeZ
   obtain ⟨w, foundW, life⟩ := post.registryLifecycle.validators i v0 foundZ
   have same : w = vy := Option.some.inj (foundW.symm.trans foundY)
   subst same
@@ -4609,15 +4604,13 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.new_key_eff
   -- The potential, the least of balance and maximum plus the band, follows the floor path.
   classical
   obtain ⟨wa, foundA, activeA⟩ := isActiveAt_eq_true_iff.mp active
+  have assignedA := Consensus.Internal.assigned_of_active activeA
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeA
   have exitGt := UInt64.lt_iff_toNat_lt.mp activeA.2
   have lowA := UInt64.le_iff_toNat_le.mp activeA.1
   obtain ⟨z, pre, post, v0, vy, split, found0, foundY, sameAct, actEq, actLe⟩ :=
-    PinDrift.Internal.Run.start_state tail window i pending ⟨wa, foundA, fun far => by
-      have := congrArg UInt64.toNat far
-      have bound := wa.exitEpoch.toNat_lt
-      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-      omega, activeA.1⟩ fun vy found => by
+    PinDrift.Internal.Run.start_state tail window i pending
+      ⟨wa, foundA, assignedA, activeA.1⟩ fun vy found => by
       obtain rfl := Option.some.inj (found.symm.trans foundA)
       omega
   obtain rfl := Option.some.inj (foundY.symm.trans foundA)

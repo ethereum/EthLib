@@ -2029,17 +2029,10 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
         e.toNat ≤ (getCurrentEpoch m.state).toNat → isActiveValidator w e = false := by
     intro m run w found e le
     by_contra active
-    simp only [Bool.not_eq_false, isActiveValidator, Bool.and_eq_true, decide_eq_true_eq]
-      at active
-    have lowEpoch := UInt64.le_iff_toNat_le.mp active.1
-    have highEpoch := UInt64.lt_iff_toNat_lt.mp active.2
-    have exitBound := w.exitEpoch.toNat_lt
-    by_cases assigned : w.activationEpoch = FAR_FUTURE_EPOCH
-    · rw [assigned] at lowEpoch
-      have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-      omega
-    · have := ahead m run w found assigned
-      omega
+    simp only [Bool.not_eq_false] at active
+    have lowEpoch := UInt64.le_iff_toNat_le.mp (activationLe_of_active active)
+    have := ahead m run w found (Consensus.Internal.assigned_of_active active)
+    omega
   intro m pre
   induction pre with
   | nil =>

@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Nat
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
@@ -2719,13 +2720,7 @@ private theorem consRate_le {fork' : Fork} {s : BeaconState preset fork'}
     (band : ∀ t : Gwei, getTotalActiveBalance s = .ok t → t.toNat ≤ wide)
     (computed : getConsolidationChurnLimit config s = .ok rate) :
     rate.toNat ≤ Apriori.consolidationChurn preset config wide := by
-  have notGloas : ¬ .glamsterdam ≤ fork' := Nat.not_le_of_lt early
-  obtain ⟨total, read⟩ : ∃ t, getTotalActiveBalance s = .ok t := by
-    cases first : getTotalActiveBalance s with
-    | error e =>
-      simp [getConsolidationChurnLimit, notGloas, getBalanceChurnLimit, first, bind,
-        Except.bind] at computed
-    | ok t => exact ⟨t, rfl⟩
+  obtain ⟨total, read⟩ := DirectSafety.consolidationChurnLimit_total early computed
   exact (Apriori.Internal.consolidationChurnLimit_le early read computed).trans
     (Apriori.Internal.consolidationChurn_mono (band total read))
 

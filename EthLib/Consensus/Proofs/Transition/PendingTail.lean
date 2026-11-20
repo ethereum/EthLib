@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.FfgStake
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.RunKept
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # Proofs: registry entries past a boundary stay pending through slots and blocks
@@ -36,15 +37,7 @@ private theorem activationEpoch_ne_farFuture_of_isActiveAt {state : BeaconState 
     ∃ validator, state.validators.data[position]? = some validator ∧
       validator.activationEpoch ≠ FAR_FUTURE_EPOCH := by
   obtain ⟨validator, found, active⟩ := isActiveAt_eq_true_iff.mp active
-  refine ⟨validator, found, ?_⟩
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  intro far
-  have below := UInt64.lt_iff_toNat_lt.mp active.2
-  have above := UInt64.le_iff_toNat_le.mp active.1
-  rw [far] at above
-  have bound := validator.exitEpoch.toNat_lt
-  change 18446744073709551615 ≤ epoch.toNat at above
-  omega
+  exact ⟨validator, found, Internal.assigned_of_active active⟩
 
 /-- Each registry entry from the position on becomes eligible only after the epoch.
 

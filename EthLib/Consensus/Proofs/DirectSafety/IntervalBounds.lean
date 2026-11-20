@@ -8,6 +8,7 @@ import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
 import EthLib.Consensus.Proofs.DirectSafety.Provenance
 import EthLib.Consensus.Proofs.DirectSafety.Cohorts
 public import EthLib.Consensus.Proofs.Transition.SlashedPersistence
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 import EthLib.Consensus.Proofs.Transition.Totality.EpochBounds
@@ -2242,13 +2243,7 @@ private theorem intervalLoss_recent_between {f h j : Fork}
     isActiveValidator w (getCurrentEpoch middle) = true ∨
       isActiveValidator w (getPreviousEpoch middle) = true := by
   have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-      UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
-    have bound := v.exitEpoch.toNat_lt
-    intro unset
-    rw [unset, far] at active
-    omega
+  have activated := Consensus.Internal.assigned_of_active active
   have activation := first.activationEpoch activated
   have finalActivation := last.activationEpoch (activation ▸ activated)
   by_cases assigned : w.exitEpoch = FAR_FUTURE_EPOCH
@@ -2277,12 +2272,7 @@ private theorem intervalLoss_recent_unassigned {f h : Fork}
   have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
   have bound := v.exitEpoch.toNat_lt
   have epochBound := (getCurrentEpoch t).toNat_lt
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-      UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
-    intro equal
-    rw [equal, far] at active
-    omega
+  have activated := Consensus.Internal.assigned_of_active active
   have activation := life.activationEpoch activated
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
     UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt, getPreviousEpoch_toNat] at active ⊢
@@ -2300,14 +2290,7 @@ private theorem intervalLoss_exit_of_not_recent {f h : Fork}
   have assigned : w.exitEpoch ≠ FAR_FUTURE_EPOCH := fun unset =>
     notRecent (intervalLoss_recent_unassigned s t v w life epochs active unset)
   refine ⟨assigned, ?_⟩
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    have bound := v.exitEpoch.toNat_lt
-    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-      UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
-    intro unset
-    rw [unset, far] at active
-    omega
+  have activated := Consensus.Internal.assigned_of_active active
   have activation := life.activationEpoch activated
   have notActive : ¬ isActiveValidator w (getCurrentEpoch t) = true :=
     fun h => notRecent (Or.inl h)
@@ -3052,14 +3035,7 @@ private theorem intervalLoss_retained {g x y : ForkedBeaconState preset}
     endEpoch events replayed i.toNat v w found located active recent
   have covered := intervalLoss_filtered_coverage tail early high endEpoch events replayed
     i.toNat supported slashings
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    have bound := v.exitEpoch.toNat_lt
-    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-      UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
-    intro unset
-    rw [unset, far] at active
-    omega
+  have activated := Consensus.Internal.assigned_of_active active
   obtain ⟨last, lastFound, key⟩ := validators_getElem?_of_validatorKeys_prefix
       (validatorKeys_prefix_and_distinct_of_chainSteps tail.chainSteps).1 found
   have same := Option.some.inj (lastFound.symm.trans located)
@@ -3110,14 +3086,7 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
   subst w
   have recent := intervalLoss_recent_unassigned x.state a.state v first life
     (epochs x a pre) active unset
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    have bound := v.exitEpoch.toNat_lt
-    have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := by decide
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-      UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
-    intro unset
-    rw [unset, far] at active
-    omega
+  have activated := Consensus.Internal.assigned_of_active active
   have bound := intervalLoss_effective_loss_prefix shared pre rest genesis caps aligned
     early high i.toNat v found activated events
     (decomposed ▸ replayed) (fun prior priorOk =>

@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.Transition.Committees
 public import EthLib.Consensus.Proofs.Transition.Genesis
 public import EthLib.Consensus.Proofs.Transition.Trace
 public import EthLib.Consensus.Proofs.SyncCommittee
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 import EthLib.Consensus.Proofs.Transition.RunKept
 
@@ -49,18 +50,10 @@ private theorem getNextSyncCommittee_keys {committee : SyncCommittee preset}
   subst v
   refine ⟨_, validator, getValidator_eq_ok_iff.mp found,
     keyEq.symm.trans (by simpa using equal), ?_⟩
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at isActive
-  constructor
-  · intro far
-    have less := UInt64.lt_iff_toNat_lt.mp (UInt64.lt_of_le_of_lt isActive.1 isActive.2)
-    rw [far] at less
-    have bound := validator.exitEpoch.toNat_lt
-    change (2 ^ 64 - 1 : Nat) < validator.exitEpoch.toNat at less
-    omega
-  · have active := UInt64.le_iff_toNat_le.mp isActive.1
-    exact Nat.le_trans active (by
-      rw [UInt64.toNat_add]
-      exact Nat.mod_le _ _)
+  refine ⟨Consensus.Internal.assigned_of_active isActive, ?_⟩
+  exact Nat.le_trans (UInt64.le_iff_toNat_le.mp (activationLe_of_active isActive)) (by
+    rw [UInt64.toNat_add]
+    exact Nat.mod_le _ _)
 
 /-- Both committees contain only keys whose activation epoch has been assigned. -/
 private def SyncCommitteeKeys (state : BeaconState preset fork) : Prop :=

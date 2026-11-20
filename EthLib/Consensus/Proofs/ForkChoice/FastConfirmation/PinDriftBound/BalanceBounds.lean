@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Nat
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.FfgJustification

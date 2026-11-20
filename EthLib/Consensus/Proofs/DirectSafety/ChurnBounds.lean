@@ -485,15 +485,7 @@ private theorem ElectraQueuesKept.total {a b : BeaconState preset .pectra}
       rw [beq_iff_eq.mp equal] at isActive
       obtain ⟨v, found, act⟩ := isActive
       obtain ⟨w, hw, _, _, hb⟩ := kept.validators i v found
-      -- An active validator cannot have the largest epoch as its activation epoch.
-      have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-        intro equal
-        simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
-          UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at act
-        have := v.exitEpoch.toNat_lt
-        simp [equal, FAR_FUTURE_EPOCH] at act
-        omega
-      simp [found, hw, hb assigned]
+      simp [found, hw, hb (Consensus.Internal.assigned_of_active act)]
     · simp [marked]
   unfold getTotalActiveBalance
   rw [epoch, checked, getActiveValidatorIndicesChecked_of_within (state := a)

@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Credits
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # The active-stake ceiling
@@ -1028,14 +1029,13 @@ theorem activeCount_le_countPath {g x z : ForkedBeaconState preset}
   obtain ⟨j, chosen, rfl⟩ := Finset.mem_image.mp member
   obtain ⟨v, found, active⟩ := (mem_getActiveValidatorIndices within).mp
     (List.mem_toFinset.mp chosen)
+  have activated := Consensus.Internal.assigned_of_active active
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq,
     UInt64.le_iff_toNat_le, UInt64.lt_iff_toNat_lt] at active
   have exitBound := v.exitEpoch.toNat_lt
   simp only [Finset.mem_filter, Finset.mem_range, found, Option.any_some, bne_iff_ne, ne_eq,
     Bool.and_eq_true]
-  refine ⟨(Array.getElem?_eq_some_iff.mp found).1, fun same => ?_, ?_⟩
-  · rw [same, far] at active
-    omega
+  refine ⟨(Array.getElem?_eq_some_iff.mp found).1, activated, ?_⟩
   -- A validator that had exited at `x` keeps its exit epoch, so it is not active at `z`.
   cases old : x.state.validators.data[j.toNat]? with
   | none => rfl

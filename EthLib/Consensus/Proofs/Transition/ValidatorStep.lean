@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.Proposers
 public import Mathlib.Algebra.BigOperators.Group.Finset.Defs
 public import Mathlib.Data.Finset.Range
 public import Mathlib.Data.Finset.Card
+import EthLib.Base.Proofs.Nat
 import EthLib.Consensus.Proofs.Transition.SyncCommitteeProvenance
 import EthLib.Consensus.Proofs.Transition.PendingConsolidations
 import EthLib.Consensus.Proofs.Transition.BlockRewards
@@ -365,15 +366,9 @@ private theorem updatedEffectiveBalance_minimum {cap balance effective result : 
     constructor
     · have whole := congrArg UInt64.toNat aligned
       simp only [UInt64.toNat_mod, UInt64.toNat_zero] at whole
-      have division := Nat.div_le_div_right
-        (c := preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (UInt64.le_iff_toNat_le.mp funded)
-      have product := Nat.mul_le_mul_left preset.EFFECTIVE_BALANCE_INCREMENT.toNat division
-      have splitOld := Nat.mod_add_div preset.MAX_EFFECTIVE_BALANCE.toNat
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      have splitBalance := Nat.mod_add_div balance.toNat
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      rw [whole] at splitOld
-      omega
+      simpa only [whole, Nat.sub_zero] using
+        Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+          (UInt64.le_iff_toNat_le.mp funded)
     · exact UInt64.le_iff_toNat_le.mp capped
 
 private theorem ScheduledFree.transfer {f h : Fork}

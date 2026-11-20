@@ -1,5 +1,6 @@
 module
 
+import EthLib.Base.Proofs.Nat
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumReserve
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
 public import EthLib.Consensus.Proofs.Transition.FfgJustification
@@ -2329,15 +2330,10 @@ private theorem cs_key_round (h : Setting config checks g split fin pulled anc c
   · rw [ite_eq_left active, ite_eq_left active, ite_eq_left active]
     -- a key active at C has the band of its creation
     obtain ⟨wv, foundV, activeV⟩ := isActiveAt_eq_true_iff.mp active
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeV
-    have finiteC := getCurrentEpoch_succ_lt_farFuture h.twoSlots counted
-    have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
     have activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
         w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted :=
-      ⟨wv, foundV, fun far => by
-        have := UInt64.le_iff_toNat_le.mp activeV.1
-        rw [far] at this
-        omega, activeV.1⟩
+      ⟨wv, foundV, Consensus.Internal.assigned_of_active activeV,
+        activationLe_of_active activeV⟩
     have band := Internal.created_band h fromFin (getCurrentEpoch pulled).toNat (by omega) replayedF
         tailC
       highC endEpochC replayedC activated (by omega)

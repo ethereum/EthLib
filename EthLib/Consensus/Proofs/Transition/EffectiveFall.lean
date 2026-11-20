@@ -29,7 +29,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
-public import EthLib.Base.Proofs.Nat
+import EthLib.Base.Proofs.Nat
 
 /-!
 # The fall of an effective balance over the end of an epoch
@@ -412,15 +412,7 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     obtain ⟨old', read', isActive⟩ := isActiveAt_eq_true_iff.mp active
     rw [found, Option.some.injEq] at read'
     subst old'
-    intro far
-    simp only [isActiveValidator, far, FAR_FUTURE_EPOCH, Bool.and_eq_true, decide_eq_true_eq]
-      at isActive
-    have := UInt64.le_iff_toNat_le.mp isActive.1
-    have bound := (getCurrentEpoch z.state).toNat_lt
-    have exitBound := UInt64.lt_iff_toNat_lt.mp isActive.2
-    have exitLt := old.exitEpoch.toNat_lt
-    simp at this
-    omega
+    exact Internal.assigned_of_active isActive
   have upgradedSame := balanceDrift_upgrades_active upgraded early i a aRead
     (by rwa [life.activationEpoch activated])
   rw [upgradedSame, advancedEq]

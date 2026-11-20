@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Producers
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # The penalty envelope of a branch
@@ -1784,10 +1785,7 @@ private theorem anchor_floor_core {g x r : ForkedBeaconState preset} {high : Nat
     have bounds : v.activationEpoch ≤ getCurrentEpoch x.state ∧
         getCurrentEpoch x.state < v.exitEpoch := by
       simpa only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] using active
-    have activation := UInt64.le_iff_toNat_le.mp bounds.1
-    have set : v.activationEpoch ≠ FAR_FUTURE_EPOCH := fun unset => by
-      rw [unset] at activation
-      omega
+    have set := Consensus.Internal.assigned_of_active active
     obtain ⟨w, foundR, life⟩ := pre.registryLifecycle.validators i v found
     have round (tail : Run config checks x r) (j : Nat) :
         (if FirstDown tail j then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0) ≤

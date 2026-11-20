@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 public import EthLib.Consensus.Proofs.Transition.Genesis
+import EthLib.Base.Proofs.Nat
 import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.ChainRoots
 public import EthLib.Consensus.Proofs.Transition.Committees
@@ -1242,16 +1243,10 @@ private theorem balanceDrift_reference_update {f : Fork} {s t : BeaconState pres
         · exact previous
         · have rounded : balance % preset.EFFECTIVE_BALANCE_INCREMENT ≤ balance :=
             UInt64.le_iff_toNat_le.mpr (by rw [UInt64.toNat_mod]; exact Nat.mod_le _ _)
-          have quotient := Nat.div_le_div_right funded
-            (c := preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-          have product := Nat.mul_le_mul_left preset.EFFECTIVE_BALANCE_INCREMENT.toNat quotient
-          have refDivision := Nat.mod_add_div reference.toNat
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-          have balDivision := Nat.mod_add_div balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-          rw [aligned] at refDivision
           rw [Base.Uint64.toNat_min, UInt64.toNat_sub_of_le _ _ rounded, UInt64.toNat_mod]
-          have capped := UInt64.le_iff_toNat_le.mp capped
-          omega
+          refine Nat.le_min.mpr ⟨?_, UInt64.le_iff_toNat_le.mp capped⟩
+          simpa only [aligned, Nat.sub_zero] using
+            Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat funded
     · have same :
           (a.putValidator j inside { v with effectiveBalance := next }).validators.data[i]? =
           a.validators.data[i]? := by
