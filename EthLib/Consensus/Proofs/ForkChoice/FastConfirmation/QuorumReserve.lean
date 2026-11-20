@@ -163,84 +163,100 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
     creditedP * (inc + 2 * preset.downwardBand + syncPMax) + maskBudget
   2 * gain + 3 * loss
 
-/-- The reserve of a call for a counting state that may be on another branch.
+/-- The terms of `pinReserve`, by name.
 
-It reads the call's pulled-up head state, the target block's state and that block's finalized state.
+Each is a read of the state, its ancestor or the finalized block's state, as `pinTerms` computes it.
 
-It adds to the quorum reserve what a counting state of the target's epoch or the next can change.
+The pin's drift bound reads them one by one. -/
+structure PinTerms (preset : Preset) where
+  quorum : ℕ
+  exiting : ℕ
+  queues : ℕ
+  queueDep : ℕ
+  queueExit : ℕ
+  exitingRise : ℕ
+  exitingCredits : ℕ
+  queueRise : ℕ
+  reserveW : ℕ
+  flagged : ℕ
+  seatShortfall : ℕ
+  consolidationsX : ℕ
+  exitedR : ℕ
+  depth : ℕ
+  syncProposer : ℕ
+  proposerCredit : ℕ
+  exitingBands : ℕ
+  pendingR : ℕ
+  creditGain : ℕ
+  creditLow : ℕ
+  creditCap : ℕ
+  creditUnits : ℕ
+  syncLeak : ℕ
+  unitGain : ℕ
+  consolidationsXCount : ℕ
+  exitBeforeFin : ℕ → Bool
+  bF : ℕ → ℕ
+  perIncrement : ℕ
+  depthFin : ℕ
+  scoreMaxFin : ℕ
+  slashCharge : ℕ
+  consolidationGain : ℕ
+  otherGain : ℕ
+  keptArm : ℕ → Bool
+  gainHigh : Bool
+  pendingRB : ℕ → Bool
+  credits : ℕ
+  branchR : ℕ
+  late : ℕ
+  syncSeats : ℕ
+  rise : ℕ → ℕ
+  fall : ℕ → ℕ
+  positions : Finset ℕ
+  current : ℕ → Bool
+  joining : ℕ
+  joinRise : ℕ
+  exitingB : ℕ → Bool
+  lateB : ℕ → Bool
+  exitedRB : ℕ → Bool
+  slashedR : ℕ
+  slashedRB : ℕ → Bool
+  tight : Bool
+  queueKeys : ℕ
+  queueWindow : ℕ
+  gainRateMax : ℕ
+  exitFloor : ℕ
+  lowKeys : ℕ
+  lowB : ℕ → Bool
+  lowEB : ℕ → ℕ
+  newKeySeats : ℕ
+  newKeySlack : ℕ
+  newKeyFloor : ℕ
+  leakAt : ℕ → ℕ → ℕ
+  ebUp : ℕ → ℕ
+  leak : ℕ → ℕ
+  partialsDue : ℕ → ℕ
+  base0 : ℕ → ℕ
+  gainRate : ℕ → ℕ
+  floorC : ℕ → ℕ
+  drop : ℕ → ℕ
+  withdrawnRB : ℕ → Bool
 
-It covers exits, the queues, credits since finality, late activations, sync seats and band changes.
+/-- The pin reserve as the sum of its named terms, with their weights. -/
+def PinTerms.total (t : PinTerms preset) : ℕ :=
+  t.quorum + (3 * t.exiting + t.queues + t.credits + t.branchR + t.late +
+    t.syncSeats + (∑ i ∈ t.positions with t.current i = true, t.rise i) + t.joinRise +
+    3 * (∑ i ∈ t.positions with t.current i = true, t.fall i) +
+    3 * t.exitingRise + t.exitingCredits + t.exitingBands + t.queueRise + t.reserveW + t.flagged +
+    t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain +
+    t.creditUnits + t.syncLeak + 3 * t.unitGain * t.consolidationsXCount)
 
-The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
+/-- The terms of the pin reserve of a call, by name.
 
-Up to the seed lookahead plus one, the exit and consolidation queues add nothing.
+The state is the pulled-up head state of the call, and the ancestor is the state of its target root.
 
-Neither do the late activations at that depth.
-
-The reserve treats every epoch of that window as fixed before the branches split.
-
-Rates are read at a quarter of the call's total active balance, or at a fifth of an increment.
-
-A key's leak and gain are read at a computed envelope of its effective balance on any branch.
-
-The exit and consolidation churns are bounded by their values at a larger total.
-
-That total is three halves of the call's total active balance.
-
-Those bounds do not model the error branch of the checked churn reads.
-
-Another branch's consolidation carry is charged at its finalized value or one epoch's churn.
-
-A key not yet eligible here is charged once outside the tight window.
-
-Another branch can top it up and activate it.
-
-The deposits applied on a branch are charged from the finalized block's carry, over its depth.
-
-The sync seats count on both branches, each at an envelope of its reward.
-
-The envelope is read at three halves of the call's total active balance.
-
-A key's fall starts from the lesser of its balance and its cap at the finalized block's state.
-
-Another branch can keep a lower effective balance that this branch's update raised.
-
-So a key's fall reaches its effective balance at the finalized block's state.
-
-Near the downward band of that start, it also reaches its rounded balance.
-
-Past the withdrawability delay, a key's whole balance is charged as its fall.
-
-A key's rise is its headroom once eleven times its gain over the depth reaches its balance bound.
-
-Below that, its gain and the credits are scaled by eleven tenths, rounded up.
-
-Another branch can keep a higher effective balance that this branch's update lowered.
-
-So a key's rise reaches its rounded balance plus the downward band, or its finalized balance.
-
-A key active from the next epoch earns a proposer credit too.
-
-A key whose exit the call reads can be active only in the previous epoch of a counting state.
-
-There it weighs three times, so its rise and its credits are charged three times.
-
-The whistleblower reward of a key slashed on another branch is charged where that key has exited.
-
-It is also charged where that key's effective balance can fall below what pays for it in the count.
-
-A key whose exit was set by the finalized block's state can be swept here and slashed there.
-
-Those charges also read its finalized effective balance and its rounded finalized balance.
-
-A due consolidation can raise its target by one more increment, whose gains count three times.
-
-Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
-
-The reserve grows as the total active balance shrinks.
-
-For small totals it exceeds all stake, so the pin is vacuous. -/
-def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
+`pinReserve` is their weighted sum, `PinTerms.total`. -/
+def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
+    PinTerms preset :=
   let epoch := getCurrentEpoch state
   let inc := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   let slots := preset.SLOTS_PER_EPOCH.toNat
@@ -313,9 +329,10 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   -- So the deposits applied from the finalized block's state are at most its carry and the churn.
   let depositCarry := if electra : .pectra ≤ fork then
       (finalizedState.depositBalanceToConsume electra).toNat else 0
-  let queues := 3 * (depthFin * depositChurn + depositCarry) +
-    (if tight then 0 else
-      3 * (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry))
+  let queueDep := 3 * (depthFin * depositChurn + depositCarry)
+  let queueExit := if tight then 0 else
+    3 * (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry)
+  let queues := queueDep + queueExit
   -- A sync seat's reward is bounded by its envelope at three halves of the call's total.
   --
   -- The integer reward is not monotone in the total, and the envelope is.
@@ -404,22 +421,21 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- That can exceed the state's balance, and later debits are charged against the floor's start.
   let carry (i : ℕ) := leakAt (finEB i - actualFin i + inc) i + 1
-  let fall (i : ℕ) := if depthFin ≤ partialDelay then
-      -- The leak is read at the floor's start plus the band and one increment.
-      --
-      -- Each epoch also loses at most one unit to the rounding of the rates.
-      let low := base0 i - (carry i +
-        depthFin * (leakAt (base0 i + preset.downwardBand + inc) i + gainRate i + 1) +
-        partialsDue i)
-      -- On another branch the key can keep an effective balance that this branch's update raised.
-      --
-      -- Away from the downward band of its start, it keeps its finalized effective balance.
-      --
-      -- Near that band, it keeps at least its rounded balance.
-      let floorC := if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
-        else min (finEB i) (low - low % inc)
-      effective i - floorC
-    else effective i
+  let floorC (i : ℕ) :=
+    -- The leak is read at the floor's start plus the band and one increment.
+    --
+    -- Each epoch also loses at most one unit to the rounding of the rates.
+    let low := base0 i - (carry i +
+      depthFin * (leakAt (base0 i + preset.downwardBand + inc) i + gainRate i + 1) +
+      partialsDue i)
+    -- On another branch the key can keep an effective balance that this branch's update raised.
+    --
+    -- Away from the downward band of its start, it keeps its finalized effective balance.
+    --
+    -- Near that band, it keeps at least its rounded balance.
+    if max (finEB i) (base0 i) ≤ low + preset.downwardBand then finEB i
+      else min (finEB i) (low - low % inc)
+  let fall (i : ℕ) := if depthFin ≤ partialDelay then effective i - floorC i else effective i
   -- Gains compound across the window, so the rise reads the gain at eleven tenths, rounded up.
   --
   -- Three more units per epoch pay the floors of the rates.
@@ -866,18 +882,131 @@ def pinReserve (config : Config) (state ancestor finalizedState : BeaconState pr
   --
   -- There it gains across its band, so its rise is charged once.
   let joinRise := ∑ i ∈ positions with current i = false ∧ upcoming i = true, rise i
-  quorumReserve config state ancestor + (3 * exiting + queues + credits + branchR + late +
-    syncSeats + (∑ i ∈ positions with current i = true, rise i) + joinRise +
-    3 * (∑ i ∈ positions with current i = true, fall i) +
-    3 * exitingRise + exitingCredits + exitingBands + queueRise + reserveW + flagged +
-    seatShortfall + (33 * consolidationsX + 9) / 10 + exitedR + pendingR +
-    creditGain + creditUnits + syncLeak + 3 * unitGain * consolidationsXCount)
+  { quorum := quorumReserve config state ancestor, exiting, queues, queueDep, queueExit, credits,
+    branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
+    queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
+    proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
+    consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin, slashCharge,
+    consolidationGain,
+    otherGain, keptArm,
+    creditLow := (33 * depth * consolidationGain + 11 * depth * otherGain +
+      30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10,
+    creditCap := if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
+      else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax,
+    gainHigh := !decide (11 * depth * (gainRateMax + 1) ≤ capMax),
+    pendingRB := fun i => (validator i).any (fun v =>
+      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
+        v.activationEpoch == FAR_FUTURE_EPOCH),
+    joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
+    joinRise,
+    exitingB := fun i => decide ((before i || current i) = true ∧
+      (slashed i = false ∨ recentSlashing i = true) ∧
+      ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true),
+    lateB := fun i => (validator i).any (fun v =>
+      decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
+        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
+    exitedRB := fun i => (validator i).any (fun v =>
+      decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
+        decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
+    slashedR,
+    slashedRB := fun i => decide (slashed i = true ∧ recentSlashing i = true),
+    withdrawnRB := fun i => (validator i).any fun v =>
+      decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1),
+    tight, queueKeys,
+    queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry,
+    gainRateMax, exitFloor, lowKeys,
+    lowB := fun i => decide ((validator i).any (fun v =>
+      decide (finalized < v.withdrawableEpoch.toNat) &&
+        decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
+    lowEB, newKeySeats, newKeySlack, newKeyFloor, leakAt, ebUp, leak, partialsDue, base0, gainRate,
+    floorC, drop }
+
+/-- The reserve of a call for a counting state that may be on another branch.
+
+It reads the call's pulled-up head state, the target block's state and that block's finalized state.
+
+It adds to the quorum reserve what a counting state of the target's epoch or the next can change.
+
+It covers exits, the queues, credits since finality, late activations, sync seats and band changes.
+
+The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
+
+Up to the seed lookahead plus one, the exit and consolidation queues add nothing.
+
+Neither do the late activations at that depth.
+
+The reserve treats every epoch of that window as fixed before the branches split.
+
+Rates are read at a quarter of the call's total active balance, or at a fifth of an increment.
+
+A key's leak and gain are read at a computed envelope of its effective balance on any branch.
+
+The exit and consolidation churns are bounded by their values at a larger total.
+
+That total is three halves of the call's total active balance.
+
+Those bounds do not model the error branch of the checked churn reads.
+
+Another branch's consolidation carry is charged at its finalized value or one epoch's churn.
+
+A key not yet eligible here is charged once outside the tight window.
+
+Another branch can top it up and activate it.
+
+The deposits applied on a branch are charged from the finalized block's carry, over its depth.
+
+The sync seats count on both branches, each at an envelope of its reward.
+
+The envelope is read at three halves of the call's total active balance.
+
+A key's fall starts from the lesser of its balance and its cap at the finalized block's state.
+
+Another branch can keep a lower effective balance that this branch's update raised.
+
+So a key's fall reaches its effective balance at the finalized block's state.
+
+Near the downward band of that start, it also reaches its rounded balance.
+
+Past the withdrawability delay, a key's whole balance is charged as its fall.
+
+A key's rise is its headroom once eleven times its gain over the depth reaches its balance bound.
+
+Below that, its gain and the credits are scaled by eleven tenths, rounded up.
+
+Another branch can keep a higher effective balance that this branch's update lowered.
+
+So a key's rise reaches its rounded balance plus the downward band, or its finalized balance.
+
+A key active from the next epoch earns a proposer credit too.
+
+A key whose exit the call reads can be active only in the previous epoch of a counting state.
+
+There it weighs three times, so its rise and its credits are charged three times.
+
+The whistleblower reward of a key slashed on another branch is charged where that key has exited.
+
+It is also charged where that key's effective balance can fall below what pays for it in the count.
+
+A key whose exit was set by the finalized block's state can be swept here and slashed there.
+
+Those charges also read its finalized effective balance and its rounded finalized balance.
+
+A due consolidation can raise its target by one more increment, whose gains count three times.
+
+Inactivity scores and the queue of partial withdrawals are read at the finalized block's state.
+
+The reserve grows as the total active balance shrinks.
+
+For small totals it exceeds all stake, so the pin is vacuous. -/
+def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
+  (pinTerms config state ancestor finalizedState).total
 
 /-- The pin reserve contains the quorum reserve. -/
 theorem quorumReserve_le_pinReserve (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     quorumReserve config state ancestor ≤ pinReserve config state ancestor finalizedState := by
-  unfold pinReserve
+  unfold pinReserve PinTerms.total pinTerms
   dsimp only
   exact Nat.le_add_right _ _
 

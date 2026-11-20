@@ -35,6 +35,10 @@ Not yet released.
 
 ### Proof additions
 
+- `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
+  `pinReserve` is now `(pinTerms config state ancestor finalizedState).total`, with the same value and statement.
+  The pin's drift bound in `PinDriftBound` reads the terms one by one.
+
 - `ConsolidationQueueRise.Appends` says that the queue of pending consolidations only grows at its end inside a block, and `ConsolidationQueueRise.appendStep_processBlock` proves it for a block from Altair and before Gloas, with the frame and the registry lifecycle.
   `riseStep_processBlock` now follows from it, and its statement is unchanged.
   The pin's `block_step` reads it.
