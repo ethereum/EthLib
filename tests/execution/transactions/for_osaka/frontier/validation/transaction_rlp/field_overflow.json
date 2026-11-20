@@ -13,7 +13,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode one integer field as a 33-byte value (2**256), exceeding the\n256-bit width of the field. The spec decodes the nonce as a 256-bit\nscalar as well; its 64-bit bound is a validation rule (EIP-2681),\nnot a decoding one, and clients that store the nonce in 64 bits\nreject the oversized encoding all the same.\n\nThe gas limit and gas price are unbounded scalars in the spec, so\noversized values there are not a decoding error and are rejected\nonly in block context. The signature v is also a bounded 256-bit\nfield, but has no field-specific decoding exception, so its\noversized encoding is not covered here.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L263"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L263"
         }
     },
     "tests/frontier/validation/test_transaction_rlp.py::test_field_overflow[fork_Osaka-transaction_test-field_r-error_TransactionException.RLP_INVALID_SIGNATURE_R]": {
@@ -30,7 +30,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode one integer field as a 33-byte value (2**256), exceeding the\n256-bit width of the field. The spec decodes the nonce as a 256-bit\nscalar as well; its 64-bit bound is a validation rule (EIP-2681),\nnot a decoding one, and clients that store the nonce in 64 bits\nreject the oversized encoding all the same.\n\nThe gas limit and gas price are unbounded scalars in the spec, so\noversized values there are not a decoding error and are rejected\nonly in block context. The signature v is also a bounded 256-bit\nfield, but has no field-specific decoding exception, so its\noversized encoding is not covered here.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L263"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L263"
         }
     },
     "tests/frontier/validation/test_transaction_rlp.py::test_field_overflow[fork_Osaka-transaction_test-field_s-error_TransactionException.RLP_INVALID_SIGNATURE_S]": {
@@ -47,7 +47,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode one integer field as a 33-byte value (2**256), exceeding the\n256-bit width of the field. The spec decodes the nonce as a 256-bit\nscalar as well; its 64-bit bound is a validation rule (EIP-2681),\nnot a decoding one, and clients that store the nonce in 64 bits\nreject the oversized encoding all the same.\n\nThe gas limit and gas price are unbounded scalars in the spec, so\noversized values there are not a decoding error and are rejected\nonly in block context. The signature v is also a bounded 256-bit\nfield, but has no field-specific decoding exception, so its\noversized encoding is not covered here.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L263"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L263"
         }
     },
     "tests/frontier/validation/test_transaction_rlp.py::test_field_overflow[fork_Osaka-transaction_test-field_value-error_TransactionException.VALUE_OVERFLOW]": {
@@ -64,7 +64,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode one integer field as a 33-byte value (2**256), exceeding the\n256-bit width of the field. The spec decodes the nonce as a 256-bit\nscalar as well; its 64-bit bound is a validation rule (EIP-2681),\nnot a decoding one, and clients that store the nonce in 64 bits\nreject the oversized encoding all the same.\n\nThe gas limit and gas price are unbounded scalars in the spec, so\noversized values there are not a decoding error and are rejected\nonly in block context. The signature v is also a bounded 256-bit\nfield, but has no field-specific decoding exception, so its\noversized encoding is not covered here.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L263"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L263"
         }
     }
 }

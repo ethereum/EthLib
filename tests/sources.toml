@@ -146,8 +146,8 @@ directories = ["bindings/python/tests/rpc/fixtures", "tests/engine"]
 commit = "efc5f9a1f356cba376c978eedb63cb0363c2aa85"
 
 [repositories."ethereum/execution-specs"]
-commit = "e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e"
-release = "tests@v21.0.2"
+commit = "391d8a05d5cb182542ac7e7330c858b6ee03f990"
+release = "tests@v21.0.3"
 directories = [
   "tests/engine", "tests/execution/blocks", "tests/execution/fees", "tests/execution/genesis",
   "tests/execution/modexp",
@@ -216,11 +216,11 @@ url = "https://github.com/ethereum/bls12-381-tests/releases/download/v0.1.2/bls_
 size = 8319
 sha256 = "a4ef909b6248395094949a3bcdeb4e1b5b999733d4436f2c5006edba99d29279"
 
-[archives."execution-specs/tests@v21.0.2/fixtures"]
+[archives."execution-specs/tests@v21.0.3/fixtures"]
 repository = "ethereum/execution-specs"
-url = "https://github.com/ethereum/execution-specs/releases/download/tests%40v21.0.2/fixtures.tar.gz"
-size = 939189561
-sha256 = "e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9"
+url = "https://github.com/ethereum/execution-specs/releases/download/tests%40v21.0.3/fixtures.tar.gz"
+size = 944748649
+sha256 = "46bd48fb71a23da084218fe856fe442ab0c8d00c85c1c1aead0d2a965804fd24"
 
 # The devnet pre-releases of execution-spec-tests, beside the pinned release line.
 [archives."execution-specs/tests-heze-devnet@v3.0.0/fixtures"]

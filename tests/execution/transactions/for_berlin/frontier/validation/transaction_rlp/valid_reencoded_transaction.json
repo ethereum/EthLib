@@ -14,7 +14,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Verify the local field encoder reproduces the framework encoding\nbyte for byte, anchoring the malformation tests to a valid baseline.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L134"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L134"
         }
     }
 }

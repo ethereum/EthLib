@@ -9,7 +9,7 @@ from ethlib.execution import blocks
 from ethlib.serialization import rlp
 from transactions.test_transactions import FORK_OF_NETWORK
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 _ROOT = "fixtures/blockchain_tests"
 _FORKS = [
