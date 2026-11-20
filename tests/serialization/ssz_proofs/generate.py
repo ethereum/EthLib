@@ -28,6 +28,7 @@ from ssz import (
     get_generalized_index,
     hash_tree_root,
     merkleize,
+    node_root,
 )
 
 # The width in bytes of each unsigned integer type.
@@ -48,13 +49,15 @@ Uint64List0 = sized(List[Uint64], "Uint64List0", LIMIT=0)
 Uint64List8 = sized(List[Uint64], "Uint64List8", LIMIT=8)
 Uint16Vector5 = sized(Vector[Uint16], "Uint16Vector5", LENGTH=5)
 Uint64List2p40 = sized(List[Uint64], "Uint64List2p40", LIMIT=2**40)
-# 2^64 chunks, so the indices of its elements and the depth of its proofs pass 2^64.
+# 2^64 and 2^65 chunks, so the indices of their elements pass 2^64.
+# Their proofs hold 65 and 66 siblings.
 Uint256List2p64 = sized(List[Uint256], "Uint256List2p64", LIMIT=2**64)
+Uint256List2p65 = sized(List[Uint256], "Uint256List2p65", LIMIT=2**65)
 RootList4 = sized(List[Bytes32], "RootList4", LIMIT=4)
 RootList5 = sized(List[Bytes32], "RootList5", LIMIT=5)
 RootVector3 = sized(Vector[Bytes32], "RootVector3", LENGTH=3)
-Uint64Progressive = type("Uint64Progressive", (ProgressiveList[Uint64],), {})
-Bits = type("Bits", (ProgressiveBitList,), {})
+Uint64Progressive = sized(ProgressiveList[Uint64], "Uint64Progressive")
+ProgressiveBits = sized(ProgressiveBitList, "ProgressiveBits")
 
 
 class Pair(Container):
@@ -107,13 +110,14 @@ TYPES: dict[str, type] = {
     "uint16_vector_5": Uint16Vector5,
     "uint64_list_2p40": Uint64List2p40,
     "uint256_list_2p64": Uint256List2p64,
+    "uint256_list_2p65": Uint256List2p65,
     "root_list_4": RootList4,
     "root_list_5": RootList5,
     "byte_list_64": ByteList64,
     "bitlist_8": BitList8,
     "bitvector_300": BitVector300,
     "uint64_progressive": Uint64Progressive,
-    "progressive_bitlist": Bits,
+    "progressive_bitlist": ProgressiveBits,
     "square": Square,
     "shape": Shape,
 }
@@ -154,6 +158,7 @@ def tagged(cls: type) -> object:
 # The paths of each type, through fields, positions and mixed-in words.
 # Some leave the tree, some name what the type does not have, and some take a step it refuses.
 PATHS: dict[str, list[list[int | str]]] = {
+    "uint64": [[], [0]],
     "nested": [
         [],
         ["slot"],
@@ -195,7 +200,8 @@ PATHS: dict[str, list[list[int | str]]] = {
     "uint16_vector_5": [[0], [4], [5], ["__len__"]],
     "uint64_list_2p40": [["__len__"], [5], [2**40 - 1], [2**40]],
     "uint256_list_2p64": [["__len__"], [0], [2**64 - 1], [2**64]],
-    "root_list_4": [["__len__"], [0], [3], [4]],
+    "uint256_list_2p65": [[0], [2**65 - 1], [2**65]],
+    "root_list_4": [[], ["__len__"], [0], [3], [4]],
     "root_list_5": [["__len__"], [0], [4], [5]],
     "byte_list_64": [["__len__"], [0], [31], [32], [63], [64]],
     "bitlist_8": [["__len__"], [0], [7], [8]],
@@ -272,6 +278,7 @@ VALUES: dict[str, tuple[str, SSZType]] = {
     "uint64_list_8_full": ("uint64_list_8", Uint64List8(data=[Uint64(n) for n in range(8)])),
     "uint64_list_2p40": ("uint64_list_2p40", Uint64List2p40(data=[Uint64(n) for n in range(9)])),
     "uint256_list_2p64": ("uint256_list_2p64", Uint256List2p64(data=[Uint256(2**256 - 1)])),
+    "uint256_list_2p65": ("uint256_list_2p65", Uint256List2p65(data=[Uint256(1)])),
     "root_list_4_empty": ("root_list_4", RootList4(data=[])),
     "root_list_4_full": ("root_list_4", RootList4(data=[Bytes32(r) for r in roots(4)])),
     "root_list_5_full": ("root_list_5", RootList5(data=[Bytes32(r) for r in roots(5)])),
@@ -290,11 +297,24 @@ VALUES: dict[str, tuple[str, SSZType]] = {
         "uint64_progressive",
         Uint64Progressive(data=[Uint64(n) for n in range(30)]),
     ),
+    # Twenty uint64 fill the first two levels of the spine, five chunks; one more opens a third.
+    "uint64_progressive_twenty": (
+        "uint64_progressive",
+        Uint64Progressive(data=[Uint64(n) for n in range(20)]),
+    ),
+    "uint64_progressive_twenty_one": (
+        "uint64_progressive",
+        Uint64Progressive(data=[Uint64(n) for n in range(21)]),
+    ),
     "progressive_bitlist": (
         "progressive_bitlist",
-        Bits(data=[Boolean(i % 5 == 0) for i in range(300)]),
+        ProgressiveBits(data=[Boolean(i % 5 == 0) for i in range(300)]),
     ),
     "square": ("square", Square(side=Uint16(3), color=Uint8(9))),
+    "shape_square": (
+        "shape",
+        Shape(selector=Uint8(1), data=Square(side=Uint16(3), color=Uint8(9))),
+    ),
     "shape_circle": (
         "shape",
         Shape(selector=Uint8(2), data=Circle(radius=Uint16(5), color=Uint8(1))),
@@ -306,6 +326,10 @@ INDEX_BOUND = 32
 
 # An index far below the tree of every value, which a 64-bit or 128-bit integer cannot hold.
 DEEP_INDEX = 2**200
+
+# Indices of one type past its element leaves, below the 128-bit range.
+# 2^66 is the left child of the leaf of element 0 of a list of 2^64 chunks: packed data.
+EXTRA_INDICES = {"uint256_list_2p64": [2**66]}
 
 # Chunk lists and limits, among them empty lists and limits at, below and above a power of two.
 # Equal chunks and zero chunks take the shortcuts of the package, which must give the same root.
@@ -329,6 +353,8 @@ CHUNKS: list[tuple[list[bytes], int | None]] = [
     (roots(5), 8),
     (roots(5), 2**20),
     (roots(1), 2**64),
+    (roots(1), 2**64 + 1),
+    (roots(1), 2**65),
     ([bytes(32)] * 4, None),
     ([bytes(32)] * 3, 8),
     ([roots(1)[0]] * 4, 4),
@@ -361,6 +387,8 @@ def proof_case(value: SSZType, gindex: int) -> dict[str, object]:
     case: dict[str, object] = {"gindex": gindex}
     try:
         case["branch"] = ["0x" + bytes(node).hex() for node in build_proof(value, gindex)]
+        # The node that the branch proves, so the file alone shows that it reaches the root.
+        case["leaf"] = "0x" + bytes(node_root(value, gindex)).hex()
     except SSZError as error:
         case["branch"] = None
         case.update(fault(error))
@@ -390,7 +418,8 @@ def main(out: Path) -> None:
         reached = {
             c["gindex"] for c in gindices if c["type"] == type_name and c["gindex"] is not None
         }
-        indices = sorted(set(range(INDEX_BOUND)) | reached | {DEEP_INDEX})
+        extra = {DEEP_INDEX, *EXTRA_INDICES.get(type_name, [])}
+        indices = sorted(set(range(INDEX_BOUND)) | reached | extra)
         values.append(
             {
                 "name": value_name,

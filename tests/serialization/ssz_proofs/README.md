@@ -34,23 +34,29 @@ uv run --no-project --python 3.12 --with eth-ssz-specs==0.1.0 \
   When the fault names the step that it refused, the case gives that step too.
 - `values` gives each value as its SSZ bytes, with its hash tree root.
   It gives the proof of every index below 32, of every index of a path of its type, and of the index 2^200.
+  A proof gives the node that it proves, then its branch.
   For an index that the package refuses, it gives the fault instead.
 - `chunk_roots` gives chunks and a limit, then their root, or the fault that refuses a limit below the number of chunks.
 
 The cases cover empty lists, a list of limit 0, lists filled to a limit that is a power of two, and limits just below and above one.
 They also cover the length node of a list, the index 0 and the root.
 Other indices go into packed data, into a length, into an empty position, and past the end of a progressive list.
-A list of 2^64 chunks has element indices above 2^64 and proofs of 65 siblings, which no 64-bit integer holds.
+Lists of 2^64 and 2^65 chunks have element indices above 2^64, which no 64-bit integer holds.
+Their proofs hold 65 and 66 siblings, and the chunk roots go up to a limit of 2^65.
 
-No case goes past a chunk limit of 2^64, since the package roots an empty subtree of at most 2^64 leaves and refuses a larger limit.
+The package roots a zero subtree of at most 2^64 leaves.
+So it refuses a limit past 2^64 for empty or zero chunks, and any limit past 2^65, where EthLib gives a root.
+No case has such a limit.
 No case has a negative position, index or limit, since the EthLib bindings refuse a negative integer before they call EthLib.
 
 The test helpers of the consensus specification also have a chunk root function of their own, in `tests/core/pyspec/eth_consensus_specs/utils/merkle_minimal.py`.
-That function gives the same root, or the same refusal, for every chunk case here.
+At the pinned commit, that function gives the same root for every chunk case here, and fails its assertion on each refused case.
+No test of this repository runs it; this was checked by hand.
 
 `bindings/python/tests/ssz/test_ssz_proof_vectors.py` checks that EthLib gives each index, proof and root, and refuses each case that the package refuses.
-It expects the whole message of EthLib for each fault of the package.
+It expects the whole message and the code of EthLib for each fault of the package.
 One wording differs: the package refuses a field name on a union as not a position, and EthLib as a missing field.
 It reads each value from its bytes, and checks that EthLib gives each value the root of the file.
+It also hashes each branch of the file up from its node, and checks that it reaches the root of the value.
 
 `SHA256SUMS` pins `cases.json` and `generate.py`.
