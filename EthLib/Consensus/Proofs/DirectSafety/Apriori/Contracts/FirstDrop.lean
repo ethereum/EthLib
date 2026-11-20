@@ -1548,7 +1548,7 @@ A sweep or a switch to compounding leaves at least that much, and the largest on
 Each step extends the trace, keeping the carried account.
 
 The trace is marked slashed only if the key ends the branch slashed. -/
-theorem FloorTrace.run_of_le_cap
+private theorem FloorTrace.run_of_le_cap
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)

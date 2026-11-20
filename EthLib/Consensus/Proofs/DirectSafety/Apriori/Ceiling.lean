@@ -2380,7 +2380,7 @@ Or it is slashed at the start with an assigned exit.
 Then its delayed penalty is not due in the epoch of the step.
 
 The high-water mark of the carried account rises at most to the effective balance after the step. -/
-theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
+private theorem FloorTrace.step_general {g x m y : ForkedBeaconState preset}
     (shared : Run config checks g x) (pre : Run config checks x m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (step : Step config checks m y) (early : y.fork < .glamsterdam)

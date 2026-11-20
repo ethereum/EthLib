@@ -528,7 +528,7 @@ It starts from the smaller of its balance and its largest effective balance.
 
 The debits are the penalties, the sync penalties and the partial withdrawals of its events.
 
-The guards are those of the per-key floor of the a priori bound, `FloorTrace.run_of_le_cap`.
+The guards are those of the per-key floor of the a priori bound.
 
 A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
 private theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}

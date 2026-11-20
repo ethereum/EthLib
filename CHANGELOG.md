@@ -222,7 +222,6 @@ Not yet released.
   The pin's bound on the deposits credited to the active keys of C's run reads it, in `deposit_each_le`.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
-  `FloorTrace.step_general` and `FloorTrace.run_of_le_cap` are the activated cases.
   They also accept a different guard in place of the final key's exit.
   It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
   Master's headers are the cases with the exit guard.
