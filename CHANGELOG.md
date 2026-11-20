@@ -39,6 +39,9 @@ Not yet released.
   `slot_of_crossing` now follows from it, and its statement is unchanged.
   The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
 
+- `DirectSafety.Apriori.Internal.segment_slot_cases` splits a segment of a run that starts in an epoch: it stays in its epoch, or it ends with the slot of the epoch boundary after an inner run.
+  `segment_events_cases` builds on it, and the pin's credit scan of a segment reads it.
+
 - `DirectSafety.Apriori.Internal.segment_events_cases` splits the events of a segment of a branch that starts in an epoch.
   The segment stays in its epoch, or it ends with the slot of the epoch boundary after an inner run, whose epoch passes it gives by source.
   The cohort's penalties in `Penalties` and one key's pass debits in the pin's drift bound read it.

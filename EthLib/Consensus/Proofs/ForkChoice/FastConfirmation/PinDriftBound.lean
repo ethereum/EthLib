@@ -17879,21 +17879,13 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
     (fork_le_of_chainSteps (mid.append rest).chainSteps) (fork_le_of_chainSteps head.chainSteps))
   obtain ⟨mf, ms⟩ := m
   obtain rfl : mf = fork := mFork
-  by_cases same : getCurrentEpoch n.state = getCurrentEpoch ms
+  rcases DirectSafety.Apriori.Internal.segment_slot_cases mid starts with same |
+    ⟨u, inner, boundary, rfl, uEpoch, -⟩
   · have whole := propN_epoch_le h highC S pulledOk toS link (head.append mid) rest
       (same.trans sameStart)
     simp only [creditScan_append, Finset.sum_add_distrib] at whole
     exact whole
-  cases mid with
-  | nil => exact absurd rfl same
-  | @snoc u _ inner step =>
-    have uEpoch : getCurrentEpoch u.state = getCurrentEpoch ms := starts step (.last _ _)
-    have crossing : getCurrentEpoch u.state < getCurrentEpoch n.state :=
-      UInt64.lt_of_le_of_ne step.chainStep.currentEpoch_le
-        (fun equal => same (equal.symm.trans uEpoch))
-    -- The last step leaves the epoch, so it is the slot that ends it.
-    obtain ⟨boundary, rfl⟩ := step.eq_slot_of_crossing crossing
-    have whole := propN_epoch_le h highC S pulledOk toS link (head.append inner)
+  · have whole := propN_epoch_le h highC S pulledOk toS link (head.append inner)
       ((Run.nil.snoc (Step.slot boundary)).append rest) (uEpoch.trans sameStart)
     simp only [creditScan_append, Finset.sum_add_distrib] at whole
     refine Nat.le_trans (Nat.mul_le_mul_right 896 (Nat.add_le_add_left
@@ -22023,6 +22015,20 @@ private theorem slashW_add_downwardBand_le
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   unfold slashW; split <;> first | exact h.facts.slashBand | simpa using h.facts.below.le
 
+/-- A replay of a run that ends by R's epoch, read at R's epoch.
+
+The horizon of the replay does not change the events of such a run. -/
+private theorem replay_at_pulled (pulled : BeaconState preset fork)
+    {u w : ForkedBeaconState preset} (run : Run config checks u w) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    (ending : getCurrentEpoch w.state ≤ getCurrentEpoch pulled)
+    {events : List (BalanceEvent preset)} (replayed : run.balanceEvents high = .ok events) :
+    run.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+  have endingNat := UInt64.le_iff_toNat_le.mp ending
+  rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le run (localHigh := high)
+    (by omega) (by omega)]
+  exact replayed
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The balance of a cut key at the split is bounded from an anchor state of R's run that holds it.
 
@@ -22128,10 +22134,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
       (toC.append r1) r2 cutFull
       (Nat.le_trans insideC (registryGrows_of_chainSteps r1.chainSteps))
       (fun {evs} ev => by
-        have ev' : r2.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs := by
-          rw [balanceEvents_eq_of_endpoint_le r2 (localHigh := high) (by simp only; omega)
-            (by simp only; omega)]
-          exact ev
+        have ev' := replay_at_pulled pulled r2 high endEpoch (UInt64.le_refl _) ev
         rw [hWdef]
         exact floor r1 r2 ev')
     rw [hBc, hDf]
@@ -22234,10 +22237,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
       have env := prefix_envelope h fromFin tail high endEpoch replayedF replayed v toC
         (fromC.append tail) (by rw [Run.append_assoc, cutC]) insideC W startEnv
         (fun {zs} pre after cutR {evs} ev => by
-          have ev' : after.balanceEvents (getCurrentEpoch pulled).toNat = .ok evs := by
-            rw [balanceEvents_eq_of_endpoint_le after (localHigh := high) (by simp only; omega)
-              (by simp only; omega)]
-            exact ev
+          have ev' := replay_at_pulled pulled after high endEpoch (UInt64.le_refl _) ev
           rw [hWdef]
           exact floor pre after ev')
       have memberSplit : (⟨fork, split⟩ : ForkedBeaconState preset) ∈
@@ -24810,20 +24810,6 @@ private theorem path_le_of_start
     · rw [zero]
       exact Nat.zero_le _
   · exact after z (List.mem_of_mem_tail later)
-
-/-- A replay of a run that ends by R's epoch, read at R's epoch.
-
-The horizon of the replay does not change the events of such a run. -/
-private theorem replay_at_pulled (pulled : BeaconState preset fork)
-    {u w : ForkedBeaconState preset} (run : Run config checks u w) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
-    (ending : getCurrentEpoch w.state ≤ getCurrentEpoch pulled)
-    {events : List (BalanceEvent preset)} (replayed : run.balanceEvents high = .ok events) :
-    run.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-  have endingNat := UInt64.le_iff_toNat_le.mp ending
-  rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le run (localHigh := high)
-    (by omega) (by omega)]
-  exact replayed
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch holds beyond the split pays an upward band.
@@ -33694,13 +33680,7 @@ private theorem flow_split_of (h : Setting config checks g split fin pulled anc 
       3 * (pinTerms config pulled anc fin).consolidationsX := by
     have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps fromFin.chainSteps)
-    have onR := (DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tail (high := high)
-      (localHigh := (getCurrentEpoch pulled).toNat) endEpoch (by simp only; omega)).symm.trans
-      replayed
-    have onF := (DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le fromFin
-      (high := high) (localHigh := (getCurrentEpoch pulled).toNat) (by simp only; omega)
-      (by simp only; omega)).symm.trans
-      replayedF
+    obtain ⟨onF, onR⟩ := replays_at_pulled h tail high endEpoch replayed fromFin replayedF
     have onC := (DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le tailC
       (high := highC) (localHigh := (getCurrentEpoch pulled).toNat) endEpochC
       (by simp only; omega)).symm.trans replayedC
