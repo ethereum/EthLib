@@ -4643,6 +4643,10 @@ The bitarray of `engine_getBlobs` is given exactly from version 4.
 The decoder of payloads of versions 1 to 3 reads back the JSON of every payload at its fork (`anyPayload_executionPayloadJson`, `Proofs/Json.lean`).
 The extra data must then hold at most 32 bytes.
 The decoder of version 4 does the same from Dencun on, with the block access list and the slot number (`payloadV4_executionPayloadV4Json`).
+Version 6 of `engine_newPayload`, from Bogota, takes the four parameters of version 5 and then the transactions of an inclusion list.
+Its decoder reads back what its writer writes from Dencun on, and the list reads back entry for entry (`newPayloadV6Params_json`, `Proofs/NewPayload.lean`; `inclusionListOfJson_json`, `Proofs/Json.lean`).
+Each entry is any byte string, as [`bogota.md`](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/engine/bogota.md#engine_newpayloadv6) asks after [execution-apis PR #956](https://github.com/ethereum/execution-apis/pull/956), so an entry that does not decode as a transaction still reads.
+No route sends a request to version 6 yet.
 The decoder of the forkchoice state reads back the JSON of every state (`forkchoiceStateOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A version of `engine_forkchoiceUpdated` reads back payload attributes whose structure it takes, and they are the attributes at their fork (`payloadAttributesOfVersion_json`).
 The decoder of its parameters reads back the state, and the JSON of the attributes or their absence (`forkchoiceUpdatedParams_json`).
@@ -4658,6 +4662,9 @@ The other two examples are of methods that EthLib does not specify, and the test
 
 The answers have a JSON form too, written and read back.
 The decoder of a payload status reads back what its writer writes, for every status and validation error (`payloadStatusOfJson_json`, `Proofs/Json.lean`).
+So does the decoder of a payload status of version 2, from Bogota (`payloadStatusV2OfJson_json`).
+That holds for every status but `INVALID_BLOCK_HASH`, which version 2 does not have.
+Its extra member says whether the payload satisfies its inclusion list, as a boolean or `null`.
 The decoder of the response of `engine_forkchoiceUpdated` does the same for each status that the method answers (`forkchoiceUpdatedResponseOfJson_json`, `Proofs/ForkchoiceUpdated.lean`).
 A JSON value reads as a payload status exactly when it is an object of this form (`payloadStatusOfJson_eq_ok_iff`, `Proofs/Json.lean`).
 Its members that are not `null` are `status` and, if present, `latestValidHash` and `validationError`.
