@@ -1036,6 +1036,22 @@ def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     """The record after importing a file with the minimal strategy of EIP-3076, as JSON text."""
     ...
 
+def consensus_read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    ...
+
+def consensus_signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    ...
+
+def consensus_remote_signer_sign(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, document: Any) -> tuple[int, bytes | None, bytes]:
+    """The answer of the sign endpoint of a remote signer, with the rule of EIP-3076."""
+    ...
+
+def consensus_remote_signer_public_keys(keys: list[bytes]) -> Any:
+    """The answer of the public keys endpoint of a remote signer: its public keys as hex."""
+    ...
+
 def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:
     """Whether a key may sign a block of a slot with a signing root, given a record."""
     ...
@@ -1054,6 +1070,10 @@ def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, sour
 
 def consensus_keymanager_json(schema: str, document: Any) -> Any:
     """A value of a schema of the Keymanager API, read from its JSON and written back."""
+    ...
+
+def consensus_keymanager_run(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """The responses of calls made one after another on a validator client, then its state."""
     ...
 
 def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:

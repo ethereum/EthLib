@@ -9,6 +9,12 @@ Not yet released.
 
 ### Proof additions
 
+- `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Both stores start at the anchor store, and the receiver reads the vote at least the delay after its deadline.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
+  Otherwise two honest stores at bounded times collide.
+  `Execution.reachable_of_start` shows that the store of any validator that is reachable from the anchor at the start stays reachable, and `Execution.reachable` now follows from it.
+
 - `Execution.honestHeadsExist_or_evidence_of_gloas` shows that from Gloas an up-to-date honest store has a head ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Otherwise two honest stores collide, or direct-safety evidence holds.
   It is the Gloas companion of `Execution.honestHeadsExist_or_evidence`, which keeps its statement.
@@ -24,7 +30,7 @@ Not yet released.
 
 - `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
-  The receiver's store must be closed under the envelopes that it accepts from its view.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
   Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
   `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
   `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
@@ -394,6 +400,31 @@ Not yet released.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
 ### Changes that break callers
+
+- In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
+  It no longer asks that the envelope leaves the store unchanged.
+  The old premise fails when a second valid envelope for a held root replaces the stored message, which the abstract execution engine allows.
+  A caller with the old premise `old` passes `fun s a m h => old s a m h ▸ Store.onExecutionPayloadEnvelope_verified h`.
+
+- In Lean, `SphincsSecurity.Security.flatMap_ofFn_injective` is removed.
+  `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
+  The SPHINCS+ and XMSS proofs now use it.
+
+- In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
+  `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
+  `Signatures.SecretKey.fromBytes` keeps its `ByteArray`, and reads 32 bytes of it with `exactBytes?`.
+  `Bls.Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Bls.Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
+  `Bls.Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
+  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `Signatures.SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
+  The new `Signatures.SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+
+- In Lean, the module `EthLib.Cryptography.Proofs.IdLoops` is removed, with its seven lemmas in the namespace `Cryptography.IdLoops`.
+  They are `id_pure`, `id_bind`, `forIn_list_yield`, `forIn_range_yield`, `forIn_range_yield_ite`, `forIn_range_yield_ite₂` and `foldl_range'_getElem!`.
+  They turned `for` loops of `Id.run do` blocks into folds.
+  No proof of EthLib uses them, since the last such loop, the tail scan of a compressed BLS point, became a fold ([#2045](https://github.com/ethereum/EthLib/pull/2045)).
+  `Proofs/Bls/G1Msm.lean` and `Proofs/Bls/G2Compress.lean` no longer import the module.
 
 - In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.

@@ -131,6 +131,7 @@ PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
 PyObject* KEYMANAGER_ERROR;
+PyObject* REMOTE_SIGNING_ERROR;
 PyObject* BINDING_ERROR;
 PyObject* RPC_ERROR;
 
@@ -887,6 +888,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_relay_validators},
   {"consensus_keymanager_json", py_consensus_keymanager_json, METH_VARARGS,
    DOC_consensus_keymanager_json},
+  {"consensus_keymanager_run", py_consensus_keymanager_run, METH_VARARGS,
+   DOC_consensus_keymanager_run},
   {"consensus_relay_delivered_payload", py_consensus_relay_delivered_payload,
    METH_VARARGS, DOC_consensus_relay_delivered_payload},
   {"consensus_relay_received_bid", py_consensus_relay_received_bid,
@@ -1029,6 +1032,14 @@ static PyMethodDef methods[] = {
    DOC_consensus_read_slashing_interchange},
   {"consensus_import_slashing_interchange", py_consensus_import_slashing_interchange,
    METH_VARARGS, DOC_consensus_import_slashing_interchange},
+  {"consensus_read_signing_request", py_consensus_read_signing_request, METH_VARARGS,
+   DOC_consensus_read_signing_request},
+  {"consensus_signing_request_root", py_consensus_signing_request_root, METH_VARARGS,
+   DOC_consensus_signing_request_root},
+  {"consensus_remote_signer_sign", py_consensus_remote_signer_sign, METH_VARARGS,
+   DOC_consensus_remote_signer_sign},
+  {"consensus_remote_signer_public_keys", py_consensus_remote_signer_public_keys, METH_VARARGS,
+   DOC_consensus_remote_signer_public_keys},
   {"consensus_check_block_signing", py_consensus_check_block_signing, METH_VARARGS,
    DOC_consensus_check_block_signing},
   {"consensus_check_attestation_signing", py_consensus_check_attestation_signing, METH_VARARGS,
@@ -1443,6 +1454,7 @@ PyInit__native(void) {
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
     KEYMANAGER_ERROR = PyObject_GetAttrString(errors, "KeymanagerError");
+    REMOTE_SIGNING_ERROR = PyObject_GetAttrString(errors, "RemoteSigningError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);

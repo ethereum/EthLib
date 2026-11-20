@@ -129,6 +129,12 @@ def readBool (path : String) (document : Json) : Except KeymanagerError Bool :=
   | some flag => .ok flag
   | none => .error (.field path)
 
+/-- An array of strings. -/
+def readStrings (path : String) (document : Json) : Except KeymanagerError (List String) :=
+  match BeaconApi.ErrorMessage.readStrings document with
+  | some texts => .ok texts
+  | none => .error (.field path)
+
 /-- A string as the API writes it. -/
 def stringJson (text : String) : Json := .str text
 
@@ -326,5 +332,34 @@ def readSignedVoluntaryExit (path : String) (document : Json) :
 The writer of the Beacon API can fail in its type, so this one can too; it never does. -/
 def signedVoluntaryExitJson (signed : SignedVoluntaryExit) : Except KeymanagerError Json :=
   (BeaconApi.toApiJson signed).mapError fun _ => .field ""
+
+/-! ## Requests -/
+
+/-- A request to delete keys, local or remote. -/
+structure DeleteKeysRequest where
+  /-- The keys to delete, in order. -/
+  pubkeys : List BLSPubkey
+  deriving DecidableEq, Repr
+
+/-- An array of public keys, each read in turn. -/
+def readPubkeys (path : String) (document : Json) : Except KeymanagerError (List BLSPubkey) :=
+  ofProtection (Interchange.readArray path (fun path => Interchange.readBytes path 48) document)
+
+/-- A request to delete keys, from its object. -/
+def readDeleteKeysRequest (document : Json) : Except KeymanagerError DeleteKeysRequest := do
+  return { pubkeys := ← requiredField "" "pubkeys" readPubkeys document }
+
+/-! ## Responses -/
+
+/-- A response of the API: its HTTP status code and its JSON body. -/
+structure Response where
+  /-- The HTTP status code. -/
+  status : Nat
+  /-- The JSON body. -/
+  body : Json
+
+/-- A response with HTTP 400 and the body of an error. -/
+def badRequest (message : String) : Response :=
+  ⟨400, errorResponseJson ⟨message⟩⟩
 
 end EthLib.Consensus.KeymanagerApi

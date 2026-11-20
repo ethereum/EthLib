@@ -716,6 +716,18 @@ extern lean_object*
 eth_consensus_import_slashing_interchange(lean_object* held, lean_object* file);
 
 extern lean_object*
+eth_consensus_read_signing_request(lean_object* args);
+
+extern lean_object*
+eth_consensus_signing_request_root(lean_object* args);
+
+extern lean_object*
+eth_consensus_remote_signer_sign(lean_object* args);
+
+extern lean_object*
+eth_consensus_remote_signer_public_keys(lean_object* args);
+
+extern lean_object*
 eth_consensus_check_block_signing(
   lean_object* text, lean_object* pubkey, uint64_t slot, lean_object* signing_root);
 
@@ -1286,6 +1298,17 @@ py_consensus_keymanager_json(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_keymanager_json, args, 2, KEYMANAGER_ERROR);
+}
+
+extern lean_object*
+eth_consensus_keymanager_run(lean_object* args);
+
+PyObject*
+py_consensus_keymanager_run(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_keymanager_run, args, 8, KEYMANAGER_ERROR);
 }
 
 extern lean_object*
@@ -2194,6 +2217,39 @@ py_consensus_import_slashing_interchange(
     eth_consensus_import_slashing_interchange(mk_bytearray(held, held_len),
       mk_bytearray(file, file_len)),
     SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_read_signing_request(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_read_signing_request, args, 2, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_signing_request_root(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_signing_request_root, args, 3, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_remote_signer_sign(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_remote_signer_sign, args, 6, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_remote_signer_public_keys(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_remote_signer_public_keys, args, 1,
+    REMOTE_SIGNING_ERROR);
 }
 
 PyObject*

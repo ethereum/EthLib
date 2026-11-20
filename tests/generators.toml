@@ -345,6 +345,11 @@ cases = ["**"]
 generator = "not established"
 checked = "keymanager-APIs at 51f2a5c9 holds no program that writes the OpenAPI document or the types files, and the README names none"
 
+[[directories."tests/consensus/remote_signing_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "remote-signing-api at 44e9e0dc holds no generator code, its workflows only lint, bundle and release the OpenAPI document, and its README names no tool that writes the examples"
+
 [[directories."tests/consensus/beacon_api"]]
 cases = ["**"]
 generator = "not established"
@@ -538,6 +543,11 @@ generator = "EELS 2.19.0"
 [[directories."tests/execution/transactions"]]
 cases = ["**"]
 generator = "execution-specs filler, no transition tool"
+
+[[directories."bindings/python/tests/eth/portal_block_data"]]
+cases = ["block-data-19426587.yaml"]
+generator = "not established"
+checked = "the file holds the header, body and receipts of mainnet block 19426587, and portal-spec-tests 45e46aa names no exporting tool"
 
 [[directories."tests/execution/genesis"]]
 cases = ["**"]

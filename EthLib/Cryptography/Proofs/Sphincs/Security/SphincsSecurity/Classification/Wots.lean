@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Chain
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Classification.Encoding
+import EthLib.Base.Proofs.List
 
 /-!
 # Extraction from a one-time signature
@@ -37,8 +38,8 @@ attribute [local irreducible] chainWalk
 omit [Params] in
 theorem leafPayload_injective {endpoints endpoints' : ChainIndex → Digest}
     (h : leafPayload endpoints = leafPayload endpoints') : endpoints = endpoints' :=
-  flatMap_ofFn_injective (bytesLE 16) 16 (bytesLE_length 16)
-    (fun _ _ => bytesLE_injective) h
+  List.ofFn_injective (EthLib.Base.flatMap_inj_of_length (by decide) (bytesLE_length 16)
+    (fun _ _ => bytesLE_injective) h)
 
 variable (f : QueryImpl HashSpec Id) (parameter : PublicParameter)
     (lay : Layer) (tree : TreeIndex) (leaf : LeafIndex)

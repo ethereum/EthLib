@@ -67,24 +67,19 @@ theorem bytesToBlsField_ok {b : Bytes32} {f : Fr}
   split at h
   · rename_i g hg
     cases h
-    obtain ⟨_, hval, hlt⟩ := Bls.Fr.fromBytesBE_ok hg
-    exact ⟨hval, hlt⟩
+    exact Bls.Fr.fromBytesBE_ok hg
   · cases h
 
 /-- A field element that the bytes decode to is the result of the KZG decoder. -/
 private theorem bytesToBlsField_of_fromBytesBE {y : Bytes32} {x : Fr}
-    (h : Fr.fromBytesBE ⟨y.toArray⟩ = .ok x) : bytesToBlsField y = .ok x := by
+    (h : Fr.fromBytesBE y = .ok x) : bytesToBlsField y = .ok x := by
   unfold bytesToBlsField
   rw [h]
 
 /-- Decoding the encoding of a field element gives it back. -/
 @[simp] theorem bytesToBlsField_blsFieldToBytes (x : Fr) :
-    bytesToBlsField (blsFieldToBytes x) = .ok x := by
-  -- The decoder is opened on a variable, so the kernel never evaluates the encoding.
-  have heta : ∀ b : ByteArray, (⟨b.data⟩ : ByteArray) = b := fun _ => rfl
-  apply bytesToBlsField_of_fromBytesBE
-  rw [show (blsFieldToBytes x).toArray = x.toBytesBE.data from rfl, heta,
-    Bls.Fr.fromBytesBE_toBytesBE]
+    bytesToBlsField (blsFieldToBytes x) = .ok x :=
+  bytesToBlsField_of_fromBytesBE (Bls.Fr.fromBytesBE_toBytesBE x)
 
 /-- Field element `i` of a flattened vector of 32-byte chunks is chunk `i`. -/
 @[simp] theorem fieldElementBytes_flatten {k : Nat} (v : Vector Bytes32 k) (i : Fin k) :

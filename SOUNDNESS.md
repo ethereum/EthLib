@@ -2819,6 +2819,8 @@ For the transactions and the withdrawals, the search of the trie binding returns
 It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
 No theorem bounds the probability of finding two bodies that pass for one header and differ.
+The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
+It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
 The check leaves four rules of that section to other checks.
 It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
@@ -4526,6 +4528,14 @@ Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction 
 So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
 Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
 The ID is then that of the head and the attributes.
+Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
+The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
+The fork is the active fork at the number after the head and at the timestamp.
+The head and the timestamp come first in those bytes, and the tree gives the number of the head.
+Take two calls on one configuration and one tree that start builds.
+They hash the same bytes only for the same head and the same attributes at the same fork (`forkchoiceUpdatedCall_payloadIdInput_inj`).
+So two distinct builds of such calls get distinct IDs, unless the Keccak-256 hashes of their inputs share their first 8 bytes.
+No theorem bounds the chance of such a collision.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
 They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
 
@@ -5569,8 +5579,12 @@ Both theorems assume a lawful state type and a preset whose sizes in the block a
 After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
 No theorem states that yet.
 
-`IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
-`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
+`IsUpdatesAnswer` is the rule of the source for the updates answer.
+It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
+`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that `updatesInRange` gives such an answer.
+That answer runs from the earliest known period of the range to the first period that the node lacks, cut to the limit.
+`isUpdatesAnswer_iff` shows that the accepted answers are exactly its starts.
+The empty answer is accepted only when the range has no known update.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
 `decodeUpdateChunks_encode` shows that the SSZ chunks of updates decode back to the updates, each with its fork, on a chain that passes the check of fork digests.
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
@@ -5870,7 +5884,11 @@ Points that remain open:
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
   EthLib takes their conditions from the validator status document that the schema links, which is not a pinned file.
-- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap; `IsUpdatesAnswer` asks only for increasing periods.
+- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap.
+  EthLib reads it as periods with no gap, in `IsUpdatesAnswer` and in `isValidLightClientUpdatesByRangeResponse` (`Consensus/ReqResp/Validity.lean`).
+  The [sync protocol](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/light-client/sync-protocol.md#validate_light_client_update) rejects an update whose signature period is more than one period after the period of the finalized header of the store.
+  The period of an update is that of its attested header, which is at most its signature period.
+  So a light client that applies the answer in order cannot use an update after a gap.
 - The source writes the context of an updates chunk as the digest of a fork version and the genesis validators root, the form before Fulu.
   EthLib takes the digest of the epoch of the attested header, which from Fulu also depends on the blob schedule.
 - The source bounds the range of the updates answer by the period of the head; the answer leaves that bound to the updates that the caller gives.
@@ -6279,6 +6297,229 @@ The source leaves six points about its values open:
 - The graffiti is a string, and the block field that it fills is 32 bytes.
   EthLib reads it as a string; how it becomes 32 bytes is a question for the call that sets it.
 
+The call `POST /eth/v1/keystores` imports ERC-2335 keystores with their EIP-3076 slashing protection data (`Consensus/KeymanagerApi/LocalKeys.lean`).
+The key state of a validator client is a pure value: its local keys, its remote keys and its EIP-3076 record.
+A request whose lists of keystores and passwords differ in length is refused (`importKeystores_eq_error_of_length_ne`, `Consensus/Proofs/KeymanagerApi/LocalKeys.lean`), with HTTP 400 and the state unchanged (`postKeystores_of_length_ne`).
+A request with no keystore succeeds with no status, whatever its data (`importKeystores_of_keystores_eq_nil`).
+A call that succeeds gives one status for each keystore, in order (`length_of_importKeystores`).
+A keystore with the status `imported` holds a key that the client holds afterwards (`mem_localKeys_of_importKeystores`), and no key held before is removed (`localKeys_prefix_of_importKeystores`).
+A keystore is a `duplicate` exactly when its key was held before the call, or a keystore before it in the request imported it (`duplicate_iff_of_importKeystores`).
+After a call, the record refuses every block and every vote that it refused before (`checkBlock_of_importKeystores`, `checkAttestation_of_importKeystores`).
+For a key imported with slashing protection data, a block or vote that the record accepts meets the conditions of EIP-3076 against the entries of that key (`checkBlockSigning_of_importKeystores`, `checkAttestationSigning_of_importKeystores`).
+The record imports those entries by the minimal strategy of EIP-3076.
+So such a block is after every block of the key in the data (`lt_slot_of_importKeystores`).
+Such a vote has a source at least, and a target after, those of every vote of the key in the data (`sourceEpoch_targetEpoch_of_importKeystores`).
+The key derivation of a keystore is bounded by limits that the caller sets, since the source sets none.
+The Python suite runs the example of the issue and the cases of the source's use case "Add a key", with keystores that it builds.
+
+The source leaves six points about the import open, and EthLib takes these readings:
+
+- Which keys' slashing protection data is loaded.
+  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
+  The [use case](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
+  Step 3 of the flow allows the data to be "loaded in its entirety, or imported on a per-key basis", and its step 4 loads it only for a matching keystore.
+  EthLib takes the per-key reading of step 4: it loads the entries of each imported key, and no others.
+  So the data of a keystore that is a duplicate is not loaded either.
+  Loading more data would refuse more messages, so the other reading is not less safe.
+- What `duplicate` compares against: "already known to the keymanager", or "not currently active".
+  EthLib compares against the local keys only, so a remote key of the same public key does not make a keystore a duplicate.
+- Which public key identifies a keystore.
+  ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret and does not read the field.
+- Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
+- Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
+- For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
+
+The calls `GET` and `DELETE /eth/v1/keystores` list the keys of a client and delete some of them (`Consensus/KeymanagerApi/DeleteKeys.lean`).
+The list gives the public key of each key that the client holds, in order (`map_validatingPubkey_listKeys`, `Consensus/Proofs/KeymanagerApi/DeleteKeys.lean`).
+A delete gives one status for each key of the request, in order (`length_data_deleteKeys`, `getElem?_data_deleteKeys`), and keeps the record (`protection_of_deleteKeys`), as the source requires.
+Afterwards the client holds no key of the request, unless it holds that key read-only (`isReadonly_of_isActive_deleteKeys`).
+A key named twice in a request is not deleted the second time (`ne_deleted_of_deleteKeys`).
+The data returned names only keys of the request whose status is `deleted` or `not_active` (`exists_of_mem_slashingProtection_deleteKeys`).
+For each such key it holds every block and vote that the record holds (`blocksOf_slashingProtection_deleteKeys`, `attestationsOf_slashingProtection_deleteKeys`).
+A delete sent again to the state that it leaves returns the same data (`slashingProtection_deleteKeys_again`), so that "both will have access to slashing protection data".
+The Python suite runs the source's use case "Delete a key", which the flow's steps also give.
+
+The source leaves two points about the delete open, and EthLib takes these readings:
+
+- A read-only key "cannot be deleted from the API", but the source gives no status for a request that names one.
+  EthLib keeps the key and gives it the status `error`, the only one that fits (`error_iff_of_deleteKeys`).
+  So it returns no data for that key, as the source asks for a key with an `error` status.
+  No call of the API makes a key read-only, so the Python suite cannot reach this case.
+- The flow sets every status to `error` when the export of the data fails.
+  EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
+
+The calls on `/eth/v1/validator/{pubkey}/` with `feerecipient`, `gas_limit` and `graffiti` get, set and delete a setting of each key (`Consensus/KeymanagerApi/Settings.lean`).
+Each setting maps keys to values, and a key without a mapping gets the default that the client fixes at its start.
+For each of the three settings, a set then a get of the key gives the value set (`Setting.get_set`, `Consensus/Proofs/KeymanagerApi/Settings.lean`), and a delete then a get gives the default (`Setting.get_of_delete`).
+A set or a delete on one key leaves the value of every other key unchanged (`Setting.get_set_of_ne`, `Setting.get_of_delete_of_ne`).
+Each call on a key that the client does not manage gets HTTP 404 and changes nothing (`handle_of_isManaged_eq_false`), and a delete on a key that it manages removes its mapping (`Setting.delete_of_isManaged`).
+A set through the API that gets HTTP 202, then a get, gives the value set (`handle_get_of_handle_set`).
+A set of the zero fee recipient gets HTTP 400 and changes nothing (`handle_feeRecipient_zero`).
+The three settings meet the law that these statements take (`feeRecipientSetting_lawful`, `gasLimitSetting_lawful`, `graffitiSetting_lawful`).
+The Python suite runs the example of issue #2140 on the fee recipient, and sets a gas limit and a graffiti.
+
+The source leaves seven points about the settings open, and EthLib takes these readings:
+
+- The get and the set list HTTP 404 only as "Path not found", unlike the delete.
+  EthLib answers HTTP 404 to each call on a key that the client does not manage, so that a set on an unmanaged key leaves no mapping that a delete could not remove.
+  A key deleted through the API keeps its mappings, which apply again if it is imported again.
+- The set of a gas limit does not mark its body as required, unlike the other two; EthLib requires it.
+- The source forbids the zero fee recipient and names no code; EthLib answers HTTP 400.
+- The graffiti is a JSON string, and the block field is 32 bytes; EthLib keeps the string as it is, with no length check.
+- A delete may get HTTP 403 when the setting lives in configuration files; that depends on storage and is not modelled.
+- The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
+- The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
+
+The call `POST /eth/v1/validator/{pubkey}/voluntary_exit` signs a voluntary exit with a key of the client (`Consensus/KeymanagerApi/VoluntaryExit.lean`).
+It reads the state that the client takes from its beacon node, which the call takes as a view of the chain.
+For a client whose keys have the public keys of their secret keys, a signed exit verifies under the key of its validator (`verify_of_signVoluntaryExit`, `Consensus/Proofs/KeymanagerApi/VoluntaryExit.lean`).
+It verifies against the signing root of the exit, under the domain of a voluntary exit in that state, which is the check that the processing of an exit makes.
+From Deneb, by [EIP-7044](https://eips.ethereum.org/EIPS/eip-7044#specification), the domain is fixed on the Capella fork version, so the exit verifies in every state of the same chain and configuration at a fork from Deneb on (`verify_of_signVoluntaryExit_of_dencun_le`).
+That theorem assumes that the validator at the index of the exit keeps its key in that state, which a chain does but the statement does not derive.
+That each key has the public key of its secret key is also an assumption: the import sets it for each key that it adds, and no call changes a key, but no theorem states it of a run of calls.
+The Python suite signs the exit of the case `basic` of the voluntary exits of consensus-specs, at Capella and at Deneb, and gets its signature byte for byte.
+
+The source leaves three points about the exit open, and EthLib takes these readings:
+
+- A key that the client holds but whose validator is not in the state, or not active.
+  EthLib answers HTTP 400 when no validator has the key, and does not check that the validator is active; the chain checks that when it processes the exit.
+- Whether a remote key, which the client does not hold, is served: EthLib answers HTTP 404, as for an unknown key.
+- How the client learns the current epoch and the registry: from the state that it is given.
+
+A key moved between two clients keeps its slashing protection, by the use case "Move a key" of the source (`Consensus/Proofs/KeymanagerApi/Move.lean`).
+The old client holds the key, and every key that it holds under that public key can be deleted.
+With a read-only copy, the delete refuses the key and returns no data for it, so the statement needs this.
+A delete of that key alone gives data, and an import of its keystore with that data into the new client imports it.
+Then the new client accepts a block or a vote of the key only if the old client accepted it (`checkBlock_of_move`, `checkAttestation_of_move`), and the old client no longer holds the key as a local key (`isActive_of_move`).
+The scope is one key and one move.
+The data passes from the delete to the import as a value: the round trip of its document is proved, and that of its text is not, as said above.
+No step compares the genesis validators root of the data with that of either client.
+The Python suite runs a move between two clients, through the JSON text of the data.
+
+The calls on `/eth/v1/remotekeys` list, import and delete the keys that a client signs with through a remote signer (`Consensus/KeymanagerApi/RemoteKeys.lean`).
+An import and a delete give one status for each key of the request (`length_importRemoteKeys`, `length_deleteRemoteKeys`, `Consensus/Proofs/KeymanagerApi/RemoteKeys.lean`).
+Each is the status of its key on the state that the keys before it leave (`getElem?_importRemoteKeys`, `getElem?_deleteRemoteKeys`), as `fst_importRemoteKey` and `fst_deleteRemoteKey` give it.
+After an import, each key with the status `imported` is a remote key (`mem_remoteKeys_importRemoteKeys`), and no remote key is lost (`remoteKeys_prefix_importRemoteKeys`).
+After a delete, no key with the status `deleted` is a remote key (`not_mem_remoteKeys_deleteRemoteKeys`).
+Importing one key that the client does not know imports it, deleting it then deletes it (`fst_deleteRemoteKeys_importRemoteKeys`), and the remote keys are those before (`remoteKeys_deleteRemoteKeys_importRemoteKeys`).
+The model takes the remote keys of a state to have distinct public keys.
+The Python suite runs the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
+
+The source leaves five points about remote keys open, and EthLib takes these readings:
+
+- Whether a local key is "already known to the validator client" for a remote import.
+  EthLib reads it as known, so its remote import is a `duplicate`.
+  The local import of #2136 compares with the local keys only, so a key imported remotely and then locally is held both ways.
+  A local delete of such a key then returns its data while the remote signer can still sign with it; the implementers should say whether the local import must refuse it.
+- The source lists no HTTP 400 for the remote calls; EthLib answers a body that does not read with HTTP 400, as for the local calls.
+- What a missing `url` means is left to the client; EthLib keeps the key without one.
+- A remote key imported through the API is marked as one that can be deleted.
+- A remote key marked read-only stays on a delete, with the status `error`, as a local one does.
+
+### Remote-signing API
+
+The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.
+EthLib cites commit `44e9e0dc`.
+A client sends one JSON request per signature, and the field `type` names its kind.
+The signer must read exactly the object that the client meant, since the root it signs comes from that object.
+
+EthLib defines the eighteen kinds of request, thirteen from before Gloas and five that Gloas adds, with their JSON forms (`Consensus/RemoteSigningApi/Request.lean`).
+Each body is a container of the consensus layer, written in the JSON mapping of SSZ, or a small container of the schemas themselves, such as the slot of an aggregator selection.
+A versioned body names its version in upper case, as `PHASE0` to `GLOAS`, and the aggregate takes the shape of the fork of that version.
+`SigningRequest.toJson_total` (`Consensus/Proofs/RemoteSigningApi/Request.lean`) shows that the writer never fails, and `SigningRequest.ofJson_toJson` that every request it writes reads back as the same request.
+`getObjVal?_type_of_ofJson` shows that a request read from a document has the kind that its `type` names, and `ofJson_unknownType` that a `type` that names no kind is refused with that name.
+`version_of_ofJson_aggregateAndProofV2` and `version_of_ofJson_blockV2` show that a versioned request has the version that its body names.
+
+The five kinds that Gloas adds sign a payload bid, a payload envelope, the data of a payload attestation, the preferences of a proposer, and the authentication of a Builder API request.
+Each carries its body under the version `GLOAS`, the only version the source defines, and EthLib reads the body as its container at Glamsterdam.
+`version_of_readGloasData` shows that such a body is read only when it names `GLOAS`, and the Python suite checks that `FULU` is refused, with the key of the body and the name it found.
+The authentication of a Builder API request has no fork info, like a deposit, and its data is "non-empty" and at most 4096 bytes.
+`ofJson_emptyAuthData` shows that a document whose data reads as empty is refused for that reason, and `ofJson_longAuthData` that data of more than 4096 bytes is refused with the limit and its size.
+So the reader never cuts the data down, and every such request read has between 1 and 4096 bytes of data.
+The Python suite reads the 29 examples that match the schemas, and checks that writing each again gives the same document.
+It checks that the other three examples are refused: the two named below, and the envelope, whose logs bloom holds 262 bytes where the bloom has 256.
+With a bloom of 256 bytes, the envelope reads back.
+The source names no preset, and its examples mix the two.
+The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
+So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
+
+A signer signs a root that it computes from the request (`Consensus/RemoteSigningApi/SigningRoot.lean`).
+The source names a domain only for the kinds that Gloas adds, so the root of every other kind comes from the duty that it serves: its object, its domain type and its epoch.
+The domain comes from the fork info, by the rule of the domain of a state: the previous fork version before the fork epoch, the current one from it, with the root of the genesis validators.
+`getDomain_eq_forkInfoDomain` (`Consensus/Proofs/RemoteSigningApi/SigningRoot.lean`) shows that this is the domain of a state with that fork info.
+For each duty before Gloas, a theorem shows that under the fork info of a state the request has the root that the duty signs in that state, for the same object; for example `getAttestationSignature_eq_of_requestSigningRoot`.
+A sync committee message is signed in the current epoch of the state, so its theorem also takes the slot of the message in that epoch.
+`getBlockSignature_eq_of_requestSigningRoot_header` shows that from Bellatrix, where a request holds only the header of a block, its root is the root of the block, so the proposer's signature verifies.
+`verifyRegistrationSignature_of_requestSigningRoot` shows that a registration gets the root that the check of a registration verifies.
+`isValidDepositSignature_of_requestSigningRoot` shows the same for a deposit whose genesis fork version is that of the configuration.
+The kinds that Gloas adds sign under the domain types that the source names.
+`getExecutionPayloadBidSignature_eq_of_requestSigningRoot` and `getPayloadAttestationMessageSignature_eq_of_requestSigningRoot` show that a bid and the data of a payload attestation get the roots that their duties sign.
+`verifyBuilderRequestAuthSignature_of_requestSigningRoot` shows that the authentication of a Builder API request gets the root that its check verifies.
+Two kinds differ from their duties, and their theorems take a hypothesis each, which Gap A lists.
+An envelope is signed by its builder in the current epoch of the state, and by the request in the epoch of the slot of its payload; `getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot` assumes that the two epochs take the same fork version.
+Proposer preferences are signed at the fork version that the configuration gives to the proposal epoch, and the request takes the version of its fork info; `proposerPreferencesSigningRoot_eq_of_requestSigningRoot` assumes that the two agree.
+
+Each kind has one domain type (`RequestType.domainType`), and `requestDomain_prefix` shows that the domain of a request starts with it, whatever the fork info.
+`requestDomain_ne` shows that two requests whose kinds have different domain types never share a domain.
+`RequestType.domainType_eq_iff` shows that only three pairs of kinds share a domain type: the two block kinds, the two aggregate kinds, and the bid with the envelope.
+So the selection proof of a slot and the RANDAO reveal of an epoch with the same number hash different signing data, and one signature serves for both only through a SHA-256 collision.
+These theorems are about domains, not signing roots; that two different signing data have different roots needs the collision resistance of SHA-256, which EthLib does not assume here.
+The examples of the kinds that Gloas adds carry no signing root.
+The Python suite computes the roots of the payload attestation, the preferences and the authentication with its own merkleization and compares them; the bid and the envelope are progressive containers (EIP-7688), so it records their roots as a change detector.
+The Python suite checks the `signingRoot` of each of the 24 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
+The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
+The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
+
+The signer itself is a state of secret keys and a record of slashing protection (`Consensus/RemoteSigningApi/Endpoints.lean`).
+It lists the public keys of its secret keys, and its sign endpoint reads the request, then the key of the path, then finds the secret key, computes the root, asks slashing protection, and signs.
+The source fixes the status codes, 400 for a bad request, 404 for an unknown key and 412 for slashing protection, but not the rules of slashing protection, so the rules are a parameter.
+`sign_status_eq_404_iff` (`Consensus/Proofs/RemoteSigningApi/Endpoints.lean`) shows that the endpoint answers 404 exactly when the request reads and its key is not held.
+`sign_signed` shows that a signature it returns verifies under the key of the path, for the root that the signer computes for the request.
+`sign_state_of_not_signed` shows that a call that does not sign leaves the state as it was.
+The instance from EIP-3076 checks and records blocks and votes, and lets every other kind pass.
+`sign_block` and `sign_vote` show that each signed block or vote passed its check against the record before its call, and enters the record, and `sign_keeps` that no call removes a record.
+`signingRoot_eq_of_signedBlocks` shows that in any run of calls, two blocks of one slot signed for one key have one signing root, whatever the record the run starts with.
+`signingRoot_eq_of_signedVotes` shows the same for two votes signed for one key that `isSlashableAttestationData` forbids together.
+So a slashable pair from one signer needs a collision of the signing root, as for the signer of § Slashing protection.
+The Python suite signs each example that reads with a fixed key and checks the signature with `py_ecc`, checks a repeated, a conflicting and an unknown-key request for the `BLOCK_V2 (GLOAS)` example, and checks a refused double vote.
+
+The signer answers with its signature as JSON under `signature`, or as the hex alone, and lists its keys as a JSON array of hex (`Consensus/RemoteSigningApi/Response.lean`).
+The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Response.lean`), so `ofApiJson_toApiJson` reads it back as written.
+`publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
+The export of the public keys endpoint writes the key list; the JSON signature response has no export, since the export of the sign endpoint returns the signature as bytes.
+
+The source leaves fourteen points about the requests open, and EthLib reads each one as follows:
+
+- The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
+  EthLib follows the schemas, so it refuses both examples.
+- No schema of a body marks a field as required, not even `Fork` or the body of `DEPOSIT`.
+  Only `fork_info`, the top-level objects and the versioned bodies list required fields.
+  EthLib reads each body as its container, which requires every field.
+- The schemas do not forbid keys beyond those they name.
+  EthLib ignores such a key at the top level of a request and in a versioned body, and refuses one inside a container, as its JSON mapping of SSZ does everywhere.
+- The schemas name no version for the forks of the blob schedule, BPO1 to BPO5, which change only blob parameters (EIP-7892).
+  The Beacon API gives them the version of Fulu; the source does not say which version a request at such a fork carries.
+- The source does not say whether a signer must refuse a `version` other than the fork that `fork_info` gives at the epoch of the message.
+  EthLib reads the body under the version it names, whatever the fork info says.
+- The source does not say at which epoch each kind is signed; EthLib takes the epoch of the duty.
+  The epoch matters only for a message before the fork epoch of the fork info, where the previous version applies.
+- From Deneb the chain checks a voluntary exit under the fork version of Capella (EIP-7044), but the request carries only its fork info.
+  The source's example signs with the version of its fork info, so EthLib does too.
+  `voluntaryExitDomain_of_requestSigningRoot` gives the root that the check of an exit verifies, under the hypothesis that the fork info gives the version of the exit domain at the epoch of the exit.
+  Gap A lists that hypothesis.
+- The source says only that the signing root of a request is "for optional verification"; it does not say what a signer does when it differs from its own.
+  EthLib refuses such a request with 400, since client and signer then disagree on what is signed.
+- The source does not say which kinds slashing protection covers.
+  The instance of EIP-3076 covers blocks and votes only, so a payload attestation or an envelope is not protected.
+- The source does not order the checks of the sign endpoint when several fail; EthLib reads the request first, so a request that does not read gets 400 whatever its key.
+- The source says that the path holds the "BLS public key in hex format", with no pattern; EthLib requires the `0x` prefix and accepts hex digits in either case.
+- The schemas give each integer the type of a string.
+  The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
+- The rule that the authentication data is not empty is in the description of its schema, not in a schema keyword.
+  EthLib refuses empty data.
+- The source defines only `GLOAS` for the five kinds that Gloas adds.
+  From Hegotá, EthLib's bid gains the bits of the inclusion list, and a request for it waits for a release that names a later version.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -6338,6 +6579,9 @@ The churn limit of validators before Electra and the Phase 0 weak subjectivity p
 Both run only before Electra, where the type of the registry keeps it within the limit of the preset (`BeaconState.registryWithinLimit_of_lt`).
 There the count is below `2^64` (`length_getActiveValidatorIndices_lt`), so the conversion keeps its value (`toNat_length_getActiveValidatorIndices`) and agrees with the specification.
 The genesis validity check, fork choice, gossip and the honest-validator duties call the pure list directly, and keep the difference.
+
+The Keymanager API has no official vectors, and its source leaves points open.
+EthLib takes a reading for each, listed under Keymanager API, until the implementers of the API answer.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
@@ -6489,6 +6733,14 @@ Blocks carry attestations, so the chain takes `SignersAtEnds` in place of `Signe
 The signers then hold at most the active balance at the end of every epoch, not only the first two.
 The theorem also assumes a positive inclusion delay, a positive withdrawal delay, and an increment at most the activation balance; mainnet meets all three.
 `processSlotsAcross_exists_ok_of_chain_altairWitnessState` instantiates the mainnet corollary at the Altair witness, so its hypotheses can hold together.
+
+The root of a voluntary exit request (`voluntaryExitDomain_of_requestSigningRoot`) holds under the hypothesis that the fork info of the request gives, at the epoch of the exit, the version of the exit domain.
+From Deneb that is the version of Capella (EIP-7044), and the Remote-signing API does not say whether the client sends it or the signer substitutes it.
+The hypothesis stays until the implementers of remote signers answer it.
+
+Two roots of the kinds that Gloas adds hold under a hypothesis, which the Remote-signing API leaves open.
+The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot`) assumes that the epoch of the slot of its payload and the current epoch of the state take the same fork version; the source names the domain type of an envelope, not its epoch.
+The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
 
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
@@ -6662,12 +6914,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 525 operations and 51 size constants.
-The Python extension calls 525 of the operations and 51 of the constants.
+Lean exports 530 operations and 51 size constants.
+The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11804 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2596), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
+11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

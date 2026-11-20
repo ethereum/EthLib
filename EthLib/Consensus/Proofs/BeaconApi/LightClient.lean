@@ -9,9 +9,11 @@ public import EthLib.Consensus.Proofs.BeaconApi.Responses
 /-!
 # Proofs: the light client answers of the Beacon API
 
-The known updates of a range, cut to the limit, form an answer that the source accepts.
+The longest answer to an updates request is one that the source accepts.
 
-No accepted answer holds more updates than that one.
+It holds the known updates of the range from its earliest known period, with no gap, to the limit.
+
+The other accepted answers are its nonempty starts, so none holds more updates.
 
 On a chain whose digests name their forks, the SSZ chunks of updates decode back to the updates.
 
@@ -28,70 +30,243 @@ open Base Serialization.Ssz
 
 variable {preset : Preset}
 
-/-- The known updates of a range, cut to the limit, form an answer that the source accepts. -/
-theorem updatesInRange_answer {α : Type} (known : Std.TreeMap UInt64 α)
+/-- The run of known updates from a period holds at most the given number of updates. -/
+private theorem updatesFrom_length_le {α : Type} (known : Std.TreeMap UInt64 α)
     (startPeriod count : UInt64) :
-    IsUpdatesAnswer known startPeriod count (updatesInRange known startPeriod count) := by
-  set filtered := known.toList.filter fun entry => decide (InRange startPeriod count entry.1)
-  have sorted : filtered.Pairwise (fun a b => a.1 < b.1) :=
-    (known.ordered_keys_toList.filter _).imp fun h => compareOfLessAndEq_eq_lt.mp h
-  refine ⟨(filtered.take (updatesLimit count)).map (·.1), ?_, ?_, ?_, ?_, ?_⟩
-  · simp only [updatesInRange, List.map_map]
-    refine List.map_congr_left fun entry mem => ?_
-    exact Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp
-      (List.mem_of_mem_filter (List.mem_of_mem_take mem))
-  · intro period mem
-    obtain ⟨entry, taken, rfl⟩ := List.mem_map.mp mem
-    simpa using (List.mem_filter.mp (List.mem_of_mem_take taken)).2
-  · exact List.Pairwise.map _ (fun _ _ h => h) (sorted.sublist (List.take_sublist _ _))
-  · intro period range known_mem
-    have found : (period, known[period]) ∈ filtered :=
-      List.mem_filter.mpr ⟨Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr
-        (Std.TreeMap.getElem?_eq_some_getElem known_mem), by simpa using range⟩
-    -- A period in the range makes the count, so the limit, positive.
+    ∀ period bound, (updatesFrom known startPeriod count period bound).length ≤ bound
+  | _, 0 => by simp [updatesFrom]
+  | period, bound + 1 => by
+    have rest := updatesFrom_length_le known startPeriod count (period + 1) bound
+    unfold updatesFrom
+    split
+    · split
+      · simp only [List.length_cons]
+        omega
+      · simp
+    · simp
+
+/-- Entry `j` of the run from a period is the known update of the period `j` after it.
+
+That period is below the size of 64 bits and lies in the range. -/
+private theorem updatesFrom_getElem {α : Type} (known : Std.TreeMap UInt64 α)
+    (startPeriod count : UInt64) :
+    ∀ period bound j (h : j < (updatesFrom known startPeriod count period bound).length),
+      period + j < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat (period + j)) ∧
+        known[UInt64.ofNat (period + j)]? =
+          some (updatesFrom known startPeriod count period bound)[j]
+  | _, 0, j, h => by simp [updatesFrom] at h
+  | period, bound + 1, j, h => by
+    by_cases hc : period < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat period)
+    · cases hk : known[UInt64.ofNat period]? with
+      | none => simp [updatesFrom, hc, hk] at h
+      | some update =>
+        cases j with
+        | zero => simp [updatesFrom, hc, hk]
+        | succ j =>
+          have hlen : j < (updatesFrom known startPeriod count (period + 1) bound).length := by
+            simpa [updatesFrom, hc, hk] using h
+          obtain ⟨small, range, value⟩ :=
+            updatesFrom_getElem known startPeriod count (period + 1) bound j hlen
+          rw [show period + (j + 1) = period + 1 + j by omega]
+          simpa [updatesFrom, hc, hk] using And.intro small (And.intro range value)
+    · simp [updatesFrom, hc] at h
+
+/-- Updates of consecutive periods from a period, each known and in the range, start the run. -/
+private theorem prefix_updatesFrom {α : Type} (known : Std.TreeMap UInt64 α)
+    (startPeriod count : UInt64) :
+    ∀ period bound (values : List α), values.length ≤ bound →
+      (∀ j (h : j < values.length), period + j < UInt64.size ∧
+        InRange startPeriod count (UInt64.ofNat (period + j)) ∧
+          known[UInt64.ofNat (period + j)]? = some values[j]) →
+      values <+: updatesFrom known startPeriod count period bound
+  | _, _, [], _, _ => List.nil_prefix
+  | _, 0, _ :: _, bounded, _ => by simp at bounded
+  | period, bound + 1, value :: values, bounded, each => by
+    obtain ⟨small, range, known_value⟩ := each 0 (by simp)
+    simp only [Nat.add_zero, List.getElem_cons_zero] at small range known_value
+    have rest := prefix_updatesFrom known startPeriod count (period + 1) bound values
+      (by simp only [List.length_cons] at bounded; omega) fun j h => by
+        obtain ⟨small', range', value'⟩ := each (j + 1) (by simp only [List.length_cons]; omega)
+        rw [show period + 1 + j = period + (j + 1) by omega]
+        exact ⟨small', range', by simpa using value'⟩
+    simp only [updatesFrom, small, range, and_self, ite_true, known_value, List.cons_prefix_cons,
+      true_and]
+    exact rest
+
+/-- What the search for the earliest known period of the range finds, when it finds one.
+
+It is a known period of the range, and no known period of the range comes before it. -/
+private theorem find?_known_eq_some {α : Type} {known : Std.TreeMap UInt64 α}
+    {startPeriod count first : UInt64} {value : α}
+    (found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) =
+      some (first, value)) :
+    known[first]? = some value ∧ InRange startPeriod count first ∧
+      ∀ period, InRange startPeriod count period → period ∈ known → first ≤ period := by
+  obtain ⟨range, before, after, split, skipped⟩ := List.find?_eq_some_iff_append.mp found
+  have sorted : known.toList.Pairwise (fun a b => a.1 < b.1) :=
+    known.ordered_keys_toList.imp fun h => compareOfLessAndEq_eq_lt.mp h
+  have mem : (first, value) ∈ known.toList :=
+    split ▸ List.mem_append_right _ List.mem_cons_self
+  refine ⟨Std.TreeMap.mem_toList_iff_getElem?_eq_some.mp mem, by simpa using range, ?_⟩
+  intro period in_range known_mem
+  have entry : (period, known[period]) ∈ known.toList :=
+    Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr
+      (Std.TreeMap.getElem?_eq_some_getElem known_mem)
+  rw [split] at entry sorted
+  rcases List.mem_append.mp entry with early | late
+  · have := skipped _ early
+    simp [in_range] at this
+  · rcases List.mem_cons.mp late with same | later
+    · rw [show period = first from congrArg Prod.fst same]
+      exact UInt64.le_refl _
+    · exact UInt64.le_of_lt
+        (List.rel_of_pairwise_cons (List.pairwise_append.mp sorted).2.1 later)
+
+/-- When the search finds nothing, the node knows no period of the range. -/
+private theorem find?_known_eq_none {α : Type} {known : Std.TreeMap UInt64 α}
+    {startPeriod count : UInt64}
+    (found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) = none)
+    (period : UInt64) (in_range : InRange startPeriod count period) : period ∉ known := by
+  intro known_mem
+  have entry : (period, known[period]) ∈ known.toList :=
+    Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr
+      (Std.TreeMap.getElem?_eq_some_getElem known_mem)
+  exact List.find?_eq_none.mp found _ entry (by simpa using in_range)
+
+/-- In periods where each is the one after the one before it, each is the first plus its index. -/
+private theorem toNat_of_consecutive {periods : List UInt64}
+    (next : ∀ i (h : i + 1 < periods.length), periods[i + 1].toNat = periods[i].toNat + 1) :
+    ∀ j (h : j < periods.length), periods[j].toNat = (periods[0]'(by omega)).toNat + j
+  | 0, _ => rfl
+  | j + 1, h => by
+    rw [next j h, toNat_of_consecutive next j (by omega)]
+    omega
+
+/-- The answers that the source accepts are the starts of the longest one.
+
+The empty answer is accepted only when the longest one is empty too. -/
+theorem isUpdatesAnswer_iff {α : Type} (known : Std.TreeMap UInt64 α)
+    (startPeriod count : UInt64) (answer : List α) :
+    IsUpdatesAnswer known startPeriod count answer ↔
+      answer <+: updatesInRange known startPeriod count ∧
+        (answer = [] → updatesInRange known startPeriod count = []) := by
+  rcases found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1))
+    with _ | ⟨first, value⟩
+  · -- The range has no known period, so only the empty answer is accepted.
+    have none_known := find?_known_eq_none found
+    simp only [updatesInRange, found, List.prefix_nil, implies_true, and_true]
+    constructor
+    · rintro ⟨periods, values, range, -, -, -⟩
+      cases periods with
+      | nil => simpa using values.symm
+      | cons period _ =>
+        obtain ⟨update, hupdate⟩ : ∃ update, known[period]? = some update := by
+          have := values ▸ List.mem_map_of_mem (f := (known[·]?)) List.mem_cons_self
+          obtain ⟨update, -, h⟩ := List.mem_map.mp this
+          exact ⟨update, h.symm⟩
+        exact absurd (Std.TreeMap.mem_iff_isSome_getElem?.mpr (by simp [hupdate]))
+          (none_known period (range period List.mem_cons_self))
+    · rintro rfl
+      exact ⟨[], by simp, by simp, by simp,
+        fun period range known_mem => absurd known_mem (none_known period range), by simp⟩
+  · obtain ⟨known_first, first_range, earliest⟩ := find?_known_eq_some found
+    simp only [updatesInRange, found]
+    have first_small : first.toNat < UInt64.size := first.toNat_lt
+    have first_back : UInt64.ofNat first.toNat = first := UInt64.ofNat_toNat
     have positive : 0 < updatesLimit count := by
       have : (128 : UInt64).toNat = 128 := rfl
-      simp only [updatesLimit, InRange, MAX_REQUEST_LIGHT_CLIENT_UPDATES] at range ⊢
+      simp only [updatesLimit, InRange, MAX_REQUEST_LIGHT_CLIENT_UPDATES] at first_range ⊢
       omega
-    obtain ⟨limit, hlimit⟩ := Nat.exists_eq_succ_of_ne_zero positive.ne'
-    rw [hlimit]
-    cases hfiltered : filtered with
-    | nil => simp [hfiltered] at found
-    | cons first rest =>
-      rw [hfiltered] at found sorted
-      refine ⟨first.1, by simp, ?_⟩
-      rcases List.mem_cons.mp found with same | later
-      · rw [← same]
-        exact UInt64.le_refl _
-      · exact UInt64.le_of_lt (List.rel_of_pairwise_cons sorted later)
-  · simp only [updatesInRange, List.length_map]
-    exact List.length_take_le _ _
+    -- The run starts with the update of the first period, so it is not empty.
+    have run_ne : updatesFrom known startPeriod count first.toNat (updatesLimit count) ≠ [] := by
+      obtain ⟨limit, hlimit⟩ := Nat.exists_eq_succ_of_ne_zero positive.ne'
+      rw [hlimit]
+      simp [updatesFrom, first_small, first_back, first_range, known_first]
+    constructor
+    · rintro ⟨periods, values, range, next, head, bounded⟩
+      have same_length : periods.length = answer.length := by
+        simpa using congrArg List.length values
+      obtain ⟨start, hstart, start_le⟩ :=
+        head first first_range (Std.TreeMap.mem_iff_isSome_getElem?.mpr (by simp [known_first]))
+      have nonempty : 0 < periods.length := by
+        cases periods with
+        | nil => simp at hstart
+        | cons _ _ => simp
+      have hzero : periods[0] = start := by
+        cases periods with
+        | nil => simp at nonempty
+        | cons _ _ => simpa using hstart
+      -- Each period of the answer is known, so the first one is the earliest known period.
+      have known_at : ∀ j (h : j < periods.length),
+          known[periods[j]]? = some (answer[j]'(by omega)) := by
+        intro j h
+        have := congrArg (·[j]?) values
+        simpa [List.getElem?_map, List.getElem?_eq_getElem h,
+          List.getElem?_eq_getElem (same_length ▸ h)] using this
+      have start_eq : start = first := by
+        have := known_at 0 nonempty
+        rw [hzero] at this
+        exact UInt64.le_antisymm start_le
+          (earliest start (hzero ▸ range _ (List.getElem_mem nonempty))
+            (Std.TreeMap.mem_iff_isSome_getElem?.mpr (by simp [this])))
+      refine ⟨prefix_updatesFrom known startPeriod count first.toNat _ answer bounded
+        fun j h => ?_, fun empty => ?_⟩
+      · have hj : j < periods.length := same_length ▸ h
+        have at_j := toNat_of_consecutive next j hj
+        rw [hzero, start_eq] at at_j
+        have back : UInt64.ofNat (first.toNat + j) = periods[j] := by
+          rw [← at_j]
+          exact UInt64.ofNat_toNat
+        rw [back]
+        exact ⟨at_j ▸ periods[j].toNat_lt, range _ (List.getElem_mem hj), known_at j hj⟩
+      · subst empty
+        have := same_length ▸ nonempty
+        simp at this
+    · rintro ⟨pre, nonempty⟩
+      have long := pre.length_le
+      have short := updatesFrom_length_le known startPeriod count first.toNat (updatesLimit count)
+      refine ⟨(List.range answer.length).map fun j => UInt64.ofNat (first.toNat + j), ?_, ?_, ?_,
+        ?_, by omega⟩
+      · refine List.ext_getElem (by simp) fun j h₁ h₂ => ?_
+        simp only [List.length_map, List.length_range] at h₁ h₂
+        have entry := updatesFrom_getElem known startPeriod count first.toNat (updatesLimit count)
+          j (by omega)
+        simp only [List.getElem_map, List.getElem_range, entry.2.2, pre.getElem h₂]
+      · intro period mem
+        obtain ⟨j, hj, rfl⟩ := List.mem_map.mp mem
+        exact (updatesFrom_getElem known startPeriod count first.toNat (updatesLimit count)
+          j (by simp at hj; omega)).2.1
+      · intro i h
+        simp only [List.length_map, List.length_range] at h
+        have small := (updatesFrom_getElem known startPeriod count first.toNat
+          (updatesLimit count) (i + 1) (by omega)).1
+        simp only [List.getElem_map, List.getElem_range, UInt64.toNat_ofNat_of_lt' small,
+          UInt64.toNat_ofNat_of_lt' (show first.toNat + i < UInt64.size by omega)]
+        omega
+      · intro period range known_mem
+        have answer_ne : answer ≠ [] := fun empty => run_ne (nonempty empty)
+        obtain ⟨update, rest, rfl⟩ := List.exists_cons_of_ne_nil answer_ne
+        exact ⟨first, by simp [List.head?_range, first_back], earliest period range known_mem⟩
 
-/-- No accepted answer holds more updates than the known updates of the range, cut to the limit.
+/-- The longest answer to an updates request is one that the source accepts.
 
-So the function gives an answer of the greatest length. -/
+It holds the known updates of the range from its earliest known period, with no gap, to the limit.
+-/
+theorem updatesInRange_answer {α : Type} (known : Std.TreeMap UInt64 α)
+    (startPeriod count : UInt64) :
+    IsUpdatesAnswer known startPeriod count (updatesInRange known startPeriod count) :=
+  (isUpdatesAnswer_iff known startPeriod count _).mpr ⟨List.prefix_refl _, id⟩
+
+/-- No accepted answer holds more updates than the longest one.
+
+The longest one holds the known updates of the range from its earliest known period, with no gap.
+
+It stops at the limit. -/
 theorem IsUpdatesAnswer.length_le {α : Type} {known : Std.TreeMap UInt64 α}
     {startPeriod count : UInt64} {answer : List α}
     (accepted : IsUpdatesAnswer known startPeriod count answer) :
-    answer.length ≤ (updatesInRange known startPeriod count).length := by
-  obtain ⟨periods, values, range, sorted, -, bounded⟩ := accepted
-  have same_length : periods.length = answer.length := by
-    simpa using congrArg List.length values
-  -- The periods differ and each is a known period of the range, so they are at most as many.
-  have covered : periods ⊆ (known.toList.filter fun entry =>
-      decide (InRange startPeriod count entry.1)).map (·.1) := by
-    intro period mem
-    obtain ⟨value, hvalue⟩ : ∃ value, known[period]? = some value := by
-      have : known[period]? ∈ answer.map some := values ▸ List.mem_map_of_mem mem
-      obtain ⟨value, -, hvalue⟩ := List.mem_map.mp this
-      exact ⟨value, hvalue.symm⟩
-    exact List.mem_map.mpr ⟨(period, value), List.mem_filter.mpr
-      ⟨Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr hvalue, by simpa using range period mem⟩,
-      rfl⟩
-  have fewer := List.Nodup.length_le_of_subset (sorted.imp UInt64.ne_of_lt) covered
-  simp only [List.length_map] at fewer
-  simp only [updatesInRange, List.length_map, List.length_take]
-  omega
+    answer.length ≤ (updatesInRange known startPeriod count).length :=
+  ((isUpdatesAnswer_iff known startPeriod count answer).mp accepted).1.length_le
 
 /-- An accepted answer holds at most the smaller of the request limit and the count. -/
 theorem IsUpdatesAnswer.length_le_limit {α : Type} {known : Std.TreeMap UInt64 α}
@@ -311,20 +486,20 @@ private theorem encodeUpdateChunk_of_read [NeZero preset.BYTES_PER_LOGS_BLOOM.to
 private theorem foldlM_of_decodeUpdateChunksFrom [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
     [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {config : Config} {genesisValidatorsRoot : Root}
     {data : ByteArray} (identify : digestsIdentify config genesisValidatorsRoot = true)
-    (fuel : Nat) {start : Nat} {updates : List (AnyLightClientUpdate preset)} (out : ByteArray)
-    (budget : data.size - start ≤ fuel)
+    (bound : Nat) {start : Nat} {updates : List (AnyLightClientUpdate preset)} (out : ByteArray)
+    (budget : data.size - start ≤ bound)
     (decoded : decodeUpdateChunksFrom preset config genesisValidatorsRoot data start =
       .ok updates) :
     updates.foldlM (fun out ⟨_, update⟩ => do
       return out ++ (← encodeUpdateChunk config genesisValidatorsRoot update)) out =
         .ok (out ++ data.extract start data.size) := by
-  induction fuel generalizing start updates out with
+  induction bound generalizing start updates out with
   | zero =>
     rw [decodeUpdateChunksFrom, dite_eq_left (by omega)] at decoded
     cases decoded
     rw [ByteArray.extract_eq_empty_iff.mpr (by omega), ByteArray.append_empty]
     rfl
-  | succ fuel ih =>
+  | succ bound ih =>
     rw [decodeUpdateChunksFrom] at decoded
     by_cases done : data.size ≤ start
     · rw [dite_eq_left done] at decoded
