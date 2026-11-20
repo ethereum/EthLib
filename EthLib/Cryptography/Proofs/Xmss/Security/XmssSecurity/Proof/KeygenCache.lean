@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.MerkleQueryBound
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+public import EthLib.Cryptography.Proofs.SupportBind
 
 @[expose] public section
 
@@ -23,17 +24,19 @@ theorem Concrete.keygen_support_rootTree
         ((simulateQ randomOracle
           (Concrete.honestKeygen parameter secret topSecret (fun key _ => pure (topBase key)) :
             OracleComp HashSpec _)).run ∅) := by
-  unfold Concrete.keygen at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨parameter, parameterCache⟩, hparameter, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨secret, secretCache⟩, hsecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topSecret, topSecretCache⟩, htopSecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topBase, topBaseCache⟩, htopBase, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨result, resultCache⟩, hresult, hout⟩ := hmem
+  -- Unfold key generation by its equation and bind on any computation, so it never runs.
+  rw [Concrete.keygen.eq_def] at hmem
+  obtain ⟨parameter, parameterCache, hparameter, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hmem
+  obtain ⟨secret, secretCache, hsecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topSecret, topSecretCache, htopSecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topBase, topBaseCache, htopBase, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨result, resultCache, hresult, hout⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  replace hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure,
     Set.mem_singleton_iff] at hout
   cases hout

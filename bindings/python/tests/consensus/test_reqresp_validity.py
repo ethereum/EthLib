@@ -201,17 +201,45 @@ def test_blocks_by_head_slots_descend_along_the_list() -> None:
 
 
 # Light client updates by range: start period 1500, count 4, so periods 1500 to 1503.
-# Each update is the slot of its attested header and the fork of its chunk.
-# Periods 1422 to 1606 are those of Electra, whose fork is named pectra.
+# Each update is the slot of its attested header and the fork digest of its chunk.
+# The digest is that of an epoch, on the chain whose genesis validators root is GENESIS_ROOT.
+# Periods 1422 to 1606 are those of Electra, and Fulu starts at period 1607.
+# Mainnet raises the blob limit at epoch 412672, the first epoch of period 1612.
+# That changes the digest within Fulu.
+
+GENESIS_ROOT = _root(0x6E)
 
 UPDATES_BY_RANGE = _u64(1500, 4)
 
 SLOTS_PER_PERIOD = 8192
 
+EPOCHS_PER_PERIOD = 256
 
-def _update(period: int, fork: str = "pectra", slot: int = 0) -> ResponseLightClientUpdate:
-    # An update whose attested header is at a slot of the period.
-    return (period * SLOTS_PER_PERIOD + slot, fork)
+
+def _digest(period: int, name: str = "mainnet", root: bytes = GENESIS_ROOT) -> bytes:
+    # The fork digest of the first epoch of a period.
+    return consensus.compute_fork_digest(name, root, period * EPOCHS_PER_PERIOD)
+
+
+def _update(
+    period: int, *, digest_period: int | None = None, slot: int = 0
+) -> ResponseLightClientUpdate:
+    # An update whose attested header is at a slot of the period, by default with its digest.
+    digest = _digest(period if digest_period is None else digest_period)
+    return (period * SLOTS_PER_PERIOD + slot, digest)
+
+
+def _valid(
+    fork: str,
+    protocol: str,
+    request: bytes,
+    items: list[ResponseLightClientUpdate] | list[ResponseLightClientBootstrap],
+    name: str = "mainnet",
+) -> bool:
+    # The check on the chain of GENESIS_ROOT.
+    return consensus.reqresp_is_valid_response(
+        fork, protocol, request, items, name=name, genesis_validators_root=GENESIS_ROOT
+    )
 
 
 @pytest.mark.parametrize(
@@ -228,50 +256,74 @@ def _update(period: int, fork: str = "pectra", slot: int = 0) -> ResponseLightCl
         pytest.param([_update(1504)], False, id="after-end"),
         pytest.param([_update(1501), _update(1500)], False, id="periods-descend"),
         pytest.param([_update(1500), _update(1500, slot=1)], False, id="period-repeats"),
-        pytest.param([_update(1500, "fusaka")], False, id="later-fork"),
-        pytest.param([_update(1500, "dencun")], False, id="earlier-fork"),
+        pytest.param([_update(1500, digest_period=1607)], False, id="later-fork"),
+        pytest.param([_update(1500, digest_period=1100)], False, id="earlier-fork"),
     ],
 )
 def test_light_client_updates_by_range(items: list[ResponseLightClientUpdate], valid: bool) -> None:
     protocol = _id("light_client_updates_by_range")
-    result = consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, items)
-    assert result is valid
+    assert _valid("pectra", protocol, UPDATES_BY_RANGE, items) is valid
 
 
 @pytest.mark.parametrize(
     "items, valid",
     [
-        pytest.param([_update(1606), _update(1607, "fusaka")], True, id="across-fulu"),
-        pytest.param([_update(1606), _update(1607)], False, id="electra-after-fulu"),
-        pytest.param([_update(1606, "fusaka")], False, id="fulu-before-fulu"),
+        pytest.param([_update(1606), _update(1607)], True, id="across-fulu"),
+        pytest.param(
+            [_update(1606), _update(1607, digest_period=1606)], False, id="electra-after-fulu"
+        ),
+        pytest.param([_update(1606, digest_period=1607)], False, id="fulu-before-fulu"),
     ],
 )
-def test_light_client_updates_by_range_fork_of_chunk(
+def test_light_client_updates_by_range_digest_of_chunk(
     items: list[ResponseLightClientUpdate], valid: bool
 ) -> None:
-    # The fork of a chunk is that of the epoch of the attested header, not the serving fork.
+    # The digest of a chunk is that of the epoch of the attested header, not the serving fork.
     request, protocol = _u64(1605, 4), _id("light_client_updates_by_range")
-    assert consensus.reqresp_is_valid_response("fusaka", protocol, request, items) is valid
+    assert _valid("fusaka", protocol, request, items) is valid
+
+
+def test_light_client_updates_by_range_blob_schedule() -> None:
+    # Periods 1611 and 1612 are both of Fulu, but the blob limit changes between them.
+    # So the digest of period 1611 is not that of period 1612, though the fork is the same.
+    request, protocol = _u64(1611, 2), _id("light_client_updates_by_range")
+    assert _digest(1611) != _digest(1612)
+    assert _valid("fusaka", protocol, request, [_update(1611), _update(1612)])
+    assert not _valid(
+        "fusaka", protocol, request, [_update(1611), _update(1612, digest_period=1611)]
+    )
+
+
+def test_light_client_updates_by_range_other_chain() -> None:
+    # A digest of the right epoch on another chain is not the digest of this chain.
+    protocol = _id("light_client_updates_by_range")
+    other = (1500 * SLOTS_PER_PERIOD, _digest(1500, root=_root(0x6F)))
+    assert not _valid("pectra", protocol, UPDATES_BY_RANGE, [other])
+
+
+def test_light_client_updates_by_range_digest_length() -> None:
+    protocol = _id("light_client_updates_by_range")
+    short = (1500 * SLOTS_PER_PERIOD, _digest(1500)[:3])
+    with raises(ConsensusError, "expected 4 bytes, got 3") as info:
+        _valid("pectra", protocol, UPDATES_BY_RANGE, [short])
+    assert info.value.code == 0
 
 
 def test_light_client_updates_by_range_before_altair() -> None:
-    # A period before Altair has no light client update, at any fork of the chunk.
+    # A period before Altair has no light client update, whatever the digest of its chunk.
     request, protocol = _u64(289, 2), _id("light_client_updates_by_range")
-    for chunk_fork in ("phase0", "altair"):
-        items = [_update(289, chunk_fork)]
-        assert not consensus.reqresp_is_valid_response("altair", protocol, request, items)
-    first = [_update(290, "altair")]
-    assert consensus.reqresp_is_valid_response("altair", protocol, request, first)
+    for digest_period in (289, 290):
+        assert not _valid("altair", protocol, request, [_update(289, digest_period=digest_period)])
+    assert _valid("altair", protocol, request, [_update(290)])
 
 
 def test_light_client_updates_by_range_request_limit() -> None:
     # A count of 200 periods allows more updates than the request limit of 128.
-    # Periods 1100 to 1299 are those of Deneb, whose fork is named dencun.
+    # Periods 1100 to 1299 are those of Deneb.
     request, protocol = _u64(1100, 200), _id("light_client_updates_by_range")
-    full = [_update(p, "dencun") for p in range(1100, 1228)]
-    assert consensus.reqresp_is_valid_response("pectra", protocol, request, full)
-    over = [*full, _update(1228, "dencun")]
-    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
+    full = [_update(p) for p in range(1100, 1228)]
+    assert _valid("pectra", protocol, request, full)
+    assert not _valid("pectra", protocol, request, [*full, _update(1228)])
 
 
 def test_light_client_updates_by_range_consecutive_periods_imply_count_bound() -> None:
@@ -279,43 +331,40 @@ def test_light_client_updates_by_range_consecutive_periods_imply_count_bound() -
     # So a response over the count also breaks the order, and the count has no case of its own.
     request, protocol = _u64(1500, 2), _id("light_client_updates_by_range")
     both = [_update(1500), _update(1501)]
-    assert consensus.reqresp_is_valid_response("pectra", protocol, request, both)
-    over = [*both, _update(1501, slot=1)]
-    assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
+    assert _valid("pectra", protocol, request, both)
+    assert not _valid("pectra", protocol, request, [*both, _update(1501, slot=1)])
 
 
 def test_light_client_updates_by_range_minimal() -> None:
     # The minimal configuration leaves Altair at the far future epoch, so every epoch is Phase 0.
     # So no update is valid there, while the empty response is.
     request, protocol = _u64(0, 4), _id("light_client_updates_by_range")
-    assert consensus.reqresp_is_valid_response("altair", protocol, request, [], name="minimal")
-    for chunk_fork in ("phase0", "altair"):
-        items = [(0, chunk_fork)]
-        result = consensus.reqresp_is_valid_response(
-            "altair", protocol, request, items, name="minimal"
-        )
-        assert not result
+    assert _valid("altair", protocol, request, [], name="minimal")
+    items = [(0, _digest(0, name="minimal"))]
+    assert not _valid("altair", protocol, request, items, name="minimal")
 
 
-def test_light_client_updates_by_range_unknown_fork() -> None:
+def test_light_client_updates_by_range_needs_genesis_root() -> None:
     protocol = _id("light_client_updates_by_range")
-    with raises(ConsensusError, "no fork named nofork") as info:
-        consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, [(0, "nofork")])
+    message = "the light client checks need the root of the genesis validators"
+    with raises(ConsensusError, message) as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, [])
     assert info.value.code == 0
 
 
 # Light client bootstrap: the request is the root C of a block.
-# Each bootstrap is the slot and root of its beacon header and the fork of its chunk.
-# Epoch 74240 opens Altair, so its first slot is 2375680.
+# Each bootstrap is the slot and root of its beacon header and the fork digest of its chunk.
+# Epoch 74240 opens Altair, so its first slot is 2375680, the first slot of period 290.
 
 ALTAIR_SLOT = 74240 * 32
 
 
 def _bootstrap(
-    period: int, root: bytes = C, fork: str = "pectra", slot: int = 0
+    period: int, root: bytes = C, *, digest_period: int | None = None, slot: int = 0
 ) -> ResponseLightClientBootstrap:
-    # A bootstrap whose header is at a slot of the period.
-    return (period * SLOTS_PER_PERIOD + slot, root, fork)
+    # A bootstrap whose header is at a slot of the period, by default with its digest.
+    digest = _digest(period if digest_period is None else digest_period)
+    return (period * SLOTS_PER_PERIOD + slot, root, digest)
 
 
 @pytest.mark.parametrize(
@@ -326,33 +375,47 @@ def _bootstrap(
         pytest.param([_bootstrap(1606, slot=8191)], True, id="last-slot-of-electra"),
         pytest.param([_bootstrap(1500, B)], False, id="other-root"),
         pytest.param([_bootstrap(1500), _bootstrap(1500)], False, id="two-bootstraps"),
-        pytest.param([_bootstrap(1500, fork="fusaka")], False, id="later-fork"),
-        pytest.param([_bootstrap(1500, fork="dencun")], False, id="earlier-fork"),
-        pytest.param([_bootstrap(1607)], False, id="electra-after-fulu"),
+        pytest.param([_bootstrap(1500, digest_period=1607)], False, id="later-fork"),
+        pytest.param([_bootstrap(1500, digest_period=1100)], False, id="earlier-fork"),
+        pytest.param([_bootstrap(1607, digest_period=1606)], False, id="electra-after-fulu"),
+        pytest.param([_bootstrap(1612, digest_period=1611)], False, id="blob-schedule"),
     ],
 )
 def test_light_client_bootstrap(items: list[ResponseLightClientBootstrap], valid: bool) -> None:
     protocol = _id("light_client_bootstrap")
-    assert consensus.reqresp_is_valid_response("pectra", protocol, C, items) is valid
+    assert _valid("pectra", protocol, C, items) is valid
 
 
-def test_light_client_bootstrap_fork_of_chunk() -> None:
-    # The fork of the chunk is that of the epoch of the header, not the serving fork.
+def test_light_client_bootstrap_digest_of_chunk() -> None:
+    # The digest of the chunk is that of the epoch of the header, not the serving fork.
     protocol = _id("light_client_bootstrap")
-    assert consensus.reqresp_is_valid_response("fusaka", protocol, C, [_bootstrap(1606)])
-    later = [_bootstrap(1607, fork="fusaka")]
-    assert consensus.reqresp_is_valid_response("fusaka", protocol, C, later)
-    assert not consensus.reqresp_is_valid_response("fusaka", protocol, C, [_bootstrap(1607)])
+    assert _valid("fusaka", protocol, C, [_bootstrap(1606)])
+    assert _valid("fusaka", protocol, C, [_bootstrap(1607)])
+    assert not _valid("fusaka", protocol, C, [_bootstrap(1607, digest_period=1606)])
+
+
+def test_light_client_bootstrap_other_chain() -> None:
+    # A digest of the right epoch on another chain is not the digest of this chain.
+    protocol = _id("light_client_bootstrap")
+    other = (1500 * SLOTS_PER_PERIOD, C, _digest(1500, root=_root(0x6F)))
+    assert not _valid("pectra", protocol, C, [other])
+
+
+def test_light_client_bootstrap_digest_length() -> None:
+    protocol = _id("light_client_bootstrap")
+    short = (1500 * SLOTS_PER_PERIOD, C, _digest(1500)[:3])
+    with raises(ConsensusError, "expected 4 bytes, got 3") as info:
+        _valid("pectra", protocol, C, [short])
+    assert info.value.code == 0
 
 
 def test_light_client_bootstrap_before_altair() -> None:
-    # A block before Altair has no bootstrap, at any fork of the chunk.
+    # A block before Altair has no bootstrap, whatever the digest of its chunk.
     protocol = _id("light_client_bootstrap")
-    for chunk_fork in ("phase0", "altair"):
-        items = [(ALTAIR_SLOT - 1, C, chunk_fork)]
-        assert not consensus.reqresp_is_valid_response("altair", protocol, C, items)
-    first = [(ALTAIR_SLOT, C, "altair")]
-    assert consensus.reqresp_is_valid_response("altair", protocol, C, first)
+    for digest_period in (289, 290):
+        items = [(ALTAIR_SLOT - 1, C, _digest(digest_period))]
+        assert not _valid("altair", protocol, C, items)
+    assert _valid("altair", protocol, C, [(ALTAIR_SLOT, C, _digest(290))])
 
 
 def test_light_client_bootstrap_minimal() -> None:
@@ -360,17 +423,16 @@ def test_light_client_bootstrap_minimal() -> None:
     # So the epoch of slot 0 is in Phase 0.
     # No bootstrap is valid there, while the empty response is.
     protocol = _id("light_client_bootstrap")
-    assert consensus.reqresp_is_valid_response("altair", protocol, C, [], name="minimal")
-    for chunk_fork in ("phase0", "altair"):
-        items = [(0, C, chunk_fork)]
-        result = consensus.reqresp_is_valid_response("altair", protocol, C, items, name="minimal")
-        assert not result
+    assert _valid("altair", protocol, C, [], name="minimal")
+    items = [(0, C, _digest(0, name="minimal"))]
+    assert not _valid("altair", protocol, C, items, name="minimal")
 
 
-def test_light_client_bootstrap_unknown_fork() -> None:
+def test_light_client_bootstrap_needs_genesis_root() -> None:
     protocol = _id("light_client_bootstrap")
-    with raises(ConsensusError, "no fork named nofork") as info:
-        consensus.reqresp_is_valid_response("pectra", protocol, C, [(0, C, "nofork")])
+    message = "the light client checks need the root of the genesis validators"
+    with raises(ConsensusError, message) as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, C, [])
     assert info.value.code == 0
 
 
@@ -713,5 +775,5 @@ def test_malformed_item() -> None:
         consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A, B, C)])
     assert info.value.code == 0
     with raises(ConsensusError, "a tuple has fewer items than expected") as info:
-        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A)])  # ty: ignore[invalid-argument-type]  # a tuple of the wrong length
+        consensus.reqresp_is_valid_response("pectra", protocol, BLOCKS_BY_RANGE, [(10, A)])
     assert info.value.code == 0

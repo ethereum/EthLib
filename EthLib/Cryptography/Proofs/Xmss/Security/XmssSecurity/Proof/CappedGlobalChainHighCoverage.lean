@@ -1161,6 +1161,36 @@ theorem monitorGlobalCausalTrace_support_covered
   have hrawCovered := hstep raw hraw
   exact ⟨hrawCovered.1, hcovered.2.append hrawCovered.2⟩
 
+/-- An output of a monitored traced computation comes from an output of the computation.
+
+The output is stated for any computation that the computation on the causal state equals. -/
+private theorem exists_eq_of_mem_support_monitorGlobalCausalTrace {α : Type}
+    (computation : GlobalCausalHashState → ProbComp
+      ((α × GlobalCausalHashState) ×
+        RevealProbeOracleSimulation.ActionTrace GlobalChainValueIndex))
+    (state : GlobalMonitoredCausalState) (result : α × GlobalMonitoredCausalState)
+    (hresult : result ∈ support ((monitorGlobalCausalTrace computation).run state)) :
+    ∃ raw, (∀ c, computation state.causal = c → raw ∈ support c) ∧
+      globalMonitoredCausalResult state raw = result := by
+  rw [monitorGlobalCausalTrace_run, support_map] at hresult
+  obtain ⟨raw, hraw, rfl⟩ := hresult
+  exact ⟨raw, fun _ same => same ▸ hraw, rfl⟩
+
+/-- The monitored adversary oracle answers a signing request with the traced filtered signer.
+
+A proof rewrites with it, so the kernel compares the oracle and its branch as computations. -/
+private theorem globalHighMonitoredBaseMappedAdversaryImpl_inr
+    (right : (ProgrammedGlobalChainKeygenView ×
+      (GlobalChainValueIndex → Digest)) ×
+      (GlobalChainEdgeIndex → Digest)) (request : SignRequest) :
+    globalHighMonitoredBaseMappedAdversaryImpl right (.inr request) =
+      monitorGlobalCausalTrace (α := (OracleWorld + SigningSpec).Range (.inr request))
+        fun causalState =>
+        (simulateQ (RevealProbeOracleSimulation.eagerTraceImpl right.1.2)
+          (globalFilteredCausalSigningQuery right.1.1 request
+            causalState)).run :=
+  rfl
+
 theorem globalHighMonitoredBaseMappedAdversaryImpl_support_cache_le
     (right : (ProgrammedGlobalChainKeygenView ×
       (GlobalChainValueIndex → Digest)) ×
@@ -1187,9 +1217,10 @@ theorem globalHighMonitoredBaseMappedAdversaryImpl_support_cache_le
       simulate_eagerTrace_globalCausalAttackerHashQueryFromHigh_support_cache_le
         right.1.2 (globalChainValueHighTableOfEdges right.2)
           right.1.1.secretKey hashInput state.causal raw hraw
-  · unfold globalHighMonitoredBaseMappedAdversaryImpl at hresult
-    rw [monitorGlobalCausalTrace_run, support_map] at hresult
-    obtain ⟨raw, hraw, rfl⟩ := hresult
+  · -- Rewrite by the branch equation and monitor on any computation, so the kernel runs no signer.
+    rw [globalHighMonitoredBaseMappedAdversaryImpl_inr] at hresult
+    obtain ⟨raw, hraw, rfl⟩ := exists_eq_of_mem_support_monitorGlobalCausalTrace _ _ _ hresult
+    replace hraw := mem_support_range_inr_traced request _ raw (hraw _ rfl)
     exact
       (simulate_eagerTrace_globalFilteredCausalSigningQuery_stateExtends
         right.1.2 right.1.1 request state.causal raw hraw).1
@@ -1244,9 +1275,10 @@ theorem globalHighMonitoredBaseMappedAdversaryImpl_support_covered_of_final
         right.1.2 (globalChainValueHighTableOfEdges right.2)
           right.1.1.secretKey hashInput state.causal covered hcovered.1 hforward
             raw hraw
-  · unfold globalHighMonitoredBaseMappedAdversaryImpl at hresult
-    rw [monitorGlobalCausalTrace_run, support_map] at hresult
-    obtain ⟨raw, hraw, rfl⟩ := hresult
+  · -- Rewrite by the branch equation and monitor on any computation, so the kernel runs no signer.
+    rw [globalHighMonitoredBaseMappedAdversaryImpl_inr] at hresult
+    obtain ⟨raw, hraw, rfl⟩ := exists_eq_of_mem_support_monitorGlobalCausalTrace _ _ _ hresult
+    replace hraw := mem_support_range_inr_traced request _ raw (hraw _ rfl)
     have hrawCovered :=
       simulate_eagerTrace_globalFilteredCausalSigningQuery_support_covered_of_final
         right.1.2 right.1.1 request state.causal covered finalCache raw
@@ -1840,14 +1872,11 @@ theorem sourceGlobalTracedProgram_support_keyView
     (result : SourceGlobalTracedProgramResult)
     (hresult : result ∈ support (sourceGlobalTracedProgram adversary)) :
     result.1 ∈ support trajectoryProgrammedGlobalChainKeygen := by
-  unfold sourceGlobalTracedProgram at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨keyView, hkeyView, hrest⟩ := hresult
-  rw [mem_support_bind_iff] at hrest
-  obtain ⟨execution, _hexecution, hpure⟩ := hrest
-  simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst result
-  exact hkeyView
+  -- Step through both binds on any computation, so the kernel runs no key generation.
+  rw [sourceGlobalTracedProgram] at hresult
+  obtain ⟨keyView, execution, hkeyView, -, hresultEq⟩ :=
+    exists_eq_of_mem_support_bind_bind_pure _ _ _ hresult
+  exact mem_support_congr hkeyView rfl (by rw [← hresultEq])
 
 theorem globalHighMonitoredProgram_support_info
     (adversary : Adversary)
@@ -1856,15 +1885,14 @@ theorem globalHighMonitoredProgram_support_info
     result.1.1.1 ∈ support trajectoryProgrammedGlobalChainKeygen ∧
       result.2 ∈ support
         (globalHighMonitoredDetailedExecution adversary result.1) := by
-  unfold globalHighMonitoredProgram at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨right, hright, hrest⟩ := hresult
-  rw [mem_support_bind_iff] at hrest
-  obtain ⟨execution, hexecution, hpure⟩ := hrest
-  simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst result
-  exact ⟨coupledGlobalChainKeygenWithBaseHighFull_support_keyView right
-    hright, hexecution⟩
+  -- Step through both binds on any computation, so the kernel runs no key generation.
+  rw [globalHighMonitoredProgram] at hresult
+  obtain ⟨right, execution, hright, hexecution, hresultEq⟩ :=
+    exists_eq_of_mem_support_bind_bind_pure _ _ _ hresult
+  exact ⟨mem_support_congr
+      (coupledGlobalChainKeygenWithBaseHighFull_support_keyView right hright) rfl
+      (by rw [← hresultEq]),
+    mem_support_congr (hexecution _ rfl) (by rw [← hresultEq]) (by rw [← hresultEq])⟩
 
 set_option maxRecDepth 1000000 in
 theorem sourceGlobal_origin_implies_right_publicObservedHit

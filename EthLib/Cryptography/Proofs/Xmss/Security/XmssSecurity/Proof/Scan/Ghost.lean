@@ -101,15 +101,42 @@ theorem mem_support_world {input : OracleWorld.Domain} {cache : QueryCache HashS
   obtain ⟨r0, hr0, rfl⟩ := hr
   exact ⟨r0, hr0, rfl⟩
 
+/-- An output of a query comes from an output of the source handler on it.
+
+The new state records the handler's cache, the updated trace and the counted query.
+
+It holds for any query, so the kernel checks it without running the signer. -/
+private theorem mem_support_impl {input : (OracleWorld + SigningSpec).Domain}
+    {cache : QueryCache HashSpec} {trace : SigningCacheTrace} {k : ℕ} {r}
+    (hr : r ∈ support ((impl publicKey secretKey input).run ((cache, trace), k))) :
+    ∃ r0 ∈ support ((simulateQ romImpl
+        (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey input)).run cache),
+      r = (r0.1, ((r0.2, signingCacheTraceUpdate input cache r0.1 r0.2 trace), tick input k)) := by
+  rw [impl_run, support_map] at hr
+  obtain ⟨r0, hr0, rfl⟩ := hr
+  exact ⟨r0, hr0, rfl⟩
+
+/-- The source handler runs the scheme's signer on a signing query.
+
+A proof rewrites with it, so the kernel compares the two forms as computations. -/
+private theorem simulateQ_source_sign_run (request : SignRequest) (cache : QueryCache HashSpec) :
+    (simulateQ romImpl
+        (cappedSourceUnloggedMappedAdversaryImpl publicKey secretKey (.inr request))).run cache =
+      ((simulateQ romImpl (Concrete.scheme.sign secretKey request.leafIndex request.message)).run
+        cache : ProbComp (Option Signature × QueryCache HashSpec)) :=
+  rfl
+
 theorem mem_support_sign {request : SignRequest} {cache : QueryCache HashSpec}
     {trace : SigningCacheTrace} {k : ℕ} {r}
     (hr : r ∈ support ((impl publicKey secretKey (.inr request)).run ((cache, trace), k))) :
     ∃ r0 ∈ support ((simulateQ romImpl (Concrete.scheme.sign secretKey request.leafIndex
         request.message)).run cache),
       r = (r0.1, ((r0.2, trace ++ [⟨request, r0.1, cache, r0.2⟩]), k)) := by
-  rw [impl_run, support_map] at hr
-  obtain ⟨r0, hr0, rfl⟩ := hr
-  exact ⟨r0, hr0, by simp [tick, IsAdvHash, signingCacheTraceUpdate]⟩
+  -- Step through lemmas for any query: the kernel would run the signer to match two forms.
+  obtain ⟨⟨output, finalCache⟩, hr0, rfl⟩ := mem_support_impl publicKey secretKey hr
+  rw [simulateQ_source_sign_run] at hr0
+  exact ⟨_, mem_support_range_inr request _ output finalCache hr0,
+    by simp [tick, IsAdvHash, signingCacheTraceUpdate]⟩
 
 /-- Forgetting the count gives the source game's adversary run. -/
 theorem impl_run_proj (computation : OracleComp (OracleWorld + SigningSpec) α)
@@ -181,8 +208,11 @@ theorem expectedSimulatedCost_overBudget_eq_zero (Q : ℕ)
           rw [hcost, zero_add]
           refine tsum_eq_zero_iff.2 fun r => ?_
           by_cases hr : r ∈ support ((impl publicKey secretKey (.inr request)).run ((cache, trace), k))
-          · obtain ⟨r0, hr0, rfl⟩ := mem_support_sign publicKey secretKey hr
-            rw [ih r0.1 r0.2 _ k (hashQueryBound_bind_right _ _ cache _ hbound r0 hr0) hk, mul_zero]
+          · -- Keep the handler's form of the query: the kernel would run the signer to match two.
+            obtain ⟨r0, hr0, rfl⟩ := mem_support_impl publicKey secretKey hr
+            have htick : tick (.inr request) k = k := by simp [tick, IsAdvHash]
+            rw [htick, ih r0.1 r0.2 _ k (hashQueryBound_bind_right _ _ cache _ hbound r0 hr0) hk,
+              mul_zero]
           · rw [(prEvent_eq_zero_of_not_mem_support _) hr, zero_mul]
 
 theorem expectedSimulatedQueryCount_liftM_query (parameter : PublicParameter)

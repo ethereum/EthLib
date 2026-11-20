@@ -369,11 +369,24 @@ theorem forgeAdvantage_eq (adversary : Adversary) :
     (fun S0 S Pf c1 c2 h1 h12 h2 => knownKeys_le S0 S Pf c1 c2 h1 h12 h2)
     fun S0 S Pf => erases_after adversary S0 S Pf).prEvent_eq _
 
+/-- A bound on the counted calls of a computation from the empty cache is one on its counted run.
+
+It reads the count as a natural number, as the experiment does. -/
+theorem hashQueryBound_iff_counted {α : Type} (oa : OracleComp OracleWorld α) {q : Nat} :
+    XmssSecurity.HashQueryBound oa ∅ q ↔
+      ∀ result : α × Nat, result ∈ @support ProbComp (α × Nat) _
+        ((simulateQ countedOracle oa).run.run' ∅) → result.2 ≤ q := by
+  simp only [XmssSecurity.HashQueryBound, XmssSecurity.simulateQ_countHashQueries]
+  exact Iff.rfl
+
 theorem hashQueryBound_realGame (adversary : Adversary) (q : Nat)
     (h : HasHashQueryBound adversary q) : HashQueryBound (realGame adversary) ∅ q := by
-  have hEth : HashQueryBound (gameCore adversary) ∅ q := by
-    simp only [HashQueryBound, simulateQ_countHashQueries]
-    exact h
+  -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
+  have run : experiment adversary =
+      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ : ProbComp (Bool × Nat)) := rfl
+  unfold HasHashQueryBound at h
+  rw [run] at h
+  have hEth : HashQueryBound (gameCore adversary) ∅ q := (hashQueryBound_iff_counted _).2 h
   rw [gameCore_eq_prefixGame] at hEth
   rw [realGame_eq_prefixGame]
   exact hashQueryBound_prefixGame _ _ _

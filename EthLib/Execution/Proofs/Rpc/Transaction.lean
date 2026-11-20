@@ -5,6 +5,7 @@ public import EthLib.Execution.Proofs.Rpc.Base
 public import EthLib.Execution.Rpc.TransactionInfo
 public import EthLib.Base.Except
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the JSON form of a signed transaction
@@ -37,10 +38,6 @@ def ParityIsByte : Transaction → Prop
   | .feeMarket tx => tx.yParity.toNat < 256
   | .blob tx => tx.yParity.toNat < 256
   | .setCode tx => tx.yParity.toNat < 256
-
-/-- A computation that has succeeded passes its value on. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Read β) :
-    (Except.ok a >>= f : Read β) = f a := rfl
 
 /-- The reader of bytes reads back the quantity of any number below 256. -/
 private theorem byte_quantityJson (what : String) {n : Nat} (h : n < 256) :
@@ -203,9 +200,9 @@ theorem access_accessJson (a : Access) : access (accessJson a) = .ok a := by
     (k := "storageKeys") (v := listJson (fun (k : Bytes32) => dataJson k.toList) a.slots)
     (by simp)
   unfold access accessJson
-  simp only [hfs, ok_bind]
+  simp only [hfs, Base.ok_bind]
   rw [ite_eq_left hex]
-  simp only [r1, r2, ok_bind, address_dataJson, array_of_items _ (bytes32 "storage key")
+  simp only [r1, r2, Base.ok_bind, address_dataJson, array_of_items _ (bytes32 "storage key")
     (fun (k : Bytes32) => dataJson k.toList) _
     (fun k _ => fixed_dataJson "storage key" k false)]
   rfl
@@ -234,7 +231,7 @@ theorem authorization_authorizationJson (a : Authorization) :
   have r6 := field_of_perm (what := "authorization") hp hd
     (k := "s") (v := quantityJson a.s.toNat) (by simp)
   unfold authorization authorizationJson
-  simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, uint256_quantityJson, uint64_toDigits,
+  simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, uint256_quantityJson, uint64_toDigits,
     address_dataJson, byte_byteJson]
   rfl
 
@@ -269,7 +266,7 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r8 := rd "gasPrice" _ rfl (isNull_quantityJson _)
     have r9 := rd "v" _ rfl (isNull_quantityJson _)
     unfold transactionOfJson
-    simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, rto, byteJson, u256Json,
+    simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, rto, byteJson, u256Json,
       uint_quantityJson, uint256_quantityJson, bytes_dataJson,
       ty0, Nat.reduceLT, ↓reduceIte]
     rfl
@@ -290,7 +287,7 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r10 := rd "yParity" _ rfl (isNull_quantityJson _)
     have r11 := rd "gasPrice" _ rfl (isNull_quantityJson _)
     unfold transactionOfJson
-    simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11,  rto, byteJson,
+    simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11,  rto, byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,
       array_of_items _ access accessJson _ (fun a _ => access_accessJson a),
@@ -314,7 +311,8 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r12 := rd "maxPriorityFeePerGas" _ rfl (isNull_quantityJson _)
     have r13 := rd "maxFeePerGas" _ rfl (isNull_quantityJson _)
     unfold transactionOfJson
-    simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, rto, byteJson,
+    simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, rto,
+      byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,
       array_of_items _ access accessJson _ (fun a _ => access_accessJson a),
@@ -340,7 +338,8 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r14 := rd "maxFeePerBlobGas" _ rfl (isNull_quantityJson _)
     have r15 := rd "blobVersionedHashes" _ rfl (isNull_listJson _ _)
     unfold transactionOfJson
-    simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, rto,
+    simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15,
+      rto,
       byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,
@@ -369,7 +368,7 @@ private theorem transactionOfJson_extra (extra : List (String × Lean.Json)) (g 
     have r13 := rd "maxFeePerGas" _ rfl (isNull_quantityJson _)
     have r14 := rd "authorizationList" _ rfl (isNull_listJson _ _)
     unfold transactionOfJson
-    simp only [hfs, ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, rto,
+    simp only [hfs, Base.ok_bind, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, rto,
       byteJson,
       u256Json, accessListJson, uint_quantityJson, uint256_quantityJson, uint64_toDigits,
       bytes_dataJson, byte_quantityJson _ hy, yParity_byte hy,

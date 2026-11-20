@@ -82,6 +82,12 @@ theorem globalChainRandomnessOfMaterial_eq_outputTraceRandomness
       hmaterial edge]
     simp
 
+/-- An output of a traced computation read at the pair type is one at the trace type. -/
+private theorem mem_support_outputTrace {α : Type} (x : ProbComp (OutputTrace α))
+    (trace : α × List HashOutput) (h : trace ∈ @support ProbComp (α × List HashOutput) _ x) :
+    @Membership.mem (OutputTrace α) _ _ (support x) trace :=
+  h
+
 theorem evalDist_outputGlobalChainRandomness_eq_uniform
     (parameter : PublicParameter) :
     (globalChainRandomnessOfMaterial parameter <$>
@@ -101,8 +107,9 @@ theorem evalDist_outputGlobalChainRandomness_eq_uniform
       intro trace htrace
       change pure (globalChainRandomnessOfMaterial parameter trace.1) =
         pure (outputTraceRandomness trace)
+      -- Read the output at the trace type: the kernel would sample the chain starts to match them.
       rw [globalChainRandomnessOfMaterial_eq_outputTraceRandomness parameter
-        trace htrace]
+        trace (mem_support_outputTrace _ trace htrace)]
     _ =ᵈ uniformGlobalChainKeygenRandomness :=
       evalDist_outputTraceRandomness_eq_uniform parameter
 

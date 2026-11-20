@@ -1296,7 +1296,7 @@ def consensus_reqresp_response_bounds(name: str, chunk_fork: str, protocol: str)
     """The smallest and the largest length of the payload of a successful response chunk, as a pair."""
     ...
 
-def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes | str, ...]], committee: list[int]) -> bool:
+def consensus_reqresp_response_valid(name: str, fork: str, protocol: str, request: bytes, items: list[tuple[int | bytes, ...]], committee: list[int], genesis_validators_root: bytes | None) -> bool:
     """Whether a response is valid for its request, as a Boolean."""
     ...
 

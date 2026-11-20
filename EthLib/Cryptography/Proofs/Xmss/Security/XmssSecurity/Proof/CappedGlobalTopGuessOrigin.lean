@@ -49,9 +49,9 @@ theorem topGuess_afterKeygen_has_origin
   have hcacheLe := xmssRom_cache_le
     (detailedGameAfterKeygen Concrete.scheme adversary keyResult.1.1 keyResult.1.2)
     keyResult.2 execution hafter
-  have hkeygen' : keyResult ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
+  -- Rewrite by the key generation equation: the kernel would run key generation to unfold it.
+  have hkeygen' := hkeygen
+  rw [Concrete.scheme_keygen] at hkeygen'
   have hold := Concrete.precomputedKeygen_support_oldKeygen keyResult hkeygen'
   let key := topKeyOf execution.1.forgery.leafIndex
   refine ⟨chain, forgedTopEncoding chain, ?_, ?_⟩

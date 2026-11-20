@@ -318,9 +318,10 @@ theorem actualGlobalChainKeygen_support_table
     (result : ProgrammedGlobalChainKeygenView)
     (hresult : result ∈ support actualGlobalChainKeygen) :
     globalKeygenChainValueTable result.cache result.secretKey = result.table := by
-  unfold actualGlobalChainKeygen at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨keyResult, _hkeyResult, hpure⟩ := hresult
+  -- Unfold by the equation and bind on any computation, so the kernel runs no key generation.
+  rw [actualGlobalChainKeygen.eq_def] at hresult
+  obtain ⟨keyResult, _hkeyResult, hpure⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  replace hpure := hpure _ rfl
   simp only [support_pure, Set.mem_singleton_iff] at hpure
   subst result
   rfl
@@ -2188,11 +2189,12 @@ theorem programmedGlobalChainTrajectoryMaterial_support_trajectories
     material.2 ∈ support
       (programmedAllChainTrajectoriesFromCache parameter material.1 ∅
         allChains) := by
-  unfold programmedGlobalChainTrajectoryMaterial at hmaterial
-  rw [mem_support_bind_iff] at hmaterial
-  obtain ⟨start, _hsecret, htrajectories⟩ := hmaterial
-  rw [mem_support_bind_iff] at htrajectories
-  obtain ⟨trajectories, htrajectories, hpure⟩ := htrajectories
+  -- Unfold by the equation and bind on any computation, so the kernel samples nothing.
+  rw [programmedGlobalChainTrajectoryMaterial.eq_def] at hmaterial
+  obtain ⟨start, _hsecret, hrest⟩ := exists_eq_of_mem_support_bind _ _ hmaterial
+  obtain ⟨trajectories, htrajectories, hpure⟩ :=
+    exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
   simp only [support_pure, Set.mem_singleton_iff] at hpure
   subst material
   exact htrajectories

@@ -100,6 +100,12 @@ private theorem cast_sub (x y : Fin M.p) : cast (x - y) = cast x - cast y := by
   change (1 : ZMod M.p) = ((1 % M.p : Nat) : ZMod M.p)
   rw [ZMod.natCast_mod, Nat.cast_one]
 
+/-- A power by limbs, read back in `ZMod p`, is the power by the integer of the limbs. -/
+theorem toFin_powLimbs (a : Montgomery M) (e : Limbs.T n) :
+    ((toFin (powLimbs a e)).val : ZMod M.p) = ((toFin a).val : ZMod M.p) ^ Limbs.val e := by
+  change cast _ = cast _ ^ _
+  rw [cast_toFin, cast_toFin, toZMod_powLimbs]
+
 /-- For a prime modulus, the Fermat inverse of a form is the Euclidean inverse, also at `0`. -/
 theorem toFin_inv [Fact M.p.Prime] (a : Montgomery M) :
     toFin a⁻¹ = Fin.inverse (toFin a) := by

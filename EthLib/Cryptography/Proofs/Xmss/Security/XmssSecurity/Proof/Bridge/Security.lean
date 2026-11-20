@@ -37,9 +37,10 @@ set_option backward.isDefEq.respectTransparency false
 theorem keygenQueries_le (adversary : EthAdversary) (q : Nat)
     (hbound : SeededBudget adversary q) : keygenQueries ≤ q := by
   let d : Derivations := ⟨0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
-  obtain ⟨r, hr⟩ := probComp_support_nonempty
+  -- Name both components: the kernel would run the key generation to match a pair with its parts.
+  obtain ⟨⟨r, cache⟩, hr⟩ := probComp_support_nonempty
     ((simulateQ randomOracle (honestRun d).withQueryLog).run (progCache 0 d))
-  exact (afterKeygen_budget adversary q hbound 0 d r.1 r.2 hr).1
+  exact (afterKeygen_budget adversary q hbound 0 d r cache hr).1
 
 /-- At most `2^128` guesses of a 256-bit seed cost one unit. -/
 theorem guesses_le {n : Nat} (hn : n ≤ 2 ^ 128) :

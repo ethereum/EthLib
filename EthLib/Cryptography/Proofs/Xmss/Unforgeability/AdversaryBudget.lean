@@ -189,9 +189,13 @@ theorem hashQueryBound_of_isQueryBoundP {α : Type} {n : Nat} :
 theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
     HasHashQueryBound adversary (gameQueries qH r) := by
-  have h := hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
-  simp only [HashQueryBound, simulateQ_countHashQueries] at h
-  exact h
+  have bound := hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
+  -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
+  have run : experiment adversary =
+      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ : ProbComp (Bool × Nat)) := rfl
+  unfold HasHashQueryBound
+  rw [run]
+  exact (hashQueryBound_iff_counted _).1 bound
 
 /-! ## The bounds -/
 

@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.CacheR
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.IdealStatement
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Execution
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.LazyScheme
+public import EthLib.Cryptography.Proofs.SupportBind
 
 @[expose] public section
 
@@ -103,17 +104,19 @@ theorem precomputedKeygen_support_secretKey_uses_finalCache
     (hmem : keyResult ∈ support
       ((simulateQ romImpl precomputedKeygen).run ∅)) :
     keyResult.1.2 = materializePrecomputation keyResult.2 keyResult.1.2 := by
-  unfold precomputedKeygen at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨parameter, parameterCache⟩, hparameter, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨secret, secretCache⟩, hsecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topSecret, topSecretCache⟩, htopSecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topBase, topBaseCache⟩, htopBase, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨treeResult, rootCache⟩, hroot, hout⟩ := hmem
+  -- Unfold key generation by its equation and bind on any computation, so it never runs.
+  rw [precomputedKeygen.eq_def] at hmem
+  obtain ⟨parameter, parameterCache, hparameter, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hmem
+  obtain ⟨secret, secretCache, hsecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topSecret, topSecretCache, htopSecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topBase, topBaseCache, htopBase, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨treeResult, rootCache, hroot, hout⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  replace hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure,
     Set.mem_singleton_iff] at hout
   subst keyResult

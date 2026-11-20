@@ -1435,14 +1435,13 @@ theorem cappedDetailedGameWithKeygenCacheAndBothTraces_support_execution
     result.2 ∈ support
       (cappedDetailedGameAfterKeygenWithBothTraces adversary result.1.1.1
         result.1.1.2 result.1.2) := by
-  unfold cappedDetailedGameWithKeygenCacheAndBothTraces at hresult
-  rw [mem_support_bind_iff] at hresult
-  obtain ⟨keyResult, _hkeyResult, hrest⟩ := hresult
-  rw [mem_support_bind_iff] at hrest
-  obtain ⟨execution, hexecution, hfinal⟩ := hrest
-  simp only [support_pure, Set.mem_singleton_iff] at hfinal
-  subst result
-  exact hexecution
+  -- Step through both binds on any computation, so the kernel runs no key generation.
+  rw [cappedDetailedGameWithKeygenCacheAndBothTraces] at hresult
+  obtain ⟨keyResult, -, hrest⟩ := exists_eq_of_mem_support_bind _ _ hresult
+  obtain ⟨execution, hexecution, hpure⟩ := exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
+  rw [mem_support_pure_iff] at hpure
+  exact mem_support_congr hexecution (by rw [hpure]) (by rw [hpure])
 
 theorem cappedDetailedGameWithKeygenCacheAndBothTraces_outcome_eq
     (adversary : Adversary)

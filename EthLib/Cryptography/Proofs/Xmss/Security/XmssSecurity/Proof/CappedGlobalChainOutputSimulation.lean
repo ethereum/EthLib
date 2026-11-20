@@ -1214,16 +1214,19 @@ theorem allChainOutputTape_eq_edgeMap
         congr 1
   exact hgeneral allChains
 
+/-- The material of an output of a traced computation is an output of its material map. -/
+private theorem outputTrace_fst_mem_support_map {α : Type} (x : ProbComp (OutputTrace α))
+    (trace : OutputTrace α) (h : trace ∈ support x) : trace.1 ∈ support (Prod.fst <$> x) :=
+  mem_support_map_of_eq _ _ h rfl
+
 theorem outputGlobalChainTrajectoryMaterialTrace_material_support
     (parameter : PublicParameter)
     (trace : OutputTrace GlobalChainTrajectoryMaterial)
     (htrace : trace ∈ support
       (outputGlobalChainTrajectoryMaterialTrace parameter)) :
     trace.1 ∈ support (outputGlobalChainTrajectoryMaterial parameter) := by
-  have hmapped : trace.1 ∈ support
-      (Prod.fst <$> outputGlobalChainTrajectoryMaterialTrace parameter) := by
-    rw [support_map]
-    exact ⟨trace, htrace, rfl⟩
+  -- Map on any computation: the kernel would sample the chain starts to match two types.
+  have hmapped := outputTrace_fst_mem_support_map _ trace htrace
   rw [outputGlobalChainTrajectoryMaterialTrace_fst parameter] at hmapped
   exact hmapped
 
@@ -1234,12 +1237,14 @@ theorem outputGlobalChainTrajectoryMaterialTrace_full_tape
       (outputGlobalChainTrajectoryMaterialTrace parameter)) :
     trace.2 = allChainOutputTape parameter allChains trace.1.2.1
       trace.1.2.2 := by
-  rw [outputGlobalChainTrajectoryMaterialTrace,
-    mem_support_bind_iff] at htrace
-  obtain ⟨start, _hsecret, htrace⟩ := htrace
-  rw [mem_support_bind_iff] at htrace
-  obtain ⟨trajectories, htrajectories, hpure⟩ := htrace
+  -- Step through each bind on any computation, so the kernel samples no chain starts.
+  rw [outputGlobalChainTrajectoryMaterialTrace] at htrace
+  obtain ⟨start, _hsecret, hrest⟩ := exists_eq_of_mem_support_bind _ _ htrace
+  obtain ⟨trajectories, htrajectories, hpure⟩ :=
+    exists_eq_of_mem_support_bind _ _ (hrest _ rfl)
+  replace hpure := hpure _ rfl
   simp only [support_pure, Set.mem_singleton_iff] at hpure
+  clear htrace hrest
   subst trace
   simpa using outputAllChainTrajectoriesTrace_full_tape parameter start
     allChains allChains_nodup ∅ [] trajectories htrajectories

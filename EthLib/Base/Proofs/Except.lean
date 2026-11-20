@@ -24,6 +24,11 @@ theorem eq_of_ensure_eq_error {ε : Type} {condition : Prop} [Decidable conditio
   unfold ensure at failed
   split at failed <;> simp_all
 
+/-- A step after a success runs on the value of that success.
+
+Rewriting with it, instead of unfolding the bind, leaves the value unevaluated. -/
+theorem ok_bind {ε α β : Type} (a : α) (g : α → Except ε β) : (Except.ok a >>= g) = g a := rfl
+
 /-- Two steps in sequence fail when the first fails, or when the second fails on its value. -/
 theorem bind_eq_error {ε α β : Type} {x : Except ε α} {g : α → Except ε β} {e : ε}
     (h : x >>= g = .error e) : x = .error e ∨ ∃ a, x = .ok a ∧ g a = .error e := by
@@ -40,5 +45,10 @@ The map then sends that value to the result. -/
 theorem map_ok_iff {ε α β : Type} {f : α → β} {x : Except ε α} {y : β} :
     f <$> x = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
   cases x <;> simp [Functor.map, Except.map]
+
+/-- A success relabelled and passed on is the value passed on. -/
+theorem mapError_ok_bind {ε ε' α β : Type} (f : ε → ε') (a : α) (k : α → Except ε' β) :
+    (Except.mapError f (.ok a) >>= k) = k a :=
+  rfl
 
 end EthLib.Base

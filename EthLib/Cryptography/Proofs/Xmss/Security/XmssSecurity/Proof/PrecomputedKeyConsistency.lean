@@ -24,7 +24,8 @@ theorem Concrete.precomputedKeygen_support_oldKeygen
       ((simulateQ romImpl Concrete.precomputedKeygen).run ∅)) :
     ((keyResult.1.1, Concrete.erasePrecomputation keyResult.1.2), keyResult.2) ∈
       support ((simulateQ romImpl Concrete.keygen).run ∅) := by
-  have hmapped : ((Concrete.erasePrecomputedKeyResult keyResult.1, keyResult.2)) ∈
+  -- State the output as the goal does: the kernel would run key generation to unfold the eraser.
+  have hmapped : ((keyResult.1.1, Concrete.erasePrecomputation keyResult.1.2), keyResult.2) ∈
       support ((simulateQ romImpl
         (Concrete.erasePrecomputedKeyResult <$> Concrete.precomputedKeygen)).run ∅) := by
     rw [simulateQ_map, StateT.run_map, support_map]
@@ -40,9 +41,8 @@ theorem Concrete.oldKeygen_support_materializedPrecomputedKeygen
       ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
   rw [← OracleComp.support_eq_of_evalDistEq
     Concrete.evalDist_materialized_keygen_eq_precomputedKeygen]
-
-  rw [support_map]
-  exact ⟨keyResult, hmem, rfl⟩
+  -- Map on any computation: the kernel would run key generation to match the map's two instances.
+  exact mem_support_map_of_eq _ _ hmem rfl
 
 theorem Concrete.precomputedKeygen_support_secretKey_components
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
@@ -50,17 +50,19 @@ theorem Concrete.precomputedKeygen_support_secretKey_components
       ((simulateQ romImpl Concrete.precomputedKeygen).run ∅)) :
     ∃ parameter secret topSecret topSigned,
       keyResult.1.2 = Concrete.precomputedSecretKey parameter secret topSecret topSigned keyResult.2 := by
-  unfold Concrete.precomputedKeygen at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨parameter, parameterCache⟩, hparameter, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨secret, secretCache⟩, hsecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topSecret, topSecretCache⟩, htopSecret, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨topBase, topBaseCache⟩, htopBase, hmem⟩ := hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨result, resultCache⟩, hresult, hout⟩ := hmem
+  -- Unfold key generation by its equation and bind on any computation, so it never runs.
+  rw [Concrete.precomputedKeygen.eq_def] at hmem
+  obtain ⟨parameter, parameterCache, hparameter, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ hmem
+  obtain ⟨secret, secretCache, hsecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topSecret, topSecretCache, htopSecret, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨topBase, topBaseCache, htopBase, hmem⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  obtain ⟨result, resultCache, hresult, hout⟩ :=
+    exists_eq_of_mem_support_simulateQ_bind _ _ _ _ (hmem _ rfl)
+  replace hout := hout _ rfl
   simp only [simulateQ_pure, StateT.run_pure, support_pure,
     Set.mem_singleton_iff] at hout
   subst keyResult
@@ -184,10 +186,9 @@ theorem Concrete.precomputedKeygen_cache_none_encodingInput
     keyResult.2
       (Concrete.CacheView.encodingInput keyResult.1.2.parameter targetLeafIndex targetInput) =
         none := by
-  let oldKeyResult : (PublicKey × SecretKey) × QueryCache HashSpec :=
-    ((keyResult.1.1, Concrete.erasePrecomputation keyResult.1.2), keyResult.2)
   have hold := Concrete.precomputedKeygen_support_oldKeygen keyResult hmem
-  exact Concrete.keygen_cache_none_encodingInput oldKeyResult hold targetLeafIndex targetInput
+  -- Take the key result from the support: the kernel would run key generation to unfold a name.
+  exact Concrete.keygen_cache_none_encodingInput _ hold targetLeafIndex targetInput
 
 theorem Concrete.precomputedKeygen_chainWalk_eq_of_cache_le
     (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)

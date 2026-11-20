@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 public import EthLib.Execution.Proofs.Evm.Instructions.Storage
 public import EthLib.Execution.Proofs.Evm.Reads
 public import EthLib.Execution.Proofs.State.Agreement
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: changing state outside an instruction's read
@@ -792,10 +793,6 @@ private def sstoreRest (word new : U256) (evm : Evm fork Meter) :
   keepReads evm id (sstoreWrite address key original current new cold evm)
 
 omit [GasMeter Meter] in
-private theorem ok_bind {α β : Type} (x : α) (k : α → Except EvmError β) :
-    (Except.ok x >>= k) = k x := rfl
-
-omit [GasMeter Meter] in
 private theorem map_ok {α β : Type} (f : α → β) (x : α) :
     (f <$> (Except.ok x : Except EvmError α)) = Except.ok (f x) := rfl
 
@@ -838,11 +835,11 @@ private theorem sstoreWrite_keeps {address : Address} {key : Bytes32} {original 
       (sstoreCost fork original current new cold) with e | f4
   · exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   have s4 : f4.state = evm.state := (chargeGas_sameContext h4).state
-  simp only [ok_bind]
+  simp only [Base.ok_bind]
   rcases h5 : chargeStateGas f4 (sstoreStateGas fork original current new) with e | f5
   · exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   have s5 : f5.state = evm.state := (chargeStateGas_sameContext h5).state.trans s4
-  simp only [ok_bind]
+  simp only [Base.ok_bind]
   by_cases static : f5.message.isStatic = true
   · simp only [static, ↓reduceIte]
     exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
@@ -853,7 +850,7 @@ private theorem sstoreWrite_keeps {address : Address} {key : Bytes32} {original 
     rw [hs1, hs2] at hset <;> simp only [Base.ExceptRel] at hset
   · subst hset
     exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
-  · simp only [Except.mapError, ok_bind, pure, Except.pure]
+  · simp only [Except.mapError, Base.ok_bind, pure, Except.pure]
     refine ⟨fun _ h _ => (by cases h), fun a1 h => ?_⟩
     cases h
     exact ⟨_, rfl, rfl, hset⟩
@@ -959,10 +956,10 @@ private theorem sstoreStep_keeps :
     rwa [g2, g1]
   have k1 : sstoreStep e1 = sstoreRest word new f2 := by
     rw [sstoreStep_eq]
-    simp only [static, ↓reduceIte, hp1, hp2, stipend', ok_bind]
+    simp only [static, ↓reduceIte, hp1, hp2, stipend', Base.ok_bind]
   have k2 : sstoreStep { e1 with state := s } = sstoreRest word new { f2 with state := s } := by
     rw [sstoreStep_eq]
-    simp only [static, ↓reduceIte, popWord_withState, hp1, hp2, map_ok, stipend', ok_bind]
+    simp only [static, ↓reduceIte, popWord_withState, hp1, hp2, map_ok, stipend', Base.ok_bind]
   refine ⟨fun err h nab => ?_, fun a1 h reads => ?_⟩
   · rw [k1] at h
     rw [sstoreRest_error h] at nab
@@ -1016,7 +1013,7 @@ private theorem finishSelfdestruct_keeps {beneficiary : Address} {refund : Nat}
     rw [ht1, ht2] at ht <;> simp only [Base.ExceptRel] at ht
   · subst ht
     exact ⟨fun _ h => h, fun _ h => by cases h⟩
-  · simp only [Except.mapError, ok_bind, pure, Except.pure]
+  · simp only [Except.mapError, Base.ok_bind, pure, Except.pure]
     refine ⟨fun _ h => (by cases h), fun a1 h => ?_⟩
     cases h
     rw [ht.tracker.createdAccounts, ht.accountExistsAndIsEmpty_eq (.inr hb)]
@@ -1062,12 +1059,12 @@ private theorem selfdestructWrite_keeps {beneficiary : Address} {cold : Bool}
       (selfdestructCreatesAccount fork evm.state evm.message.currentTarget beneficiary)) with
     e | f4
   · exact ⟨fun _ h => h, fun _ h => by cases h⟩
-  simp only [ok_bind]
+  simp only [Base.ok_bind]
   rcases h5 : chargeStateGas f4 (selfdestructStateGas fork
       (selfdestructCreatesAccount fork evm.state evm.message.currentTarget beneficiary)) with
     e | f5
   · exact ⟨fun _ h => h, fun _ h => by cases h⟩
-  simp only [ok_bind]
+  simp only [Base.ok_bind]
   have c5 := (chargeGas_sameContext h4).trans (chargeStateGas_sameContext h5)
   exact finishSelfdestruct_keeps (by rw [c5.state]; exact hag) (by rw [c5.message]; exact ho) hb
 
@@ -1107,7 +1104,7 @@ private theorem selfdestructStep_keeps :
       have hcheck2 : checkGas { g with state := s' } (selfdestructCost fork cold false) =
           .error e := hcheck
       rw [selfdestructStep_eq]
-      simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, ok_bind,
+      simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, Base.ok_bind,
         accessAddress_withState, hacc, hcheck2]
       rfl
   have hcheck2 : checkGas { g with state := s } (selfdestructCost fork cold false) = .ok () :=
@@ -1116,7 +1113,7 @@ private theorem selfdestructStep_keeps :
       (selfdestructWrite (toAddressMasked word) cold
         (recordAccountRead g (toAddressMasked word))) := by
     rw [selfdestructStep_eq]
-    simp only [static, ↓reduceIte, hp1, ok_bind, hacc, hcheck]
+    simp only [static, ↓reduceIte, hp1, Base.ok_bind, hacc, hcheck]
   have k2 : selfdestructStep fork { e1 with state := s } =
       keepReads { recordAccountRead g (toAddressMasked word) with
           state := s.recordAccountRead (toAddressMasked word) } id
@@ -1124,7 +1121,7 @@ private theorem selfdestructStep_keeps :
           { recordAccountRead g (toAddressMasked word) with
             state := s.recordAccountRead (toAddressMasked word) }) := by
     rw [selfdestructStep_eq]
-    simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, ok_bind,
+    simp only [static, ↓reduceIte, popWord_withState, hp1, map_ok, Base.ok_bind,
       accessAddress_withState, hacc, hcheck2]
     rfl
   refine ⟨fun err h nab => ?_, fun a1 h reads => ?_⟩

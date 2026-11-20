@@ -4338,8 +4338,18 @@ So, unless the roots of their headers collide, the runs disagree on the checkpoi
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
 Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
-The drift should be zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch, but no theorem proves that yet.
-With zero drift, the accountable keys hold at least one third of the unslashed active stake at `x`.
+`derivedDrift_eq_zero_of_stableKeys` (`DirectSafety/Drift.lean`) shows that the drift of a tail is zero when its unslashed active keys are stable (`StableKeys`).
+That is: `x` and each state of the tail up to one epoch past the later finalized epoch have as unslashed active keys those of `x` not slashed since, no recent key outside its active keys, and the effective balances of `x` on those keys.
+A slashing keeps the keys stable, since a slashed key leaves both the support and the reference.
+An activation that takes effect after the epoch of `x`, or an exit of an unslashed key that takes effect at or after it, breaks the hypothesis; it was scheduled at least `1 + MAX_SEED_LOOKAHEAD` epochs before, exactly that many for an activation.
+A change of effective balance breaks it too, at the epoch transition that computes it.
+`stableKeys_self_of_genesisEpoch` shows that a state at the genesis epoch meets it for itself.
+`accountable_safety_third` (`DirectSafety/Safety.lean`) concludes that, with stable keys on both tails, the accountable keys hold at least one third of the unslashed active stake at `x`, or the hashes show evidence.
+This is the bound of a static validator set.
+The conflict already puts the epoch of `x` at or before the earlier finalized epoch (`epoch_le_of_conflict`), so the theorem takes no premise on `x`.
+On mainnet, activations, exits, consolidations and effective balance changes, including those after partial withdrawals of compounding validators, happen almost every epoch, so such a window is almost never stable, and the drift forms are the ones that apply there.
+No theorem shows that the hypotheses of these forms hold together for some pair of runs.
+A start from a genesis without later deposits is a candidate: no key activates, no exit by request is allowed before `SHARD_COMMITTEE_PERIOD` epochs, and balances of 32 ETH take many epochs of rewards or penalties to leave the hysteresis band.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -4373,6 +4383,7 @@ If SHA-256 collides on the two signing roots, the two signatures may be one.
 `accountable_safety_signed` restates `accountable_safety` for the unslashed active keys at `x` that signed such a pair (`signedConflictKeys`).
 `accountableKeys_subset_signedConflictKeys` shows that they include the accountable keys.
 Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence.
+`accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes show evidence.
 The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
 No theorem shows that a block of either run could include a slashing built from those signatures.
 An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
@@ -7124,6 +7135,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
+- `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`
 - `EthLib/Cryptography/Proofs/Vrf/`

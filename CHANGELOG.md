@@ -105,6 +105,15 @@ Not yet released.
 
 - `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; the pin's `created_first_state` reads it.
 
+- Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
+  `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
+  `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
+  In both, the keys must stay stable up to one epoch past the later finalized epoch.
+
+- On a chain whose digests name their forks, the digest of each update or bootstrap of a valid light client response names the fork of its epoch ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `forkOfDigest_of_isValidLightClientUpdatesByRangeResponse` and `forkOfDigest_of_isValidLightClientBootstrapResponse` state it.
+  `isValidLightClientUpdatesByRangeResponse_iff_without_count` shows that the updates check needs no bound of its length by the count.
+
 - `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
   An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
   `cappedCalls T r` charges each request `470595 + 3 T` calls and one request `3 * 2^32` more; at `2^30` requests the floor drops from about `2^-63.4` to `2^-73.4`.
@@ -762,6 +771,25 @@ Not yet released.
   Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
   The new statement implies the old one, so a reader of the old statement drops the last conjunct.
   The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
+
+- The light client checks of req/resp responses compare fork digests, not forks ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  From Fulu, a change of blob parameters changes the digest within one fork, and a fork no longer tells those epochs apart.
+  In Python, `reqresp_is_valid_response` takes a new argument `genesis_validators_root`, which the light client protocols need.
+  An item of `ResponseLightClientUpdate` or `ResponseLightClientBootstrap` now ends with the 4-byte digest of its chunk in place of the name of a fork.
+  In Lean, the update and bootstrap checks take the root of the genesis validators, and their items carry a digest field in place of a fork field.
+  `lightClientForkMatches` and `ResponseUpdate.forkMatches` become `lightClientDigestMatches` and `ResponseUpdate.digestMatches`.
+  `ResponseUpdate.ofUpdate` and `ResponseBootstrap.ofBootstrap` take the digest.
+
+- In Lean, requests by range share one range predicate, `InCountRange`, and the light client updates limit is `lightClientUpdatesLimit` ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `slotInRange`, `slotInRange_iff`, `BeaconApi.InRange` and `BeaconApi.updatesLimit` are removed; a caller writes `decide (InCountRange start count value)`, `InCountRange` or `lightClientUpdatesLimit`.
+
+- In Lean, eight more laws move from the step laws to the base laws, with the same conclusions and a weaker laws premise.
+  Each takes `EpochBaseLaws R` in place of `EpochStepLaws R`, which provides it.
+  `EpochStepLaws.processVoluntaryExit`, `EpochStepLaws.processBlsToExecutionChange`, `EpochStepLaws.applySyncReward`, `EpochStepLaws.processSyncAggregate`, `EpochStepLaws.processHistoricalRootsUpdate`, `EpochStepLaws.processParticipationRecordUpdates`, `EpochStepLaws.processSyncCommitteeUpdates` and `EpochStepLaws.processPtcWindow` are renamed `EpochBaseLaws.processVoluntaryExit`, `EpochBaseLaws.processBlsToExecutionChange`, `EpochBaseLaws.applySyncReward`, `EpochBaseLaws.processSyncAggregate`, `EpochBaseLaws.processHistoricalRootsUpdate`, `EpochBaseLaws.processParticipationRecordUpdates`, `EpochBaseLaws.processSyncCommitteeUpdates` and `EpochBaseLaws.processPtcWindow`.
+  A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws`.
+  `payloadInputs_processVoluntaryExit`, `payloadInputs_processBlsToExecutionChange` and `payloadInputs_processSyncAggregate` are removed; a caller writes `payloadInputsLaws.processVoluntaryExit`, `payloadInputsLaws.processBlsToExecutionChange` or `payloadInputsLaws.processSyncAggregate`.
+  `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
+  That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.

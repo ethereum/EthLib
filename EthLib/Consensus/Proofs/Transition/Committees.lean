@@ -1104,15 +1104,6 @@ private theorem keeps_processJustificationAndFinalization
     exact Keeps.of_eq (by rw [← rest]) (by rw [← rest]) (by rw [← rest]) (by rw [← rest])
       (by rw [← rest])
 
-/-! ## Steps that keep the RANDAO mixes and the slot, at every fork -/
-
-/-- The update of the historical roots keeps the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processHistoricalRootsUpdate computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
 /-! ## Steps that keep the slot and activity, at every fork -/
 
 /-- A balance increase keeps the slot and activity. -/

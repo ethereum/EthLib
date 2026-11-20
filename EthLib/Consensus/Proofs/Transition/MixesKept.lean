@@ -46,11 +46,6 @@ private theorem Kept.foldlM {α ε : Type}
   foldlM_ok_invariant (Kept state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
     (Kept.refl state) computed
 
-/-- A step that keeps the mixes and the slot, as a pair of equalities. -/
-private theorem Kept.of_eq
-    (kept : after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot) : Kept state after :=
-  kept
-
 /-- A step that keeps the inputs of a payload keeps the mixes and the slot. -/
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   ⟨inputs.randaoMixes, inputs.slot⟩
@@ -67,11 +62,8 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     (windowed : if gloas : .glamsterdam ≤ fork then processPtcWindow looked gloas = .ok after
       else looked = after) : Kept rooted after := by
   have flags : Kept rooted (processParticipationFlagUpdates rooted altair) := ⟨rfl, rfl⟩
-  have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced := by
-    unfold processSyncCommitteeUpdates at syncedOk
-    simp only [bind, Except.bind, pure, Except.pure] at syncedOk
-    repeat' (split at syncedOk <;> try cases syncedOk)
-    all_goals exact ⟨rfl, rfl⟩
+  have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced :=
+    Kept.of_payloadInputs (payloadInputsLaws.processSyncCommitteeUpdates syncedOk)
   have lookedKept : Kept synced looked := by
     split at lookedOk
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
@@ -81,9 +73,7 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     · exact lookedOk ▸ Kept.refl _
   have windowedKept : Kept looked after := by
     split at windowed
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at windowed
-      obtain ⟨_, _, _, _, rfl⟩ := windowed
-      exact ⟨rfl, rfl⟩
+    · exact Kept.of_payloadInputs (payloadInputsLaws.processPtcWindow windowed)
     · exact windowed ▸ Kept.refl _
   exact flags.trans <| syncedKept.trans <| lookedKept.trans windowedKept
 
@@ -111,7 +101,7 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     · exact (Kept.of_payloadInputs
         (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
-    · exact (Kept.of_eq (randaoMixes_slot_processHistoricalRootsUpdate rootedOk)).trans
+    · exact (Kept.of_payloadInputs (payloadInputsLaws.processHistoricalRootsUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2]
@@ -178,7 +168,7 @@ private theorem kept_processOperations {body : BeaconBlockBody preset fork} {par
     split at changesOk
     · rw [← Array.foldlM_toList] at changesOk
       exact Kept.foldlM (fun _ _ _ ok =>
-        Kept.of_payloadInputs (payloadInputs_processBlsToExecutionChange ok)) changesOk
+        Kept.of_payloadInputs (payloadInputsLaws.processBlsToExecutionChange ok)) changesOk
     · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
       exact changesOk ▸ Kept.refl _
   have requests : Kept changed after := by
@@ -202,7 +192,7 @@ private theorem kept_processOperations {body : BeaconBlockBody preset fork} {par
     (Kept.foldlM (fun _ _ _ ok =>
       Kept.of_payloadInputs (payloadInputs_processDeposit ok)) depositedOk).trans <|
     (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processVoluntaryExit ok)) exitsOk).trans <|
+      Kept.of_payloadInputs (payloadInputsLaws.processVoluntaryExit ok)) exitsOk).trans <|
     changes.trans requests
 
 /-- Two states with the same slot, whose RANDAO mixes agree except at the current epoch. -/
@@ -263,7 +253,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
     exact paidStep.trans <| (header headedOk).trans <| executedStep.trans <|
       (randao revealedOk).trans <| votedStep.trans <|
       (Writes.of_kept (kept_processOperations operatedOk)).trans
-      (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processSyncAggregate synced)))
+      (Writes.of_kept (Kept.of_payloadInputs (payloadInputsLaws.processSyncAggregate synced)))
   rename_i notAltair
   have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
   have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
