@@ -2482,7 +2482,7 @@ An ID from `0x10` on goes to the shared capability that holds it, and `route` gi
 `messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Message.lean`) states that the IDs an eth version holds are those below the first ID from which its decoder rejects every ID as unknown.
 `Message.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that the eth decoder reads a message exactly from its own ID and item, on a version that uses its form.
 `SnapMessage.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Snap.lean`) states that the snap decoder reads a message exactly from its own ID and item, on a version that uses its ID.
-`SnapMessage.messageCount_le_iff_unknownId` states the same of the IDs that a snap version holds.
+`SnapMessage.messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Snap.lean`) states that the IDs a snap version holds, reserved ones included, are those below the first ID from which its decoder rejects every ID as unknown.
 No theorem says anything about a sequence of frames beyond one step, or about timeouts.
 
 The source leaves three points open, and the session reads them as follows.
