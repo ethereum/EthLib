@@ -395,6 +395,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `SphincsSecurity.Security.flatMap_ofFn_injective` is removed.
+  `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
+  The SPHINCS+ and XMSS proofs now use it.
+
 - In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
   It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
   `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
