@@ -9,6 +9,14 @@ Not yet released.
 
 ### Proof additions
 
+- `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
+  `cappedCalls T r` charges each request `470595 + 3 T` calls and one request `3 * 2^32` more; at `2^30` requests the floor drops from about `2^-63.4` to `2^-73.4`.
+  `forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, and `unforgeable` and `unforgeable_adversary` are unchanged.
+  `HashSig.prEvent_failedSearch_le` bounds, in the random oracle model, the chance that some search fails its first `T` trials, whoever queried them.
+  `hashCost` names the cost of a query, and `countedOracle_eq` and `experiment_eq` state the counted game as the random oracle with that cost; `countedOracle_cost` is removed, and `hashCost_eq` replaces it.
+  The bridge's budget transfers are proved once for any computation, so the kernel replay of `Count`, `AdversaryCalls` and the new modules stays within a few GB.
+
 - `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Both stores start at the anchor store, and the receiver reads the vote at least the delay after its deadline.
   For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
