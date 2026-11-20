@@ -95,7 +95,7 @@ Under a fixed answer function, key generation makes exactly `13434881` calls, wh
 
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
-It also assumes that a bottom tree of the index that the key keeps holds a top signature, not an error.
+It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error.
 It proves that the signer's own calls before each search add none.
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
@@ -115,7 +115,7 @@ It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH +
 The constants are proved upper bounds on the calls of key generation, of one stateless signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-The library proves no smaller bound on the calls of a request in the game.
+The library proves no smaller bound on the calls of a stateless signing request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -6979,7 +6979,7 @@ The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12094 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (343).
+12095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

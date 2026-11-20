@@ -29,6 +29,7 @@ Each search then fails with probability at most `exp(-4000)`, and signing at mos
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 open OracleSpec OracleComp ENNReal
 
 /-- The hash as a query to the random oracle of the game. -/

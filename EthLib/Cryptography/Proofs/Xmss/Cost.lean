@@ -31,6 +31,7 @@ namespace EthLib.Cryptography.Xmss.Cost
 
 open OracleSpec OracleComp
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 open EthLib.Cryptography.HashSig (queriesWith queriesWith_bind queriesWith_pure
   length_queriesWith_ofFnInOrder_const length_queriesWith_chain length_queriesWith_node
   queriesWith_build)
@@ -81,17 +82,6 @@ theorem isQueryBoundP_keyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : S
       isQueryBoundP_bind (m := 0)
         (isQueryBoundP_build hH (isQueryBoundP_seedPrf hH s) pp .top LAYER_HEIGHT 0)
         fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
-  simp [LAYER_HEIGHT]
-
-/-- Key generation of the stateless scheme: at most `1 + 205 * 2^16` calls.
-
-It bounds the calls of key generation in the security game of the stateless signer. -/
-theorem isQueryBoundP_statelessKeyGenWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (seed : Seed) :
-    IsQueryBoundP (statelessKeyGenWith H seed) p (1 + 205 * 2 ^ LAYER_HEIGHT) := by
-  unfold statelessKeyGenWith
-  refine isQueryBoundP_bind (isQueryBoundP_schemeSeed hH seed) fun s _ =>
-    (isQueryBoundP_bind (m := 0) (isQueryBoundP_publicKeyOf hH (isQueryBoundP_seedPrf hH s))
-      fun _ _ => isQueryBoundP_pure _ _ 0).mono ?_
   simp [LAYER_HEIGHT]
 
 /-- The top key's signature of a root is one search: at most `2^32 + 204` calls. -/
@@ -157,7 +147,7 @@ theorem isQueryBoundP_signWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : Secre
 
 /-- Signing in a bottom tree the key keeps is the bottom search alone: at most `2^32 + 204` calls.
 
-The key returned by signing keeps the tree it signed in. -/
+A key that signing returned after a successful bottom search keeps that tree. -/
 theorem isQueryBoundP_signWith_of_mem (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
     (idx : LeafIndex) (msg : Message) (hkept : ∃ t ∈ sk.cache, t.index = bottomTree idx) :
     IsQueryBoundP (signWith H sk idx msg) p (MAX_RANDOMIZER_TRIALS + 204) := by

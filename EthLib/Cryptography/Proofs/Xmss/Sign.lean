@@ -31,6 +31,7 @@ So that signer returns the stateless signature, byte for byte, whatever trees th
 namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 
 variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {prf : SeedPrf Id}
   {layer : Layer} {e : Nat}
@@ -85,9 +86,9 @@ theorem signLayer_run :
   | none => rfl
   | some found => rfl
 
-/-- What signing computes, one layer after the other, as a computation in `Except`.
+/-- What the stateless signer computes, one layer after the other, as a computation in `Except`.
 
-- `s` and `pp` are the scheme seed and the public parameter, from the secret key's seed.
+- `s` and `pp` are the scheme seed and the public parameter, from the seed `S_0`.
 - Both layers derive their secrets from `s`.
 - The top layer signs the root of bottom tree `b`, which signing builds. -/
 theorem statelessSignWith_run {seed : Seed} {idx : LeafIndex} {m : Message}
@@ -156,9 +157,9 @@ theorem signLayer_error {err : XmssError}
     rw [hots] at h
     cases h
 
-/-! ## Signatures -/
+/-! ## Signatures of the stateless signer -/
 
-/-- A signature holds one honest signature per layer.
+/-- A stateless signature holds one honest signature per layer.
 
 - The bottom key `idx` signs the message.
 - The top key `b` signs the root of bottom tree `b`. -/
@@ -192,7 +193,7 @@ theorem statelessSign_eq_ok {seed : Seed} {idx : LeafIndex} {m : Message} {σ : 
       cases h
       exact ⟨rfl, rfl, rfl⟩
 
-/-- Signing fails only when one layer's one-time key finds no codeword. -/
+/-- The stateless signer fails only when one layer's one-time key finds no codeword. -/
 theorem statelessSign_error {seed : Seed} {idx : LeafIndex} {m : Message} {err : XmssError}
     (h : (statelessSignWith (pureHash f) seed idx m).run = .error err) :
     ∃ layer key, err = .noAdmissibleEncoding layer key := by

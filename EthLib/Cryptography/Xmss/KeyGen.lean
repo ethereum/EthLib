@@ -67,9 +67,9 @@ structure CachedTree where
 
 `S` is secret for the key's whole life, and so is every one-time secret derived from it.
 
-The tree nodes are public: a signature reveals some of them.
+The tree nodes are not secret: a signature reveals some of them.
 
-A key from key generation and signing holds exactly what signing would rebuild from `S`.
+A key from key generation and signing holds exactly what the note's signer rebuilds from `S`.
 
 With other trees, a top key could sign two different roots. -/
 structure SecretKey where

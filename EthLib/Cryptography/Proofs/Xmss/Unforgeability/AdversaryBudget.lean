@@ -86,7 +86,7 @@ theorem isQueryBoundP_seedPrf (s : Seed) (pp : PublicParam) (a : Address) (suffi
     IsQueryBoundP (seedPrf H s pp a suffix) (fun _ => True) 1 :=
   isQueryBoundP_H _
 
-/-- Key generation: the scheme seed, then the public key. -/
+/-- Stateless key generation: the scheme seed, then the public key. -/
 theorem isQueryBoundP_statelessKeyGenWith (seed : Seed) :
     IsQueryBoundP (statelessKeyGenWith H seed) (fun _ => True) keyGenQueries := by
   unfold statelessKeyGenWith
@@ -96,7 +96,7 @@ theorem isQueryBoundP_statelessKeyGenWith (seed : Seed) :
   simp only [keyGenQueries]
   omega
 
-/-- A signature: the scheme seed, the parameter, then the signature from the derivations. -/
+/-- A stateless signature: the scheme seed, the parameter, then the signature. -/
 theorem isQueryBoundP_statelessSignWith (sk : Seed) (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (statelessSignWith H sk idx msg) (fun _ => True) requestQueries := by
   unfold statelessSignWith

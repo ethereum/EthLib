@@ -236,11 +236,11 @@ theorem prEvent_prfGame_ideal_le (adversary : ReasonAdversary) {qH r : ℕ}
     ⟨Or.inl hE, enncard_le_of_mem_support_prfGame adversary hh hr hz⟩).trans
     (failsAtMost_prfGame (gameQueries qH r) adversary hr (∅, ∅) fun _ _ _ _ _ h => by simp at h)
 
-/-- **The failure of some signing request.**
+/-- **The failure of some signing request of the stateless signer.**
 
 The adversary makes at most `qH` hash queries and `r` signing requests.
 
-Let `q` be the budget of the game's hash calls.
+Let `q` be the bound on the hash calls of the stateless game, for `qH` and `r`.
 
 Some request fails with probability at most `2 q / 2^256 + r (q / 2^95 + 2 exp(-4000))`. -/
 theorem statelessSigningFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
@@ -253,13 +253,13 @@ theorem statelessSigningFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
     rw [add_comm]
     exact add_le_add_right (prEvent_prfGame_ideal_le adversary hh hr) _
 
-/-- **leanXMSS with a signer that reveals its reasons, with its failure term bounded.**
+/-- **The stateless signer that reveals its reasons, with its failure term bounded.**
 
-Take an adversary whose reduction to the theorem's game makes at most `q >= 1` hash calls.
+Take an adversary whose reduction to the stateless game makes at most `q >= 1` hash calls.
 
 The adversary itself makes at most `qH` hash queries and `r` signing requests.
 
-Let `Q` be the budget of the game's hash calls, for the same adversary in this game.
+Let `Q` be the bound on the hash calls of the stateless game, for the same adversary.
 
 The bound says nothing from about `2^31` requests, since its last term is quadratic in `r`.
 

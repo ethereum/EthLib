@@ -6,7 +6,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Sign
 /-!
 # Proofs: the signer that keeps its key wins as often as the stateless one
 
-The game's signer keeps its key: the top tree, and the bottom trees it signed in last.
+The game's signer keeps its key: `S`, `P`, the top tree, and the bottom trees it signed in last.
 
 The stateless signer of the note rebuilds them from the seed on each request.
 
@@ -26,6 +26,7 @@ namespace EthLib.Cryptography.Xmss.Unforgeability
 open OracleComp OracleSpec ENNReal
 open EthLib.Cryptography.Xmss
 open EthLib.Cryptography.Xmss.Constants
+open EthLib.Cryptography.Xmss.Internal (signRootWith cacheTreeWith fetchTreeWith)
 open XmssSecurity (HashSpec OracleWorld romImpl)
 open XmssSecurity.Seeded (Erases worldKnown erases_pure_of_resolves)
 open DeterministicSigning (Resolves resolves_of_run cache_le_of_run)
@@ -344,12 +345,6 @@ section Request
 
 variable {seed : Seed} {sk : SecretKey} {cache : QueryCache HashSpec}
 
-/-- The run of a hash computation in the game is its run against the random oracle. -/
-theorem run_liftM_hash {β : Type} (comp : OracleComp HashSpec β) (c : QueryCache HashSpec) :
-    (simulateQ romImpl (liftM comp : OracleComp OracleWorld β)).run c =
-      (simulateQ randomOracle comp).run c := by
-  rw [XmssSecurity.Bridge.lift_hash_romImpl]
-
 /-- A signature with a key that the cache knows answers as the stateless signature.
 
 The answer and the cache after it agree, once the updated key is forgotten. -/
@@ -368,7 +363,7 @@ theorem keyInv_of_mem_support_signWith (h : KeyInv seed sk cache) {idx : LeafInd
     (hx : x ∈ support
       ((simulateQ romImpl (liftM (signWith Hh sk idx msg) : OracleComp OracleWorld _)).run cache)) :
     KeyInv seed x.1.2 x.2 := by
-  rw [run_liftM_hash] at hx
+  rw [XmssSecurity.Bridge.lift_hash_romImpl] at hx
   have hres := resolves_of_run _ _ _ hx
   exact keyInv_signWith (h.mono (cache_le_of_run _ _ _ hx)) hres
 
@@ -377,7 +372,7 @@ theorem keyInv_of_mem_support_keyGenWith {x : (PublicKey × SecretKey) × QueryC
     (hx : x ∈ support
       ((simulateQ romImpl (liftM (keyGenWith Hh seed) : OracleComp OracleWorld _)).run cache)) :
     KeyInv seed x.1.2 x.2 := by
-  rw [run_liftM_hash] at hx
+  rw [XmssSecurity.Bridge.lift_hash_romImpl] at hx
   exact keyInv_keyGenWith (resolves_of_run _ _ _ hx)
 
 end Request
@@ -396,24 +391,28 @@ abbrev statelessOracles (seed : Seed) : QueryImpl (OracleWorld + SigningSpec)
   QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
     statelessSigningOracle seed
 
+/-- A coin or hash query of the game passes through, and leaves the key as it is. -/
 theorem run_keyedOracles_inl (t : OracleWorld.Domain) (sk : SecretKey) :
     ((keyedOracles (.inl t)).run sk).run =
       (fun u => ((u, sk), [])) <$> (liftM (OracleWorld.query t) : OracleComp OracleWorld _) := by
   simp only [QueryImpl.add_apply_inl, QueryImpl.ofLift_apply]
   rfl
 
+/-- A coin or hash query of the stateless game passes through. -/
 theorem run_statelessOracles_inl (seed : Seed) (t : OracleWorld.Domain) :
     (statelessOracles seed (.inl t)).run =
       (fun u => (u, [])) <$> (liftM (OracleWorld.query t) : OracleComp OracleWorld _) := by
   simp only [QueryImpl.add_apply_inl, QueryImpl.ofLift_apply]
   rfl
 
+/-- A request of the game signs with the kept key, and logs the signature or its absence. -/
 theorem run_keyedOracles_inr (request : SignRequest) (sk : SecretKey) :
     ((keyedOracles (.inr request)).run sk).run =
       (fun r => ((r.1.toOption, r.2), [⟨request, r.1.toOption⟩])) <$>
         (liftM (signWith H sk request.leafIndex request.message) : OracleComp OracleWorld _) :=
   rfl
 
+/-- A request of the stateless game signs from the seed, and logs the same entry. -/
 theorem run_statelessOracles_inr (seed : Seed) (request : SignRequest) :
     (statelessOracles seed (.inr request)).run =
       (fun r => (r.toOption, [⟨request, r.toOption⟩])) <$>
@@ -535,11 +534,13 @@ noncomputable def statelessRun (adversary : Adversary) (seed : Seed) :
   (liftM (keyGenWith Hh seed) : OracleComp OracleWorld _) >>= fun p =>
     (simulateQ (statelessOracles seed) (adversary.main p.1)).run >>= checkForgery p.1
 
-theorem gameCore_eq (adversary : Adversary) :
+/-- The game draws a seed, then runs from that seed. -/
+theorem gameCore_eq_bind (adversary : Adversary) :
     gameCore adversary = liftM sampleSeed >>= keyedRun adversary :=
   rfl
 
-theorem statelessGameCore_eq (adversary : Adversary) :
+/-- The stateless game draws a seed, then runs from that seed. -/
+theorem statelessGameCore_eq_bind (adversary : Adversary) :
     statelessGameCore adversary = liftM sampleSeed >>= statelessRun adversary := by
   unfold statelessGameCore statelessRun
   refine bind_congr fun seed => ?_
@@ -550,7 +551,7 @@ theorem statelessGameCore_eq (adversary : Adversary) :
 theorem evalDistEq_gameCore (adversary : Adversary) :
     (simulateQ romImpl (gameCore adversary)).run' ∅ =ᵈ
       (simulateQ romImpl (statelessGameCore adversary)).run' ∅ := by
-  rw [gameCore_eq, statelessGameCore_eq, XmssSecurity.Seeded.run'_lift_sample_bind,
+  rw [gameCore_eq_bind, statelessGameCore_eq_bind, XmssSecurity.Seeded.run'_lift_sample_bind,
     XmssSecurity.Seeded.run'_lift_sample_bind]
   refine EvalDistEq.bind_right _ fun seed => ?_
   unfold keyedRun statelessRun
@@ -559,7 +560,7 @@ theorem evalDistEq_gameCore (adversary : Adversary) :
   exact evalDistEq_rest adversary seed b.1.1 b.1.2 b.2 (keyInv_of_mem_support_keyGenWith hb) _ _
     fun _ => rfl
 
-/-- **The game's signer forges as rarely as the stateless signer.**
+/-- **The adversary forges against the game's signer as often as against the stateless one.**
 
 The two games give the same signatures, so the adversary wins each with the same probability. -/
 theorem forgeAdvantage_eq_statelessForgeAdvantage (adversary : Adversary) :
@@ -567,11 +568,11 @@ theorem forgeAdvantage_eq_statelessForgeAdvantage (adversary : Adversary) :
   have hnew : forgeAdvantage adversary =
       Pr{let x ← (simulateQ romImpl (gameCore adversary)).run' ∅}[x = true] := by
     unfold forgeAdvantage experiment
-    exact prEvent_countedOracle_true _
+    exact prEvent_countedOracle _ fun x : Bool => x = true
   have hold : statelessForgeAdvantage adversary =
       Pr{let x ← (simulateQ romImpl (statelessGameCore adversary)).run' ∅}[x = true] := by
     unfold statelessForgeAdvantage statelessExperiment
-    exact prEvent_countedOracle_true _
+    exact prEvent_countedOracle _ fun x : Bool => x = true
   rw [hnew, hold]
   exact (evalDistEq_gameCore adversary).prEvent_eq _
 

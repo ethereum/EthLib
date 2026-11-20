@@ -9,7 +9,7 @@ In the note, the secret key is the seed `S_0` alone, and signing rebuilds every 
 
 That signer is written here as the note writes it, as a reference for the proofs.
 
-A theorem proves that the specification's signer returns its bytes.
+A theorem proves that the specification's signer returns the same signatures, byte for byte.
 
 Another proves that key generation gives the same public key.
 

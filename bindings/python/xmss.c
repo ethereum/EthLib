@@ -56,7 +56,7 @@ parse_uint(
 
 /* ---- The cache of secret keys ---------------------------------------- */
 
-/* Signing builds the top tree and a bottom tree, each costing a key generation.
+/* Signing from the seed alone builds the top tree and a bottom tree, each costing a key generation.
  *
  * So the extension keeps, per seed, the secret key that key generation returns.
  * It holds the top tree, the last bottom trees it signed in and their top signatures.
@@ -65,6 +65,7 @@ parse_uint(
  *
  * Memory: a built tree holds 2^17 - 1 digests, about 22 MiB of Lean objects.
  * A key holds its top tree and up to 8 bottom trees, so the 2 slots hold at most 18 trees.
+ * That is about 400 MiB, which no call releases but eviction.
  * A call in flight holds its own key on top of that, until it stores or frees it.
  * A signer uses one seed, so 2 slots keep it warm while a second seed is in use.
  *
@@ -80,12 +81,12 @@ parse_uint(
  * Every stored key is marked multi-threaded first, so Lean never updates it in place.
  * Two threads that sign with one seed at once each store their updated key, and the last stays.
  * The other's new tree is dropped; it costs a rebuild and changes no signature.
- * The lock is never held while the thread can stop: with the GIL, it is never released under it.
- * So a fork never copies the lock held, as a free-threaded build stops every thread first. */
+ * Under the lock, no thread releases the GIL or reaches a point where a free-threaded build pauses.
+ * So a forked child never inherits the lock held. */
 #define XMSS_KEY_CACHE_SEEDS 2
 
-/* The longest seed and public key a slot holds; the module refuses to load if the scheme's are
- * longer. */
+/* The longest seed and public key a slot holds.
+ * The module refuses to load if the scheme's are longer. */
 #define XMSS_KEY_CACHE_SEED_MAX 32
 #define XMSS_KEY_CACHE_PUB_KEY_MAX 64
 
@@ -225,8 +226,8 @@ key_gen_seed(
   return key;
 }
 
-/* The secret key of a seed, from the cache or from key generation, with one reference owned by
- * the caller; `pk_out` receives the public key.
+/* The secret key of a seed, from the cache or from key generation.
+ * The caller owns one reference, and `pk_out` receives the public key.
  *
  * A key from key generation is stored, so a later call finds it.
  * A key that another thread stored meanwhile may keep bottom trees, so it is not replaced.

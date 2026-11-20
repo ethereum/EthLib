@@ -83,24 +83,28 @@ section Oracles
 
 variable {seed : Seed} {sk : SecretKey} {cache : QueryCache HashSpec}
 
+/-- A coin or hash query of the game passes through, and leaves the key as it is. -/
 theorem run_keyedReasonOracles_inl (t : OracleWorld.Domain) (sk : SecretKey) :
     ((keyedReasonOracles (.inl t)).run sk).run =
       (fun u => ((u, sk), [])) <$> (liftM (OracleWorld.query t) : OracleComp OracleWorld _) := by
   simp only [QueryImpl.add_apply_inl, QueryImpl.ofLift_apply]
   rfl
 
+/-- A coin or hash query of the stateless game passes through. -/
 theorem run_statelessReasonOracles_inl (seed : Seed) (t : OracleWorld.Domain) :
     (statelessReasonOracles seed (.inl t)).run =
       (fun u => (u, [])) <$> (liftM (OracleWorld.query t) : OracleComp OracleWorld _) := by
   simp only [QueryImpl.add_apply_inl, QueryImpl.ofLift_apply]
   rfl
 
+/-- A request of the game signs with the kept key, and replies with the whole result. -/
 theorem run_keyedReasonOracles_inr (request : SignRequest) (sk : SecretKey) :
     ((keyedReasonOracles (.inr request)).run sk).run =
       (fun r => ((r.1, r.2), ([⟨request, r.1.toOption⟩] : QueryLog SigningSpec))) <$>
         (liftM (signWith H sk request.leafIndex request.message) : OracleComp OracleWorld _) :=
   rfl
 
+/-- A request of the stateless game signs from the seed, and replies alike. -/
 theorem run_statelessReasonOracles_inr (seed : Seed) (request : SignRequest) :
     (statelessReasonOracles seed (.inr request)).run =
       (fun r => (r, ([⟨request, r.toOption⟩] : QueryLog SigningSpec))) <$>
@@ -157,18 +161,20 @@ noncomputable def keyedReasonRun (adversary : ReasonAdversary) (seed : Seed) :
       checkReason p.1 (x.1.1, x.2)
 
 /-- The result of the game with the stateless signer, its seed drawn. -/
-noncomputable def statelessKeyedReasonRun (adversary : ReasonAdversary) (seed : Seed) :
+noncomputable def statelessReasonRunOf (adversary : ReasonAdversary) (seed : Seed) :
     OracleComp OracleWorld (Forgery × QueryLog SigningSpec × Bool) :=
   (liftM (keyGenWith Hh seed) : OracleComp OracleWorld _) >>= fun p =>
     (simulateQ (statelessReasonOracles seed) (adversary.main p.1)).run >>= checkReason p.1
 
-theorem reasonRun_eq (adversary : ReasonAdversary) :
+/-- The game draws a seed, then runs from that seed. -/
+theorem reasonRun_eq_bind (adversary : ReasonAdversary) :
     reasonRun adversary = liftM sampleSeed >>= keyedReasonRun adversary :=
   rfl
 
-theorem statelessReasonRun_eq' (adversary : ReasonAdversary) :
-    statelessReasonRun adversary = liftM sampleSeed >>= statelessKeyedReasonRun adversary := by
-  unfold statelessReasonRun statelessKeyedReasonRun
+/-- The stateless game draws a seed, then runs from that seed. -/
+theorem statelessReasonRun_eq_bind (adversary : ReasonAdversary) :
+    statelessReasonRun adversary = liftM sampleSeed >>= statelessReasonRunOf adversary := by
+  unfold statelessReasonRun statelessReasonRunOf
   refine bind_congr fun seed => ?_
   rw [statelessKeyGenWith_eq, XmssSecurity.Bridge.liftM_hash_map, bind_map_left]
   rfl
@@ -177,10 +183,10 @@ theorem statelessReasonRun_eq' (adversary : ReasonAdversary) :
 theorem evalDistEq_reasonRun (adversary : ReasonAdversary) :
     (simulateQ romImpl (reasonRun adversary)).run' ∅ =ᵈ
       (simulateQ romImpl (statelessReasonRun adversary)).run' ∅ := by
-  rw [reasonRun_eq, statelessReasonRun_eq', XmssSecurity.Seeded.run'_lift_sample_bind,
+  rw [reasonRun_eq_bind, statelessReasonRun_eq_bind, XmssSecurity.Seeded.run'_lift_sample_bind,
     XmssSecurity.Seeded.run'_lift_sample_bind]
   refine EvalDistEq.bind_right _ fun seed => ?_
-  unfold keyedReasonRun statelessKeyedReasonRun
+  unfold keyedReasonRun statelessReasonRunOf
   rw [run'_romImpl_bind, run'_romImpl_bind]
   refine OracleComp.EvalDistEq.bind_congr_of_support _ fun b hb => ?_
   exact evalDistEq_run_bind seed keyedReasonOracles (statelessReasonOracles seed)

@@ -18,13 +18,13 @@ So the two extra calls return what the real game's signer holds.
 They change nothing, and only cost budget.
 
 ```text
-    EthLib :  S_0, hash S, hash P, tree, adversary, verify
-                                         signer: 2 cached calls, then sign
-    real   :  S_0, hash S, hash P, tree, adversary, verify
-                                         signer: sign
+    stateless :  S_0, hash S, hash P, tree, adversary, verify
+                                            signer: 2 cached calls, then sign
+    real      :  S_0, hash S, hash P, tree, adversary, verify
+                                            signer: sign
 ```
 
-Hence both games win with the same probability, and the real game spends at most EthLib's budget.
+Hence both games win equally often, and the real game spends at most the stateless game's budget.
 -/
 
 @[expose] public section
@@ -111,7 +111,7 @@ theorem knownKeys_paramInput (S0 : MasterSeed) (S Pf : HashOutput) :
 
 -- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
-/-- EthLib's signer erases to the real game's: the cache answers its calls for `S` and `P`. -/
+/-- The stateless signer erases to the real game's: the cache answers its calls for `S` and `P`. -/
 theorem erases_statelessSignWith (S0 : MasterSeed) (S Pf : HashOutput) (idx : LeafIndex)
     (msg : Message) :
     Erases (knownKeys S0 S Pf) (Except.toOption <$> statelessSignWith queryH (ofSeed S0) idx msg)
@@ -130,7 +130,7 @@ theorem erases_statelessSignWith (S0 : MasterSeed) (S Pf : HashOutput) (idx : Le
 
 /-! ## The adversary's run -/
 
-/-- EthLib's game once the keys exist: the adversary with its oracles, then the verification. -/
+/-- The stateless game once the keys exist: the adversary with its oracles, then verification. -/
 noncomputable def ethRest (adversary : Adversary) (sk : Seed) (pk : PublicKey) :
     OracleComp OracleWorld Bool := do
   let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
@@ -140,7 +140,7 @@ noncomputable def ethRest (adversary : Adversary) (sk : Seed) (pk : PublicKey) :
   let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
   return decide (Valid log ∧ ¬Contains log forgery) && verified
 
-/-- Each oracle of EthLib's adversary erases to the real game's. -/
+/-- Each oracle of the stateless game erases to the real game's. -/
 theorem erases_oracles (S0 : MasterSeed) (S Pf : HashOutput)
     (input : (OracleWorld + SigningSpec).Domain) :
     Erases (worldKnown (knownKeys S0 S Pf))
@@ -161,7 +161,7 @@ theorem erases_oracles (S0 : MasterSeed) (S Pf : HashOutput)
     exact (erases_statelessSignWith S0 S Pf request.leafIndex request.message).lift_hash.bind _ _
       fun _ => .pure _
 
-/-- EthLib's game after key generation erases to the real game's. -/
+/-- The stateless game after key generation erases to the real game's. -/
 theorem erases_rest (adversary : Adversary) (S0 : MasterSeed) (S Pf : HashOutput)
     (root : Digest) :
     Erases (worldKnown (knownKeys S0 S Pf))
@@ -295,7 +295,7 @@ noncomputable def topRoot (S Pf : HashOutput) : OracleComp OracleWorld Digest :=
 
 -- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
-/-- EthLib's key generation in the game: the seed hash, the parameter's hash, then the top tree. -/
+/-- Stateless key generation in the game: the seed hash, the parameter's hash, then the top tree. -/
 theorem liftM_statelessKeyGenWith_bind {β : Type} (S0 : MasterSeed)
     (k : Seed × PublicKey → OracleComp OracleWorld β) :
     (liftM (statelessKeyGenWith H (ofSeed S0)) : OracleComp OracleWorld _) >>= k
@@ -309,7 +309,7 @@ theorem liftM_statelessKeyGenWith_bind {β : Type} (S0 : MasterSeed)
 
 -- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
-/-- EthLib's key generation from `S`, as the real game runs it. -/
+/-- Key generation from `S`, as the real game runs it. -/
 theorem liftM_realKeygen_bind {β : Type} (S : HashOutput)
     (k : PublicKey → OracleComp OracleWorld β) :
     (liftM (realKeygen S) : OracleComp OracleWorld _) >>= k
@@ -321,7 +321,7 @@ theorem liftM_realKeygen_bind {β : Type} (S : HashOutput)
 
 -- `S` is a hash value and a seed has 256 bits, so definitional checks may unfold the widths.
 set_option backward.isDefEq.respectTransparency false in
-/-- EthLib's game, as a game of that shape. -/
+/-- The stateless game, as a game of that shape. -/
 theorem statelessGameCore_eq_prefixGame (adversary : Adversary) :
     statelessGameCore adversary
       = prefixGame XmssSecurity.sampleMasterSeed seedHashInput (fun _ S => paramInput S)
@@ -356,13 +356,16 @@ theorem erases_after (adversary : Adversary) (S0 : MasterSeed) (S Pf : HashOutpu
 
 /-! ## The theorem -/
 
-/-- The winning event of the counted experiment is the one of the plain random oracle's run.
+/-- An event of the counted experiment is the event of the plain random oracle's run.
 
 It is stated for any game, so the kernel compares the two oracles once, not on a game. -/
-theorem prEvent_countedOracle_true (game : OracleComp OracleWorld Bool) :
-    Pr{let result ← (simulateQ countedOracle game).run.run' ∅}[result.1 = true] =
-      Pr{let x ← (simulateQ romImpl game).run' ∅}[x = true] := by
-  rw [← XmssSecurity.Bridge.probOutput_countHashQueries, simulateQ_countHashQueries]
+theorem prEvent_countedOracle {α : Type} (game : OracleComp OracleWorld α) (P : α → Prop) :
+    Pr{let result ← (simulateQ countedOracle game).run.run' ∅}[P result.1]
+      = Pr{let x ← (simulateQ romImpl game).run' ∅}[P x] := by
+  have h := congrArg (fun c : OracleComp OracleWorld α => (simulateQ romImpl c).run' ∅)
+    (XmssSecurity.countHashQueries_forget game)
+  simp only [simulateQ_map, StateT.run'_map'] at h
+  rw [← h, prEvent_map, simulateQ_countHashQueries]
   rfl
 
 theorem statelessForgeAdvantage_eq (adversary : Adversary) :
@@ -371,7 +374,7 @@ theorem statelessForgeAdvantage_eq (adversary : Adversary) :
   have hEth : statelessForgeAdvantage adversary =
       Pr{let x ← (simulateQ romImpl (statelessGameCore adversary)).run' ∅}[x = true] := by
     unfold statelessForgeAdvantage statelessExperiment
-    exact prEvent_countedOracle_true _
+    exact prEvent_countedOracle _ fun x : Bool => x = true
   rw [hEth, statelessGameCore_eq_prefixGame, realGame_eq_prefixGame]
   exact (evalDist_prefixGame _ _ _
     (fun S0 S Pf c1 c2 h1 h12 h2 => knownKeys_le S0 S Pf c1 c2 h1 h12 h2)

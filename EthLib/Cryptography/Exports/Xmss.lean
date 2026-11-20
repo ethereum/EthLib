@@ -102,15 +102,12 @@ def constTargetSum (_ : Unit) : UInt64 :=
 
 /-- The public key grown from a seed.
 
-It builds the whole top tree, `2^16` one-time keys.
-
-It returns the secret key too, which holds that tree, as an opaque object.
-
-The C side keeps it per seed, so a first signature does not build the top tree again. -/
+It builds the whole top tree, `2^16` one-time keys. -/
 @[export eth_xmss_key_gen]
 def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
   runXmss do
     let seed ← Base.exactBytes SEED_LEN seed .badSeedSize
+    -- The C side keeps the secret key per seed, so a first signature reuses its top tree.
     let (pk, sk) := keyGen seed
     return (encodePublicKey pk, sk)
 
@@ -118,7 +115,7 @@ def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
 
 The C side keeps the key of each seed, and passes it back here to sign.
 
-It keeps the updated key even when signing fails, so a tree built stays.
+It returns the updated key even when signing fails, so a tree that signing built is not lost.
 
 A message of the wrong length leaves the key as it is. -/
 @[export eth_xmss_sign]

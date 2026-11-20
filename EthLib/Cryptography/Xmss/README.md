@@ -56,7 +56,7 @@ So the code makes its calls as the note defines them, one by one and in a fixed 
 
 - a vector of hashes is computed entry 0 first (`ofFnInOrder`);
 - a node computes its left subtree, then its right subtree, then its own hash;
-- signing builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it.
+- signing builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it, unless the key keeps that tree.
 
 Every secret derives from the scheme seed `S = H("leanXMSS" | S_0)`, and so does the public parameter, which the public key publishes.
 These derivations are the public parameter, the chain starts and the randomizer bases.
@@ -84,7 +84,7 @@ So the key keeps up to 8 bottom trees, each with that top signature, and drops t
 A signature in a kept tree costs one one-time signature; otherwise it costs one bottom tree and the top key's search.
 Signing never rebuilds the top tree.
 
-The C extension keeps the secret key of the last 2 seeds it saw, so `xmss.key_gen(seed)` and `xmss.sign(seed, ...)` keep their signatures and take only the seed.
+The C extension keeps the secret key of the last 2 seeds it saw, so `xmss.key_gen(seed)` and `xmss.sign(seed, ...)` keep their Python signatures and still take only the seed.
 
 Never sign two different messages at one leaf index with one key.
 A one-time key that signs two different messages can reveal enough chain values for a forgery, and nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.
@@ -146,7 +146,7 @@ That length is 48 bytes on the bottom layer and 32 on the top.
 Before a key's search, the signer hashes no such input.
 Its other calls carry other addresses, and the input that grows the scheme seed has 40 bytes, too short to be a trial input.
 The theorem assumes that the cache holds no trial input of the two keys when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
-It also assumes that a bottom tree of the index that the key keeps holds a top signature, not an error, as a key from `keyGen` does, since it keeps none.
+It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error; a key from `keyGen` keeps no bottom tree.
 Then the cache still holds none when each search starts, so each search fails with probability at most `exp(-4000)`.
 
 **Domain separation.**

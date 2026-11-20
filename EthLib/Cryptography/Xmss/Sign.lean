@@ -37,6 +37,8 @@ open EthLib.Cryptography.Xmss.Constants
 
 variable {m : Type → Type} [Monad m] (H : ByteArray → m (Vector UInt8 32))
 
+namespace Internal
+
 /-- The top key `b`'s signature of a root: the one-time signature and the key's path.
 
 The path is read from the top tree, so only the search and the chains hash.
@@ -65,13 +67,17 @@ def cacheTreeWith (sk : SecretKey) (b : Nat) : m CachedTree := do
 
 A kept tree is read without a hash call.
 
-Otherwise the tree is built and kept, and the tree kept longest past the limit is dropped. -/
+Otherwise the tree is built and put first.
+
+Past the limit, the tree used longest ago is dropped. -/
 def fetchTreeWith (sk : SecretKey) (b : Nat) : m (CachedTree × SecretKey) :=
   match sk.cache.find? (·.index == b) with
   | some t => pure (t, { sk with cache := t :: sk.cache.filter (·.index != b) })
   | none => do
     let t ← cacheTreeWith H sk b
     return (t, { sk with cache := (t :: sk.cache).take MAX_CACHED_BOTTOM_TREES })
+
+end Internal
 
 /-- `Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.
 
@@ -104,7 +110,7 @@ def signWith (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
   let some (randomizer, chainValues) ← otsSign H sk.publicParam (seedPrf H sk.schemeSeed)
       .bottom (UInt32.ofNat idx.toNat) (packBytes msg)
     | return (.error (.noAdmissibleEncoding .bottom idx.toNat), sk)
-  let (t, sk) ← fetchTreeWith H sk (bottomTree idx)
+  let (t, sk) ← Internal.fetchTreeWith H sk (bottomTree idx)
   -- The key's path and the root the top key signed both come from the one bottom tree.
   let bottom : LayerSignature :=
     { randomizer, chainValues, path := t.tree.path LAYER_HEIGHT idx.toNat }

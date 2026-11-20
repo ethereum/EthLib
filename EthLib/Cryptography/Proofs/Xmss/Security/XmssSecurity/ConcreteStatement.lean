@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
+public import EthLib.Cryptography.Proofs.Xmss.Reference
 public import VCVio.OracleComp.QueryTracking.WriterCost
 
 /-!
