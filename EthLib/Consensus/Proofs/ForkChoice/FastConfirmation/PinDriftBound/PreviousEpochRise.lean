@@ -16,7 +16,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.
 namespace EthLib.Consensus.Models.Network
 namespace PinDrift
 
-open Base Uint64 Models DirectSafety PinKeys
+open Base Uint64 Models DirectSafety
 open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
@@ -24,6 +24,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 section Terms
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
+
+namespace Internal
 
 /-- The charge of a charged key of `K5`: the run splits at the step that starts its exit.
 
@@ -1407,8 +1409,7 @@ Each key uses the whistleblower stake bound plus the allowance for credits and r
 A key that C's branch charges to depart is also read at its charge.
 
 A charge in the split's own epoch also reads the credits of `pre`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_bounds (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem registry_bounds (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -1683,8 +1684,7 @@ The run `pre` is the shared run from the start of the split's epoch.
 A charge in that epoch reads the balance before the credits of `pre`.
 
 So the key's proposer, whistleblower and sync credits over `pre` are read too. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cP_le (h : Setting config checks g
-  split fin pulled anc counted V)
+theorem cP_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -1858,8 +1858,7 @@ At a low gain rate each active key of `CS` uses one gain unit for its stake at s
 Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
 
 The reserve already counts a rounding unit for the deposit that creates the key. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_csUnits (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
     {events eventsF : List (BalanceEvent preset)}
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -1951,8 +1950,7 @@ At a high gain rate each deposit slot is charged at the largest cap.
 The keys of `K6` outside R's registry share that budget without counting any slot twice.
 
 Each key created after R's registry came through a pending deposit of the window. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_capSlots (h : Setting config
-  checks g split fin pulled anc counted V) :
+theorem bud_capSlots (h : Setting config checks g split fin pulled anc counted V) :
     Internal.capUse config pulled anc fin counted +
       (if (pinTerms config pulled anc fin).gainHigh = true then
         ((Internal.CS counted split).filter fun v =>
@@ -2412,8 +2410,7 @@ The bound is scaled by ten, so the tenth is exact.
 One floor of all of a key's flows bounds its gain, and each split by kind costs one step.
 
 `registry` and `registryCharge` are the bounds of the registry keys at their slashing. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_split_of (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem flow_split_of (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2687,8 +2684,7 @@ The reserve charges that exit on R's branch.
 Its stake in C is at most its stake at R and its rise.
 
 The same bound applies to keys whose scheduled exits R can see. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cJ_le (h : Setting config checks g
-  split fin pulled anc counted V)
+theorem cJ_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2911,6 +2907,8 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cJ_le (h : Sett
     simp only [Finset.sum_add_distrib]
   rw [Finset.sum_add_distrib] at beyond
   omega
+
+end Internal
 
 end Terms
 

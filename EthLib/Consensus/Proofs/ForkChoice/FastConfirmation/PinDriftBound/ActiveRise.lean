@@ -15,7 +15,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.
 namespace EthLib.Consensus.Models.Network
 namespace PinDrift
 
-open Base Uint64 Models DirectSafety PinKeys
+open Base Uint64 Models DirectSafety
 open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
@@ -23,6 +23,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 section Terms
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
+
+namespace Internal
 
 /-- A key with a flow credit of `cred` or a whistleblower credit has a gross credit on C's run.
 
@@ -269,7 +271,7 @@ Keys slashed on R's branch instead use the bound from the finalized state.
 Its balance at a state of C's branch is its finalized balance and its credits since.
 
 Those credits are sync and consolidation credits, which the slack holds with one rounding band. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_exited
+theorem registry_exited
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -400,8 +402,7 @@ private theorem unit_gate (h : Setting config checks g split fin pulled anc coun
   simp [Internal.slashW, not] at slash
 
 /-- The units of a set of keys are the unit for each key with a flow credit. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_unitK (t : PinTerms preset) {x
-  y : ForkedBeaconState preset}
+theorem sum_unitK (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ) (eventsC events eventsF : List (BalanceEvent preset))
     (S : Finset ValidatorIndex) (cred : ValidatorIndex → ℕ) :
     ∑ v ∈ S, Internal.unitK t tailC high eventsC events eventsF v.toNat (cred v) =
@@ -423,8 +424,7 @@ A key slashed only on R's branch uses a unit from that branch's slashing budget.
 The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave.
 
 The keys of `SC` alone fit the slots and the extra units at weight one. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_units (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_units (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -796,8 +796,7 @@ They are one rounding step for a sync debit on R's branch or on its shared segme
 The bound also includes compounding flows, one rounding unit and the induced leak.
 
 The starting balance floor accounts for rounding down to an increment. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keyCeiling (anc : BeaconState preset
-  fork)
+def keyCeiling (anc : BeaconState preset fork)
     (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i : ℕ) : Prop :=
@@ -1040,8 +1039,7 @@ private theorem credC_prefix_le (h : Setting config checks g split fin pulled an
   omega
 
 /-- The credits of a key over the run before a step are at most those over the whole run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_prefix_le (blockP slotP
-  : BalanceSource → Bool) (v high : ℕ)
+theorem creditScan_prefix_le (blockP slotP : BalanceSource → Bool) (v high : ℕ)
     {x a b c : ForkedBeaconState preset} (pre : Run config checks x a)
     (step : Step config checks a b) (post : Run config checks b c) :
     (Internal.creditScan blockP slotP v high pre) ≤
@@ -1070,8 +1068,7 @@ private theorem prefix_credits_mono {a b : ForkedBeaconState preset}
 /-- The sync credits of the events of a prefix of C's run are within those of the whole run.
 
 The replay of the prefix at `highC` is a prefix of the replay of the run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCr_prefix_le {a b :
-  ForkedBeaconState preset}
+theorem syncCr_prefix_le {a b : ForkedBeaconState preset}
     (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
     (post : Run config checks b ⟨fork, counted⟩) (highC : ℕ)
     {eventsPre eventsC : List (BalanceEvent preset)}
@@ -2088,8 +2085,7 @@ The reward budget's stake bound includes the slashing increment.
 
 For an unslashed key at R, the exit epoch plus the withdrawal delay must exceed R's next epoch.
 -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_frozen (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem registry_frozen (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2180,8 +2176,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_frozen
     (balanceAt as v.toNat) core (by omega) p2.1 p1 p2.2.1 p3 p2.2.2 kept
 
 /-- At the finalized state there is no earlier balance path, and the effective balance fits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.finalized_start (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem finalized_start (h : Setting config checks g split fin pulled anc counted V)
     (i : ℕ) :
     (∀ p ∈ (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩).balancePath,
       p = ⟨fork, fin⟩ ∨ effectiveAt p i = 0) ∧
@@ -2195,8 +2190,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry that is off the kept arm is bounded by the largest cap.
 
 Its rise is its whole headroom, so the bound reads the largest cap at each step of C's branch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_headroom (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem registry_headroom (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
     (i : ℕ) (notKept : ¬ (pinTerms config pulled anc fin).keptArm i = true) (slack : ℕ) :
@@ -2249,8 +2243,7 @@ The premises are the rate of the ceiling at the depth of the window.
 They are also the charge of the flow gain to the key.
 
 The unit pays the joint floor, and the band is an upward band at least. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_key_ceiling (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem created_key_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {events : List (BalanceEvent preset)}
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -2334,8 +2327,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_key_cei
 /-- The exit of a key that the finalized state does not hold is not before the finalized epoch.
 
 An exit up to the finalized epoch would be an exit of the finalized registry. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_exitAfterFin (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem created_exitAfterFin (h : Setting config checks g split fin pulled anc counted V)
     {i : ℕ} (created : fin.validators.data.size ≤ i) :
     ∀ w, pulled.validators.data[i]? = some w →
       (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat := by
@@ -2409,8 +2401,7 @@ They are the keys whose sync flows are charged to the reserve.
 The bounds include the leak induced by one increment for each key slashed on R's branch.
 
 That allowance is weighted three in the combined bound and one for the keys slashed on C alone. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_syncLeak (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_syncLeak (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2586,8 +2577,7 @@ They are one rounding step for a credit on C's branch or a sync debit on R's.
 The bound also includes compounding flows, one rounding unit and the induced leak.
 
 It includes the key's sync debits on the shared segment. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_core (h : Setting config checks
-  g split fin pulled anc counted V)
+theorem key_core (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2621,8 +2611,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_core (h : S
   · exact key_core_headroom h tail fromFin tailC highC v kept
 
 /-- The rise of the other keys, which are active in both. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cN_le (h : Setting config checks g
-  split fin pulled anc counted V)
+theorem cN_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2678,6 +2667,8 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cN_le (h : Sett
   rw [eq]
   refine le_trans (Finset.sum_le_sum term) (le_of_eq ?_)
   exact (Nat.cast_sum _ _).symm
+
+end Internal
 
 end Terms
 

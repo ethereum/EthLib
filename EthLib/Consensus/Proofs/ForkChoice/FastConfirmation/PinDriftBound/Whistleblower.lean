@@ -15,7 +15,7 @@ public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.
 namespace EthLib.Consensus.Models.Network
 namespace PinDrift
 
-open Base Uint64 Models DirectSafety PinKeys
+open Base Uint64 Models DirectSafety
 open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
@@ -23,6 +23,8 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
 section Terms
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
   {V : Finset ValidatorIndex}
+
+namespace Internal
 
 /-- The whistleblower credits of a set of keys over a run fit the limits of its slashing events. -/
 private theorem whistC_sum_le_limits {g m y : ForkedBeaconState preset}
@@ -43,8 +45,7 @@ private theorem whistC_sum_le_limits {g m y : ForkedBeaconState preset}
 /-- The positions of the keys slashed on C's branch after the split.
 
 They are unslashed at the split and slashed at C. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedOnC (split counted : BeaconState
-  preset fork) : Finset ℕ :=
+def slashedOnC (split counted : BeaconState preset fork) : Finset ℕ :=
   (Finset.range counted.validators.data.size).filter fun i =>
     (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
       (counted.validators.data[i]?.map (·.slashed)).getD false = true
@@ -66,8 +67,7 @@ Take the larger of that sum and the finalized balance, including the rounded bou
 These charges omit the general effective-balance ceiling, which can be higher.
 
 The remaining keys use that ceiling if it is higher. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleEnv (t : PinTerms preset)
-  (pulled anc fin : BeaconState preset fork) (i : ℕ) :
+def whistleEnv (t : PinTerms preset) (pulled anc fin : BeaconState preset fork) (i : ℕ) :
     ℕ :=
   if t.slashedRB i = true then
     max (balanceAt pulled i + t.rise i + preset.EFFECTIVE_BALANCE_INCREMENT.toNat) (balanceAt fin i)
@@ -98,8 +98,7 @@ So a key of the registry at `c` keeps its effective balance there.
 If the balance at `c` is within the finalized bound, it stays within that bound plus the slack.
 
 The finalized state is the case `c = fin`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.short_in_fin (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem short_in_fin (h : Setting config checks g split fin pulled anc counted V)
     {c : BeaconState preset fork}
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -132,8 +131,7 @@ The seat debits are those of the two runs that R shares with C.
 A key that exited before the finalized state also holds its credits on the shared segment.
 
 A sync credit there has the band of its rounding. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleSlackBase (t : PinTerms preset)
-  {x y : ForkedBeaconState preset}
+def whistleSlackBase (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {x' y' : ForkedBeaconState preset}
     (rrun : Run config checks x' y') (highC high : ℕ)
     (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
@@ -153,8 +151,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleSlackBase (t
 /-- The reward allowance adds a second gain unit to the credit slack when R slashes the key.
 
 The second unit pays the joint floor that R's slashing penalty can tip. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleSlack (t : PinTerms preset) {x y
-  : ForkedBeaconState preset}
+def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) {x' y' : ForkedBeaconState preset}
     (rrun : Run config checks x' y') (highC high : ℕ)
     (eventsC eventsF events : List (BalanceEvent preset)) (fin : BeaconState preset fork)
@@ -320,8 +317,7 @@ The bound holds at every state of C's run after `z`, and at C.
 The key's base stake is credits, so one floor of the flows pays its gain.
 
 The rate premise is that of the low regime: `key` reads it at the depth of the call. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_ceiling (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
@@ -510,8 +506,7 @@ private theorem wide_of_lowGain (h : Setting config checks g split fin pulled an
 /-- Off the high gain rate, the depth of the window is small against the rate.
 
 The product of depth and rate is below an eleventh of an increment. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_of_lowGain (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem key_of_lowGain (h : Setting config checks g split fin pulled anc counted V)
     (lowGain : (pinTerms config pulled anc fin).gainHigh = false) :
     11 * (min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
@@ -523,7 +518,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_of_lowGain 
     (wide_of_lowGain h lowGain)
 
 /-- The kept arm's test bounds the gain at the full depth. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keptArm_eq (i : ℕ)
+theorem keptArm_eq (i : ℕ)
     (kept : (pinTerms config pulled anc fin).keptArm i = true) :
     11 * (pinTerms config pulled anc fin).depth *
         ((pinTerms config pulled anc fin).gainRate i + 1) ≤
@@ -532,8 +527,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keptArm_eq (i :
   exact kept.2
 
 /-- The kept arm bounds the gain per increment up to the full depth. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_of_kept (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem key_of_kept (h : Setting config checks g split fin pulled anc counted V)
     (i D : ℕ) (depth : D ≤ (pinTerms config pulled anc fin).depth)
     (kept : (pinTerms config pulled anc fin).keptArm i = true) :
     11 * D * ((pinTerms config pulled anc fin).perIncrement *
@@ -785,8 +779,7 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     simp [outside, hcr i, act]
 
 /-- The sum of a function of the positions over the images of the positions of a set is its sum. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_image_ofNat (T : Finset ℕ)
-  (small : ∀ i ∈ T, i < 2 ^ 64) (f : ℕ → ℕ) :
+theorem sum_image_ofNat (T : Finset ℕ) (small : ∀ i ∈ T, i < 2 ^ 64) (f : ℕ → ℕ) :
     ∑ v ∈ T.image UInt64.ofNat, f v.toNat = ∑ i ∈ T, f i := by
   rw [Finset.sum_image fun a ha b hb same => by
     rw [← UInt64.toNat_ofNat_of_lt' (small a ha), ← UInt64.toNat_ofNat_of_lt' (small b hb), same]]
@@ -961,8 +954,7 @@ private theorem slashedC_retained (h : Setting config checks g split fin pulled 
     found
 
 /-- The withdrawal test includes keys withdrawable by R's next epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.withdrawnRB_of_le (config : Config)
-  (pulled anc fin : BeaconState preset fork)
+theorem withdrawnRB_of_le (config : Config) (pulled anc fin : BeaconState preset fork)
     {i : ℕ} {w : Validator} (found : pulled.validators.data[i]? = some w)
     (le : w.withdrawableEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1) :
     (pinTerms config pulled anc fin).withdrawnRB i = true := by
@@ -970,8 +962,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.withdrawnRB_of_
   simp [found, le]
 
 /-- Deposits to a key unslashed before each credit count toward its pre-slashing deposits. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.deposits_le_depPre (L : List
-  (BalanceEvent preset)) (i : ℕ)
+theorem deposits_le_depPre (L : List (BalanceEvent preset)) (i : ℕ)
     (clean : ∀ e ∈ L, e.source = .deposits →
       Internal.keyCredit i e = 0 ∨ ¬ slashedFlagAt e.before.state i = some true) :
     ((L.filter fun e => e.source = .deposits).map (Internal.keyCredit i)).sum ≤ Internal.depPre L i
@@ -999,8 +990,7 @@ A deposit event of a block credits no balance.
 One of a slot step starts from a state that does not hold the key slashed.
 
 A slashed key stays slashed up to the end of the run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.prefix_deposits_clean (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem prefix_deposits_clean (h : Setting config checks g split fin pulled anc counted V)
     {a : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
     (aEarly : a.fork < .glamsterdam) (highC : ℕ) {e1 : List (BalanceEvent preset)}
     (replayed1 : pre.balanceEvents highC = .ok e1) (v : ValidatorIndex)
@@ -1036,8 +1026,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A bound along R's run from the first state of a key holds on the whole run.
 
 Before the first state `c` the key is absent, so its effective balance is zero there. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.path_le_of_start {a e :
-  ForkedBeaconState preset} {c : BeaconState preset fork}
+theorem path_le_of_start {a e : ForkedBeaconState preset} {c : BeaconState preset fork}
     (toC : Run config checks a ⟨fork, c⟩) (fromC : Run config checks ⟨fork, c⟩ e) (i X : ℕ)
     (before : ∀ p ∈ toC.balancePath, p = ⟨fork, c⟩ ∨ effectiveAt p i = 0)
     (after : ∀ z ∈ fromC.balancePath, effectiveAt z i ≤ X) :
@@ -1080,8 +1069,7 @@ It holds the activation reserve at its start.
 No gross block credit reaches it before its activation, so a deposit or a consolidation pays it.
 
 A consolidation needs an entry of the finalized queue, whose target is inside that registry. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_deposit (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem created_deposit (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
     (replayedF : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -1120,8 +1108,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch holds beyond the split pays an upward band.
 
 The deposit that creates it on C's run supplies the credit band. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_band (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem created_band (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
@@ -1245,8 +1232,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 A key already in the split's registry needs its slashing withdrawal bound.
 
 A later key gets that bound from the state that first holds it. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.envelope_of_clean_fin (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem envelope_of_clean_fin (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)}
@@ -1295,7 +1281,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The replays of the branch from `fin` to the split and of R's run, read at R's epoch.
 
 Both runs end by R's epoch, so the horizon of the replay does not change their events. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.replays_at_pulled
+theorem replays_at_pulled
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -2104,8 +2090,7 @@ private theorem whistle_slack_sc (h : Setting config checks g split fin pulled a
   linarith
 
 /-- The largest representable epoch is reserved for keys without an assigned exit. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exitEpoch_toNat_lt_of_ne_far {epoch
-  : Epoch} (assigned : epoch ≠ FAR_FUTURE_EPOCH) :
+theorem exitEpoch_toNat_lt_of_ne_far {epoch : Epoch} (assigned : epoch ≠ FAR_FUTURE_EPOCH) :
     epoch.toNat < 2 ^ 64 - 1 := by
   have bound := epoch.toNat_lt
   have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
@@ -3245,8 +3230,7 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
   linarith
 
 /-- The rise and seat debit of an active key, with its late or pending charge. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleActiveRow (config : Config)
-  (pulled anc fin : BeaconState preset fork)
+def whistleActiveRow (config : Config) (pulled anc fin : BeaconState preset fork)
     (i seatDebit : ℕ) : ℕ :=
   let terms := pinTerms config pulled anc fin
   let W := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
@@ -3340,8 +3324,7 @@ The reserve covers the rewards through the keys' shares and the separate slashin
 The seat debits, the keys' rise allowances and R's slashing charge pay the rest.
 
 `registry` is the bound of the keys of the split's registry on each step of C's branch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_whistle_of (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem bud_whistle_of (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -3578,8 +3561,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_whistle_of 
   linarith
 
 /-- Glue: V keys are current at R, and distinct keys have distinct positions. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_fall (h : Setting config checks
-  g split fin pulled anc counted V) :
+theorem bud_fall (h : Setting config checks g split fin pulled anc counted V) :
     (∑ v ∈ V, (pinTerms config pulled anc fin).fall v.toNat) ≤
       ∑ i ∈ (pinTerms config pulled anc fin).positions with
         (pinTerms config pulled anc fin).current i = true,
@@ -3593,8 +3575,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_fall (h : S
     (isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩)
 
 /-- The quorum reserve covers the stake that joins the active set. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_joining : (pinTerms config
-  pulled anc fin).joining ≤
+theorem bud_joining : (pinTerms config pulled anc fin).joining ≤
     (pinTerms config pulled anc fin).quorum := by
   dsimp only [pinTerms, quorumReserve]
   exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
@@ -3608,8 +3589,7 @@ The credit part pays at a rate below one, so it costs at most itself.
 The other parts round down their increments once, and `f` at least two covers the rounding.
 
 The consolidations are a whole number `m` of increments, and the slashed keys are at most `n`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_close (I WD FP D D2 m OC Wr Wc
-  Wo Ws n df L : ℕ)
+theorem flow_close (I WD FP D D2 m OC Wr Wc Wo Ws n df L : ℕ)
     (hI : 0 < I) (hWD : 0 < WD) (key : 0 < L → 11 * D * FP < WD * I) (f2 : 0 < L → 2 ≤ FP / WD)
     (hD : D ≤ df) (hDD : D ≤ D2) (hc : Wc ≤ 3 * (I * m)) (ho : Wo ≤ OC) (hs : Ws ≤ 3 * (I * n))
     (lin : 10 * (I * WD) * L ≤ 11 * D * FP * (Wr + Wc + Wo + Ws)) :
@@ -3699,8 +3679,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_close (I W
 /-- The gains of the counted keys, at their weights, are at most the linear rate of their flows.
 
 The credits of each class are read through the function `cA`, `cB` or `cC` of the key. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_lin (t : PinTerms preset) {x y
-  : ForkedBeaconState preset}
+theorem flow_lin (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (A B C : Finset ValidatorIndex)
     (cA cB cC : ℕ → ℕ) :
@@ -3745,8 +3724,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_lin (t : P
   nlinarith [a, b, c]
 
 /-- On R's branch the budget counts one balance increment per slashing for initial penalties. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_slash (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem flow_slash (h : Setting config checks g split fin pulled anc counted V)
     (W : Finset ValidatorIndex) :
     ∑ v ∈ W, Internal.slashW (pinTerms config pulled anc fin) v.toNat ≤
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (pinTerms config pulled anc fin).slashedR := by
@@ -3764,8 +3742,7 @@ The flows are C's credits and the debits of R's run and of the shared segment.
 The debits of the shared segment and of R's run take the epochs from the finalized block to the end.
 
 C's credit bound includes the seat rewards and the proposer's share. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_sync (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem flow_sync (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -3798,8 +3775,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_sync (h : 
   nlinarith [credits, shared, own, scaled]
 
 /-- Some counted key has a positive flow gain when the weighted gains are positive. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_pos (t : PinTerms preset) {x y
-  : ForkedBeaconState preset}
+theorem flow_pos (t : PinTerms preset) {x y : ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (A B C : Finset ValidatorIndex)
     (cA cB cC : ℕ → ℕ)
@@ -3816,8 +3792,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_pos (t : P
 /-- A key with a positive flow gain is on a kept arm or beyond R's registry in the low regime.
 
 Either way its rate per increment is below an eleventh, so the credit part pays below its worth. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_key (h : Setting config checks
-  g split fin pulled anc counted V)
+theorem flow_key (h : Setting config checks g split fin pulled anc counted V)
     {x y : ForkedBeaconState preset} (tailC : Run config checks x y) (high : ℕ)
     (eventsC events eventsF : List (BalanceEvent preset)) (i c : ℕ)
     (pos : 0 < Internal.flowK (pinTerms config pulled anc fin) tailC high eventsC events eventsF i
@@ -3840,8 +3815,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_key (h : S
 /-- The rate of one increment, at the pin's base reward, is at least two.
 
 The base reward per increment is at least four. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_rate (h : Setting config
-  checks g split fin pulled anc counted V) :
+theorem flow_rate (h : Setting config checks g split fin pulled anc counted V) :
     2 ≤ (pinTerms config pulled anc fin).perIncrement *
         (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := by
   have four := Internal.four_le_perIncrement h
@@ -4098,8 +4072,7 @@ The bands of the credited keys are the upward band for each slot of the window.
 `SB` is the bands of the keys that hold a seat on the shared segment or on R's run.
 
 `SU` is the units and the induced leak of the keys. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slack_le (h : Setting config checks
-  g split fin pulled anc counted V)
+theorem slack_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -4223,8 +4196,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slack_le (h : S
 An epoch pass applies at most `MAX_PENDING_DEPOSITS_PER_EPOCH` deposits.
 
 C's run has at most the epochs from the finalized state. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.deposit_scan_card_le (h : Setting
-  config checks g split fin pulled anc counted V)
+theorem deposit_scan_card_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) (T : Finset ℕ)
     (positive : ∀ i ∈ T,
       0 < (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) i highC tailC)) :
@@ -4266,8 +4238,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.deposit_scan_ca
 A key that a deposit credits before its slashing has a positive deposit scan.
 
 `created` is that scan for the keys created on C's branch and slashed there. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whist_count (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem whist_count (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
@@ -4321,8 +4292,7 @@ A key that received a deposit on C's branch, or was created there, is read at th
 It holds their whistleblower credits twice, because their rounding is at most their double.
 
 Those credits are within the base too, so the bound divides by the quotient less two. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_whist_of (h : Setting config
-  checks g split fin pulled anc counted V)
+theorem flow_whist_of (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
     {eventsF events : List (BalanceEvent preset)} (high : ℕ)
@@ -4501,6 +4471,8 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_whist_of (
     congr 1
     omega
   omega
+
+end Internal
 
 end Terms
 

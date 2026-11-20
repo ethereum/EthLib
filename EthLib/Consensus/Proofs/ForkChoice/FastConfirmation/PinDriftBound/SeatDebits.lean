@@ -17,7 +17,7 @@ section
 
 /-! Bounds on sync committee rewards and debits over a branch. -/
 
-namespace PinSeatDebits
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety
 
@@ -72,14 +72,12 @@ private theorem syncProposer_le {reward proposer : Gwei} {bound : ℕ} (le : rew
   exact Nat.div_le_div_right (Nat.mul_le_mul_right _ le)
 
 /-- The sync reward of a seat at the envelope of a total, with its proposer share. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncSeatEnvelope (preset : Preset)
-  (total : ℕ) : ℕ :=
+def syncSeatEnvelope (preset : Preset) (total : ℕ) : ℕ :=
   PinTerms.syncEnvelope preset total + PinTerms.syncEnvelope preset total * PROPOSER_WEIGHT.toNat /
     (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)
 
 /-- The credits of an event over a set of keys are at most its credits over the registry. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keys_credits_le (S : Finset ℕ) (e :
-  BalanceEvent preset) :
+theorem keys_credits_le (S : Finset ℕ) (e : BalanceEvent preset) :
     ∑ j ∈ S, (actualBalanceAt e.after j - actualBalanceAt e.before j) ≤ e.credits := by
   unfold BalanceEvent.credits
   refine Finset.sum_le_sum_of_ne_zero fun j _ positive => Finset.mem_range.mpr ?_
@@ -115,8 +113,7 @@ private theorem NoSync.record {fork : Fork} {source : BalanceSource}
     exact notSync
 
 /-- The effective balance of a key at a state of a run from genesis is at most the largest cap. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.effectiveAt_le_capMax {g m :
-  ForkedBeaconState preset}
+theorem effectiveAt_le_capMax {g m : ForkedBeaconState preset}
     (run : Run config checks g m) (genesis : Genesis (config := config) (checks := checks) g)
     (caps : CapOrder preset) (early : m.fork < .glamsterdam) (v : ℕ) :
     effectiveAt m v ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
@@ -131,8 +128,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.effectiveAt_le_
 /-- The replay of a block from Altair ends with its one sync pass, after events of other sources.
 
 The pass is the sync aggregate of the block, applied at the state that its other passes leave. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.blockReplay_sync_split {fork :
-  Fork} {a t : BeaconState preset fork}
+theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset fork}
     (early : fork < .glamsterdam) (altair : .altair ≤ fork) {engine : ExecutionEngine preset fork}
     {block : BeaconBlock preset fork} {events : List (BalanceEvent preset)}
     (replay : blockBalanceReplay (config := config) (checks := checks) early engine a block =
@@ -280,8 +276,7 @@ private theorem processSyncAggregate_moved_le {fork : Fork} {s t : BeaconState p
   exact bounds.trans (Nat.mul_le_mul_right _ length)
 
 /-- The sync debits of a set of keys and the sync credits and debits of a second set of keys. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncSeatMoves (debited moving : Finset
-  ℕ) (events : List (BalanceEvent preset)) : ℕ :=
+def syncSeatMoves (debited moving : Finset ℕ) (events : List (BalanceEvent preset)) : ℕ :=
   ∑ i ∈ debited, (events.map (PinDrift.Internal.syncDebit i)).sum +
     ∑ i ∈ moving, ((events.map (PinDrift.Internal.syncCredit i)).sum + (events.map
       (PinDrift.Internal.syncDebit i)).sum)
@@ -416,8 +411,7 @@ private theorem replay_stage_noSync {fork : Fork} {k : EpochStage}
       exact held
 
 /-- From Electra, a slot step records no sync pass. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slot_noSync {x y :
-  ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+theorem slot_noSync {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok : Step config checks x y).balanceEvents = .ok events) :
@@ -452,8 +446,7 @@ private theorem sum_syncMoves_append (keys : Finset ℕ) (first second : List (B
   omega
 
 /-- A slot step neither debits nor credits a key for the sync committee. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slot_syncDebit_zero {x y :
-  ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
+theorem slot_syncDebit_zero {x y : ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (ok : advanceSlotAcross config checks x = .ok y) (early : y.fork < .glamsterdam)
     {events : List (BalanceEvent preset)}
     (replayed : (Step.slot ok : Step config checks x y).balanceEvents = .ok events) (i : ℕ) :
@@ -475,8 +468,7 @@ In Electra, deposits are credited in the epoch processing, so in slot steps.
 A block step only queues deposit requests.
 
 So the step's deposit events raise no balance. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.block_deposit_zero {f : Fork} {u w
-  : BeaconState preset f}
+theorem block_deposit_zero {f : Fork} {u w : BeaconState preset f}
     {engine : ExecutionEngine preset f} {signed : SignedBeaconBlock preset f}
     {due : upgradeDue config ⟨f, u⟩ = false}
     {ok : applySignedBlock config checks engine u signed true = .ok w}
@@ -497,7 +489,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.block_deposit_z
 /-- A block step is apart from keys if the proposer at its end is not among them.
 
 A slot step is apart from every set of keys. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stepApart (keys : Finset ℕ) :
+def stepApart (keys : Finset ℕ) :
     {x y : ForkedBeaconState preset} → Step config checks x y → Prop
   | _, _, .slot _ => True
   | _, y, .block .. => ∀ p, getBeaconProposerIndex y.state = .ok p → p.toNat ∉ keys
@@ -619,8 +611,7 @@ Each block moves the keys at most one participant reward and its proposer share 
 If no block's proposer is among the keys, each block moves them at most one participant reward.
 
 That reward is per seat. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.syncDebits_le {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem Run.syncDebits_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (fulu : .fusaka ≤ x.fork) (early : y.fork < .glamsterdam) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
     (total : ℕ)
@@ -657,7 +648,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.syncDebits_
     fun debited moving apartSets apart =>
       (bounds.2.2 debited moving apartSets apart).trans (Run.blockCount_mul_le tail _ empty)⟩
 
-end PinSeatDebits
+end PinDrift.Internal
 
 end
 

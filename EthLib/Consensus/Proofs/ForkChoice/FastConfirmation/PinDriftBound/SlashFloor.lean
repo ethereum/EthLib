@@ -14,15 +14,14 @@ section
 
 /-! Balance floors for validators slashed before a run or during its first epoch. -/
 
-namespace PinSlashFloor
+namespace PinDrift.Internal
 
 open Base Uint64 Models DirectSafety DirectSafety.Apriori.Internal
 
 variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 
 /-- Every fork from Fulu on has the slashing quotient of Electra. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.mspq_fusaka {f : Fork} (h : .fusaka
-  ≤ f) :
+theorem mspq_fusaka {f : Fork} (h : .fusaka ≤ f) :
     (EthLib.Consensus.parameters preset f).MIN_SLASHING_PENALTY_QUOTIENT =
       (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT := by
   have pectra : .pectra ≤ f := Nat.le_trans (by decide) h
@@ -115,8 +114,7 @@ The last is its initial slashing penalty, if the run slashes it.
 That penalty is the effective balance at `m` over the slashing quotient.
 
 The effective balance changes only at the boundary, after any slashing before it. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochFloor {g m n :
-  ForkedBeaconState preset} (shared : Run config checks g m)
+theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run config checks g m)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (vector : 4 ≤ preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat)
@@ -279,7 +277,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.epochFloor {g m
     simp only [cond, and_self, ↓reduceIte]
     omega
 
-end PinSlashFloor
+end PinDrift.Internal
 
 end
 

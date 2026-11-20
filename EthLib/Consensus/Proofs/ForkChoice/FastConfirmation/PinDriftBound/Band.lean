@@ -60,6 +60,8 @@ open Base Uint64
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
+namespace PinDrift.Internal
+
 /-- The key of a step's slashing evidence is the key of a validator of the step's first state. -/
 private theorem slashingEvidence_key {x y : ForkedBeaconState preset} (st : Step config checks x y)
     {key : Cryptography.Bls.BLSPubkey} (evidence : st.SlashingEvidence key) :
@@ -80,8 +82,7 @@ Otherwise the step carries a slashing that names its key.
 Either way a validator of the first state holds that key.
 
 The keys of a run from genesis are distinct. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.fresh_unslashed {g m n :
-  ForkedBeaconState preset}
+theorem fresh_unslashed {g m n : ForkedBeaconState preset}
     (toM : Run config checks g m) (step : Step config checks m n)
     (genesis : Genesis config checks g) {i : ℕ} (fresh : m.state.validators.data.size ≤ i)
     {w : Validator} (found : n.state.validators.data[i]? = some w) : w.slashed = false := by
@@ -119,8 +120,7 @@ It is slashed on R's branch after the split, or after it joined.
 So its withdrawable epoch is at least the split's epoch plus `EPOCHS_PER_SLASHINGS_VECTOR`.
 
 A run keeps every slashing, so the counting state would hold a key slashed at the split slashed. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashed_waits {g :
-  ForkedBeaconState preset}
+theorem slashed_waits {g : ForkedBeaconState preset}
     {split pulled counted : BeaconState preset fork}
     (toSplit : Run config checks g ⟨fork, split⟩) (genesis : Genesis config checks g)
     (toPulled : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -154,15 +154,18 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashed_waits {
       UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (pre.snoc step).chainSteps)
     omega
 
+end PinDrift.Internal
+
 open DirectSafety DirectSafety.Apriori.Internal
+
+namespace PinDrift.Internal
 
 /-- The rate at which one rewards pass can debit a key, read at the last state of the epoch.
 
 It reads the total active balance, the key's effective balance and its score there.
 
 The pass reads the score after its update, which adds at most the score bias. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.passPenaltyRate (config : Config) (z :
-  ForkedBeaconState preset) (v : ℕ) : ℕ :=
+def passPenaltyRate (config : Config) (z : ForkedBeaconState preset) (v : ℕ) : ℕ :=
   let total := activeBalanceTotal z.state
   let score := if altair : .altair ≤ z.fork then
       (((z.state.inactivityScores altair).data[v]?).map (·.toNat)).getD 0 else 0
@@ -187,8 +190,7 @@ Inside the epoch only blocks run, and they record no penalty.
 The slot that ends the epoch runs the rewards pass, read at its last state.
 
 So a segment that stays in its epoch pays nothing. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.segment_passDebit_le_guarded {m n :
-  ForkedBeaconState preset}
+theorem segment_passDebit_le_guarded {m n : ForkedBeaconState preset}
     (mid : Run config checks m n) (early : n.fork < .glamsterdam) (altair : .altair ≤ m.fork)
     (high : ℕ) (endEpoch : (getCurrentEpoch n.state).toNat ≤ high + 1)
     (starts : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
@@ -280,8 +282,7 @@ The rate must hold at each state of the branch before the epoch of its end.
 The branch ends `epoch y - epoch x` epochs, and each runs one rewards pass.
 
 Summing the bounds for the segments covers the entire run. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.passDebit_le {x y :
-  ForkedBeaconState preset} (tail : Run config checks x y)
+theorem Run.passDebit_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (altair : .altair ≤ x.fork) (high : ℕ)
     (endEpoch : (getCurrentEpoch y.state).toNat ≤ high + 1)
     {v : ℕ} (inside : v < x.state.validators.data.size) (pen : ℕ)
@@ -325,13 +326,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.passDebit_l
   simpa [ix] using total
 
 /-- The sync debit of one key in one event. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncDebit (v : ℕ) (event : BalanceEvent
-  preset) : ℕ :=
+def syncDebit (v : ℕ) (event : BalanceEvent preset) : ℕ :=
   if event.source = .sync then actualBalanceAt event.before v - actualBalanceAt event.after v else 0
 
 /-- The sync credit of a key in one event. -/
-def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCredit (v : ℕ) (event :
-  BalanceEvent preset) : ℕ :=
+def syncCredit (v : ℕ) (event : BalanceEvent preset) : ℕ :=
   if event.source = .sync then actualBalanceAt event.after v - actualBalanceAt event.before v else 0
 
 /-- The balance of a key that stays unslashed falls over a branch only by its debits, as events.
@@ -343,8 +342,7 @@ The debits are the penalties, the sync penalties and the partial withdrawals of 
 The guards are those of the per-key floor of the a priori bound.
 
 A key with no activation epoch is allowed if the branch starts from Fulu or later. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.balanceFloor_events_or_fulu {g
-  x y : ForkedBeaconState preset}
+theorem Run.balanceFloor_events_or_fulu {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (tail : Run config checks x y)
     (genesis : Genesis (config := config) (checks := checks) g) (caps : CapOrder preset)
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
@@ -412,8 +410,7 @@ The entries counted are those due by the cutoff.
 The cutoff is less than the start epoch plus the minimum withdrawability delay.
 
 This leaves out the extra wait of one epoch plus the seed lookahead before exit churn can start. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.partialDebit_net {x y :
-  ForkedBeaconState preset}
+theorem Run.partialDebit_net {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high cutoff : ℕ) (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff)
     (short : cutoff < (getCurrentEpoch x.state).toNat +
@@ -447,8 +444,7 @@ These are its entries of the queue at the start.
 The cutoff is within the withdrawal delay of the start.
 
 An entry appended along the branch is due no earlier than the delay after the start. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.partialDebit_le {x y :
-  ForkedBeaconState preset}
+theorem Run.partialDebit_le {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high cutoff : ℕ) (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff)
     (short : cutoff < (getCurrentEpoch x.state).toNat +
@@ -463,15 +459,18 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.partialDebi
     endpoint short v
     replayed)
 
+end PinDrift.Internal
+
 /-! ## The band of totals from the guard at the finalized state -/
 
 section Band
 
 open DirectSafety.Apriori
 
+namespace PinDrift.Internal
+
 /-- From Electra, the ceiling of a window grows with the epoch of the window. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stakeCeilingAt_mono {x :
-  ForkedBeaconState preset} {high : ℕ}
+theorem stakeCeilingAt_mono {x : ForkedBeaconState preset} {high : ℕ}
     (electra : .pectra ≤ x.fork) {s t : ℕ} (le : s ≤ t) :
     stakeCeilingAt config x high s ≤ stakeCeilingAt config x high t := by
   have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
@@ -484,8 +483,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stakeCeilingAt_
     omega
 
 /-- The floor of a window falls with the epoch of the window. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stakeFloorAt_anti {x :
-  ForkedBeaconState preset} {high : ℕ} {s t : ℕ}
+theorem stakeFloorAt_anti {x : ForkedBeaconState preset} {high : ℕ} {s t : ℕ}
     (le : s ≤ t) : stakeFloorAt config x high t ≤ stakeFloorAt config x high s := by
   induction le with
   | refl => exact Nat.le_refl _
@@ -497,8 +495,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stakeFloorAt_an
 /-- From Electra, the guard bounds twice the window's last ceiling by three times its last floor.
 
 The window's last index is the epoch after `high`, counted from the guarded state's epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ratio_of_guard {x :
-  ForkedBeaconState preset} {high : ℕ}
+theorem ratio_of_guard {x : ForkedBeaconState preset} {high : ℕ}
     (electra : .pectra ≤ x.fork) (guard : aprioriGuardAt config x high) :
     2 * stakeCeilingAt config x high (high + 1 - (getCurrentEpoch x.state).toNat) ≤
       3 * stakeFloorAt config x high (high + 1 - (getCurrentEpoch x.state).toNat) := by
@@ -513,8 +510,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ratio_of_guard 
 /-- From Electra and before Gloas, take a state reached from a guarded state within its window.
 
 Its total is between the floor and the ceiling of the window at the state's index. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.total_within_guard {g x z :
-  ForkedBeaconState preset} {high : ℕ}
+theorem total_within_guard {g x z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -543,8 +539,7 @@ Both lie between the window's last floor and ceiling.
 The guard asks that twice that ceiling be at most three times that floor.
 
 So the band follows from the guard, and nothing assumes it. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.total_band_of_guard {g x y z :
-  ForkedBeaconState preset} {high : ℕ}
+theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
     (aligned : MaxEffectiveBalancesAligned preset) (twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat)
@@ -570,6 +565,8 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.total_band_of_g
     electra
     (show ix x z ≤ high + 1 - (getCurrentEpoch x.state).toNat by simp only [ix]; omega)
   omega
+
+end PinDrift.Internal
 
 /-- The preset facts that the pin's drift bound needs.
 
@@ -632,19 +629,19 @@ structure PinPresetFacts (preset : Preset) : Prop where
   With the cap order, the two are equal, as the upgrade to Electra needs. -/
   activation : ActivationWithinMaxEffective preset
 
+namespace PinDrift.Internal
+
 /-- The downward band is below an increment.
 
 Four bands fit in an increment, and an increment is positive. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.PinPresetFacts.below (facts :
-  PinPresetFacts preset) :
+theorem PinPresetFacts.below (facts : PinPresetFacts preset) :
     preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have := facts.quarterBand
   have := facts.incrementSize
   omega
 
 /-- The base reward factor is positive, since its product with an increment is at least `2 ^ 35`. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.PinPresetFacts.reward (facts :
-  PinPresetFacts preset) :
+theorem PinPresetFacts.reward (facts : PinPresetFacts preset) :
     1 ≤ preset.BASE_REWARD_FACTOR.toNat := by
   have scale := facts.rewardScale
   rcases Nat.eq_zero_or_pos preset.BASE_REWARD_FACTOR.toNat with zero | positive
@@ -657,12 +654,13 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.PinPresetFacts.
 It compares epochs with gwei, since the unit gain adds two gwei of rounding for each epoch.
 
 An increment is at least 900 slashings vectors. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.PinPresetFacts.vectorSmall (facts :
-  PinPresetFacts preset) :
+theorem PinPresetFacts.vectorSmall (facts : PinPresetFacts preset) :
     44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
       3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
   have := facts.rounding
   omega
+
+end PinDrift.Internal
 
 /-- The mainnet preset has the preset facts of the pin. -/
 theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
@@ -682,6 +680,8 @@ theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
     by decide, by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.minimal⟩
 
+namespace PinDrift.Internal
+
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 
 The guard asks that twice the last ceiling be at most three times the last floor.
@@ -693,8 +693,7 @@ So the first floor is at least two thirds of an increment.
 The window is shorter than the slashings vector, and an increment is at least 900 vectors.
 
 An increment is also at least 14 slashing quotients, so the first floor is at least 9 quotients. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.first_floor_of_guard {g x :
-  ForkedBeaconState preset} {high : ℕ}
+theorem first_floor_of_guard {g x : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (aligned : MaxEffectiveBalancesAligned preset)
     (xEarly : x.fork < .glamsterdam)
@@ -718,8 +717,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.first_floor_of_
   unfold driftHorizon at window
   constructor <;> omega
 
+end PinDrift.Internal
+
 end Band
 
+namespace PinDrift.Internal
 
 /-! ## Credits to exiting keys -/
 
@@ -754,9 +756,7 @@ private theorem applyPendingDeposit_frame {s s' : BeaconState preset fork}
 This holds while the key exits and is not yet withdrawable.
 
 The deposit queue postpones deposits to such a key. -/
-theorem
-  _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.processPendingDeposits_exited_balance
-  {state after : BeaconState preset fork}
+theorem processPendingDeposits_exited_balance {state after : BeaconState preset fork}
     {electra : .pectra ≤ fork}
     (computed : processPendingDeposits config checks state electra = .ok after)
     {i : ℕ} {v : Validator} (found : state.validators.data[i]? = some v)
@@ -808,5 +808,7 @@ theorem
       (Nat.lt_of_lt_of_le inside sizeV) other
     exact ⟨bal'.trans bal, suffix ++ suffix', by rw [pre2, pre, List.append_assoc]⟩
   exact final.1
+
+end PinDrift.Internal
 
 end EthLib.Consensus.Models.Network
