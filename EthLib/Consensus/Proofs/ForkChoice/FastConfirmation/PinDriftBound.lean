@@ -55,6 +55,7 @@ import EthLib.Consensus.Proofs.Transition.RewardDeltas
 import EthLib.Consensus.Proofs.Transition.FfgStake
 import EthLib.Consensus.Proofs.Time
 import EthLib.Consensus.Proofs.Participation
+import Mathlib.Algebra.Order.Floor.Div
 
 /-!
 # The quorum of a call drifts by at most its pin reserve, on another branch
@@ -107,22 +108,6 @@ namespace EthLib.Consensus.Models.Network
 open Base Uint64
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
-
-/-- A run from a state without a property to a state with it splits at a step that gains it. -/
-private theorem Run.split_at_flip {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (P : ForkedBeaconState preset → Prop) (missing : ¬P x) (held : P y) :
-    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m)
-      (step : Step config checks m n) (post : Run config checks n y),
-      tail = (pre.snoc step).append post ∧ ¬P m ∧ P n := by
-  induction tail with
-  | nil => exact absurd held missing
-  | @snoc middle last pre step ih =>
-    by_cases inside : P middle
-    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih inside
-      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
-      rw [split]
-      rfl
-    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
 
 /-- The key of a step's slashing evidence is the key of a validator of the step's first state. -/
 private theorem slashingEvidence_key {x y : ForkedBeaconState preset} (st : Step config checks x y)
@@ -844,6 +829,8 @@ private theorem processPendingDeposits_exited_balance {state after : BeaconState
 end EthLib.Consensus.Models.Network
 
 namespace EthLib.Consensus.Models.Network
+
+open DirectSafety.Apriori.Internal (recordBalance_single)
 
 section
 
@@ -1616,8 +1603,8 @@ private theorem replayRewards_absent {f : Fork} {pass : BeaconState preset f}
       pre.1.validators = pass.validators ∧
         (pre.2.map (DirectSafety.Apriori.Internal.rewardCredit v)).sum = 0)
     (fun {pre post index reward} held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, after, actionOk, rfl⟩ := ok
+      obtain ⟨_, _, _, actionOk, events⟩ := recordBalance_single ok
+      rw [events]
       have increased := liftAccessor_ok.mp actionOk
       have same := sameSizes_increaseBalance increased
       have registry := increaseBalance_validators increased
@@ -1630,12 +1617,12 @@ private theorem replayRewards_absent {f : Fork} {pass : BeaconState preset f}
       simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
         List.sum_nil, preSum, DirectSafety.Apriori.Internal.rewardCredit, ↓reduceIte,
         actualBalanceAt, Array.getElem?_eq_none preSize,
-        Array.getElem?_eq_none (show after.balances.data.size ≤ v by rw [same.2]; exact preSize),
+        Array.getElem?_eq_none (show post.1.balances.data.size ≤ v by rw [same.2]; exact preSize),
         Option.map_none,
         Option.getD_none, Nat.sub_self, Nat.add_zero])
     (fun {source pre post index penalty} sourceCases held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, after, actionOk, rfl⟩ := ok
+      obtain ⟨_, _, _, actionOk, events⟩ := recordBalance_single ok
+      rw [events]
       have decreased := liftAccessor_ok.mp actionOk
       have same := sameSizes_decreaseBalance decreased
       have registry := decreaseBalance_validators decreased
@@ -2551,19 +2538,14 @@ private theorem Grew.trans {f : Fork} {p q r : BalanceReplay preset f} (one : Gr
     · exact one.events e old
     · exact .inr other
 
-/-- A recorded pass appends one event of its source to the events, after its action. -/
-private theorem recordBalance_cases {f : Fork} {source : BalanceSource}
-    {limits : BeaconState preset f → Except TransitionError (Nat × Nat)}
-    {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
-    {p q : BalanceReplay preset f} (ok : recordBalance source limits action p = .ok q) :
-    action p.1 = .ok q.1 ∧ (∀ e ∈ q.2, e ∈ p.2 ∨ e.source = source) ∧
-      ∃ credit debit, q.2 = p.2 ++ [⟨source, ⟨f, p.1⟩, ⟨f, q.1⟩, credit, debit⟩] := by
-  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨⟨credit, debit⟩, _, after, computed, rfl⟩ := ok
-  refine ⟨computed, fun e member => ?_, credit, debit, rfl⟩
+private theorem mem_or_source_of_append {source : BalanceSource}
+    {pre post : List (BalanceEvent preset)} {added e : BalanceEvent preset}
+    (events : post = pre ++ [added]) (same : added.source = source)
+    (member : e ∈ post) : e ∈ pre ∨ e.source = source := by
+  rw [events] at member
   rcases List.mem_append.mp member with old | added
   · exact .inl old
-  · exact .inr (by rw [List.mem_singleton.mp added])
+  · exact .inr ((congrArg BalanceEvent.source (List.mem_singleton.mp added)).trans same)
 
 /-- A carried pass changes the state by its action and records nothing. -/
 private theorem carryBalance_cases {f : Fork}
@@ -2583,8 +2565,8 @@ private theorem replayDeltas_grew {f : Fork} {source : BalanceSource}
   refine previous.trans ?_
   simp only [bind_ok_iff] at step
   obtain ⟨index, _, raised, raisedOk, loweredOk⟩ := step
-  obtain ⟨raisedAction, raisedEvents, -⟩ := recordBalance_cases raisedOk
-  obtain ⟨loweredAction, loweredEvents, -⟩ := recordBalance_cases loweredOk
+  obtain ⟨_, _, _, raisedAction, raisedEvents⟩ := recordBalance_single raisedOk
+  obtain ⟨_, _, _, loweredAction, loweredEvents⟩ := recordBalance_single loweredOk
   have raisedAction := liftAccessor_ok.mp raisedAction
   have loweredAction := liftAccessor_ok.mp loweredAction
   have first : Grew r raised :=
@@ -2592,15 +2574,17 @@ private theorem replayDeltas_grew {f : Fork} {source : BalanceSource}
       (frame_increaseBalance raisedAction).toFrame.slot,
       congrArg Array.size (congrArg (·.data) (increaseBalance_validators raisedAction)),
       fun e member => by
-        rcases raisedEvents e member with old | new
+        rcases mem_or_source_of_append raisedEvents rfl member with old | new
         · exact .inl old
-        · exact .inr (by rw [new]; decide)⟩
+        · refine .inr ?_
+          rw [new]
+          exact (show BalanceSource.rewards ≠ .deposits by decide)⟩
   have second : Grew raised r' :=
     ⟨Kept.of_data (congrArg (·.data) (decreaseBalance_validators loweredAction)),
       (frame_decreaseBalance loweredAction).toFrame.slot,
       congrArg Array.size (congrArg (·.data) (decreaseBalance_validators loweredAction)),
       fun e member => by
-        rcases loweredEvents e member with old | new
+        rcases mem_or_source_of_append loweredEvents rfl member with old | new
         · exact .inl old
         · exact .inr (by rw [new]; exact notDeposit)⟩
   exact first.trans second
@@ -2664,13 +2648,15 @@ private theorem replay_stage {f : Fork} (electra : .pectra ≤ f) {k : EpochStag
     exact ofEdge action same (sameSizes_processRegistryUpdates (config := config)
       (by simpa only [EpochStage.Edge] using action)).1
   · simp only [epochReplayAction] at ok
-    obtain ⟨action, events, -⟩ := recordBalance_cases ok
+    obtain ⟨_, _, _, action, events⟩ := recordBalance_single ok
     have edge : EpochStage.Edge config checks .slashings p.1 q.1 := action
     exact ⟨kept_stage electra edge, edge.slot_eq, sizeOf edge ⟨nofun, nofun, nofun⟩,
       fun e member => by
-        rcases events e member with old | new
+        rcases mem_or_source_of_append events rfl member with old | new
         · exact .inl old
-        · exact .inr (by rw [new]; decide)⟩
+        · refine .inr ?_
+          rw [new]
+          exact (show BalanceSource.slashings ≠ .deposits by decide)⟩
   · simp only [epochReplayAction] at ok
     split at ok
     · obtain ⟨action, same⟩ := carryBalance_cases ok
@@ -2883,7 +2869,7 @@ private theorem quiet_record {f : Fork} {source : BalanceSource}
     {pre post : BalanceReplay preset f} (initial : Quiet pre.2)
     (keeps : source = .deposits → ∀ t, action pre.1 = .ok t → KeepsExiting pre.1 t)
     (ok : recordBalance source limits action pre = .ok post) : Quiet post.2 := by
-  obtain ⟨actionOk, -, credit, debit, events⟩ := PinEventsKept.recordBalance_cases ok
+  obtain ⟨credit, debit, _, actionOk, events⟩ := recordBalance_single ok
   rw [events]
   intro e member sourceEq
   rcases List.mem_append.mp member with old | new
@@ -2948,7 +2934,7 @@ private theorem blockReplay_invariant {f : Fork} (electra : .pectra ≤ f) (earl
       (notDeposit : source ≠ .deposits) (notConsolidation : source ≠ .consolidations)
       (initial : P pre.2) (ok : recordBalance source limits action pre = .ok post) :
       P post.2 := by
-    obtain ⟨-, -, credit, debit, events⟩ := PinEventsKept.recordBalance_cases ok
+    obtain ⟨credit, debit, -, -, events⟩ := recordBalance_single ok
     rw [events]
     exact ordinary _ _ notDeposit notConsolidation initial
   have altair : .altair ≤ f := Nat.le_trans (by decide) electra
@@ -2977,7 +2963,7 @@ private theorem blockReplay_invariant {f : Fork} (electra : .pectra ≤ f) (earl
     attestedQuiet rewardedOk
   have depositedQuiet := foldlM_ok_invariant (fun p => P p.2)
     (fun pre dep post h ok => by
-      obtain ⟨actionOk, -, credit, debit, events⟩ := PinEventsKept.recordBalance_cases ok
+      obtain ⟨credit, debit, _, actionOk, events⟩ := recordBalance_single ok
       rw [events]
       exact deposit _ _ _ _ _ _ _ h actionOk)
     rewardedQuiet depositOk
@@ -3599,7 +3585,8 @@ private theorem rewards_noConsolidations {f : Fork} {pre post : BalanceReplay pr
       (initial : ∀ e ∈ pre.2, e.source ≠ .consolidations)
       (ok : recordBalance source limits action pre = .ok post) :
       ∀ e ∈ post.2, e.source ≠ .consolidations := fun e member => by
-    rcases (PinEventsKept.recordBalance_cases ok).2.1 e member with old | new
+    obtain ⟨_, _, _, _, events⟩ := recordBalance_single ok
+    rcases PinEventsKept.mem_or_source_of_append events rfl member with old | new
     · exact initial e old
     · exact new ▸ notConsolidation
   exact replayRewards_induction (fun pre => ∀ e ∈ pre.2, e.source ≠ .consolidations)
@@ -4370,7 +4357,8 @@ private theorem NoSync.record {fork : Fork} {source : BalanceSource}
     (ok : recordBalance source limits action p = .ok q) (notSync : source ≠ .sync) :
     NoSync q := by
   intro e member
-  rcases (PinEventsKept.recordBalance_cases ok).2.1 e member with old | new
+  obtain ⟨_, _, _, _, events⟩ := recordBalance_single ok
+  rcases PinEventsKept.mem_or_source_of_append events rfl member with old | new
   · exact held e old
   · rw [new]
     exact notSync
@@ -4440,10 +4428,9 @@ private theorem blockReplay_sync_split {fork : Fork} {a t : BeaconState preset f
         (fun _ _ _ prior computed => prior.record computed (by decide)) second consolidatedOk
     · cases requestsOk
       exact ten
-  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
-    Prod.mk.injEq] at syncOk
-  obtain ⟨⟨credit, debit⟩, limitsOk, u, synced, rfl, rfl⟩ := syncOk
-  refine ⟨consolidated.1, consolidated.2, _, credit, debit, rfl, fun i => ?_, fun i => ?_, synced⟩
+  obtain ⟨credit, debit, _, synced, events⟩ := recordBalance_single syncOk
+  refine ⟨consolidated.1, consolidated.2, _, credit, debit, events,
+    fun i => ?_, fun i => ?_, synced⟩
   · exact List.sum_eq_zero fun x member => by
       obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
       simp [syncDebit, eleven e inside]
@@ -4826,43 +4813,6 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
           priorMoves.trans (Nat.mul_le_mul_right _ (Nat.le_succ _)),
           fun debited moving apartSets apart => (priorApart' debited moving apartSets apart).trans
             (Nat.mul_le_mul_right _ (Nat.le_succ _))⟩
-
-/-- A run has at most one block for each slot of the epochs that it touches. -/
-private theorem Run.blockCount_le_epochs {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) :
-    tail.blockCount ≤
-      ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
-        preset.SLOTS_PER_EPOCH.toNat := by
-  have epochLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
-  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat] at epochLe ⊢
-  have low : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat ≤
-      x.state.slot.toNat := Nat.div_mul_le_self _ _
-  have high' := Nat.lt_mul_div_succ y.state.slot.toNat positive
-  have blocks := tail.blocks_le_slots low (b := preset.SLOTS_PER_EPOCH.toNat *
-      (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) - 1) (by omega)
-  have difference : (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 -
-      x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) * preset.SLOTS_PER_EPOCH.toNat =
-      preset.SLOTS_PER_EPOCH.toNat * (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) -
-        x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [Nat.sub_mul, Nat.mul_comm (preset.SLOTS_PER_EPOCH.toNat)]
-  have grows : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat <
-      preset.SLOTS_PER_EPOCH.toNat * (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) := by
-    calc x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat
-        ≤ y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat :=
-          Nat.mul_le_mul_right _ epochLe
-      _ < preset.SLOTS_PER_EPOCH.toNat *
-          (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) := by
-          rw [Nat.mul_add, Nat.mul_one, Nat.mul_comm]
-          omega
-  have counted : tail.blockCount ≤ (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 -
-      x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) * preset.SLOTS_PER_EPOCH.toNat := by
-    rw [difference]
-    generalize x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat *
-      preset.SLOTS_PER_EPOCH.toNat = lowest at *
-    generalize preset.SLOTS_PER_EPOCH.toNat *
-      (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) = highest at *
-    omega
-  exact counted
 
 /-- The blocks of a run fit one amount per seat for each slot of the epochs that the run touches.
 
@@ -5420,66 +5370,6 @@ private theorem step_arith_slash (b' b cap K band pass X sl Q Bq φt φt1 pen EB
 
 /-! ## The state before a new key is scheduled -/
 
-/-- One step of a chain moves the current epoch on by at most one. -/
-private theorem ChainStep.epoch_le_succ {a b : ForkedBeaconState preset}
-    (step : ChainStep config checks a b) :
-    (getCurrentEpoch b.state).toNat ≤ (getCurrentEpoch a.state).toNat + 1 := by
-  cases step with
-  | slot ok =>
-    obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
-    have kept := processUpgrades_slot upgrades
-    have next := advanceSlot_slot slotOk
-    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
-    simp only at kept next ⊢
-    rw [kept, next]
-    by_cases zero : preset.SLOTS_PER_EPOCH.toNat = 0
-    · simp [zero]
-    · have positive : 1 ≤ preset.SLOTS_PER_EPOCH.toNat := Nat.pos_of_ne_zero zero
-      calc (a.state.slot.toNat + 1) / preset.SLOTS_PER_EPOCH.toNat
-          ≤ (a.state.slot.toNat + preset.SLOTS_PER_EPOCH.toNat) /
-              preset.SLOTS_PER_EPOCH.toNat :=
-            Nat.div_le_div_right (Nat.add_le_add_left positive _)
-        _ = a.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 :=
-            Nat.add_div_right _ positive
-  | block engine signed validate ok =>
-    have same := processBlock_slot (applySignedBlock_ok ok).2.1
-    simp only [getCurrentEpoch, same]
-    exact Nat.le_succ _
-
-/-- A run from an epoch to a later one has a slot step that leaves a given epoch between them. -/
-private theorem Run.cross_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
-    (k : ℕ) (low : (getCurrentEpoch x.state).toNat ≤ k)
-    (high : k < (getCurrentEpoch y.state).toNat) :
-    ∃ (z n : ForkedBeaconState preset) (pre : Run config checks x z)
-      (ok : advanceSlotAcross config checks z = .ok n) (rest : Run config checks n y),
-      tail = (pre.snoc (Step.slot ok)).append rest ∧ (getCurrentEpoch z.state).toNat = k ∧
-        (getCurrentEpoch n.state).toNat = k + 1 := by
-  obtain ⟨m, n, pre, step, post, split, hm, hn⟩ :=
-    Run.split_at_flip tail (fun z => k < (getCurrentEpoch z.state).toNat) (by omega) high
-  have missing : ¬k < (getCurrentEpoch m.state).toNat := hm
-  have gained : k < (getCurrentEpoch n.state).toNat := hn
-  have bound := ChainStep.epoch_le_succ step.chainStep
-  cases step with
-  | slot ok => exact ⟨m, n, pre, ok, post, split, by omega, by omega⟩
-  | @block fork before after engine signed due ok =>
-    have same := processBlock_slot (applySignedBlock_ok ok).2.1
-    have e : (getCurrentEpoch after).toNat = (getCurrentEpoch before).toNat := by
-      simp only [getCurrentEpoch, same]
-    simp only at missing gained
-    omega
-
-/-- A run that starts at or before an epoch and ends at or after it passes a state of that epoch. -/
-private theorem Run.exists_epoch_split {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (k : ℕ)
-    (low : (getCurrentEpoch x.state).toNat ≤ k) (high : k ≤ (getCurrentEpoch y.state).toNat) :
-    ∃ (z : ForkedBeaconState preset) (pre : Run config checks x z) (post : Run config checks z y),
-      (getCurrentEpoch z.state).toNat = k ∧ tail = pre.append post := by
-  by_cases last : k = (getCurrentEpoch y.state).toNat
-  · exact ⟨y, tail, .nil, last.symm, rfl⟩
-  · obtain ⟨z, n, pre, ok, rest, split, hz, -⟩ := Run.cross_split tail k low (by omega)
-    exact ⟨z, pre, (Run.nil.snoc (Step.slot ok)).append rest, hz, by
-      rw [split, Run.append_assoc]; rfl⟩
-
 /-- A key that is activated by the end of a run is scheduled two epochs before its activation.
 
 The key may have exited, so long as its activation is before its exit.
@@ -5824,12 +5714,6 @@ private def EpochClaim (x z : ForkedBeaconState preset) (high i : ℕ) {m : Fork
       3 * (preset.MAX_EFFECTIVE_BALANCE.toNat + preset.downwardBand) *
         ((getCurrentEpoch m.state).toNat - (getCurrentEpoch z.state).toNat)
 
-/-- The rounded-up quotient `Bq` covers its numerator. -/
-private theorem ceil_div_cover (a Q : ℕ) (positive : 0 < Q) : a ≤ Q * ((a + Q - 1) / Q) := by
-  have h1 := Nat.div_add_mod (a + Q - 1) Q
-  have h2 := Nat.mod_lt (a + Q - 1) positive
-  omega
-
 /-- The facts on the cap and the slashing charge that each step of the floor of a key reads.
 
 The slashing quotient is positive.
@@ -5855,7 +5739,7 @@ private theorem Ctx.step_facts {g x m : ForkedBeaconState preset} {high : ℕ}
     omega
   refine ⟨positiveQ,
     UInt64.le_iff_toNat_le.mp (Internal.minimum_cap c.caps.activation c.caps.compounding val),
-    ?_, ceil_div_cover _ _ positiveQ⟩
+    ?_, le_smul_ceilDiv (β := Nat) positiveQ⟩
   have := Run.effectiveBalance_capped (c.shared.append hm) c.genesis c.caps.activation
     c.caps.compounding mEarly val (Array.mem_of_getElem? found)
   have e : effectiveAt m i = val.effectiveBalance.toNat := by simp [effectiveAt, found]
@@ -6508,43 +6392,6 @@ private theorem Ctx.claimAt {g x z y p : ForkedBeaconState preset} {high : ℕ}
   exact c.arith xEarly (getCurrentEpoch z.state).toNat (getCurrentEpoch p.state).toNat xz
     (by omega) (by omega) _ _ _ chargeLe h1
 
-/-- A state on the balance path of a run is a state of the run, or the state inside a slot step.
-
-The state inside a slot step comes after the slot and its epoch transition, before the upgrades. -/
-private theorem Run.mem_balancePath_split {z w : ForkedBeaconState preset}
-    (r : Run config checks z w) {p : ForkedBeaconState preset} (member : p ∈ r.balancePath) :
-    (∃ (rp : Run config checks z p) (rest : Run config checks p w), r = rp.append rest) ∨
-    (∃ (q n : ForkedBeaconState preset) (rq : Run config checks z q)
-      (ok : advanceSlotAcross config checks q = .ok n) (rest : Run config checks n w)
-      (adv : BeaconState preset q.fork), r = (rq.snoc (Step.slot ok)).append rest ∧
-        advanceSlot config checks q.state = .ok adv ∧ p = ⟨q.fork, adv⟩ ∧
-        processUpgrades config checks ⟨q.fork, adv⟩ = .ok n) := by
-  induction r with
-  | nil =>
-    simp only [Run.balancePath, List.mem_singleton] at member
-    subst member
-    exact .inl ⟨.nil, .nil, rfl⟩
-  | @snoc q last pre step ih =>
-    simp only [Run.balancePath, List.mem_append] at member
-    rcases member with member | member
-    · rcases ih member with ⟨rp, rest, eq⟩ | ⟨q', n, rq, ok, rest, adv, eq, adv_ok, hp, up⟩
-      · exact .inl ⟨rp, rest.snoc step, by rw [eq]; rfl⟩
-      · exact .inr ⟨q', n, rq, ok, rest.snoc step, adv, by rw [eq]; rfl, adv_ok, hp, up⟩
-    · cases step with
-      | block engine signed due ok =>
-        simp only [Step.balancePath, List.mem_cons, List.not_mem_nil, or_false] at member
-        rcases member with rfl | rfl
-        · exact .inl ⟨pre, (Run.nil.snoc (.block engine signed due ok)), rfl⟩
-        · exact .inl ⟨pre.snoc (.block engine signed due ok), .nil, rfl⟩
-      | slot ok =>
-        obtain ⟨adv, advOk, upgrades⟩ := bind_ok_iff.mp ok
-        simp only [Step.balancePath, advOk, Except.toOption, List.mem_cons, List.not_mem_nil,
-          or_false] at member
-        rcases member with rfl | rfl | rfl
-        · exact .inl ⟨pre, (Run.nil.snoc (.slot ok)), rfl⟩
-        · exact .inr ⟨_, last, pre, ok, .nil, adv, rfl, advOk, rfl, upgrades⟩
-        · exact .inl ⟨pre.snoc (.slot ok), .nil, rfl⟩
-
 /-- A prefix of a list of events debits a key at most as much as the list. -/
 private theorem keyDebits_le_of_prefix (i : ℕ) {a b : List (BalanceEvent preset)} (h : a <+: b) :
     keyDebits i a ≤ keyDebits i b := by
@@ -6949,6 +6796,7 @@ namespace EthLib.Consensus.Models.Network
 namespace PinDrift
 
 open Base Uint64 Models DirectSafety PinKeys
+open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
@@ -7579,16 +7427,16 @@ private theorem epochReplayAction_slashing_credit {fork : Fork} (k : EpochStage)
     refine replayRewards_induction (config := config)
       (fun p => ∀ e ∈ p.2, e.source = .slashings → e.creditLimit = 0) ?_ ?_ held ok
     · intro pre' post' index reward held' ok'
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok'
-      obtain ⟨_, _, _, _, rfl⟩ := ok'
+      obtain ⟨_, _, _, _, events⟩ := recordBalance_single ok'
+      rw [events]
       intro e member source
       rcases List.mem_append.mp member with old | new
       · exact held' e old source
       · obtain rfl := List.mem_singleton.mp new
         exact absurd source (by simp)
     · intro src pre' post' index penalty pen held' ok'
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok'
-      obtain ⟨_, _, _, _, rfl⟩ := ok'
+      obtain ⟨_, _, _, _, events⟩ := recordBalance_single ok'
+      rw [events]
       intro e member source
       rcases List.mem_append.mp member with old | new
       · exact held' e old source
@@ -8198,14 +8046,14 @@ private theorem PassCredits.record {f : Fork} {proposer : ℕ} {source : Balance
         actualBalanceAt (⟨f, t⟩ : ForkedBeaconState preset) i ≤
           actualBalanceAt (⟨f, pre.1⟩ : ForkedBeaconState preset) i) :
     PassCredits proposer post.2 := by
-  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-  obtain ⟨⟨credit, debit⟩, _, t, computed, rfl⟩ := ok
+  obtain ⟨_, _, _, computed, events⟩ := recordBalance_single ok
+  rw [events]
   intro e member
   rcases List.mem_append.mp member with old | new
   · exact held e old
   · obtain rfl := List.mem_singleton.mp new
     exact ⟨notSync, notConsolidation, fun source i other =>
-      Nat.sub_eq_zero_of_le (lowered source t computed i other)⟩
+      Nat.sub_eq_zero_of_le (lowered source post.1 computed i other)⟩
 
 /-- A pass that does not lower a balance, and keeps the sizes, does not raise it. -/
 private theorem actualBalanceAt_le_of_down {f : Fork} {s u : BeaconState preset f}
@@ -8263,7 +8111,9 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
     (PinEventsKept.carryBalance_cases headedOk).1
   have input : OperationsInput config checks engine a block voted.1 :=
     ⟨a, headed.1, executed.1, revealed.1, by simp [notGloas, pure, Except.pure], headerOk,
-      by simpa only [bellatrix, ↓reduceDIte] using (PinEventsKept.recordBalance_cases executedOk).1,
+      by
+        obtain ⟨_, _, _, action, _⟩ := recordBalance_single executedOk
+        simpa only [bellatrix, ↓reduceDIte] using action,
       (PinEventsKept.carryBalance_cases revealedOk).1,
       by simpa only [before, ↓reduceDIte] using (PinEventsKept.carryBalance_cases votedOk).1⟩
   have read := (operationsInput_proposer apart input).1
@@ -8303,7 +8153,8 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
       getBeaconProposerIndex post.1 = .ok block.proposerIndex ∧
         PassCredits block.proposerIndex.toNat post.2 := by
     intro source limits action pre post src ⟨seen, held⟩ ok props
-    obtain ⟨-, -, kept⟩ := props _ _ (PinEventsKept.recordBalance_cases ok).1 seen
+    obtain ⟨_, _, _, actionOk, _⟩ := recordBalance_single ok
+    obtain ⟨-, -, kept⟩ := props _ _ actionOk seen
     refine ⟨kept, held.record ok ?_ ?_ fun _ u computed i other => ?_⟩
     · rcases src with rfl | rfl <;> decide
     · rcases src with rfl | rfl <;> decide
@@ -8345,10 +8196,8 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
       PassCredits block.proposerIndex.toNat p.2)
     (fun _ _ _ held ok => held.record ok (by decide) (by decide) fun h => absurd h (by decide))
     requestedC consolidatedOk
-  simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq,
-    Prod.mk.injEq] at syncOk
-  obtain ⟨⟨credit, debit⟩, -, u, synced, rfl, rfl⟩ := syncOk
-  exact ⟨consolidated.1, consolidated.2, altair, _, credit, debit, rfl, link, synced,
+  obtain ⟨credit, debit, _, synced, events⟩ := recordBalance_single syncOk
+  exact ⟨consolidated.1, consolidated.2, altair, _, credit, debit, events, link, synced,
     consolidatedC, processBlockHeader_proposer headerOk⟩
 
 /-- A key that an event of a block step credits is its proposer, or a seat holder for a sync event.
@@ -8790,22 +8639,6 @@ private theorem seat_positions {g : ForkedBeaconState preset}
     exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1,
       w, found, mem⟩
 
-/-- A later epoch of a period is in the same period or the next one. -/
-private theorem succ_div_le (a c : ℕ) : (a + 1) / c ≤ a / c + 1 := by
-  rcases Nat.eq_zero_or_pos c with zero | positive
-  · subst zero
-    simp
-  · apply Nat.div_le_of_le_mul
-    have := Nat.lt_mul_div_succ a positive
-    omega
-
-/-- The empty run before a run changes nothing. -/
-private theorem run_nil_append {x y : ForkedBeaconState preset} (r : Run config checks x y) :
-    Run.nil.append r = r := by
-  induction r with
-  | nil => rfl
-  | snoc r step ih => exact congrArg (fun run => run.snoc step) ih
-
 /-- The keys credited in the block steps of a run, counted by the periods that it touches.
 
 The keys that a sync aggregate debits hold a seat of one committee for each period of the run.
@@ -8862,7 +8695,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
       exact ⟨hS i w found mem, w, 0, found, Nat.le_refl _, mem⟩
     · intro j hj
       obtain rfl : j = 0 := by omega
-      exact ⟨x, Run.nil, r, altair, run_nil_append r, (Nat.add_zero _).symm, rfl⟩
+      exact ⟨x, Run.nil, r, altair, Run.nil_append r, (Nat.add_zero _).symm, rfl⟩
   | succ n ih =>
     intro x shared r fulu count
     have electra : .pectra ≤ x.fork := Nat.le_trans (by decide) fulu
@@ -8873,7 +8706,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
         (getCurrentEpoch z.state).toNat / max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
       (Nat.lt_irrefl _) (by omega)
     have low := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have up := PinKeys.ChainStep.epoch_le_succ step.chainStep
+    have up := step.chainStep.epoch_le_succ
     have mSame : (getCurrentEpoch m.state).toNat /
         max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat =
           (getCurrentEpoch x.state).toNat /
@@ -8887,9 +8720,8 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
             max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat + 1 := by
       have above := Nat.div_le_div_right
         (c := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat) up
-      have step' := succ_div_le (getCurrentEpoch m.state).toNat
-        (max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)
-      omega
+      rw [Nat.succ_div] at above
+      split at above <;> omega
     have mEarly : m.fork < .glamsterdam :=
       Nat.lt_of_le_of_lt (Nat.le_trans step.chainStep.fork_le
         (fork_le_of_chainSteps post.chainSteps)) early
@@ -9021,7 +8853,7 @@ private theorem credited_pieces_seated {g : ForkedBeaconState preset}
     · intro j hj
       by_cases j0 : j = 0
       · subst j0
-        exact ⟨x, Run.nil, (pre.snoc (Step.slot ok)).append post, altair, run_nil_append _,
+        exact ⟨x, Run.nil, (pre.snoc (Step.slot ok)).append post, altair, Run.nil_append _,
           (Nat.add_zero _).symm, by simp⟩
       · obtain ⟨z, r1, r2, alt, cut, per, hL⟩ := hz₂ (j - 1) (by omega)
         refine ⟨z, (pre.snoc (Step.slot ok)).append r1, r2, alt, ?_, ?_, ?_⟩
@@ -9376,7 +9208,7 @@ private theorem banded_keys_le (h : Setting config checks g split fin pulled anc
         preset.SLOTS_PER_EPOCH.toNat := by
     have count : tail.blockCount ≤
         ((getCurrentEpoch x).toNat + 1 - (getCurrentEpoch split).toNat) *
-          preset.SLOTS_PER_EPOCH.toNat := PinSeatDebits.Run.blockCount_le_epochs tail positive
+          preset.SLOTS_PER_EPOCH.toNat := tail.blockCount_le_epochs positive
     have same : (getCurrentEpoch x).toNat + 1 - (getCurrentEpoch split).toNat =
         (getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1 := by omega
     rw [same] at count
@@ -9945,7 +9777,7 @@ private theorem balancePath_endpoint {x m y : ForkedBeaconState preset}
     {p : ForkedBeaconState preset} (member : p ∈ rp.balancePath) :
     ∃ (r1 : Run config checks x p) (r2 : Run config checks p y),
       r1.append r2 = rp.append rest := by
-  rcases PinKeys.Run.mem_balancePath_split rp member with
+  rcases rp.mem_balancePath_split member with
     ⟨rq, rest', eq⟩ | ⟨q, n, rq, ok, rest', adv, eq, -, hp, up⟩
   · subst eq
     exact ⟨rq, rest'.append rest, Run.append_assoc _ _ _⟩
@@ -10966,21 +10798,6 @@ private theorem key_credit_ceiling {n y : ForkedBeaconState preset}
   have balances := fourth aligned startCap capCeil rate endEpoch fixpoint
   exact (third _ aligned startCap
     (fun z member => balances z member) capCeil).1
-
-/-- Rounding down after adding an amount adds at most its whole increments.
-
-The base is first raised by one increment less one, which covers the rest of the amount. -/
-private theorem rounded_add_floor_le (I x y : ℕ) (hI : 0 < I) :
-    (x + y) - (x + y) % I ≤ (x + I - 1) - (x + I - 1) % I + I * (y / I) := by
-  obtain ⟨q, r, hr, rfl⟩ : ∃ q r, r < I ∧ y = I * q + r :=
-    ⟨y / I, y % I, Nat.mod_lt _ hI, (Nat.div_add_mod y I).symm⟩
-  have quotient : (I * q + r) / I = q := by
-    rw [Nat.mul_add_div hI, Nat.div_eq_of_lt hr, Nat.add_zero]
-  have shifted : x + (I * q + r) = (x + r) + I * q := by ring
-  have modulo : ((x + r) + I * q) % I = (x + r) % I := Nat.add_mul_mod_self_left _ _ _
-  have mono := rounded_mono I (show x + r ≤ x + I - 1 by omega)
-  rw [quotient, shifted, modulo]
-  omega
 
 /-- A cap above the activation balance belongs to a validator with compounding credentials. -/
 private theorem compounding_of_cap {z : ForkedBeaconState preset} {i : ℕ}
@@ -13228,12 +13045,6 @@ private theorem four_le_perIncrement (h : Setting config checks g split fin pull
   rw [definition]
   exact four
 
-/-- Rounding up a whole number of increments gives it back. -/
-private theorem div_round_mul (I u : ℕ) (hI : 0 < I) : (I * u + I - 1) / I = u := by
-  rw [show I * u + I - 1 = I * u + (I - 1) by omega, Nat.mul_add_div hI,
-    Nat.div_eq_of_lt (show I - 1 < I by omega)]
-  simp
-
 /-- The gain on a positive number of increments is below an eleventh of them.
 
 The rate for each increment is the one that `rate_per_increment` bounds. -/
@@ -13256,7 +13067,7 @@ private theorem gain_credit_le (I WD F P D C : ℕ) (hI : 0 < I)
     11 * (D * ((C + I - 1) / I * P * F / WD)) ≤ C := by
   obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero alignedC
   subst hu
-  rw [div_round_mul I u hI]
+  rw [show (I * u + I - 1) / I = u from smul_ceilDiv (β := Nat) hI u]
   rcases Nat.eq_zero_or_pos u with zero | pos
   · subst zero
     simp
@@ -13274,7 +13085,7 @@ private theorem gain_split_flat (I WD F P e0 C k depth : ℕ) (hI : 0 < I) (hk :
   obtain ⟨a, rfl⟩ := Nat.dvd_of_mod_eq_zero alignedE
   obtain ⟨b, rfl⟩ := Nat.dvd_of_mod_eq_zero alignedC
   rw [← Nat.mul_add, Nat.mul_div_cancel_left _ hI, Nat.mul_div_cancel_left _ hI,
-    div_round_mul I b hI]
+    show (I * b + I - 1) / I = b from smul_ceilDiv (β := Nat) hI b]
   have floor := Nat.add_div_le_div_add_div_add_one (a * P * F) (b * P * F) WD
   have split : (a + b) * P * F = a * P * F + b * P * F := by ring
   rw [split]
@@ -13404,19 +13215,6 @@ private theorem ceiling_closed_floor (I WD F P e0 D Cr Cr' S W C q : ℕ)
     ring
   omega
 
-/-- A number below an aligned bound by less than an increment rounds down to at most the bound.
-
-Rounding down is to a multiple of the increment. -/
-private theorem floor_le_of_lt {B E I : ℕ} (hI : 0 < I) (aligned : E % I = 0)
-    (lt : B < E + I) : B - B % I ≤ E := by
-  obtain ⟨u, hu⟩ := Nat.dvd_of_mod_eq_zero aligned
-  have qlt : B / I < u + 1 := (Nat.div_lt_iff_lt_mul hI).mpr (by
-    have : (u + 1) * I = E + I := by rw [hu]; ring
-    omega)
-  have mul : I * (B / I) ≤ I * u := Nat.mul_le_mul_left _ (by omega)
-  have div := Nat.div_add_mod B I
-  omega
-
 /-- The arithmetic of the credit ceiling, for any run.
 
 The bound `e0` on the effective balance, with the credits rounded down to increments, is closed.
@@ -13469,7 +13267,10 @@ private theorem ceiling_arith (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.t
     rw [← hq] at split
     exact split
   · unfold gainOn
-    rw [hC, div_round_mul _ _ incPos]
+    let I := preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    let u := 11 * (Cr' + W + depth * q + depth) / (10 * I)
+    have quotient : (I * u + I - 1) / I = u := smul_ceilDiv (β := Nat) incPos u
+    rw [hC, quotient]
   · unfold gainOn
     omega
 
@@ -14427,8 +14228,8 @@ private theorem c_ceiling (h : Setting config checks g split fin pulled anc coun
     have key : ∀ T : ℕ, T ≤ (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) -
         (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) %
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat := fun T => by
-      have := Nat.mod_lt (T + preset.EFFECTIVE_BALANCE_INCREMENT.toNat - 1) incPos
-      omega
+      rw [← Nat.mul_div_self_eq_mod_sub_self]
+      exact le_smul_ceilDiv (β := Nat) incPos
     rw [ebUp_eq config pulled anc fin electra v.toNat _ rfl]
     exact le_trans (min_le_min le_rfl (key _)) (le_max_right _ _)
   obtain ⟨i, hi⟩ : ∃ i, i = v.toNat := ⟨_, rfl⟩
@@ -14871,7 +14672,7 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     · exact Or.inl within
     · refine Or.inr (Nat.le_min.mpr ⟨?_, ?_⟩)
       · have atC := ceiling (Run.nil : Run config checks ⟨fork, c⟩ ⟨fork, c⟩) rest
-          (run_nil_append _)
+          (Run.nil_append _)
         have capped := effective_le_cap_at (shared.append toC) h.genesis h.caps h.early v.toNat
         have aligned := FloorTrace.effective_aligned (shared.append toC) h.genesis h.aligned v.toNat
         have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat
@@ -14894,24 +14695,6 @@ private theorem prefix_envelope (h : Setting config checks g split fin pulled an
     rw [up]
     exact Nat.le_max_right _ _
   rw [← hB] at floorRound
-  omega
-
-/-- Rounding down after adding an amount adds at most the whole increments that cover it. -/
-private theorem rounded_add_ceil_le (I x C : ℕ) (hI : 0 < I) :
-    (x + C) - (x + C) % I ≤ (x - x % I) + I * ((C + I - 1) / I) := by
-  have sum := Nat.div_add_mod (x + C) I
-  have base := Nat.div_add_mod x I
-  have step : (x + C) / I ≤ x / I + (C + I - 1) / I := by
-    obtain ⟨q, r, hr, rfl⟩ : ∃ q r, r < I ∧ x = I * q + r :=
-      ⟨x / I, x % I, Nat.mod_lt _ hI, (Nat.div_add_mod x I).symm⟩
-    have quotient : (I * q + r) / I = q := by
-      rw [Nat.mul_add_div hI, Nat.div_eq_of_lt hr, Nat.add_zero]
-    have shifted : (I * q + r + C) / I = q + (r + C) / I := by
-      rw [show I * q + r + C = I * q + (r + C) by ring, Nat.mul_add_div hI]
-    rw [shifted, quotient]
-    exact Nat.add_le_add_left (Nat.div_le_div_right (by omega)) _
-  have scaled := Nat.mul_le_mul_left I step
-  rw [Nat.mul_add] at scaled
   omega
 
 /-- A cap at a state of the Electra forks is at most the largest cap. -/
@@ -16867,8 +16650,7 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
   -- the run from the finalized state to the exit step, and its events, a prefix of the replay
   have shape : fromFin.append ((pre.snoc step).append post) =
       (fromFin.append pre).append ((Run.nil.snoc step).append post) := by
-    have snoc : pre.snoc step = pre.append (Run.nil.snoc step) := rfl
-    rw [snoc, ← Run.append_assoc pre (Run.nil.snoc step) post, Run.append_assoc]
+    rw [pre.snoc_append_eq, Run.append_assoc]
   rw [← split', shape] at replayed
   obtain ⟨prior, priorOk, isPrefix⟩ := Run.balanceEvents_prefix (fromFin.append pre)
     ((Run.nil.snoc step).append post) (getCurrentEpoch pulled).toNat events replayed
@@ -18682,16 +18464,14 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       have step := slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle
       exact ⟨by omega, by omega⟩
 
-/-- A validator active at an epoch up to the current one has its activation assigned and reached. -/
-private theorem activated_of_active {s : BeaconState preset fork} {w : Validator} {e : Epoch}
-    (active : isActiveValidator w e = true) (le : e ≤ getCurrentEpoch s) :
-    w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch s := by
+/-- An active validator's activation is before the far-future epoch. -/
+private theorem activation_ne_far_of_active {w : Validator} {e : Epoch}
+    (active : isActiveValidator w e = true) : w.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  have low := UInt64.le_iff_toNat_le.mp (activationLe_of_active active)
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  have low := UInt64.le_iff_toNat_le.mp active.1
   have high := UInt64.lt_iff_toNat_lt.mp active.2
   have bound := w.exitEpoch.toNat_lt
-  have ahead := UInt64.le_iff_toNat_le.mp le
-  refine ⟨fun far => ?_, UInt64.le_iff_toNat_le.mpr (by omega)⟩
+  intro far
   rw [far] at low
   have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
@@ -18702,7 +18482,7 @@ private theorem activated_of_activeVoters (early : fork < .glamsterdam)
     ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
       w.activationEpoch ≤ getCurrentEpoch s := by
   obtain ⟨w, found, active⟩ := active_of_activeVoters early member
-  exact ⟨w, found, activated_of_active active (UInt64.le_refl _)⟩
+  exact ⟨w, found, activation_ne_far_of_active active, activationLe_of_active active⟩
 
 /-- A voter of the quorum has its activation assigned and reached.
 
@@ -18717,7 +18497,8 @@ private theorem activated_of_quorum (early : fork < .glamsterdam)
   · exact activated_of_activeVoters early (by simpa [activeVoters] using now)
   · obtain ⟨w, found, active⟩ :=
       (mem_getActiveValidatorIndices (s.validators.bound early)).mp before
-    exact ⟨w, found, activated_of_active active (getPreviousEpoch_le s)⟩
+    exact ⟨w, found, activation_ne_far_of_active active,
+      UInt64.le_trans (activationLe_of_active active) (getPreviousEpoch_le s)⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C activates has its activation before its exit. -/
@@ -20012,7 +19793,7 @@ private theorem kc_envelope (h : Setting config checks g split fin pulled anc co
         exact slashedF) wP foundP (frozen wP foundP) (late wP foundP) pre rest ev
       omega
   exact prefix_envelope h fromFin tail (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF
-    replayed v Run.nil (fromFin.append tail) (run_nil_append (fromFin.append tail)) inFin
+    replayed v Run.nil (fromFin.append tail) (Run.nil_append (fromFin.append tail)) inFin
     (slashW (pinTerms config pulled anc fin) v.toNat)
     (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) floorAt
 
@@ -20317,7 +20098,7 @@ private theorem pre_credit_seat (h : Setting config checks g split fin pulled an
     have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := by have := h.twoSlots; omega
     have count : pre.blockCount ≤
         ((getCurrentEpoch split).toNat + 1 - (getCurrentEpoch b).toNat) *
-          preset.SLOTS_PER_EPOCH.toNat := PinSeatDebits.Run.blockCount_le_epochs pre positive
+          preset.SLOTS_PER_EPOCH.toNat := pre.blockCount_le_epochs positive
     have one : (getCurrentEpoch split).toNat + 1 - (getCurrentEpoch b).toNat = 1 := by
       rw [sameEpoch]
       omega
@@ -20826,18 +20607,6 @@ private theorem syncProposer_le_credit (config : Config)
     (pinTerms config state ancestor finalizedState).syncProposer ≤
       (pinTerms config state ancestor finalizedState).proposerCredit :=
   Nat.le_add_left _ _
-
-/-- The quotient of a number rounded up is at most the number. -/
-private theorem ceil_div_le (c q : ℕ) : (c + q - 1) / q ≤ c := by
-  rcases Nat.eq_zero_or_pos q with rfl | pos
-  · simp
-  · obtain ⟨q', rfl⟩ : ∃ q', q = q' + 1 := ⟨q - 1, by omega⟩
-    rcases Nat.eq_zero_or_pos c with rfl | cpos
-    · exact (Nat.div_eq_of_lt (by omega)).le
-    · obtain ⟨c', rfl⟩ : ∃ c', c = c' + 1 := ⟨c - 1, by omega⟩
-      refine Nat.div_le_of_le_mul ?_
-      rw [show c' + 1 + (q' + 1) - 1 = c' + q' + 1 by omega]
-      nlinarith
 
 /-- The keys of `SC` that the rise term of `bud_whistle_of` charges.
 
@@ -21874,7 +21643,7 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
         (run_same_epoch_effective fromFin h.early sameE v.toNat inFin).le
     · refine le_max_of_le_right (cut_balance_core h fromFin tail high endEpoch replayedF replayed
         v hW (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) fromFin
-        (run_nil_append fromFin) inFin ?_ (fun hle => absurd hle flat)
+        (Run.nil_append fromFin) inFin ?_ (fun hle => absurd hle flat)
         (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩)
         (fun p hp ne => by
           have : p = ⟨fork, fin⟩ := by simpa [Run.balancePath] using hp
@@ -22047,22 +21816,6 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
       exact px
     · intro x hx
       rw [round x hx]
-
-/-- A sum is at most the sum of the floors of its parts, with the ceiling of the second part. -/
-private theorem floor_add_ceil_le (a b Q : ℕ) (pos : 0 < Q) :
-    (a + b) / Q ≤ a / Q + (b + Q - 1) / Q := by
-  refine Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul pos).mpr ?_)
-  have h1 := Nat.div_add_mod a Q
-  have h2 := Nat.mod_lt a pos
-  have h3 := Nat.div_add_mod (b + Q - 1) Q
-  have h4 := Nat.mod_lt (b + Q - 1) pos
-  generalize a / Q = qa at *
-  generalize (b + Q - 1) / Q = qb at *
-  generalize a % Q = ra at *
-  generalize (b + Q - 1) % Q = rb at *
-  have : (qa + qb).succ * Q = Q * qa + Q * qb + Q := by rw [Nat.succ_mul]; ring
-  rw [this]
-  omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- R1 from the count of its rounding bands.
@@ -22827,7 +22580,7 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
     (Nat.le_succ _) high joined
     ((U ∪ cutKeys config pulled anc fin split).image fun v : ValidatorIndex => v.toNat)
   have second := syncF_run_le h pulledTotal pulledOk fromFin Run.nil rfl (.inl ⟨fromFin, rfl⟩) tailC
-    near highC (by rw [run_nil_append]; exact replayedC)
+    near highC (by rw [Run.nil_append]; exact replayedC)
     ((U ∪ cutKeys config pulled anc fin split).image fun v : ValidatorIndex => v.toNat)
   generalize (U ∪ cutKeys config pulled anc fin split).image (fun v : ValidatorIndex => v.toNat) =
     P at toPositions first second
@@ -22954,7 +22707,7 @@ private theorem syncCredits_le (h : Setting config checks g split fin pulled anc
   obtain ⟨fromFin⟩ := h.fromFin
   have run := syncF_run_le h pulledTotal pulledOk fromFin Run.nil rfl
     (.inl ⟨fromFin, rfl⟩) tailC near highC
-    (by rw [run_nil_append]; exact replayedC) keys
+    (by rw [Run.nil_append]; exact replayedC) keys
   have credits : ∑ i ∈ keys, (eventsC.map (syncCredit i)).sum ≤ ∑ i ∈ keys, syncF eventsC i :=
     Finset.sum_le_sum fun i _ => (Nat.le_add_right _ _).trans (syncF_eq eventsC i).ge
   have totalEq := getD_total_eq pulledOk
@@ -23121,7 +22874,7 @@ private theorem earlier_charge (h : Setting config checks g split fin pulled anc
     obtain ⟨u, foundU, -⟩ := isActiveAt_eq_true_iff.mp activeSplit
     have := (Array.getElem?_eq_some_iff.mp foundU).1
     omega
-  obtain ⟨z, cc, pre0, ok, rest0, splitEq, hz, hcc⟩ := PinKeys.Run.cross_split pre'
+  obtain ⟨z, cc, pre0, ok, rest0, splitEq, hz, hcc⟩ := Run.cross_split pre'
     ((getCurrentEpoch p.state).toNat - 1)
     (by show (getCurrentEpoch split).toNat ≤ (getCurrentEpoch p.state).toNat - 1; omega)
     (by omega)
@@ -24270,14 +24023,6 @@ private theorem prefix_deposits_clean (h : Setting config checks g split fin pul
       ((one.trans two).trans p2.slashedPersistence) v.toNat x found flagged
     simp [foundA, flagA] at unslashedA
 
-/-- A run split at a step is the run before it and the run from the step. -/
-private theorem snoc_append_eq {a b c : ForkedBeaconState preset}
-    (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
-    (post : Run config checks b c) :
-    (pre.snoc step).append post = pre.append ((Run.nil.snoc step).append post) := by
-  rw [Run.append_assoc]
-  rfl
-
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A bound along R's run from the first state of a key holds on the whole run.
 
@@ -24506,7 +24251,7 @@ private theorem envelope_of_clean_fin (h : Setting config checks g split fin pul
       Nat.lt_of_lt_of_le inFin (registryGrows_of_chainSteps fromFin.chainSteps)
     exact envelope_of_voter h fromFin tail replayedF replayed v
       (Run.nil : Run config checks ⟨fork, fin⟩ ⟨fork, fin⟩) (fromFin.append tail)
-      (run_nil_append (fromFin.append tail)) cleanFin (slashedLateSplit splitSize) inFin
+      (Run.nil_append (fromFin.append tail)) cleanFin (slashedLateSplit splitSize) inFin
       (Or.inl ⟨effective_fin_le_ebUp h v.toNat, Nat.le_refl _⟩) (fun w fw clean' =>
         late_of_withdrawable h fromFin tail v.toNat w fw clean' (late w fw)) z inPath
   · obtain ⟨c, toC, fromC, cutC, insideC, clean, before, floorStart, firstAfter⟩ :=
@@ -24662,9 +24407,7 @@ private theorem share_ge (pos : 0 < (parameters preset fork).WHISTLEBLOWER_REWAR
       wShare preset fork x := by
   unfold wShare
   generalize (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat = Q at pos ⊢
-  have split := Nat.div_add_mod (33 * x + 10 * Q - 1) (10 * Q)
-  have small := Nat.mod_lt (33 * x + 10 * Q - 1) (show 0 < 10 * Q by omega)
-  omega
+  exact le_smul_ceilDiv (β := Nat) (show 0 < 10 * Q by omega)
 
 /-- A key's credits on C's run have their gross scan and their credit or consolidation band. -/
 private theorem credit_band_bounds (h : Setting config checks g split fin pulled anc counted V)
@@ -25326,7 +25069,7 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
   obtain ⟨eS, replayedS⟩ := ((Run.nil.snoc step).append post).balanceEvents_ok h.early highC
   have whole := balanceEvents_append pre ((Run.nil.snoc step).append post) highC replayed1
     replayedS
-  rw [← snoc_append_eq pre step post, replayedC] at whole
+  rw [← pre.snoc_append_eq step post, replayedC] at whole
   obtain rfl := Except.ok.inj whole
   have insideC := (Array.getElem?_eq_some_iff.mp foundC).1
   have below := insideC.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
@@ -25357,7 +25100,7 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
     ((pre.snoc step).append post) highC v replayedC
   have depSplit := creditScan_append (fun _ => false) (fun s => decide (s = .deposits)) v.toNat
     highC pre ((Run.nil.snoc step).append post)
-  rw [← snoc_append_eq pre step post] at depSplit
+  rw [← pre.snoc_append_eq step post] at depSplit
   have depMono : depPre e1 v.toNat ≤ depPre (e1 ++ eS) v.toNat := by
     unfold depPre
     simp only [List.filter_append, List.map_append, List.sum_append]
@@ -27243,7 +26986,7 @@ private theorem slack_le (h : Setting config checks g split fin pulled anc count
   obtain ⟨toFin⟩ := h.toFin
   have prop := proposer_rewards_le h (toFin.append fromFin) (.inl ⟨fromFin⟩) Run.nil rfl tailC highC
     (T.image UInt64.ofNat)
-  rw [run_nil_append] at prop
+  rw [Run.nil_append] at prop
   have c1 := conv fun i => propN tailC highC i
   beta_reduce at c1
   rw [c1] at prop
@@ -28465,7 +28208,7 @@ private theorem prefix_prologue (h : Setting config checks g split fin pulled an
     | some _ => exact (Array.getElem?_eq_some_iff.mp found).1
   obtain ⟨v, rfl⟩ := Uint64.exists_toNat_eq
     (inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam bEarly b.state))
-  rw [snoc_append_eq] at replayedC
+  rw [Run.snoc_append_eq] at replayedC
   obtain ⟨e1, replayed1, t, rfl⟩ := Run.balanceEvents_prefix pre _ highC _ replayedC
   exact ⟨v, rfl, e1, t, replayed1, rfl, prefix_deposits_clean h pre aEarly highC replayed1 v
     (by simpa using (Bool.and_eq_true_iff.mp flag).1)⟩
@@ -28492,7 +28235,7 @@ private theorem credC_prefix_le (h : Setting config checks g split fin pulled an
       propN ((pre.snoc step).append post) highC i + depPre eventsC i + consAmt eventsC i := by
   obtain ⟨v, rfl, e1, t, replayed1, rfl, clean⟩ :=
     prefix_prologue h pre step post highC replayedC i flag
-  have whole := snoc_append_eq pre step post
+  have whole := pre.snoc_append_eq step post
   rw [whole] at replayedC ⊢
   have depPreOk := deposits_le_depPre e1 v.toNat clean
   have deps := scan_le_events (fun _ => false) (fun s => decide (s = .deposits)) (· = .deposits)
@@ -30009,7 +29752,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
   · by_cases inFin : v.toNat < fin.validators.data.size
     · exact key_core_cap h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC v
         (voter_unslashed h v voter)
-        (voter_late h fromFin v voter) Run.nil fromFin (run_nil_append fromFin) inFin
+        (voter_late h fromFin v voter) Run.nil fromFin (Run.nil_append fromFin) inFin
         (finalized_start h v.toNat).1 (.inl (finalized_start h v.toNat).2) kept
     · exact key_core_created h tail replayed' fromFin replayedF' tailC highC endEpochC replayedC
         v voter (Nat.le_of_not_lt inFin) kept
@@ -30741,12 +30484,10 @@ private theorem charge_credits_to (h : Setting config checks g split fin pulled 
     rfl
   have hR := DirectSafety.Apriori.Internal.balanceEvents_append _ post highC one hp
   have hX := DirectSafety.Apriori.Internal.balanceEvents_append r _ highC hr hR
-  have eqX : r.append ((Run.nil.snoc step).append post) = (r.snoc step).append post :=
-    Run.append_assoc r (Run.nil.snoc step) post
+  have eqX := (r.snoc_append_eq step post).symm
   have eqTail : ((before.append r).snoc step).append post =
-      before.append (r.append ((Run.nil.snoc step).append post)) := by
-    rw [Run.append_assoc, Run.append_assoc]
-    rfl
+      before.append (r.append ((Run.nil.snoc step).append post)) :=
+    ((before.append r).snoc_append_eq step post).trans (Run.append_assoc before r _).symm
   rw [eqTail, DirectSafety.Apriori.Internal.balanceEvents_append _ _ highC h0 hX] at replayedY
   obtain rfl := Except.ok.inj replayedY
   rw [eqTail]
@@ -31118,7 +30859,7 @@ private theorem split_epoch_start_data (h : Setting config checks g split fin pu
   have hystT := hysteresis_at_epoch_start h toT earlier
   obtain ⟨insideT, effEq, floor, up, rise⟩ := charge_start_at h highC (pre.append cf) step
     v.toNat hin unset pFulu pEarly sameT hystT pEpoch charged
-  exact ⟨⟨fork, t⟩, Run.nil, pre.append cf, run_nil_append _, insideT, sameT, effEq, floor, up,
+  exact ⟨⟨fork, t⟩, Run.nil, pre.append cf, Run.nil_append _, insideT, sameT, effEq, floor, up,
     rise⟩
 
 /-- Two splits of a run at steps that charge the same key start at the same state.
@@ -31348,7 +31089,7 @@ private theorem registry_charge (h : Setting config checks g split fin pulled an
         exact started
       have := charge_effective_bound h (y := a) aFork front highC aEpoch replayedY cf step' post'
         cut' hcharge later held
-      simpa only [run_nil_append, List.nil_append] using this)
+      simpa only [Run.nil_append, List.nil_append] using this)
   simp only [propN, whistC, creditScan_nil, syncCr, List.map_nil, List.sum_nil,
     Nat.add_zero] at core
   exact core
@@ -31478,7 +31219,7 @@ private theorem registry_bounds (h : Setting config checks g split fin pulled an
       · by_cases slashedR : (pinTerms config pulled anc fin).slashedRB i = true
         · by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
           · refine registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC
-              endEpochC replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
+              endEpochC replayedC step member i Run.nil fromFin (Run.nil_append fromFin) inFin
               (finalized_start h i).1 (.inl (finalized_start h i).2) unslashed flag
               (fun w' found' unslashedR => ?_) kept
             -- R slashes the key, so it is not unslashed there
@@ -31496,7 +31237,7 @@ private theorem registry_bounds (h : Setting config checks g split fin pulled an
       · -- A finalized key that exits at or after the finalized epoch.
         by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
         · exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC
-            endEpochC replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
+            endEpochC replayedC step member i Run.nil fromFin (Run.nil_append fromFin) inFin
             (finalized_start h i).1 (.inl (finalized_start h i).2) unslashed flag
             (fun w' found' _ => late_of_exitAfterFin h i
               (fun w'' found'' => by
@@ -31866,7 +31607,7 @@ private theorem bud_csUnits (h : Setting config checks g split fin pulled anc co
   obtain ⟨-, absent, -⟩ := Finset.mem_filter.mp inCS
   obtain ⟨w, found, live⟩ := isActiveAt_eq_true_iff.mp active
   have deposit := created_deposit h fromFin replayedF tailC highC endEpochC replayedC
-    ⟨w, found, activated_of_active live (UInt64.le_refl _)⟩ absent
+    ⟨w, found, activation_ne_far_of_active live, activationLe_of_active live⟩ absent
   have cSplit := credC_split tailC highC v.toNat
   have nSplit := credN_split tailC highC v.toNat
   unfold flowCredit
@@ -31920,7 +31661,8 @@ private theorem created_slots_le (h : Setting config checks g split fin pulled a
       (Nat.le_trans grows beyond)
   · obtain ⟨member, active⟩ := Finset.mem_filter.mp inCS
     obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
-    exact deposit v ⟨w, found, activated_of_active isActive (UInt64.le_refl _)⟩
+    exact deposit v
+      ⟨w, found, activation_ne_far_of_active isActive, activationLe_of_active isActive⟩
       (Finset.mem_filter.mp member).2.1
 
 /-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.

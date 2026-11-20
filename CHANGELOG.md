@@ -9,6 +9,27 @@ Not yet released.
 
 ### Proof additions
 
+- `Run.nil_append` drops an empty prefix, and `Run.snoc_append_eq` puts the split of a run before its final prefix step instead of after it.
+  `PinDriftBound` reads both to split event replays.
+
+- `Run.split_at_flip` cuts a run at a step that gains a property, and `ChainStep.epoch_le_succ` bounds one step's epoch increase by one.
+  `PinDriftBound` reads them to locate changes along a run.
+
+- `Run.cross_split` cuts a run at the slot that leaves a given epoch, and `Run.exists_epoch_split` cuts it at a state in a given epoch.
+  `PinDriftBound` reads both, and `Run.split_next` follows from `Run.cross_split` with its statement unchanged.
+
+- `Run.blockCount_le_epochs` bounds the blocks of a run by the slots of the epochs it touches.
+  `PinDriftBound` reads it to count sync committee debits and credits.
+
+- `Run.mem_balancePath_split` locates a balance-path state at a run boundary or inside a slot step before upgrades.
+  `PinDriftBound` reads it to bound balances along the path.
+
+- `ceil_div_le` bounds a rounded-up natural-number quotient by its numerator.
+  `PinDriftBound` reads it for a rounded balance bound.
+
+- `floor_add_ceil_le`, `rounded_add_ceil_le`, `rounded_add_floor_le` and `floor_le_of_lt` bound natural-number quotients and amounts rounded to an increment.
+  `PinDriftBound` reads them to bound sums and compare balances.
+
 - `signers_elsewhere_of_unseated` says that no member of a sync committee takes the position of a validator whose key the committee lacks, regardless of the member's participation bit.
   `processSyncAggregate_proposer` reads it, and the pin's bound on a position that a sync aggregate moves reads it in `PinDriftBound`.
 
@@ -736,6 +757,7 @@ Not yet released.
 
 - `activationLe_of_active` and `activationLe_of_slashable` say that an active or slashable validator was activated at or before the epoch.
   `ActivationExitOrder` reads both for its exit, slashing and consolidation steps, and `ValidatorStep` reads the first.
+  `PinDriftBound` reads `activationLe_of_active` for active voters.
 
 - `DirectSafety.Apriori.Internal.keys_debits_le` says that the debits of one event over a set of keys are at most its debits over the registry.
   The pin's debit bounds read it.

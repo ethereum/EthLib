@@ -112,6 +112,43 @@ def _root_.EthLib.Consensus.Run.balancePath {x : ForkedBeaconState preset} :
   | _, .nil => [x]
   | _, .snoc pre step => pre.balancePath ++ step.balancePath
 
+/-- A state on the balance path of a run is a state of the run, or the state inside a slot step.
+
+The state inside a slot step comes after the slot and its epoch transition, before the upgrades. -/
+theorem Run.mem_balancePath_split {z w : ForkedBeaconState preset}
+    (r : Run config checks z w) {p : ForkedBeaconState preset} (member : p ∈ r.balancePath) :
+    (∃ (rp : Run config checks z p) (rest : Run config checks p w), r = rp.append rest) ∨
+    (∃ (q n : ForkedBeaconState preset) (rq : Run config checks z q)
+      (ok : advanceSlotAcross config checks q = .ok n) (rest : Run config checks n w)
+      (adv : BeaconState preset q.fork), r = (rq.snoc (Step.slot ok)).append rest ∧
+        advanceSlot config checks q.state = .ok adv ∧ p = ⟨q.fork, adv⟩ ∧
+        processUpgrades config checks ⟨q.fork, adv⟩ = .ok n) := by
+  induction r with
+  | nil =>
+    simp only [Run.balancePath, List.mem_singleton] at member
+    subst member
+    exact .inl ⟨.nil, .nil, rfl⟩
+  | @snoc q last pre step ih =>
+    simp only [Run.balancePath, List.mem_append] at member
+    rcases member with member | member
+    · rcases ih member with ⟨rp, rest, eq⟩ | ⟨q', n, rq, ok, rest, adv, eq, advanced, hp, up⟩
+      · exact .inl ⟨rp, rest.snoc step, by rw [eq]; rfl⟩
+      · exact .inr ⟨q', n, rq, ok, rest.snoc step, adv, by rw [eq]; rfl, advanced, hp, up⟩
+    · cases step with
+      | block engine signed due ok =>
+        simp only [Step.balancePath, List.mem_cons, List.not_mem_nil, or_false] at member
+        rcases member with rfl | rfl
+        · exact .inl ⟨pre, (Run.nil.snoc (.block engine signed due ok)), rfl⟩
+        · exact .inl ⟨pre.snoc (.block engine signed due ok), .nil, rfl⟩
+      | slot ok =>
+        obtain ⟨adv, advOk, upgrades⟩ := bind_ok_iff.mp ok
+        simp only [Step.balancePath, advOk, Except.toOption, List.mem_cons, List.not_mem_nil,
+          or_false] at member
+        rcases member with rfl | rfl | rfl
+        · exact .inl ⟨pre, (Run.nil.snoc (.slot ok)), rfl⟩
+        · exact .inr ⟨_, last, pre, ok, .nil, adv, rfl, advOk, rfl, upgrades⟩
+        · exact .inl ⟨pre.snoc (.slot ok), .nil, rfl⟩
+
 /-- A step's balance path starts at its start and ends at its end. -/
 theorem Step.balancePath_ends {m n : ForkedBeaconState preset}
     (step : Step config checks m n) :

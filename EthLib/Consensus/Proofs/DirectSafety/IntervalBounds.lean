@@ -3097,14 +3097,8 @@ private theorem intervalLoss_departing {g x y : ForkedBeaconState preset}
   obtain ⟨a, b, pre, step, post, equal, first, last, before, after, unset,
     assigned, amount, epoch⟩ := tail.departure_charge_site charge member
   rw [index] at before after
-  have decomposed : pre.append ((Run.nil.snoc step).append post) = tail := by
-    have assoc : pre.append ((Run.nil.snoc step).append post) =
-        (pre.snoc step).append post := by
-      clear tail early endEpoch replayed member slashings equal
-      induction post with
-      | nil => rfl
-      | snoc post next ih => exact congrArg (fun r => r.snoc next) ih
-    exact assoc.trans equal
+  have decomposed : pre.append ((Run.nil.snoc step).append post) = tail :=
+    (pre.snoc_append_eq step post).symm.trans equal
   let rest := (Run.nil.snoc step).append post
   have earlyA := Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) early
   have epochs (p q : ForkedBeaconState preset) (run : Run config checks p q) :

@@ -1967,19 +1967,8 @@ theorem effectiveFall_le
         simp only [slots] at zero
         rw [zero, Nat.div_zero] at epochY epochR
         omega
-      have epochT := getCurrentEpoch_toNat T.state
-      have epochZ := getCurrentEpoch_toNat z.state
-      rw [zEpoch] at epochZ
-      have sameQuotient : z.state.slot.toNat / slots = T.state.slot.toNat / slots := by
-        simp only [slots]
-        omega
-      have bound := toZ.blocks_le_slots (a := T.state.slot.toNat / slots * slots)
-        (b := T.state.slot.toNat / slots * slots + slots - 1) (Nat.div_mul_le_self _ _) (by
-          have split := Nat.div_add_mod z.state.slot.toNat slots
-          have small := Nat.mod_lt z.state.slot.toNat slotsPos
-          rw [sameQuotient, Nat.mul_comm] at split
-          omega)
-      omega
+      simpa only [zEpoch, Nat.add_sub_cancel_left, Nat.one_mul] using
+        toZ.blockCount_le_epochs slotsPos
     -- The validator at the last state of the epoch on the branch of `y`.
     have zEpochR : getCurrentEpoch z.state = getCurrentEpoch R.state := zEpoch.trans boundaryEpoch
     obtain ⟨-, keptZ, growsZ, activeZs⟩ := readsAt (boundary.append toZ) Zearly zEpochR

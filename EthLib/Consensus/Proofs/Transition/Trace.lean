@@ -98,6 +98,13 @@ theorem Run.chainSteps {x y : ForkedBeaconState preset} (run : Run config checks
   | nil => exact .refl
   | snoc _ step ih => exact ih.tail step.chainStep
 
+/-- Prepending the empty run leaves a run unchanged. -/
+theorem Run.nil_append {x y : ForkedBeaconState preset} (r : Run config checks x y) :
+    Run.nil.append r = r := by
+  induction r with
+  | nil => rfl
+  | snoc r step ih => exact congrArg (fun run => run.snoc step) ih
+
 /-- Appending runs is associative. -/
 theorem Run.append_assoc {a b c d : ForkedBeaconState preset} (one : Run config checks a b)
     (two : Run config checks b c) (three : Run config checks c d) :
@@ -105,6 +112,75 @@ theorem Run.append_assoc {a b c d : ForkedBeaconState preset} (one : Run config 
   induction three with
   | nil => rfl
   | snoc three step ih => exact congrArg (fun run => run.snoc step) ih
+
+/-- A run split at a step is the run before it and the run from the step. -/
+theorem Run.snoc_append_eq {x a b c : ForkedBeaconState preset}
+    (pre : Run config checks x a) (step : Step config checks a b)
+    (post : Run config checks b c) :
+    (pre.snoc step).append post = pre.append ((Run.nil.snoc step).append post) := by
+  rw [Run.append_assoc]
+  rfl
+
+/-- A run from a state without a property to a state with it splits at a step that gains it. -/
+theorem Run.split_at_flip {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (P : ForkedBeaconState preset → Prop) (missing : ¬P x) (held : P y) :
+    ∃ (m n : ForkedBeaconState preset) (pre : Run config checks x m)
+      (step : Step config checks m n) (post : Run config checks n y),
+      tail = (pre.snoc step).append post ∧ ¬P m ∧ P n := by
+  induction tail with
+  | nil => exact absurd held missing
+  | @snoc middle last pre step ih =>
+    by_cases inside : P middle
+    · obtain ⟨m, n, a, one, rest, split, hm, hn⟩ := ih inside
+      refine ⟨m, n, a, one, rest.snoc step, ?_, hm, hn⟩
+      rw [split]
+      rfl
+    · exact ⟨middle, last, pre, step, .nil, rfl, inside, held⟩
+
+/-- One step of a chain moves the current epoch on by at most one. -/
+theorem ChainStep.epoch_le_succ {a b : ForkedBeaconState preset}
+    (step : ChainStep config checks a b) :
+    (getCurrentEpoch b.state).toNat ≤ (getCurrentEpoch a.state).toNat + 1 := by
+  cases step with
+  | slot ok =>
+    obtain ⟨advanced, slotOk, upgrades⟩ := bind_ok_iff.mp ok
+    rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat]
+    simp only [processUpgrades_slot upgrades, advanceSlot_slot slotOk]
+    rw [Nat.succ_div]
+    split <;> omega
+  | block engine signed validate ok =>
+    simp only [getCurrentEpoch, (frame_processBlock (applySignedBlock_ok ok).2.1).slot]
+    exact Nat.le_succ _
+
+/-- A run from an epoch to a later one has a slot step that leaves a given epoch between them. -/
+theorem Run.cross_split {x y : ForkedBeaconState preset} (tail : Run config checks x y)
+    (k : Nat) (low : (getCurrentEpoch x.state).toNat ≤ k)
+    (high : k < (getCurrentEpoch y.state).toNat) :
+    ∃ (z n : ForkedBeaconState preset) (pre : Run config checks x z)
+      (ok : advanceSlotAcross config checks z = .ok n) (rest : Run config checks n y),
+      tail = (pre.snoc (Step.slot ok)).append rest ∧ (getCurrentEpoch z.state).toNat = k ∧
+        (getCurrentEpoch n.state).toNat = k + 1 := by
+  obtain ⟨m, n, pre, step, post, split, hm, hn⟩ :=
+    Run.split_at_flip tail (fun z => k < (getCurrentEpoch z.state).toNat) (by omega) high
+  have missing : ¬k < (getCurrentEpoch m.state).toNat := hm
+  have gained : k < (getCurrentEpoch n.state).toNat := hn
+  have bound := step.chainStep.epoch_le_succ
+  have crossing : getCurrentEpoch m.state < getCurrentEpoch n.state :=
+    UInt64.lt_iff_toNat_lt.mpr (by omega)
+  obtain ⟨ok, rfl⟩ := step.eq_slot_of_crossing crossing
+  exact ⟨m, n, pre, ok, post, split, by omega, by omega⟩
+
+/-- A run that starts at or before an epoch and ends at or after it passes a state of that epoch. -/
+theorem Run.exists_epoch_split {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (k : Nat)
+    (low : (getCurrentEpoch x.state).toNat ≤ k) (high : k ≤ (getCurrentEpoch y.state).toNat) :
+    ∃ (z : ForkedBeaconState preset) (pre : Run config checks x z) (post : Run config checks z y),
+      (getCurrentEpoch z.state).toNat = k ∧ tail = pre.append post := by
+  by_cases last : k = (getCurrentEpoch y.state).toNat
+  · exact ⟨y, tail, .nil, last.symm, rfl⟩
+  · obtain ⟨z, n, pre, ok, rest, split, hz, -⟩ := Run.cross_split tail k low (by omega)
+    exact ⟨z, pre, (Run.nil.snoc (Step.slot ok)).append rest, hz,
+      split.trans (pre.snoc_append_eq (Step.slot ok) rest)⟩
 
 /-- A step of two appended runs is a step of one of them. -/
 theorem Run.contains_append {g x y u v : ForkedBeaconState preset}
@@ -332,6 +408,25 @@ theorem Run.blocks_le_slots {first last : ForkedBeaconState preset}
     (high : last.state.slot.toNat ≤ b) : run.blockCount ≤ b - a + 1 := by
   have := run.blockCount_le
   split at this <;> omega
+
+/-- A run has at most one block for each slot of the epochs that it touches. -/
+theorem Run.blockCount_le_epochs {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) :
+    tail.blockCount ≤
+      ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat := by
+  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, Nat.sub_mul]
+  have low := Nat.div_mul_le_self x.state.slot.toNat preset.SLOTS_PER_EPOCH.toNat
+  have high := Nat.lt_mul_div_succ y.state.slot.toNat positive
+  rw [Nat.mul_comm] at high
+  have blocks := tail.blocks_le_slots low (b :=
+    (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) *
+      preset.SLOTS_PER_EPOCH.toNat - 1) (by omega)
+  have startLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
+  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat] at startLe
+  have ordered := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat startLe
+  rw [Nat.add_mul, Nat.one_mul] at blocks ⊢
+  omega
 
 /-- A later epoch of the same period is the same epoch, or it does not start a period. -/
 private theorem epoch_same_or_not_start {period earlier later : Nat} (le : earlier ≤ later)

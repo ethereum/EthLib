@@ -68,4 +68,47 @@ theorem div_mul_div_le_mul_div (total increment factor root : Nat) :
         rw [← Nat.mul_assoc]
         exact Nat.mul_le_mul_right _ (Nat.div_mul_le_self _ _)
 
+/-- The rounded-up quotient is at most its numerator. -/
+theorem ceil_div_le (c q : Nat) : (c + q - 1) / q ≤ c := by
+  rcases Nat.eq_zero_or_pos q with rfl | pos
+  · simp
+  · exact (Nat.div_le_iff_le_mul pos).mpr (by
+      have := Nat.le_mul_of_pos_right c pos
+      omega)
+
+/-- The quotient of a sum is at most the floor of one quotient plus the ceiling of the other. -/
+theorem floor_add_ceil_le (a b Q : Nat) (pos : 0 < Q) :
+    (a + b) / Q ≤ a / Q + (b + Q - 1) / Q := by
+  apply (Nat.div_le_iff_le_mul pos).mpr
+  rw [Nat.add_mul, Nat.mul_comm (_ / Q) Q, Nat.mul_comm ((b + Q - 1) / Q) Q]
+  have ha := Nat.div_add_mod a Q
+  have hr := Nat.mod_lt a pos
+  have hb := Nat.div_add_mod (b + Q - 1) Q
+  have hs := Nat.mod_lt (b + Q - 1) pos
+  omega
+
+/-- Round down a sum using an upper bound that rounds the added amount up instead. -/
+theorem rounded_add_ceil_le (I x C : Nat) (hI : 0 < I) :
+    (x + C) - (x + C) % I ≤ (x - x % I) + I * ((C + I - 1) / I) := by
+  rw [← Nat.mul_div_self_eq_mod_sub_self, ← Nat.mul_div_self_eq_mod_sub_self, ← Nat.mul_add]
+  exact Nat.mul_le_mul_left _ (floor_add_ceil_le x C I hI)
+
+/-- Round down a sum by allowing for the added remainder before rounding the base down. -/
+theorem rounded_add_floor_le (I x y : Nat) (hI : 0 < I) :
+    (x + y) - (x + y) % I ≤ (x + I - 1) - (x + I - 1) % I + I * (y / I) := by
+  have h := rounded_add_ceil_le I y x hI
+  rw [Nat.add_comm y x, ← Nat.mul_div_self_eq_mod_sub_self (x := y),
+    Nat.mul_div_self_eq_mod_sub_self (x := x + I - 1),
+    Nat.add_comm (I * (y / I))] at h
+  exact h
+
+/-- Rounding down a number less than one increment above an aligned bound stays below it. -/
+theorem floor_le_of_lt {B E I : Nat} (hI : 0 < I) (aligned : E % I = 0)
+    (lt : B < E + I) : B - B % I ≤ E := by
+  obtain ⟨u, rfl⟩ := Nat.dvd_of_mod_eq_zero aligned
+  rw [← Nat.mul_div_self_eq_mod_sub_self]
+  apply Nat.mul_le_mul_left
+  exact Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul hI).mpr (by
+    simpa [Nat.succ_mul, Nat.mul_comm u I] using lt))
+
 end EthLib.Base

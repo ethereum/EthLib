@@ -1576,13 +1576,7 @@ private theorem epoch_anchor {x u : ForkedBeaconState preset} (tail : Run config
         (getCurrentEpoch a.state).toNat < (getCurrentEpoch r.state).toNat := by
   have order := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
   by_cases same : getCurrentEpoch u.state = getCurrentEpoch x.state
-  · have whole : ∀ {v : ForkedBeaconState preset} (run : Run config checks x v),
-        run = Run.nil.append run := by
-      intro v run
-      induction run with
-      | nil => rfl
-      | snoc pre step ih => exact congrArg (·.snoc step) ih
-    exact ⟨x, .nil, tail, whole tail, same, fun _ member => by cases member⟩
+  · exact ⟨x, .nil, tail, tail.nil_append.symm, same, fun _ member => by cases member⟩
   have later : (getCurrentEpoch x.state).toNat < (getCurrentEpoch u.state).toNat := by
     exact Nat.lt_of_le_of_ne order fun equal => same (UInt64.toNat_inj.mp equal.symm)
   obtain ⟨r, pre, inner, split, inside, outside, -, begins⟩ :=
