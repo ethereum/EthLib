@@ -39,6 +39,43 @@ namespace Honest
 abbrev SharedSpec := Public.withLabels Start Row Word
 abbrev SharedState := RelabelState Public Start Row Word
 
+private def rowLayer : Row → Layer := Sum.elim Prod.fst Prod.fst
+
+private def cellLayer : Cell → Layer := Sum.elim Prod.fst rowLayer
+
+private theorem layer_of_cell (l : Layer) (c : LayerGraph.Cell) : cellLayer (inLayer l c) = l := by
+  rcases c with x | (k | k) <;> rfl
+
+private theorem layer_of_row (pp : PublicParam) (l : Layer) (r : LayerGraph.Row) :
+    rowLayer ((selection pp l).node r) = l := by cases r <;> rfl
+
+/-- Every private start and every canonical node in the other layer retains its exact contents. -/
+theorem other_cell {pp : PublicParam} {l other : Layer} {s t : SharedState}
+    (frame : (selection pp l).Framed s t) (different : other ≠ l) (c : LayerGraph.Cell) :
+    t.2 (inLayer other c) = s.2 (inLayer other c) := by
+  apply frame.cells
+  rintro ⟨x, eq⟩
+  have layers := congrArg cellLayer eq
+  change cellLayer (inLayer l x) = cellLayer (inLayer other c) at layers
+  exact different (by simpa only [layer_of_cell] using layers.symm)
+
+/-- The ordinary public table also retains both halves of each well-formed point of the other layer. -/
+theorem other_public {pp : PublicParam} {l other : Layer} {s t : SharedState}
+    (frame : (selection pp l).Framed s t) (different : other ≠ l) (r : LayerGraph.Row) (vs : List Word)
+    (width : vs.length = ((LayerGraph.graph pp other).ch r).length) :
+    t.1 ((LayerGraph.graph pp other).pt r vs) = s.1 ((LayerGraph.graph pp other).pt r vs) := by
+  let localView := selection pp l
+  let otherView := selection pp other
+  apply frame.publicRows
+  rintro ⟨k, ws, length, eq⟩
+  have same := (graph pp).pt_inj
+    (show ws.length = ((graph pp).ch (localView.node k)).length by
+      simpa only [localView.children, List.length_map] using length)
+    (show vs.length = ((graph pp).ch (otherView.node r)).length by
+      simpa only [otherView.children, List.length_map] using width)
+    ((localView.point k ws).symm.trans (eq.trans (otherView.point r vs)))
+  exact different (by simpa only [localView, otherView, layer_of_row] using congrArg rowLayer same.1.symm)
+
 private theorem collect (pp : PublicParam) (l : Layer) {α : Type} (n : Nat)
     (f : Fin n → OracleComp LayerGraph.Spec α) (entries : ∀ i, (selection pp l).Preserves (f i)) :
     (selection pp l).Preserves (ofFnInOrder n f) := by
