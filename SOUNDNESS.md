@@ -35,7 +35,7 @@ Gap D asks whether the use of EthLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-beta.4` and other upstream sources; consistency theorems on the constants | P R B V |
+| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to one commit or release of each upstream source, listed in `tests/sources.toml`; consistency theorems on the constants | P R B V |
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
 | A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
@@ -4927,8 +4927,19 @@ It reports `2^17` blob gas for each versioned hash.
 From Dencun, its blob gas price is the base fee per blob gas that the blob schedule of the chain, at the fork, number and timestamp of the block, gives for the excess blob gas of its header.
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
-They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
-No theorem yet shows that they succeed on the blocks of a valid view.
+They are built exactly when the block has one receipt for each transaction, and each transaction has a hash and a sender (`exists_receiptInfos_eq_ok_iff`).
+That sender is the one that the signature names at the fork of the block.
+Otherwise they fail with `-32603`.
+Computing the contract address of a creation never fails, since each nonce is below `2^256` (`createAddress_ok`, `Proofs/Evm/Call/ContractAddress.lean`).
+In a valid view, a canonical block after the lowest has one receipt for each transaction (`Valid.length_receipts`), since it keeps the receipts of its run.
+The run of a body gives one receipt for each transaction (`applyTransactions_receipts_length`, `Proofs/Blocks/Transition.lean`).
+Each signature of the block names a sender (`Valid.exists_recoverSender`, `Proofs/Rpc/Block.lean`).
+Each transaction of the block has a hash (`Valid.exists_transactionHash`), since the run computes the transactions root from their bytes (`transactionsRoot_eq_ok_iff`, `Proofs/Blocks/TypedRoots.lean`).
+So the receipt objects of the block are built (`Valid.exists_receiptInfos`).
+The method for the receipts of a block answers them for a parameter that resolves to that block (`Valid.exists_blockReceipts`).
+The method for one receipt answers the object at the index of a transaction that the lookup by hash finds there (`Valid.exists_transactionReceipt`).
+The lowest block, the blocks off the canonical chain and the pending block are inputs of the view.
+So no theorem says that their receipt objects are built.
 From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success (`outcomeOf_of_byzantium`), which the object writes as `status` `0x1`; before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
 In a valid view, take a canonical block after the lowest.
 Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
@@ -5664,9 +5675,16 @@ The proof also reads `stateRoot_blockStates`, which shows that the state kept un
 
 The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
 From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
-The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
-So both keep the two facts that the proof reads.
-No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
+`Store.onInvalidPayload_blocks_blockStates` (`Consensus/Proofs/ForkChoice/Optimistic.lean`) shows that the first step keeps both the block and the state of each root, or removes both.
+`Store.recordValidatedInclusionListSatisfaction_eq` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) shows that the second touches neither the blocks nor the states.
+The bootstrap answer of a root depends only on the configuration, the block and the state under that root, and the fork of the store.
+`bootstrapFor_onInvalidPayload` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows that the first step keeps the answer of each root whose block stays.
+`bootstrapFor_recordValidatedInclusionListSatisfaction` shows that the second step keeps the answer of every root.
+`bootstrapFor_valid_of_onInvalidPayload` and `bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction` carry `bootstrapFor_valid_of_reachable` over the two steps, through the two theorems above.
+The proof of the first also reads `bootstrapFor_of_missing` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`), since a served root has its block.
+So a bootstrap served after either step starts a light client, with the same assumptions on the schedule, the state type and the preset.
+A root that the first step removes has neither its block nor its state, so `bootstrapFor_of_missing` gives it the error with code 404.
+No theorem covers a store that the handlers reach after either step.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
@@ -5703,8 +5721,8 @@ With Electra after Fulu, a Fulu store can refuse a root before the Electra fork 
 With Gloas after Heze, a Heze store can refuse a root before the Gloas fork epoch.
 No theorem states these refusals.
 Both theorems assume a lawful state type and a preset whose sizes in the block are nonzero.
-After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
-No theorem states that yet.
+After either step that `Store.Reachable` leaves out, each root whose block the store still holds keeps the answer that both theorems give.
+`bootstrapFor_onInvalidPayload` and `bootstrapFor_recordValidatedInclusionListSatisfaction` show this, with the assumptions of both theorems read at the store before the step.
 
 `IsUpdatesAnswer` is the rule of the source for the updates answer.
 It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
@@ -6655,7 +6673,7 @@ Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate
 They come in three kinds.
 A `partial` definition is defined by `partial` recursion.
 An `opaque` one is an opaque constant.
-A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to.
+A `reaches-opaque` one unfolds to an opaque constant: `while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition of Lean core.
 
 `lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
 The list below is generated from that file, and it is empty when none remains.
@@ -7147,8 +7165,9 @@ leanchecker replays every declaration of EthLib into Lean's kernel, proof bodies
 First, the workflow checks that leanchecker rejects a fixture theorem of `False` that the kernel never checked.
 The replay uses Lean's own kernel, so it does not protect against a bug in that kernel (C1).
 
-The workflow runs every Monday and on each push to `master`, but a newer push cancels a replay still in progress.
-So only the weekly run is sure to finish.
+The workflow runs every Monday and on each push to `master`.
+On `master` a running replay finishes, and a newer push replaces only a run that has not started.
+So a replay can skip a commit, but the latest commit on `master` is always replayed.
 
 ## Gap D: does the use of EthLib hold together?
 
