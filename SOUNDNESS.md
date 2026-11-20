@@ -434,6 +434,11 @@ It proves that the signer's own calls before each search add none of that layer'
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So no theorem bounds the failure of a later signature, or of signing inside the game.
+`HashSig.prEvent_failedSearch_le` (`Proofs/HashSig/FailedSearch.lean`) drops the assumption on the cache.
+Take a run with at most `n` hash calls from an empty cache.
+It ends with some search whose first `T` trials all missed with probability at most `n * q^T`.
+Here `q` is the chance that one uniform answer misses, and the trial inputs may be queried by anyone, in any order.
+The unforgeability theorem with capped searches below uses it; no theorem yet states it as a failure bound for signing inside the game.
 
 Unforgeability is `Unforgeability.Bridge.unforgeable` (`Proofs/Sphincs/Unforgeability.lean`).
 Take an adversary whose experiment makes at most `q >= 1` hash calls and at most `2^30` signing requests.
@@ -458,6 +463,18 @@ At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
 The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
+
+A third theorem, `Unforgeability.Bridge.unforgeable_capped`, charges each request its counter searches only up to `2^22` counters.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C' + 1) / 2^127`, where `C' = 264193 + r * (470595 + 3 * 2^22) + 3 * 2^32 + 491`.
+At `2^30` requests, `C'` is about `2^53.6`, so the bound is never below about `2^-73.4`, against `2^-63.4` for the second theorem.
+For `r >= 2` the third bound is the lower one.
+The proof wraps the adversary: it stops forwarding queries once an answer has a counter of at least `2^22`, or is no signature (`capSearches`).
+Up to that answer the two runs agree, and all requests but the last one cost at most `470595 + 3 * 2^22` calls.
+The last one costs at most `470595 + 3 * 2^32`, which is the `3 * 2^32` in `C'`.
+An answer with a long search leaves, in the oracle's cache, a search whose first `2^22` counters all missed the code (`failedSearch_of_signerOf`).
+By `HashSig.prEvent_failedSearch_le`, that has probability at most `(q + C) * (1 - p)^(2^22)`, below `2^-127` up to `2^200` calls, and the `1` covers it; above that, the bound is at least 1.
+`forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, with that term written out.
 
 ### VRF tree
 
