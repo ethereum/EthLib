@@ -5553,8 +5553,12 @@ Both theorems assume a lawful state type and a preset whose sizes in the block a
 After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
 No theorem states that yet.
 
-`IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
-`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
+`IsUpdatesAnswer` is the rule of the source for the updates answer.
+It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
+`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that `updatesInRange` gives such an answer.
+That answer runs from the earliest known period of the range to the first period that the node lacks, cut to the limit.
+`isUpdatesAnswer_iff` shows that the accepted answers are exactly its starts.
+The empty answer is accepted only when the range has no known update.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
 `decodeUpdateChunks_encode` shows that the SSZ chunks of updates decode back to the updates, each with its fork, on a chain that passes the check of fork digests.
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
@@ -5854,7 +5858,11 @@ Points that remain open:
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
   EthLib takes their conditions from the validator status document that the schema links, which is not a pinned file.
-- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap; `IsUpdatesAnswer` asks only for increasing periods.
+- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap.
+  EthLib reads it as periods with no gap, in `IsUpdatesAnswer` and in `isValidLightClientUpdatesByRangeResponse` (`Consensus/ReqResp/Validity.lean`).
+  The [sync protocol](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/light-client/sync-protocol.md#validate_light_client_update) rejects an update whose signature period is more than one period after the period of the finalized header of the store.
+  The period of an update is that of its attested header, which is at most its signature period.
+  So a light client that applies the answer in order cannot use an update after a gap.
 - The source writes the context of an updates chunk as the digest of a fork version and the genesis validators root, the form before Fulu.
   EthLib takes the digest of the epoch of the attested header, which from Fulu also depends on the blob schedule.
 - The source bounds the range of the updates answer by the period of the head; the answer leaves that bound to the updates that the caller gives.
