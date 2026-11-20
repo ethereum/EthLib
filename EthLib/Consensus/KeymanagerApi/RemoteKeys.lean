@@ -24,7 +24,7 @@ A remote key marked read-only stays, with an error status, as a local one does.
 
 A body that does not read gets HTTP 400, as for the other calls, though the source lists none here.
 
-[`remote_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/remote_keystores.yaml
+[`remote_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/remote_keystores.yaml
 -/
 
 @[expose] public section

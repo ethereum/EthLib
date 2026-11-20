@@ -6484,7 +6484,8 @@ The source leaves three points about the data API open, and EthLib specifies non
 ### Keymanager API
 
 The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
-EthLib cites its release `v1.1.0`, commit `51f2a5c9`.
+EthLib cites its commit `3e7c64e`.
+At that commit the source also defines the builder configuration endpoints of a key, which EthLib does not yet specify.
 The source has no test vectors, so the Python suite reads the examples of its schemas; `tests/consensus/README.md` lists them.
 [`ARCHITECTURE.md`](ARCHITECTURE.md#interfaces) accepts this specification only with feedback from the implementers that use it: validator clients and key-management tools.
 The points that the source leaves open are listed below, with the reading that EthLib takes, until they answer.
@@ -6518,7 +6519,7 @@ The source leaves six points about its values open:
 - The schema of a signed voluntary exit lists no field as required.
   The container has every field, so EthLib requires all four: the message, its epoch, its validator index and the signature.
 - It does not say whether an optional field may be `null`.
-  OpenAPI 3.0 allows `null` only for a schema marked `nullable`, and none is, so EthLib refuses it.
+  The document is OpenAPI 3.1, which allows `null` only for a schema whose type includes it, and none does, so EthLib refuses it.
 - The graffiti is a string, and the block field that it fills is 32 bytes.
   EthLib reads it as a string; how it becomes 32 bytes is a question for the call that sets it.
 
@@ -6540,8 +6541,8 @@ The Python suite runs the example of the issue and the cases of the source's use
 The source leaves six points about the import open, and EthLib takes these readings:
 
 - Which keys' slashing protection data is loaded.
-  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
-  The [use case](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
+  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
+  The [use case](https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
   Step 3 of the flow allows the data to be "loaded in its entirety, or imported on a per-key basis", and its step 4 loads it only for a matching keystore.
   EthLib takes the per-key reading of step 4: it loads the entries of each imported key, and no others.
   So the data of a keystore that is a duplicate is not loaded either.
@@ -6577,18 +6578,17 @@ The calls on `/eth/v1/validator/{pubkey}/` with `feerecipient`, `gas_limit` and 
 Each setting maps keys to values, and a key without a mapping gets the default that the client fixes at its start.
 For each of the three settings, a set then a get of the key gives the value set (`Setting.get_set`, `Consensus/Proofs/KeymanagerApi/Settings.lean`), and a delete then a get gives the default (`Setting.get_of_delete`).
 A set or a delete on one key leaves the value of every other key unchanged (`Setting.get_set_of_ne`, `Setting.get_of_delete_of_ne`).
-Each call on a key that the client does not manage gets HTTP 404 and changes nothing (`handle_of_isManaged_eq_false`), and a delete on a key that it manages removes its mapping (`Setting.delete_of_isManaged`).
+Each call on a key that the client does not manage gets HTTP 404, "The key was not found on the server", as the source gives for the get, the set and the delete, and changes nothing (`handle_of_isManaged_eq_false`), and a delete on a key that it manages removes its mapping (`Setting.delete_of_isManaged`).
 A set through the API that gets HTTP 202, then a get, gives the value set (`handle_get_of_handle_set`).
 A set of the zero fee recipient gets HTTP 400 and changes nothing (`handle_feeRecipient_zero`).
 The three settings meet the law that these statements take (`feeRecipientSetting_lawful`, `gasLimitSetting_lawful`, `graffitiSetting_lawful`).
 The Python suite runs the example of issue #2140 on the fee recipient, and sets a gas limit and a graffiti.
 
-The source leaves seven points about the settings open, and EthLib takes these readings:
+The set of each setting, the gas limit included, requires its body, as the source marks it.
 
-- The get and the set list HTTP 404 only as "Path not found", unlike the delete.
-  EthLib answers HTTP 404 to each call on a key that the client does not manage, so that a set on an unmanaged key leaves no mapping that a delete could not remove.
-  A key deleted through the API keeps its mappings, which apply again if it is imported again.
-- The set of a gas limit does not mark its body as required, unlike the other two; EthLib requires it.
+The source leaves six points about the settings open, and EthLib takes these readings:
+
+- A key deleted through the API keeps its mappings, which apply again if it is imported again.
 - The source forbids the zero fee recipient and names no code; EthLib answers HTTP 400.
 - The graffiti is a JSON string, and the block field is 32 bytes; EthLib keeps the string as it is, with no length check.
 - A delete may get HTTP 403 when the setting lives in configuration files; that depends on storage and is not modelled.
@@ -6643,8 +6643,8 @@ The source leaves five points about remote keys open, and EthLib takes these rea
 
 ### Remote-signing API
 
-The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.
-EthLib cites commit `44e9e0dc`.
+The Remote-signing API, as `ethereum/remote-signing-api` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.
+EthLib cites commit `514525c`.
 A client sends one JSON request per signature, and the field `type` names its kind.
 The signer must read exactly the object that the client meant, since the root it signs comes from that object.
 
@@ -6661,9 +6661,8 @@ Each carries its body under the version `GLOAS`, the only version the source def
 The authentication of a Builder API request has no fork info, like a deposit, and its data is "non-empty" and at most 4096 bytes.
 `ofJson_emptyAuthData` shows that a document whose data reads as empty is refused for that reason, and `ofJson_longAuthData` that data of more than 4096 bytes is refused with the limit and its size.
 So the reader never cuts the data down, and every such request read has between 1 and 4096 bytes of data.
-The Python suite reads the 29 examples that match the schemas, and checks that writing each again gives the same document.
-It checks that the other three examples are refused: the two named below, and the envelope, whose logs bloom holds 262 bytes where the bloom has 256.
-With a bloom of 256 bytes, the envelope reads back.
+The Python suite reads the 30 examples that match the schemas, and checks that writing each again gives the same document.
+It checks that the other two examples, named below, are refused.
 The source names no preset, and its examples mix the two.
 The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
@@ -6691,9 +6690,8 @@ So the selection proof of a slot and the RANDAO reveal of an epoch with the same
 These theorems are about domains, not signing roots; that two different signing data have different roots needs the collision resistance of SHA-256, which EthLib does not assume here.
 The examples of the kinds that Gloas adds carry no signing root.
 The Python suite computes the roots of the payload attestation, the preferences and the authentication with its own merkleization and compares them; the bid and the envelope are progressive containers (EIP-7688), so it records their roots as a change detector.
-The Python suite checks the `signingRoot` of each of the 24 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
-The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
-The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
+The Python suite checks the `signingRoot` of each of the 26 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
+For the Electra and Fulu aggregates it also computes that root under the mainnet preset with its own merkleization.
 
 The signer itself is a state of secret keys and a record of slashing protection (`Consensus/RemoteSigningApi/Endpoints.lean`).
 It lists the public keys of its secret keys, and its sign endpoint reads the request, then the key of the path, then finds the secret key, computes the root, asks slashing protection, and signs.

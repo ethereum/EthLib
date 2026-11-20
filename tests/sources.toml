@@ -56,13 +56,11 @@ commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
 directories = ["tests/consensus/relay_api"]
 
 [repositories."ethereum/keymanager-APIs"]
-commit = "51f2a5c90e9d301c3e9980da402ec70ae82f0991"
-release = "v1.1.0"
+commit = "3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e"
 directories = ["tests/consensus/keymanager_api"]
 
 [repositories."ethereum/remote-signing-api"]
-commit = "44e9e0dcc115c91f8b739684f4789a8310476bd9"
-release = "v1.4.0"
+commit = "514525ca961a9d001e96a02bf870285a8ae401a4"
 directories = ["tests/consensus/remote_signing_api"]
 
 [repositories."ethereum/c-kzg-4844"]
