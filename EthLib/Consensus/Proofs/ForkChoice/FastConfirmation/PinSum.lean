@@ -15749,6 +15749,194 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
     intro zs r1 r2 evs ev
     exact slash_floor_across h v toC insideC clean wP foundP slashedP rb r1 r2 ev
 
+/-- A replay inside one epoch whose steps all start past the cutoff records no event.
+
+The run starts at `b`, so each of its steps starts at the epoch of `b` or later.
+
+No landed lemma states this, so `cut_whistle` reads it here, for a cutoff before that epoch. -/
+private theorem balanceEvents_late {f : Fork} {b : BeaconState preset f}
+    {y : ForkedBeaconState preset} (tail : Run config checks ⟨f, b⟩ y)
+    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch b)
+    {high : ℕ} (late : high + 1 < (getCurrentEpoch b).toNat) :
+    tail.balanceEvents high = .ok [] := by
+  refine Run.induction_of_same_epoch (fun _ r => r.balanceEvents high = .ok []) rfl ?_ ?_ tail
+    early same
+  · intro _ s _ _ _ _ _ pre _ prior
+    have started : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch s).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+    have skipped : ¬ (getCurrentEpoch s).toNat ≤ high + 1 := by omega
+    simp [Run.balanceEvents, prior, skipped, pure, Except.pure, bind, Except.bind]
+  · intro middle _ _ _ pre _ _ _ _ prior
+    have started : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch middle.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+    have skipped : ¬ (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
+    simp [Run.balanceEvents, prior, skipped, pure, Except.pure, bind, Except.bind]
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The whistleblower credits of the shared run's last epoch fit the keys that it slashes.
+
+The run `pre` goes from `b` to the split, inside the split's epoch.
+
+A whistleblower credit lands in the proposer's block, so a key of any class can receive it.
+
+Each key slashed along `pre` pays the quotient of its effective balance at the slashing.
+
+That balance is the one at the split.
+
+It changes only at an epoch update, and `pre` is in one epoch.
+
+R's call reads each such key as slashed, since its withdrawable epoch is a slashing vector away.
+
+The sum is over keys that `SC` leaves out, because they are slashed at the split. -/
+private theorem cut_whistle (h : Setting config checks g split fin pulled anc counted V)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b) (high : ℕ) (keys : Finset ℕ) :
+    ∑ i ∈ keys, whistC pre high i ≤
+      ∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
+          (fun v => ((b.validators.data[v.toNat]?).map (·.slashed)).getD false = false ∧
+            ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
+            (pinTerms config pulled anc fin).slashedRB v.toNat = true),
+        balanceAt split v.toNat / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
+  classical
+  obtain ⟨toPulled⟩ := h.toPulled
+  obtain ⟨events, replayed, bounded⟩ := Run.balanceEvents_bounded toB pre h.genesis h.early high
+  have scan := creditScan_sum_le keys id (fun s => decide (s = .slashings)) (fun _ => false) high
+    BalanceEvent.credits pre replayed fun e _ _ => by
+      simpa [keyCredit] using PinSplit5.keys_credits_le keys e
+  have limits := slashing_credits_le_limits events fun e member => (bounded e member).1
+  have slashings : (events.map fun e =>
+      if decide (e.source = .slashings) = true ∨ false = true then e.credits else 0).sum =
+      ((events.filter (·.source = .slashings)).map BalanceEvent.credits).sum := by
+    simp only [decide_eq_true_eq, Bool.false_eq_true, or_false]
+    rw [List.sum_map_ite (fun e : BalanceEvent preset => e.source = .slashings)
+      BalanceEvent.credits (fun _ => 0)]
+    simp
+  refine (scan.trans (slashings.le.trans limits)).trans ?_
+  by_cases late : high + 1 < (getCurrentEpoch b).toNat
+  · rw [balanceEvents_late pre h.early sameEpoch late] at replayed
+    cases replayed
+    simp
+  have endEpoch : (getCurrentEpoch split).toNat ≤ high + 1 := by rw [sameEpoch]; omega
+  let P : ℕ → Prop := fun j => ((b.validators.data[j]?).map (·.slashed)).getD false = false ∧
+    ((split.validators.data[j]?).map (·.slashed)).getD false = true ∧
+    (pinTerms config pulled anc fin).slashedRB j = true
+  let quotient := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  refine (slashing_credits_le toB pre h.genesis h.early h.caps.compounding high endEpoch
+    (Finset.range pulled.validators.data.size)
+    (fun j => if P j then balanceAt split j / quotient else 0) ?_ replayed).trans ?_
+  · intro a a' step contained j inside flip
+    obtain ⟨before, after, -⟩ := pre.contains_split step contained
+    have rest := (Run.nil.snoc step).append after
+    have sameFork : a.fork = fork := fork_eq_of_run before rest (Nat.le_refl _)
+    have size := Nat.lt_of_lt_of_le (Finset.mem_range.mp inside)
+      ((after.append toPulled).registryLifecycle.size_le)
+    refine ⟨Finset.mem_range.mpr size, ?_⟩
+    simp only [Bool.and_eq_true, Bool.not_eq_true'] at flip
+    obtain ⟨unslashedA, slashedA'⟩ := flip
+    rcases foundA : a.state.validators.data[j]? with _ | u
+    · simp [effectiveAt, foundA]
+    have clean : u.slashed = false := by simpa [foundA] using unslashedA
+    obtain ⟨w, foundA', marked⟩ :
+        ∃ w, a'.state.validators.data[j]? = some w ∧ w.slashed = true := by
+      cases found : a'.state.validators.data[j]? with
+      | none => simp [found] at slashedA'
+      | some w => exact ⟨w, rfl, by simpa [found] using slashedA'⟩
+    obtain ⟨_, foundS, markedS⟩ := after.slashedPersistence j w foundA' marked
+    obtain ⟨wP, foundP, markedP⟩ := (after.append toPulled).slashedPersistence j w foundA' marked
+    have startB : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch a.state).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps before.chainSteps)
+    have endS : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch split).toNat :=
+      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
+    have epochB : (getCurrentEpoch b).toNat = (getCurrentEpoch split).toNat := by rw [sameEpoch]
+    have withdrawable := ((rest.append toPulled).newly_slashed_withdrawableEpoch h.caps.activation
+      h.caps.compounding h.early h.delay j u wP foundA foundP clean markedP).2
+    have p : P j := by
+      refine ⟨?_, by simp [foundS, markedS], ?_⟩
+      · cases foundB : b.validators.data[j]? with
+        | none => rfl
+        | some v =>
+          simp [unslashed_of_run before foundB (fun z read => by simp_all)]
+      · exact slashedRB_of_withdrawable config pulled anc fin foundP markedP (by omega)
+    have sameEpochA : getCurrentEpoch split = getCurrentEpoch a.state :=
+      UInt64.toNat_inj.mp (by omega)
+    have kept := rest.effectiveKept_of_same_epoch h.early sameEpochA j
+      (Array.getElem?_eq_some_iff.mp foundA).1
+    have read : balanceAt split j = effectiveAt a j := kept
+    simp only [p, ↓reduceIte, quotient, read, sameFork, le_refl]
+  · rw [← Finset.sum_filter]
+    have limit := pulled.validators.bound h.early
+    have registry := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+    have round (z : ℕ) (hz : z ∈ (Finset.range pulled.validators.data.size).filter P) :
+        (UInt64.ofNat z).toNat = z := by
+      have := Finset.mem_range.mp (Finset.mem_filter.mp hz).1
+      simp only [UInt64.toNat_ofNat']
+      omega
+    refine Finset.sum_le_sum_of_injOn UInt64.ofNat ?_ ?_ ?_ (fun _ _ _ => Nat.zero_le _)
+    · intro x hx y hy same
+      rw [← round x hx, ← round y hy, same]
+    · intro v hv
+      obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hv
+      obtain ⟨inside, px⟩ := Finset.mem_filter.mp hx
+      refine Finset.mem_filter.mpr ⟨Finset.mem_image.mpr ⟨x, inside, rfl⟩, ?_⟩
+      rw [round x hx]
+      exact px
+    · intro x hx
+      rw [round x hx]
+
+/-- The cut keys are in no class of `bud_sync`.
+
+A cut key is slashed at the split, and the flag persists to C.
+
+So it is not in `V` or a quorum class, and it is not in `SC`, which is unslashed at the split.
+
+It is in the split's registry, so it is not in `CS`. -/
+private theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
+    Disjoint (cutKeys config pulled anc fin split) (V ∪ K4 pulled counted V ∪ K5 counted V ∪
+      K6 pulled counted ∪ SC pulled counted split ∪ CS counted split) := by
+  rw [Finset.disjoint_left]
+  intro v cut member
+  simp only [cutKeys, Finset.mem_filter] at cut
+  obtain ⟨w, found, marked⟩ : ∃ w, split.validators.data[v.toNat]? = some w ∧ w.slashed = true := by
+    cases hw : split.validators.data[v.toNat]? <;> simp_all
+  obtain ⟨toCounted⟩ := h.toCounted
+  obtain ⟨u, foundC, markedC⟩ := toCounted.slashedPersistence v.toNat w found marked
+  have atCounted : slashedFlagAt counted v.toNat = some true := by
+    simp [slashedFlagAt, foundC, markedC]
+  simp only [Finset.mem_union] at member
+  rcases member with ((((inV | in4) | in5) | in6) | inSC) | inCS
+  · have unslashed := (h.voting v inV).2
+    simp [atCounted] at unslashed
+  · exact classes_unslashed (Finset.mem_union_left _ (Finset.mem_union_left _ in4))
+      atCounted
+  · exact classes_unslashed (pulled := pulled)
+      (Finset.mem_union_left _ (Finset.mem_union_right _ in5)) atCounted
+  · exact classes_unslashed (V := V) (Finset.mem_union_right _ in6) atCounted
+  · simp only [SC, Finset.mem_filter] at inSC
+    have fresh := inSC.2.2
+    simp [slashedFlagAt, found, marked] at fresh
+  · simp only [CS, Finset.mem_filter] at inCS
+    have := (Array.getElem?_eq_some_iff.mp found).1
+    omega
+
+/-- A sum is at most the sum of the floors of its parts, with the ceiling of the second part. -/
+private theorem floor_add_ceil_le (a b Q : ℕ) (pos : 0 < Q) :
+    (a + b) / Q ≤ a / Q + (b + Q - 1) / Q := by
+  refine Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul pos).mpr ?_)
+  have h1 := Nat.div_add_mod a Q
+  have h2 := Nat.mod_lt a pos
+  have h3 := Nat.div_add_mod (b + Q - 1) Q
+  have h4 := Nat.mod_lt (b + Q - 1) pos
+  generalize a / Q = qa at *
+  generalize (b + Q - 1) / Q = qb at *
+  generalize a % Q = ra at *
+  generalize (b + Q - 1) % Q = rb at *
+  have : (qa + qb).succ * Q = Q * qa + Q * qb + Q := by rw [Nat.succ_mul]; ring
+  rw [this]
+  omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- R1 from the count of its rounding bands.
 
 The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
@@ -16066,41 +16254,6 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
   refine (Finset.sum_le_sum fun i _ => (syncF_eq evs i).le).trans (moves.trans (le_of_eq ?_))
   dsimp only
   rw [sameEpoch]
-
-/-- The cut keys are in no class of `bud_sync`.
-
-A cut key is slashed at the split, and the flag persists to C.
-
-So it is not in `V` or a quorum class, and it is not in `SC`, which is unslashed at the split.
-
-It is in the split's registry, so it is not in `CS`. -/
-private theorem cut_disjoint (h : Setting config checks g split fin pulled anc counted V) :
-    Disjoint (cutKeys config pulled anc fin split) (V ∪ K4 pulled counted V ∪ K5 counted V ∪
-      K6 pulled counted ∪ SC pulled counted split ∪ CS counted split) := by
-  rw [Finset.disjoint_left]
-  intro v cut member
-  simp only [cutKeys, Finset.mem_filter] at cut
-  obtain ⟨w, found, marked⟩ : ∃ w, split.validators.data[v.toNat]? = some w ∧ w.slashed = true := by
-    cases hw : split.validators.data[v.toNat]? <;> simp_all
-  obtain ⟨toCounted⟩ := h.toCounted
-  obtain ⟨u, foundC, markedC⟩ := toCounted.slashedPersistence v.toNat w found marked
-  have atCounted : slashedFlagAt counted v.toNat = some true := by
-    simp [slashedFlagAt, foundC, markedC]
-  simp only [Finset.mem_union] at member
-  rcases member with ((((inV | in4) | in5) | in6) | inSC) | inCS
-  · have unslashed := (h.voting v inV).2
-    simp [atCounted] at unslashed
-  · exact classes_unslashed (Finset.mem_union_left _ (Finset.mem_union_left _ in4))
-      atCounted
-  · exact classes_unslashed (pulled := pulled)
-      (Finset.mem_union_left _ (Finset.mem_union_right _ in5)) atCounted
-  · exact classes_unslashed (V := V) (Finset.mem_union_right _ in6) atCounted
-  · simp only [SC, Finset.mem_filter] at inSC
-    have fresh := inSC.2.2
-    simp [slashedFlagAt, found, marked] at fresh
-  · simp only [CS, Finset.mem_filter] at inCS
-    have := (Array.getElem?_eq_some_iff.mp found).1
-    omega
 
 /-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
 
@@ -17745,23 +17898,6 @@ private theorem sum_SC_filter_positions (h : Setting config checks g split fin p
   (Finset.sum_filter _ _).trans ((sum_SC_positions h (fun i => if p i then f i else 0)).trans
     (Finset.sum_filter _ _).symm)
 
-/-- A sum is at most the sum of the floors of its parts, with the ceiling of the second part. -/
-private theorem floor_add_ceil_le (a b Q : ℕ) (pos : 0 < Q) :
-    (a + b) / Q ≤ a / Q + (b + Q - 1) / Q := by
-  refine Nat.lt_succ_iff.mp ((Nat.div_lt_iff_lt_mul pos).mpr ?_)
-  have h1 := Nat.div_add_mod a Q
-  have h2 := Nat.mod_lt a pos
-  have h3 := Nat.div_add_mod (b + Q - 1) Q
-  have h4 := Nat.mod_lt (b + Q - 1) pos
-  generalize a / Q = qa at *
-  generalize (b + Q - 1) / Q = qb at *
-  generalize a % Q = ra at *
-  generalize (b + Q - 1) % Q = rb at *
-  have : (qa + qb).succ * Q = Q * qa + Q * qb + Q := by rw [Nat.succ_mul]; ring
-  rw [this]
-  omega
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C slashes after the split, and that R neither slashes nor exits, keeps its exit late.
 
 The exit guard of its run from the finalized block holds along the run.
@@ -26258,142 +26394,6 @@ private theorem flow_split (h : Setting config checks g split fin pulled anc cou
           (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
           2 * (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) :=
   sorry
-
-/-- A replay inside one epoch whose steps all start past the cutoff records no event.
-
-The run starts at `b`, so each of its steps starts at the epoch of `b` or later.
-
-No landed lemma states this, so `cut_whistle` reads it here, for a cutoff before that epoch. -/
-private theorem balanceEvents_late {f : Fork} {b : BeaconState preset f}
-    {y : ForkedBeaconState preset} (tail : Run config checks ⟨f, b⟩ y)
-    (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch b)
-    {high : ℕ} (late : high + 1 < (getCurrentEpoch b).toNat) :
-    tail.balanceEvents high = .ok [] := by
-  refine Run.induction_of_same_epoch (fun _ r => r.balanceEvents high = .ok []) rfl ?_ ?_ tail
-    early same
-  · intro _ s _ _ _ _ _ pre _ prior
-    have started : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch s).toNat :=
-      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have skipped : ¬ (getCurrentEpoch s).toNat ≤ high + 1 := by omega
-    simp [Run.balanceEvents, prior, skipped, pure, Except.pure, bind, Except.bind]
-  · intro middle _ _ _ pre _ _ _ _ prior
-    have started : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch middle.state).toNat :=
-      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have skipped : ¬ (getCurrentEpoch middle.state).toNat ≤ high + 1 := by omega
-    simp [Run.balanceEvents, prior, skipped, pure, Except.pure, bind, Except.bind]
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The whistleblower credits of the shared run's last epoch fit the keys that it slashes.
-
-The run `pre` goes from `b` to the split, inside the split's epoch.
-
-A whistleblower credit lands in the proposer's block, so a key of any class can receive it.
-
-Each key slashed along `pre` pays the quotient of its effective balance at the slashing.
-
-That balance is the one at the split.
-
-It changes only at an epoch update, and `pre` is in one epoch.
-
-R's call reads each such key as slashed, since its withdrawable epoch is a slashing vector away.
-
-The sum is over keys that `SC` leaves out, because they are slashed at the split. -/
-private theorem cut_whistle (h : Setting config checks g split fin pulled anc counted V)
-    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
-    (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
-    (sameEpoch : getCurrentEpoch split = getCurrentEpoch b) (high : ℕ) (keys : Finset ℕ) :
-    ∑ i ∈ keys, whistC pre high i ≤
-      ∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
-          (fun v => ((b.validators.data[v.toNat]?).map (·.slashed)).getD false = false ∧
-            ((split.validators.data[v.toNat]?).map (·.slashed)).getD false = true ∧
-            (pinTerms config pulled anc fin).slashedRB v.toNat = true),
-        balanceAt split v.toNat / (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat := by
-  classical
-  obtain ⟨toPulled⟩ := h.toPulled
-  obtain ⟨events, replayed, bounded⟩ := Run.balanceEvents_bounded toB pre h.genesis h.early high
-  have scan := creditScan_sum_le keys id (fun s => decide (s = .slashings)) (fun _ => false) high
-    BalanceEvent.credits pre replayed fun e _ _ => by
-      simpa [keyCredit] using PinSplit5.keys_credits_le keys e
-  have limits := slashing_credits_le_limits events fun e member => (bounded e member).1
-  have slashings : (events.map fun e =>
-      if decide (e.source = .slashings) = true ∨ false = true then e.credits else 0).sum =
-      ((events.filter (·.source = .slashings)).map BalanceEvent.credits).sum := by
-    simp only [decide_eq_true_eq, Bool.false_eq_true, or_false]
-    rw [List.sum_map_ite (fun e : BalanceEvent preset => e.source = .slashings)
-      BalanceEvent.credits (fun _ => 0)]
-    simp
-  refine (scan.trans (slashings.le.trans limits)).trans ?_
-  by_cases late : high + 1 < (getCurrentEpoch b).toNat
-  · rw [balanceEvents_late pre h.early sameEpoch late] at replayed
-    cases replayed
-    simp
-  have endEpoch : (getCurrentEpoch split).toNat ≤ high + 1 := by rw [sameEpoch]; omega
-  let P : ℕ → Prop := fun j => ((b.validators.data[j]?).map (·.slashed)).getD false = false ∧
-    ((split.validators.data[j]?).map (·.slashed)).getD false = true ∧
-    (pinTerms config pulled anc fin).slashedRB j = true
-  let quotient := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
-  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
-  refine (slashing_credits_le toB pre h.genesis h.early h.caps.compounding high endEpoch
-    (Finset.range pulled.validators.data.size)
-    (fun j => if P j then balanceAt split j / quotient else 0) ?_ replayed).trans ?_
-  · intro a a' step contained j inside flip
-    obtain ⟨before, after, -⟩ := pre.contains_split step contained
-    have rest := (Run.nil.snoc step).append after
-    have sameFork : a.fork = fork := fork_eq_of_run before rest (Nat.le_refl _)
-    have size := Nat.lt_of_lt_of_le (Finset.mem_range.mp inside)
-      ((after.append toPulled).registryLifecycle.size_le)
-    refine ⟨Finset.mem_range.mpr size, ?_⟩
-    simp only [Bool.and_eq_true, Bool.not_eq_true'] at flip
-    obtain ⟨unslashedA, slashedA'⟩ := flip
-    rcases foundA : a.state.validators.data[j]? with _ | u
-    · simp [effectiveAt, foundA]
-    have clean : u.slashed = false := by simpa [foundA] using unslashedA
-    obtain ⟨w, foundA', marked⟩ :
-        ∃ w, a'.state.validators.data[j]? = some w ∧ w.slashed = true := by
-      cases found : a'.state.validators.data[j]? with
-      | none => simp [found] at slashedA'
-      | some w => exact ⟨w, rfl, by simpa [found] using slashedA'⟩
-    obtain ⟨_, foundS, markedS⟩ := after.slashedPersistence j w foundA' marked
-    obtain ⟨wP, foundP, markedP⟩ := (after.append toPulled).slashedPersistence j w foundA' marked
-    have startB : (getCurrentEpoch b).toNat ≤ (getCurrentEpoch a.state).toNat :=
-      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps before.chainSteps)
-    have endS : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch split).toNat :=
-      UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps rest.chainSteps)
-    have epochB : (getCurrentEpoch b).toNat = (getCurrentEpoch split).toNat := by rw [sameEpoch]
-    have withdrawable := ((rest.append toPulled).newly_slashed_withdrawableEpoch h.caps.activation
-      h.caps.compounding h.early h.delay j u wP foundA foundP clean markedP).2
-    have p : P j := by
-      refine ⟨?_, by simp [foundS, markedS], ?_⟩
-      · cases foundB : b.validators.data[j]? with
-        | none => rfl
-        | some v =>
-          simp [unslashed_of_run before foundB (fun z read => by simp_all)]
-      · exact slashedRB_of_withdrawable config pulled anc fin foundP markedP (by omega)
-    have sameEpochA : getCurrentEpoch split = getCurrentEpoch a.state :=
-      UInt64.toNat_inj.mp (by omega)
-    have kept := rest.effectiveKept_of_same_epoch h.early sameEpochA j
-      (Array.getElem?_eq_some_iff.mp foundA).1
-    have read : balanceAt split j = effectiveAt a j := kept
-    simp only [p, ↓reduceIte, quotient, read, sameFork, le_refl]
-  · rw [← Finset.sum_filter]
-    have limit := pulled.validators.bound h.early
-    have registry := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-    have round (z : ℕ) (hz : z ∈ (Finset.range pulled.validators.data.size).filter P) :
-        (UInt64.ofNat z).toNat = z := by
-      have := Finset.mem_range.mp (Finset.mem_filter.mp hz).1
-      simp only [UInt64.toNat_ofNat']
-      omega
-    refine Finset.sum_le_sum_of_injOn UInt64.ofNat ?_ ?_ ?_ (fun _ _ _ => Nat.zero_le _)
-    · intro x hx y hy same
-      rw [← round x hx, ← round y hy, same]
-    · intro v hv
-      obtain ⟨x, hx, rfl⟩ := Finset.mem_image.mp hv
-      obtain ⟨inside, px⟩ := Finset.mem_filter.mp hx
-      refine Finset.mem_filter.mpr ⟨Finset.mem_image.mpr ⟨x, inside, rfl⟩, ?_⟩
-      rw [round x hx]
-      exact px
-    · intro x hx
-      rw [round x hx]
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
