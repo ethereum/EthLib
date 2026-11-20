@@ -27,6 +27,7 @@ Lean core proves no such facts for `Except`, and every layer needs them.
 - Two functions that agree on every entry of a vector map it to one result.
 - A failed map fails on some input, and succeeds on every input before it.
 - A property that each step keeps holds after a successful fold.
+- A property of the state and a bound holds after a fold whose steps add a weight to the bound.
 - Two folds whose steps agree on every item of the list read the same result.
 - A fold whose steps fail only with errors of a property fails only with them.
 - A fold succeeds when each step succeeds and keeps an invariant that holds at the start.
@@ -477,6 +478,25 @@ theorem foldlM_ok_invariant {g : β → α → Except ε β} (P : β → Prop)
     rw [List.foldlM_cons, bind_ok_iff] at computed
     obtain ⟨middle, first, rest⟩ := computed
     exact foldlM_ok_invariant P step (step b x middle holds first) rest
+
+/-- A fold that adds a weight for each input to a bound keeps a property of the state and bound.
+
+It needs each successful step to keep the property, with the weight of its input added to the bound.
+
+The end then has the property with the start bound plus the sum of the weights. -/
+theorem foldlM_ok_weighted {α β ε : Type} {g : β → α → Except ε β} (P : β → Nat → Prop)
+    (weight : α → Nat) (step : ∀ b x b' c, P b c → g b x = .ok b' → P b' (c + weight x)) :
+    ∀ {xs : List α} {b b' : β} {c : Nat}, P b c → xs.foldlM g b = .ok b' →
+      P b' (c + (xs.map weight).sum)
+  | [], _, _, _, holds, computed => by
+    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    simpa using holds
+  | x :: _, b, _, c, holds, computed => by
+    rw [List.foldlM_cons, bind_ok_iff] at computed
+    obtain ⟨middle, first, rest⟩ := computed
+    have := foldlM_ok_weighted P weight step (step b x middle c holds first) rest
+    simpa [Nat.add_assoc] using this
 
 /-- A fold keeps a property when each step of an item of the list keeps it. -/
 theorem foldlM_ok_invariant_of_mem {g : β → α → Except ε β} (P : β → Prop) :

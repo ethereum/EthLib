@@ -23,6 +23,8 @@ A transaction that cannot enter the block makes the block invalid, with its own 
 
 The receipts of a body have the Bloom filters of their logs, and their cumulative gas never falls.
 
+The transactions of a body that runs give one receipt each.
+
 The DAO transfer runs only before Paris, at the block that the chain configuration names.
 
 Before Glamsterdam a body gives no block access list.
@@ -483,6 +485,17 @@ theorem applyTransactions_results_length {env : BlockEnvironment fork} {body : B
   obtain ⟨_, _, -, -, hReceipts, hResults⟩ := applyTransaction_results hStep
   rw [hResults, List.length_append, hBefore, hReceipts]
   rfl
+
+/-- The transactions of a body that runs give one receipt each. -/
+theorem applyTransactions_receipts_length {env : BlockEnvironment fork} {body : BodyState}
+    {transactions : List Transaction} {overrides : BodyOverrides} {output : BodyOutput fork}
+    (h : applyTransactions env body transactions overrides = .ok output) :
+    output.receipts.length = transactions.length := by
+  have count := foldlM_ok_weighted (fun (b : BodyOutput fork) c => b.receipts.length = c)
+    (fun _ => 1) (fun _ _ _ _ hBefore hStep => by
+      obtain ⟨_, _, -, -, hReceipts, -⟩ := applyTransaction_results hStep
+      rw [hReceipts, hBefore]) rfl h
+  simpa [List.map_const', List.sum_replicate_nat] using count
 
 /-- A transaction that cannot enter its block makes the block invalid, with its error. -/
 theorem applyTransaction_of_checkInclusion {env : BlockEnvironment fork} {index : Nat}

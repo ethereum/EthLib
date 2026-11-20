@@ -6,6 +6,7 @@ public import EthLib.Execution.Proofs.Rpc.Raw
 public import EthLib.Execution.Proofs.Blocks.Receipt
 public import EthLib.Execution.Proofs.Transactions.Inclusion
 public import EthLib.Execution.Proofs.Transactions.Process
+import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 
 /-!
 # Proofs: the receipt objects
@@ -14,6 +15,11 @@ The receipt objects of a block follow its receipts, one for each transaction, in
 
 Their logs are numbered from 0 across the block, and the lookup of one receipt keeps that number.
 
+The receipt objects of a block are built exactly when two conditions hold.
+
+- The block has as many receipts as transactions.
+- Each transaction has a hash, and a signature that names a sender at the fork of the block.
+
 From Byzantium, the status of a receipt object is `0x1` exactly when the receipt is a success.
 
 A receipt object has blob fields exactly for a blob transaction, with `2^17` blob gas per hash.
@@ -21,6 +27,8 @@ A receipt object has blob fields exactly for a blob transaction, with `2^17` blo
 From Dencun, its blob gas price is the base fee per blob gas at the excess blob gas of the header.
 
 In a valid view, take a canonical block after the lowest.
+
+Its receipt objects are built, and the lookups by block and by transaction return them.
 
 Each receipt object has the Bloom filter of its logs.
 
@@ -248,6 +256,70 @@ theorem receiptInfos_eq_ok {r : BlockRecord} {config : ChainConfig} {infos : Lis
       simpa [List.map_map, Function.comp_def] using this
     rw [e1, e2] at hri
     simpa [gasBefore, logsBefore] using hri
+
+/-- The object of a receipt is built when its transaction has a hash and a sender.
+
+Computing the address of a creation never fails, since each nonce is below `2^256`. -/
+private theorem exists_receiptInfo {r : BlockRecord} (config : ChainConfig)
+    (index before firstLog : Nat) {tx : Transaction} (receipt : Receipt r.fork)
+    (hs : ∃ sender, recoverSender r.fork tx = .ok sender)
+    (hh : ∃ hash, transactionHash tx = .ok hash) :
+    ∃ info, r.receiptInfo config index before firstLog tx receipt = .ok info := by
+  obtain ⟨sender, hs⟩ := hs
+  obtain ⟨hash, hh⟩ := hh
+  have hti := (transactionInfo_eq_ok (index := index)).mpr ⟨sender, hash, hs, hh, rfl⟩
+  obtain ⟨address, ha⟩ := Evm.createAddress_ok sender (BitVec.isLt tx.nonce)
+  unfold receiptInfo
+  cases tx.to with
+  | none =>
+    simp [hti, ha, bind, Except.bind, pure, Except.pure, Functor.map, Except.map, Except.mapError]
+  | some _ => simp [hti, bind, Except.bind, pure, Except.pure]
+
+/-- From any index, receipt objects are built when each transaction has a hash and a sender. -/
+private theorem exists_receiptInfosFrom {r : BlockRecord} (config : ChainConfig) :
+    ∀ {l : List (Transaction × Receipt r.fork)} (index before firstLog : Nat),
+      (∀ p ∈ l, (∃ sender, recoverSender r.fork p.1 = .ok sender) ∧
+        ∃ hash, transactionHash p.1 = .ok hash) →
+      ∃ infos, r.receiptInfosFrom config index before firstLog l = .ok infos := by
+  intro l
+  induction l with
+  | nil => exact fun _ _ _ _ => ⟨[], by simp only [receiptInfosFrom]⟩
+  | cons x l ih =>
+    intro index before firstLog hl
+    obtain ⟨tx, receipt⟩ := x
+    obtain ⟨hs, hh⟩ := hl (tx, receipt) List.mem_cons_self
+    obtain ⟨info, hinfo⟩ := exists_receiptInfo config index before firstLog receipt hs hh
+    obtain ⟨infos, hinfos⟩ := ih (index + 1) receipt.cumulativeGasUsed
+      (firstLog + receipt.logs.length) fun p hp => hl p (List.mem_cons_of_mem _ hp)
+    exact ⟨info :: infos, by
+      simp [receiptInfosFrom, hinfo, hinfos, bind, Except.bind, pure, Except.pure]⟩
+
+/-- The receipt objects of a block are built exactly when two conditions hold.
+
+- The block has as many receipts as transactions.
+- Each transaction has a hash, and its signature names a sender at the fork of the block.
+
+Creations add no condition: each nonce is below `2^256`, so its address is always computed. -/
+theorem exists_receiptInfos_eq_ok_iff {r : BlockRecord} {config : ChainConfig} :
+    (∃ infos, r.receiptInfos config = .ok infos) ↔
+      r.block.transactions.length = r.receipts.length ∧ ∀ tx ∈ r.block.transactions,
+        (∃ sender, recoverSender r.fork tx = .ok sender) ∧
+          ∃ hash, transactionHash tx = .ok hash := by
+  constructor
+  · rintro ⟨infos, h⟩
+    obtain ⟨hlen, hl, hall⟩ := receiptInfos_eq_ok h
+    refine ⟨hl, fun tx htx => ?_⟩
+    obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem htx
+    obtain ⟨tx, receipt, htx', -, hri⟩ := hall k (by omega)
+    rw [List.getElem?_eq_getElem hk, Option.some.injEq] at htx'
+    subst htx'
+    obtain ⟨ti, hti, -⟩ := receiptInfo_transactionInfo hri
+    obtain ⟨sender, hash, hs, hh, -⟩ := transactionInfo_eq_ok.mp hti
+    exact ⟨⟨sender, hs⟩, hash, hh⟩
+  · rintro ⟨hl, hall⟩
+    unfold receiptInfos
+    simp only [hl, ↓reduceIte]
+    exact exists_receiptInfosFrom config 0 0 0 fun ⟨tx, _⟩ hp => hall tx (List.of_mem_zip hp).1
 
 /-- The logs of some objects are numbered in order from the first log. -/
 private theorem logIndex_receiptInfosFrom {r : BlockRecord} {config : ChainConfig} :
@@ -622,6 +694,72 @@ theorem Valid.transactionReceipt_blockReceipts {v : ChainView} {checkSeal : Bool
   refine ⟨infos, ?_, hget⟩
   rw [blockReceipts_of_resolve hres, hinfos]
   rfl
+
+/-- In a valid view, take a canonical block after the lowest.
+
+It has one receipt for each of its transactions. -/
+theorem Valid.length_receipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal) {i : Nat}
+    (hi : i + 1 < v.canonical.length) :
+    v.canonical[i + 1].receipts.length = v.canonical[i + 1].block.transactions.length := by
+  obtain ⟨env, body, txs, htxs, hr⟩ := hv.receipts_run hi
+  rw [← hr]
+  exact applyTransactions_receipts_length htxs
+
+/-- In a valid view, take a canonical block after the lowest.
+
+Each of its transactions has a hash. -/
+theorem Valid.exists_transactionHash {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {i : Nat} (hi : i + 1 < v.canonical.length) :
+    ∀ tx ∈ v.canonical[i + 1].block.transactions, ∃ hash, transactionHash tx = .ok hash := by
+  intro tx htx
+  obtain ⟨-, result, hrun, -⟩ := hv.follows i hi
+  obtain ⟨-, -, -, hroots⟩ := Blocks.runBody_eq_ok.mp hrun
+  obtain ⟨values, hvalues, -⟩ := transactionsRoot_eq_ok_iff.mp (outputRoots_transactions hroots)
+  obtain ⟨bytes, -, hbytes⟩ := exists_mem_of_mapM_ok hvalues htx
+  exact ⟨_, by simp only [transactionHash, hbytes, bind, Except.bind, pure, Except.pure]; rfl⟩
+
+/-- In a valid view, take a canonical block after the lowest.
+
+Its receipt objects are built. -/
+theorem Valid.exists_receiptInfos {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {i : Nat} (hi : i + 1 < v.canonical.length) :
+    ∃ infos, v.canonical[i + 1].receiptInfos v.config = .ok infos :=
+  BlockRecord.exists_receiptInfos_eq_ok_iff.mpr ⟨(hv.length_receipts hi).symm, fun tx htx =>
+    ⟨hv.exists_recoverSender hi tx htx, hv.exists_transactionHash hi tx htx⟩⟩
+
+/-- In a valid view, take a parameter that resolves to a canonical block after the lowest.
+
+The receipts of the parameter are the receipt objects of that block, which are built. -/
+theorem Valid.exists_blockReceipts {v : ChainView} {checkSeal : Bool} (hv : v.Valid checkSeal)
+    {i : Nat} (hi : i + 1 < v.canonical.length) {p : BlockParam}
+    (hp : v.resolve p = .ok (some v.canonical[i + 1])) :
+    ∃ infos, v.canonical[i + 1].receiptInfos v.config = .ok infos ∧
+      v.blockReceipts p = .ok (some infos) := by
+  obtain ⟨infos, h⟩ := hv.exists_receiptInfos hi
+  refine ⟨infos, h, ?_⟩
+  rw [blockReceipts_of_resolve hp, h]
+  rfl
+
+/-- In a valid view, take a transaction that the lookup by hash finds in a canonical block.
+
+That block needs to come after the lowest.
+
+Its receipt is then the object at its index among the receipt objects of the block. -/
+theorem Valid.exists_transactionReceipt {v : ChainView} {checkSeal : Bool}
+    (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length) {hash : Hash32}
+    {tx : Transaction} {index : Nat}
+    (hf : v.findTransaction hash = some (v.canonical[i + 1], tx, index)) :
+    ∃ infos info, v.canonical[i + 1].receiptInfos v.config = .ok infos ∧
+      infos[index]? = some info ∧ v.transactionReceipt hash = .ok (some info) := by
+  obtain ⟨infos, h⟩ := hv.exists_receiptInfos hi
+  obtain ⟨-, hget, -⟩ := findTransaction_some hf
+  obtain ⟨hlen, hl, -⟩ := BlockRecord.receiptInfos_eq_ok h
+  have hk : index < infos.length := by
+    have := (List.getElem?_eq_some_iff.mp hget).1
+    omega
+  refine ⟨infos, infos[index], h, List.getElem?_eq_getElem hk, ?_⟩
+  simp [transactionReceipt, hf, h, bind, Except.bind, pure, Except.pure,
+    List.getElem?_eq_getElem hk]
 
 end ChainView
 

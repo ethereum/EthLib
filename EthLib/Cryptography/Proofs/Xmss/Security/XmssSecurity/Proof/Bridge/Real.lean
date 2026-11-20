@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Translate
 public import EthLib.Cryptography.Proofs.Xmss.Tree
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots
+public import EthLib.Cryptography.Proofs.Xmss.Reference
 
 /-!
 # EthLib's key generation under the programmed cache
