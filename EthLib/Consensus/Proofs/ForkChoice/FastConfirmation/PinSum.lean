@@ -6278,8 +6278,8 @@ private theorem deposits_scan_le (h : Setting config checks g split fin pulled a
   obtain ⟨X, hX⟩ : ∃ X : BalanceEvent preset → ℕ, ∀ e, X e =
       ∑ v ∈ P.filter (fun v => ¬ slashedFlagAt e.before.state v.toNat = some true),
         keyCredit v.toNat e := ⟨_, fun _ => rfl⟩
-  have scan := creditScan_sum_le S (fun _ => false) (fun s => decide (s = .deposits)) highC
-    (fun e => DirectSafety.funding_deposit_credit e - X e) tailC replayedC
+  have scan := creditScan_sum_le S UInt64.toNat (fun _ => false) (fun s => decide (s = .deposits))
+    highC (fun e => DirectSafety.funding_deposit_credit e - X e) tailC replayedC
     fun e member selected => by
       have := each e member (by simpa using selected)
       have := hX e
@@ -11330,7 +11330,7 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
     Run.balanceEvents_bounded toM inner h.genesis uEarly highC
   have scan : ∑ v ∈ S, (creditScan (fun s => decide (s = .rewards)) (fun _ => false) v.toNat highC
       inner).1 ≤ sourceCredits .rewards events := by
-    have := creditScan_sum_le S (fun s => decide (s = .rewards)) (fun _ => false) highC
+    have := creditScan_sum_le S UInt64.toNat (fun s => decide (s = .rewards)) (fun _ => false) highC
       (fun e => e.creditLimit) inner replayed fun e member _ =>
         sum_keyCredit_le_creditLimit S e (bounded e member).1
     simpa [sourceCredits] using this
@@ -12124,8 +12124,8 @@ private theorem scan_le_events (blockP slotP : BalanceSource → Bool) (p : Bala
     (replayed : tail.balanceEvents high = .ok events) :
     (creditScan blockP slotP v.toNat high tail).1 ≤
       ((events.filter fun e => p e.source).map (keyCredit v.toNat)).sum := by
-  have scan := creditScan_sum_le {v} blockP slotP high (keyCredit v.toNat) tail replayed
-    fun e _ _ => by simp
+  have scan := creditScan_sum_le {v} UInt64.toNat blockP slotP high (keyCredit v.toNat) tail
+    replayed fun e _ _ => by simp
   simp only [Finset.sum_singleton] at scan
   refine scan.trans (le_of_eq ?_)
   simp only [selects]
@@ -14187,7 +14187,7 @@ private theorem syncCr_gross_shared (h : Setting config checks g split fin pulle
     (v : ℕ) (positive : 0 < syncCr eventsF v) :
     0 < grossScan v high (fromFin.append tailC) := by
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨-, sync⟩ := creditScan_bounds ∅
+  obtain ⟨-, sync⟩ := creditScan_bounds (∅ : Finset ValidatorIndex) UInt64.toNat
     (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) high
     (fun _ => 0) fromFin replayedF (fun e _ _ => by simp)
   have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
@@ -16900,8 +16900,8 @@ private theorem whistC_sum_le_limits {g m y : ForkedBeaconState preset}
   obtain ⟨found, foundOk, bounded⟩ := Run.balanceEvents_bounded shared tail genesis early high
   rw [replayed] at foundOk
   cases foundOk
-  simpa [whistC] using creditScan_sum_le S (fun s => decide (s = .slashings)) (fun _ => false)
-    high (fun e => e.creditLimit) tail replayed fun e member _ =>
+  simpa [whistC] using creditScan_sum_le S UInt64.toNat (fun s => decide (s = .slashings))
+    (fun _ => false) high (fun e => e.creditLimit) tail replayed fun e member _ =>
       sum_keyCredit_le_creditLimit S e (bounded e member).1
 
 /-- The positions of the keys slashed on C's branch after the split.
@@ -17866,7 +17866,7 @@ private theorem syncCr_gross (h : Setting config checks g split fin pulled anc c
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (v : ℕ) (positive : 0 < syncCr eventsC v) : 0 < grossScan v highC tailC := by
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨-, sync⟩ := creditScan_bounds ∅
+  obtain ⟨-, sync⟩ := creditScan_bounds (∅ : Finset ValidatorIndex) UInt64.toNat
     (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) highC
     (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
   have bound := sync (fun s => decide (s = .sync)) (Or.inl fun s covered => by
@@ -18439,7 +18439,7 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
   -- the credits that the slack reads, and the bands that they bring
   obtain ⟨grossP, grossW, grossS, hbC, consBand⟩ :=
     credit_band_bounds h fromFin replayedF' tailC highC endEpochC replayedC small
-  obtain ⟨-, credits⟩ := PinSplit.creditScan_bounds ∅ (fun _ => false)
+  obtain ⟨-, credits⟩ := PinSplit.creditScan_bounds ∅ UInt64.toNat (fun _ => false)
     (fun s => decide (s = .deposits)) highC (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
   have dep := credits (fun s => decide (s = .deposits))
     (Or.inr fun electra early replayed i => PinSplit5.block_deposit_zero electra early replayed i)
