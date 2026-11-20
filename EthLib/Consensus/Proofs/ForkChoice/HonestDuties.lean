@@ -421,8 +421,7 @@ private theorem readsAttestation_firstSeat {config : Config} {store : Store pres
       (mem_getActiveValidatorIndices_of_getBeaconCommittee committeeOk
         (member ▸ Array.getElem_mem seated))
   obtain ⟨domain, domainOk⟩ := computeDomain_total config DOMAIN_BEACON_ATTESTER
-    (if indexed.data.target.epoch < state.forkVersions.epoch then
-      state.forkVersions.previousVersion else state.forkVersions.currentVersion)
+    (state.forkVersions.versionAt indexed.data.target.epoch)
     state.genesisValidatorsRoot
   obtain ⟨root, rootOk⟩ := computeSigningRoot_total indexed.data domain
   have sortedOne : sortedSet [v] = [v] := by
