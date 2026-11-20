@@ -33,6 +33,9 @@ For every standing, message ID and validation that a client passes:
 - So an RPC sends each message it forwards at most once to each peer.
   This needs a positive lifetime of the seen cache, and no mesh holding a peer twice before the RPC.
   It also needs each explicit peer to be listed once and to be outside every mesh.
+- An RPC keeps the fanout.
+- If the topics of the peers list each peer at most once before the RPC, they do after it.
+  When they do, the peers that announced a topic appear once each.
 -/
 
 @[expose] public section
@@ -130,6 +133,25 @@ theorem backoffEnd_fold_mem (t : String) (ends : Nat) (l : List PeerId) (q : Pee
       exact Nat.le_max_right _ _
     · exact ih hq' _
 
+/-- A subscription change keeps each peer listed at most once among the topics of the peers.
+
+It needs each peer to be listed at most once before. -/
+theorem applySubscription_nodup (src : PeerId) (pt : List (PeerId × List String)) (sub : SubOpts)
+    (h : (pt.map (·.1)).Nodup) : ((applySubscription src pt sub).map (·.1)).Nodup := by
+  simp only [applySubscription, List.map_cons, List.nodup_cons]
+  refine ⟨fun hm => ?_, (List.filter_sublist.map _).nodup h⟩
+  obtain ⟨e, he, hes⟩ := List.mem_map.1 hm
+  have := (List.mem_filter.1 he).2
+  simp [hes] at this
+
+/-- The peers that announced a topic appear once each.
+
+It needs each peer to be listed at most once among the topics of the peers. -/
+theorem topicPeers_nodup {s : RouterState} (h : (s.peerTopics.map (·.1)).Nodup) (t : String) :
+    (topicPeers s t).Nodup := by
+  unfold topicPeers
+  exact (List.filter_sublist.map _).nodup h
+
 /-- Inserting an ID into the seen cache keeps every ID that it held. -/
 private theorem contains_insert_mono (c : SeenCache) (now ttl : Nat) (id id' : MessageId)
     (h : c.contains now ttl id' = true) : (c.insert now id).contains now ttl id' = true := by
@@ -177,7 +199,9 @@ private theorem graft_cases :
       · exact Or.inr (Classical.byContradiction fun h' => h5 ⟨h, h'⟩)
     · simp [receiveGraft, h1, h2, h3, h4, h5]
 
-/-- A GRAFT keeps the topics, the explicit and outbound peers, the cache and the other outputs. -/
+/-- A GRAFT keeps the topics, the explicit and outbound peers, the cache and the other outputs.
+
+It also keeps the fanout and the topics of the peers. -/
 private theorem graft_fields :
     (receiveGraft p backoffMs now src (s, out) g).1.topics = s.topics ∧
     (receiveGraft p backoffMs now src (s, out) g).1.explicit = s.explicit ∧
@@ -186,7 +210,9 @@ private theorem graft_fields :
     (receiveGraft p backoffMs now src (s, out) g).2.forward = out.forward ∧
     (receiveGraft p backoffMs now src (s, out) g).2.delivered = out.delivered ∧
     (receiveGraft p backoffMs now src (s, out) g).2.answers = out.answers ∧
-    (receiveGraft p backoffMs now src (s, out) g).1.seen = s.seen := by
+    (receiveGraft p backoffMs now src (s, out) g).1.seen = s.seen ∧
+    (receiveGraft p backoffMs now src (s, out) g).1.fanout = s.fanout ∧
+    (receiveGraft p backoffMs now src (s, out) g).1.peerTopics = s.peerTopics := by
   rcases graft_cases p backoffMs now src s out g with
     ⟨_, h⟩ | ⟨_, _, _, h⟩ | ⟨_, _, h⟩ | ⟨_, _, _, _, _, h⟩ <;> simp [h]
 
@@ -449,18 +475,23 @@ end Message
 
 section Prune
 
-/-- A PRUNE only removes a peer from a mesh, and leaves the topics, peers and caches. -/
+/-- A PRUNE only removes a peer from a mesh, and leaves the topics, peers and caches.
+
+It also keeps the fanout and the topics of the peers. -/
 private theorem prune_step (pruneBackoffMs now : Nat) (src : PeerId) (s : RouterState)
     (q : Prune) :
     (receivePrune pruneBackoffMs now src s q).topics = s.topics ∧
     (receivePrune pruneBackoffMs now src s q).explicit = s.explicit ∧
     (receivePrune pruneBackoffMs now src s q).mcache = s.mcache ∧
     (receivePrune pruneBackoffMs now src s q).seen = s.seen ∧
+    (receivePrune pruneBackoffMs now src s q).fanout = s.fanout ∧
+    (receivePrune pruneBackoffMs now src s q).peerTopics = s.peerTopics ∧
     ∀ t x, x ∈ peersOf (receivePrune pruneBackoffMs now src s q).mesh t →
       x ∈ peersOf s.mesh t := by
   by_cases ht : q.topicId ∈ s.topics
   · refine ⟨by simp [receivePrune, ht], by simp [receivePrune, ht], by simp [receivePrune, ht],
-      by simp [receivePrune, ht], fun t x hx => ?_⟩
+      by simp [receivePrune, ht], by simp [receivePrune, ht], by simp [receivePrune, ht],
+      fun t x hx => ?_⟩
     simp only [receivePrune, ht, not_true_eq_false, ↓reduceIte, peersOf_setPeers] at hx
     by_cases h : t = q.topicId
     · simp only [h, ↓reduceIte, List.mem_filter] at hx
@@ -468,7 +499,7 @@ private theorem prune_step (pruneBackoffMs now : Nat) (src : PeerId) (s : Router
     · simpa [h] using hx
   · have e : receivePrune pruneBackoffMs now src s q = s := by simp [receivePrune, ht]
     rw [e]
-    exact ⟨rfl, rfl, rfl, rfl, fun t x hx => hx⟩
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun t x hx => hx⟩
 
 /-- A PRUNE keeps each mesh free of a repeated peer.
 
@@ -577,7 +608,7 @@ private theorem graft_fold (a1 : RouterState × Out) (l : List Graft) :
     exact ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11⟩
   rintro ⟨s, o⟩ g hg ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13⟩
   simp only at h1 h2 h3 h4 h5 h6 h7 h8 h9 h10 h11 h12 h13
-  obtain ⟨f1, f2, f3, f4, f5, f6, f7, f8⟩ := graft_fields p backoffMs now src s o g
+  obtain ⟨f1, f2, f3, f4, f5, f6, f7, f8, -⟩ := graft_fields p backoffMs now src s o g
   have S1 := graft_step_backoff p backoffMs now src s o g
   have S2 := graft_step_sublist p backoffMs now src s o g
   have S3 := graft_step_mesh p backoffMs now src s o g
@@ -755,7 +786,7 @@ private theorem prune_fold (s : RouterState) (l : List Prune) :
     r.mcache = s.mcache ∧ r.seen = s.seen ∧ ∀ t x, x ∈ peersOf r.mesh t → x ∈ peersOf s.mesh t)
     (receivePrune pruneBackoffMs now src) ?_ ⟨rfl, rfl, rfl, rfl, fun t x hx => hx⟩
   intro r q _ ⟨h1, h2, h3, h4, h5⟩
-  obtain ⟨p1, p2, p3, p4, p5⟩ := prune_step pruneBackoffMs now src r q
+  obtain ⟨p1, p2, p3, p4, -, -, p5⟩ := prune_step pruneBackoffMs now src r q
   exact ⟨p1.trans h1, p2.trans h2, p3.trans h3, p4.trans h4, fun t x hx => h5 t x (p5 t x hx)⟩
 
 /-- The IHAVEs change no output but the control messages, drop none, and add only IWANTs. -/
@@ -1350,6 +1381,61 @@ theorem receiveRpc_mesh_nodup (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String)
     rw [hr1, hs3]
     exact foldl_inv _ (fun r : RouterState => ∀ t, (peersOf r.mesh t).Nodup) _
       (fun r q _ hr => prune_step_nodup pruneBackoffMs now src r q hr) h2 t
+
+/-- An RPC keeps the fanout, and changes the topics of the peers only by its subscriptions. -/
+private theorem receiveRpc_lists :
+    (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.fanout =
+      s.fanout ∧
+    ((receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.peerTopics =
+        s.peerTopics ∨
+      (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.peerTopics =
+        rpc.subscriptions.foldl (applySubscription src) s.peerTopics) := by
+  by_cases hn : (standing src).belowGraylist = true ∧ src ∉ s.explicit
+  · rw [receiveRpc_graylist p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn.1
+      hn.2]
+    exact ⟨rfl, Or.inl rfl⟩
+  · obtain ⟨pt, s1, a1, a2, s3, hpt, hs1, ha1, ha2, hs3, hr1, -⟩ :=
+      receiveRpc_eq p backoffMs pruneBackoffMs standing msgId validate now src rpc s hn
+    subst hs1
+    obtain ⟨⟨se, mc, e1, -⟩, -⟩ := message_fold p now msgId validate { s with peerTopics := pt }
+      rpc.publish
+    rw [← ha1] at e1
+    have h1 : a1.1.fanout = s.fanout ∧ a1.1.peerTopics = pt := by
+      rw [e1]
+      exact ⟨rfl, rfl⟩
+    have h2 : a2.1.fanout = s.fanout ∧ a2.1.peerTopics = pt := by
+      rw [ha2]
+      refine foldl_inv _ (fun a : RouterState × Out => a.1.fanout = s.fanout ∧
+        a.1.peerTopics = pt) _ ?_ h1
+      rintro ⟨s', o⟩ g - ⟨hf, hp⟩
+      obtain ⟨-, -, -, -, -, -, -, -, gf, gp⟩ := graft_fields p backoffMs now src s' o g
+      exact ⟨gf.trans hf, gp.trans hp⟩
+    have h3 : s3.fanout = s.fanout ∧ s3.peerTopics = pt := by
+      rw [hs3]
+      refine foldl_inv _ (fun r : RouterState => r.fanout = s.fanout ∧ r.peerTopics = pt) _ ?_ h2
+      intro r q _ ⟨hf, hp⟩
+      obtain ⟨-, -, -, -, qf, qp, -⟩ := prune_step pruneBackoffMs now src r q
+      exact ⟨qf.trans hf, qp.trans hp⟩
+    rw [hr1]
+    exact ⟨h3.1, Or.inr (h3.2.trans hpt)⟩
+
+/-- An RPC keeps the fanout. -/
+theorem receiveRpc_fanout :
+    (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1.fanout =
+      s.fanout :=
+  (receiveRpc_lists p backoffMs pruneBackoffMs standing msgId validate now src rpc s).1
+
+/-- An RPC keeps each peer listed at most once among the topics of the peers.
+
+It needs each peer to be listed at most once before the RPC. -/
+theorem receiveRpc_peerTopics_nodup (h : (s.peerTopics.map (·.1)).Nodup) :
+    ((receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc
+      s).1.peerTopics.map (·.1)).Nodup := by
+  rcases (receiveRpc_lists p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2
+    with e | e <;> rw [e]
+  · exact h
+  · exact foldl_inv _ (fun pt : List (PeerId × List String) => (pt.map (·.1)).Nodup) _
+      (fun pt sub _ hpt => applySubscription_nodup src pt sub hpt) h
 
 /-- Distinct messages, each sent to a list of peers that repeats none, give distinct pairs. -/
 private theorem pairs_nodup (ts : Message → List PeerId) (l : List Message) (hl : l.Nodup)
