@@ -5,6 +5,8 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.KeyedSigner
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.KeyedReasons
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -13,11 +15,15 @@ Source: the leanXMSS specification draft, section "Security".
 
 The theorem holds in the random oracle model.
 
-Take an adversary whose experiment makes at most `q >= 1` hash calls.
+The game's signer keeps its key across requests, as a real signer does.
+
+Take an adversary whose game with the note's stateless signer makes at most `q >= 1` hash calls.
 
 It forges a signature with probability at most `q / 2^127`.
 
-`q` counts every hash call of the experiment, the signer's and key generation's included.
+`q` counts every hash call of that game, the signer's and key generation's included.
+
+Both signers return the same signatures, so the adversary forges in both games equally often.
 
 Key generation alone makes about `2^23.7` calls.
 
@@ -46,11 +52,15 @@ It compares them with a model of the scheme with precomputed keys, its own game-
 - EthLib's adversary is one of the model's.
 - EthLib's game wins as often as the real game of the proof.
 
-EthLib's signer gets the seed `S_0` and re-derives `S` and `P` with two hash calls.
+The stateless signer gets the seed `S_0` and derives `S` and `P` again with two hash calls.
 
 Key generation made those calls first, so they return cached answers and change nothing.
 
 They still count toward the budget `q`, so the bound holds as stated.
+
+The game's signer reads its trees from its key instead of rebuilding them.
+
+Every call those trees stand for was made before, so the oracle's cache answers them alike.
 
 A variant game has a signer that replies with its error, which tells which layer failed.
 

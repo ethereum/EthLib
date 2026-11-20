@@ -236,42 +236,42 @@ theorem prEvent_prfGame_ideal_le (adversary : ReasonAdversary) {qH r : ℕ}
     ⟨Or.inl hE, enncard_le_of_mem_support_prfGame adversary hh hr hz⟩).trans
     (failsAtMost_prfGame (gameQueries qH r) adversary hr (∅, ∅) fun _ _ _ _ _ h => by simp at h)
 
-/-- **The failure of some signing request.**
+/-- **The failure of some signing request of the stateless signer.**
 
 The adversary makes at most `qH` hash queries and `r` signing requests.
 
-Let `q` be the budget of the game's hash calls.
+Let `q` be the bound on the hash calls of the stateless game, for `qH` and `r`.
 
 Some request fails with probability at most `2 q / 2^256 + r (q / 2^95 + 2 exp(-4000))`. -/
-theorem signingFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
+theorem statelessSigningFailure_le (adversary : ReasonAdversary) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    signingFailure adversary ≤
+    statelessSigningFailure adversary ≤
       2 * (gameQueries qH r : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ +
         r * ((gameQueries qH r : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000))) :=
   (signingFailure_le_prfGame adversary hh hr).trans <| by
     rw [add_comm]
     exact add_le_add_right (prEvent_prfGame_ideal_le adversary hh hr) _
 
-/-- **leanXMSS with a signer that reveals its reasons, with its failure term bounded.**
+/-- **The stateless signer that reveals its reasons, with its failure term bounded.**
 
-Take an adversary whose reduction to the theorem's game makes at most `q >= 1` hash calls.
+Take an adversary whose reduction to the stateless game makes at most `q >= 1` hash calls.
 
 The adversary itself makes at most `qH` hash queries and `r` signing requests.
 
-Let `Q` be the budget of the game's hash calls, for the same adversary in this game.
+Let `Q` be the bound on the hash calls of the stateless game, for the same adversary.
 
 The bound says nothing from about `2^31` requests, since its last term is quadratic in `r`.
 
 It forges with probability at most `q / 2^127 + 2 Q / 2^256 + r (Q / 2^95 + 2 exp(-4000))`. -/
-theorem reasonForgeAdvantage_le_bounded (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
+theorem statelessReasonForgeAdvantage_le_bounded (q : ℕ) (hq : 1 ≤ q) (adversary : ReasonAdversary)
     (hbound : HasHashQueryBound (hideReasons adversary) q) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    reasonForgeAdvantage adversary ≤
+    statelessReasonForgeAdvantage adversary ≤
       q / ((2 ^ 127 : ℕ) : ℝ≥0∞) + (2 * (gameQueries qH r : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ +
         r * ((gameQueries qH r : ℝ≥0∞) / 2 ^ 95 + 2 * ENNReal.ofReal (Real.exp (-4000)))) :=
-  (reasonForgeAdvantage_le_add q hq adversary hbound).trans
-    (add_le_add_right (signingFailure_le adversary hh hr) _)
+  (statelessReasonForgeAdvantage_le_add q hq adversary hbound).trans
+    (add_le_add_right (statelessSigningFailure_le adversary hh hr) _)
 
 end EthLib.Cryptography.Xmss.Unforgeability
