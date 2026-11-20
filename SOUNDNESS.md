@@ -688,6 +688,10 @@ It is the public key recovery of SEC 1 v2 §4.1.6, with `x_R = r` only.
 By it, recovery returns `Q` exactly when `r` and `s` lie in `[1, n - 1]` and `R = (r, y)` lies on the curve.
 The parity of `y` must be the recovery id.
 `Q` must be a point of the curve other than `O`, equal to `(s / r) R - (e / r) G`.
+
+`recoverExport_eq` (`Proofs/Exports/Secp256k1.lean`) proves that the fast export returns the same bytes or error as the shared readers, recovery and encoding.
+The proof uses `RecoveryMul.mul_eq` to identify the signed scalar chain with joint multiplication on the curve.
+
 `verify_lowS_unique` (`Proofs/Secp256k1/Malleability.lean`) proves that two low-s signatures with one `r` that verify are equal, under the same bound.
 `verify_iff_s_eq_or_neg` assumes the same bound and a valid signature `(r, s)`.
 Under them, `(r, s')` verifies under the same key and hash exactly when `s'` is `s` or `n - s`.

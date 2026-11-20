@@ -3,7 +3,7 @@ module
 /-!
 # Inverses in a prime field
 
-The inverse of `a` mod `m` comes from the extended Euclidean algorithm on `a` and `m`.
+The extended Euclidean algorithm gives the inverse of `a` mod `m`.
 
 It is Algorithm 2.142 of the Handbook of Applied Cryptography, chapter 2:
 <https://cacr.uwaterloo.ca/hac/about/chap2.pdf>.
@@ -11,6 +11,8 @@ It is Algorithm 2.142 of the Handbook of Applied Cryptography, chapter 2:
 The algorithm finds `s` with `s * a = gcd(a, m) mod m`.
 
 When `m` is prime and `a` is not zero, the gcd is `1`, so `s` is the inverse of `a`.
+
+For an odd prime modulus, Fermat's little theorem also gives the inverse as `a ^ (m - 2)`.
 -/
 
 @[expose] public section
@@ -41,5 +43,11 @@ The result is the coefficient of the gcd, reduced mod `m`.
 When `m` is prime, it is the inverse of `a` for `a != 0`, and it sends `0` to `0`. -/
 def Fin.inverse {m : Nat} [NeZero m] (a : Fin m) : Fin m :=
   Fin.ofNat m (euclid a.val m 1 0 % m).toNat
+
+/-- The inverse of `a` mod an odd prime `m`, by Fermat's little theorem.
+
+It sends `0` to `0`. -/
+@[inline] def Fin.inversePrime {m : Nat} (a : Fin m) : Fin m :=
+  Fin.npow a (m - 2)
 
 end EthLib.Cryptography

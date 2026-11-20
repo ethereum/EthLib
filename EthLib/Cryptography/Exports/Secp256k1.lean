@@ -79,18 +79,29 @@ def isLowSExport (signature : ByteArray) : Result UInt8 := runSecp256k1 do
   let (_, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
   return if Ecdsa.isLowS s then 1 else 0
 
+/-- Read 32 big-endian bytes into the four words used by recovery. -/
+@[inline] def readRecoveryWords (bytes : ByteArray) (start : Nat)
+    (h : start + 32 ≤ bytes.size) : Fp.RecoveryField.Raw :=
+  Base.withByteArrayWords32 bytes start h fun a b c d => ⟨d, c, b, a⟩
+
 /-- The public key that signed a hash, from the signature and a recovery id of `0` or `1`.
 
 It comes back in the 65-byte uncompressed encoding. -/
 @[export eth_secp256k1_recover]
 def recoverExport (hash signature : ByteArray) (recoveryId : UInt8) : Result ByteArray :=
   runSecp256k1 do
-    let h ← readHash hash
-    let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
-    if hid : recoveryId.toNat < 2 then
-      let q ← Ecdsa.recover h r s ⟨recoveryId.toNat, hid⟩
-      return q.encodeUncompressed
-    else throw (.badRecoveryId recoveryId)
+    if hh : hash.size = HASH_LEN then
+      if hs : signature.size = SIGNATURE_LEN then
+        have hh' : hash.size = 32 := by simpa only [HASH_LEN] using hh
+        have hs' : signature.size = 64 := by simpa only [SIGNATURE_LEN] using hs
+        if hid : recoveryId.toNat < 2 then
+          let r := readRecoveryWords signature 0 (by omega)
+          let s := readRecoveryWords signature 32 (by omega)
+          let digest := readRecoveryWords hash 0 (by omega)
+          Ecdsa.recoverEncodedFromWords digest r s ⟨recoveryId.toNat, hid⟩
+        else throw (.badRecoveryId recoveryId)
+      else throw (.badSignatureSize signature.size)
+    else throw (.badHashSize hash.size)
 
 /-- The signature of a hash by SEC 1 v2 §4.1.3 and RFC 6979, with the low `s` of EIP-2.
 

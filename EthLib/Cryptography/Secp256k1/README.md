@@ -28,7 +28,16 @@ The specification is written to be read first.
 Where it runs on Montgomery limbs for speed, theorems tie each step to the plain computation.
 Points are in affine coordinates, as SEC 1 prints them.
 Scalar multiplication works on Jacobian coordinates, on Montgomery limbs, and converts back once.
-Inverses are computed by the extended Euclidean algorithm.
+The `Fin` field inverses use the extended Euclidean algorithm.
+The recovery export computes its two inverses in blocks of divsteps and checks each candidate by multiplication.
+The export uses the secp256k1 endomorphism to split the variable scalar into two signed parts.
+The fixed generator scalar splits at bit 128, and the four parts share one doubling chain.
+The generator uses fourteen-bit windows.
+For an affine variable point, six table entries share a denominator.
+A joint digit selects both signed contributions for one addition.
+The fallback uses five-bit windows for the variable point.
+In this chain, Montgomery products use four 64-bit words and the identity
+`2^256 = 2^32 + 977 mod p` to reduce each step.
 The files build on one another in this order:
 
 | File | Contents |
@@ -37,6 +46,9 @@ The files build on one another in this order:
 | `Curve.lean` | the points, and the addition rule of SEC 1 §2.2.1 |
 | `Encoding.lean` | the 33-byte and 65-byte encodings, and their decoding |
 | `Ecdsa.lean` | verification, and the low-s rule of EIP-2 |
+| `RecoveryField.lean` | four-word Montgomery arithmetic for recovery |
+| `RecoveryInverse.lean` | checked modular inversion for recovery |
+| `RecoveryMul.lean` | simultaneous multiplication for public key recovery |
 | `Recovery.lean` | public key recovery |
 | `Sign.lean` | signing, with the nonce of RFC 6979 |
 | `Ecdh.lean` | the Diffie-Hellman exchange |
@@ -54,7 +66,7 @@ From there they reach Python:
 | --- | --- | --- |
 | `Ecdsa.verify` | `eth_secp256k1_verify` | `secp256k1.verify` |
 | `Ecdsa.isLowS` | `eth_secp256k1_is_low_s` | `secp256k1.is_low_s` |
-| `Ecdsa.recover` | `eth_secp256k1_recover` | `secp256k1.recover` |
+| `Ecdsa.recoverEncodedFromWords` | `eth_secp256k1_recover` | `secp256k1.recover` |
 | `Ecdsa.sign` | `eth_secp256k1_sign` | `secp256k1.sign` |
 | `ecdh` | `eth_secp256k1_ecdh` | `secp256k1.ecdh` |
 | `addressOfPrivateKey` | `eth_secp256k1_address` | `secp256k1.address` |

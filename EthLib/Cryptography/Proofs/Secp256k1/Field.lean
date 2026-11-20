@@ -244,6 +244,11 @@ theorem toZMod_pow (a : Fp) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = to
 /-- `p = 3 mod 4`, which gives the square root its closed form. -/
 theorem modulus_mod_four : modulus % 4 = 3 := by decide
 
+/-- The square root checks the candidate from the exponent `(p + 1) / 4`. -/
+theorem sqrt_eq_ite_pow (a : Fp) :
+    a.sqrt = let c := a.pow ((modulus + 1) / 4); if c * c = a then some c else none :=
+  rfl
+
 /-- A root that `sqrt` returns squares to its input. -/
 theorem sqrt_mul_self {a c : Fp} (h : a.sqrt = some c) : toZMod c * toZMod c = toZMod a := by
   simp only [sqrt] at h

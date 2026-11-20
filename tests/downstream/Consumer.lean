@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Hex
 public import EthLib.Cryptography.Bls.Fp12
 public import EthLib.Cryptography.Hash.Keccak
+public import EthLib.Cryptography.Secp256k1.Ecdsa
 public import EthLib.Execution.Proofs.Transactions.Envelope
 public import EthLib.Networking.Proofs.Quic.Frame
 public import EthLib.Networking.Proofs.Quic.Packet
@@ -37,6 +38,32 @@ example (a b : Cryptography.Bls.Fp12) :
         (a.c0 + a.c1) * (b.c0 + b.c1) - a.c0 * b.c0 - a.c1 * b.c1⟩ := by
   unfold Cryptography.Bls.Fp12.mul
   rfl
+
+section
+open Cryptography.Jacobian Cryptography.Secp256k1
+
+-- A downstream proof unfolds the hash reader, coordinate writer and scalar inverse.
+example (hash : Vector UInt8 32) :
+    Ecdsa.hashToInt hash = Base.bytesToNat hash.toList := rfl
+
+example (x : Fp) : x.toBytes = Base.natToBytes 32 x.val := rfl
+
+example (a : Fn) : a.inv = Cryptography.Fin.inverse a := rfl
+
+-- The generated equations are used to rewrite both cases of the shared scalar loop.
+example (a : Fp) (p q pq : Coords Fp) (k l : Nat) :
+    Coords.mulAddAux a p q pq 0 k l = Coords.infinity :=
+  Coords.mulAddAux.eq_1 a p q pq k l
+
+example (a : Fp) (p q pq : Coords Fp) (fuel k l : Nat) :
+    Coords.mulAddAux a p q pq (fuel + 1) k l =
+      let acc := Coords.double a (Coords.mulAddAux a p q pq fuel (k / 2) (l / 2))
+      if k % 2 = 1 then
+        if l % 2 = 1 then Coords.add a acc pq else Coords.add a acc p
+      else if l % 2 = 1 then Coords.add a acc q else acc :=
+  Coords.mulAddAux.eq_2 a p q pq k l fuel
+
+end
 
 -- A proof that its own RLP decoder is right reads back each encoding through this theorem.
 example (x : Serialization.Rlp.Item) (b : ByteArray) (h : Serialization.Rlp.encode x = .ok b) :
