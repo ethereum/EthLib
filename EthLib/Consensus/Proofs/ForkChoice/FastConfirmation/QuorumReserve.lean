@@ -199,8 +199,6 @@ structure PinTerms (preset : Preset) where
   perIncrement : ℕ
   depthFin : ℕ
   scoreMaxFin : ℕ
-  slashCharge : ℕ
-  consolidationGain : ℕ
   otherGain : ℕ
   keptArm : ℕ → Bool
   gainHigh : Bool
@@ -886,8 +884,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     branchR, late, syncSeats, rise, fall, positions, current, exitingRise, exitingCredits,
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
     proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
-    consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin, slashCharge,
-    consolidationGain,
+    consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin,
     otherGain, keptArm,
     creditLow := (33 * depth * consolidationGain + 11 * depth * otherGain +
       30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /

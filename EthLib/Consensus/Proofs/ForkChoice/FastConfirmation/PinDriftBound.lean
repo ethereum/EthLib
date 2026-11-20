@@ -7517,7 +7517,7 @@ private def syncF (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
 
 The effective-balance drop of R's initial penalty is at most one increment, by `slashBand`.
 
-`branchR` charges each such key `slashCharge`, at least one increment. -/
+`branchR` charges each such key the slash charge, at least one increment. -/
 private def slashR (t : PinTerms preset) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0
 
@@ -7683,9 +7683,9 @@ private def flagRate (t : PinTerms preset) : ℕ :=
 
 /-- The leak of one increment over the window, at the largest score of the finalized state.
 
-It is the leak part of `slashCharge`, read at one increment.
+It is the leak part of the slash charge, read at one increment.
 
-`slashCharge` covers it and the flag gain of two windows. -/
+The slash charge covers it and the flag gain of two windows. -/
 private def slashLeak (config : Config) (fork : Fork) (t : PinTerms preset) : ℕ :=
   t.depthFin * (2 * t.perIncrement +
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
@@ -22713,13 +22713,13 @@ So is a sync debit of R that `rise` omits.
 
 The keys of `K4` weigh one, and those of `K5` weigh three.
 
-`slashCharge`'s surplus pays `flow_split_of`'s slashed term.
+The surplus of the slash charge pays `flow_split_of`'s slashed term.
 
 `branchR` also holds the unit of each key slashed on R's branch.
 
-The charge `slashCharge` is at least an increment and `2 * depthFin * flagRate`.
+The slash charge is at least an increment and `2 * depthFin * flagRate`.
 
-The flag rate is at most the rate of an increment, and `slashCharge` has four of it for each epoch.
+The flag rate is at most the rate of an increment, and the slash charge has four of it for each epoch.
 
 The `syncProposer` part of `proposerCredit` is not used by `credR`.
 
@@ -33618,7 +33618,7 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
 
 /-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
 
-They also take `slashCharge`'s surplus over R's slashed keys and a tenth of the keys' credits.
+They also take the surplus of the slash charge over R's slashed keys and a tenth of the keys' credits.
 
 The bound is scaled by ten, so the tenth is exact.
 
