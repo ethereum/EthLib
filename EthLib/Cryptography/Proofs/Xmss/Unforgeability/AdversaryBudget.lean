@@ -185,13 +185,27 @@ theorem hashQueryBound_of_isQueryBoundP {α : Type} {n : Nat} :
       have := h.1.resolve_left (not_not_intro trivial)
       omega
 
+/-- A bound on the counted calls of a computation from the empty cache bounds its counted run.
+
+It reads the count as a natural number, as the experiment does. -/
+theorem counted_le_of_hashQueryBound {α : Type} (oa : OracleComp OracleWorld α) {q : Nat}
+    (bound : HashQueryBound oa ∅ q) :
+    ∀ result : α × Nat, result ∈ @support ProbComp (α × Nat) _
+      ((simulateQ countedOracle oa).run.run' ∅) → result.2 ≤ q := by
+  simp only [HashQueryBound, simulateQ_countHashQueries] at bound
+  exact bound
+
 /-- The game's counted experiment makes at most `Q` calls, for a budget of `qH` and `r`. -/
 theorem hasHashQueryBound_of_budget (adversary : Adversary) {qH r : Nat}
     (hbudget : HasAdversaryBudget adversary qH r) :
     HasHashQueryBound adversary (gameQueries qH r) := by
-  have h := hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
-  simp only [HashQueryBound, simulateQ_countHashQueries] at h
-  exact h
+  have bound := hashQueryBound_of_isQueryBoundP _ (isQueryBoundP_gameCore adversary hbudget) ∅
+  -- Rewrite the experiment to its run first: the kernel would run the game to compare them.
+  have run : experiment adversary =
+      ((simulateQ countedOracle (gameCore adversary)).run.run' ∅ : ProbComp (Bool × Nat)) := rfl
+  unfold HasHashQueryBound
+  rw [run]
+  exact counted_le_of_hashQueryBound _ bound
 
 /-! ## The bounds -/
 
