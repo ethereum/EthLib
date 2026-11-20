@@ -1278,6 +1278,17 @@ py_consensus_relay_delivered_payload(
 }
 
 extern lean_object*
+eth_consensus_keymanager_json(lean_object* args);
+
+PyObject*
+py_consensus_keymanager_json(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_keymanager_json, args, 2, KEYMANAGER_ERROR);
+}
+
+extern lean_object*
 eth_consensus_relay_received_bid(lean_object* args);
 
 PyObject*

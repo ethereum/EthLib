@@ -32,6 +32,7 @@ public import EthLib.Consensus.Exports.HonestBuilder
 public import EthLib.Consensus.Exports.HonestProposer
 public import EthLib.Consensus.Exports.HonestValidator
 public import EthLib.Consensus.Exports.GossipValidation
+public import EthLib.Consensus.Exports.KeymanagerApi
 public import EthLib.Consensus.Exports.OptimisticSync
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.RelayApi

@@ -199,6 +199,7 @@ extern PyObject* DEPOSIT_TREE_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
+extern PyObject* KEYMANAGER_ERROR;
 extern PyObject* BINDING_ERROR;
 extern PyObject* RPC_ERROR;
 
@@ -460,6 +461,7 @@ PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* a
 PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_validators (PyObject* self, PyObject* args);
+PyObject* py_consensus_keymanager_json (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_received_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_keeps (PyObject* self, PyObject* args);

@@ -10,6 +10,7 @@ from ethlib.errors import (
     ConsensusError,
     DepositTreeError,
     ForkChoiceError,
+    KeymanagerError,
     LightClientError,
     ProposerError,
     SlashingProtectionError,
@@ -235,6 +236,11 @@ def relay_validators(
 ) -> list[dict[str, Any]]:
     """At Fulu only: the JSON entries of the validators that a relay lists, from SSZ bytes."""
     return _native.consensus_relay_validators(name, fork, state, registry)
+
+
+def keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a Keymanager API schema, checked and written back as canonical JSON."""
+    return _native.consensus_keymanager_json(schema, document)
 
 
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
@@ -2338,6 +2344,8 @@ __all__ = [
     "check_attestation_signing",
     "record_block_signing",
     "record_attestation_signing",
+    "KeymanagerError",
+    "keymanager_json",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
