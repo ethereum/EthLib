@@ -21,7 +21,7 @@ A theorem proves the bound of the first, before Gloas from Fulu.
 
 The drift premise of the checked-call headlines follows from it.
 
-`PinDrift.le_pinReserve` proves the bound of the second, from the pulled-up state to a counting state.
+`PinDrift.le_pinReserve` bounds the second, from the pulled-up state to a counting state.
 -/
 
 @[expose] public section

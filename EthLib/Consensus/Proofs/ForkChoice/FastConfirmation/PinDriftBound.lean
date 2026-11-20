@@ -4133,7 +4133,8 @@ private theorem Run.exiting_deposit_credit_zero {g x y : ForkedBeaconState prese
     ((events.filter (·.source = .deposits)).map (keyCredit i)).sum = 0 :=
   Run.exiting_deposit_credit_zero_of_kept tail (Nat.le_trans (by decide) fulu) early high replayed
     (fun {_ _} ok contained {_} replayedEs e member source =>
-      let kept := PinEventsKept.Run.events_kept shared genesis tail fulu early ok contained replayedEs
+      let kept := PinEventsKept.Run.events_kept shared genesis tail fulu early ok contained
+        replayedEs
         e member source
       ⟨kept.1, kept.2.1, kept.2.2.1⟩)
     i v found exited held
@@ -11691,7 +11692,8 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.mul_comm (_ - _)] at times
       nlinarith
   have key := PinKeyFloor.passPenaltyRate_le_leak (config := config)
-    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize (Nat.le_trans (by norm_num) h.facts.rewardScale)
+    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize
+    (Nat.le_trans (by norm_num) h.facts.rewardScale)
     T.toNat_lt aligned band scored
   dsimp only at key
   refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
@@ -13530,7 +13532,7 @@ private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 <
 
 /-- The base reward per increment is at least four.
 
-The root of a quarter total is below `2 ^ 31`, and `rewardScale` makes the scaled factor at least `2 ^ 35`.
+The root of a quarter total is below `2 ^ 31`, and `rewardScale` makes the factor at least `2 ^ 35`.
 
 Below the small total the root is at most a fifth of an increment, which the factor covers.
 
@@ -14663,7 +14665,8 @@ private theorem effective_le_cap_run (h : Setting config checks g split fin pull
     {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) {y : BeaconState preset fork}
     (r : Run config checks ⟨fork, split⟩ ⟨fork, y⟩) (i : ℕ) :
-    ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinKeyFloor.capAt z i := fun z member => by
+    ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinKeyFloor.capAt z i
+      := fun z member => by
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
   exact effective_le_cap_at (shared.append (toC.append r1)) h.genesis h.caps h.early i
@@ -17425,7 +17428,8 @@ private theorem syncDebits_window_le (h : Setting config checks g split fin pull
     ∑ v ∈ S, (events.map (syncDebit v.toNat)).sum ≤
       ((getCurrentEpoch e).toNat + 1 - (getCurrentEpoch fin).toNat) *
         preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-          PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat := by
+          PinSeatDebits.syncEnvelope preset
+            ((getTotalActiveBalance pulled).toOption.getD 0).toNat := by
   obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   have band : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       run.Contains step → ∀ T : Gwei, getTotalActiveBalance w.state = .ok T →
@@ -22692,7 +22696,7 @@ The surplus of the slash charge pays `flow_split_of`'s slashed term.
 
 The slash charge is at least an increment and `2 * depthFin * flagRate`.
 
-The flag rate is at most the rate of an increment, and the slash charge has four of it for each epoch.
+The flag rate is at most the rate of an increment, and the slash charge has four per epoch.
 
 The `syncProposer` part of `proposerCredit` is not used by R's credits.
 
@@ -24197,7 +24201,8 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
     exact List.mem_append_left _ mem
   have pEarly : p.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
-  have ceiling := PinKeyFloor.Run.effective_ceiling_of_balance_ceiling r1 pEarly fuluZ v.toNat inside
+  have ceiling := PinKeyFloor.Run.effective_ceiling_of_balance_ceiling r1 pEarly fuluZ v.toNat
+    inside
     (S + Cr + (D * (11 * (Cr + W + D * q + D) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
       P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
         (D * q + D)))
@@ -24454,7 +24459,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     rw [hE i]
     obtain ⟨pre, -, -, aEarly, -⟩ :=
       DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
-    have capped := PinSeatDebits.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
+    have capped := PinSeatDebits.effectiveAt_le_capMax ((shared.append fromFin).append pre)
+      h.genesis
       h.caps aEarly i
     by_cases unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false
     · simp only [unslashed]
@@ -24477,7 +24483,8 @@ private theorem whistle_core (h : Setting config checks g split fin pulled anc c
     rw [hcr i]
     obtain ⟨pre, -, -, aEarly, -⟩ :=
       DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
-    have capped := PinSeatDebits.effectiveAt_le_capMax ((shared.append fromFin).append pre) h.genesis
+    have capped := PinSeatDebits.effectiveAt_le_capMax ((shared.append fromFin).append pre)
+      h.genesis
       h.caps aEarly i
     by_cases act : isActiveAt counted (getCurrentEpoch counted) i = true
     · simp only [act]
@@ -25243,7 +25250,8 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
   obtain ⟨-, credits⟩ := PinKeys.creditScan_bounds ∅ UInt64.toNat (fun _ => false)
     (fun s => decide (s = .deposits)) highC (fun _ => 0) tailC replayedC (fun e _ _ => by simp)
   have dep := credits (fun s => decide (s = .deposits))
-    (Or.inr fun electra early replayed i => PinSeatDebits.block_deposit_zero electra early replayed i)
+    (Or.inr fun electra early replayed i => PinSeatDebits.block_deposit_zero electra early
+      replayed i)
     (Or.inl fun _ covered => covered) electra h.early i
   have deposits := (depPre_le_deposits eventsC i).trans dep
   have bandXZero : ∀ hh, bandX fin hh i = 0 ∨ preset.upwardBand ≤ bandX fin hh i := by
@@ -27956,10 +27964,12 @@ private theorem slack_le (h : Setting config checks g split fin pulled anc count
         (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit +
         (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
           preset.SYNC_COMMITTEE_SIZE.toNat *
-            PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+            PinSeatDebits.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-            PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+            PinSeatDebits.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           (pinTerms config pulled anc fin).syncProposer) + 9) / 10) +
       2 * ∑ i ∈ T, whistC tailC highC i +
@@ -28034,10 +28044,12 @@ private theorem slack_le (h : Setting config checks g split fin pulled anc count
       (pinTerms config pulled anc fin).depth * (pinTerms config pulled anc fin).proposerCredit +
         (pinTerms config pulled anc fin).depth * preset.SLOTS_PER_EPOCH.toNat *
           preset.SYNC_COMMITTEE_SIZE.toNat *
-            PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+            PinSeatDebits.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-            PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+            PinSeatDebits.syncEnvelope preset
+              ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
         ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) *
           (pinTerms config pulled anc fin).syncProposer := by
     nlinarith [prop, sync]
@@ -29756,7 +29768,8 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   have alignedC : balanceAt ending v.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
     FloorTrace.effective_aligned (toFin.append (fromFin.append tailC)) h.genesis h.aligned v.toNat
   have atMax : balanceAt ending v.toNat ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat :=
-    PinSeatDebits.effectiveAt_le_capMax (toFin.append (fromFin.append tailC)) h.genesis h.caps h.early
+    PinSeatDebits.effectiveAt_le_capMax (toFin.append (fromFin.append tailC)) h.genesis h.caps
+      h.early
       v.toNat
   -- the cap that `capFor` reads is the largest one off the low rate, and otherwise `cappedY`'s
   have capped : ∀ S U : ℕ, ((preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∧ Cr + Fl ≤ S ∧
@@ -33518,7 +33531,8 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
         (3 * (WB + (((pinTerms config pulled anc fin).depth +
           ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
             preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat *
-              PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
+              PinSeatDebits.syncEnvelope preset
+                ((getTotalActiveBalance pulled).toOption.getD 0).toNat +
             (pinTerms config pulled anc fin).depth *
               (pinTerms config pulled anc fin).syncProposer))) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat * (pinTerms config pulled anc fin).perIncrement *
@@ -33536,7 +33550,8 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
   set SCS := preset.SYNC_COMMITTEE_SIZE.toNat with hSCS
   set slots := preset.SLOTS_PER_EPOCH.toNat with hslots
   set P := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat with hP
-  set env := PinSeatDebits.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat
+  set env := PinSeatDebits.syncEnvelope preset
+    ((getTotalActiveBalance pulled).toOption.getD 0).toNat
     with henv
   set W := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat with hW
   set Sx := ∑ i ∈ t.positions, max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
@@ -33594,7 +33609,7 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
 
 /-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
 
-They also take the surplus of the slash charge over R's slashed keys and a tenth of the keys' credits.
+They also take the slash charge's surplus over R's slashed keys and a tenth of the keys' credits.
 
 The bound is scaled by ten, so the tenth is exact.
 

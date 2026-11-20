@@ -139,7 +139,7 @@ def PinGuarded (last : ℕ) : Prop :=
 
 Take honest voters whose stake exceeds a third of the total plus the margin and the pin reserve.
 
-A justified checkpoint of the call's epoch then has a signer among them, or two honest stores collide.
+A justified checkpoint of the call's epoch then has a signer among them, or two stores collide.
 
 The pin bounds the drift of the quorum.
 
