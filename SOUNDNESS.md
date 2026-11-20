@@ -4385,8 +4385,21 @@ The theorems then conclude the bound, or `HashEvidence`, or `SigningEvidence`; n
 Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence, or the signing roots of the checks collide (`SigningEvidence`).
 `accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes or the signing roots show evidence.
 The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
-No theorem shows that a block of either run could include a slashing built from those signatures.
+These theorems alone do not show that a block of either run could include a slashing built from those signatures.
 An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
+`singleAttesterSlashing` (`DirectSafety/Includable.lean`) is the attester slashing whose two attestations name one validator alone, with two given signatures.
+`processAttesterSlashing_single_eq_slashValidator` takes the two data of a double or surround vote with the domains and signing roots that their `SignedIn` holds, and two signatures by the key alone that verify on them.
+Those signatures are given, not derived: the relation of signatures does not give them, and a signature that merely exists is not one that someone holds.
+The aggregates that the runs accepted could serve instead when each of their indices names, in the slashing state, the key it named in the run; the slashing then also slashes the other slashable validators in both, and no theorem states that case yet.
+The state reads the fork version of each signature at the target epoch of its data, and has the genesis validators root of the runs.
+`processAttesterSlashing_single_eq_slashValidator_run` takes a state of a run from the genesis of the signatures, whose genesis validators root is then the right one.
+The validator is slashable at the epoch of the state, and the preset allows at least one attester; mainnet allows at least 2048.
+Then `processAttesterSlashing` returns what slashing the validator returns, so it accepts the slashing exactly when the state can slash the validator (`processAttesterSlashing_eq_slashValidator_of_single`, `Consensus/Proofs/Transition/AttesterSlashingAccepted.lean`).
+This is about the operation; it does not show that a whole block with it is valid.
+The fork windows cannot hold when a state of the chain reads neither version at that epoch, for example when the two versions are more than one fork apart; no theorem states this.
+No theorem shows that the state can slash the validator in general.
+That step can fail on checked arithmetic (exit queue, withdrawable epoch, slashings sum, balances) or on the proposer lookup.
+The pairs of headers are left out: they arise only from a proposer slashing that a tail already processed, so that run already slashed the key.
 The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
 
 `source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).

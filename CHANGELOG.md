@@ -11,6 +11,10 @@ Not yet released.
 
 - In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
 
+- A double or surround vote of signed direct safety, with a signature by the key alone on each data, gives an attester slashing that a state accepts exactly when it can slash the validator, when the state reads the fork versions of the signatures and the validator is slashable there ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
+  `processAttesterSlashing_eq_slashValidator_of_single` shows that a slashing whose two attestations name one validator, with both signatures verifying in the domains the state reads and the validator slashable there, returns what slashing that validator returns.
+  `processAttesterSlashing_single_eq_slashValidator` and its run form apply it to `singleAttesterSlashing`, built from the two signed data of direct safety and two given signatures by the key alone, at a state that reads their fork versions and where the validator is slashable.
+
 - Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
   `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
   `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
