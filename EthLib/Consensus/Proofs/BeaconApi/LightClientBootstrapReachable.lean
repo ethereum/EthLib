@@ -6,7 +6,6 @@ public import EthLib.Consensus.ForkChoice.OptimisticSync
 public import EthLib.Consensus.Proofs.ForkChoice.Reachable
 import EthLib.Consensus.Proofs.BeaconApi.LightClientBootstrap
 import EthLib.Consensus.Proofs.BeaconApi.StateQueries
-import EthLib.Consensus.Proofs.ForkChoice.Optimistic
 import EthLib.Consensus.Proofs.ForkChoice.OptimisticSync
 import EthLib.Consensus.Proofs.ForkSchedule
 
@@ -39,7 +38,7 @@ Recording whether a validated payload satisfies its inclusion lists keeps each b
 
 So a bootstrap served after either step on a reachable store starts a light client too.
 
-That result needs the same forks, state type and preset sizes as the first.
+That result needs the same forks, state type and preset sizes as the result for a reachable store.
 -/
 
 @[expose] public section

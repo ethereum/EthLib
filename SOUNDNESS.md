@@ -5666,7 +5666,7 @@ The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when 
 From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
 `Store.onInvalidPayload_blocks_blockStates` (`Consensus/Proofs/ForkChoice/Optimistic.lean`) shows that the first step keeps both the block and the state of each root, or removes both.
 `Store.recordValidatedInclusionListSatisfaction_eq` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) shows that the second touches neither the blocks nor the states.
-The bootstrap answer of a root depends only on the block and the state under that root, and on the fork of the store.
+The bootstrap answer of a root depends only on the configuration, the block and the state under that root, and the fork of the store.
 `bootstrapFor_onInvalidPayload` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows that the first step keeps the answer of each root whose block stays.
 `bootstrapFor_recordValidatedInclusionListSatisfaction` shows that the second step keeps the answer of every root.
 `bootstrapFor_valid_of_onInvalidPayload` and `bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction` carry `bootstrapFor_valid_of_reachable` over the two steps, through the two theorems above.
