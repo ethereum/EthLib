@@ -454,3 +454,60 @@ def test_bad_starting_record():
     """A starting record that does not read is refused with the code of EIP-3076 data."""
     with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
         consensus.keymanager_run(MEMORY, WORK, '{"metadata": {}}', [])
+
+
+def _calls(*calls: tuple[str, str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """The responses of calls on a client with no key, and its state afterwards."""
+    return consensus.keymanager_run(MEMORY, WORK, _interchange([]), list(calls))
+
+
+def test_list_keys():
+    """The list gives each key that the client holds, in order, with its path."""
+    keystores = [_keystore(secret, "pass") for secret in SECRETS[:2]]
+    responses, _ = _calls(
+        ("GET", "/eth/v1/keystores", {}),
+        _import(keystores, ["pass", "pass"]),
+        ("GET", "/eth/v1/keystores", {}),
+    )
+    assert responses[0] == (200, {"data": []})
+    listed = [
+        {"validating_pubkey": key, "derivation_path": PATH, "readonly": False}
+        for key in _pubkeys()[:2]
+    ]
+    assert responses[2] == (200, {"data": listed})
+
+
+def test_delete_use_case():
+    """The use case of the source: a request a, a, b, c on a client that holds a and c."""
+    a, b, c = _pubkeys()
+    protection = _interchange([_entry(a, 100, 9, 10), _entry(c, 200, 19, 20)])
+    keystores = [_keystore(SECRETS[0], "pass"), _keystore(SECRETS[2], "pass")]
+    delete = ("DELETE", "/eth/v1/keystores", {"pubkeys": [a, a, b, c]})
+    responses, state = _calls(
+        _import(keystores, ["pass", "pass"], protection),
+        delete,
+        ("GET", "/eth/v1/keystores", {}),
+        delete,
+    )
+    code, body = responses[1]
+    assert code == 200
+    statuses = [entry["status"] for entry in body["data"]]
+    assert statuses == ["deleted", "not_active", "not_found", "deleted"]
+    returned = json.loads(body["slashing_protection"])
+    assert sorted(entry["pubkey"] for entry in returned["data"]) == sorted([a, c])
+    assert responses[2] == (200, {"data": []})
+    # A second delete finds no key, and returns the same data, which the record keeps.
+    again = responses[3][1]
+    statuses = [entry["status"] for entry in again["data"]]
+    assert statuses == ["not_active", "not_active", "not_found", "not_active"]
+    assert json.loads(again["slashing_protection"]) == returned
+    assert state["local_keys"] == []
+    record = state["slashing_protection"].encode()
+    with raises(SlashingProtectionError, "slashing protection failed with code 3"):
+        consensus.check_block_signing(record, bytes.fromhex(a[2:]), 100, bytes(32))
+
+
+def test_delete_bad_request():
+    """A delete whose body does not read gets HTTP 400."""
+    responses, _ = _calls(("DELETE", "/eth/v1/keystores", {"pubkeys": ["0x12"]}))
+    assert responses == [(400, {"message": "the request does not read"})]

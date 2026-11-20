@@ -6295,6 +6295,25 @@ The source leaves six points about the import open, and EthLib takes these readi
 - Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
 - For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
 
+The calls `GET` and `DELETE /eth/v1/keystores` list the keys of a client and delete some of them (`Consensus/KeymanagerApi/DeleteKeys.lean`).
+The list gives the public key of each key that the client holds, in order (`map_validatingPubkey_listKeys`, `Consensus/Proofs/KeymanagerApi/DeleteKeys.lean`).
+A delete gives one status for each key of the request, in order (`length_data_deleteKeys`, `getElem?_data_deleteKeys`), and keeps the record (`protection_of_deleteKeys`), as the source requires.
+Afterwards the client holds no key of the request, unless it holds that key read-only (`isReadonly_of_isActive_deleteKeys`).
+A key named twice in a request is not deleted the second time (`ne_deleted_of_deleteKeys`).
+The data returned names only keys of the request whose status is `deleted` or `not_active` (`exists_of_mem_slashingProtection_deleteKeys`).
+For each such key it holds every block and vote that the record holds (`blocksOf_slashingProtection_deleteKeys`, `attestationsOf_slashingProtection_deleteKeys`).
+A delete sent again to the state that it leaves returns the same data (`slashingProtection_deleteKeys_again`), so that "both will have access to slashing protection data".
+The Python suite runs the source's use case "Delete a key", which the flow's steps also give.
+
+The source leaves two points about the delete open, and EthLib takes these readings:
+
+- A read-only key "cannot be deleted from the API", but the source gives no status for a request that names one.
+  EthLib keeps the key and gives it the status `error`, the only one that fits (`error_iff_of_deleteKeys`).
+  So it returns no data for that key, as the source asks for a key with an `error` status.
+  No call of the API makes a key read-only, so the Python suite cannot reach this case.
+- The flow sets every status to `error` when the export of the data fails.
+  EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
+
 ### Remote-signing API
 
 The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.

@@ -274,6 +274,10 @@ def attestationsOf (interchange : Interchange) (pubkey : BLSPubkey) :
     List SignedAttestationRecord :=
   (interchange.data.filter (·.pubkey = pubkey)).flatMap (·.signedAttestations)
 
+/-- Whether a file names a key in one of its entries. -/
+def namesKey (interchange : Interchange) (pubkey : BLSPubkey) : Bool :=
+  interchange.data.any fun entry => decide (entry.pubkey = pubkey)
+
 /-- The entries of a file that name a key of a list, in order, with the chain of the file. -/
 def entriesOf (interchange : Interchange) (keys : List BLSPubkey) : Interchange :=
   { interchange with data := interchange.data.filter (·.pubkey ∈ keys) }

@@ -47,6 +47,10 @@ structure KeyState where
 def KeyState.isActive (state : KeyState) (pubkey : BLSPubkey) : Bool :=
   state.localKeys.any (·.pubkey == pubkey)
 
+/-- Whether the client holds a key that cannot be deleted through the API. -/
+def KeyState.isReadonly (state : KeyState) (pubkey : BLSPubkey) : Bool :=
+  state.localKeys.any fun key => key.pubkey == pubkey && key.readonly
+
 /-- The settings that a validator client fixes at its start, which the source leaves to it. -/
 structure ClientConfig where
   /-- The bounds on the key derivation of a keystore, which the source does not set. -/
