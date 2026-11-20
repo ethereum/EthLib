@@ -24,7 +24,8 @@ Not yet released.
   `pinReserve` is now `(pinTerms config state ancestor finalizedState).total`, with the same value and statement.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.
 
-- `PinTerms.capAt`, `PinTerms.dueAmount`, `PinTerms.syncEnvelope`, `PinTerms.wide`, `PinTerms.balanceChurn`, `PinTerms.activationExitChurn`, `PinTerms.consolidationChurn` and `PinTerms.exitedSlashable` are the reads of a state that `pinTerms` applies.
+- `PinTerms.capAt`, `PinTerms.dueAmount` and `PinTerms.exitedSlashable` read a key's cap, its due partial withdrawals and its exit from a state, as `pinTerms` does.
+  `PinTerms.syncEnvelope`, `PinTerms.wide`, `PinTerms.balanceChurn`, `PinTerms.activationExitChurn` and `PinTerms.consolidationChurn` are the bounds that `pinTerms` computes from a total.
   `joiningStake` is the stake joining the active set, which `quorumReserve` and `pinTerms` both read, with `quorumReserve`'s value and statement unchanged.
   `PinTerms` gains the fields `flagRate`, `slashLeak`, `high` and `capFor`, and `pinReserve`'s value is unchanged.
   The pin's drift bound in `PinDriftBound` reads them at other states and totals.

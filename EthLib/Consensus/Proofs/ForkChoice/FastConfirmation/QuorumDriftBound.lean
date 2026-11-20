@@ -208,9 +208,8 @@ theorem quorumDrift_le_quorumReserve
     whistleblower depositCredit due dueStake proposers depositRecipients recipients nP debited
     transfers depositGain slashBack syncP blockDeposits creditedP creditMax joining crossing
     headroom gain partials fall syncPMax whistleblowerP maskBudget loss
-  have gainEq : gain = ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i +
-      min headroom (crossing + (recipients + debited) * preset.upwardBand + debited * creditMax +
-        transfers + depositGain) := rfl
+  have gainEq : gain = joining + min headroom (crossing + (recipients + debited) *
+      preset.upwardBand + debited * creditMax + transfers + depositGain) := rfl
   have lossEq : loss = ∑ i ∈ positions with current i = true, fall i +
       creditedP * (inc + 2 * preset.downwardBand + syncPMax) + maskBudget := rfl
   have nPLe : edge.blockCount + tailP.blockCount ≤ nP := counted
@@ -253,6 +252,7 @@ theorem quorumDrift_le_quorumReserve
     rw [← Finset.sum_add_distrib]
     exact Finset.sum_le_sum fun i _ => by omega
   have joined := sum_upcoming_le positions current upcoming effective
+  change _ ≤ (∑ i ∈ positions with current i = true, effective i) + joining at joined
   have totalEq : total' = max inc (∑ i ∈ positions with current i = true, effective i) := by
     rw [← totalP, getTotalActiveBalance_toNat pulledOk, activeBalanceTotal]
     rfl
