@@ -24,11 +24,7 @@ TIMES = [
 
 # The start of epoch 132352, the Glamsterdam time of Hoodi in EIP-7773 until its row was cleared.
 # The genesis file and EIP-7773 give Hoodi no Glamsterdam time now.
-#
-# File: EIPS/eip-7773.md
-# Repository: ethereum/EIPs
-# Commit: f3de103bc6eb82d2780e051e50d47a92aac45b40 (with the time)
-# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92 (without it)
+# The row was cleared in ethereum/EIPs by "Update EIP-7773: Clear postponed Hoodi activation".
 UNSCHEDULED_GLAMSTERDAM = 1_793_036_568
 
 
