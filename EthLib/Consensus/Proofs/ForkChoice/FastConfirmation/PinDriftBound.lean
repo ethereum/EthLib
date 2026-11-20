@@ -8250,29 +8250,6 @@ private theorem actualBalanceAt_le_of_down {f : Fork} {s u : BeaconState preset 
       Array.getElem?_eq_none (by have := sizes.2; omega)
     simp [actualBalanceAt, outS, outU]
 
-/-- A fold of recorded passes ends at the state of the fold of their actions. -/
-private theorem record_fold_state {α : Type} (src : BalanceSource)
-    (lim : α → BeaconState preset fork → Except TransitionError (ℕ × ℕ))
-    (act : BeaconState preset fork → α → Except TransitionError (BeaconState preset fork)) :
-    ∀ (items : List α) (p q : BalanceReplay preset fork),
-      items.foldlM (fun pre x => recordBalance src (lim x) (act · x) pre) p = .ok q →
-      items.foldlM act p.1 = .ok q.1 := by
-  intro items
-  induction items with
-  | nil =>
-    intro p q ok
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at ok
-    subst ok
-    rfl
-  | cons x rest ih =>
-    rintro ⟨first, events⟩ q ok
-    rw [List.foldlM_cons, bind_ok_iff] at ok
-    obtain ⟨⟨second, recorded⟩, step, others⟩ := ok
-    obtain ⟨_, _, -, actionOk, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single step
-    show List.foldlM act first (x :: rest) = _
-    rw [List.foldlM_cons, actionOk]
-    exact ih _ _ others
-
 /-- The replay of a block ends with its sync pass, after passes that credit only its proposer.
 
 The proposer of the block is the one that the state before the sync pass reads.
@@ -8320,11 +8297,11 @@ private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState pr
   -- The operations apply the actions of the replay in order, so they keep that proposer.
   have operated : processOperations config checks voted.1 block.body a.latestBlockHeader.slot =
       .ok consolidated.1 := by
-    have pOk := record_fold_state _ _ _ _ _ _ proposedOk
-    have sOk := record_fold_state _ _ _ _ _ _ slashedOk
-    have aOk := record_fold_state _ _ _ _ _ _ attestedOk
-    have dOk := record_fold_state _ _ _ _ _ _ depositedOk
-    have cOk := record_fold_state _ _ _ _ _ _ consolidatedOk
+    have pOk := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ proposedOk
+    have sOk := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ slashedOk
+    have aOk := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ attestedOk
+    have dOk := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ depositedOk
+    have cOk := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ consolidatedOk
     simp only [Array.foldlM_toList] at pOk sOk aOk dOk cOk
     unfold processOperations
     simp only [notGloas, electra, ↓reduceDIte, bind_ok_iff, ensure_ok_iff, processExecutionRequests]
@@ -11201,10 +11178,10 @@ private theorem block_flip_balance {engine : ExecutionEngine preset fork}
   obtain ⟨_, _, -, hu2, -⟩ := DirectSafety.Apriori.Internal.recordBalance_single h2
   obtain ⟨hu3, -⟩ := PinEventsKept.carryBalance_cases h3
   obtain ⟨hu4, -⟩ := PinEventsKept.carryBalance_cases h4
-  have f5 := record_fold_state _ _ _ _ _ _ h5
-  have f6 := record_fold_state _ _ _ _ _ _ h6
-  have f7 := record_fold_state _ _ _ _ _ _ h7
-  have f8 := record_fold_state _ _ _ _ _ _ h8
+  have f5 := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ h5
+  have f6 := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ h6
+  have f7 := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ h7
+  have f8 := DirectSafety.Apriori.Internal.recordFold_plain _ _ _ _ _ h8
   obtain ⟨hu9, -⟩ := PinEventsKept.carryBalance_cases h9
   obtain ⟨hu10, -⟩ := PinEventsKept.carryBalance_cases h10
   obtain ⟨hu11, -⟩ := PinEventsKept.carryBalance_cases h11

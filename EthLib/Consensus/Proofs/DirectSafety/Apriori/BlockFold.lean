@@ -500,7 +500,7 @@ theorem recordBalance_single {fork : Fork} {source : BalanceSource}
   exact ⟨credit, debit, limitsOk, actionOk, rfl⟩
 
 /-- A recorded fold runs the plain fold of its actions. -/
-private theorem recordFold_plain {fork : Fork} {α : Type} {source : BalanceSource}
+theorem recordFold_plain {fork : Fork} {α : Type} {source : BalanceSource}
     {limits : α → BeaconState preset fork → Except TransitionError (Nat × Nat)}
     {action : α → BeaconState preset fork → Except TransitionError (BeaconState preset fork)} :
     ∀ (items : List α) (s t : BeaconState preset fork) (prior events : List (BalanceEvent preset)),

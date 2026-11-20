@@ -701,6 +701,9 @@ Not yet released.
 - `DirectSafety.Apriori.Internal.balance_le_pathCredits` says that the balance at the end of a path of states is at most the balance at its start and the increases between its states.
   The pin's step bounds read it.
 
+- `DirectSafety.Apriori.Internal.recordFold_plain` says that a recorded fold ends at the state of the fold of its actions.
+  `PinDriftBound` reads it in `blockReplay_proposer_credits` and `block_flip_balance`.
+
 - `add_le_of_lt_of_aligned` says that a whole number of increments above another is at least one increment above it.
   The pin's effective-balance bounds read it.
 
