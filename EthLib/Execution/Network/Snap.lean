@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Network.Protocol
 public import EthLib.Execution.State.Account
 public import EthLib.Execution.Trie.HexPrefix
+public import EthLib.Execution.Trie.Proof
 
 /-!
 # `Execution.Network.Snap`
@@ -91,13 +92,11 @@ def capabilityLength (c : Networking.Devp2p.Capability) : Nat :=
 
 /-! ## Accounts in slim form -/
 
-/-- The root of the empty trie: the Keccak-256 hash of the RLP empty string. -/
-def EMPTY_TRIE_ROOT : Hash32 := Cryptography.Hash.Keccak.keccak256 ⟨#[0x80]⟩
-
 /-- The slim form of an account: the empty root and the empty code hash as empty strings. -/
 def slimAccount (account : State.Account) (storageRoot : Hash32) : Item :=
   .list [Codec.toItem account.nonce, Codec.toItem account.balance,
-    if storageRoot = EMPTY_TRIE_ROOT then .bytes .empty else Codec.toItem storageRoot,
+    if storageRoot = Trie.emptyTrieRoot Cryptography.Hash.Keccak.keccak256 then .bytes .empty
+    else Codec.toItem storageRoot,
     if account.codeHash = State.EMPTY_CODE_HASH then .bytes .empty
     else Codec.toItem account.codeHash]
 
@@ -109,7 +108,9 @@ An empty code hash is the hash of empty code. -/
 def ofSlimAccount (item : Item) : Except RlpError (State.Account × Hash32) := do
   match ← item.fields 4 with
   | [n, b, r, c] =>
-    let root ← if r = .bytes .empty then pure EMPTY_TRIE_ROOT else r.field 2
+    let root ←
+      if r = .bytes .empty then pure (Trie.emptyTrieRoot Cryptography.Hash.Keccak.keccak256)
+      else r.field 2
     let code ← if c = .bytes .empty then pure State.EMPTY_CODE_HASH else c.field 3
     return (⟨← n.field 0, ← b.field 1, code⟩, root)
   | items => throw (.wrongFieldCount 4 items.length)

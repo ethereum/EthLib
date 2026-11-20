@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Kzg.Core
 public import EthLib.Cryptography.Proofs.Kzg.Polynomials
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the input checks of the blob operations
@@ -56,47 +57,6 @@ theorem validateKzgG1Point_ok_valid {b : Bytes48} {p : Bls.G1}
               cases hq
               simpa using hsub
       · cases h
-
-/-- The parser accepts exactly the bytes of the right length, and keeps them. -/
-theorem parseBytes_eq_ok_iff {n : Nat} {err : Nat → KzgError} {b : ByteArray}
-    {v : Vector UInt8 n} :
-    parseBytes n err b = .ok v ↔ v.toArray = b.data := by
-  unfold parseBytes
-  split
-  · rename_i h
-    constructor
-    · intro he
-      cases he
-      rfl
-    · intro hv
-      congr 1
-      exact (Vector.toArray_inj.mp (hv.trans rfl)).symm
-  · rename_i h
-    constructor
-    · intro he
-      cases he
-    · intro hv
-      exact absurd (hv ▸ v.size_toArray : b.data.size = n) h
-
-/-- The parser rejects exactly the bytes of another length, with the error for that length. -/
-theorem parseBytes_eq_error_iff {n : Nat} {err : Nat → KzgError} {b : ByteArray}
-    {e : KzgError} :
-    parseBytes n err b = .error e ↔ b.size ≠ n ∧ e = err b.size := by
-  unfold parseBytes
-  split
-  · rename_i h
-    constructor
-    · intro he
-      cases he
-    · rintro ⟨hne, _⟩
-      exact absurd h hne
-  · rename_i h
-    constructor
-    · intro he
-      cases he
-      exact ⟨h, rfl⟩
-    · rintro ⟨_, rfl⟩
-      rfl
 
 /-- `bytesToKzgCommitment` succeeds exactly on valid bytes, and returns them unchanged. -/
 theorem bytesToKzgCommitment_ok_iff {b : Bytes48} {c : KZGCommitment} :

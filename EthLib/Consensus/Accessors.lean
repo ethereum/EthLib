@@ -496,10 +496,7 @@ def getBeaconProposerIndex (state : BeaconState preset fork) :
 Before the epoch of the latest fork of the state, the previous fork version applies. -/
 def getDomain (config : Config) (state : BeaconState preset fork) (domainType : DomainType)
     (epoch : Option Epoch := none) : Except AccessorError Domain :=
-  let epoch := epoch.getD (getCurrentEpoch state)
-  let version :=
-    if epoch < state.forkVersions.epoch then state.forkVersions.previousVersion
-    else state.forkVersions.currentVersion
+  let version := state.forkVersions.versionAt (epoch.getD (getCurrentEpoch state))
   (computeDomain config domainType version state.genesisValidatorsRoot).mapError .ssz
 
 /-- From Electra: the indices of the committees whose bit is set, in increasing order. -/

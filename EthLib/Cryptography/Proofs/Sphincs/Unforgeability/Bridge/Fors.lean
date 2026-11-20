@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Sphincs.Unforgeability.Bridge.Tree
 public import EthLib.Cryptography.Proofs.HashSig
+public import EthLib.Cryptography.Proofs.Sphincs.Sign
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Recovery
 
 /-!
@@ -238,10 +239,10 @@ theorem forsSiblings_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecuri
     | zero => simp
     | succ i => simp [Nat.add_right_comm, Nat.add_assoc]
 
-/-- Under fixed answers, the opening of a FORS tree is the model's. -/
+/-- Under fixed answers, the opening of a FORS tree, its path computed alone, is the model's. -/
 theorem treeOpen_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (index : SphincsSecurity.Index) (κ : SphincsSecurity.FTree) (leaf : SphincsSecurity.FLeaf) :
-    evalWithAnswerFn f (treeOpen (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P)
+    evalWithAnswerFn f (Recompute.treeOpen (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P)
         (secretsOf S P) index.val (treeOf κ) leaf)
       = ofOpening (evalWithAnswerFn f
           (SphincsSecurity.Seeded.treeOpen P index κ leaf S : OracleComp HashSig.HashSpec _)) := by
@@ -254,18 +255,18 @@ theorem treeOpen_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.P
       = ofDigest <$> SphincsSecurity.Seeded.forsSecret P index κ leaf S :=
     forsSecret_queryH S P index κ leaf
   rw [eval_treeOpen]
-  simp only [EthLib.Cryptography.Sphincs.treeOpen, evalWithAnswerFn_bind, Merkle.path]
+  simp only [Recompute.treeOpen, evalWithAnswerFn_bind, Merkle.path]
   rw [hs, evalWithAnswerFn_map, h, evalWithAnswerFn_pure]
   rfl
 
-/-- Under fixed answers, the FORS openings are the model's. -/
+/-- Under fixed answers, the FORS openings, their paths computed alone, are the model's. -/
 theorem forsSign_answers (S : SphincsSecurity.MasterSeed) (P : SphincsSecurity.PublicParameter)
     (index : SphincsSecurity.Index) (leaves : SphincsSecurity.FTree → SphincsSecurity.FLeaf) :
-    evalWithAnswerFn f (forsSign (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P)
+    evalWithAnswerFn f (Recompute.forsSign (queryH (m := OracleComp HashSig.HashSpec)) (ofParam P)
         (secretsOf S P) index.val (ofLeaves leaves))
       = ofOpenings (evalWithAnswerFn f
           (SphincsSecurity.Seeded.forsOpen P index leaves S : OracleComp HashSig.HashSpec _)) := by
-  rw [forsSign, eval_ofFnInOrder]
+  rw [Recompute.forsSign, eval_ofFnInOrder]
   refine Vector.ext fun i hi => ?_
   simp only [Vector.getElem_ofFn, Fin.getElem_fin, ofLeaves, ofOpenings,
     SphincsSecurity.Seeded.forsOpen, eval_sequenceFin]

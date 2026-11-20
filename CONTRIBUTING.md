@@ -720,6 +720,43 @@ Rules for every body:
 Read the body aloud before you post it.
 If it sounds like a report, cut it.
 
+### Labels
+
+Workflows label issues and pull requests, so you do not need to set these labels yourself.
+
+- The paths that a pull request changes give its area labels, such as `crypto` and `crypto: keccak`.
+  [`.github/labeler.yml`](.github/labeler.yml) maps the paths to the labels.
+  After each push, the workflow also removes an area label whose paths the pull request no longer changes.
+- The type of a [title](#titles) gives a label such as `type: proof`, and a `!` before the colon gives `statement-change`.
+  On an issue, the scope also gives the area labels, since an issue changes no paths.
+  On an issue, the older prefixes `proofs:`, `specs:`, `specs+proofs:`, `bindings:` and `meta:` also give labels; `meta:` gives `meta`, for a tracking issue.
+  [`.github/workflows/labeler.yml`](.github/workflows/labeler.yml) holds the tables of scopes and prefixes.
+  It sets the title labels after the path labels, so that neither overwrites the other.
+- [`.github/labels.yml`](.github/labels.yml) defines each label with its color and description.
+  A change to it on `master` creates or updates labels, and never deletes one.
+
+Other labels, such as `leanVM` and `bug`, stay manual.
+
+## leanVM work
+
+The leanVM specification is large, and people review it one small pull request at a time.
+[`EthLib/Cryptography/LeanVm/README.md`](EthLib/Cryptography/LeanVm/README.md) records what it covers, its security model and its layout.
+These rules hold for every leanVM issue and pull request:
+
+- Each leanVM issue becomes exactly one pull request, which closes it.
+  If the work outgrows the issue, split the issue first.
+- Issues carry the title prefix `[leanVM]` and the label `leanVM`.
+- Pull requests carry the label `leanVM` and a title in the form of [Titles](#titles), with the scope `leanvm`:
+  `feat(leanvm): ...` for definitions, `proof(leanvm): ...` for theorems, `test(leanvm): ...` for vectors, `docs(leanvm): ...` for documentation.
+- Definitions and their theorems land in separate pull requests.
+  A definitions pull request contains no `sorry`, and its theorems have their own issue.
+- Each pull request needs two approvals: a cryptographer's, for its definitions and statements, and a Lean reviewer's, for its proofs.
+- Automated review agents do not review anything labelled `leanVM`, unless a person asks them to.
+- The description links the section of the leanVM whitepaper and the leanVM code it was compared with, at the commit that `tests/sources.toml` pins.
+  Doc comments cite the papers, never leanVM.
+- If EthLib and leanVM disagree, report it on the issue, with the file and line on both sides.
+  Do not change either side to make them agree.
+
 ## Licence
 
 EthLib's own material is distributed under CC0 1.0 Universal.

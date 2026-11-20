@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.Indicators
 public import EthLib.Consensus.Proofs.ForkChoice.Supporters
 public import EthLib.Consensus.Proofs.ForkChoice.VoteOrigins
 public import EthLib.Consensus.Proofs.ForkChoice.Ghost
@@ -26,6 +27,8 @@ In a store where each latest vote has its origin, that vote comes from an attest
 Its slot is at or after the slot of the voted block, and before the current slot.
 
 So the slot of the vote lies in the range of the adversary of the block.
+
+In particular, no vote counts for a block at the current slot, which is never one-confirmed.
 
 [fcr]: https://arxiv.org/abs/2405.00549v4
 -/
@@ -227,6 +230,62 @@ theorem isAncestor_getHead_of_duty_support
   apply isAncestor_getHead_of_majority_withBoost lower before stateOk tree viable scoreOk
     ?_ headOk
   rw [total]
+  omega
+
+/-- In a forward store, no counted vote supports a held block at the current slot.
+
+Each counted vote is a latest vote, whose attestation is for a block at its slot or before.
+
+That slot is before the current slot.
+
+A vote counts only through a descendant of the block, which is at the block's slot or later. -/
+theorem voteCountsFor_eq_false_of_slot_eq_current
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    {current : Slot} {root : Root} {block : BeaconBlock preset fork}
+    (slotOk : store.getCurrentSlot config = .ok current)
+    (found : store.blocks[root]? = some block) (atCurrent : block.slot = current)
+    (index : ValidatorIndex) :
+    store.voteCountsFor ⟨root, .pending⟩ index = false := by
+  cases counts : store.voteCountsFor ⟨root, .pending⟩ index with
+  | false => rfl
+  | true =>
+    obtain ⟨message, supported, latest, -, supportedOk, descends⟩ :=
+      store.exists_of_voteCountsFor counts
+    obtain ⟨attestation, rfl, origin⟩ := forward.votesHaveOrigins latest
+    -- The vote's block is a descendant of the block, so at the current slot or later.
+    obtain ⟨supportedBlock, supportedFound, above⟩ := slot_le_of_isAncestor found descends
+    rw [getSupportedNode_root supportedOk] at supportedFound
+    -- The vote's block is at the vote's slot or before, which is before the current slot.
+    obtain ⟨votedBlock, votedFound, votedLe⟩ := origin.voted
+    obtain ⟨current', currentOk, past⟩ := origin.past
+    rw [slotOk, Except.ok.injEq] at currentOk
+    subst current'
+    have same : supportedBlock = votedBlock :=
+      Option.some.inj (supportedFound.symm.trans votedFound)
+    subst same
+    exact absurd (UInt64.lt_of_le_of_lt above (UInt64.lt_of_le_of_lt votedLe past))
+      (atCurrent ▸ UInt64.lt_irrefl _)
+
+/-- In a forward store, a held block at the current slot is not one-confirmed.
+
+This holds under the tally of any balance source. -/
+theorem not_isOneConfirmed_of_slot_eq_current
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    (forward : Store.ForwardReachable config anchorState anchorBlock store)
+    {current : Slot} {root head : Root} {block : BeaconBlock preset fork}
+    {source : BeaconState preset fork}
+    (slotOk : store.getCurrentSlot config = .ok current)
+    (found : store.blocks[root]? = some block) (atCurrent : block.slot = current) :
+    store.isOneConfirmed config head source (store.tallyVotes source) root ≠ .ok true := by
+  intro confirmed
+  obtain ⟨support, threshold, supportOk, thresholdOk, -⟩ :=
+    isOneConfirmed_eq_ok_true_iff.mp confirmed
+  have above := threshold_lt_of_isOneConfirmed supportOk thresholdOk confirmed
+  -- The support is the sum of the balances whose vote counts, and none counts.
+  have zero : support.toNat = 0 := by
+    rw [store.getAttestationScore_toNat_eq_sum supportOk]
+    simp [voteCountsFor_eq_false_of_slot_eq_current forward slotOk found atCurrent]
   omega
 
 end Store

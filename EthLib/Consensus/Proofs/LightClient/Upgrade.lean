@@ -4,6 +4,7 @@ public import EthLib.Consensus.LightClient.Upgrade
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Serialization.Proofs.Ssz.Type.ValueEquality
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the upgrade of light client data to a later fork
@@ -72,12 +73,7 @@ private theorem mapM_toChunk_eq_map :
     obtain ⟨chunk, converted, tail, restBuilt, done⟩ := built
     simp only [pure, Except.pure, Except.ok.injEq] at done
     subst done
-    have same : node = chunk.toArray := by
-      unfold toChunk at converted
-      split at converted
-      · cases converted
-        rfl
-      · cases converted
+    have same : node = chunk.toArray := toChunk_ok_iff.mp converted
     rw [List.map_cons, same, mapM_toChunk_eq_map restBuilt]
 
 /-- A branch vector holds the list it was made from. -/
@@ -85,10 +81,12 @@ theorem branchVector_toList {depth : Nat} {branch : List Bytes32}
     {vector : Vector Bytes32 depth} (made : branchVector depth branch = .ok vector) :
     vector.toList = branch := by
   unfold branchVector at made
-  split at made
-  · cases made
-    simp
-  · cases made
+  cases read : Base.exactArray depth branch.toArray (Serialization.Ssz.Err.count depth) with
+  | error e => simp [read, Except.mapError] at made
+  | ok v =>
+    simp only [read, Except.mapError, Except.ok.injEq] at made
+    subst made
+    exact congrArg Array.toList (Base.exactArray_eq_ok_iff.mp read)
 
 /-- An accepted branch is as long as the depth of its index. -/
 private theorem verifyMerkleProof_length {leaf root : Bytes} {branch : List Bytes} {index : Nat}

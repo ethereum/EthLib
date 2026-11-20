@@ -479,17 +479,7 @@ private theorem rise_withdrawals {s t : BeaconState preset fork} {capella : .sha
     apply applyExpectedWithdrawals_of_setters (Rise 0) Rise.refl
       (fun one two => by simpa using one.trans two) withdraw _ _ _ _ _ _ applied
     all_goals exact fun _ _ => Fixed.rise ⟨rfl, rfl, rfl, rfl, rfl⟩
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      exact Rise.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of (Rise 0) (Rise.refl _) (fun _ => expected) ok
 
 /-- The execution part of a block does not raise the supply. -/
 private theorem rise_blockExecution {engine : ExecutionEngine preset fork}
@@ -826,17 +816,7 @@ private theorem flags_withdrawals {s t : BeaconState preset fork} {capella : .sh
     apply applyExpectedWithdrawals_of_setters ParticipationKept ParticipationKept.refl
       (fun one two => one.trans two) withdraw _ _ _ _ _ _ applied
     all_goals exact fun _ _ => ⟨rfl, rfl⟩
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      exact ParticipationKept.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of ParticipationKept (ParticipationKept.refl _) (fun _ => expected) ok
 
 private theorem flags_blockExecution {engine : ExecutionEngine preset fork}
     {s t : BeaconState preset fork} {body : BeaconBlockBody preset fork}
@@ -1825,14 +1805,10 @@ private theorem attestationsStart_same {engine : ExecutionEngine preset fork}
   have paid {a b : BeaconState preset fork} (gloas : .glamsterdam ≤ fork)
       (ok : processParentExecutionPayload config checks a gloas block.body = .ok b) :
       Steady a b :=
-    processParentExecutionPayload_step_of Steady Steady.refl Steady.trans
-      (fun frame validators => Steady.of_validators validators frame.slot)
-      (fun requested => ⟨activeStep_processWithdrawalRequest requested,
-        effectiveKept_withdrawalRequest requested,
-        (sameSizes_processWithdrawalRequest requested).1⟩)
-      (fun requested => ⟨activeStep_processConsolidationRequest requested,
-        effectiveKept_consolidationRequest requested,
-        (sameSizes_processConsolidationRequest requested).1⟩) ok
+    ⟨processParentExecutionPayload_step_of ActiveStep ActiveStep.refl ActiveStep.trans
+      (fun frame validators => ActiveStep.of_validators (congrArg (·.data) validators) frame.slot)
+      activeStep_processWithdrawalRequest activeStep_processConsolidationRequest ok,
+      effectiveKept_parentPayload ok⟩
   have head := started.step_of Steady Steady.refl Steady.trans paid
     (fun headed => by
       obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headed

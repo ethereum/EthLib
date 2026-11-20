@@ -199,6 +199,8 @@ extern PyObject* DEPOSIT_TREE_ERROR;
 extern PyObject* VALIDATOR_DUTY_ERROR;
 extern PyObject* PROPOSER_ERROR;
 extern PyObject* SLASHING_PROTECTION_ERROR;
+extern PyObject* KEYMANAGER_ERROR;
+extern PyObject* REMOTE_SIGNING_ERROR;
 extern PyObject* BINDING_ERROR;
 extern PyObject* RPC_ERROR;
 
@@ -460,6 +462,8 @@ PyObject* py_consensus_builder_preferences_failures (PyObject* self, PyObject* a
 PyObject* py_consensus_default_auth_data (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_submission_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_validators (PyObject* self, PyObject* args);
+PyObject* py_consensus_keymanager_json (PyObject* self, PyObject* args);
+PyObject* py_consensus_keymanager_run (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_received_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_relay_delivered_keeps (PyObject* self, PyObject* args);
@@ -516,6 +520,10 @@ PyObject* py_consensus_on_invalidated_payload (PyObject* self, PyObject* args);
 PyObject* py_consensus_is_optimistic_restricted_domain (PyObject* self, PyObject* args);
 PyObject* py_consensus_read_slashing_interchange (PyObject* self, PyObject* args);
 PyObject* py_consensus_import_slashing_interchange (PyObject* self, PyObject* args);
+PyObject* py_consensus_read_signing_request (PyObject* self, PyObject* args);
+PyObject* py_consensus_signing_request_root (PyObject* self, PyObject* args);
+PyObject* py_consensus_remote_signer_sign (PyObject* self, PyObject* args);
+PyObject* py_consensus_remote_signer_public_keys (PyObject* self, PyObject* args);
 PyObject* py_consensus_check_block_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_check_attestation_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_record_block_signing (PyObject* self, PyObject* args);
@@ -536,9 +544,6 @@ PyObject* py_consensus_get_execution_payload_bid          (PyObject* self, PyObj
 PyObject* py_consensus_get_self_built_execution_payload_bid (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_execution_payload_envelope     (PyObject* self, PyObject* args);
 PyObject* py_consensus_get_validators_custody_requirement (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_ssz                                  (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_possession_signing_root              (PyObject* self, PyObject* args);
-PyObject* py_pq_keys_is_valid_possession_proof            (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar         (PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_inclusion_proof(PyObject* self, PyObject* args);
 PyObject* py_consensus_verify_data_column_sidecar_kzg_proofs(PyObject* self, PyObject* args);
@@ -746,6 +751,7 @@ PyObject* py_engine_read_get_blobs_result                (PyObject* self, PyObje
 PyObject* py_engine_exchange_transition_configuration     (PyObject* self, PyObject* args);
 PyObject* py_engine_exchange_capabilities                (PyObject* self, PyObject* args);
 PyObject* py_engine_get_client_version                   (PyObject* self, PyObject* args);
+PyObject* py_engine_error_object                         (PyObject* self, PyObject* args);
 PyObject* py_engine_rewrite_params                       (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload            (PyObject* self, PyObject* args);
 PyObject* py_engine_prepare_execution_payload_gloas      (PyObject* self, PyObject* args);

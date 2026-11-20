@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Bytes
 
 /-!
 # Readers of byte fields
@@ -21,6 +22,12 @@ abbrev Reader (ε α : Type) := StateT (List UInt8) (Except ε) α
 def bytes {ε : Type} (truncated : ε) (n : Nat) : Reader ε (List UInt8) := fun input =>
   let field := input.take n
   if field.length = n then .ok (field, input.drop n) else .error truncated
+
+/-- Read exactly `n` bytes as an object of `n` bytes, without padding a truncated field. -/
+def vector {ε : Type} (truncated : ε) (n : Nat) : Reader ε (Vector UInt8 n) := do
+  let field ← bytes truncated n
+  -- The read above returns exactly `n` bytes, so the length check never fails.
+  StateT.lift (exactArray n field.toArray fun _ => truncated)
 
 /-- Read a big-endian integer of the given byte width. -/
 def uint {ε : Type} (truncated : ε) (n : Nat) : Reader ε Nat := do

@@ -32,8 +32,9 @@ instance : DecidablePred isHashCall := fun input ↦ inferInstanceAs (Decidable 
 /-- A count of the counted oracle is a count of the counted game under some answer function.
 
 The cost function must charge 1 for each hash call and 0 for each coin. -/
-theorem mem_support_counted_iff (oa : OracleComp OracleWorld Bool) (cost : OracleWorld.Domain → Nat)
-    (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : Bool × Nat) :
+theorem mem_support_counted_iff {α : Type} (oa : OracleComp OracleWorld α)
+    (cost : OracleWorld.Domain → Nat)
+    (hcost : ∀ input, cost input = if isHashCall input then 1 else 0) (result : α × Nat) :
     result ∈ support ((simulateQ (HashSpec.romImpl.withAddCost cost) oa).run.run' ∅) ↔
       ∃ f : QueryImpl HashSpec Id, result ∈ support
         (simulateQ (unifFwdAnswerImpl f) (SphincsSecurity.QueryCap.counted isHashCall oa)) := by
@@ -77,6 +78,78 @@ theorem countedRun_bind {α β : Type} (oa : OracleComp OracleWorld α)
 theorem countedRun_map {α β : Type} (oa : OracleComp OracleWorld α) (g : α → β) :
     countedRun f (g <$> oa) = (fun r ↦ (g r.1, r.2)) <$> countedRun f oa := by
   simp only [countedRun, SphincsSecurity.QueryCap.counted_map, simulateQ_map]
+
+/-- A run of a mapped computation is a run of the computation, with its result mapped. -/
+theorem mem_support_countedRun_map {α β : Type} (oa : OracleComp OracleWorld α) (g : α → β)
+    (r : β × Nat) (hr : r ∈ support (countedRun f (g <$> oa))) :
+    ∃ run ∈ support (countedRun f oa), r = (g run.1, run.2) := by
+  rw [countedRun_map, support_map] at hr
+  obtain ⟨run, hrun, rfl⟩ := hr
+  exact ⟨run, hrun, rfl⟩
+
+/-- A run of a computation, with its result mapped, is a run of the mapped computation. -/
+theorem mem_support_countedRun_map_of_mem {α β : Type} (oa : OracleComp OracleWorld α)
+    (g : α → β) (a : α) (n : Nat) (h : (a, n) ∈ support (countedRun f oa)) :
+    (g a, n) ∈ support (countedRun f (g <$> oa)) := by
+  rw [countedRun_map, support_map]
+  exact ⟨(a, n), h, rfl⟩
+
+/-! ## The counted oracles as the plain random oracle with a cost -/
+
+/-- The cost of a query: 0 for a coin and 1 for a hash call. -/
+def hashCost : OracleWorld.Domain → Nat
+  | .inl _ => 0
+  | .inr _ => 1
+
+/-- The cost of a query is 1 exactly when it is a hash call. -/
+theorem hashCost_eq (input : OracleWorld.Domain) :
+    hashCost input = if isHashCall input then 1 else 0 := by
+  cases input <;> rfl
+
+/-- The counted oracle is the plain random oracle, charging 1 per hash call. -/
+theorem countedOracle_eq : countedOracle = HashSpec.romImpl.withAddCost hashCost := rfl
+
+/-- The experiment runs the game against the plain random oracle, charging 1 per hash call. -/
+theorem experiment_eq (adversary : Adversary) :
+    experiment adversary =
+      (simulateQ (HashSpec.romImpl.withAddCost hashCost) (gameCore adversary)).run.run' ∅ := by
+  rw [experiment, countedOracle_eq]
+
+/-- The model's counted oracle is the plain random oracle, charging 1 per hash call. -/
+theorem modelCountedOracle_eq :
+    SphincsSecurity.Security.countedOracle = HashSpec.romImpl.withAddCost hashCost := rfl
+
+/-- The model's experiment runs its game against the plain random oracle, at 1 per hash call. -/
+theorem modelExperiment_eq (adversary : SphincsSecurity.Security.Adversary) :
+    SphincsSecurity.Security.experiment adversary =
+      (simulateQ (HashSpec.romImpl.withAddCost hashCost)
+        (SphincsSecurity.Security.gameCore adversary)).run.run' ∅ := by
+  rw [SphincsSecurity.Security.experiment, modelCountedOracle_eq]
+
+/-- A computation equal to a counted run has the same results as that run. -/
+theorem mem_support_iff_of_eq_withAddCost {α : Type} (oa : OracleComp OracleWorld α)
+    (X : ProbComp (α × Nat))
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat) :
+    r ∈ support X ↔
+      r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) := by
+  subst hX
+  exact Iff.rfl
+
+/-- A result of a computation equal to a counted run is a run under some answer function. -/
+theorem exists_countedRun_of_mem_support {α : Type} (oa : OracleComp OracleWorld α)
+    (X : ProbComp (α × Nat))
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat)
+    (h : r ∈ support X) : ∃ f, r ∈ support (countedRun f oa) :=
+  (mem_support_counted_iff oa hashCost hashCost_eq r).1
+    ((mem_support_iff_of_eq_withAddCost oa X hX r).1 h)
+
+/-- A run under some answer function is a result of a computation equal to the counted run. -/
+theorem mem_support_of_countedRun {α : Type} (oa : OracleComp OracleWorld α)
+    (X : ProbComp (α × Nat))
+    (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) (r : α × Nat)
+    (h : r ∈ support (countedRun f oa)) : r ∈ support X :=
+  (mem_support_iff_of_eq_withAddCost oa X hX r).2
+    ((mem_support_counted_iff oa hashCost hashCost_eq r).2 ⟨f, h⟩)
 
 /-- A hash computation runs as under `f`, with its hash calls as the count. -/
 theorem countedRun_liftM {β : Type} (oc : OracleComp HashSpec β) :
@@ -249,19 +322,16 @@ theorem hasHashQueryBound_translate {a b : Nat} (ha : 0 < a) (hab : a ≤ b)
       b * hashCalls f (signWith H ⟨ofSeed S0⟩ m))
     (adversary : Adversary) (q : Nat) (hq : HasHashQueryBound adversary q) :
     SphincsSecurity.Security.HasHashQueryBound (translate adversary) (b * q / a) := by
-  have hcost : ∀ input : OracleWorld.Domain,
-      (fun | .inl _ => (0 : Nat) | .inr _ => 1) input = if isHashCall input then 1 else 0 :=
-    fun input ↦ by cases input <;> rfl
   intro result hr
-  obtain ⟨f, hr⟩ := (mem_support_counted_iff _ _ hcost result).1 hr
-  change result ∈ support (countedRun f _) at hr
-  rw [gameCore_translate, countedRun_map, support_map] at hr
-  obtain ⟨⟨run, n⟩, hrun, rfl⟩ := hr
+  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _
+    (modelExperiment_eq (translate adversary)) result hr
+  rw [gameCore_translate] at hr
+  obtain ⟨⟨run, n⟩, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
   have hsigned : (wins run, n) ∈ support (countedRun f (signedGame adversary)) := by
-    rw [signedGame_eq, countedRun_map, support_map]
-    exact ⟨(run, n), hrun, rfl⟩
+    rw [signedGame_eq]
+    exact mem_support_countedRun_map_of_mem f _ wins run n hrun
   obtain ⟨n', hn', hle⟩ := countLe_signedGame f hab adversary (hreq f) _ hsigned
-  have hq' := hq _ ((mem_support_counted_iff _ _ hcost _).2 ⟨f, hn'⟩)
+  have hq' := hq _ (mem_support_of_countedRun f _ _ (experiment_eq adversary) _ hn')
   exact (Nat.le_div_iff_mul_le ha).2 (by
     rw [Nat.mul_comm]
     exact hle.trans (Nat.mul_le_mul_left _ hq'))

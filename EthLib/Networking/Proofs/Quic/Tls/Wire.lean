@@ -60,11 +60,8 @@ theorem encodeBlob_length_overflow (width minimum maximum : Nat) (data : List UI
 
 /-- Reading a fixed-size vector recovers the same vector. -/
 @[simp] theorem vector_encode (n : Nat) (value : Vector UInt8 n) (rest : List UInt8) :
-    vector n (value.toList ++ rest) = .ok (value, rest) := by
-  have length : value.toList.length = n := by simp
-  simp only [vector, ← length, bytes_append, bind, StateT.bind, Except.bind,
-    pure, StateT.pure, Except.pure, ↓reduceDIte]
-  simp only [Vector.toArray_toList, Vector.mk_toArray]
+    vector n (value.toList ++ rest) = .ok (value, rest) :=
+  Base.ByteReader.vector_append _ value rest
 
 /-- Reading any successful vector encoding recovers its data and the following bytes. -/
 theorem blob_encode_of_encode {width minimum maximum : Nat} {data encoded : List UInt8}
@@ -204,20 +201,8 @@ theorem eq_natToBytes_of_codePoint {input rest : List UInt8} {value : CodePoint}
 /-- A fixed-size vector retains every consumed byte and the exact remaining suffix. -/
 theorem eq_toList_append_of_vector {n : Nat} {input rest : List UInt8}
     {value : Vector UInt8 n} (parsed : vector n input = .ok (value, rest)) :
-    input = value.toList ++ rest := by
-  cases dataRead : bytes n input with
-  | error error => simp [vector, dataRead, bind, StateT.bind, Except.bind] at parsed
-  | ok result =>
-    obtain ⟨data, suffix⟩ := result
-    by_cases length : data.length = n
-    · have checked : (⟨data.toArray, by simpa using length⟩ : Vector UInt8 n) = value ∧
-          suffix = rest := by
-        simpa [vector, dataRead, length, bind, StateT.bind, Except.bind,
-          pure, StateT.pure, Except.pure] using parsed
-      obtain ⟨rfl, rfl⟩ := checked
-      simpa using (Base.ByteReader.bytes_ok_iff ..).mp dataRead |>.2
-    · simp [vector, dataRead, length, bind, StateT.bind, Except.bind,
-        throw, throwThe, MonadExceptOf.throw, StateT.lift] at parsed
+    input = value.toList ++ rest :=
+  (Base.ByteReader.vector_ok_iff _ input rest value).mp parsed
 
 /-- Every accepted length-prefixed byte vector is the encoding of the returned data. -/
 theorem encodeBlob_of_blob {width minimum maximum : Nat} {input data rest : List UInt8}

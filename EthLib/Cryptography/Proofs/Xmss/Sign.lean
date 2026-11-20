@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Xmss.Sign
 public import EthLib.Cryptography.Proofs.Xmss.KeyGen
 public import EthLib.Cryptography.Proofs.Xmss.Ots
 public import EthLib.Cryptography.Proofs.Xmss.Serialization
+public import EthLib.Cryptography.Proofs.Xmss.Tree
 
 /-!
 # Proofs: leanXMSS signing
@@ -13,6 +14,10 @@ What a successful signature holds, and how signing can fail.
 Each theorem holds for every hash function `f`, run in the identity monad.
 
 `sign` is the case `f = hash`.
+
+Signing builds the bottom tree once, for both the key's path and the root.
+
+It signs exactly as the form that computes the path, then builds the whole tree for the root.
 -/
 
 @[expose] public section
@@ -24,6 +29,39 @@ open EthLib.Cryptography.Xmss.Constants
 variable {f : ByteArray → Vector UInt8 32} {pp : PublicParam} {s : Seed} {prf : SeedPrf Id}
   {layer : Layer} {e : Nat}
   {msg : ByteArray} {sig : LayerSignature}
+
+/-! ## One build gives the path and the root -/
+
+/-- Reading the key's path and the root from one build signs as computing them apart.
+
+The right side signs the bottom layer with its path, then computes the root of the whole tree.
+
+Both sides give the same signature, byte for byte, for every hash in the identity monad. -/
+theorem signDerived_eq_path_node (H : ByteArray → Id (Vector UInt8 32)) (prf : SeedPrf Id)
+    (pp : PublicParam) (idx : LeafIndex) (msg : Message) :
+    signDerived H prf pp idx msg = (do
+      let bottom ← match ← signLayer H pp prf .bottom idx.toNat (packBytes msg) with
+        | .ok sig => pure sig
+        | .error err => return .error err
+      let bottomRoot ← node H pp prf .bottom LAYER_HEIGHT (bottomTree idx)
+      let top ← match ← signLayer H pp prf .top (bottomTree idx) (packBytes bottomRoot) with
+        | .ok sig => pure sig
+        | .error err => return .error err
+      return .ok { leafIndex := idx, bottom, top }) := by
+  unfold signDerived signLayer
+  -- Name the bottom one-time signature, so no tree is evaluated.
+  generalize otsSign H pp prf .bottom (UInt32.ofNat idx.toNat) (packBytes msg) = found
+  rcases found with _ | ⟨randomizer, chainValues⟩
+  · rfl
+  · -- The path and the root, computed apart, are the two read from the one build.
+    have hpath : path H pp prf .bottom idx.toNat =
+        (build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)).run.path LAYER_HEIGHT idx.toNat :=
+      (path_build_run idx.toNat).symm
+    have hroot : node H pp prf .bottom LAYER_HEIGHT (bottomTree idx) =
+        (build H pp prf .bottom LAYER_HEIGHT (bottomTree idx)).run.value :=
+      (value_build_run _ _).symm
+    rw [hpath, hroot]
+    rfl
 
 /-! ## The signer as a value
 
@@ -57,7 +95,7 @@ theorem signWith_run {sk : SecretKey} {idx : LeafIndex} {m : Message}
               (bottomTree idx)).run)).run.bind fun top =>
             .ok { leafIndex := idx, bottom, top } := by
   subst hs hpp
-  rw [signWith, Id.run_bind, Id.run_bind, signDerived, Id.run_bind]
+  rw [signWith, Id.run_bind, Id.run_bind, signDerived_eq_path_node, Id.run_bind]
   cases (signLayer (pureHash f)
       (publicParamOf (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run)).run
       (seedPrf (pureHash f) (schemeSeed (pureHash f) sk.seed).run) .bottom idx.toNat

@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Operations
+import EthLib.Consensus.Proofs.Transition.EpochParticipation
 
 /-!
 # Proofs: what the checks of a payload and of a bid read
@@ -18,6 +19,8 @@ From Gloas they read the latest block hash and the latest bid.
 From Fulu the header step also reads the proposer lookahead, so these fields include it.
 
 Most steps of a block keep all of these fields, when they succeed.
+
+Several steps of an epoch keep them too, and so does a pending deposit.
 
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
@@ -141,6 +144,22 @@ theorem payloadInputs_initiateValidatorExit {index : ValidatorIndex}
   · exact PayloadInputs.refl _
   · exact (payloadInputs_exitQueue queue).trans (payloadInputs_setValidator set)
 
+/-- Adding a validator keeps the inputs of a payload. -/
+theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
+    {withdrawalCredentials : Bytes32} {amount : Gwei}
+    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
+    PayloadInputs state after := by
+  unfold addValidatorToRegistry at computed
+  split at computed
+  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
+      Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  split at computed
+  · cases computed
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · cases computed
+
 /-- Slashing a validator keeps the inputs of a payload. -/
 theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
@@ -160,6 +179,98 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     (payloadInputs_increaseBalance raisedOk).trans <|
     (payloadInputs_increaseBalance lastOk).trans cancelled
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- A pending deposit keeps the inputs of a payload. -/
+theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
+    (computed : applyPendingDeposit config checks state deposit = .ok after) :
+    PayloadInputs state after := by
+  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨-, added⟩
+  · exact PayloadInputs.refl _
+  · exact payloadInputs_increaseBalance raised
+  · exact payloadInputs_addValidatorToRegistry added
+
+/-! ## Steps of an epoch -/
+
+/-- The inactivity updates keep the inputs of a payload. -/
+theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
+    (computed : processInactivityUpdates config state altair = .ok after) :
+    PayloadInputs state after := by
+  rw [processInactivityUpdates_frame computed]
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+/-- The registry updates keep the inputs of a payload. -/
+theorem payloadInputs_processRegistryUpdates
+    (computed : processRegistryUpdates config state = .ok after) : PayloadInputs state after := by
+  unfold processRegistryUpdates at computed
+  split at computed
+  · simp only [bind_ok_iff, liftAccessor_ok] at computed
+    obtain ⟨_, _, computed⟩ := computed
+    refine PayloadInputs.foldlM (fun _ _ _ ok => ?_) computed
+    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, ok⟩ := ok
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, set⟩ := ok
+      exact payloadInputs_setValidatorAt set
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact payloadInputs_initiateValidatorExit exited
+    split at ok
+    · exact payloadInputs_setValidatorAt (liftAccessor_ok.mp ok)
+    · simp only [pure, Except.pure, Except.ok.injEq] at ok
+      exact ok ▸ PayloadInputs.refl _
+  simp only [bind_ok_iff] at computed
+  obtain ⟨_, updatedOk, activated⟩ := computed
+  refine (PayloadInputs.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
+    (PayloadInputs.foldlM (fun _ _ _ ok => ?_) activated)
+  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
+    have set := payloadInputs_setValidatorAt markedOk
+    split at ok
+    · simp only [bind_ok_iff, liftAccessor_ok] at ok
+      obtain ⟨_, _, exited⟩ := ok
+      exact set.trans (payloadInputs_initiateValidatorExit exited)
+    · simp only [pure, Except.pure, Except.ok.injEq] at ok
+      exact ok ▸ set
+  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
+    obtain ⟨_, _, _, _, set⟩ := ok
+    exact payloadInputs_setValidator set
+
+/-- A pass over the pending deposits keeps the inputs of a payload. -/
+theorem payloadInputs_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
+    {available : Gwei} :
+    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
+      {count : Nat} {postponed : Array PendingDeposit} {pass},
+      passPendingDeposits config checks stop nextEpoch available state processed count postponed
+        deposits = .ok pass →
+      PayloadInputs state pass.1.state :=
+  fun computed => passPendingDeposits_of PayloadInputs PayloadInputs.refl
+    (fun one two => one.trans two) (fun ok => payloadInputs_applyPendingDeposit ok) computed
+
+/-- A pass over the pending consolidations keeps the inputs of a payload. -/
+theorem payloadInputs_passPendingConsolidations {nextEpoch : Epoch} :
+    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
+      {result : BeaconState preset fork × Nat},
+      passPendingConsolidations nextEpoch state consolidations = .ok result →
+      PayloadInputs state result.1 :=
+  fun computed => (passPendingConsolidations_of PayloadInputs PayloadInputs.refl
+    (fun one two => one.trans two) (fun _ => True)
+    (fun _ _ _ lowered raised =>
+      (payloadInputs_decreaseBalance lowered).trans (payloadInputs_increaseBalance raised))
+    (fun _ _ => trivial) computed).2
+
+/-- The historical summaries update keeps the inputs of a payload. -/
+theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
+    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
+    PayloadInputs state after := by
+  obtain ⟨-, rest⟩ := processHistoricalSummariesUpdate_eq computed
+  split at rest
+  · obtain ⟨_, _, _, _, _, same⟩ := rest
+    rw [← same]
+    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · subst rest
+    exact PayloadInputs.refl _
 
 /-! ## The requests of a parent payload -/
 
@@ -360,17 +471,9 @@ theorem payloadInputs_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 theorem payloadInputs_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
     (computed : processWithdrawals state capella payload = .ok after) :
-    PayloadInputs state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
-      exact payloadInputs_applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases computed
-      exact PayloadInputs.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact payloadInputs_applyExpectedWithdrawals applied
+    PayloadInputs state after :=
+  processWithdrawals_of PayloadInputs (PayloadInputs.refl _)
+    (fun _ => payloadInputs_applyExpectedWithdrawals) computed
 
 /-! ## The operations of a block -/
 
@@ -866,22 +969,6 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
-
-/-- Adding a validator keeps the inputs of a payload. -/
-theorem payloadInputs_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
-    {withdrawalCredentials : Bytes32} {amount : Gwei}
-    (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
-    PayloadInputs state after := by
-  unfold addValidatorToRegistry at computed
-  split at computed
-  · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
-      Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  split at computed
-  · cases computed
-    exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · cases computed
 
 /-- From Electra, a deposit keeps the inputs of a payload. -/
 theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}

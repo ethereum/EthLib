@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Execution.Exports.Evm
 
 /-!
@@ -63,11 +64,23 @@ theorem extendMemoryOf_eq {size : Nat} {ranges : List (U256 × U256)} :
 
 /-! ## Created addresses -/
 
+/-- A sender of any length but 20 bytes gives the error of a sender. -/
+private theorem readAddress_of_size_ne {sender : ByteArray} (h : sender.size ≠ 20) :
+    readAddress sender = .error (ArgumentError.senderLength sender.size).toResult :=
+  Base.exactBytes_of_size_ne _ h
+
+/-- A sender of 20 bytes gives the address of those bytes. -/
+private theorem readAddress_of_size_eq {sender : ByteArray} (h : sender.size = 20) :
+    readAddress sender = .ok (readBytes sender 0 20 (by omega)) := by
+  -- Reading the buffer in place gives back the vector of its bytes.
+  rw [readAddress, Base.exactBytes_of_size_eq _ h]
+  exact congrArg Except.ok (Base.readBytes_packBytes (⟨sender.data, h⟩ : Vector UInt8 20) _).symm
+
 /-- A sender of any length but 20 bytes gives the error of a sender, for CREATE. -/
 theorem createAddressOf_eq_error_of_size_ne {sender : ByteArray} {nonce : Nat}
     (h : sender.size ≠ 20) :
     createAddressOf (sender, nonce) = .error (ArgumentError.senderLength sender.size).toResult := by
-  simp [createAddressOf, readAddress, h, bind, Except.bind]
+  simp [createAddressOf, readAddress_of_size_ne h, bind, Except.bind]
 
 /-- A sender of 20 bytes gives the CREATE address of that sender, or the error of its preimage. -/
 theorem createAddressOf_eq_of_size_eq {sender : ByteArray} {nonce : Nat} (h : sender.size = 20) :
@@ -75,7 +88,7 @@ theorem createAddressOf_eq_of_size_eq {sender : ByteArray} {nonce : Nat} (h : se
       ((createAddress (readBytes sender 0 20 (by omega)) nonce).map
         (fun a => ⟨a.toArray⟩)).mapError
         fun e => (e.code, s!"create preimage rejected: {reprStr e}") := by
-  simp [createAddressOf, readAddress, h, bind, Except.bind]
+  simp [createAddressOf, readAddress_of_size_eq h, bind, Except.bind]
 
 /-- With a sender of 20 bytes, CREATE never fails with the code of a sender of a wrong length. -/
 theorem createAddressOf_code_ne_of_size_eq {sender : ByteArray} {nonce : Nat} {code : UInt32}
@@ -95,20 +108,21 @@ theorem create2AddressExport_eq_error_of_size_ne {sender salt initCode : ByteArr
     (h : sender.size ≠ 20) :
     create2AddressExport sender salt initCode =
       .error (ArgumentError.senderLength sender.size).toResult := by
-  simp [create2AddressExport, readAddress, h, bind, Except.bind]
+  simp [create2AddressExport, readAddress_of_size_ne h, bind, Except.bind]
 
 /-- A sender of 20 bytes and a salt of any length but 32 bytes give the error of a salt. -/
 theorem create2AddressExport_eq_error_of_salt_size_ne {sender salt initCode : ByteArray}
     (hs : sender.size = 20) (h : salt.size ≠ 32) :
     create2AddressExport sender salt initCode =
       .error (ArgumentError.saltLength salt.size).toResult := by
-  simp [create2AddressExport, readAddress, readWord, hs, h, bind, Except.bind]
+  simp [create2AddressExport, readAddress_of_size_eq hs, readWord, h, bind, Except.bind]
 
 /-- A sender of 20 bytes and a salt of 32 bytes give the CREATE2 address of the three inputs. -/
 theorem create2AddressExport_eq_of_size_eq {sender salt initCode : ByteArray}
     (hs : sender.size = 20) (h : salt.size = 32) :
     create2AddressExport sender salt initCode =
       .ok ⟨(create2Address (readBytes sender 0 20 (by omega)) (wordOf salt) initCode).toArray⟩ := by
-  simp [create2AddressExport, readAddress, readWord, hs, h, bind, Except.bind, pure, Except.pure]
+  simp [create2AddressExport, readAddress_of_size_eq hs, readWord, h, bind, Except.bind, pure,
+    Except.pure]
 
 end EthLib.Execution.Evm.Exports

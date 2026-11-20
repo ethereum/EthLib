@@ -226,6 +226,7 @@ theorem isSome_of_mem_support_findCodeword (pp : PublicParam) (layer : Layer) (e
       (Internal.findCodeword queryH pp layer e msg base 0 MAX_RANDOMIZER_TRIALS)).run C)) :
     z.1.isSome := by
   obtain ⟨j, hj, y, hy, hcw⟩ := h
+  rw [Internal.findCodeword_eq] at hz
   exact Wots.isSome_of_mem_support_findFirst_romImpl (trialRandomizer base) _ _ _
     (codeword_messageDigest_queryH pp layer e msg) _ 0 C
     ⟨j, Nat.zero_le _, by omega, y, hy, hcw⟩ z hz
@@ -239,6 +240,7 @@ theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : La
     ∃ j < MAX_RANDOMIZER_TRIALS, ∃ y,
       z.2 (trialInput pp layer e msg base j) = some y ∧
         codeword? (halfOf 0 (ofOutput y)) = some x := by
+  rw [Internal.findCodeword_eq] at hz
   obtain ⟨j, -, hj, rfl, y, hy, hcw⟩ := Wots.exists_cached_of_mem_support_findFirst_romImpl
     (trialRandomizer base) _ _ _ (codeword_messageDigest_queryH pp layer e msg) _ 0 C z hz rho x hx
   exact ⟨j, by omega, y, hy, hcw⟩
@@ -248,6 +250,7 @@ theorem exists_cached_of_mem_support_findCodeword (pp : PublicParam) (layer : La
 /-- A trial and its randomizer fix the base. -/
 theorem trialRandomizer_inj_base {base base' : Randomizer} {j : ℕ}
     (h : trialRandomizer base j = trialRandomizer base' j) : base = base' := by
+  rw [trialRandomizer_eq, trialRandomizer_eq] at h
   have hb : bytesToUint base < 2 ^ 128 :=
     lt_of_lt_of_eq (Base.bytesToUint_lt base) (by simp [RANDOMIZER_LEN])
   have hb' : bytesToUint base' < 2 ^ 128 :=
@@ -460,6 +463,12 @@ theorem isQueryBoundP_node (pp : PublicParam) (layer : Layer) (level j : ℕ) :
   merkleNode_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
     (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
 
+/-- A build of a tree draws no base. -/
+theorem isQueryBoundP_build (pp : PublicParam) (layer : Layer) (level j : ℕ) :
+    IsQueryBoundP (build hashD pp prfD layer level j) IsRndQuery 0 :=
+  merkleBuild_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_otsPublicLeaf _ _ _)
+    (fun _ _ _ => isQueryBoundP_th _ _ _) ⟨level, j⟩
+
 /-- The path of a key draws no base. -/
 theorem isQueryBoundP_path (pp : PublicParam) (layer : Layer) (e : ℕ) :
     IsQueryBoundP (path hashD pp prfD layer e) IsRndQuery 0 :=
@@ -525,11 +534,10 @@ theorem failsAtMost_signDerived (Q : ℕ) (pp : PublicParam) (idx : LeafIndex) (
       (signDerived hashD prfD pp idx msg) := by
   unfold signDerived
   rw [two_mul]
-  refine FailsAtMost.bind (failsAtMost_signLayer Q pp .bottom _ _) fun r hr => ?_
-  rcases r with err | bottom
+  refine FailsAtMost.bind (failsAtMost_otsSign Q pp .bottom _ _) fun r hr => ?_
+  rcases r with _ | ⟨rho, y⟩
   · exact absurd rfl hr
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_pure _ _ _) fun bottom => ?_
-  refine FailsAtMost.bind_of_noBase (isQueryBoundP_node pp .bottom _ _) fun root => ?_
+  refine FailsAtMost.bind_of_noBase (isQueryBoundP_build pp .bottom _ _) fun tree => ?_
   refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_signLayer Q pp .top _ _)
     fun r hr => ?_).mono_bound (add_zero _).le
   rcases r with err | top

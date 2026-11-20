@@ -98,20 +98,37 @@ def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UIn
 
 /-- `rho_c = LE_128(LE^-1(R_0) + c mod 2^128)`: the randomizer of trial `c`.
 
-A sum, not a hash, so each trial costs the one hash of its digest. -/
+A sum, not a hash, so each trial costs the one hash of its digest.
+
+The sum runs byte by byte, least significant first, and drops the carry past the top byte. -/
 def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
-  uintToBytes RANDOMIZER_LEN ((bytesToUint base + c) % 2 ^ 128)
+  go base c 0
+where
+  /-- Add `carry` into the bytes from byte `i` up. -/
+  go (acc : Randomizer) (carry i : Nat) : Randomizer :=
+    if h : i < RANDOMIZER_LEN then
+      -- The byte keeps the low 8 bits of the sum, and the rest carries into the next byte.
+      let sum := acc[i].toNat + carry
+      go (acc.set i (UInt8.ofNat sum)) (sum / 256) (i + 1)
+    else acc
+  termination_by RANDOMIZER_LEN - i
 
 namespace Internal
 
 /-- Try the trials from `c` onward, at most `fuel` of them.
 
-Returns the first trial's randomizer whose digest is a codeword, with the codeword. -/
+Returns the first trial's randomizer whose digest is a codeword, with the codeword.
+
+Each trial hashes `P | A_msg(l, e) | M | rho_c` to get the digest of its randomizer.
+
+Only `rho_c` changes between trials, so the bytes before it are built once. -/
 def findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray)
     (base : Randomizer) (c fuel : Nat) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
+  -- The input of every trial starts with `P | A_msg(l, e) | M`.
+  let before := thInput pp (addrMsg layer e) msg
   Wots.findFirst (trialRandomizer base)
-    (fun rho => codeword? <$> messageDigest H pp layer e msg rho) c fuel
+    (fun rho => codeword? <$> (do return halfOf 0 (← H (before ++ packBytes rho)))) c fuel
 
 end Internal
 

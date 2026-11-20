@@ -1,5 +1,7 @@
 """The check of a BlockBodies answer against its header."""
 
+from pathlib import Path
+
 import pytest
 
 import archives
@@ -14,6 +16,7 @@ from trie_reference import Trie
 # The rules come from "Block Encoding and Validity" in caps/eth.md of ethereum/devp2p at the pin.
 # The accepted bodies are the blocks of tests/execution/blocks/blockchain_tests.json.
 # The blocks of era 0 of mainnet are accepted too, and tests/sources.toml pins their archive.
+# So is block 19426587 of mainnet, after Shapella, which portal_block_data holds.
 # The refused ones are RLP built here.
 
 ARCHIVE = "era1/mainnet-00000-5ec1ffb8"
@@ -265,3 +268,80 @@ def test_body_that_is_not_rlp_is_refused() -> None:
 def test_fork_that_is_not_a_string_is_refused() -> None:
     with raises(TypeError, "fork must be str"):
         check_body(b"frontier", _header(), rlp.encode([[], []]))  # ty: ignore[invalid-argument-type]
+
+
+# Block 19426587 of mainnet, the first block of Cancun, with its header and body as RLP.
+# The file comes from ethereum/portal-spec-tests, and portal_block_data/README.md gives its pin.
+MAINNET_BLOCK = Path(__file__).parent / "portal_block_data" / "block-data-19426587.yaml"
+
+# The activation time of Cancun on mainnet, from the table of EIP-7569.
+CANCUN_MAINNET_TIMESTAMP = 1710338135
+
+
+def _mainnet_block() -> tuple[bytes, bytes]:
+    """The header and the body of the pinned mainnet block."""
+    fields = dict(line.split(": 0x") for line in MAINNET_BLOCK.read_text().splitlines())
+    return bytes.fromhex(fields["header"]), bytes.fromhex(fields["body"])
+
+
+def _root(entries: list[bytes]) -> bytes:
+    """The root of the trie that maps the RLP of each index to its entry."""
+    return Trie({rlp.encode(_p(i)): entry for i, entry in enumerate(entries)}).root
+
+
+def test_mainnet_cancun_body_accepted() -> None:
+    header, body = _mainnet_block()
+    fields = rlp.decode(header)
+    # The header is that of block 19426587, at the first timestamp of Cancun.
+    assert int.from_bytes(fields[8], "big") == 19426587
+    assert int.from_bytes(fields[11], "big") == CANCUN_MAINNET_TIMESTAMP
+    transactions, ommers, withdrawals = rlp.decode(body)
+    # The block has transactions and withdrawals, and no ommers, as every block after the Merge.
+    assert (len(transactions), len(ommers), len(withdrawals)) == (37, 0, 16)
+    # The reference trie gives the roots of the header, so the test does not trust the check alone.
+    entries = [rlp.encode(item) if isinstance(item, list) else item for item in transactions]
+    assert _root(entries) == fields[4]
+    assert _root([rlp.encode(withdrawal) for withdrawal in withdrawals]) == fields[16]
+    assert keccak.keccak256(rlp.encode(ommers)) == fields[1]
+    check_body("dencun", header, body)
+
+
+def test_mainnet_cancun_body_without_its_last_transaction_is_refused() -> None:
+    header, body = _mainnet_block()
+    transactions, ommers, withdrawals = rlp.decode(body)
+    kept = transactions[:-1]
+    entries = [rlp.encode(item) if isinstance(item, list) else item for item in kept]
+    message = (
+        f"transactions have the root 0x{_root(entries).hex()}, "
+        f"not the transactions root 0x{rlp.decode(header)[4].hex()}"
+    )
+    with raises(EthWireError, message) as info:
+        check_body("dencun", header, rlp.encode([kept, ommers, withdrawals]))
+    assert info.value.code == 603
+
+
+def test_mainnet_cancun_body_without_its_last_withdrawal_is_refused() -> None:
+    header, body = _mainnet_block()
+    transactions, ommers, withdrawals = rlp.decode(body)
+    kept = withdrawals[:-1]
+    message = (
+        f"withdrawals have the root 0x{_root([rlp.encode(w) for w in kept]).hex()}, "
+        f"not the withdrawals root 0x{rlp.decode(header)[16].hex()}"
+    )
+    with raises(EthWireError, message) as info:
+        check_body("dencun", header, rlp.encode([transactions, ommers, kept]))
+    assert info.value.code == 606
+
+
+def test_mainnet_cancun_body_with_an_ommer_is_refused() -> None:
+    # The block's own header as an ommer: its number is not after the block, so the hash refuses it.
+    header, body = _mainnet_block()
+    transactions, _, withdrawals = rlp.decode(body)
+    ommers = [rlp.decode(header)]
+    message = (
+        f"ommers have the hash 0x{keccak.keccak256(rlp.encode(ommers)).hex()}, "
+        f"not the ommers hash 0x{EMPTY_OMMERS_HASH.hex()}"
+    )
+    with raises(EthWireError, message) as info:
+        check_body("dencun", header, rlp.encode([transactions, ommers, withdrawals]))
+    assert info.value.code == 608

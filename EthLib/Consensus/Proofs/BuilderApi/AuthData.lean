@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.BuilderApi.AuthData
+public import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the default data of a builder from its URL
@@ -249,13 +250,10 @@ theorem take_append_replicate_append_drop {gs : List UInt16} {s l : Nat}
       _ = D.dropWhile (· = 0) := List.drop_left
   rw [List.append_assoc, hrep, hdrop, List.takeWhile_append_dropWhile, List.take_append_drop]
 
-/-- The vector of the groups of an address is that address. -/
-private theorem vector_mk_eq {address : Vector UInt16 8} {gs : List UInt16}
-    (h : gs = address.toList)
-    (hg : gs.toArray.size = 8) : (⟨gs.toArray, hg⟩ : Vector UInt16 8) = address := by
-  subst h
-  rcases address with ⟨a, ha⟩
-  simp [Vector.toList]
+/-- The groups of an address read as that address. -/
+private theorem exactArray_groups {ε : Type} {address : Vector UInt16 8} {gs : List UInt16}
+    (bad : Nat → ε) (h : gs = address.toList) : Base.exactArray 8 gs.toArray bad = .ok address :=
+  Base.exactArray_eq_ok_iff.mpr (by rw [h, Vector.toArray_toList])
 
 /-- The compressed text of an IPv6 address reads back as that address. -/
 theorem parseIpv6_compressIpv6 (address : Vector UInt16 8) :
@@ -265,7 +263,7 @@ theorem parseIpv6_compressIpv6 (address : Vector UInt16 8) :
   cases hz : zeroRun address.toList with
   | none =>
     simp only [splitDoubleColon_joinGroups, parseGroups_joinGroups]
-    rw [dite_eq_left (by simp), vector_mk_eq rfl]
+    exact exactArray_groups _ rfl
   | some run =>
     obtain ⟨s, l⟩ := run
     obtain ⟨hl2, hl⟩ := zeroRun_spec hz
@@ -277,7 +275,7 @@ theorem parseIpv6_compressIpv6 (address : Vector UInt16 8) :
     have hrun := take_append_replicate_append_drop hl
     have hlen : 8 - (s + (8 - (s + l))) = l := by omega
     simp [show s ≤ 8 by omega, show s + (8 - (s + l)) ≤ 7 by omega, hlen]
-    rw [dite_eq_left (by omega), vector_mk_eq (by rw [← List.append_assoc, hrun])]
+    exact exactArray_groups _ (by rw [← List.append_assoc, hrun])
 
 /-- Two IPv6 addresses with the same compressed text are equal. -/
 theorem compressIpv6_injective : Function.Injective compressIpv6 := by

@@ -4,6 +4,7 @@ public import EthLib.Networking.Quic.Protection
 public import EthLib.Cryptography.Proofs.Aes.Gcm
 public import EthLib.Cryptography.Proofs.ChaCha20Poly1305
 import EthLib.Base.Proofs.MapM
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: QUIC packet protection
@@ -45,7 +46,7 @@ theorem decryptPayload_encryptPayload (suite : CipherSuite) (keys : PacketKeys s
       obtain ⟨c, t⟩ := out
       simp [he, Except.mapError, Except.map] at h
       obtain ⟨rfl, rfl⟩ := h
-      simp only [decryptPayload, size_packBytes, ↓reduceDIte, readBytes_packBytes]
+      simp only [decryptPayload, exactBytes_packBytes, bind, Except.bind]
       rw [ChaCha20Poly1305.decrypt_encrypt _ _ _ _ _ _ he]
       rfl
 
@@ -95,7 +96,6 @@ theorem sample_applyMask (longHeader : Bool) (offset : Nat) (width : Packet.Pack
     have hpn : ¬(offset ≤ offset + 4 + i ∧
         offset + 4 + i < offset + (width.val + 1)) := by omega
     rw [maskByte, ite_eq_right hzero, dite_eq_right hpn, UInt8.xor_zero]
-    rfl
   · rfl
 
 private theorem and_xor (a b c : UInt8) :
@@ -397,10 +397,17 @@ private theorem decryptPayload_ne (suite : CipherSuite) (keys : PacketKeys suite
   split at h
   · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
     cases he
-  · split at h
-    · obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
+  · cases read : exactBytes 16 tag Error.tagLength with
+    | error e =>
+      simp only [read, bind, Except.bind] at h
+      cases h
+      -- A tag of the wrong length gives its own error, not this one.
+      obtain ⟨-, he⟩ := exactBytes_eq_error_iff.mp read
       cases he
-    · cases h
+    | ok tag =>
+      simp only [read, bind, Except.bind] at h
+      obtain ⟨e, -, he⟩ := Base.mapError_eq_error h
+      cases he
 
 /-- A reserved-bit error comes only from a packet that authenticates, RFC 9000 §§17.2, 17.3.1.
 

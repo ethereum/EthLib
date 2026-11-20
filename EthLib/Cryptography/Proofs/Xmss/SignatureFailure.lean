@@ -135,12 +135,29 @@ theorem node_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (level j 
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _
 
+/-- A build of the layer queries no trial input of the other layer. -/
+theorem build_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (level j : Nat) :
+    IsQueryBoundP (build Hq pp (seedPrf Hq seed) layer level j)
+      (IsTrialQuery (addrMsg layer' e') k) 0 :=
+  merkleBuild_isQueryBoundP_zero _ _
+    (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
+    (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _
+
 /-- A key's path queries no trial input of the other layer. -/
 theorem path_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : Nat) :
     IsQueryBoundP (path Hq pp (seedPrf Hq seed) layer e) (IsTrialQuery (addrMsg layer' e') k) 0 :=
   merkleSiblings_isQueryBoundP_zero _ _
     (fun _ => otsPublicLeaf_isQueryBoundP_otherLayer hl e' k _ _ _)
     (fun _ _ _ => nodeHash_isQueryBoundP_otherLayer hl e' k _ _ _ _) _ _
+
+/-- The codeword search of a key on the layer queries no trial input of the other layer. -/
+theorem findCodeword_isQueryBoundP_otherLayer (pp : PublicParam) (e : UInt32) (msg : ByteArray)
+    (base : Randomizer) (c fuel : Nat) :
+    IsQueryBoundP (Internal.findCodeword Hq pp layer e msg base c fuel)
+      (IsTrialQuery (addrMsg layer' e') k) 0 := by
+  rw [Internal.findCodeword_eq]
+  exact findFirst_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_map_iff _ _ _ |>.2
+    (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)) _ _
 
 /-- A one-time signature on the layer queries no trial input of the other layer. -/
 theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : UInt32)
@@ -149,8 +166,7 @@ theorem otsSign_isQueryBoundP_otherLayer (pp : PublicParam) (seed : Seed) (e : U
       (IsTrialQuery (addrMsg layer' e') k) 0 := by
   refine isQueryBoundP_bind_zero _ _ (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)
     fun base => isQueryBoundP_bind_zero _ _
-      (findFirst_isQueryBoundP_zero _ _ (fun _ => isQueryBoundP_map_iff _ _ _ |>.2
-        (th_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _)) _ _) fun r => ?_
+      (findCodeword_isQueryBoundP_otherLayer hl e' k _ _ _ _ _ _) fun r => ?_
   rcases r with _ | ⟨rho, x⟩
   · exact isQueryBoundP_pure _ _ _
   · exact isQueryBoundP_bind_zero _ _ (chainStarts_isQueryBoundP_otherLayer hl e' k _ _ _)
@@ -253,20 +269,19 @@ theorem prEvent_signDerived_error_le (s : Seed) (pp : PublicParam) (idx : LeafIn
   unfold signDerived
   rw [run'_simulateQ_romImpl_bind]
   refine (prEvent_bind_le_prEvent_add_mul_prEvent_not_of_support _ _
-    (fun z => z.1.isOk = false) _ (ε := ENNReal.ofReal (Real.exp (-4000)))
+    (fun z => z.1 = none) _ (ε := ENNReal.ofReal (Real.exp (-4000)))
     fun z hz hok => ?_).trans ?_
-  · -- The bottom layer signed; the top layer's trial inputs are still fresh.
-    rcases z with ⟨_ | sig, c⟩
+  · -- The bottom key signed; the top layer's trial inputs are still fresh.
+    rcases z with ⟨_ | ⟨rho, y⟩, c⟩
     · exact absurd rfl hok
     have hc : CacheAvoids (IsTopTrialQuery idx) c := cache_eq_none_of_mem_support_run_romImpl
-      (signLayer_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) htop hz
+      (otsSign_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) htop hz
     dsimp only
-    simp only [pure_bind]
     refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTopTrialQuery idx)) _ _ _ ?_
-      fun root c' hc' => ?_
+      fun tree c' hc' => ?_
     · intro z hz
       exact cache_eq_none_of_mem_support_run_romImpl
-        (node_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) hc hz
+        (build_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) hc hz
     rw [run'_simulateQ_romImpl_bind]
     refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1.isOk = false) _
       fun z _ hz => ?_).trans ?_
@@ -276,10 +291,9 @@ theorem prEvent_signDerived_error_le (s : Seed) (pp : PublicParam) (idx : LeafIn
     · rw [prEvent_run_romImpl_fst _ _ fun r : Except XmssError LayerSignature => r.isOk = false]
       refine prEvent_signLayer_error_le pp s .top _ _ c' ?_
       rwa [Base.size_packBytes]
-  · -- The bottom layer fails rarely, and the top layer after it.
-    rw [prEvent_run_romImpl_fst _ _ fun r : Except XmssError LayerSignature => r.isOk = false,
-      two_mul]
-    refine add_le_add (prEvent_signLayer_error_le pp s .bottom _ _ cache ?_)
+  · -- The bottom key fails rarely, and the top layer after it.
+    rw [prEvent_run_romImpl_fst _ _ fun r => r = none, two_mul]
+    refine add_le_add (prEvent_otsSign_none_le pp s .bottom _ _ cache ?_)
       (mul_le_of_le_one_right' (prEvent_le_one _))
     have hsize : (packBytes msg).size + 16 = 48 := by
       rw [Base.size_packBytes]

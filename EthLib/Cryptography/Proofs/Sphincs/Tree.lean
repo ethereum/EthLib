@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Sphincs.Tree
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Merkle.Build
 
 /-!
 # Proofs: the trees of the leanSPHINCS hypertree
@@ -13,6 +14,8 @@ The key `e` of a tree of height `h` reaches node `floor(e / 2^h)` at the top hei
 So a key below `2^h`, which every key of the tree is, reaches the root.
 
 A tree hashes only at heights 1 to its own height, so only those node hashes matter.
+
+A build of a tree holds its root and the path of each of its keys.
 
 Each statement specializes one proved for every Merkle tree.
 
@@ -79,6 +82,29 @@ theorem treeRoot_eq_of_agree (hash' : Merkle.Position → Digest → Digest → 
   Merkle.node_congr _ hash' _ _ agree
 
 end Monad
+
+/-! ## A build holds the root and the paths -/
+
+section Build
+
+variable {H : ByteArray → Id (Vector UInt8 32)} {pkSeed : PkSeed} {prf : Prf Id} {layer : Layer}
+  {tree : Nat}
+
+/-- The top value of a tree's build is the tree's root. -/
+theorem value_buildTree_run :
+    (buildTree H pkSeed prf layer tree).run.value = (treeRoot H pkSeed prf layer tree).run :=
+  Merkle.value_build_run _ _ _
+
+/-- The path of a key of the tree, read from the tree's build, is the key's path. -/
+theorem path_buildTree_run {e : Nat} (he : e < 2 ^ layer.height) :
+    (buildTree H pkSeed prf layer tree).run.path layer.height e
+      = (path H pkSeed prf layer tree e).run := by
+  -- The key's ancestor at the top height is the root, node 0.
+  have h := Merkle.path_build_run (nodeHash H pkSeed layer tree) (leaves H pkSeed prf layer tree)
+    layer.height e
+  rwa [Nat.div_eq_of_lt he] at h
+
+end Build
 
 /-! ## The path reaches the root -/
 

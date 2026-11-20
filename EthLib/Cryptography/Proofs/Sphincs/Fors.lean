@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Sphincs.Fors
 public import EthLib.Cryptography.Proofs.Sphincs.Tree
+public import EthLib.Cryptography.Proofs.Merkle.Build
 public import EthLib.Cryptography.Proofs.HashSig
 
 /-!
@@ -11,6 +12,8 @@ An honest FORS opening leads back to the instance's FORS public key.
 
 - Climbing all 10 heights from leaf `s` with its path reaches the tree's root `Y_{10,0}`.
 - The 24 roots, hashed by `T_k`, are the FORS public key.
+
+The signer builds each tree once, and reads both the opening and the root from that build.
 
 Each step specializes a statement proved for every Merkle tree.
 
@@ -76,12 +79,20 @@ end Monad
 variable {f : ByteArray → Vector UInt8 32} {pkSeed : PkSeed} {prf : Prf Id} {idx : Nat}
   {kappa : Fin FORS_TREES}
 
-/-- What an opening computes: the leaf's secret and the leaf's path. -/
+/-- What an opening computes: the leaf's secret and the leaf's path, then the tree's root.
+
+The path and the root are read from one build of the tree. -/
 theorem treeOpen_run (s : Fin (2 ^ FORS_HEIGHT)) :
     (treeOpen (pureHash f) pkSeed prf idx kappa s).run
-      = { secret := (forsSecret prf idx kappa s.val).run
-          path := (Merkle.path (forsNodeHash (pureHash f) pkSeed idx kappa)
-            (forsLeaves (pureHash f) pkSeed prf idx kappa) FORS_HEIGHT s.val).run } :=
+      = ({ secret := (forsSecret prf idx kappa s.val).run
+           path := (Merkle.path (forsNodeHash (pureHash f) pkSeed idx kappa)
+             (forsLeaves (pureHash f) pkSeed prf idx kappa) FORS_HEIGHT s.val).run },
+        (forsRoot (pureHash f) pkSeed prf idx kappa).run) := by
+  -- The leaf's ancestor at height 10 is the root, node 0.
+  have hpath := Merkle.path_build_run (forsNodeHash (pureHash f) pkSeed idx kappa)
+    (forsLeaves (pureHash f) pkSeed prf idx kappa) FORS_HEIGHT s.val
+  rw [Nat.div_eq_of_lt s.isLt] at hpath
+  rw [treeOpen, Id.run_bind, Id.run_bind, Id.run_pure, forsBuild, hpath, Merkle.value_build_run]
   rfl
 
 /-- An opening's path is the same with any node hash that agrees on heights 1 to 9.
@@ -91,7 +102,7 @@ theorem treeOpen_path_eq_of_agree (hash' : Merkle.Position → Digest → Digest
     (agree : ∀ q : Merkle.Position, 1 ≤ q.level → q.level < FORS_HEIGHT →
       forsNodeHash (pureHash f) pkSeed idx kappa q = hash' q)
     (s : Fin (2 ^ FORS_HEIGHT)) :
-    (treeOpen (pureHash f) pkSeed prf idx kappa s).run.path
+    (treeOpen (pureHash f) pkSeed prf idx kappa s).run.1.path
       = (Merkle.path hash' (forsLeaves (pureHash f) pkSeed prf idx kappa) FORS_HEIGHT s).run := by
   rw [treeOpen_run, Merkle.path_congr _ hash' _ _ _ agree]
 
@@ -110,30 +121,48 @@ theorem forsRecover_run (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES)
           (treeRecover (pureHash f) pkSeed idx kappa leaves[kappa] openings[kappa]).run)).run := by
   rw [forsRecover, Id.run_bind, HashSig.ofFnInOrder_run]
 
+/-- What the FORS signer computes: the opening of each tree, then the FORS public key. -/
+theorem forsSign_run (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
+    (forsSign (pureHash f) pkSeed prf idx leaves).run
+      = (Vector.ofFn fun kappa => (treeOpen (pureHash f) pkSeed prf idx kappa leaves[kappa]).run.1,
+          (forsKey (pureHash f) pkSeed prf idx).run) := by
+  rw [forsSign, Id.run_bind, HashSig.ofFnInOrder_run, Id.run_bind, Id.run_pure, forsKey_run]
+  -- Each tree's build gives its root, so the key hashes the 24 roots.
+  have hroots : (Vector.ofFn fun kappa =>
+      (treeOpen (pureHash f) pkSeed prf idx kappa leaves[kappa]).run).map Prod.snd
+      = Vector.ofFn fun kappa => (forsRoot (pureHash f) pkSeed prf idx kappa).run :=
+    Vector.ext fun i hi => by simp [treeOpen_run]
+  rw [hroots]
+  exact Prod.ext (Vector.ext fun i hi => by simp) rfl
+
 /-! ## An honest opening leads to the FORS public key -/
 
 /-- An honest opening of one tree recovers the tree's root. -/
 theorem treeRecover_treeOpen (s : Fin (2 ^ FORS_HEIGHT)) :
     (treeRecover (pureHash f) pkSeed idx kappa s
-        (treeOpen (pureHash f) pkSeed prf idx kappa s).run).run
-      = (forsRoot (pureHash f) pkSeed prf idx kappa).run :=
+        (treeOpen (pureHash f) pkSeed prf idx kappa s).run.1).run
+      = (forsRoot (pureHash f) pkSeed prf idx kappa).run := by
+  rw [treeOpen_run]
   -- The revealed secret hashes to the honest leaf, and the honest path climbs to the root.
-  Merkle.climb_path_root (forsNodeHash (pureHash f) pkSeed idx kappa)
+  exact Merkle.climb_path_root (forsNodeHash (pureHash f) pkSeed idx kappa)
     (forsLeaves (pureHash f) pkSeed prf idx kappa) s.isLt
 
 /-- Honest openings of every tree recover the instance's FORS public key. -/
 theorem forsRecover_forsSign (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
     (forsRecover (pureHash f) pkSeed idx leaves
-        (forsSign (pureHash f) pkSeed prf idx leaves).run).run
+        (forsSign (pureHash f) pkSeed prf idx leaves).run.1).run
       = (forsKey (pureHash f) pkSeed prf idx).run := by
+  rw [forsRecover_run, forsKey_run, forsSign_run]
   -- Tree by tree, the opening recovers the tree's root.
-  have hsign : (forsSign (pureHash f) pkSeed prf idx leaves).run
-      = Vector.ofFn fun kappa => (treeOpen (pureHash f) pkSeed prf idx kappa leaves[kappa]).run :=
-    HashSig.ofFnInOrder_run _ _
-  rw [forsRecover_run, forsKey_run, hsign]
   refine congrArg (fun roots => (forsPkFromRoots (pureHash f) pkSeed idx roots).run)
     (congrArg Vector.ofFn (funext fun kappa => ?_))
   simp only [Fin.getElem_fin, Vector.getElem_ofFn]
   exact treeRecover_treeOpen _
+
+/-- The FORS signer gives the instance's FORS public key. -/
+theorem forsSign_run_snd (leaves : Vector (Fin (2 ^ FORS_HEIGHT)) FORS_TREES) :
+    (forsSign (pureHash f) pkSeed prf idx leaves).run.2
+      = (forsKey (pureHash f) pkSeed prf idx).run := by
+  rw [forsSign_run]
 
 end EthLib.Cryptography.Sphincs

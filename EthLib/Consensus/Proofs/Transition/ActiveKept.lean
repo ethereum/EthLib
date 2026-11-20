@@ -532,18 +532,9 @@ private theorem blockKeeps_applyExpectedWithdrawals {capella : .shapella ≤ for
 
 private theorem blockKeeps_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) : BlockKeeps state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · simp only [bind_ok_iff, liftAccessor_ok] at computed
-      obtain ⟨_, _, applied⟩ := computed
-      exact blockKeeps_applyExpectedWithdrawals applied
-    · cases computed
-      exact BlockKeeps.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact blockKeeps_applyExpectedWithdrawals applied
+    (computed : processWithdrawals state capella payload = .ok after) : BlockKeeps state after :=
+  processWithdrawals_of BlockKeeps (BlockKeeps.refl _)
+    (fun _ => blockKeeps_applyExpectedWithdrawals) computed
 
 private theorem blockKeeps_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :

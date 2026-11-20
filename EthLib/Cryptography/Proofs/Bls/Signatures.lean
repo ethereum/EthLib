@@ -73,30 +73,37 @@ theorem coreAggregateVerify_size_ne {pks msgs : Array ByteArray} (h : pks.size �
 theorem coreVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
     (pk msg dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
-  simp [coreVerify, exactBytes?, h]
+  simp [coreVerify, EthLib.Base.exactBytes?_of_size_ne h]
 
 /-- The core aggregate verification rejects a signature that is not 96 bytes. -/
 theorem coreAggregateVerify_badSignatureSize {sig : ByteArray} (h : sig.size ≠ 96)
     (pks msgs : Array ByteArray) (dst : ByteArray) :
     coreAggregateVerify pks msgs sig dst = false := by
-  simp [coreAggregateVerify, exactBytes?, h]
+  simp [coreAggregateVerify, EthLib.Base.exactBytes?_of_size_ne h]
 
 /-- The core verification rejects a public key that is not 48 bytes. -/
 theorem coreVerify_badPubkeySize {pk : ByteArray} (h : pk.size ≠ 48) (msg sig dst : ByteArray) :
     coreVerify pk msg sig dst = false := by
   unfold coreVerify
-  rw [show exactBytes? 48 pk = none by simp [exactBytes?, h]]
+  rw [EthLib.Base.exactBytes?_of_size_ne h]
   -- Every branch of the signature checks ends on the rejected key.
   split
   · simp
   · split <;> simp
 
-/-- The secret key decoder gives a key exactly when the decoder of scalars gives its scalar. -/
-theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :
-    SecretKey.fromBytes bytes = .ok sk ↔ Fr.fromBytesBE bytes = .ok sk.val := by
+/-- The secret key decoder rejects an input that is not 32 bytes long. -/
+theorem SecretKey.fromBytes_of_size_ne {bytes : ByteArray} (h : bytes.size ≠ 32) :
+    SecretKey.fromBytes bytes = .error .invalidSecretKey := by
+  unfold SecretKey.fromBytes
+  rw [EthLib.Base.exactBytes?_of_size_ne h]
+
+/-- On 32 bytes, the key decoder gives a key exactly when the scalar decoder gives its value. -/
+theorem SecretKey.fromBytes_packBytes_eq_ok_iff {b : Vector UInt8 32} {sk : SecretKey} :
+    SecretKey.fromBytes (packBytes b) = .ok sk ↔ Fr.fromBytesBE b = .ok sk.val := by
   obtain ⟨x, hx⟩ := sk
   unfold SecretKey.fromBytes
-  cases hd : Fr.fromBytesBE bytes with
+  simp only [exactBytes?_packBytes]
+  cases hd : Fr.fromBytesBE b with
   | error e => simp
   | ok y =>
     by_cases hy : y = 0
@@ -105,13 +112,17 @@ theorem SecretKey.fromBytes_eq_ok_iff {bytes : ByteArray} {sk : SecretKey} :
 
 /-- Decoding the 32 bytes of a secret key gives it back. -/
 theorem SecretKey.fromBytes_toBytesBE (sk : SecretKey) :
-    SecretKey.fromBytes sk.val.toBytesBE = .ok sk :=
-  SecretKey.fromBytes_eq_ok_iff.mpr (Fr.fromBytesBE_toBytesBE sk.val)
+    SecretKey.fromBytes sk.val.toBytesBE = .ok sk := by
+  -- The encoding is the packed vector of its own bytes.
+  rw [← packBytes_mk_data sk.val.toBytesBE (Fr.size_data_toBytesBE sk.val)]
+  exact SecretKey.fromBytes_packBytes_eq_ok_iff.mpr (Fr.fromBytesBE_toBytesBE sk.val)
 
 /-- The secret key decoder rejects the encoding of zero (§2.3). -/
 theorem SecretKey.fromBytes_zero :
     SecretKey.fromBytes (0 : Fr).toBytesBE = .error .invalidSecretKey := by
+  rw [← packBytes_mk_data (0 : Fr).toBytesBE (Fr.size_data_toBytesBE 0)]
   unfold SecretKey.fromBytes
+  simp only [exactBytes?_packBytes]
   rw [Fr.fromBytesBE_toBytesBE]
   simp
 

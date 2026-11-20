@@ -210,12 +210,6 @@ def ack (ecnPresent : Bool) : Reader Ack := do
     else pure none
   return ⟨largest, delay, firstRange, rs, ecn⟩
 
-/-- Read a fixed-length byte vector without defaulting or padding. -/
-def vector (n : Nat) : Reader (Vector UInt8 n) := do
-  let data ← bytes n
-  if h : data.length = n then return ⟨data.toArray, by simpa using h⟩
-  else throw (.truncated n data.length)
-
 /-- Read a frame's fields after its shortest one-byte type (§19). -/
 def decodeBody (kind : Nat) : Reader Frame := do
   match kind with

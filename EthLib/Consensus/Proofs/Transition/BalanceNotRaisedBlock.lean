@@ -248,16 +248,8 @@ private theorem down_processWithdrawals {capella : .shapella ≤ fork}
       obtain ⟨_, rfl⟩ := setBuilder_ok set
       exact BalanceDown.of_balances rfl
     · exact down_decreaseBalance step index
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, ok⟩ := bind_ok_iff.mp computed
-      exact applied (liftAccessor_ok.mp ok)
-    · cases computed
-      exact BalanceDown.refl _ _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, ok⟩ := computed
-    exact applied ok
+  exact processWithdrawals_of (BalanceDown index) (BalanceDown.refl _ _) (fun _ => applied)
+    computed
 
 /-! ## The proposer along a block -/
 
@@ -1129,17 +1121,8 @@ private theorem fixed_applyExpectedWithdrawals {capella : .shapella ≤ fork}
 /-- The withdrawal step keeps the fields. -/
 private theorem fixed_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) : FixedZ state after := by
-  unfold processWithdrawals at computed
-  split at computed
-  · split at computed
-    · obtain ⟨_, _, applied⟩ := bind_ok_iff.mp computed
-      exact fixed_applyExpectedWithdrawals (liftAccessor_ok.mp applied)
-    · cases computed
-      exact FixedZ.refl _
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, _, _, applied⟩ := computed
-    exact fixed_applyExpectedWithdrawals applied
+    (computed : processWithdrawals state capella payload = .ok after) : FixedZ state after :=
+  processWithdrawals_of FixedZ (FixedZ.refl _) (fun _ => fixed_applyExpectedWithdrawals) computed
 
 /-- The execution part of a block keeps a balance from rising and keeps the fields.
 

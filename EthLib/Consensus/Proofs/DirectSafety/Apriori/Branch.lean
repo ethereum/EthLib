@@ -97,25 +97,7 @@ private theorem epochReplay_events_core {f : Fork} (altair : .altair ≤ f)
   obtain ⟨pass, passOk, rfl⟩ := two
   simp only [epochReplayAction] at three
   -- The rewards record rewards and penalties only.
-  have sources := replayRewards_induction (fun pre => ∀ e ∈ pre.2,
-      e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)
-    (fun held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, rfl⟩ := ok
-      intro e member
-      rcases List.mem_append.mp member with old | new
-      · exact held e old
-      · obtain rfl := List.mem_singleton.mp new
-        exact .inl rfl)
-    (fun penalty held ok => by
-      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
-      obtain ⟨_, _, _, _, rfl⟩ := ok
-      intro e member
-      rcases List.mem_append.mp member with old | new
-      · exact held e old
-      · obtain rfl := List.mem_singleton.mp new
-        exact .inr penalty)
-    (by simp) three
+  have sources := replayRewards_sources (by simp) three
   obtain ⟨a4, e4, s4, c4⟩ := epochReplayAction_sources (by simp) four
   obtain ⟨a5, e5, s5, c5⟩ := epochReplayAction_sources (by simp) five
   obtain ⟨a6, e6, s6, c6⟩ := epochReplayAction_sources (by simp) six

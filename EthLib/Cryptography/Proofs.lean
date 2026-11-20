@@ -5,6 +5,7 @@ public import EthLib.Cryptography.Proofs.Exports.Keccak
 public import EthLib.Cryptography.Proofs.Bls
 public import EthLib.Cryptography.Proofs.Kzg
 public import EthLib.Cryptography.Proofs.Merkle
+public import EthLib.Cryptography.Proofs.Ecdsa.Encoding
 public import EthLib.Cryptography.Proofs.EvalDistEq
 public import EthLib.Cryptography.Proofs.UniformReads
 public import EthLib.Cryptography.Proofs.RandomOracleTable
@@ -15,6 +16,8 @@ public import EthLib.Cryptography.Proofs.HashSig.Oracle
 public import EthLib.Cryptography.Proofs.HashSig.Bytes
 public import EthLib.Cryptography.Proofs.HashSig.Commute
 public import EthLib.Cryptography.Proofs.HashSig.Interchange
+public import EthLib.Cryptography.Proofs.HashSig.Calls
+public import EthLib.Cryptography.Proofs.HashSig.FailedSearch
 public import EthLib.Cryptography.Proofs.Wots
 public import EthLib.Cryptography.Proofs.Wots.Binding
 public import EthLib.Cryptography.Proofs.Wots.TargetSum
@@ -26,6 +29,8 @@ public import EthLib.Cryptography.Proofs.LogKeys
 public import EthLib.Cryptography.Proofs.LazyPermutation
 public import EthLib.Cryptography.Proofs.IndependentAnswers
 public import EthLib.Cryptography.Proofs.IndependentOutside
+public import EthLib.Cryptography.Proofs.OneCallPermutation
+public import EthLib.Cryptography.Proofs.Indifferentiability
 public import EthLib.Cryptography.Proofs.TaggedLazyPermutation
 public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable

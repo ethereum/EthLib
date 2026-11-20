@@ -1036,6 +1036,22 @@ def consensus_import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     """The record after importing a file with the minimal strategy of EIP-3076, as JSON text."""
     ...
 
+def consensus_read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    ...
+
+def consensus_signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    ...
+
+def consensus_remote_signer_sign(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, document: Any) -> tuple[int, bytes | None, bytes]:
+    """The answer of the sign endpoint of a remote signer, with the rule of EIP-3076."""
+    ...
+
+def consensus_remote_signer_public_keys(keys: list[bytes]) -> Any:
+    """The answer of the public keys endpoint of a remote signer: its public keys as hex."""
+    ...
+
 def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:
     """Whether a key may sign a block of a slot with a signing root, given a record."""
     ...
@@ -1050,6 +1066,14 @@ def consensus_record_block_signing(interchange: bytes, pubkey: bytes, slot: int,
 
 def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, signing_root: bytes) -> bytes:
     """The record after a key signs a vote, as JSON text."""
+    ...
+
+def consensus_keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a schema of the Keymanager API, read from its JSON and written back."""
+    ...
+
+def consensus_keymanager_run(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """The responses of calls made one after another on a validator client, then its state."""
     ...
 
 def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:
@@ -1198,18 +1222,6 @@ def consensus_fork_of_digest(name: str, config: dict[str, Any] | None, genesis_v
 
 def consensus_digests_identify(name: str, config: dict[str, Any] | None, genesis_validators_root: bytes) -> bool:
     """Whether the digest of each epoch at which it can change reads back the fork at that epoch."""
-    ...
-
-def pq_keys_ssz(type: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of the value that the bytes encode, and the bytes of that value, as a pair."""
-    ...
-
-def pq_keys_possession_signing_root(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes:
-    """The root that a proof of possession signs, on the chain with the given genesis validators."""
-    ...
-
-def pq_keys_is_valid_possession_proof(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, proof: bytes) -> bool:
-    """Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."""
     ...
 
 def consensus_verify_data_column_sidecar(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool:
@@ -2054,6 +2066,10 @@ def engine_exchange_capabilities(request: dict) -> list[str]:
 
 def engine_get_client_version(code: str, name: str, version: str, commit: bytes, request: dict) -> list[dict[str, str]]:
     """The answer to an `engine_getClientVersionV1` request, from a version object."""
+    ...
+
+def engine_error_object(code: int) -> str:
+    """The error object of the Engine API error with a code: its negative code, message and data."""
     ...
 
 def engine_rewrite_params(method: str, params: list[Any]) -> list[Any]:

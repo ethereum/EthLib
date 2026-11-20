@@ -480,28 +480,6 @@ extern lean_object*
 eth_consensus_api_ptc_ssz(lean_object* args);
 
 extern lean_object*
-eth_pq_keys_ssz(
-  lean_object* args
-);
-
-extern lean_object*
-eth_pq_keys_possession_signing_root(
-  lean_object* name,
-  lean_object* genesis_validators_root,
-  lean_object* pubkey,
-  lean_object* xmss_public_key
-);
-
-extern lean_object*
-eth_pq_keys_is_valid_possession_proof(
-  lean_object* name,
-  lean_object* genesis_validators_root,
-  lean_object* pubkey,
-  lean_object* xmss_public_key,
-  lean_object* proof
-);
-
-extern lean_object*
 eth_consensus_compute_shuffled_permutation(
   lean_object* args
 );
@@ -736,6 +714,18 @@ eth_consensus_read_slashing_interchange(lean_object* text);
 
 extern lean_object*
 eth_consensus_import_slashing_interchange(lean_object* held, lean_object* file);
+
+extern lean_object*
+eth_consensus_read_signing_request(lean_object* args);
+
+extern lean_object*
+eth_consensus_signing_request_root(lean_object* args);
+
+extern lean_object*
+eth_consensus_remote_signer_sign(lean_object* args);
+
+extern lean_object*
+eth_consensus_remote_signer_public_keys(lean_object* args);
 
 extern lean_object*
 eth_consensus_check_block_signing(
@@ -1300,6 +1290,28 @@ py_consensus_relay_delivered_payload(
 }
 
 extern lean_object*
+eth_consensus_keymanager_json(lean_object* args);
+
+PyObject*
+py_consensus_keymanager_json(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_keymanager_json, args, 2, KEYMANAGER_ERROR);
+}
+
+extern lean_object*
+eth_consensus_keymanager_run(lean_object* args);
+
+PyObject*
+py_consensus_keymanager_run(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_keymanager_run, args, 8, KEYMANAGER_ERROR);
+}
+
+extern lean_object*
 eth_consensus_relay_received_bid(lean_object* args);
 
 PyObject*
@@ -1373,51 +1385,6 @@ py_consensus_upgrade_operation(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_upgrade_operation, args, 3, SSZ_ERROR);
-}
-
-PyObject*
-py_pq_keys_ssz(
-  PyObject* self,
-  PyObject* args
-) {
-  return call_pyvalue_export(eth_pq_keys_ssz, args, 2, SSZ_ERROR);
-}
-
-PyObject*
-py_pq_keys_possession_signing_root(
-  PyObject* self,
-  PyObject* args
-) {
-  PyObject *name_obj;
-  const uint8_t *root, *pubkey, *key;
-  Py_ssize_t root_len, pubkey_len, key_len;
-  if (!PyArg_ParseTuple(args, "Oy#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
-                        &key, &key_len)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybytes(
-    eth_pq_keys_possession_signing_root(name, mk_bytearray(root, root_len),
-      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len)),
-    CONSENSUS_ERROR);
-}
-
-PyObject*
-py_pq_keys_is_valid_possession_proof(
-  PyObject* self,
-  PyObject* args
-) {
-  PyObject *name_obj;
-  const uint8_t *root, *pubkey, *key, *proof;
-  Py_ssize_t root_len, pubkey_len, key_len, proof_len;
-  if (!PyArg_ParseTuple(args, "Oy#y#y#y#", &name_obj, &root, &root_len, &pubkey, &pubkey_len,
-                        &key, &key_len, &proof, &proof_len)) return NULL;
-  lean_object* name = str_arg(name_obj, "name");
-  if (!name) return NULL;
-  return except_into_pybool(
-    eth_pq_keys_is_valid_possession_proof(name, mk_bytearray(root, root_len),
-      mk_bytearray(pubkey, pubkey_len), mk_bytearray(key, key_len),
-      mk_bytearray(proof, proof_len)),
-    CONSENSUS_ERROR);
 }
 
 PyObject*
@@ -2250,6 +2217,39 @@ py_consensus_import_slashing_interchange(
     eth_consensus_import_slashing_interchange(mk_bytearray(held, held_len),
       mk_bytearray(file, file_len)),
     SLASHING_PROTECTION_ERROR);
+}
+
+PyObject*
+py_consensus_read_signing_request(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_read_signing_request, args, 2, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_signing_request_root(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_signing_request_root, args, 3, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_remote_signer_sign(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_remote_signer_sign, args, 6, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_remote_signer_public_keys(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_remote_signer_public_keys, args, 1,
+    REMOTE_SIGNING_ERROR);
 }
 
 PyObject*

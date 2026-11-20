@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Real
+public import EthLib.Cryptography.Proofs.Xmss.MapMonad
 
 /-!
 # EthLib's signer under the prepared cache
@@ -13,7 +14,9 @@ It derives the same randomizer base and makes the same trials.
 
 Everything it computes after a codeword is cached.
 
-That is the chains, the path, the bottom root and the whole top signature.
+That is the chains, the bottom tree and the whole top signature.
+
+The bottom tree's build resolves to a tree with the stored root and the stored path of the key.
 
 So it erases to the values the model's key stores.
 -/
@@ -102,9 +105,10 @@ theorem erases_findCodeword_bottom {β : Type} (cache : QueryCache HashSpec)
       (Xmss.Internal.findCodeword queryH (ofParam sk.parameter) .bottom (ofLeafIndex index)
         (Xmss.packBytes (ofMessage message)) (ofRandomizer base) trial fuel >>= K)
       (tableSignFrom base sk index message fuel trial >>= K')
-  | 0, _ => by simpa [Xmss.Internal.findCodeword, Wots.findFirst, tableSignFrom] using hnone
+  | 0, _ => by simpa [Xmss.Internal.findCodeword_eq, Wots.findFirst, tableSignFrom] using hnone
   | fuel + 1, trial => by
-    unfold Xmss.Internal.findCodeword Wots.findFirst tableSignFrom
+    rw [Xmss.Internal.findCodeword_eq]
+    unfold Wots.findFirst tableSignFrom
     simp only [Xmss.Unforgeability.trialRandomizer_ofRandomizer,
       Xmss.Unforgeability.messageDigest_bottom, Concrete.precomputedSignAttempt, bind_assoc,
       bind_map_left]
@@ -112,9 +116,32 @@ theorem erases_findCodeword_bottom {β : Type} (cache : QueryCache HashSpec)
     rw [Xmss.Unforgeability.codeword?_ofDigest]
     cases TargetSum.decodeDigest digest with
     | none =>
-      simpa [Xmss.Internal.findCodeword] using
+      simpa [Xmss.Internal.findCodeword_eq] using
         erases_findCodeword_bottom cache sk index message base K K' hnone hsome fuel (trial + 1)
     | some enc => simpa using hsome _ enc
+
+/-- A resolved node gives a resolved build of the same position, with the node's value on top. -/
+theorem resolves_build {α : Type} {cache : QueryCache HashSpec}
+    (hash : Merkle.Position → α → α → OracleComp HashSpec α)
+    (leaves : Nat → OracleComp HashSpec α) :
+    ∀ (p : Merkle.Position) (v : α), Resolves cache (Merkle.node hash leaves p) v →
+      ∃ t, Resolves cache (Merkle.build hash leaves p) t ∧ t.value = v := by
+  rintro ⟨level, j⟩
+  induction level generalizing j with
+  | zero =>
+    intro v h
+    exact ⟨.leaf v, by rw [Merkle.build_zero]; exact h.bind (.pure _), rfl⟩
+  | succ level ih =>
+    intro v h
+    -- The node resolves its two children, then its hash.
+    rw [Merkle.node_succ] at h
+    obtain ⟨a, ha, h⟩ := h.of_bind
+    obtain ⟨b, hb, h⟩ := h.of_bind
+    obtain ⟨left, hleft, rfl⟩ := ih (2 * j) a ha
+    obtain ⟨right, hright, rfl⟩ := ih (2 * j + 1) b hb
+    exact ⟨.node v left right, by
+      rw [Merkle.build_succ]
+      exact hleft.bind (hright.bind (h.bind (.pure _))), rfl⟩
 
 namespace Prepared
 
@@ -139,7 +166,8 @@ theorem realTopFind (h : Prepared seed d result cache) (key : TopIndex) (base : 
     exact .pure _
   | fuel + 1, trial, hmodel => by
     rw [Concrete.topSignFrom] at hmodel
-    unfold Xmss.Internal.findCodeword Wots.findFirst
+    rw [Xmss.Internal.findCodeword_eq]
+    unfold Wots.findFirst
     simp only [Xmss.Unforgeability.trialRandomizer_ofRandomizer,
       Xmss.Unforgeability.messageDigest_top, bind_map_left]
     obtain ⟨digest, hdigest, hrest⟩ := hmodel.of_bind
@@ -148,7 +176,8 @@ theorem realTopFind (h : Prepared seed d result cache) (key : TopIndex) (base : 
     cases hdec : TargetSum.decodeDigest digest with
     | none =>
       rw [hdec] at hrest
-      exact realTopFind h key base res fuel (trial + 1) hrest
+      have next := realTopFind h key base res fuel (trial + 1) hrest
+      rwa [Xmss.Internal.findCodeword_eq] at next
     | some encoding =>
       rw [hdec] at hrest
       rw [← hrest.pure_inv]
@@ -259,6 +288,33 @@ theorem root_resolves (h : Prepared seed d result cache) (index : LeafIndex) :
   rw [Prepared.bottomRootNode_eq]
   exact hroot
 
+/-- The build of bottom tree `b` resolves to a tree with the stored root and the key's path. -/
+theorem realBottomBuild (h : Prepared seed d result cache) (index : LeafIndex) :
+    ∃ t, Resolves cache (Xmss.build queryH (ofParam d.parameter) (realPrf seed) .bottom
+        LAYER_HEIGHT (topKeyOf index).val : OracleComp HashSpec _) t ∧
+      t.value = ofDigest (h.root (topKeyOf index)) ∧
+      t.path LAYER_HEIGHT index.val = ofPath fun level =>
+        (modelSecretKey d result).treeValue level.castSucc
+          (Concrete.authenticationPathNode index level) := by
+  obtain ⟨t, ht, hroot⟩ := resolves_build _ _ _ _ (h.root_resolves index)
+  replace ht : Resolves cache (Xmss.build queryH (ofParam d.parameter) (realPrf seed) .bottom
+      LAYER_HEIGHT (topKeyOf index).val : OracleComp HashSpec _) t := ht
+  refine ⟨t, ht, hroot, ?_⟩
+  -- Answer every query from the cache: the build and the path then evaluate to their values.
+  let f : QueryImpl HashSpec Id := fun x => (cache x).getD default
+  have hf : ∀ x a, cache x = some a → f x = a := fun x a hx => by simp [f, hx]
+  rw [← ht.eval f hf, ← (h.realBottomPath index).eval f hf]
+  have hbuild := Xmss.build_map_monad (m := OracleComp HashSpec) (m' := Id)
+    (fun {β} (c : OracleComp HashSpec β) => (evalWithAnswerFn f c : Id β)) (fun _ => rfl)
+    (fun x g => evalWithAnswerFn_bind f x g) queryH (realPrf seed) (ofParam d.parameter) .bottom
+    LAYER_HEIGHT (topKeyOf index).val
+  have hpath := Xmss.path_map_monad (m := OracleComp HashSpec) (m' := Id)
+    (fun {β} (c : OracleComp HashSpec β) => (evalWithAnswerFn f c : Id β)) (fun _ => rfl)
+    (fun x g => evalWithAnswerFn_bind f x g) queryH (realPrf seed) (ofParam d.parameter) .bottom
+    index.val
+  rw [hbuild, hpath, show (topKeyOf index).val = index.val / 2 ^ LAYER_HEIGHT from rfl]
+  exact Xmss.path_build_run index.val
+
 /-- EthLib's signer from `S` and `P` erases to the table signer, its signatures translated. -/
 theorem erases_sign (h : Prepared seed d result cache) (index : LeafIndex) (message : Message) :
     Erases cache (Except.toOption <$> Xmss.signDerived queryH (realPrf seed) (ofParam d.parameter)
@@ -266,8 +322,8 @@ theorem erases_sign (h : Prepared seed d result cache) (index : LeafIndex) (mess
       (Option.map (ofSignature index) <$> (tableSign d.rnd (modelSecretKey d result) index message :
         OracleComp HashSpec (Option Signature))) := by
   unfold Xmss.signDerived tableSign
-  -- Only the bottom layer is unfolded: the top layer resolves as a whole.
-  rw [Xmss.signLayer.eq_1, Xmss.otsSign.eq_1, Xmss.Unforgeability.toNat_ofLeafIndex,
+  -- Only the bottom key is unfolded: the top layer resolves as a whole.
+  rw [Xmss.otsSign.eq_1, Xmss.Unforgeability.toNat_ofLeafIndex,
     Xmss.Unforgeability.ofNat_val_leafIndex, randomizerBase_queryH]
   simp only [bind_assoc, map_bind]
   have hR0 : cache (rndInput d.parameter seed ⟨index, message⟩) = some (d.rnd ⟨index, message⟩) :=
@@ -286,10 +342,11 @@ theorem erases_sign (h : Prepared seed d result cache) (index : LeafIndex) (mess
     simp only [bind_assoc, pure_bind]
     refine ((chainStarts_bottom seed d index).mono h.prog_le).bind ?_
     refine (h.realBottomChains index encoding).bind ?_
-    refine (h.realBottomPath index).bind ?_
     rw [Xmss.Unforgeability.bottomTree_ofLeafIndex]
     simp only [map_bind]
-    refine (h.root_resolves index).bind ?_
+    obtain ⟨tree, htree, hroot, hpath⟩ := h.realBottomBuild index
+    refine htree.bind ?_
+    rw [hroot, hpath]
     refine (h.realTopLayer (topKeyOf index)).bind ?_
     cases hsigned : (modelSecretKey d result).topSigned (topKeyOf index) with
     | none =>

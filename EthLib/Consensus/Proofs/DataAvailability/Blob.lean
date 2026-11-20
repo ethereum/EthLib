@@ -10,6 +10,7 @@ public import EthLib.Serialization.Proofs.Ssz.Merkle.Branch
 public import EthLib.Serialization.Proofs.Ssz.Typed.Gindex
 public import EthLib.Serialization.Proofs.Ssz.Codec.PathValues
 public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the blob sidecars
@@ -23,6 +24,8 @@ Two sidecars whose branches verify for one blob of one block carry one commitmen
 Otherwise the two climbs to the body root hash two different messages to one SHA-256 output.
 
 The depth of the inclusion proof, 17 for both presets, is the depth that the body type gives.
+
+The signed header of a block carries the root of its body.
 
 Every sidecar built from a block passes the inclusion check.
 
@@ -221,6 +224,26 @@ theorem blobKzgCommitmentGindex_depth (named : preset = .mainnet ∨ preset = .m
     constructor <;> omega
   rw [depth, named_limits named |>.1, named_limits named |>.2, depthFor_pow]
 
+/-- The signed header of a block carries the root of its body and the signature of the block.
+
+Its other fields are those of the block. -/
+theorem signedHeader_eq_ok_iff {signed : SignedBeaconBlock preset fork}
+    {header : SignedBeaconBlockHeader} :
+    signed.signedHeader = .ok header ↔
+      SszType.hashTreeRoot signed.message.body = .ok header.message.bodyRoot ∧
+        header = ⟨⟨signed.message.slot, signed.message.proposerIndex, signed.message.parentRoot,
+          signed.message.stateRoot, header.message.bodyRoot⟩, signed.signature⟩ := by
+  unfold SignedBeaconBlock.signedHeader
+  cases rooted : SszType.hashTreeRoot signed.message.body with
+  | error e => simp [bind, Except.bind]
+  | ok bodyRoot =>
+    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
+    constructor
+    · rintro rfl
+      exact ⟨rfl, rfl⟩
+    · rintro ⟨rfl, eq⟩
+      exact eq.symm
+
 variable [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat] [NeZero preset.SYNC_COMMITTEE_SIZE.toNat]
   [NeZero preset.MAX_COMMITTEES_PER_SLOT.toNat] [NeZero preset.PTC_SIZE.toNat]
   [NeZero preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat]
@@ -295,20 +318,19 @@ theorem blobKzgCommitmentInclusionProof_valid (deneb : .dencun ≤ fork ∧ fork
   -- The built proof is the branch that the generic construction gives.
   unfold blobKzgCommitmentInclusionProof at built
   simp only [named, proved, mapM_toChunk, bind, Except.bind] at built
-  split at built
-  · rename_i exact
-    cases built
-    have length : nodes.length = preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat := by
-      simpa using exact
-    have depth : Nat.log2 gindex = preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat := by
-      have := (Bool.and_eq_true_iff.mp valid).1
-      simp only [beq_iff_eq] at this
-      omega
-    refine ⟨gindex, leaf, root, named, rooted, bodyRoot, depth, ?_⟩
-    have listed : (⟨nodes.toArray, exact⟩ : Vector Bytes32 _).toList = nodes := by simp
-    rw [listed, ← depth]
-    exact valid
-  · cases built
+  -- The branch holds the nodes, so it has their number.
+  have listed : branch.toList = nodes := by
+    have same := congrArg Array.toList (Base.exactArray_eq_ok_iff.mp built)
+    exact same
+  have length : nodes.length = preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat := by
+    rw [← listed, Vector.length_toList]
+  have depth : Nat.log2 gindex = preset.KZG_COMMITMENT_INCLUSION_PROOF_DEPTH.toNat := by
+    have := (Bool.and_eq_true_iff.mp valid).1
+    simp only [beq_iff_eq] at this
+    omega
+  refine ⟨gindex, leaf, root, named, rooted, bodyRoot, depth, ?_⟩
+  rw [listed, ← depth]
+  exact valid
 
 /-- For both presets, the inclusion proof of every commitment of a body is built. -/
 theorem blobKzgCommitmentInclusionProof_ok (named : preset = .mainnet ∨ preset = .minimal)
@@ -329,10 +351,7 @@ theorem blobKzgCommitmentInclusionProof_ok (named : preset = .mainnet ∨ preset
     omega
   unfold blobKzgCommitmentInclusionProof
   simp only [located, proved, mapM_toChunk, bind, Except.bind]
-  split
-  · exact ⟨_, rfl⟩
-  · rename_i short
-    exact absurd (by simpa using length) short
+  exact ⟨_, Base.exactArray_of_size_eq _ (by simpa using length)⟩
 
 /-- Every sidecar built from a signed block passes the inclusion check of its commitment.
 

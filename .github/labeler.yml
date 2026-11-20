@@ -1,0 +1,459 @@
+# The area labels of a pull request, from the paths it changes.
+#
+# The paths job of workflows/labeler.yml applies them with sync-labels.
+# So it also removes a label of this file once the pull request no longer changes a matching path.
+# A child label, such as crypto: keccak, matches a subset of its parent's paths.
+# So every file that gives a child also gives its parent.
+# A module covers its file, its directory, its Proofs and Exports entries and its tests.
+# Python tests named gossip or reqresp give no child, since both consensus and networking have them.
+# labels.yml defines each label.
+
+"crypto":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography.lean'
+          - 'EthLib/Cryptography/**'
+          - 'tests/cryptography/**'
+          - 'bindings/python/tests/aes/**'
+          - 'bindings/python/tests/bls/**'
+          - 'bindings/python/tests/ethash/**'
+          - 'bindings/python/tests/keccak/**'
+          - 'bindings/python/tests/kzg/**'
+          - 'bindings/python/tests/secp256k1/**'
+          - 'bindings/python/tests/secp256r1/**'
+          - 'bindings/python/tests/sphincs/**'
+          - 'bindings/python/tests/vrf/**'
+          - 'bindings/python/tests/xmss/**'
+
+"crypto: aes":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Aes.lean'
+          - 'EthLib/Cryptography/Aes/**'
+          - 'EthLib/Cryptography/Proofs/Aes.lean'
+          - 'EthLib/Cryptography/Proofs/Aes/**'
+          - 'EthLib/Cryptography/Exports/Aes.lean'
+          - 'bindings/python/tests/aes/**'
+
+"crypto: alt_bn128":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/AltBn128.lean'
+          - 'EthLib/Cryptography/AltBn128/**'
+          - 'EthLib/Cryptography/Proofs/AltBn128.lean'
+          - 'EthLib/Cryptography/Proofs/AltBn128/**'
+
+"crypto: bls":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Bls.lean'
+          - 'EthLib/Cryptography/Bls/**'
+          - 'EthLib/Cryptography/Proofs/Bls.lean'
+          - 'EthLib/Cryptography/Proofs/Bls/**'
+          - 'EthLib/Cryptography/Exports/Bls.lean'
+          - 'tests/cryptography/bls/**'
+          - 'bindings/python/tests/bls/**'
+
+"crypto: ethash":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Ethash.lean'
+          - 'EthLib/Cryptography/Ethash/**'
+          - 'EthLib/Cryptography/Proofs/Ethash.lean'
+          - 'EthLib/Cryptography/Proofs/Ethash/**'
+          - 'EthLib/Cryptography/Exports/Ethash.lean'
+          - 'bindings/python/tests/ethash/**'
+
+"crypto: hash":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Hash.lean'
+          - 'EthLib/Cryptography/Hash/**'
+          - 'EthLib/Cryptography/Proofs/Hash.lean'
+          - 'EthLib/Cryptography/Proofs/Hash/**'
+
+"crypto: keccak":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Hash/Keccak.lean'
+          - 'EthLib/Cryptography/Exports/Keccak.lean'
+          - 'EthLib/Cryptography/Proofs/Hash/Keccak.lean'
+          - 'EthLib/Cryptography/Proofs/Hash/Keccak/**'
+          - 'EthLib/Cryptography/Proofs/Exports/Keccak.lean'
+          - 'EthLib/Cryptography/Proofs/Models/KeccakBits.lean'
+          - 'tests/cryptography/keccak/**'
+          - 'bindings/python/tests/keccak/**'
+
+"crypto: kzg":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Kzg.lean'
+          - 'EthLib/Cryptography/Kzg/**'
+          - 'EthLib/Cryptography/Proofs/Kzg.lean'
+          - 'EthLib/Cryptography/Proofs/Kzg/**'
+          - 'EthLib/Cryptography/Exports/Kzg.lean'
+          - 'tests/cryptography/kzg/**'
+          - 'bindings/python/tests/kzg/**'
+
+"crypto: merkle":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Merkle.lean'
+          - 'EthLib/Cryptography/Merkle/**'
+          - 'EthLib/Cryptography/Proofs/Merkle.lean'
+          - 'EthLib/Cryptography/Proofs/Merkle/**'
+
+"crypto: secp256k1":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Secp256k1.lean'
+          - 'EthLib/Cryptography/Secp256k1/**'
+          - 'EthLib/Cryptography/Proofs/Secp256k1.lean'
+          - 'EthLib/Cryptography/Proofs/Secp256k1/**'
+          - 'EthLib/Cryptography/Exports/Secp256k1.lean'
+          - 'tests/cryptography/secp256k1/**'
+          - 'bindings/python/tests/secp256k1/**'
+
+"crypto: secp256r1":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Secp256r1.lean'
+          - 'EthLib/Cryptography/Secp256r1/**'
+          - 'EthLib/Cryptography/Proofs/Secp256r1.lean'
+          - 'EthLib/Cryptography/Proofs/Secp256r1/**'
+          - 'EthLib/Cryptography/Exports/Secp256r1.lean'
+          - 'tests/cryptography/secp256r1/**'
+          - 'bindings/python/tests/secp256r1/**'
+
+"crypto: sphincs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Sphincs.lean'
+          - 'EthLib/Cryptography/Sphincs/**'
+          - 'EthLib/Cryptography/Proofs/Sphincs.lean'
+          - 'EthLib/Cryptography/Proofs/Sphincs/**'
+          - 'EthLib/Cryptography/Exports/Sphincs.lean'
+          - 'tests/cryptography/sphincs/**'
+          - 'bindings/python/tests/sphincs/**'
+
+"crypto: vrf":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Vrf.lean'
+          - 'EthLib/Cryptography/Vrf/**'
+          - 'EthLib/Cryptography/Proofs/Vrf.lean'
+          - 'EthLib/Cryptography/Proofs/Vrf/**'
+          - 'EthLib/Cryptography/Exports/Vrf.lean'
+          - 'tests/cryptography/vrf/**'
+          - 'bindings/python/tests/vrf/**'
+
+"crypto: xmss":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Cryptography/Xmss.lean'
+          - 'EthLib/Cryptography/Xmss/**'
+          - 'EthLib/Cryptography/Proofs/Xmss.lean'
+          - 'EthLib/Cryptography/Proofs/Xmss/**'
+          - 'EthLib/Cryptography/Exports/Xmss.lean'
+          - 'tests/cryptography/xmss/**'
+          - 'bindings/python/tests/xmss/**'
+
+"consensus":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus.lean'
+          - 'EthLib/Consensus/**'
+          - 'tests/consensus/**'
+
+"consensus: containers":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/Containers/**'
+          - 'EthLib/Consensus/Proofs/Containers/**'
+
+"consensus: data-availability":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/DataAvailability/**'
+          - 'EthLib/Consensus/Proofs/DataAvailability/**'
+
+"consensus: forkchoice":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/ForkChoice/**'
+          - 'EthLib/Consensus/Proofs/ForkChoice*.lean'
+          - 'EthLib/Consensus/Proofs/ForkChoice/**'
+          - 'EthLib/Consensus/Exports/ForkChoice*.lean'
+
+"consensus: gossip":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/Gossip/**'
+          - 'EthLib/Consensus/Proofs/Gossip/**'
+          - 'EthLib/Consensus/Exports/Gossip*.lean'
+          - 'tests/consensus/gossip/**'
+
+"consensus: light-client":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/LightClient/**'
+          - 'EthLib/Consensus/Proofs/LightClient/**'
+          - 'EthLib/Consensus/Exports/LightClient*.lean'
+
+"consensus: reqresp":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/ReqResp/**'
+          - 'EthLib/Consensus/Proofs/ReqResp/**'
+          - 'EthLib/Consensus/Exports/ReqResp*.lean'
+
+"consensus: transition":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Consensus/Transition/**'
+          - 'EthLib/Consensus/Proofs/Transition/**'
+          - 'EthLib/Consensus/Exports/Transition*.lean'
+          - 'tests/consensus/transition/**'
+
+"execution":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution.lean'
+          - 'EthLib/Execution/**'
+          - 'tests/execution/**'
+          - 'bindings/python/tests/blocks/**'
+          - 'bindings/python/tests/evm/**'
+          - 'bindings/python/tests/fees/**'
+          - 'bindings/python/tests/state/**'
+          - 'bindings/python/tests/transactions/**'
+          - 'bindings/python/tests/trie/**'
+
+"execution: blocks":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Blocks*.lean'
+          - 'EthLib/Execution/Blocks/**'
+          - 'EthLib/Execution/Proofs/Blocks*.lean'
+          - 'EthLib/Execution/Proofs/Blocks/**'
+          - 'EthLib/Execution/Exports/Blocks*.lean'
+          - 'tests/execution/blocks/**'
+          - 'bindings/python/tests/blocks/**'
+
+"execution: evm":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Evm*.lean'
+          - 'EthLib/Execution/Evm/**'
+          - 'EthLib/Execution/Proofs/Evm*.lean'
+          - 'EthLib/Execution/Proofs/Evm/**'
+          - 'EthLib/Execution/Exports/Evm*.lean'
+          - 'EthLib/Execution/Proofs/Exports/Evm*.lean'
+          - 'bindings/python/tests/evm/**'
+          - 'EthLib/Execution/Exports/Precompiles*.lean'
+
+"execution: fees":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Fees*.lean'
+          - 'EthLib/Execution/Fees/**'
+          - 'EthLib/Execution/Proofs/Fees*.lean'
+          - 'EthLib/Execution/Proofs/Fees/**'
+          - 'EthLib/Execution/Exports/Fees*.lean'
+          - 'tests/execution/fees/**'
+          - 'bindings/python/tests/fees/**'
+
+"execution: network":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Network*.lean'
+          - 'EthLib/Execution/Network/**'
+          - 'EthLib/Execution/Proofs/Network*.lean'
+          - 'EthLib/Execution/Proofs/Network/**'
+          - 'EthLib/Execution/Exports/Network*.lean'
+
+"execution: state":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/State*.lean'
+          - 'EthLib/Execution/State/**'
+          - 'EthLib/Execution/Proofs/State*.lean'
+          - 'EthLib/Execution/Proofs/State/**'
+          - 'EthLib/Execution/Exports/State*.lean'
+          - 'bindings/python/tests/state/**'
+
+"execution: transactions":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Transactions*.lean'
+          - 'EthLib/Execution/Transactions/**'
+          - 'EthLib/Execution/Proofs/Transactions*.lean'
+          - 'EthLib/Execution/Proofs/Transactions/**'
+          - 'EthLib/Execution/Exports/Transactions*.lean'
+          - 'tests/execution/transactions/**'
+          - 'bindings/python/tests/transactions/**'
+
+"execution: trie":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Execution/Trie*.lean'
+          - 'EthLib/Execution/Trie/**'
+          - 'EthLib/Execution/Proofs/Trie*.lean'
+          - 'EthLib/Execution/Proofs/Trie/**'
+          - 'EthLib/Execution/Exports/Trie*.lean'
+          - 'EthLib/Execution/Proofs/Exports/Trie*.lean'
+          - 'bindings/python/tests/trie/**'
+
+"networking":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking.lean'
+          - 'EthLib/Networking/**'
+          - 'bindings/python/tests/devp2p/**'
+          - 'bindings/python/tests/discv4/**'
+          - 'bindings/python/tests/discv5/**'
+          - 'bindings/python/tests/enr/**'
+          - 'bindings/python/tests/rlpx/**'
+          - 'bindings/python/tests/snappy/**'
+
+"networking: devp2p":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Devp2p/**'
+          - 'EthLib/Networking/Proofs/Devp2p/**'
+          - 'EthLib/Networking/Exports/Devp2p*.lean'
+          - 'bindings/python/tests/devp2p/**'
+
+"networking: discv4":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Discv4/**'
+          - 'EthLib/Networking/Proofs/Discv4/**'
+          - 'EthLib/Networking/Exports/Discv4*.lean'
+          - 'bindings/python/tests/discv4/**'
+
+"networking: discv5":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Discv5/**'
+          - 'EthLib/Networking/Proofs/Discv5/**'
+          - 'EthLib/Networking/Exports/Discv5*.lean'
+          - 'bindings/python/tests/discv5/**'
+
+"networking: encoding":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Encoding/**'
+          - 'EthLib/Networking/Proofs/Encoding/**'
+
+"networking: enr":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Enr/**'
+          - 'EthLib/Networking/Proofs/Enr/**'
+          - 'EthLib/Networking/Exports/Enr*.lean'
+          - 'bindings/python/tests/enr/**'
+
+"networking: gossip":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Gossip/**'
+          - 'EthLib/Networking/Proofs/Gossip/**'
+          - 'EthLib/Networking/Exports/Gossip*.lean'
+
+"networking: reqresp":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/ReqResp/**'
+          - 'EthLib/Networking/Proofs/ReqResp/**'
+          - 'EthLib/Networking/Exports/ReqResp*.lean'
+
+"networking: rlpx":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Rlpx/**'
+          - 'EthLib/Networking/Proofs/Rlpx/**'
+          - 'EthLib/Networking/Exports/Rlpx*.lean'
+          - 'bindings/python/tests/rlpx/**'
+
+"networking: snappy":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Networking/Snappy/**'
+          - 'EthLib/Networking/Proofs/Snappy/**'
+          - 'EthLib/Networking/Exports/Snappy*.lean'
+          - 'bindings/python/tests/snappy/**'
+
+"serialization":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Serialization.lean'
+          - 'EthLib/Serialization/**'
+          - 'tests/serialization/**'
+          - 'bindings/python/tests/rlp/**'
+          - 'bindings/python/tests/ssz/**'
+
+"serialization: rlp":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Serialization/Rlp*.lean'
+          - 'EthLib/Serialization/Rlp/**'
+          - 'EthLib/Serialization/Proofs/Rlp*.lean'
+          - 'EthLib/Serialization/Proofs/Rlp/**'
+          - 'EthLib/Serialization/Exports/Rlp*.lean'
+          - 'bindings/python/tests/rlp/**'
+
+"serialization: ssz":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Serialization/Ssz*.lean'
+          - 'EthLib/Serialization/Ssz/**'
+          - 'EthLib/Serialization/Proofs/Ssz*.lean'
+          - 'EthLib/Serialization/Proofs/Ssz/**'
+          - 'EthLib/Serialization/Exports/Ssz*.lean'
+          - 'EthLib/Serialization/Proofs/Exports/Ssz*.lean'
+          - 'tests/serialization/ssz/**'
+          - 'bindings/python/tests/ssz/**'
+
+"engine":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Engine.lean'
+          - 'EthLib/Engine/**'
+          - 'tests/engine/**'
+
+"base":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'EthLib/Base.lean'
+          - 'EthLib/Base/**'
+
+# Any file under bindings, except the Python tests.
+"bindings":
+  - changed-files:
+      - all-globs-to-any-file:
+          - 'bindings/**'
+          - '!bindings/python/tests/**'
+
+"tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'bindings/python/tests/**'
+
+"ci":
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'scripts/**'
+
+# The Markdown files at the root and in the library tree.
+"docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'EthLib/**/*.md'
+
+"proofs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/Proofs/**'

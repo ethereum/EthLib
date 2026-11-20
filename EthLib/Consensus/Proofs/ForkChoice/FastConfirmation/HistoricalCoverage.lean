@@ -318,11 +318,11 @@ private theorem route_of_split {store : Store preset fork} {root : Root}
 /-- At a time `T`, the confirmed root of a call is viable, given its coverage before `T`.
 
 Otherwise two honest stores collide, or held-state or cross-store evidence holds. -/
-private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
+public theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
     {anchor : Store preset fork} {Δ time : ℕ} {anchorEpoch horizon : Epoch} {margin : ℕ}
     {g : ForkedBeaconState preset} (pre : Run config checks g ⟨fork, anchorState⟩)
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) (preGloas : fork < .glamsterdam)
+    (preGloas : fork < .glamsterdam)
     (admitted : BlocksAdmitted e 0 Δ time) (fits : DelayFits fork config genesisTimeMs Δ)
     (prompt : Prompt e time) (votes : ValidatedDutyVotes (e := e) time)
     (windows : AssignmentWindowAgreement (e := e) time)
@@ -419,15 +419,19 @@ private theorem Execution.rootViableAt_of_checked [DecidablePred (· ∈ J)]
       (forward n u caller).slots_le_current slots (UInt64.le_of_eq anchorSlot)
     rw [slotOk, Except.ok.injEq] at callerCurrentOk
     subst callerCurrentOk
-    exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary positive
+    exact .inl ((justified_descends_of_signer anchored start anchorSlot anchorBoundary fit.positive
       preGloas fits roots caller callerHeld (low.trans high) beginOk timeEq
       (callerBlocks root block callerHeld) rfl covers high receiver atTime upToDate hdOk
       currentOk late signer).resolve_right collide)
 
-/-- The induction of the historical-anchor headline, with the root's viability given per time.
+/-- The root is on every up-to-date honest head chain from the call up to the time.
 
-The viability at a time may read the coverage at every earlier time. -/
-private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
+The viability of the root at a time may read its coverage at every earlier time.
+
+The window reserve and the receivers' exits read one reserve value.
+
+The alternatives are a block collision of honest stores and historical direct-safety evidence. -/
+public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)] {Δ : ℕ}
     (sync : e.Synchronous Δ) (slots : 0 < config.SLOT_DURATION_MS)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
     (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
@@ -476,9 +480,9 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
       discount.toNat + 2 * support.toNat)
     (callerTime : (e.world n).time ≤ time) (sourceReads : SourceWindowReads (e := e) n time source)
     (drift : WindowMarginDrift (e := e) n time source shift)
-    {finish : Slot}
-    (reserve : SourceWindowReserve (J := J) (config := config) ((e.world n).state u) head source
-      first finish)
+    {finish : Slot} {exitAllowance : ℕ}
+    (reserve : SourceWindowReserveWith (J := J) (config := config) ((e.world n).state u) head
+      source first finish exitAllowance)
     {x : ValidatorIndex} (reference : x ∈ J) {m : ℕ} (referenceTime : time ≤ (e.world m).time)
     (referenceUpToDate : UpToDate config checks sources (e.world m).time ((e.world m).view x)
       ((e.world m).state x))
@@ -511,16 +515,9 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
     (parentCovers : HonestHeadsCover (e := e) block.parentRoot (e.world n).time (time + 1))
     (fit : config.CommitteeWindowsFit preset)
     (viableAt : ∀ T, (e.world n).time ≤ T → T ≤ time →
-      HonestHeadsCover (e := e) root (e.world n).time T →
-      ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode) (hd : ForkChoiceNode), (e.world k).time = T →
-      UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-      ((e.world k).state w).getHead config = .ok hd →
-      ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
-      ((e.world k).state w).isAncestor
-          ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
-        (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes)
-    (exits : ReceiverWindowExitsNear (e := e) (computeEpochAtSlot preset parent.slot) source first
-      (e.world n).time time)
+      HonestHeadsCover (e := e) root (e.world n).time T → RootViableAt (e := e) root T)
+    (exits : ReceiverWindowExitsNearWith (e := e) (computeEpochAtSlot preset parent.slot) source
+      first (e.world n).time time exitAllowance)
     (late : LateDutyMajority (e := e) (computeEpochAtSlot preset parent.slot)
       (e.world n).time time) :
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
@@ -625,7 +622,7 @@ private theorem honestHeadsCover_core [DecidablePred (· ∈ J)] {Δ : ℕ}
             referenceUpToDate currentOk referenceSlotOk receiverLastOk finishOk
         have finality := receiverFinality_of_viable anchored start anchorSlot preGloas absent
           family receiver highK known tree route
-        have step := e.isAncestor_getHead_of_historical_anchor sync slots positive minLookahead
+        have step := e.isAncestor_getHead_of_historical_anchor_with sync slots positive minLookahead
           maxLookahead ring preGloas (time := T)
           (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
           half (fun v hv s c d a dt b dl => votes v hv s c d a dt b (by omega)) fits
@@ -823,7 +820,7 @@ public theorem Execution.honestHeadsCover_of_historical_anchor [DecidablePred (�
     HonestHeadsCover (e := e) root (e.world n).time (time + 1) ∨
       HonestCollision (e := e) time ∨
       HistoricalDirectSafetyEvidence (e := e) pre time :=
-  honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       fit.positive minLookahead maxLookahead ring newVoters)
@@ -973,7 +970,7 @@ public theorem Execution.honestHeadsCover_of_signed_justification [DecidablePred
     simp only [Store.getCurrentStoreEpoch, slotOk, bind, Except.bind, pure, Except.pure,
       Except.ok.injEq] at read
     exact read
-  exact honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  exact Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
     admitted half votes fits prompt windows
     (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
       positive minLookahead maxLookahead ring newVoters)
@@ -1236,7 +1233,6 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
       HonestCollision (e := e) time ∨ HistoricalDirectSafetyEvidence (e := e) pre time ∨
       CrossStoreJustifiedEvidence (e := e) pre time ∨
         HeldStateFinalityEvidence (e := e) pre time := by
-  have positive := fit.positive
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
     have := parameters.roots
     omega
@@ -1249,19 +1245,18 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
     anchorZero slots parameters delay genesis pre roots absent heldEarly bounded enough terminal
     afterAnchor byzantine
   -- The caller reads its head at each rollover, and every honest store has a head.
-  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by omega
   have signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 time :=
     anchorEpochOk ▸ signedAll
-  rcases e.callRolloverRead_or_evidence sync slots history preGloas admitted fits prompt votes
+  rcases e.callRolloverRead_or_evidence sync slots preGloas admitted fits prompt votes
       anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits fit caller n head.root with
+      heldEarly enough terminal ceiling scoreFits fit.seeds caller n head.root with
     rollover | collision | evidence
   rotate_left
   · exact .inr (.inl collision)
   · exact .inr (.inr (.inl evidence))
-  rcases e.honestHeadsExist_or_evidence sync slots positive preGloas admitted fits prompt votes
+  rcases e.honestHeadsExist_or_evidence sync slots preGloas admitted fits prompt votes
       anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits (e.world n).time with
+      heldEarly enough terminal ceiling scoreFits fit.seeds (e.world n).time with
     exist | collision | evidence
   rotate_left
   · exact .inr (.inl collision)
@@ -1309,7 +1304,7 @@ private theorem viableAt_or_alternative_of_checked_call [DecidablePred (· ∈ J
   by_cases heldEvidence : HeldStateFinalityEvidence (e := e) pre time
   · exact .inr (.inr (.inr (.inr heldEvidence)))
   refine .inl ⟨fun T low high covers => ?_, exist⟩
-  exact (e.rootViableAt_of_checked pre sync slots positive preGloas admitted fits prompt votes
+  exact (e.rootViableAt_of_checked pre sync slots preGloas admitted fits prompt votes
       windows fit ring incrementPositive anchored sound anchorSlot anchorBoundary start
       anchorEpochOk bounded roots absent pinned signedAll quorumDrift unslashed terminal
       anchorGenesis parameters genesis heldEarly enough included caller callerUpToDate slotOk
@@ -1447,7 +1442,7 @@ public theorem Execution.honestHeadsCover_of_checked_call [DecidablePred (· ∈
     viable | alternatives
   swap
   · exact .inr alternatives
-  rcases honestHeadsCover_core sync slots minLookahead maxLookahead ring preGloas
+  rcases Execution.honestHeadsCover_of_viableAt sync slots minLookahead maxLookahead ring preGloas
       admitted half votes fits prompt windows
       (Execution.votersInHeadWindow_of_newlyActive anchored start (UInt64.le_of_eq anchorSlot)
         fit.positive minLookahead maxLookahead ring newVoters)
@@ -1611,7 +1606,7 @@ public theorem Execution.rootViable_of_checked_call [DecidablePred (· ∈ J)] {
   -- Each up-to-date honest store has a head, and its coverage before that time gives the root.
   obtain ⟨viable, exist⟩ := viable
   refine .inl fun w receiver k nodes low high upToDate tree => ?_
-  obtain ⟨hd, hdOk⟩ := exist w receiver k nodes low high upToDate tree
+  obtain ⟨hd, hdOk⟩ := exist w receiver k low high upToDate
   exact viable (e.world k).time low high (fun earlier lower upper => cover earlier lower (by omega))
     w receiver k nodes hd rfl upToDate hdOk tree
 

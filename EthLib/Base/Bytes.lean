@@ -11,6 +11,8 @@ It writes `B_n` for the byte strings of length `n`.
 
 A read of one byte of an untyped string gives zero past its end.
 
+The exact-length read of a byte string is the exact-length read of its array of bytes.
+
 [paper]: https://github.com/ethereum/yellowpaper/blob/efc5f9a1f356cba376c978eedb63cb0363c2aa85/Paper.tex
 -/
 
@@ -55,6 +57,28 @@ def packBytes {n : Nat} (v : Vector UInt8 n) : ByteArray :=
   -- The length invariant is discarded, not checked: every object has one.
   ⟨v.toArray⟩
 
+/-- The elements of an array as a vector of `n` elements, if the array has exactly `n`.
+
+Examples:
+* `exactArray? 2 #[10, 20] = some #v[10, 20]`
+* `exactArray? 3 #[10, 20] = none`
+-/
+def exactArray? {α : Type} (n : Nat) (a : Array α) : Option (Vector α n) :=
+  if h : a.size = n then some ⟨a, h⟩ else none
+
+/-- The elements of an array as a vector of `n` elements, or an error built from its length.
+
+The error is built only for an array of another length: no padding, no truncation.
+
+Examples:
+* `exactArray 2 #[10, 20] id = .ok #v[10, 20]`
+* `exactArray 3 #[10, 20] id = .error 2`
+-/
+def exactArray {α ε : Type} (n : Nat) (a : Array α) (bad : Nat → ε) : Except ε (Vector α n) :=
+  match exactArray? n a with
+  | some v => .ok v
+  | none => .error (bad a.size)
+
 /-- The bytes of a buffer as an object of `n` bytes, if the buffer has exactly `n` bytes.
 
 Examples:
@@ -62,7 +86,19 @@ Examples:
 * `exactBytes? 3 (ByteArray.mk #[10, 20]) = none`
 -/
 def exactBytes? (n : Nat) (bytes : ByteArray) : Option (Vector UInt8 n) :=
-  if h : bytes.size = n then some ⟨bytes.data, h⟩ else none
+  exactArray? n bytes.data
+
+/-- The bytes of a buffer as an object of `n` bytes, or an error built from the buffer's length.
+
+The error is built only for a buffer of another length: no padding, no truncation.
+
+Examples:
+* `exactBytes 2 (ByteArray.mk #[10, 20]) id = .ok #v[10, 20]`
+* `exactBytes 3 (ByteArray.mk #[10, 20]) id = .error 2`
+-/
+def exactBytes {ε : Type} (n : Nat) (bytes : ByteArray) (bad : Nat → ε) :
+    Except ε (Vector UInt8 n) :=
+  exactArray n bytes.data bad
 
 /-- Read the `n` bytes of a buffer that start at an offset.
 
@@ -74,9 +110,9 @@ Example, with `b = ByteArray.mk #[10, 20, 30, 40]`:
 def readBytes (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
     Vector UInt8 n :=
   -- Every index below the object's length lands inside the buffer.
-  Vector.ofFn fun i => b.data[offset + i.val]'(by
-    simp only [ByteArray.size] at h
-    omega)
+  --
+  -- Each byte is read in place: the array of all the bytes would copy the buffer for every byte.
+  Vector.ofFn fun i => b[offset + i.val]'(by omega)
 
 /-- The byte at index `i` of the buffer, or `0` past its end.
 

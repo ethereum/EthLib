@@ -83,7 +83,7 @@ private theorem one_ne_max : ¬(0 + 1 : UInt64) = 2 ^ 64 - 1 := by decide +kerne
 /-- A 32-byte key read back from its bytes is that key. -/
 private theorem readKey_packBytes (v : Key) : readKey (packBytes v) = .ok v := by
   unfold readKey
-  rw [dite_eq_left (size_packBytes v)]
+  rw [exactBytes_of_size_eq _ (size_packBytes v)]
   rfl
 
 /-- The first 32 bytes of a key followed by other bytes are that key. -/
@@ -91,7 +91,7 @@ private theorem readBytes_packBytes_append (v : Key) (q : ByteArray) (h) :
     readBytes (packBytes v ++ q) 0 32 h = v := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_left (by simp [packBytes]; omega)]
   simp [packBytes]
 
@@ -100,7 +100,7 @@ private theorem readBytes_packBytes_append_append (v : Key) (q r : ByteArray) (h
     readBytes (packBytes v ++ q ++ r) 0 32 h = v := by
   apply Vector.ext
   intro i hi
-  simp only [readBytes, Vector.getElem_ofFn, ByteArray.data_append]
+  simp only [readBytes_eq_ofFn_data, Vector.getElem_ofFn, ByteArray.data_append]
   rw [Array.getElem_append_left (by simp [packBytes]; omega),
     Array.getElem_append_left (by simp [packBytes]; omega)]
   simp [packBytes]

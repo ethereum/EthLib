@@ -53,11 +53,10 @@ abbrev hashId : ByteArray → Id (Vector UInt8 32) :=
 
 /-- The first or the last 16 bytes of a 32-byte hash value. -/
 def halfOf (half : Fin 2) (full : Vector UInt8 32) : Digest :=
-  -- Half 0 is bytes 0 to 15, half 1 is bytes 16 to 31.
-  Vector.ofFn fun i => full[16 * half.val + i.val]'(by
+  -- Half 0 is bytes 0 to 15, half 1 is bytes 16 to 31, copied as one slice.
+  (full.extract (16 * half.val) (16 * half.val + 16)).cast (by
     have := half.isLt
-    have := i.isLt
-    simp only [DIGEST_LEN] at *
+    simp only [DIGEST_LEN]
     omega)
 
 /-- The bytes one tweakable hash call hashes: `P | A | M`. -/

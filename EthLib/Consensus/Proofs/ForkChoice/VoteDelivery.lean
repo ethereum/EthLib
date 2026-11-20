@@ -274,6 +274,54 @@ theorem DelayFits.due_lt_slot {Δ : ℕ}
   rw [nextNat, Nat.add_mul, Nat.one_mul] at followingNat
   exact UInt64.lt_iff_toNat_lt.mpr (by omega)
 
+/-- Honest stores at ordered times have ordered current slots.
+
+The later store must be up to date. -/
+theorem Execution.currentSlot_le_of_time_le {anchor : Store preset fork}
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
+    (later : (e.world n).time ≤ (e.world k).time)
+    (updated : UpToDate config checks sources (e.world k).time
+      ((e.world k).view w) ((e.world k).state w))
+    {slot current : Slot}
+    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current) :
+    slot ≤ current := by
+  have callerClock := e.clock_bounds u n
+  have receiverClock := e.clock_bounds w k
+  rw [anchored u callerHonest] at callerClock
+  rw [anchored w receiverHonest] at receiverClock
+  have clockLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
+    have initial := UInt64.le_iff_toNat_le.mp receiverClock.2.1
+    have now := updated.1
+    exact UInt64.le_iff_toNat_le.mpr (by omega)
+  have callerRead := mapError_ok_iff.mp callerSlot
+  have receiverRead := mapError_ok_iff.mp receiverSlot
+  change computeSlotAtTimeMs config _ _ = .ok slot at callerRead
+  change computeSlotAtTimeMs config _ _ = .ok current at receiverRead
+  rw [callerClock.1] at callerRead
+  rw [receiverClock.1] at receiverRead
+  exact computeSlotAtTimeMs_mono clockLe callerRead receiverRead
+
+/-- Honest stores at ordered times have ordered predecessor slots. -/
+theorem Execution.previousSlot_le_of_time_le {anchor : Store preset fork}
+    (anchored : ∀ w ∈ J, e.start w = anchor)
+    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
+    (later : (e.world n).time ≤ (e.world k).time)
+    (updated : UpToDate config checks sources (e.world k).time
+      ((e.world k).view w) ((e.world k).state w))
+    {slot current oldLast last : Slot}
+    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
+    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current)
+    (callerLast : subChecked slot 1 = .ok oldLast)
+    (receiverLast : subChecked current 1 = .ok last) : oldLast ≤ last := by
+  have slots := e.currentSlot_le_of_time_le anchored callerHonest receiverHonest later updated
+    callerSlot receiverSlot
+  have := (subChecked_ok_iff.mp callerLast).2
+  have := (subChecked_ok_iff.mp receiverLast).2
+  have := UInt64.le_iff_toNat_le.mp slots
+  exact UInt64.le_iff_toNat_le.mpr (by omega)
+
 /-- Prompt processing supplies both receiver events around a duty's next slot boundary. -/
 theorem Execution.exists_duty_boundaries {Δ : ℕ}
     {slot next : Slot} {start following : UInt64} {time : ℕ}
@@ -598,7 +646,7 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
   have reached := e.reachable
     (fun u hu => (start u hu).symm ▸ EthLib.Consensus.Store.Reachable.anchor anchored) k w receiver
   obtain ⟨receiverBase, receiverBaseFound, _, _⟩ := reached.blockStatesFromParents known
-  have baseEq := e.blockStates_eq anchored honest receiver (start v honest) (start w receiver)
+  have baseEq := e.blockStates_eq anchored (start v honest) (start w receiver)
     (agree (v, n) ⟨honest, nBound⟩ (w, k) ⟨receiver, kBound⟩) baseFound receiverBaseFound
   subst receiverBase
   have computed : ((e.world k).state w).computeCheckpointState config checks
@@ -619,6 +667,120 @@ theorem VoteAt.accepted_of_target_known {anchor : Store preset fork}
   simp [EthLib.Consensus.Store.onAttestation, valid, stored, read, committees, indexedOk, signed,
     bind, Except.bind, Except.mapError, pure, Except.pure]
 
+/-- At every fork, a held duty vote is accepted at the next slot, or honest stores collide.
+
+The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.
+
+From Gloas the receiver must also accept the payload status that the vote names.
+
+The vote's event and the receiver's event are bounded by the same time. -/
+theorem VoteAt.accepted_at_next_slot_of_payloadVote {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ u ∈ J, e.start u = anchor) {last : ℕ}
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    {slot next : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (committees : ∀ withTarget targetState,
+      ((e.world n).state v).storeTargetCheckpointState config checks attestation.data.target =
+        .ok withTarget →
+      withTarget.checkpointState attestation.data.target = .ok targetState →
+      checkAttestationCommittees targetState attestation = .ok ())
+    (dataSlot : attestation.data.slot = slot)
+    (nextOk : addChecked slot 1 = .ok next)
+    (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
+    (arrivalBound : (e.world arrival).time ≤ last) (nBound : (e.world n).time ≤ last)
+    {voted : BeaconBlock preset fork}
+    (votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
+      some voted)
+    (notFuture : voted.slot ≤ slot)
+    (payload : ∀ gloas : .glamsterdam ≤ fork,
+      ((e.world arrival).state w).validatePayloadVote gloas attestation voted = .ok ())
+    (checkpoint : ((e.world arrival).state w).getCheckpointBlock attestation.data.beaconBlockRoot
+      attestation.data.target.epoch = .ok attestation.data.target.root) :
+    ((∃ after, ((e.world arrival).state w).onAttestation config checks attestation false =
+        .ok after) ∧
+      ReadsAttestation config checks ((e.world arrival).state w) attestation indexed) ∨
+    HonestCollision (e := e) last := by
+  obtain ⟨_, target, _, targetKnown, _, _⟩ :=
+    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock checkpoint
+  -- The honest vote's data puts its target at the epoch of its slot.
+  have epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot := by
+    obtain ⟨_, _, _, _, _, _, _, _, made⟩ := vote.honestData
+    exact dataSlot ▸ target_epoch_eq_of_getAttestationData made
+  have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
+    have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
+    simp only [UInt64.toNat_one] at sum
+    omega)
+  have valid := validateOnAttestation_of_facts currentOk
+    ((epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm) ▸
+      epoch_recent_at_next_slot (dataSlot ▸ nextOk))
+    (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
+    targetKnown votedKnown (dataSlot ▸ notFuture)
+    payload checkpoint past
+  exact vote.accepted_of_target_known anchored start honest receiver committees
+    nBound arrivalBound targetKnown valid
+
+/-- From Gloas, a receiver passes the payload check of an honest duty vote for a block it holds.
+
+Both stores start at the anchor store, and the receiver reads the vote a delay after its deadline.
+
+For each envelope in its view that the receiver accepts, its store already marks the root verified.
+
+Otherwise two honest stores at bounded times collide. -/
+theorem VoteAt.validatePayloadVote_or_collision {Δ : ℕ} (sync : e.Synchronous Δ)
+    (gloas : .glamsterdam ≤ fork) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {last : ℕ}
+    {v w : ValidatorIndex} (honest : v ∈ J) (receiver : w ∈ J)
+    (startVoter : e.start v = anchor) (startReceiver : e.start w = anchor)
+    {slot : Slot} {committeeIndex : CommitteeIndex} {deadline n arrival : ℕ}
+    {attestation : Attestation preset fork} {indexed : IndexedAttestation preset fork}
+    (vote : VoteAt e v slot committeeIndex deadline n attestation indexed)
+    (late : deadline + Δ ≤ (e.world arrival).time) (arrivalBound : (e.world arrival).time ≤ last)
+    (closed : ∀ (signed : SignedExecutionPayloadEnvelope preset fork) after,
+      .envelope gloas signed ∈ (e.world arrival).view w →
+      ((e.world arrival).state w).onExecutionPayloadEnvelope config checks sources gloas signed =
+        .ok after →
+      ((e.world arrival).state w).isPayloadVerified gloas signed.message.beaconBlockRoot = true)
+    {voted : BeaconBlock preset fork}
+    (votedKnown : ((e.world arrival).state w).blocks[attestation.data.beaconBlockRoot]? =
+      some voted) :
+    ((e.world arrival).state w).validatePayloadVote gloas attestation voted = .ok () ∨
+      HonestCollision (e := e) last := by
+  rcases e.blocksAgree_or_collision last with agree | collision
+  swap
+  · exact .inr collision
+  -- The voter's head is the voted block, since the two stores agree.
+  obtain ⟨head, headBlock, -, state, headOk, headKnown, -, -, made⟩ := vote.honestData
+  obtain ⟨indexOk, -, slotEq, rootEq, -, -⟩ := getAttestationData_eq_ok_iff.mp made
+  have nBound : (e.world n).time ≤ last := by
+    have := vote.atTime
+    omega
+  obtain rfl : headBlock = voted := agree v honest w receiver n arrival nBound arrivalBound _ _ _
+    (by rw [rootEq]; exact headKnown) votedKnown
+  -- A vote at its head's slot or on an empty head names no payload.
+  by_cases same : headBlock.slot = state.slot
+  · rw [attestationDataIndex_of_glamsterdam_of_eq gloas same, Except.ok.injEq] at indexOk
+    exact .inl (by simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure])
+  rw [attestationDataIndex_of_glamsterdam_of_ne gloas same] at indexOk
+  cases status : head.payloadStatus <;> rw [status] at indexOk <;>
+    simp only [Except.ok.injEq, reduceCtorEq] at indexOk
+  · exact .inl (by simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure])
+  -- A full head has its payload verified at the voter, and synchrony delivers it.
+  have verified := Store.isPayloadVerified_of_getHead gloas headOk status
+  rw [← rootEq] at verified
+  obtain ⟨st, stFound, -⟩ :=
+    Store.Reachable.blockStatesFromParents
+      (e.reachable_of_start (startReceiver ▸ Store.Reachable.anchor anchored) arrival) votedKnown
+  rcases e.payloadVerified_of_partiallySynchronous sync gloas anchorSlot anchored honest receiver
+      startVoter startReceiver (by rw [vote.atTime, Nat.max_zero]; exact late) arrivalBound
+      closed verified ⟨st, stFound⟩ with delivered | collision
+  · have slotNe : headBlock.slot ≠ attestation.data.slot := slotEq ▸ same
+    exact .inl (by simp [Store.validatePayloadVote, ← indexOk, slotNe, delivered, pure,
+      Except.pure])
+  · exact .inr collision
+
 /-- A held duty vote is accepted at the next slot, or bounded honest stores name a collision.
 
 The receiver holds the voted block, at the duty slot or earlier, with the target in its chain.
@@ -637,7 +799,6 @@ theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : 
       withTarget.checkpointState attestation.data.target = .ok targetState →
       checkAttestationCommittees targetState attestation = .ok ())
     (dataSlot : attestation.data.slot = slot)
-    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
     (nextOk : addChecked slot 1 = .ok next)
     (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
     (arrivalBound : (e.world arrival).time ≤ last) (nBound : (e.world n).time ≤ last)
@@ -653,20 +814,9 @@ theorem VoteAt.accepted_at_next_slot (preGloas : fork < .glamsterdam) {anchor : 
     ∃ u ∈ J, ∃ v ∈ J, ∃ n m, (e.world n).time ≤ last ∧ (e.world m).time ≤ last ∧
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
-  obtain ⟨_, target, _, targetKnown, _, _⟩ :=
-    EthLib.Consensus.Store.isAncestor_of_getCheckpointBlock preGloas checkpoint
-  have past : attestation.data.slot < next := UInt64.lt_iff_toNat_lt.mpr (by
-    have sum := (addChecked_ok_iff.mp (dataSlot ▸ nextOk)).2
-    simp only [UInt64.toNat_one] at sum
-    omega)
-  have valid := validateOnAttestation_of_facts currentOk
-    ((epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm) ▸
-      epoch_recent_at_next_slot (dataSlot ▸ nextOk))
-    (epoch.trans (congrArg (computeEpochAtSlot preset) dataSlot).symm)
-    targetKnown votedKnown (dataSlot ▸ notFuture)
-    (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint past
-  exact vote.accepted_of_target_known anchored start honest receiver committees
-    nBound arrivalBound targetKnown valid
+  exact vote.accepted_at_next_slot_of_payloadVote anchored start honest receiver committees
+    dataSlot nextOk currentOk arrivalBound nBound votedKnown notFuture
+    (fun gloas => False.elim (Nat.not_le_of_lt preGloas gloas)) checkpoint
 
 /-- A delivered duty is recorded and retained, or bounded honest stores name a collision. -/
 theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
@@ -683,7 +833,6 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
       withTarget.checkpointState attestation.data.target = .ok targetState →
       checkAttestationCommittees targetState attestation = .ok ())
     (dataSlot : attestation.data.slot = slot)
-    (epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot)
     (nextOk : addChecked slot 1 = .ok next)
     (currentOk : ((e.world arrival).state w).getCurrentSlot config = .ok next)
     (late : deadline + Δ ≤ (e.world arrival).time)
@@ -703,7 +852,7 @@ theorem VoteAt.recorded_at_next_slot {Δ : ℕ} (sync : e.Synchronous Δ)
       ∃ root collision, EthLib.Consensus.Store.findBlockCollision ((e.world n).state u)
         ((e.world m).state v) [root] = some collision := by
   rcases vote.accepted_at_next_slot preGloas anchored start honest receiver committees dataSlot
-      epoch nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
+      nextOk currentOk arrivalBound (by have := vote.atTime; omega) votedKnown notFuture
       checkpoint with ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact .inr collision

@@ -24,6 +24,11 @@ open EthLib.Base.ByteReader (bytes_append uint_encode require_true)
     varint (Varint.encodeList value ++ rest) = .ok (value, rest) := by
   simp [varint, Varint.decodeList_encodeList, Except.mapError]
 
+/-- Reading an opaque fixed-size field preserves its bytes exactly. -/
+theorem vector_encode (n : Nat) (value : Vector UInt8 n) (rest : List UInt8) :
+    vector n (value.toList ++ rest) = .ok (value, rest) :=
+  Base.ByteReader.vector_append _ value rest
+
 /-- Reading a length-prefixed string recovers its bytes and the following bytes. -/
 theorem blob_encode (data rest : List UInt8) (h : data.length < 2 ^ 62) :
     blob (Varint.encodeList ⟨data.length, h⟩ ++ (data ++ rest)) = .ok (data, rest) := by

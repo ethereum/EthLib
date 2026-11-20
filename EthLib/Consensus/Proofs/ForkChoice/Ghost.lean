@@ -24,6 +24,8 @@ The slot of a block serves as its height, so a known parent has to sit at a lowe
 
 The view holds the nodes that lead to a viable leaf, and their ancestors.
 
+Before Gloas, each ancestor of a viable node is viable, or the justified block descends from it.
+
 A validator counts when it is active and not slashed in the justified state.
 
 Its stake is its effective balance, and an equivocator has no latest message.
@@ -622,6 +624,88 @@ theorem filterNodeTree_parent {config : Config} (before : fork < .glamsterdam)
   simp only at pPending parentRoot
   rw [parentRoot, ← pPending]
   exact pMem
+
+/-- Before Gloas, a block that descends from another root, and is not that root, has a parent.
+
+The store holds the parent at an earlier slot, and the parent descends from that root too. -/
+private theorem isAncestor_parentRoot_of_ne {root ancestor : Root}
+    {block : BeaconBlock preset fork} (before : fork < .glamsterdam)
+    (found : store.blocks[root]? = some block)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨ancestor, .pending⟩ = .ok true)
+    (ne : root ≠ ancestor) :
+    ∃ parent, store.blocks[block.parentRoot]? = some parent ∧ parent.slot < block.slot ∧
+      store.isAncestor ⟨block.parentRoot, .pending⟩ ⟨ancestor, .pending⟩ = .ok true := by
+  obtain ⟨ancestorBlock, ancestorFound⟩ := held_of_isAncestor descends
+  have walk := getAncestor_of_isAncestor_of_lt before ancestorFound descends
+  by_cases le : block.slot ≤ ancestorBlock.slot
+  · -- The walk stops at once, so it would reach the root itself.
+    rw [getAncestor_of_le found le] at walk
+    cases walk
+    exact absurd rfl ne
+  -- The walk steps to the parent, which the store holds at an earlier slot.
+  rw [getAncestor] at walk
+  split at walk
+  · simp_all
+  rename_i same sameFound
+  obtain rfl : block = same := Option.some.inj (found.symm.trans sameFound)
+  simp only [le, ↓reduceIte] at walk
+  split at walk
+  · simp [throw, throwThe, MonadExceptOf.throw] at walk
+  rename_i parent parentFound
+  split at walk
+  · rename_i lower
+    refine ⟨parent, parentFound, lower, ?_⟩
+    rw [parentPayloadStatus_of_lt before] at walk
+    simp [isAncestor, block_ok_iff.mpr ancestorFound, walk, bind, Except.bind, pure, Except.pure]
+  · simp [throw, throwThe, MonadExceptOf.throw] at walk
+
+/-- Before Gloas, viability passes from a root to each of its ancestors.
+
+Take a root in the filtered tree, or one that the justified block descends from.
+
+Each ancestor of that root is then in the tree, or the justified block descends from it. -/
+theorem viable_of_ancestor {config : Config} {root member : Root}
+    {nodes : List ForkChoiceNode} (before : fork < .glamsterdam)
+    (tree : store.getFilteredNodeTree config = .ok nodes)
+    (descends : store.isAncestor ⟨root, .pending⟩ ⟨member, .pending⟩ = .ok true)
+    (viable : store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩
+        ⟨root, .pending⟩ = .ok true ∨ (⟨root, .pending⟩ : ForkChoiceNode) ∈ nodes) :
+    store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩ ⟨member, .pending⟩ = .ok true ∨
+      (⟨member, .pending⟩ : ForkChoiceNode) ∈ nodes := by
+  obtain ⟨memberBlock, memberFound⟩ := held_of_isAncestor descends
+  rcases viable with below | inTree
+  · -- The justified block descends from the root, so from the member too.
+    obtain ⟨rootBlock, rootFound, -⟩ := slot_le_of_isAncestor memberFound descends
+    exact .inl (isAncestor_trans_of_lt before rootFound memberFound below descends)
+  -- Walk down the filtered tree from the root, by the slot of the node, until the member.
+  have walkDown : ∀ s, ∀ n ∈ nodes, ∀ block : BeaconBlock preset fork,
+      store.blocks[n.root]? = some block → block.slot.toNat = s →
+      store.isAncestor ⟨n.root, .pending⟩ ⟨member, .pending⟩ = .ok true →
+      store.isAncestor ⟨store.justifiedCheckpoint.root, .pending⟩ ⟨member, .pending⟩ =
+          .ok true ∨ (⟨member, .pending⟩ : ForkChoiceNode) ∈ nodes := by
+    intro s
+    induction s using Nat.strong_induction_on with
+    | _ s ih =>
+    intro n mem block found atSlot nDescends
+    rcases (filterNodeTree_parent before rfl tree n mem).2 with rfl | ⟨pending, ⟨same, sameFound,
+      parentIn⟩⟩
+    · -- The node is the justified block.
+      exact .inl nDescends
+    obtain rfl : block = same := Option.some.inj (found.symm.trans sameFound)
+    by_cases atMember : n.root = member
+    · -- The node is the member, and it is pending.
+      refine .inr ?_
+      obtain ⟨r, status⟩ := n
+      simp only at atMember pending
+      subst atMember pending
+      exact mem
+    · -- The member is below the node, so below its parent, which is in the tree too.
+      obtain ⟨parent, parentFound, lower, parentDescends⟩ :=
+        isAncestor_parentRoot_of_ne before found nDescends atMember
+      exact ih parent.slot.toNat (atSlot ▸ UInt64.lt_iff_toNat_lt.mp lower) _ parentIn parent
+        parentFound rfl parentDescends
+  obtain ⟨rootBlock, rootFound⟩ := (filterNodeTree_mem tree _ inTree).2.1
+  exact walkDown _ _ inTree rootBlock rootFound rfl descends
 
 /-- Before Gloas, the viable nodes below a node lie in its subtree.
 

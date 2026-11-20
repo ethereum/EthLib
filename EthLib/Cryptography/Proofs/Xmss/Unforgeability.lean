@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Game
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.Reasons
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.SeedHops
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.IdealFailure
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.AdversaryBudget
 
 /-!
 # Proofs: leanXMSS as EthLib computes it is unforgeable
@@ -25,6 +26,12 @@ A signing request can make more than `2^33`, when its randomizer trials keep mis
 So the bound is never below about `2^-103.3`, and each signing request adds more than `2^-94`.
 
 With all `2^32` leaf indices signed, `q` exceeds `2^65`, and the bound exceeds `2^-62`.
+
+A second form counts only the adversary's own calls: `qH` calls of `H` and `r` requests.
+
+Its bound is `Q / 2^127`, with `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
+
+For `r <= 2^32` it is at most `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 
 The game runs EthLib's key generation, signing and verification.
 
@@ -55,7 +62,9 @@ Take an adversary that makes at most `qH` hash queries and `r` signing requests 
 
 The hops cost at most `2 Q / 2^256`, where `Q` bounds the hash calls of the game on every run.
 
-`Q = 205 * 2^16 + 1 + qH + r (2^33 + 615 * 2^16) + 384`, so it charges each request's worst case.
+Here `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
+
+So it charges each request's worst case.
 
 After the hops, some request fails with probability at most `r (Q / 2^95 + 2 exp(-4000))`.
 
@@ -104,3 +113,19 @@ info: 'EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_bounded' 
 -/
 #guard_msgs (whitespace := lax) in
 #print axioms EthLib.Cryptography.Xmss.Unforgeability.reasonForgeAdvantage_le_bounded
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget
+
+/--
+info: 'EthLib.Cryptography.Xmss.Unforgeability.forgeAdvantage_le_lifetime' depends on axioms:
+
+[propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs (whitespace := lax) in
+#print axioms EthLib.Cryptography.Xmss.Unforgeability.forgeAdvantage_le_lifetime

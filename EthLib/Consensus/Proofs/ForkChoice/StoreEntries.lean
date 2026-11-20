@@ -23,6 +23,8 @@ So in a reachable store each known block has them, with that one exception.
 The late test then answers for each known head other than the anchor before Gloas.
 
 The test on justification answers for any two known blocks.
+
+From Heze, each verified payload of a reachable store has an answer on its inclusion lists.
 -/
 
 @[expose] public section
@@ -37,7 +39,21 @@ variable {preset : Preset} {fork : Fork} {config : Config}
 
 namespace Store
 
-/-- Each key of the five maps of the first store is a key of the same map of the second store. -/
+/-- From Heze, a block with an answer on inclusion lists in the first store has one in the second.
+
+Each verified payload of the second store is one of the first store or has an answer. -/
+private abbrev KeepsAnswers (gloas : .glamsterdam ≤ fork) (a b : Store preset fork) : Prop :=
+  ∀ heze : .hegota ≤ fork, ∀ r : Root,
+    (((a.payloadInclusionListSatisfaction heze)[r]?).isSome →
+      ((b.payloadInclusionListSatisfaction heze)[r]?).isSome) ∧
+    ((b.payloads gloas).contains r →
+      (a.payloads gloas).contains r ∨ ((b.payloadInclusionListSatisfaction heze)[r]?).isSome)
+
+/-- Each key of the five maps of the first store is a key of the same map of the second store.
+
+From Heze each root with an answer on inclusion lists still has one.
+
+A new verified payload has an answer too. -/
 private abbrev Keeps (a b : Store preset fork) : Prop :=
   (∀ r : Root, (a.unrealizedJustifications[r]?).isSome →
       (b.unrealizedJustifications[r]?).isSome) ∧
@@ -47,50 +63,76 @@ private abbrev Keeps (a b : Store preset fork) : Prop :=
       (∀ r : Root, ((a.payloadTimelinessVote gloas)[r]?).isSome →
         ((b.payloadTimelinessVote gloas)[r]?).isSome) ∧
       (∀ r : Root, ((a.payloadDataAvailabilityVote gloas)[r]?).isSome →
-        ((b.payloadDataAvailabilityVote gloas)[r]?).isSome)
+        ((b.payloadDataAvailabilityVote gloas)[r]?).isSome) ∧
+      KeepsAnswers gloas a b
+
+private theorem KeepsAnswers.refl (gloas : .glamsterdam ≤ fork) (a : Store preset fork) :
+    KeepsAnswers gloas a a :=
+  fun _ _ => ⟨id, .inl⟩
+
+private theorem KeepsAnswers.trans {gloas : .glamsterdam ≤ fork} {a b c : Store preset fork}
+    (ab : KeepsAnswers gloas a b) (bc : KeepsAnswers gloas b c) : KeepsAnswers gloas a c :=
+  fun heze r => ⟨fun h => (bc heze r).1 ((ab heze r).1 h), fun verified =>
+    ((bc heze r).2 verified).elim (fun old => ((ab heze r).2 old).imp id (bc heze r).1) .inr⟩
+
+private theorem KeepsAnswers.of_fields {gloas : .glamsterdam ≤ fork} {a b : Store preset fork}
+    (payloads : b.payloads gloas = a.payloads gloas)
+    (satisfaction : ∀ h, b.payloadInclusionListSatisfaction h =
+      a.payloadInclusionListSatisfaction h) : KeepsAnswers gloas a b :=
+  fun heze r => ⟨by rw [satisfaction heze]; exact id, by rw [payloads]; exact .inl⟩
 
 private theorem Keeps.refl (a : Store preset fork) : Keeps a a :=
-  ⟨fun _ h => h, fun _ h => h, fun _ => ⟨fun _ h => h, fun _ h => h, fun _ h => h⟩⟩
+  ⟨fun _ h => h, fun _ h => h, fun g =>
+    ⟨fun _ h => h, fun _ h => h, fun _ h => h, .refl g a⟩⟩
 
 private theorem Keeps.trans {a b c : Store preset fork} (ab : Keeps a b) (bc : Keeps b c) :
     Keeps a c :=
   ⟨fun r h => bc.1 r (ab.1 r h), fun r h => bc.2.1 r (ab.2.1 r h), fun g =>
     ⟨fun r h => (bc.2.2 g).1 r ((ab.2.2 g).1 r h),
       fun r h => (bc.2.2 g).2.1 r ((ab.2.2 g).2.1 r h),
-      fun r h => (bc.2.2 g).2.2 r ((ab.2.2 g).2.2 r h)⟩⟩
+      fun r h => (bc.2.2 g).2.2.1 r ((ab.2.2 g).2.2.1 r h),
+      (ab.2.2 g).2.2.2.trans (bc.2.2 g).2.2.2⟩⟩
 
 private theorem Keeps.of_fields {a b : Store preset fork}
     (unrealized : b.unrealizedJustifications = a.unrealizedJustifications)
     (timeliness : b.blockTimeliness = a.blockTimeliness)
     (ptc : ∀ g, b.ptcTimeliness g = a.ptcTimeliness g)
     (timelyVote : ∀ g, b.payloadTimelinessVote g = a.payloadTimelinessVote g)
-    (availableVote : ∀ g, b.payloadDataAvailabilityVote g = a.payloadDataAvailabilityVote g) :
+    (availableVote : ∀ g, b.payloadDataAvailabilityVote g = a.payloadDataAvailabilityVote g)
+    (payloads : ∀ g, b.payloads g = a.payloads g := by intros; rfl)
+    (satisfaction : ∀ h, b.payloadInclusionListSatisfaction h =
+      a.payloadInclusionListSatisfaction h := by intros; rfl) :
     Keeps a b := by
-  refine ⟨fun r h => ?_, fun r h => ?_, fun g => ⟨fun r h => ?_, fun r h => ?_, fun r h => ?_⟩⟩
+  refine ⟨fun r h => ?_, fun r h => ?_, fun g =>
+    ⟨fun r h => ?_, fun r h => ?_, fun r h => ?_, .of_fields (payloads g) satisfaction⟩⟩
   · rwa [unrealized]
   · rwa [timeliness]
   · rwa [ptc]
   · rwa [timelyVote]
   · rwa [availableVote]
 
-/-- A store that keeps those keys and leaves its map of timeliness as it is. -/
+/-- A store that keeps those keys and leaves its maps of timeliness and of payloads as they are. -/
 private abbrev Fixes (a b : Store preset fork) : Prop :=
-  Keeps a b ∧ b.blockTimeliness = a.blockTimeliness
+  Keeps a b ∧ b.blockTimeliness = a.blockTimeliness ∧ ∀ g, b.payloads g = a.payloads g
 
-private theorem Fixes.refl (a : Store preset fork) : Fixes a a := ⟨.refl _, rfl⟩
+private theorem Fixes.refl (a : Store preset fork) : Fixes a a := ⟨.refl _, rfl, fun _ => rfl⟩
 
 private theorem Fixes.trans {a b c : Store preset fork} (ab : Fixes a b) (bc : Fixes b c) :
     Fixes a c :=
-  ⟨ab.1.trans bc.1, bc.2.trans ab.2⟩
+  ⟨ab.1.trans bc.1, bc.2.1.trans ab.2.1, fun g => (bc.2.2 g).trans (ab.2.2 g)⟩
 
 private theorem Fixes.of_fields {a b : Store preset fork}
     (unrealized : b.unrealizedJustifications = a.unrealizedJustifications)
     (timeliness : b.blockTimeliness = a.blockTimeliness)
     (ptc : ∀ g, b.ptcTimeliness g = a.ptcTimeliness g)
     (timelyVote : ∀ g, b.payloadTimelinessVote g = a.payloadTimelinessVote g)
-    (availableVote : ∀ g, b.payloadDataAvailabilityVote g = a.payloadDataAvailabilityVote g) :
+    (availableVote : ∀ g, b.payloadDataAvailabilityVote g = a.payloadDataAvailabilityVote g)
+    (payloads : ∀ g, b.payloads g = a.payloads g := by intros; rfl)
+    (satisfaction : ∀ h, b.payloadInclusionListSatisfaction h =
+      a.payloadInclusionListSatisfaction h := by intros; rfl) :
     Fixes a b :=
-  ⟨Keeps.of_fields unrealized timeliness ptc timelyVote availableVote, timeliness⟩
+  ⟨Keeps.of_fields unrealized timeliness ptc timelyVote availableVote payloads satisfaction,
+    timeliness, payloads⟩
 
 private theorem isSome_insert_of {α : Type} {m : Std.TreeMap Root α} {k r : Root} {v : α}
     (h : (m[r]?).isSome) : ((m.insert k v)[r]?).isSome := by
@@ -209,7 +251,8 @@ private theorem recordPtcVotes_keeps {gloas : .glamsterdam ≤ fork}
   simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at recorded
   obtain ⟨_, _, _, _, rfl⟩ := recorded
   exact ⟨⟨fun _ h => h, fun _ h => h, fun g =>
-    ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h⟩⟩, rfl⟩
+    ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h,
+      .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
 
 private theorem onPayloadAttestationMessage_keeps {checks : SignatureChecks}
     {gloas : .glamsterdam ≤ fork} {message : PayloadAttestationMessage} {isFromBlock : Bool}
@@ -260,9 +303,10 @@ private theorem recordBlockPtcVotes_entries {checks : SignatureChecks}
   · dsimp only at recorded
     have kept := notifyPtcMessages_keeps recorded
     refine ⟨Fixes.trans ?_ kept, fun g => ⟨(kept.1.2.2 g).2.1 _ isSome_insert_self,
-      (kept.1.2.2 g).2.2 _ isSome_insert_self⟩⟩
+      (kept.1.2.2 g).2.2.1 _ isSome_insert_self⟩⟩
     exact ⟨⟨fun _ h => h, fun _ h => h, fun g =>
-      ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h⟩⟩, rfl⟩
+      ⟨fun _ h => h, fun _ h => isSome_insert_of h, fun _ h => isSome_insert_of h,
+        .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
   · simp only [pure, Except.pure, Except.ok.injEq] at recorded
     subst recorded
     exact ⟨.refl _, fun g => absurd g ‹_›⟩
@@ -271,7 +315,8 @@ private theorem recordBlockTimeliness_entries {root : Root} {after : Store prese
     (recorded : a.recordBlockTimeliness config root = .ok after) :
     Keeps a after ∧ (after.blockTimeliness[root]?).isSome ∧
       (∀ gloas : .glamsterdam ≤ fork, ((after.ptcTimeliness gloas)[root]?).isSome) ∧
-      ∀ r, r ≠ root → after.blockTimeliness[r]? = a.blockTimeliness[r]? := by
+      (∀ r, r ≠ root → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
+      ∀ g, after.payloads g = a.payloads g := by
   unfold recordBlockTimeliness at recorded
   simp only [bind_ok_iff, pure, Except.pure] at recorded
   obtain ⟨_, _, _, _, _, _, _, _, recorded⟩ := recorded
@@ -279,12 +324,16 @@ private theorem recordBlockTimeliness_entries {root : Root} {after : Store prese
   · simp only [bind_ok_iff, Except.ok.injEq] at recorded
     obtain ⟨_, _, rfl⟩ := recorded
     exact ⟨⟨fun _ h => h, fun _ h => isSome_insert_of h, fun g =>
-      ⟨fun _ h => isSome_insert_of h, fun _ h => h, fun _ h => h⟩⟩, isSome_insert_self,
-      fun g => isSome_insert_self, fun r ne => by simp [getElem?_insert_root, Ne.symm ne]⟩
+      ⟨fun _ h => isSome_insert_of h, fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩,
+      isSome_insert_self,
+      fun g => isSome_insert_self, fun r ne => by simp [getElem?_insert_root, Ne.symm ne],
+      fun _ => rfl⟩
   · cases recorded
     exact ⟨⟨fun _ h => h, fun _ h => isSome_insert_of h, fun g =>
-      ⟨fun _ h => h, fun _ h => h, fun _ h => h⟩⟩, isSome_insert_self,
-      fun g => absurd g ‹_›, fun r ne => by simp [getElem?_insert_root, Ne.symm ne]⟩
+      ⟨fun _ h => h, fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩,
+      isSome_insert_self,
+      fun g => absurd g ‹_›, fun r ne => by simp [getElem?_insert_root, Ne.symm ne],
+      fun _ => rfl⟩
 
 private theorem updateProposerBoostRoot_keeps {head root : Root} {after : Store preset fork}
     (updated : a.updateProposerBoostRoot config head root = .ok after) : Fixes a after := by
@@ -306,7 +355,7 @@ private theorem computePulledUpTip_entries {root : Root} {after : Store preset f
   have ins : ∀ (s : Store preset fork) (cp : Checkpoint),
       Fixes s { s with unrealizedJustifications := s.unrealizedJustifications.insert root cp } :=
     fun s cp => ⟨⟨fun _ h => isSome_insert_of h, fun _ h => h, fun _ => ⟨fun _ h => h,
-      fun _ h => h, fun _ h => h⟩⟩, rfl⟩
+      fun _ h => h, fun _ h => h, .of_fields rfl fun _ => rfl⟩⟩, rfl, fun _ => rfl⟩
   split at pulled <;> simp only [pure, Except.pure, Except.ok.injEq] at pulled <;> subst pulled
   · exact ⟨(ins _ _).trans ((updateUnrealizedCheckpoints_keeps _ _).trans
       (updateCheckpoints_keeps _ _)), (updateCheckpoints_keeps _ _).1.1 _
@@ -322,21 +371,23 @@ private theorem addBlock_entries {checks : SignatureChecks} {sources : BlockSour
       (∀ gloas : .glamsterdam ≤ fork, ((after.ptcTimeliness gloas)[blockRoot]?).isSome ∧
         ((after.payloadTimelinessVote gloas)[blockRoot]?).isSome ∧
         ((after.payloadDataAvailabilityVote gloas)[blockRoot]?).isSome) ∧
-      ∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]? := by
+      (∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
+      ∀ g, after.payloads g = a.payloads g := by
   unfold addBlock at added
   simp only [bind_ok_iff] at added
   obtain ⟨state, valid, head, -, voted, vote, recorded, record, boosted, boost, added⟩ := added
   obtain ⟨k1, v1⟩ := recordBlockPtcVotes_entries vote
-  obtain ⟨k2, t2, p2, o2⟩ := recordBlockTimeliness_entries record
+  obtain ⟨k2, t2, p2, o2, s2⟩ := recordBlockTimeliness_entries record
   have k3 := updateProposerBoostRoot_keeps boost
   obtain ⟨k5, u5⟩ := computePulledUpTip_entries added
   have tail := k3.trans ((updateCheckpoints_keeps _ _).trans k5)
   refine ⟨(Fixes.of_fields (by rfl) (by rfl) (fun _ => by rfl) (fun _ => by rfl)
       (fun _ => by rfl)).1.trans (k1.1.trans (k2.trans tail.1)), u5, tail.1.2.1 _ t2,
-      fun g => ?_, fun r ne => ?_⟩
+      fun g => ?_, fun r ne => ?_, fun g => ?_⟩
   · exact ⟨(tail.1.2.2 g).1 _ (p2 g), ((k2.trans tail.1).2.2 g).2.1 _ (v1 g).1,
-      ((k2.trans tail.1).2.2 g).2.2 _ (v1 g).2⟩
-  · rw [tail.2, o2 r ne, k1.2]
+      ((k2.trans tail.1).2.2 g).2.2.1 _ (v1 g).2⟩
+  · rw [tail.2.1, o2 r ne, k1.2.1]
+  · exact ((tail.2.2 g).trans (s2 g)).trans (k1.2.2 g)
 
 private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSources preset fork}
     {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
@@ -349,7 +400,7 @@ private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSourc
         ((after.payloadTimelinessVote gloas)[blockRoot]?).isSome ∧
         ((after.payloadDataAvailabilityVote gloas)[blockRoot]?).isSome) ∧
       (∀ r, r ≠ blockRoot → after.blockTimeliness[r]? = a.blockTimeliness[r]?) ∧
-      ¬ a.blocks.contains blockRoot := by
+      ¬ a.blocks.contains blockRoot ∧ ∀ g, after.payloads g = a.payloads g := by
   cases root : SszType.hashTreeRoot signed.message with
   | error e => simp [onBlock, root, bind, Except.bind, Except.mapError] at added
   | ok blockRoot =>
@@ -360,8 +411,42 @@ private theorem onBlock_entries {checks : SignatureChecks} {sources : BlockSourc
     · obtain ⟨blocks, -⟩ := onBlock_insert root known added
       simp only [onBlock, root, known, bind, Except.bind, Except.mapError, ↓reduceIte,
         Bool.false_eq_true] at added
-      obtain ⟨k, u, t, p, o⟩ := addBlock_entries added
-      exact .inr ⟨blockRoot, k, blocks, u, t, p, o, known⟩
+      obtain ⟨k, u, t, p, o, same⟩ := addBlock_entries added
+      exact .inr ⟨blockRoot, k, blocks, u, t, p, o, known, same⟩
+
+/-- From Heze, after an envelope each block with an answer on inclusion lists still has one.
+
+The block of the envelope has one too. -/
+private theorem recordEnvelope_answers {sources : BlockSources preset fork} {root : Root}
+    {payload : ExecutionPayload preset fork} {recorded : Store preset fork}
+    (record : a.recordEnvelope sources root payload = .ok recorded) (heze : .hegota ≤ fork)
+    (r : Root) :
+    (((a.payloadInclusionListSatisfaction heze)[r]?).isSome →
+      ((recorded.payloadInclusionListSatisfaction heze)[r]?).isSome) ∧
+    ((recorded.payloadInclusionListSatisfaction heze)[root]?).isSome := by
+  simp only [recordEnvelope, heze, dite_true, recordPayloadInclusionListSatisfaction, bind_ok_iff,
+    mapError_ok_iff, pure, Except.pure, Except.ok.injEq] at record
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := record
+  exact ⟨isSome_insert_of, isSome_insert_self⟩
+
+/-- An accepted envelope keeps the keys of the five maps.
+
+From Heze its payload has an answer. -/
+private theorem onExecutionPayloadEnvelope_keeps {checks : SignatureChecks}
+    {sources : BlockSources preset fork} {gloas : .glamsterdam ≤ fork}
+    {signed : SignedExecutionPayloadEnvelope preset fork} {after : Store preset fork}
+    (accepted : a.onExecutionPayloadEnvelope config checks sources gloas signed = .ok after) :
+    Keeps a after := by
+  obtain ⟨_, _, _, _, recorded, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
+  have answers := recordEnvelope_answers record
+  obtain ⟨_, rfl⟩ := recordEnvelope_frame record
+  refine ⟨fun _ h => h, fun _ h => h, fun _ => ⟨fun _ h => h, fun _ h => h, fun _ h => h,
+    fun heze r => ⟨(answers heze r).1, fun verified => ?_⟩⟩⟩
+  by_cases same : signed.message.beaconBlockRoot = r
+  · subst same
+    exact .inr (answers heze signed.message.beaconBlockRoot).2
+  · left
+    simpa [Std.TreeMap.contains_insert, same] using verified
 
 private theorem getForkchoiceStore_unrealized {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
@@ -404,7 +489,7 @@ private theorem Entries.mono {anchorBlock : BeaconBlock preset fork} {b : Store 
     Entries anchorBlock b root :=
   ⟨kept.1 _ entries.1, entries.2.1.imp (kept.2.1 _) id, fun g =>
     ⟨(kept.2.2 g).1 _ (entries.2.2 g).1, (kept.2.2 g).2.1 _ (entries.2.2 g).2.1,
-      (kept.2.2 g).2.2 _ (entries.2.2 g).2.2⟩⟩
+      (kept.2.2 g).2.2.1 _ (entries.2.2 g).2.2⟩⟩
 
 private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
@@ -437,7 +522,7 @@ private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
     exact Entries.mono (onTick_keeps ticked).1 (ih (by rwa [blocks] at known))
   | @block prior _ checks sources signed previous added ih =>
     rcases onBlock_entries added with
-      same | ⟨blockRoot, kept, blocks, unrealized, timely, ptc, -, -⟩
+      same | ⟨blockRoot, kept, blocks, unrealized, timely, ptc, -, -, -⟩
     · subst same
       exact ih known
     · rw [blocks] at known
@@ -455,15 +540,47 @@ private theorem Reachable.entries_aux {anchorState : BeaconState preset fork}
     exact Entries.mono (onPayloadAttestationMessage_keeps voted).1 (ih (by rwa [blocks] at known))
   | envelope _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onExecutionPayloadEnvelope_frame accepted
-    obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
-    obtain ⟨_, rfl⟩ := recordEnvelope_frame record
-    exact Entries.mono (Keeps.of_fields rfl rfl (fun _ => rfl) (fun _ => rfl) (fun _ => rfl))
-      (ih (by rwa [blocks] at known))
+    exact Entries.mono (onExecutionPayloadEnvelope_keeps accepted) (ih (by rwa [blocks] at known))
   | @inclusionList _ _ _ heze _ _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onInclusionList_frame accepted
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
     exact Entries.mono (Keeps.of_fields rfl rfl (fun _ => rfl) (fun _ => rfl) (fun _ => rfl))
       (ih (by rwa [blocks] at known))
+
+/-- From Heze, each verified payload of a reachable store has an answer on inclusion lists. -/
+private theorem Reachable.answers_aux {anchorState : BeaconState preset fork}
+    {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
+    (reachable : Reachable config anchorState anchorBlock store) (heze : .hegota ≤ fork)
+    (root : Root) (verified : (store.payloads (Nat.le_trans (by decide) heze)).contains root) :
+    ((store.payloadInclusionListSatisfaction heze)[root]?).isSome := by
+  have gloas : .glamsterdam ≤ fork := Nat.le_trans (by decide) heze
+  -- After a step that keeps the keys, each verified payload still has an answer.
+  have step : ∀ {s t : Store preset fork}, Keeps s t →
+      (∀ r, (s.payloads gloas).contains r →
+        ((s.payloadInclusionListSatisfaction heze)[r]?).isSome) →
+      ∀ r, (t.payloads gloas).contains r →
+        ((t.payloadInclusionListSatisfaction heze)[r]?).isSome :=
+    fun kept held r verified => (((kept.2.2 gloas).2.2.2 heze r).2 verified).elim
+      (fun old => ((kept.2.2 gloas).2.2.2 heze r).1 (held r old)) id
+  revert root
+  induction reachable with
+  | anchor made =>
+    obtain ⟨_, -, -, -, fields⟩ := getForkchoiceStore_fields made
+    intro root verified
+    rw [(fields gloas).2.1] at verified
+    simp at verified
+  | tick _ ticked ih => exact step (onTick_keeps ticked).1 ih
+  | block _ added ih =>
+    rcases onBlock_entries added with same | ⟨-, kept, -⟩
+    · exact same ▸ ih
+    · exact step kept ih
+  | attestation _ attested ih => exact step (onAttestation_keeps attested).1 ih
+  | attesterSlashing _ slashed ih => exact step (onAttesterSlashing_keeps slashed).1 ih
+  | payloadAttestation _ voted ih => exact step (onPayloadAttestationMessage_keeps voted).1 ih
+  | envelope _ accepted ih => exact step (onExecutionPayloadEnvelope_keeps accepted) ih
+  | @inclusionList _ _ _ heze' _ _ accepted ih =>
+    obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze' accepted
+    exact step (Keeps.of_fields rfl rfl (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)) ih
 
 private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
@@ -489,9 +606,9 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
       simp
   | tick _ ticked ih =>
     obtain ⟨-, -, blocks, -⟩ := onTick_frame ticked
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onTick_keeps ticked).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onTick_keeps ticked).2.1]; exact ih.2⟩
   | @block prior _ checks sources signed previous added ih =>
-    rcases onBlock_entries added with same | ⟨blockRoot, -, blocks, -, -, -, others, fresh⟩
+    rcases onBlock_entries added with same | ⟨blockRoot, -, blocks, -, -, -, others, fresh, -⟩
     · subst same
       exact ih
     · refine ⟨?_, ?_⟩
@@ -501,14 +618,14 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
         exact ih.2
   | attestation _ attested ih =>
     obtain ⟨-, blocks, -⟩ := onAttestation_frame attested
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttestation_keeps attested).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttestation_keeps attested).2.1]; exact ih.2⟩
   | attesterSlashing _ slashed ih =>
     obtain ⟨-, blocks, -⟩ := onAttesterSlashing_frame slashed
-    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttesterSlashing_keeps slashed).2]; exact ih.2⟩
+    exact ⟨by rw [blocks]; exact ih.1, by rw [(onAttesterSlashing_keeps slashed).2.1]; exact ih.2⟩
   | payloadAttestation _ voted ih =>
     obtain ⟨-, blocks, -⟩ := (onPayloadAttestationMessage_onlyPtcVotes voted).frame
     exact ⟨by rw [blocks]; exact ih.1,
-      by rw [(onPayloadAttestationMessage_keeps voted).2]; exact ih.2⟩
+      by rw [(onPayloadAttestationMessage_keeps voted).2.1]; exact ih.2⟩
   | envelope _ accepted ih =>
     obtain ⟨-, blocks, -⟩ := onExecutionPayloadEnvelope_frame accepted
     obtain ⟨_, _, _, _, _, record, rfl⟩ := onExecutionPayloadEnvelope_ok accepted
@@ -518,6 +635,35 @@ private theorem Reachable.anchor_untimely {anchorState : BeaconState preset fork
     obtain ⟨-, blocks, -⟩ := onInclusionList_frame accepted
     obtain ⟨_, _, rfl⟩ := onInclusionList_ok heze accepted
     exact ⟨by rw [blocks]; exact ih.1, ih.2⟩
+
+/-- A tick keeps the verified payloads. -/
+theorem onTick_payloads {timeMs : UInt64} {after : Store preset fork}
+    (ticked : store.onTick config timeMs = .ok after) (gloas : .glamsterdam ≤ fork) :
+    after.payloads gloas = store.payloads gloas :=
+  (onTick_keeps ticked).2.2 gloas
+
+/-- A block keeps the verified payloads. -/
+theorem onBlock_payloads {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : SignedBeaconBlock preset fork} {after : Store preset fork}
+    (added : store.onBlock config checks sources signed = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas := by
+  rcases onBlock_entries added with same | ⟨-, -, -, -, -, -, -, -, kept⟩
+  · rw [same]
+  · exact kept gloas
+
+/-- An attestation keeps the verified payloads. -/
+theorem onAttestation_payloads {checks : SignatureChecks} {attestation : Attestation preset fork}
+    {isFromBlock : Bool} {after : Store preset fork}
+    (attested : store.onAttestation config checks attestation isFromBlock = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas :=
+  (onAttestation_keeps attested).2.2 gloas
+
+/-- An attester slashing keeps the verified payloads. -/
+theorem onAttesterSlashing_payloads {checks : SignatureChecks}
+    {slashing : AttesterSlashing preset fork} {after : Store preset fork}
+    (slashed : store.onAttesterSlashing config checks slashing = .ok after)
+    (gloas : .glamsterdam ≤ fork) : after.payloads gloas = store.payloads gloas :=
+  (onAttesterSlashing_keeps slashed).2.2 gloas
 
 end Store
 
@@ -574,6 +720,14 @@ theorem Store.Reachable.payloadDataAvailabilityVote_isSome
     (known : store.blocks.contains root) (gloas : .glamsterdam ≤ fork) :
     ((store.payloadDataAvailabilityVote gloas)[root]?).isSome :=
   ((reachable.entries_aux known).2.2 gloas).2.2
+
+/-- From Heze, in a reachable store, each verified payload has an answer on its inclusion lists. -/
+theorem Store.Reachable.payloadInclusionListSatisfaction_isSome
+    (reachable : Store.Reachable config anchorState anchorBlock store) {root : Root}
+    (heze : .hegota ≤ fork)
+    (verified : store.isPayloadVerified (Nat.le_trans (by decide) heze) root = true) :
+    ((store.payloadInclusionListSatisfaction heze)[root]?).isSome :=
+  reachable.answers_aux heze root verified
 
 /-- In a reachable store, each known block has an unrealized justified checkpoint. -/
 theorem Store.Reachable.unrealizedJustification_ok

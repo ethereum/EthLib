@@ -2,6 +2,7 @@ module
 
 public import EthLib.Base.ByteReader
 public import EthLib.Base.Proofs.BigEndian
+public import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: readers of byte fields
@@ -17,6 +18,14 @@ namespace EthLib.Base.ByteReader
 @[simp] theorem bytes_append {ε : Type} (truncated : ε) (field rest : List UInt8) :
     bytes truncated field.length (field ++ rest) = .ok (field, rest) := by
   simp [bytes]
+
+/-- Reading as many bytes as an object holds returns that object and the bytes after it. -/
+@[simp] theorem vector_append {ε : Type} (truncated : ε) {n : Nat} (value : Vector UInt8 n)
+    (rest : List UInt8) : vector truncated n (value.toList ++ rest) = .ok (value, rest) := by
+  have length : value.toList.length = n := by simp
+  simp only [vector, ← length, bytes_append, bind, StateT.bind, Except.bind, StateT.lift,
+    Vector.toArray_toList, exactArray_toArray]
+  rfl
 
 /-- Reading a written integer returns it modulo the field width, and the bytes after it. -/
 @[simp] theorem uint_encode {ε : Type} (truncated : ε) (n value : Nat) (rest : List UInt8) :
@@ -44,6 +53,26 @@ theorem bytes_ok_iff {ε : Type} (truncated : ε) (n : Nat)
     · contradiction
   · rintro ⟨rfl, rfl⟩
     exact bytes_append truncated field rest
+
+/-- An object read succeeds exactly when the input is the bytes of the object, then the rest. -/
+theorem vector_ok_iff {ε : Type} (truncated : ε) {n : Nat} (input rest : List UInt8)
+    (value : Vector UInt8 n) :
+    vector truncated n input = .ok (value, rest) ↔ input = value.toList ++ rest := by
+  constructor
+  · intro accepted
+    cases read : bytes truncated n input with
+    | error error => simp [vector, read, StateT.bind, bind, Except.bind] at accepted
+    | ok result =>
+      obtain ⟨field, trailing⟩ := result
+      obtain ⟨length, rfl⟩ := (bytes_ok_iff truncated n input field trailing).mp read
+      have made : exactArray field.length field.toArray (fun _ => truncated) =
+          .ok ⟨field.toArray, by simp⟩ := exactArray_of_size_eq _ (by simp)
+      subst length
+      simp [vector, read, made, StateT.bind, StateT.lift, bind, Except.bind] at accepted
+      obtain ⟨rfl, rfl⟩ := accepted
+      simp
+  · rintro rfl
+    exact vector_append truncated value rest
 
 /-- A successful integer read consumes its unique encoding at the given width. -/
 theorem uint_ok_iff {ε : Type} (truncated : ε) (n value : Nat)

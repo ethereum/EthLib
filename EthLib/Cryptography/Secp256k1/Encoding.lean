@@ -40,6 +40,12 @@ def Fp.ofBytes (bytes : List UInt8) : Except Secp256k1Error Fp :=
   if h : Base.bytesToNat bytes < Fp.modulus then .ok ⟨_, h⟩
   else .error (.coordinateTooLarge (Base.bytesToNat bytes))
 
+/-- Big-endian bytes as a scalar, if their integer is below `n`.
+
+A larger value is rejected rather than reduced, so each scalar has one encoding. -/
+def Fn.ofBytes? (bytes : List UInt8) : Option Fn :=
+  if h : Base.bytesToNat bytes < Fn.modulus then some ⟨_, h⟩ else none
+
 namespace Point
 
 /-- The point as 33 bytes, by SEC 1 v2 §2.3.3 with point compression.

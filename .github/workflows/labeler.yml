@@ -1,0 +1,265 @@
+# Label each pull request by the paths it changes, then each pull request and issue by its title.
+#
+# The paths job applies .github/labeler.yml to a pull request and gives its area labels.
+# The titles job reads the conventional title, `type(scope)!: summary`.
+# The type gives a `type:` label, and `!` gives `statement-change`.
+# On an issue, the scope also gives area labels, since an issue changes no paths.
+# A title that does not parse, or whose type is not one of CONTRIBUTING.md, gets no label.
+# On an issue, a few older prefixes, such as `proofs:` and `meta:`, also give labels.
+#
+# The titles job runs after the paths job and reads the labels again before it changes them.
+# The paths job writes the whole list of labels, so a title label added at the same time could be
+# lost.
+# For the same reason, one pull request or issue runs one event at a time.
+# A manual run is not in that order, so an edit during it can lose a label until the next event.
+#
+# pull_request_target runs this workflow from the base branch, with a token that can write labels,
+# also for pull requests from forks.
+# So no job checks out or runs code from the pull request: the labeler reads only the list of
+# changed files through the API, and its configuration from the base branch.
+# The title comes from the author, so the script reads it from the event payload as data.
+# No `${{ }}` expression reaches the script.
+#
+# A manual run on master labels every open pull request and issue once, except those labelled
+# leanVM.
+
+name: labeler
+
+on:
+  # Safe here: no job checks out or runs code from the pull request.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, synchronize, reopened, edited]
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+
+permissions: {}
+
+# Each run labels from scratch, so a newer event on the same item replaces a run in progress.
+# Issues and pull requests share one sequence of numbers.
+# A manual run waits for the one in progress instead, and does not hold back the events.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || 'backfill' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  paths:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # read the configuration from the base branch
+      pull-requests: write # set the labels of a pull request
+
+    steps:
+      # sync-labels also removes a label of the configuration once no changed path matches it.
+      # Labels that the configuration does not name, such as the types, stay as they are.
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true
+
+  paths-backfill:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # read the configuration from the base branch
+      pull-requests: write # set the labels of a pull request
+
+    steps:
+      - name: List the open pull requests
+        id: open
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const numbers = pulls
+              .filter((pull) => !pull.labels.some((label) => label.name === 'leanVM'))
+              .map((pull) => pull.number);
+            core.info(`Labelling ${numbers.length} of ${pulls.length} open pull requests.`);
+            core.setOutput('numbers', numbers.join('\n'));
+
+      - if: steps.open.outputs.numbers != ''
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: true
+          pr-number: ${{ steps.open.outputs.numbers }}
+
+  titles:
+    needs: [paths, paths-backfill]
+    # Runs when the paths jobs are skipped or fail too, but not once the run is cancelled.
+    # A manual run reads the tables from master only.
+    if: >-
+      !cancelled()
+      && (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: write # label issues
+      pull-requests: write # label pull requests
+
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // The types that CONTRIBUTING.md lists.
+            const TYPES = ['feat', 'fix', 'proof', 'perf', 'refactor', 'test', 'docs', 'build', 'ci', 'chore'];
+            const BREAKING = 'statement-change';
+
+            // Older issue prefixes that are not types, and the labels each gives.
+            // They apply to issues only: a pull request title uses a type of CONTRIBUTING.md.
+            const PREFIXES = {
+              proofs: ['type: proof'],
+              specs: ['type: feat'],
+              'specs+proofs': ['type: feat', 'type: proof'],
+              bindings: ['bindings', 'type: feat'],
+              meta: ['meta'],
+            };
+
+            // The area labels of a scope, for issues; every label here is in labels.yml.
+            // gossip and reqresp are absent: both consensus and networking define them.
+            const crypto = (child) => ['crypto', `crypto: ${child}`];
+            const consensus = (child) => ['consensus', `consensus: ${child}`];
+            const execution = (child) => ['execution', `execution: ${child}`];
+            const networking = (child) => ['networking', `networking: ${child}`];
+            const serialization = (child) => ['serialization', `serialization: ${child}`];
+            const SCOPES = {
+              crypto: ['crypto'],
+              cryptography: ['crypto'],
+              aes: crypto('aes'),
+              alt_bn128: crypto('alt_bn128'),
+              'alt-bn128': crypto('alt_bn128'),
+              altbn128: crypto('alt_bn128'),
+              bls: crypto('bls'),
+              ethash: crypto('ethash'),
+              hash: crypto('hash'),
+              keccak: crypto('keccak'),
+              kzg: crypto('kzg'),
+              merkle: crypto('merkle'),
+              secp256k1: crypto('secp256k1'),
+              secp256r1: crypto('secp256r1'),
+              sphincs: crypto('sphincs'),
+              vrf: crypto('vrf'),
+              xmss: crypto('xmss'),
+              consensus: ['consensus'],
+              containers: consensus('containers'),
+              'data-availability': consensus('data-availability'),
+              forkchoice: consensus('forkchoice'),
+              'fork-choice': consensus('forkchoice'),
+              'light-client': consensus('light-client'),
+              transition: consensus('transition'),
+              execution: ['execution'],
+              blocks: execution('blocks'),
+              evm: execution('evm'),
+              precompiles: execution('evm'),
+              fees: execution('fees'),
+              state: execution('state'),
+              transactions: execution('transactions'),
+              trie: execution('trie'),
+              networking: ['networking'],
+              devp2p: networking('devp2p'),
+              discv4: networking('discv4'),
+              discv5: networking('discv5'),
+              enr: networking('enr'),
+              rlpx: networking('rlpx'),
+              snappy: networking('snappy'),
+              serialization: ['serialization'],
+              rlp: serialization('rlp'),
+              ssz: serialization('ssz'),
+              engine: ['engine'],
+              base: ['base'],
+              bindings: ['bindings'],
+              tests: ['tests'],
+              ci: ['ci'],
+              proofs: ['proofs'],
+            };
+
+            // type, then an optional (scope), then an optional !, then a colon and a space.
+            // The type may join two words with +, as the prefix specs+proofs does.
+            const TITLE = /^([a-z]+(?:\+[a-z]+)?)(?:\(([^()]*)\))?(!)?: /;
+            // The labels that the script may remove; it only adds the others.
+            const OWN = new Set([...TYPES.map((type) => `type: ${type}`), BREAKING]);
+
+            function labelsFor(title, isIssue) {
+              const match = TITLE.exec(title);
+              if (!match) return [];
+              const [, type, scope, bang] = match;
+              const labels = [];
+              if (TYPES.includes(type)) labels.push(`type: ${type}`);
+              else if (isIssue && Object.hasOwn(PREFIXES, type)) labels.push(...PREFIXES[type]);
+              else return [];
+              // ! marks a breaking change, which only a type of CONTRIBUTING.md can carry.
+              if (bang && TYPES.includes(type)) labels.push(BREAKING);
+              if (isIssue && scope) {
+                for (const part of scope.split(',')) {
+                  // Own keys only, so that a scope such as constructor finds nothing.
+                  const key = part.trim();
+                  if (Object.hasOwn(SCOPES, key)) labels.push(...SCOPES[key]);
+                }
+              }
+              return [...new Set(labels)];
+            }
+
+            async function label(number, title, have, isIssue) {
+              const want = labelsFor(title, isIssue);
+              const add = want.filter((name) => !have.includes(name));
+              const remove = have.filter((name) => OWN.has(name) && !want.includes(name));
+              const target = { ...context.repo, issue_number: number };
+              if (add.length) await github.rest.issues.addLabels({ ...target, labels: add });
+              for (const name of remove) {
+                try {
+                  await github.rest.issues.removeLabel({ ...target, name });
+                } catch (error) {
+                  // Someone removed it since the read; that is the state wanted.
+                  if (error.status !== 404) throw error;
+                }
+              }
+              core.info(`#${number}: add [${add.join(', ')}], remove [${remove.join(', ')}]`);
+              return add.length + remove.length > 0;
+            }
+
+            // The labels now on an item: those of the payload predate the paths job.
+            async function current(number) {
+              const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+                ...context.repo,
+                issue_number: number,
+                per_page: 100,
+              });
+              return labels.map((l) => l.name);
+            }
+
+            if (context.eventName === 'workflow_dispatch') {
+              // Listed after the paths backfill, so the labels are current.
+              const items = await github.paginate(github.rest.issues.listForRepo, {
+                ...context.repo,
+                state: 'open',
+                per_page: 100,
+              });
+              let changed = 0;
+              let skipped = 0;
+              const failed = [];
+              for (const item of items) {
+                const have = item.labels.map((l) => l.name);
+                if (have.includes('leanVM')) {
+                  skipped += 1;
+                  continue;
+                }
+                // One failure, such as a rate limit, stops neither the other items nor the report.
+                try {
+                  if (await label(item.number, item.title, have, !item.pull_request)) changed += 1;
+                } catch (error) {
+                  core.warning(`#${item.number}: ${error.message}`);
+                  failed.push(item.number);
+                }
+              }
+              core.info(`${items.length} open, ${skipped} skipped as leanVM, ${changed} changed.`);
+              if (failed.length) core.setFailed(`${failed.length} items failed; run the backfill again.`);
+            } else {
+              const isIssue = context.eventName === 'issues';
+              const item = isIssue ? context.payload.issue : context.payload.pull_request;
+              await label(item.number, item.title, await current(item.number), isIssue);
+            }

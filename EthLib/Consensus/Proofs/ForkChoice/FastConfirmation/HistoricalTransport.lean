@@ -126,7 +126,6 @@ private theorem relation_of_checkpoint_lookahead {config : Config} {checks : Sig
 private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork}
     {anchorBlock : BeaconBlock preset fork} {store : Store preset fork}
-    (early : fork < .glamsterdam)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     {checkpoint : Checkpoint} {root : Root} {block : BeaconBlock preset fork}
@@ -143,10 +142,10 @@ private theorem pendingTailRun_checkpointPrefix {config : Config} {checks : Sign
       PendingTailRun count epoch boundary after := by
   exact relation_of_checkpoint_lookahead (PendingTailRun count epoch)
     PendingTailRun.refl (fun one two => one.trans two)
-    (fun ok => pendingTailRun_stateTransition early finite ok)
+    (fun ok => pendingTailRun_stateTransition finite ok)
     (fun slots bound ok => relation_of_processSlots_of_stateTransition (PendingTailRun count epoch)
       (fun one two => one.trans two) (fun rest => pendingTailRun_processSlots finite rest)
-      (fun step => pendingTailRun_processBlock early finite step) slots bound ok)
+      (fun step => pendingTailRun_processBlock finite step) slots bound ok)
     (fun ok => pendingTailRun_processSlots finite ok)
     anchorSlot reached target found startOk atOrAfter baseFound sourceFound advanced
 
@@ -157,20 +156,19 @@ The source lookahead transports its tail, while the receiver lookahead supplies 
 Historical applicability is still required separately; no validator identity is inferred. -/
 private theorem registry_of_checkpointPrefix {config : Config} {checks : SignatureChecks}
     {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
-    {store : Store preset fork} (early : fork < .glamsterdam)
+    {store : Store preset fork}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
     {checkpoint : Checkpoint} {root sourceRoot : Root}
     {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
-    {source advancedSource boundaryBase base cached : BeaconState preset fork}
+    {source advancedSource base cached : BeaconState preset fork}
     {sourceTarget : Slot}
     (walk : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
     (found : store.blocks[root]? = some block)
     (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
     (bound : start ≤ max block.slot target)
     (baseFound : store.blockStates[root]? = some base)
-    (boundaryBaseFound : store.blockStates[checkpoint.root]? = some boundaryBase)
     (advanced : lookaheadState config checks base target = .ok cached)
     (sourceRun : lookaheadState config checks source sourceTarget = .ok advancedSource)
     (sourceWalk : store.getCheckpointBlock sourceRoot checkpoint.epoch = .ok checkpoint.root)
@@ -181,6 +179,11 @@ private theorem registry_of_checkpointPrefix {config : Config} {checks : Signatu
     (finite : checkpoint.epoch < FAR_FUTURE_EPOCH) :
     ∀ epoch position, isActiveAt advancedSource epoch position = true →
       ∃ validator, cached.validators.data[position]? = some validator := by
+  -- The checkpoint block is held, so the store holds its state.
+  obtain ⟨-, checkpointBlock, -, checkpointFound, -, -⟩ :=
+    Store.isAncestor_of_getCheckpointBlock sourceWalk
+  obtain ⟨boundaryBase, boundaryBaseFound, -, -⟩ :=
+    reached.reachable.blockStatesFromParents checkpointFound
   obtain ⟨boundary, boundaryRun, receiverRun⟩ := relation_of_checkpoint_lookahead
     RunKept RunKept.refl (fun one two => one.trans two)
     (fun ok => runKept_stateTransition ok)
@@ -188,7 +191,7 @@ private theorem registry_of_checkpointPrefix {config : Config} {checks : Signatu
     (fun ok => runKept_processSlots ok)
     anchorSlot reached walk found startOk bound boundaryBaseFound baseFound advanced
   obtain ⟨sourceBoundary, sourceBoundaryRun, related⟩ := pendingTailRun_checkpointPrefix
-    (count := boundary.validators.data.size) early anchorSlot reached sourceWalk
+    (count := boundary.validators.data.size) anchorSlot reached sourceWalk
     sourceBlockFound startOk sourceBound boundaryBaseFound sourceFound sourceRun finite
   have same : sourceBoundary = boundary :=
     Except.ok.inj (sourceBoundaryRun.symm.trans boundaryRun)
@@ -940,45 +943,38 @@ public theorem ancestor_head_of_window_margin [DecidablePred (· ∈ J)]
 /-- Held-state finality supplies the source bound at the store's realized checkpoint.
 
 The two ancestry reads remain separate inputs; this does not bound cached-output finality. -/
-private theorem registry_of_honest_block {anchor : Store preset fork}
-    (anchorStore : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (anchored : ∀ w ∈ J, e.start w = anchor)
+private theorem registry_of_honest_block {store : Store preset fork}
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (anchorInvariant : Invariant anchorState) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (positive : 0 < preset.SLOTS_PER_EPOCH) (early : fork < .glamsterdam)
-    {u : ValidatorIndex} (honest : u ∈ J) {n : Nat}
-    {boundaryBase source base cached : BeaconState preset fork}
+    (positive : 0 < preset.SLOTS_PER_EPOCH)
+    {source base cached : BeaconState preset fork}
     {root sourceRoot : Root} {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
-    (boundaryBaseFound : ((e.world n).state u).blockStates[
-      ((e.world n).state u).finalizedCheckpoint.root]? = some boundaryBase)
-    (startOk : computeStartSlotAtEpoch preset ((e.world n).state u).finalizedCheckpoint.epoch =
+    (startOk : computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch =
       .ok start)
-    (walk : ((e.world n).state u).getCheckpointBlock root
-      ((e.world n).state u).finalizedCheckpoint.epoch =
-        .ok ((e.world n).state u).finalizedCheckpoint.root)
-    (found : ((e.world n).state u).blocks[root]? = some block)
+    (walk : store.getCheckpointBlock root
+      store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root)
+    (found : store.blocks[root]? = some block)
     (bound : start ≤ max block.slot target)
-    (baseFound : ((e.world n).state u).blockStates[root]? = some base)
+    (baseFound : store.blockStates[root]? = some base)
     (advanced : lookaheadState config checks base target = .ok cached)
-    (sourceWalk : ((e.world n).state u).getCheckpointBlock sourceRoot
-      ((e.world n).state u).finalizedCheckpoint.epoch =
-        .ok ((e.world n).state u).finalizedCheckpoint.root)
-    (sourceBlockFound : ((e.world n).state u).blocks[sourceRoot]? = some sourceBlock)
-    (sourceFound : ((e.world n).state u).blockStates[sourceRoot]? = some source)
+    (sourceWalk : store.getCheckpointBlock sourceRoot
+      store.finalizedCheckpoint.epoch =
+        .ok store.finalizedCheckpoint.root)
+    (sourceBlockFound : store.blocks[sourceRoot]? = some sourceBlock)
+    (sourceFound : store.blockStates[sourceRoot]? = some source)
     (sourceBound : start ≤ sourceBlock.slot)
-    (finite : ((e.world n).state u).finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH) :
+    (finite : store.finalizedCheckpoint.epoch < FAR_FUTURE_EPOCH) :
     ∀ epoch position, isActiveAt source epoch position = true →
       ∃ validator, cached.validators.data[position]? = some validator := by
-  have reached := e.forwardReachableWith
-    (fun w member => (anchored w member) ▸ Store.ForwardReachableWith.anchor anchorStore)
-    n u honest
   have finalized := (reached.reachable.ordered_finalized anchorInvariant).2 sourceFound
   have identity : lookaheadState config checks source source.slot = .ok source := by
     simp [lookaheadState, pure, Except.pure]
   have sourceStart : start ≤ max sourceBlock.slot source.slot := by
     rw [UInt64.le_iff_toNat_le, toNat_max]
     exact Nat.le_trans (UInt64.le_iff_toNat_le.mp sourceBound) (Nat.le_max_left _ _)
-  exact registry_of_checkpointPrefix early anchorSlot reached anchorInvariant positive
-    walk found startOk bound baseFound boundaryBaseFound advanced identity sourceWalk
+  exact registry_of_checkpointPrefix anchorSlot reached anchorInvariant positive
+    walk found startOk bound baseFound advanced identity sourceWalk
     sourceBlockFound sourceStart sourceFound finalized finite
 
 /-- An invariant state's three old checkpoints are below the far-future epoch. -/
@@ -1055,6 +1051,73 @@ private theorem registry_of_runKept {state after : BeaconState preset fork}
   have inside := Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp held).1 run.grows
   exact ⟨after.validators.data[position], Array.getElem?_eq_getElem inside⟩
 
+/-- A validator active in a held block's state at its epoch has its index in a checkpoint state.
+
+The store is built with one setting of the checks.
+
+The two blocks read one checkpoint at its epoch, and the state's finality is not past it.
+
+The checkpoint state is the receiver's state processed to the start of its epoch, or later. -/
+public theorem _root_.EthLib.Consensus.Store.ForwardReachableWith.registered_of_shared_checkpoint
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {store : Store preset fork}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (anchorInvariant : Invariant anchorState) (positive : 0 < preset.SLOTS_PER_EPOCH)
+    {checkpoint : Checkpoint} {root sourceRoot : Root}
+    {block sourceBlock : BeaconBlock preset fork} {start target : Slot}
+    {source base cached : BeaconState preset fork}
+    (walk : store.getCheckpointBlock root checkpoint.epoch = .ok checkpoint.root)
+    (found : store.blocks[root]? = some block)
+    (startOk : computeStartSlotAtEpoch preset checkpoint.epoch = .ok start)
+    (bound : start ≤ max block.slot target)
+    (baseFound : store.blockStates[root]? = some base)
+    (advanced : lookaheadState config checks base target = .ok cached)
+    (sourceWalk : store.getCheckpointBlock sourceRoot checkpoint.epoch = .ok checkpoint.root)
+    (sourceBlockFound : store.blocks[sourceRoot]? = some sourceBlock)
+    (sourceFound : store.blockStates[sourceRoot]? = some source)
+    (finalized : source.finalizedCheckpoint.epoch ≤ checkpoint.epoch)
+    {position : Nat} {validator : Validator}
+    (registered : source.validators.data[position]? = some validator)
+    (active : isActiveValidator validator (computeEpochAtSlot preset sourceBlock.slot) = true) :
+    position < cached.validators.data.size := by
+  by_cases atBlock : start ≤ sourceBlock.slot
+  · -- The pending tail at the checkpoint's epoch carries the position into the receiver.
+    have finite : checkpoint.epoch < FAR_FUTURE_EPOCH := by
+      have activeBound := UInt64.lt_iff_toNat_lt.mp
+        (by simpa [isActiveValidator] using active : _ ∧ _).2
+      have exitBound := validator.exitEpoch.toNat_lt
+      have epochLe := epoch_le_of_slot_le (preset := preset) _ _ (UInt64.le_iff_toNat_le.mp atBlock)
+      rw [computeEpochAtSlot_computeStartSlotAtEpoch positive startOk] at epochLe
+      have far : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      rw [UInt64.lt_iff_toNat_lt, far]
+      omega
+    have identity : lookaheadState config checks source source.slot = .ok source := by
+      simp [lookaheadState, pure, Except.pure]
+    have sourceStart : start ≤ max sourceBlock.slot source.slot := by
+      rw [UInt64.le_iff_toNat_le, toNat_max]
+      exact Nat.le_trans (UInt64.le_iff_toNat_le.mp atBlock) (Nat.le_max_left _ _)
+    obtain ⟨_, inside⟩ := registry_of_checkpointPrefix anchorSlot reached anchorInvariant positive
+      walk found startOk bound baseFound advanced identity sourceWalk
+      sourceBlockFound sourceStart sourceFound finalized finite _ position
+      (isActiveAt_eq_true_iff.mpr ⟨validator, registered, active⟩)
+    exact (Array.getElem?_eq_some_iff.mp inside).1
+  · -- A source block before the epoch's start is the checkpoint block itself.
+    have rootEq : sourceRoot = checkpoint.root := by
+      simpa [Store.getCheckpointBlock, startOk, Except.mapError,
+        Store.getAncestor_of_le (node := ⟨sourceRoot, .pending⟩) sourceBlockFound
+          (UInt64.le_of_lt (UInt64.not_le.mp atBlock)),
+        bind, Except.bind, pure, Except.pure] using sourceWalk
+    rw [rootEq] at sourceFound
+    obtain ⟨boundary, boundaryRun, receiverRun⟩ := relation_of_checkpoint_lookahead
+      RunKept RunKept.refl (fun one two => one.trans two)
+      (fun ok => runKept_stateTransition ok)
+      (fun slots bound ok => runKept_of_processSlots_of_stateTransition slots bound ok)
+      (fun ok => runKept_processSlots ok)
+      anchorSlot reached walk found startOk bound sourceFound baseFound advanced
+    exact Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp registered).1
+      ((runKept_lookahead boundaryRun).grows.trans receiverRun.grows)
+
 /-- A window at the justified root has successful registry reads in its actual cached state.
 
 The cached state may process empty slots beyond the block at that root. -/
@@ -1080,39 +1143,6 @@ private theorem registry_of_justified_window {anchor : Store preset fork}
   obtain ⟨epoch, active⟩ := active_of_committeeWindow early held window v member
   obtain ⟨validator, found⟩ := registry_of_runKept (runKept_lookahead advanced) active
   exact ⟨validator, validatorAt_ok_iff.mpr found⟩
-
-/-- Honest stores at ordered times have ordered predecessor slots. -/
-public theorem Execution.previousSlot_le_of_time_le {anchor : Store preset fork}
-    (anchored : ∀ w ∈ J, e.start w = anchor)
-    {u w : ValidatorIndex} (callerHonest : u ∈ J) (receiverHonest : w ∈ J) {n k : Nat}
-    (later : (e.world n).time ≤ (e.world k).time)
-    (updated : UpToDate config checks sources (e.world k).time
-      ((e.world k).view w) ((e.world k).state w))
-    {slot current oldLast last : Slot}
-    (callerSlot : ((e.world n).state u).getCurrentSlot config = .ok slot)
-    (receiverSlot : ((e.world k).state w).getCurrentSlot config = .ok current)
-    (callerLast : subChecked slot 1 = .ok oldLast)
-    (receiverLast : subChecked current 1 = .ok last) : oldLast ≤ last := by
-  have callerClock := e.clock_bounds u n
-  have receiverClock := e.clock_bounds w k
-  rw [anchored u callerHonest] at callerClock
-  rw [anchored w receiverHonest] at receiverClock
-  have clockLe : ((e.world n).state u).timeMs ≤ ((e.world k).state w).timeMs := by
-    have initial := UInt64.le_iff_toNat_le.mp receiverClock.2.1
-    have now := updated.1
-    exact UInt64.le_iff_toNat_le.mpr (by omega)
-  have slots : slot ≤ current := by
-    have callerRead := mapError_ok_iff.mp callerSlot
-    have receiverRead := mapError_ok_iff.mp receiverSlot
-    change computeSlotAtTimeMs config _ _ = .ok slot at callerRead
-    change computeSlotAtTimeMs config _ _ = .ok current at receiverRead
-    rw [callerClock.1] at callerRead
-    rw [receiverClock.1] at receiverRead
-    exact computeSlotAtTimeMs_mono clockLe callerRead receiverRead
-  have := (subChecked_ok_iff.mp callerLast).2
-  have := (subChecked_ok_iff.mp receiverLast).2
-  have := UInt64.le_iff_toNat_le.mp slots
-  exact UInt64.le_iff_toNat_le.mpr (by omega)
 
 /-- Genesis finality supplies the actual head and cache walks through the anchor. -/
 private theorem registry_of_genesis_window {anchor : Store preset fork}
@@ -1144,11 +1174,6 @@ private theorem registry_of_genesis_window {anchor : Store preset fork}
     e.checkpointStates_fixedChecks anchorStore anchored honest
       (Store.checkpointState_ok_iff.mp cached)
   obtain ⟨block, found⟩ := reached.reachable.known_of_blockState baseFound
-  obtain ⟨anchorRoot, anchorHash, anchorFound⟩ := reached.reachable.anchor_known
-  have sameRoot := Except.ok.inj (anchorHash.symm.trans hashed)
-  rw [sameRoot] at anchorFound
-  obtain ⟨boundaryBase, boundaryBaseFound, _, _⟩ :=
-    reached.reachable.blockStatesFromParents anchorFound
   have startOk : computeStartSlotAtEpoch preset
       ((e.world n).state u).finalizedCheckpoint.epoch = .ok 0 := by
     simp [genesis, GENESIS_EPOCH, computeStartSlotAtEpoch, mulChecked]
@@ -1156,8 +1181,8 @@ private theorem registry_of_genesis_window {anchor : Store preset fork}
   have headWalk := reached.reachable.getCheckpointBlock_anchor anchorSlot boundary unknown
     headFound hashed
   rw [← epochEq] at walk headWalk
-  have inside := registry_of_honest_block anchorStore anchored anchorInvariant
-    (UInt64.le_of_eq anchorSlot) positive early honest boundaryBaseFound startOk walk found
+  have inside := registry_of_honest_block reached anchorInvariant
+    (UInt64.le_of_eq anchorSlot) positive startOk walk found
     UInt64.zero_le baseFound advanced headWalk headFound headStateFound
     UInt64.zero_le (by rw [genesis]; decide)
   intro v member
@@ -1209,7 +1234,7 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
   obtain ⟨block, found⟩ := reached.reachable.known_of_blockState baseFound
   have ordered := reached.reachable.finalized_le_justified anchorInvariant
   obtain ⟨start, boundaryBlock, startOk, boundaryFound, _, _⟩ :=
-    Store.isAncestor_of_getCheckpointBlock early walk
+    Store.isAncestor_of_getCheckpointBlock walk
   obtain ⟨boundaryBase, boundaryBaseFound, _, _⟩ :=
     reached.reachable.blockStatesFromParents boundaryFound
   have bound : start ≤ max block.slot target := by
@@ -1243,8 +1268,8 @@ private theorem registry_of_nongenesis_window {anchor : Store preset fork}
       pure, Except.pure] using headWalk
   have finite := finalized_finite_of_anchor reached.reachable anchorInvariant
     (anchor_finite_of_parentNext reached.reachable anchorSlot parentFound unknown parentNext)
-  have inside := registry_of_honest_block anchorStore anchored anchorInvariant
-    (UInt64.le_of_eq anchorSlot) positive early honest boundaryBaseFound startOk walk found
+  have inside := registry_of_honest_block reached anchorInvariant
+    (UInt64.le_of_eq anchorSlot) positive startOk walk found
     bound baseFound advanced headWalk headFound headStateFound headBound finite
   intro v member
   obtain ⟨epoch, active⟩ := active_of_committeeWindow early

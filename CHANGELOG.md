@@ -9,6 +9,12 @@ Not yet released.
 
 ### Breaking changes
 
+- `pinReserve` is larger: it follows spec rev 2.5.4, and it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
+  `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
+  Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
+  On mainnet the new reserve costs about 1.56 to 1.72 points of stake at depth 4.
+  `quorumReserve_le_pinReserve` keeps its statement.
+
 - The `withdrawal` field of `EthLib.Consensus.Internal.CapStep` is stronger.
   For a slashed validator with an assigned exit, it now says that `withdrawableEpoch` is equal after the step.
   It said that the epoch does not fall.
@@ -89,6 +95,97 @@ Not yet released.
   The pin's closure of the created keys reads it.
 
 - `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; PinSum's `created_first_state` reads it.
+
+- `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
+  `cappedCalls T r` charges each request `470595 + 3 T` calls and one request `3 * 2^32` more; at `2^30` requests the floor drops from about `2^-63.4` to `2^-73.4`.
+  `forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, and `unforgeable` and `unforgeable_adversary` are unchanged.
+  `HashSig.prEvent_failedSearch_le` bounds, in the random oracle model, the chance that some search fails its first `T` trials, whoever queried them.
+  `hashCost` names the cost of a query, and `countedOracle_eq` and `experiment_eq` state the counted game as the random oracle with that cost; `countedOracle_cost` is removed, and `hashCost_eq` replaces it.
+  The bridge's budget transfers are proved once for any computation, so the kernel replay of `Count`, `AdversaryCalls` and the new modules stays within a few GB.
+
+- `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Both stores start at the anchor store, and the receiver reads the vote at least the delay after its deadline.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
+  Otherwise two honest stores at bounded times collide.
+  `Execution.reachable_of_start` shows that the store of any validator that is reachable from the anchor at the start stays reachable, and `Execution.reachable` now follows from it.
+
+- `Execution.honestHeadsExist_or_evidence_of_gloas` shows that from Gloas an up-to-date honest store has a head ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Otherwise two honest stores collide, or direct-safety evidence holds.
+  It is the Gloas companion of `Execution.honestHeadsExist_or_evidence`, which keeps its statement.
+  `CheckpointRegistryStakeCeiling` assumes that the effective balances of each honest justified state add up to at most the cap.
+  `AnchorRegistryRoom` asks the anchor's registry to leave room for the pending deposits of each epoch up to the horizon.
+
+- The Gloas head endpoint adds these facts.
+  `Store.Reachable.validators_size_le_of_gloas` bounds the registry of each held block state and checkpoint state from Gloas by the anchor's registry and the epochs since the anchor.
+  `advanceSlots_validators_size_le`, `processSlots_validators_size_le` and `stateTransition_validators_size_le` bound the validators that runs of slots and a block from Gloas add.
+  `Store.ForwardReachableWith.registered_of_shared_checkpoint` gives each validator active in a held block state an index in a state processed to a checkpoint that both blocks read.
+  Both blocks must read one checkpoint at or past that state's finality.
+  `Store.updateCheckpoints_finalizedCheckpoint` states that replacing the checkpoints keeps the finalized checkpoint or adopts the given one.
+
+- `Execution.payloadVerified_of_partiallySynchronous` delivers, from Gloas, a payload that an honest sender verified ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It reaches each honest receiver that holds its block state, at least the delay after the sender's event and after stabilization.
+  For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
+  Otherwise bounded honest stores collide; those may be any honest stores, not only the two that start at the anchor.
+  `Store.onTick_payloads`, `Store.onBlock_payloads`, `Store.onAttestation_payloads` and `Store.onAttesterSlashing_payloads` show that those handlers keep the verified payloads.
+  `HonestCollision`, `Execution.blocksAgree_or_collision` and `Execution.not_honestCollision_of_agree` move from `FastConfirmation/HistoricalStatements.lean` to `BlockAgreement.lean`, with their statements unchanged.
+
+- `Store.getNodeChildren_held` shows that the children of a held node can be computed at every fork, when the store's parents sit below their children (`ParentsBelow`).
+  Each child is held and lower in rank.
+
+- `Store.isPayloadVerified_of_getHead` shows that from Gloas a full head of a store has its payload verified by that store.
+
+- `VoteAt.accepted_at_next_slot_of_payloadVote` accepts a held duty vote at the next slot at every fork, or names a collision of bounded honest stores ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas it takes the receiver's check of the payload status that the vote names.
+
+- `Execution.blocks_of_partiallySynchronous_of_anchorSlot` delivers a block at every fork, when from Gloas the anchor block is not after the anchor state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  `Execution.blocks_of_partiallySynchronous` is now its corollary before Gloas, with its statement unchanged.
+  It needs partial synchrony, the sender's read of the receiver's finalized checkpoint, and a receiver that admits the delivered blocks.
+  Otherwise bounded honest stores collide.
+  From Gloas the payload of a full parent reaches the receiver through `Execution.payloadVerified_of_partiallySynchronous`.
+
+- `Store.getHead_exists_of_gloas` shows that from Gloas the head of a store that the handlers build can be computed ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  It is the Gloas twin of `Store.getHead_exists`.
+  The store must hold its justified state, whose effective balances add up to at most `2 * 10^17` Gwei (`effectiveBalanceSum`).
+  `HeldRegistriesWithinLimit` asks each held block state to have its registry within the limit.
+  `ActiveEquivocatorsRegistered` asks each equivocator active in a held block's state, at that block's epoch, to have a place in the justified state.
+  `Config.HeadWeightsFit` bundles the slot length and the reorg threshold that the head reads need, and `Config.headWeightsFit_mainnet` and `Config.headWeightsFit_minimal` prove it.
+
+- The Gloas head adds these facts.
+  `Store.Reachable.payloadInclusionListSatisfaction_isSome` gives, from Heze, the inclusion-list answer of each verified payload of a reachable store.
+  `getBeaconCommittees_nodup` shows that the committees of one slot together repeat no member.
+  `advanceSlot_validators_size_le` bounds the validators that one slot adds, and `foldlM_validators_size_le` the validators that a fold adds.
+
+- `Xmss.Cost` and `Sphincs.Cost` state the hash calls of key generation, signing and verification ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  XMSS bounds key generation and signing on every path: at most `13434881` and `8616804556` calls.
+  Under a fixed answer function, XMSS key generation makes exactly `13434881` calls.
+  leanSPHINCS counts the calls under a fixed answer function.
+  Key generation makes exactly `264193`, signing at most `12885372483`, and verification at most `491`, exactly `491` when it accepts.
+  `HashSig.length_queriesWith_node` and `HashSig.length_queriesWith_ofFnInOrder_const` count the calls of shared loops.
+- `Unforgeability.Bridge.unforgeable_adversary` bounds a SPHINCS forgery by the adversary's own hash calls ([#3336](https://github.com/ethereum/EthLib/issues/3336)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + schemeCalls r) / 2^127`.
+  `schemeCalls r` bounds the calls of key generation, of `r` requests and of verification, about `2^63.7` at the model's cap of 1,182,000,000 requests.
+  `HasAdversaryQueryBound` reads both counts from `adversaryExperiment`, the game with a counter on the adversary's hash calls.
+  `mem_support_counted_iff` now holds for a game with any result type, not only a Boolean one.
+
+- XMSS signing builds the bottom tree once, for both the key's path and the root its top key signs ([#3395](https://github.com/ethereum/EthLib/pull/3395)).
+  `Xmss.signDerived_eq_path_node` proves that every signature stays the same, byte for byte, for every hash function.
+  `Merkle.build` computes every node under a position, with the calls of the node there, in the same order.
+  The signing bound drops from `8630239231` to `8616804556` calls, and a request's bound `requestQueries` from `2^33 + 615 * 2^16` to `2^33 + 410 * 2^16 + 204`.
+  `Cost.signCalls_eq`, `isQueryBoundP_signDerived`, `isQueryBoundP_signWith` and `lifetimeQueries_eq` state the new constants.
+
+- leanSPHINCS signing builds each tree once: the top tree, the two lower trees and the 24 FORS trees ([#3401](https://github.com/ethereum/EthLib/pull/3401)).
+  Each build gives both the path of a key and the root that the layer above signs.
+  `signWith_eq_recompute` proves that every signature stays the same, byte for byte, for every hash function.
+  `signDerived` now takes `PK.seed` and the built top tree, `signLayer` takes the key's built tree, and `forsSign` also returns the FORS public key.
+  The signing bound drops from `939499 + 3 * 2^32` to `470595 + 3 * 2^32` calls, and so does `signCalls` in `schemeCalls`.
+  `Cost.signCalls_eq` and `hashCalls_signWith_le` state the new constants, and `unforgeable_adversary` keeps its 127 bits.
+
+- `Xmss.Unforgeability.forgeAdvantage_le_adversaryBudget` bounds an XMSS forgery by the adversary's own calls ([#3335](https://github.com/ethereum/EthLib/issues/3335)).
+  An adversary with at most `qH` calls of `H` and `r` signing requests (`HasAdversaryBudget`) forges with probability at most `gameQueries qH r / 2^127`.
+  `gameQueries qH r` adds upper bounds on the calls of key generation, of `r` requests and of the verification.
+  `forgeAdvantage_le_lifetime` takes `r <= 2^32`, and its constant `lifetimeQueries` is `2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385`.
+  `unforgeable` is unchanged.
 
 - `quorumDrift_le_quorumReserve` bounds the drift of a fast-confirmation call's quorum by `quorumReserve` ([#2058](https://github.com/ethereum/EthLib/issues/2058)).
   It compares the call's pulled-up state with a later state in the target's epoch or the next, before Gloas from Fulu.
@@ -264,6 +361,51 @@ Not yet released.
   The churn call writes only the churn left and the earliest consolidation epoch.
   The source then gets its exit and withdrawable epochs, and the consolidation joins the queue.
 
+- `Execution.confirmedRoot_covers` covers the last confirmed root of consecutive calls of the fast confirmation rule by one honest validator ([#1458](https://github.com/ethereum/EthLib/issues/1458), Theorem 1).
+  That root is on every up-to-date honest head from the next slot to a horizon.
+  The alternatives are a collision of two honest stores and four kinds of accountable-safety evidence: historical, cross-store direct-safety, cross-store justified and held-state finality.
+  It covers executions whose honest stores verify signatures with BLS (`checks = .bls`), because the specification's pulled-up head state processes slots with BLS checks.
+  Each call assumes `CallObligations`, with `MemberObligations` for each member of its walk.
+  `CallObligations` does not include the caller's head read at each rollover: `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` from the theorem's other premises.
+  `MemberObligations` states each window reserve at `exitReserveNear`, the reserve that the exit bound of the walk's receivers gives.
+  The run assumes `JustifiedPinned`, `ByzantineCountedStake`, `TargetIncluded` and `StaleHeadVotersInWindow`; `SOUNDNESS.md` describes them.
+  With `Preset.InclusionDelayPositive` and two conditions on the anchor, the theorem derives the signed justification inside, through `Execution.justifiedHonestlySigned`.
+  It derives `HeldStatesBeforeUpgrade` through `Execution.heldStatesBeforeUpgrade_of_bounded`, from its horizon and `HonestStoreEpochsBounded`, so it does not take it.
+  It takes `CapOrder` and `ActivationWithinMaxEffective`, which it passes to `Execution.quorumDriftWithin`.
+  Its proof is a private step: one call keeps the call invariant, given the invariant at every earlier call.
+  `CallAt` names one call in a run of calls by one validator.
+  `FastConfirmation/ConfirmedCalls.lean` holds the walk of a call and the call invariant; the helpers that the step reads are public in its `ConfirmedCalls` namespace.
+  `FastConfirmation/ConfirmedCallStep.lean` holds the step and the theorem.
+  The step reads these new or newly public lemmas:
+  - `Store.viable_of_ancestor` passes viability from a root to its ancestors before Gloas.
+  - `Store.held_of_isAncestor` now gives the held block at the root of any ancestor node, not only of a pending one.
+  - `Store.Reachable.finalized_known` gives the block of a reachable store's finalized checkpoint; steps of `RootViability.lean` and `RootHeld.lean` read it too.
+  - `Execution.walk_covers` covers a walk of roots from its start and a step, and `honestHeadsCover_mono` shrinks the interval of a coverage.
+  - `Execution.honestHeadsCover_of_viableAt` is the induction behind the historical-anchor headlines, with the root's viability given per time.
+    Its window reserve and its receivers' exits read one reserve value; the headlines pass `exitReserve`.
+  - `Execution.rootViableAt_of_checked` gives that viability for the root of a checked call.
+  - `Execution.currentSlot_le_of_time_le` orders the current slots of honest stores at ordered times; `Execution.previousSlot_le_of_time_le` keeps its statement and reads it.
+    Both are in `ForkChoice/VoteDelivery.lean`; `Execution.previousSlot_le_of_time_le` moves there from `FastConfirmation/HistoricalTransport.lean`.
+  - `Store.ForwardReachable.justified_origins_epoch`, `Store.ForwardReachable.pulledUp_le_unrealized`, `Store.Reachable.justified_epoch_le_unrealized` and `Execution.unrealizedJustified_epoch_le_of_le` bound the justified checkpoints of a store.
+    `Store.onBlock_pulledUp` gives the pull-up of a block that the store adds, which their block steps read.
+  - `Store.adversaryRange_start` and `Store.ForwardReachableWith.supportersOf_mem_committees_of_near` read the adversary's range of a block and its committees; `Store.ForwardReachableWith.supportersOf_mem_committees` now reads the second.
+  - `Store.updateCheckpoints_justifiedCheckpoint`, `Store.onTick_unrealizedJustifiedCheckpoint` and `Store.onBlock_unrealized_epoch_le` are the store steps of the justified bounds above.
+    `Store.updateCheckpoints_unrealizedJustifiedCheckpoint` and `Store.onTick_justifiedCheckpoint_of_unrealized` are now public, with their statements unchanged.
+  - `Execution.crossStoreFinality_or_evidence` puts one honest store's finalized checkpoint on another's justified chain at that epoch or later, or gives `CrossStoreDirectSafetyEvidence`.
+    `Execution.finalized_read_or_accountable` is its step for one pair of stores.
+  - `Execution.anchor_stateRoot_nonzero` shows that an honest held copy of the anchor block has a nonzero state root.
+  - `Store.getCheckpointForBlock_eq_ok_iff` reads the checkpoint of an epoch in a chain as that epoch and its checkpoint block.
+  - `computeStartSlotAtEpoch_le_of_epoch_le`, `Store.getCurrentStoreEpoch_eq`, `Store.getCheckpointBlock_of_ancestor_epoch` and `Store.getCheckpointBlock_self` read the clock and the checkpoint reads of a store.
+  - `Store.Reachable.anchor_le_finalized`, `Store.ForwardReachable.block_epoch_le_current`, `Store.ForwardReachable.justified_before_current`, `Store.ForwardReachable.unrealizedJustification_epoch_le` and `Store.ForwardReachable.votingSource_epoch_le` bound the epochs that a store holds.
+  - `Execution.isAncestor_of_le` keeps an ancestor test at every later event, and `Execution.anchor_unrealized_le` bounds an honest store's unrealized justified epoch below by the anchor store's.
+    `Execution.getBlockEpoch_of_le` keeps the epoch read of a held block at every later event.
+  - `Store.parentRoot_of_getAncestorRoots` and `Store.isAncestor_terminal_of_getAncestorRoots` in `ForkChoice/AncestorRoots.lean` read a walk of roots.
+    Each root has the root before it as parent, or the terminal block; the head descends from it, and it descends from the terminal block.
+    `Store.isAncestor_parentRoot_of_isAncestor` passes descent from a known block to its parent.
+  - `Store.voteCountsFor_eq_false_of_slot_eq_current` and `Store.not_isOneConfirmed_of_slot_eq_current` show that, in a forward store, no vote counts for a block at the current slot, so it is not one-confirmed.
+  - `Store.unrealizedJustification_found` reads an unrealized justification as its stored entry.
+  - `isStartSlotAtEpoch_eq`, `isStartSlotAtEpoch_next_eq_false` and `computeStartSlotAtEpoch_of_isStartSlotAtEpoch` read the start test of a slot as its remainder by the epoch length.
+
 - `Execution.rootViable_of_checked_call` shows that the confirmed root of a call of the fast confirmation rule stays viable from the call up to `time` ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 3, for the confirmed root).
   At each up-to-date honest store, the root is in the filtered tree or below the justified block.
   The alternatives are a collision of two honest stores and accountable-safety evidence.
@@ -336,6 +478,21 @@ Not yet released.
 - `quorum_of_current_target` names the honest voters of `HonestTargetVotes` when the two-thirds test on the current target passes.
   Three times their stake is at least twice the total active balance plus the margin of the count.
 
+- `exitReserveNear` is the active source stake already scheduled to exit within three epochs of the source, the reach of a confirmation's near window.
+  `Preset.SeedLookaheadAtLeastThree` asks for a seed lookahead of at least three epochs, so that activity is fixed three epochs ahead.
+  `Execution.receiverWindowExitsNear_of_sourceOnParentChain` in `FastConfirmation/ReceiverExits.lean` reads it, since the near window reaches three epochs past the source.
+  `Preset.seedLookaheadAtLeastThree_mainnet` and `Preset.seedLookaheadAtLeastThree_minimal` show that both presets satisfy it.
+  Under it, no other source stake leaves by then, in any later state that keeps the source's fixed activity.
+  `exitReserve` keeps its value, and no theorem orders the two values.
+  `SourceWindowReserveWith`, `WindowExitBoundWith` and `ReceiverWindowExitsNearWith` take the reserve as an argument.
+  `SourceWindowReserve`, `WindowExitBound` and `ReceiverWindowExitsNear` are their instances at `exitReserve`, with their statements unchanged.
+  `Execution.isAncestor_getHead_of_historical_anchor_with` and `Execution.source_surplus_or_historical_evidence_with` take one reserve value for the window reserve and the exit bound.
+  The theorems without `_with` keep their statements and read them.
+
+- `Execution.receiverWindowExitsNear_of_sourceOnParentChain` proves `ReceiverWindowExitsNearWith` at `exitReserveNear` when the call's balance source is on the parent's chain (`SourceOnParentChain`), or names a block collision between honest stores.
+  The checkpoint's epoch is at most two epochs before the parent's, and the preset satisfies `Preset.SeedLookaheadAtLeastThree`.
+  Each near receiver's head state keeps the source's activity three epochs ahead, so each full epoch of its window is bounded by `exitReserveNear`.
+
 - `Store.Reachable.blockState_slot_eq` states that a known block's state is at the block's slot, when the anchor block is at the anchor state's slot.
 
 - `le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch` shows that a slot at the start of an epoch is at most the first slot of the epoch of each later slot.
@@ -346,6 +503,15 @@ Not yet released.
   `drift x high` reads only numbers at `x` and the window to the later finalized epoch, so it needs no replay of the tails.
   It takes the premises of `source_safety`.
   When its guard fails, `drift` is the unslashed active stake at `x`, and the bound says nothing.
+
+- `Execution.honestTargetVotes_of_byzantineStakeAtMost` derives the honest target-vote count, `HonestTargetVotes`, from a bound on Byzantine stake ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
+  It assumes `TargetCountBounds`, which is stated for the pulled-up state of the head.
+  That state has at most the threshold share of Byzantine stake in the committees of the epoch so far.
+  The honest validators of the slots still to come hold the share that the rule counts for them.
+  They hold a third of the margin on top of it.
+  For a head whose block is two or more epochs before the current epoch it also assumes `StaleHeadVotersInWindow`.
+  `HonestTargetVotes` and `quorum_of_no_conflicting_checkpoint` keep their statements.
+  `le_activityFixedEpoch` is now public, for `TargetCount.lean`.
 
 - `Execution.honestHeadsCover_of_historical_anchor` keeps a confirmed block on every honest head chain from the call to a horizon, by induction on time ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   It no longer assumes the root's own earlier coverage.
@@ -404,6 +570,19 @@ Not yet released.
 
 - `processEpoch_registryCut` splits an epoch at its registry updates: the three stages before them, the registry updates, then the rest of the epoch.
 
+- Six epoch and deposit steps keep the inputs of a payload: `payloadInputs_applyPendingDeposit`, `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations` and `payloadInputs_processHistoricalSummariesUpdate`.
+
+- `roundToIncrement_share_bounds` bounds a share of a total, raised to the least churn and rounded down to an increment.
+  When the least churn is at least one increment, so is the share, and the share is at most the least churn plus the total.
+
+- `epochs_le_div_add_one` bounds the epochs that hold an amount plus less than one churn, when the churn is at least one increment.
+  They are at most the amount in increments, plus one.
+
+- `processWithdrawals_of` carries a relation across the withdrawal step.
+  It holds when the relation holds of the state to itself and across the expected withdrawals.
+
+- `effectiveKept_parentPayload` states that the payload of the parent keeps the size of the registry and each effective balance in it.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
@@ -431,7 +610,7 @@ Not yet released.
 - Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
   `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
   The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
-  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store whose filtered tree reads has a head.
+  `Execution.honestHeadsExist_or_evidence` shows `HonestHeadsExist`: every up-to-date honest store has a head.
   The alternatives are a collision of two honest stores and `HistoricalDirectSafetyEvidence`.
   `Execution.callRolloverRead_or_evidence` derives `CallRolloverRead` with the same alternatives.
   The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot (`VoteAt.accepted_at_next_slot`), and `Handles.checkpointStates_of_found` keeps it.
@@ -441,11 +620,89 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
+  It no longer asks that the envelope leaves the store unchanged.
+  The old premise fails when a second valid envelope for a held root replaces the stored message, which the abstract execution engine allows.
+  A caller with the old premise `old` passes `fun s a m h => old s a m h ▸ Store.onExecutionPayloadEnvelope_verified h`.
+
+- In Lean, `SphincsSecurity.Security.flatMap_ofFn_injective` is removed.
+  `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
+  The SPHINCS+ and XMSS proofs now use it.
+
+- In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
+  `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
+  `Signatures.SecretKey.fromBytes` keeps its `ByteArray`, and reads 32 bytes of it with `exactBytes?`.
+  `Bls.Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Bls.Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
+  `Bls.Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
+  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `Signatures.SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
+  The new `Signatures.SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+
+- In Lean, the module `EthLib.Cryptography.Proofs.IdLoops` is removed, with its seven lemmas in the namespace `Cryptography.IdLoops`.
+  They are `id_pure`, `id_bind`, `forIn_list_yield`, `forIn_range_yield`, `forIn_range_yield_ite`, `forIn_range_yield_ite₂` and `foldl_range'_getElem!`.
+  They turned `for` loops of `Id.run do` blocks into folds.
+  No proof of EthLib uses them, since the last such loop, the tail scan of a compressed BLS point, became a fold ([#2045](https://github.com/ethereum/EthLib/pull/2045)).
+  `Proofs/Bls/G1Msm.lean` and `Proofs/Bls/G2Compress.lean` no longer import the module.
+
+- In Lean, `Execution.blockStates_eq` no longer takes `first : u ∈ J` and `second : w ∈ J` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  Two stores that start at the anchor store agree on states wherever their blocks agree, honest or not.
+  A caller drops those two arguments.
+
+- In Lean, `VoteAt.accepted_at_next_slot` and `VoteAt.recorded_at_next_slot` no longer take the premise `epoch : attestation.data.target.epoch = computeEpochAtSlot preset slot` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The honest vote data already puts the target at the epoch of the duty slot.
+  A caller drops that argument.
+
+- In Lean, `pendingTailRun_processBlock` and `pendingTailRun_stateTransition` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the requests of the parent payload leave the entries past the boundary pending.
+  A caller drops the explicit argument `early`.
+
+- In Lean, `Store.onBlock_pulledUp` also states that the finalized checkpoint before the pull-up is the store's or that of the block's state ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  A caller that destructures its result adds one pattern after the one for the justified checkpoint.
+  The callers in EthLib that do so are `Store.onBlock_unrealized_epoch_le` and two private callers in `Checkpoints.lean` and `CheckpointBlocks.lean`.
+
+- In Lean, `Store.getCheckpointBlock_trans` and `Store.getCheckpointBlock_self` hold at every fork and no longer take `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  The root of an ancestor walk does not depend on the payload status of its start.
+  So a read at an earlier epoch goes through the checkpoint of a later one.
+  A caller drops the first explicit argument.
+
+- In Lean, `Store.isAncestor_of_getCheckpointBlock` holds at every fork and no longer takes `fork < .glamsterdam` ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
+  From Gloas the walk reaches the checkpoint's block with some payload status.
+  The ancestor test against a pending node accepts every status.
+  A caller drops the first explicit argument.
+
+- In Lean, `HonestHeadsExist` no longer takes the store's filtered tree: every up-to-date honest store in the interval has a head ([#3352](https://github.com/ethereum/EthLib/issues/3352)).
+  `Execution.honestHeadsExist_or_evidence` derives the filtered tree from the held justified block and the epoch room that the tree needs.
+  It no longer takes `positive`, which its `parameters.slots` gives.
+  It takes `seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) + preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64` after `scoreFits`, which `Config.CommitteeWindowsFit.seeds` gives.
+  `Execution.callRolloverRead_or_evidence` no longer takes `history`, which its `parameters.lookahead` gives, and it takes the same `seeds` in place of `fit`.
+  A caller that applied `HonestHeadsExist` to `nodes` and `tree` drops both arguments.
+  A caller of `Execution.honestHeadsExist_or_evidence` drops `positive` and passes `fit.seeds` after `scoreFits`.
+  A caller of `Execution.callRolloverRead_or_evidence` drops `history` and passes `fit.seeds` in place of `fit`.
+
+- In Lean, `DirectSafety.Apriori.whistleblowerAllowanceAt` can now be below the cap form, which charges each slashable key at `MAX_EFFECTIVE_BALANCE_ELECTRA` (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  From Electra, when `WHISTLEBLOWER_REWARD_QUOTIENT_ELECTRA` is at least 2, it is the smaller of `whistleblowerAllowance` and a new bound.
+  The new bound is the new `slashableBase`, plus `windowIssuance`, the deposit carry and the exit flow of the window, over one less than that quotient.
+  `slashableBase` sums the larger of the effective and the actual balance over the validators that are unslashed and not yet withdrawable at the reference state.
+  `creditBudget`, `gainBudget` and `drift` read the allowance, so each is at most its former value.
+  `accountable_safety_apriori` keeps its statement, with that smaller drift, so it implies the former statement.
+  A caller that unfolded `whistleblowerAllowanceAt` to `whistleblowerAllowance` now gets the `if` form.
+  The new `Apriori.Internal.otherCredit_le_allowanceAt_electra` bounds the other funding credits of a branch by the allowance.
+  The new `DirectSafety.replayRewards_sources` (DirectSafety/IntervalFunding.lean) states that the rewards pass records only reward, penalty and inactivity events; `epochReplay_events` and the allowance proof read it.
+
+- The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
+  Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
+  The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.
+  The leanXMSS and VRF specifications are unchanged.
+
 - In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The index is the first with the key of the request.
   The validator there has execution credentials from the address of the request, and it may make a request.
   `isActiveValidator_of_canRequest` gives that a validator that may make a request is active.
   A caller that matched the cases as `⟨index, exited⟩` and `⟨index, v, owed, withdrawn⟩` writes `⟨index, v, accepted, exited⟩` and `⟨index, v, owed, accepted, withdrawn⟩`.
+
+- In Lean, `queriesWith` and its lemmas move from `Sphincs.Unforgeability` to `HashSig`, so that XMSS can count its calls with them ([#3334](https://github.com/ethereum/EthLib/issues/3334)).
+  A caller opens `EthLib.Cryptography.HashSig` or writes `HashSig.queriesWith`.
 
 - In Lean, the switch case of `consolidationRequest_cases` records the switched validator in `SwitchAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The request names one key twice, the index is the first with that key, and the validator there passes `isValidSwitchToCompoundingRequest`.
@@ -470,6 +727,9 @@ Not yet released.
   Every result that offers the evidence as an alternative was then true without a conflict.
   `Execution.finalized_prefix_or_accountable`, `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` conclude the two new facts.
   A caller that takes the evidence apart has two more components after the time bound; a caller that passes it on is unchanged.
+
+- In Lean, `Store.held_of_isAncestor` now takes any ancestor node.
+  A caller that names the implicit `root` passes the node `⟨root, .pending⟩` as `ancestor`.
 
 - In Lean, `Execution.honestHeadsCover_of_byzantine_bound` moves from `HistoricalSigners.lean` to `HistoricalCoverage.lean`, with the same statement, so that the checked-call headlines can read `Execution.justifiedHonestlySigned`.
   A caller that imports `HistoricalSigners.lean` alone imports `HistoricalCoverage.lean` instead.
@@ -894,14 +1154,26 @@ Not yet released.
   Conclusions and the existing unbounded `Votes` definition are unchanged.
 
 - In Lean, the compressed encoding of a point of `G1` has its 48 bytes in its type ([#2189](https://github.com/ethereum/EthLib/issues/2189)).
-  `G1.compress` returns a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
-  A caller that holds bytes of another length reads them with `exactBytes? 48`, now in `EthLib.Base`, and rejects `none` as decompression did.
+  `G1.compress` and `G1.infinityBytes` are a `Vector UInt8 48`, and `G1.uncompress`, `G1.keyValidatePoint` and `G1.keyValidate` take one.
+  A caller that holds bytes of another length reads them with `exactBytes? 48`, and rejects `none` as decompression did.
+  `exactBytes?` moves from the BLS exports to `EthLib.Base`.
+  `exactBytes?_packBytes`, `packBytes_of_exactBytes?`, `packBytes_mk_data`, `packBytes_set` and `getElem_eq_get!_packBytes` are new in `EthLib.Base`.
   `G1.size_compress` and `keyValidatePoint_size_ne` are removed, since the type states the length.
-  `G1.uncompress_ok_cases` no longer states the size, and `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` state its facts on the bytes of the input.
-  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and the theorems on decoded setups state their facts through them.
+  `G1.uncompress_ok_cases` no longer states the size.
+  It and `uncompress_eq_zero_or` take a vector and read the flags in its first byte.
+  `uncompress_ok_cases_bytes` and `uncompress_eq_zero_or_bytes` are new, and state their facts on the bytes of the input.
+  `G1.compress_uncompress`, `uncompress_injective`, `uncompress_valid`, `keyValidatePoint_eq_ok_iff`, `exists_keyValidatePoint_of_isOk`, `exists_mul_generator_of_keyValidatePoint` and `Security.exists_decodeKey_of_uncompress` take the encoding as a vector.
+  `G1.compress_congr` and `Kzg.compress_eq_of_toPoint_eq` keep their meaning, and now equate vectors.
+  `TrustedSetup.decodeG1` and `TrustedSetup.decodeG2` decode one point of a setup, and `TrustedSetup.decodeG1_eq_ok` relates the first to decompression.
+  `TrustedSetup.ofBytes_g1Monomial_mem`, `SetupLagrange.coords_of_encodes`, `SetupLagrange.ofBytes_getElem` and `SetupTorsion.modulus_smul_eq_zero` state their facts through `decodeG1`.
+  `Kzg.uncompress_G1_POINT_AT_INFINITY` and `validateKzgG1Point_eq_ok_iff` pass the 48 bytes to decompression with no conversion to bytes.
   `Signatures.keyMessagePair` is the pair of one key and one message in the core aggregate verification.
   `coreVerify_iff` takes the key as a vector, and `packBytes_pointToPubkey` and `packBytes_skToPk` become `pointToPubkey_eq` and `skToPk_eq`.
-  `SyncDrawable.keys` states key validation of each key as a vector.
+  `coreVerify_of_represents`, `pointToPubkey_bytes`, `pkBytes_eq`, `skToPk_bytes` and `Security.G1Sub.encode_eq_compress` state the key as the bytes of the compressed point, `packBytes (G1.compress P)`.
+  `Security.G1Sub.encode_def` is new, and states the encoding in the same form.
+  `Signatures.addPubkeyPoint_invalidPubkey` validates the key with no conversion to bytes, and `fastAggregateVerify_rogue` states the keys with `skToPk`.
+  `EpochDraws.keys`, `EpochDrawsEnd.keys`, `SyncDrawable.keys`, `UpgradeDraws` and `UpgradeDrawsEnd` validate each key as a vector.
+  So do the hypotheses of `getNextSyncCommittee_ok`, `processEpoch_total_of_altair_of_lt_electra`, `processEpoch_total_of_electra` and `runHypotheses_of_quiet_altair`, and the conclusion of `witnessKey_valid`.
   No C export or Python function changes.
 
 - In Lean, `EthLib.Execution.Exports.Proofs.Evm` and `EthLib.Execution.Exports.Proofs.Trie` move to `EthLib.Execution.Proofs.Exports.Evm` and `EthLib.Execution.Proofs.Exports.Trie` ([#2630](https://github.com/ethereum/EthLib/issues/2630)).
@@ -1532,9 +1804,9 @@ Not yet released.
   Threads may call the exports at the same time, and a list that another thread changes during a call is read as a snapshot.
 - The consensus gossip and req/resp lists, the subscribed subnets and the SSZ root exports now take and return typed values ([#1551](https://github.com/ethereum/EthLib/pull/1551)).
   The C exports `eth_consensus_gossip_topics`, `eth_consensus_reqresp_protocol_ids`, `eth_consensus_reqresp_parse_protocol_id`, `eth_consensus_reqresp_request_bounds`, `eth_consensus_reqresp_response_bounds` and `eth_consensus_compute_subscribed_subnets` take the tuple of their arguments as one value.
-  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message`, `eth_consensus_merkle_proof` and `eth_pq_keys_ssz`.
+  So do `eth_consensus_ssz_static`, `eth_consensus_reqresp_message` and `eth_consensus_merkle_proof`.
   A list comes back as a list, the subscribed subnets as a list of `int`, and a pair as a tuple, where each came back as JSON text.
-  The three SSZ exports return the root and the bytes as a pair, where they returned the two joined.
+  The two SSZ exports return the root and the bytes as a pair, where they returned the two joined.
   `eth_consensus_merkle_proof` returns the node and the list of its siblings, and `eth_consensus_compute_subscribed_subnets` takes the node ID as an `int`.
   In Python, a node ID of 2^256 or more, or an epoch or a generalized index of 2^64 or more, raises the error class of the method with code 0, where it raised `OverflowError`.
   A `bool` given for one of them raises the same error, where it read as 0 or 1.

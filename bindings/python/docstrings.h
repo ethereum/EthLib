@@ -770,6 +770,18 @@
 #define DOC_consensus_import_slashing_interchange \
   "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."
 
+#define DOC_consensus_read_signing_request \
+  "A request of the Remote-signing API, read and written again as the signer reads it."
+
+#define DOC_consensus_signing_request_root \
+  "The root that a remote signer signs for a request of the Remote-signing API."
+
+#define DOC_consensus_remote_signer_sign \
+  "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076."
+
+#define DOC_consensus_remote_signer_public_keys \
+  "The answer of the public keys endpoint of a remote signer: its public keys as hex."
+
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."
 
@@ -781,6 +793,12 @@
 
 #define DOC_consensus_record_attestation_signing \
   "The record after a key signs a vote, as JSON text."
+
+#define DOC_consensus_keymanager_json \
+  "A value of a schema of the Keymanager API, read from its JSON and written back."
+
+#define DOC_consensus_keymanager_run \
+  "The responses of calls made one after another on a validator client, then its state."
 
 #define DOC_consensus_is_execution_block \
   "From Bellatrix: whether a block carries a payload other than the empty one."
@@ -892,15 +910,6 @@
 
 #define DOC_consensus_digests_identify \
   "Whether the digest of each epoch at which it can change reads back the fork at that epoch."
-
-#define DOC_pq_keys_ssz \
-  "The root of the value that the bytes encode, and the bytes of that value, as a pair."
-
-#define DOC_pq_keys_possession_signing_root \
-  "The root that a proof of possession signs, on the chain with the given genesis validators."
-
-#define DOC_pq_keys_is_valid_possession_proof \
-  "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."
 
 #define DOC_consensus_verify_data_column_sidecar \
   "Whether a sidecar, given as bytes, has a valid shape."
@@ -1534,6 +1543,9 @@
 
 #define DOC_engine_get_client_version \
   "The answer to an `engine_getClientVersionV1` request, from a version object."
+
+#define DOC_engine_error_object \
+  "The error object of the Engine API error with a code: its negative code, message and data."
 
 #define DOC_engine_rewrite_params \
   "The parameters of an Engine API request, read by the decoder and written by the writer."

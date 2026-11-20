@@ -64,7 +64,6 @@ Most of these theorems are about correctness: an honest run gives the expected a
 
 Some of them state a security property.
 The unforgeability of leanXMSS holds for EthLib's own definitions.
-The binding of an EIP-8450 proof of possession follows from it.
 The unforgeability of leanSPHINCS holds for EthLib's own definitions too.
 The unforgeability of BLS signatures holds for a scheme that EthLib's signing and verification compute.
 The accountable safety and the plausible liveness of Casper FFG hold for an abstract model of votes.
@@ -83,6 +82,11 @@ The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`)
 If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
 It says nothing about unforgeability.
 
+The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
+Key generation makes at most `13434881` calls and signing at most `8616804556`.
+Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
+Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
+
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
 It proves that the signer's own calls before each search add none.
@@ -94,6 +98,15 @@ Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean
 In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
 Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
+
+The budget `q` counts the calls of key generation, the signer and the final verification too.
+`Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
+Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
+It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
+The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
+A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
+The library proves no smaller bound on the calls of a request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -114,23 +127,6 @@ It bounds every run, including the unlucky ones, so the bound is weaker than `2^
 
 The bound is classical: the adversary queries the oracle as a classical algorithm.
 The statement is written with VCVio's oracle computations and probabilities, so their definitions are part of what it says.
-
-### EIP-8450 proof of possession
-
-A proof of possession is a leanXMSS signature, at leaf index 0, of a root that names a BLS key and the leanXMSS key.
-Completeness is `isValidPqPossessionProof_sign` (`Consensus/Proofs/PqKeys/Possession.lean`): a key generated from a seed that signs its possession root at leaf 0 gives a proof that the check accepts.
-`isValidPqPossessionProofWith_of_index_ne` shows that a proof at any other leaf index fails.
-
-Binding is `possession_binding` (`Consensus/Proofs/PqKeys/PossessionBinding.lean`).
-Its game is the leanXMSS game, except that the adversary returns a BLS key and a proof.
-It wins when the check accepts the proof for that BLS key and the honest leanXMSS key.
-And no signing request for their possession root returned that proof.
-Such an adversary turns into a leanXMSS adversary with the same hash calls that wins whenever it wins, so the bound is again `q / 2^127`.
-The game checks a proof as the specification does, and `possessionVerdict_eq` shows that the two verdicts agree for every hash.
-
-The theorem says nothing about two BLS keys whose possession roots collide under SHA-256.
-A proof that the key holder made for one of them is then valid for the other.
-The game does not count that as a win.
 
 ### Merkle trees
 
@@ -425,6 +421,10 @@ If `keyGen seed` returns a key pair, and `sign` returns a signature for a messag
 
 The Python suite checks one signature that an independent implementation computed, with its public key, through the bindings.
 
+The hash calls of each algorithm, under a fixed answer function, are in `Proofs/Sphincs/Cost.lean`, when each call of `H` makes exactly one query.
+Key generation makes exactly `264193` calls, and signing at most `12885372483`.
+Verification makes at most `491` calls, and exactly `491` when it accepts.
+
 In the random oracle model, all `2^32` counters of one search miss the code with probability below `exp(-2^18)` (`prEvent_findCounter_none_le`, `Proofs/Sphincs/CodewordSearch.lean`).
 The theorem assumes that the oracle's cache holds none of the counters' inputs when the search starts.
 
@@ -434,6 +434,11 @@ It proves that the signer's own calls before each search add none of that layer'
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So no theorem bounds the failure of a later signature, or of signing inside the game.
+`HashSig.prEvent_failedSearch_le` (`Proofs/HashSig/FailedSearch.lean`) drops the assumption on the cache.
+Take a run with at most `n` hash calls from an empty cache.
+It ends with some search whose first `T` trials all missed with probability at most `n * q^T`.
+Here `q` is the chance that one uniform answer misses, and the trial inputs may be queried by anyone, in any order.
+The unforgeability theorem with capped searches below uses it; no theorem yet states it as a failure bound for signing inside the game.
 
 Unforgeability is `Unforgeability.Bridge.unforgeable` (`Proofs/Sphincs/Unforgeability.lean`).
 Take an adversary whose experiment makes at most `q >= 1` hash calls and at most `2^30` signing requests.
@@ -448,6 +453,28 @@ The bridge in `Proofs/Sphincs/Unforgeability/Bridge/` connects the model to EthL
 An EthLib forgery is a model forgery of a translated adversary (`forgeAdvantage_le`).
 Under every fixed answer of the oracle, a signing request costs the model at most what it costs EthLib (`hashCalls_sign_le`).
 So the adversary's budget of `q` hash calls carries over unchanged, and the model's theorem `h26_layered` gives the bound.
+
+A second theorem, `Unforgeability.Bridge.unforgeable_adversary`, counts only the adversary's own hash calls.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C) / 2^127`, where `C = 264193 + r * (470595 + 3 * 2^32) + 491`.
+At the model's cap of 1,182,000,000 requests, `C` is about `2^63.7`, so the bound is never below about `2^-63.3`.
+At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
+`r` is not capped: a run past `2^30` requests loses, but its signer calls still enter `C`.
+Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
+A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
+The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
+
+A third theorem, `Unforgeability.Bridge.unforgeable_capped`, charges each request its counter searches only up to `2^22` counters.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C' + 1) / 2^127`, where `C' = 264193 + r * (470595 + 3 * 2^22) + 3 * 2^32 + 491`.
+At `2^30` requests, `C'` is about `2^53.6`, so the bound is never below about `2^-73.4`, against `2^-63.4` for the second theorem.
+For `r >= 2` the third bound is the lower one.
+The proof wraps the adversary: it stops forwarding queries once an answer has a counter of at least `2^22`, or is no signature (`capSearches`).
+Up to that answer the two runs agree, and all requests but the last one cost at most `470595 + 3 * 2^22` calls.
+The last one costs at most `470595 + 3 * 2^32`, which is the `3 * 2^32` in `C'`.
+An answer with a long search leaves, in the oracle's cache, a search whose first `2^22` counters all missed the code (`failedSearch_of_signerOf`).
+By `HashSig.prEvent_failedSearch_le`, that has probability at most `(q + C) * (1 - p)^(2^22)`, below `2^-127` up to `2^200` calls, and the `1` covers it; above that, the bound is at least 1.
+`forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, with that term written out.
 
 ### VRF tree
 
@@ -613,6 +640,7 @@ It wins if `validateLightClientUpdate` accepts the update with the honest member
 Its advantage is at most the byte bound above.
 `validateLightClientUpdate_oracleChecks` shows that with the real hash of the signing root, the game's check is the light client's check with the BLS checks.
 The light client theorems of `Authenticate.lean` still take `SignatureChecks.AggregateSound`, because they reason about one accepted update, not a probability.
+With the BLS checks, that assumption holds only for a trivial relation, as the light client bullet of A4 says.
 The game requires a proof of possession that passes PopVerify, §3.3.3, under the key tag.
 Ethereum registers a validator key with a deposit signature instead, a signature on a message that holds the key, under the message tag and the deposit domain.
 The bound does not cover that form of proof.
@@ -1286,6 +1314,39 @@ The theorems below tie the code to the model, and only a reader who checks the m
 `size_pending_lt` proves that every hasher reached from the empty one keeps fewer pending bytes than the rate, so its digest pads them into one block.
 The Python tests (`bindings/python/tests/keccak`) check the hashes and the permutation against pinned vectors.
 
+`Proofs/Hash/Keccak/OneBlock.lean` bounds collisions and preimages of Keccak-256 on messages of at most 135 bytes.
+There Keccak-f[1600] is replaced by a uniform permutation of the 2^1600 states, which the adversary evaluates forward and backward.
+`spongeAbsorb_of_size_lt` proves that, below 136 bytes, the absorbing phase is one call to the permutation.
+The call is on the padded block with a zero capacity, whatever the permutation is.
+`oneCallHash_eq` proves that the hash of the games is that sponge, with only the permutation swapped.
+Let the adversary make `q` calls to the permutation and its inverse.
+`keccak256_collisionAdvantage_le` bounds its chance of a collision by `(Q (Q - 1) / 2 * 2^1344 + Q * 2^1088) / (2^1600 - Q)` with `Q = q + 2`, about `Q (Q - 1) / 2^257 + Q / 2^512`.
+`keccak256_preimageAdvantage_le` bounds its chance of a preimage of any given digest by `Q (2^1344 + 2^1088) / (2^1600 - Q)` with `Q = q + 1`, about `Q / 2^256 + Q / 2^512`.
+These bounds hold in the random permutation model only.
+Keccak-f[1600] is one fixed permutation, and treating it as a uniform one is a heuristic that EthLib assumes and does not prove.
+
+The bounds that model Keccak-256 as a random oracle on byte strings can be carried to the sponge over a uniform permutation.
+That carrying rests on the hypothesis below.
+`Proofs/Indifferentiability.lean` defines indifferentiability from a random oracle, after Definition 1 of [Bertoni, Daemen, Peeters and Van Assche](https://keccak.team/files/SpongeIndifferentiability.pdf), §2, without its bounds on running times.
+Its simulator asks the random oracle at most once per call.
+The simulator of their §4.3, Algorithm 3, does so, adapted to a 256-bit oracle that leaves it to draw the other output bits.
+`realProb_le_romProb_add` is the composition for single-stage games, Theorem 3.1 of [Ristenpart, Shacham and Shrimpton](https://hovav.net/ucsd/dist/revindiff.pdf).
+Their §4 shows that the composition fails for multi-stage games.
+Let each hash call cost at least 1.
+`isQueryBoundP_romGame` proves that the random-oracle image of a game of cost `N` then asks the oracle at most `N` times.
+`Keccak256Indifferentiable` (`Proofs/Hash/Keccak/Indifferentiability.lean`) is the hypothesis for Keccak-256.
+Its bound is the closed form of equation (6) of Bertoni et al.
+For a cost `N`, it is `((1 - 2^-1088) N^2 + (1 + 2^-1088) N) / 2^513`.
+Their Theorem 2 rests on the exact term of their Lemma 5, `spongeExact`.
+Their equation (6) approximates that term by the closed form, for `N` well below `2^512`.
+`spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
+So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
+EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
+Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
+The distinguisher here asks only for 256-bit outputs of byte strings.
+The definition bounds no running time, so only random-oracle bounds that count queries alone carry over.
+
 ### KZG
 
 No text is agreed yet as the normative KZG specification.
@@ -1484,6 +1545,23 @@ That theorem is informal in the paper.
 Its §3.2 explains how it follows from the two lemmas.
 The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
 2025/1683 does not prove these steps again, and EthLib does not formalize them.
+
+`getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, for any rows.
+Sidecar `i` has index `i`, and holds the cell and the proof at position `i` of every row, in row order.
+Every sidecar carries the given header, commitments, branch, slot and root.
+Before Gloas, `getDataColumnSidecars_length_of_lt_glamsterdam` shows that a build that succeeds has as many rows as commitments.
+`getDataColumnSidecarsFromColumnSidecar` calls that builder with the fields of one sidecar, so both theorems cover that rebuild.
+Before Gloas, `getDataColumnSidecarsFromBlock_valid` shows that each sidecar built from a block carries its signed header and the commitments of its body.
+The inclusion check of each such sidecar passes by `verifyKzgCommitmentsInclusionProof_built`.
+The signed header carries the root of the body (`signedHeader_eq_ok_iff`), and the built branch climbs to that root (`blobKzgCommitmentsInclusionProof_valid`).
+From Gloas, `getDataColumnSidecarsFromBlock_root` shows that each sidecar built from a block names the block by its root and its slot.
+No theorem states yet:
+
+- that a built sidecar passes its shape check, which also needs at least one blob.
+  Before Gloas that check needs at most the blob limit at the epoch of the header.
+  From Gloas it needs as many rows as the commitments of the bid, which the builder does not check.
+- that the batch check accepts a sidecar built from the cells and proofs of blobs.
+- that the builder succeeds when each row has a cell and a proof per column, with as many rows as commitments before Gloas.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
@@ -2284,15 +2362,18 @@ The trie commits to a map from byte keys to byte values under one 32-byte root.
 Two theorems in `Execution/Proofs/Trie/Binding.lean` describe what the root binds, for every hash.
 
 The first is `verifyProof_binding`, about two Merkle proofs of one key that verify against one root.
-They are one proof and give the key one value.
+They read as one list of nodes and give the key one value.
 Otherwise `findProofCollision` returns two different nodes of the proofs with one hash.
+A proof reads as itself, except the proof of no nodes against the root of the empty trie.
+The empty trie has no node, so that proof reads as the encoding of its root node, `0x80`, which `readNodes` writes.
 The second is `root_binding`, about two tries with one root.
 They give every key one value, or `findCollision` returns such a collision in the proofs of that key.
 Both searches are proved to return only collisions, and to return none for an input compared with itself.
 
 `verifyProof_sound`, in the same file, compares a proof with the proof that the trie builds for the key.
-The proof is that honest proof and gives the trie's value of the key.
-Otherwise `findProofCollision` returns a collision between the two proofs.
+The proof reads as that honest proof and gives the trie's value of the key.
+Otherwise `findProofCollision` returns a collision between the nodes that the proof reads as and the honest proof.
+`verifyProof_nil_eq_ok_iff` proves that the proof of no nodes verifies only against the root of the empty trie, where it shows the key unset.
 
 A secured trie hashes each key into its path, so two of its keys can have one path.
 `root_binding` and `verifyProof_sound` name that case too.
@@ -2645,11 +2726,27 @@ If no mesh holds a peer twice before a leave, none does after it (`leave_mesh_no
 `join_mesh_nodup` proves the same for a join with a lawful choice.
 It also needs the fanout of the topic, and the peers that announced it, to list each peer once.
 With `receiveRpc_mesh_nodup` and `heartbeat_mesh_nodup`, every step of the router thus keeps the meshes free of a repeated peer, under the needs of each theorem.
-No theorem states that those two lists of a join repeat no peer in the states that the router reaches.
 A published message goes only to explicit peers and to peers not below the publish threshold.
 With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
 It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
+
+Along a run of lawful router steps from an empty router, the fanout of a topic and the peers that announced it repeat no peer.
+A subscription change replaces every entry of its sender, so it keeps each peer listed at most once among the topics of the peers (`applySubscription_nodup`).
+`receiveRpc_peerTopics_nodup` carries this over an RPC, the only step that changes those topics.
+Then the peers that announced each topic appear once each (`topicPeers_nodup`).
+`join_fanout_nodup`, `publish_fanout_nodup` and `heartbeat_fanout_nodup` keep each fanout free of a repeated peer, and an RPC keeps the fanout (`receiveRpc_fanout`).
+A publish that fills an empty fanout takes peers that announced the topic.
+So it also needs a lawful choice, and those peers to appear once each.
+`steps_nodup` (`Networking/Proofs/Gossip/Steps.lean`) carries these properties along a run of RPCs, joins, leaves, publishes and heartbeats.
+Each step of the run is a `RouterStep`, so each join, publish and heartbeat uses a lawful choice.
+In each state that the run reaches, no mesh and no fanout holds a peer twice, and the peers that announced each topic appear once.
+The topics of the peers also list each peer at most once, so a second run can start from that state.
+`steps_nodup_of_empty` states this for a run from a router with no mesh, no fanout and no topics of peers.
+`steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
+That join keeps every mesh free of a repeated peer, with no hypothesis on the fanout or on the peers of its topic.
+`receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
+No step changes the explicit peers or adds one to a mesh, but no theorem states along a run that they stay outside every mesh.
 
 The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
 `Select.first_lawful` proves that this choice is lawful.
@@ -2757,6 +2854,8 @@ For the transactions and the withdrawals, the search of the trie binding returns
 It reuses `indexedRoot_binding` and `withdrawalsRoot_binding` for the roots, and `encode_injective` for the ommers.
 `checkBody_tooManyOmmers` and `checkBody_tooManyOmmers_shapella` show that a body with three ommers is rejected once the earlier checks pass.
 No theorem bounds the probability of finding two bodies that pass for one header and differ.
+The Python suite checks the bodies of the execution-specs block fixtures and of era 0 of mainnet.
+It also checks mainnet block 19426587, the first block of Cancun, whose body holds 37 transactions and 16 withdrawals.
 
 The check leaves four rules of that section to other checks.
 It does not check the header itself, which the header checks of the eth protocol decide before the body is asked for.
@@ -3191,12 +3290,33 @@ Their additional conclusion supplies held states and runs for which reference un
 This alternative is outside the store-collision witnesses and provides no a priori drift bound or unconditional one-third slashing guarantee.
 The drift counts from the anchor, so on a long execution with enough churn since the anchor the alternative holds with no accountable key.
 
-`Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the assumed honest target-vote count, `HonestTargetVotes`.
-`SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count; it is not an additional hypothesis on its own.
-The count gives active honest voters, each of whom signs the target or lies outside the committees of the epoch so far, and three times their stake is at least three times the computed support plus the margin.
-`quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; no theorem derives the count from a bound on Byzantine stake, or shows that the target is justified.
+`Consensus/Proofs/ForkChoice/FastConfirmation/TargetVotes.lean` states the honest target-vote count, `HonestTargetVotes`.
+`SignsTarget`, in the network file above, describes a signing witness by a bounded time inside that count.
+It is not an additional hypothesis on its own.
+The count gives active honest voters.
+Each of them signs the target or lies outside the committees of the epoch so far.
+Three times their stake is at least three times the computed support plus the margin.
+`quorum_of_no_conflicting_checkpoint` takes that count as a hypothesis and, when the one-third test passes, applies it; it does not show that the target is justified.
 `quorum_of_current_target` applies the count in the same way when the two-thirds test passes.
 Then three times the voters' stake is at least twice the total active balance plus the margin of the count.
+`Execution.honestTargetVotes_of_byzantineStakeAtMost` (`Consensus/Proofs/ForkChoice/FastConfirmation/TargetCount.lean`) derives the count from `TargetCountBounds`.
+`TargetCountBounds` is stated for the pulled-up state of the head.
+It assumes that the Byzantine stake is at most the threshold share of the active members of the committees so far, as in Assumption 2.
+Those are the committees of the epoch so far.
+It also assumes that the honest validators of the slots still to come hold the share that the rule counts for them.
+They hold a third of the margin on top of it.
+The rule checks none of these; they are assumptions on the run.
+The theorem takes an anchored store from an anchor state with `Invariant`, a positive slot duration and a fork before Gloas.
+It takes two seed lookaheads of at least one epoch, and a ring of mixes longer than the minimum lookahead plus one.
+It takes an increment that is a whole number of 100 Gwei, and `MaxEffectiveBalancesAligned`.
+From the second it derives the aligned balances of the head's pulled-up state.
+Take a head whose block is before the start of the current epoch and at least two epochs before it.
+The rule reads the committees of the current epoch from a state that has not processed the epochs in between.
+For such a head the theorem assumes `StaleHeadVotersInWindow`: a voter for the head's own current target is among those committees.
+For every other head it proves the membership.
+It is an assumption on the run: runs where those committees miss a voter for the head's target are not covered.
+Shuffling these committees from the pulled-up state of the head would remove the premise.
+That is a change of the rule, which this theorem does not make.
 
 `Execution.honestTargetVotes_signed_of_checked` in `Consensus/Proofs/ForkChoice/FastConfirmation/RootViability.lean` turns that count into signatures, for the current target ([#2058](https://github.com/ethereum/EthLib/issues/2058), Theorem 2).
 The caller's store is up to date at a slot start of the target's epoch, and its head passes the two-thirds test.
@@ -3223,8 +3343,10 @@ At each up-to-date honest store up to `time`, the root is in the filtered tree o
 The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
 That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
 Each such store has a head, by `Execution.honestHeadsExist_or_evidence` in `HonestHeads.lean`, up to the same alternatives ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
-It reads `CheckpointStakeCeiling`, `ProposerScoreFits` and the network and duty premises that the headline already takes.
+It reads `CheckpointStakeCeiling`, `ProposerScoreFits`, the bound of `Config.CommitteeWindowsFit.seeds` on the epoch of the largest 64-bit time and the network and duty premises that the headline already takes.
 The store holds its justified state because an honest vote for that checkpoint reaches it by the next slot and is accepted.
+So the store holds its justified block, and its filtered tree computes without error.
+That is why `HonestHeadsExist` needs no premise on the tree.
 Each evidence alternative is relative to the anchor, and its drift counts from the anchor.
 So with enough churn since the anchor it holds with no accountable key.
 `HeldStateFinalityEvidence` is evidence from runs to two held states, one with an honest store's finality and one justified at that epoch or later.
@@ -3238,7 +3360,7 @@ Its other premises are those of that headline, with the root fixed to the root t
 The root is held by every up-to-date honest store from the call on.
 An honest supporter behind the caller's margin sent a vote above the root before the call's slot (`Execution.honest_vote_of_caller_margin`).
 `Execution.rootHeld_of_honest_vote` then delivers the root.
-The root's viability at each time is a private step of the same file.
+`Execution.rootViableAt_of_checked` in the same file gives the root's viability at each time.
 A justified checkpoint of the call's epoch or before is comparable with the root (`Execution.justified_comparable_of_checked`).
 If the root strictly descends from it, `Execution.rootInFilteredTree_of_checked` keeps the root in the filtered tree.
 A later justified checkpoint has an honest signer, which puts it above the root (`justified_descends_of_duty`).
@@ -3259,12 +3381,14 @@ Off the epoch's first slot the call's count is reserved.
 At the epoch's first slot, the root is of an earlier epoch, and the call's epoch is at least two and after the anchor's.
 The rule does not check the reserved count, the first-slot condition or the epoch bounds; they are assumptions on the run.
 Its record of an earlier call's target check, `TargetChecked`, includes coverage of honest heads by that call's origin.
-No theorem derives that coverage, nor `startCovers`, the coverage by the start of the call's walk up to `time`.
+These theorems take that coverage and `startCovers`, the coverage by the start of the call's walk up to `time`, as premises.
+`Execution.confirmedRoot_covers` derives both for each call of a run, through its call invariant.
 `AcceptedRealizedRecent` and `AcceptedRealizedHead` restrict the runs in scope; the rule does not check them.
 Each accepted root has a realized justification at most one epoch before its own.
 An accepted root of an earlier epoch is realized as justified by the head's state.
 `CallRolloverRead` is the caller's head read at each rollover for the current target of its head, through `CallerHeadAt` above.
-`Execution.rootInFilteredTree_of_checked` assumes it, and the headlines derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
+`Execution.rootInFilteredTree_of_checked` and `Execution.rootViableAt_of_checked` assume it.
+The headlines and `Execution.confirmedRoot_covers` derive it through `Execution.callRolloverRead_or_evidence`, so they do not take it.
 `QuorumDriftWithin` assumes that an honest voter set of a call keeps its stake in each counting state, up to the call's quorum reserve.
 Its alternative is a collision of two honest stores.
 `Execution.quorumDriftWithin` proves it for an honest fork choice with BLS checks, before Gloas from Fulu.
@@ -3280,6 +3404,7 @@ The theorem bounds the drift by the reserve, but whether the reserve is small en
 `Execution.rootViable_of_checked_call` and `Execution.honestHeadsCover_of_checked_call` still take `QuorumDriftWithin` as a premise.
 A caller with BLS checks from Fulu to before Gloas discharges it with `Execution.quorumDriftWithin`.
 `Execution.heldStatesBeforeUpgrade_of_bounded` likewise discharges `HeldStatesBeforeUpgrade` from the horizon and `HonestStoreEpochsBounded`.
+`Execution.confirmedRoot_covers` below discharges both the same way, so it takes neither `QuorumDriftWithin` nor `HeldStatesBeforeUpgrade` as a premise.
 The model's genesis time must be the anchor state's (`secondsToMilliseconds anchorState.genesisTime = genesisTimeMs`), a fact of the configuration that holds for every real anchor.
 
 `JustifiedPinned` is a further premise, absent from the signed-justification headline.
@@ -3301,6 +3426,51 @@ The paper's conclusion is a seed whose unrealized justification is the target or
 The premise also allows two honest stores that collide, since the seed reads the call's block at the target root.
 Votes for the target of epoch E count until start(E+1) − 1, and the conclusion applies once a receiver's epoch is E + 2 or later.
 
+`Execution.confirmedRoot_covers` in `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedCallStep.lean` addresses Theorem 1 of [#1458](https://github.com/ethereum/EthLib/issues/1458).
+It takes consecutive calls of the rule by one honest validator, one per slot from `firstSlot`, run from the anchor store.
+The first slot's epoch is at least two and after the anchor state's epoch.
+The rule does not check this; it is an assumption on the run, and runs whose first call is earlier are not covered.
+After the last call, the confirmed root is on every up-to-date honest head from the next slot to the horizon.
+The alternatives are a collision between blocks held by honest stores, or accountable-safety evidence.
+That evidence is `HistoricalDirectSafetyEvidence`, `CrossStoreDirectSafetyEvidence`, `CrossStoreJustifiedEvidence` or `HeldStateFinalityEvidence`.
+Each evidence alternative is relative to the anchor, so with enough churn since the anchor it holds with no accountable key.
+The theorem covers executions whose honest stores verify signatures with BLS (`checks = .bls`).
+The specification's pulled-up head state processes slots with BLS checks, and a run under other checks can differ from it.
+The fork is Fulu or later and before Gloas.
+A private step of the same file shows that each call keeps the call invariant, given the invariant at every earlier call.
+The call invariant and the walk of a call are in `ConfirmedCalls.lean`.
+The step derives `QuorumDriftWithin` with `Execution.quorumDriftWithin`, and the honest target count with `Execution.honestTargetVotes_of_byzantineStakeAtMost`.
+So the endpoint takes neither as a premise.
+In their place it takes the parameter facts that the drift bound reads, among them `CapOrder` and `ActivationWithinMaxEffective`.
+For the seed lookahead it takes `Preset.SeedLookaheadAtLeastThree` instead, a lookahead of at least three epochs.
+The drift bound needs a lookahead of one epoch, and the near exit bound below needs three.
+The endpoint derives `HeldStatesBeforeUpgrade` itself, with `Execution.heldStatesBeforeUpgrade_of_bounded`, and does not take it either.
+
+The endpoint assumes `CallObligations` of each call.
+They apply when a call walks from its head to the start it selected.
+Then they assume the source reads of the later windows (`SourceWindowReads`).
+They also assume `TargetCountBounds` with the call's pin reserve, and the realized guards `AcceptedRealizedRecent` and `AcceptedRealizedHead`.
+The rule checks neither the count bounds nor the realized guards; they are assumptions on the run.
+No theorem derives the source reads yet.
+They do not include the head read at each rollover (`CallRolloverRead`).
+The step derives it through `Execution.callRolloverRead_or_evidence`, up to a collision of two honest stores or `HistoricalDirectSafetyEvidence`.
+For each walked member they assume `MemberObligations`.
+That is the member's margin over its committee weight, which pays for the drift of each later window, and the reserve of each later window.
+That reserve is `exitReserveNear`, the active source stake already scheduled to exit within three epochs, not `exitReserve`.
+Under `Preset.SeedLookaheadAtLeastThree`, `Execution.receiverWindowExitsNear_of_sourceOnParentChain` bounds each near receiver's exits by it.
+An exit that starts at the source's epoch or later lands at least `MAX_SEED_LOOKAHEAD + 1` epochs after it.
+The near window reaches three epochs past the source, so the proof needs a lookahead of three to keep each such exit out of it.
+No theorem derives the margin's drift bound, `WindowMarginDrift`, yet.
+A planned follow-up charges it from the source state, for the receivers that the proof reads.
+With a positive excess, the member's margin asks more than the rule's one-confirmation test.
+`MemberObligations` also includes `LateDutyMajority` and `NewlyActiveVotersInHeadWindow` for the member's parent; they are assumptions on the run.
+A call that keeps its start walks no roots, and assumes nothing.
+The run also assumes `JustifiedPinned` at margin 0, `ByzantineCountedStake anchorEpoch 0 limit`, `TargetIncluded` and `StaleHeadVotersInWindow`, which are described above.
+The endpoint derives the signed justification inside, as the historical-anchor headlines do.
+It derives it from the Byzantine bound, a positive inclusion delay and the two conditions on the anchor.
+The Byzantine bound and the two conditions on the anchor are assumptions on the run; the anchor store checks neither condition.
+No theorem derives `JustifiedPinned` yet.
+
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
 It keeps the block stored before only when that block is in the chain of the head, and at the first slot of an epoch only when `isConfirmedChainSafe` accepts it.
@@ -3309,9 +3479,9 @@ That block must then be in the epoch before the current one, and its checkpoint 
 The rule stores that block, or a later root of the walk of `getAncestorRoots` from that block to the head.
 That root and each root before it in the walk then pass `isOneConfirmed`, with the votes of the state of the observed justified checkpoint.
 The rule makes two walks, and `Store.getAncestorRoots_of_append` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the second walk is the part of the first walk after the root where the first walk stopped.
-No theorem yet shows that the roots of a walk are in the chain of the head.
 
-These theorems prove no safety: no theorem yet shows that a start is safe, or that a one-confirmed walk keeps a block in the chain of every honest head.
+`Store.parentRoot_of_getAncestorRoots` in `Consensus/Proofs/ForkChoice/AncestorRoots.lean` shows that the roots of a walk are in the chain of the head.
+These theorems prove no safety on their own; `Execution.confirmedRoot_covers` above does, under its premises.
 `Store.onFastConfirmation_confirmedRoot` and `Store.getLatestConfirmed_eq_or` do not record every check of the rule.
 For the start they leave out the other checks that compare the epochs and the slots of the blocks.
 For the walks they leave out the checks on the epochs of the start and of the walked blocks.
@@ -3519,7 +3689,8 @@ It assumes a signature that passes the block signature check.
 `computeOnChainAggregate_spec` shows that the on-chain aggregate joins the network aggregates sorted by their first committee, and `committeeBits_computeOnChainAggregate` that its committee bits mark exactly those committees.
 `getExecutionRequests_eq_ok_iff` shows that the requests read from a list are exactly the requests that give that list.
 It rests on the canonical SSZ decoder and on the empty bytes being the only encoding of an empty list.
-`signedHeader_eq_ok_iff` shows that the signed header of a block carries the root of its body, and `getValidatorsCustodyRequirement_bounds` that the custody requirement stays between its two bounds.
+`signedHeader_eq_ok_iff` (`Consensus/Proofs/DataAvailability/Blob.lean`) shows that the signed header of a block carries the root of its body.
+`getValidatorsCustodyRequirement_bounds` shows that the custody requirement stays between its two bounds.
 `totalEffectiveBalance_eq_ok_iff` shows that the balance behind that requirement is the sum of the effective balances of the validators, with a repeated index counted again.
 From Altair, `processSyncCommitteeContributions_spec` states the bits of the sync aggregate of a block.
 They are exactly the bits that its contributions set, each at the seat of its subcommittee.
@@ -3908,8 +4079,9 @@ These two are rewrite lemmas: no theorem yet binds the rebuilt root to the paylo
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
-The signature theorems assume `SignatureChecks.AggregateSound`, listed in A4.
+The signature theorems assume `SignatureChecks.AggregateSound` (`Consensus/Proofs/SignatureChecks.lean`), listed in A4.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
+With the BLS checks, the assumption holds only for a trivial relation (A4), so these theorems do not yet say who signed.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
 `SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
 `LightClientForgery.forgeAdvantage_le` bounds how often a forger makes the light client accept an aggregate with one designated honest member's bit set, on a root that member never signed.
@@ -4158,8 +4330,8 @@ So, unless the roots of their headers collide, the runs disagree on the checkpoi
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
 Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
-The drift is zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch.
-Then the accountable keys hold at least one third of the unslashed active stake at `x`.
+The drift should be zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch, but no theorem proves that yet.
+With zero drift, the accountable keys hold at least one third of the unslashed active stake at `x`.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -4181,6 +4353,22 @@ The theorems take no bound on the fork, so a run may cross every upgrade that th
 `verifiedConflict_of_accountable` gives, for each accountable key, two checks of its conflicting messages.
 Each is a call of `isValidIndexedAttestation` or `checkHeaderSignature` that a block of a run executed, and that accepted.
 It assumes nothing about the signature checks, so it does not say who signed.
+`signedConflict_of_accountable` (`DirectSafety/Signatures.lean`) reads those checks as signatures, under two assumptions listed in A4.
+They cover only the accepted checks that blocks of the two runs made: the aggregate checks of indexed attestations, and the checks of the two headers of each proposer slashing.
+An aggregate call of that set accepts only if every key of the call signed its message, and a header call only if its key signed it.
+Then each accountable key signed the signing roots of two attestation data that `isSlashableAttestationData` flags, each in an attester domain.
+Otherwise it signed the signing roots of two different headers of one slot, each in a proposer domain.
+Their proposer index holds the key in the registry at `x`, since the registry keeps its keys and its keys are distinct.
+Each domain is that of the genesis validators root of the runs and of some fork version, which need not be one of the config.
+`Run.genesisValidatorsRoot` shows that a run keeps that root.
+If SHA-256 collides on the two signing roots, the two signatures may be one.
+`accountable_safety_signed` restates `accountable_safety` for the unslashed active keys at `x` that signed such a pair (`signedConflictKeys`).
+`accountableKeys_subset_signedConflictKeys` shows that they include the accountable keys.
+Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence.
+The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
+No theorem shows that a block of either run could include a slashing built from those signatures.
+An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
+The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
 
 `source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).
 `derivedDrift_le_sources` shows that the drift of a tail is at most its envelope.
@@ -4285,6 +4473,13 @@ A payload and its block determine each other.
 
 The checks of `engine_newPayload` answer by the version of the method and the fork of the payload.
 `exists_acceptsFork_iff` (`Proofs/NewPayload.lean`) shows that some version takes a fork exactly when the fork is from Paris to Glamsterdam.
+`acceptsFork_eq_true_iff` gives the forks of each version.
+From version 3, a version takes the forks from the one that adds its last parameter, and none from the one that adds the next.
+Those parameters are the blob hashes and the beacon root of Dencun, the requests of Pectra, and the payload of Glamsterdam with its access list and slot.
+Version 2 takes Paris and Shapella, and version 1 Paris alone.
+`acceptsGetPayloadFork_eq_true_iff` (`Proofs/GetPayload.lean`) states the same rule for the payloads that `engine_getPayload` returns.
+Its fields are the bundle of Dencun, the requests of Pectra, the cell proofs of Fusaka, and the access list and the slot of Glamsterdam.
+So version 5 returns Fusaka and the BPO forks, and some version returns each fork from Paris to Glamsterdam (`exists_acceptsGetPayloadFork_iff`).
 `validRequests_iff` states when the execution requests of version 4 and later pass.
 Each request must have more than one byte, and their first bytes must strictly increase along the list.
 `status_of_checkNewPayload` shows that a payload that fails the checks is `INVALID`, or `INVALID_BLOCK_HASH` only at version 1, with no latest valid hash.
@@ -4368,6 +4563,14 @@ Every answer of that method is `VALID`, `INVALID` or `SYNCING`, the restriction 
 So the decoder reads back the response of every call (`forkchoiceUpdatedResponseOfJson_call`).
 Its response names a build exactly when the update applies a head and the attributes pass their checks (`forkchoiceUpdatedResponse_payloadId`).
 The ID is then that of the head and the attributes.
+Step 5 of [payload building](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/engine/paris.md#payload-building) asks that each new build has its own ID.
+The bytes that the ID hashes determine the head and the attributes, at one fork (`payloadIdInput_inj`).
+The fork is the active fork at the number after the head and at the timestamp.
+The head and the timestamp come first in those bytes, and the tree gives the number of the head.
+Take two calls on one configuration and one tree that start builds.
+They hash the same bytes only for the same head and the same attributes at the same fork (`forkchoiceUpdatedCall_payloadIdInput_inj`).
+So two distinct builds of such calls get distinct IDs, unless the Keccak-256 hashes of their inputs share their first 8 bytes.
+No theorem bounds the chance of such a collision.
 The Python tests read the status examples of `engine_newPayload` and the response examples of `engine_forkchoiceUpdated` in the OpenRPC method files.
 They also read back the status that EthLib answers to each request of `new_payload.json` that expects no error, and each response to the chains of `forkchoice.json`.
 
@@ -4550,6 +4753,9 @@ The next and last are those of the first and last fork times after the head whos
 The reported fork ID is the EIP-6122 `FORK_HASH` that the node announces at that configuration's activation (`configObject_forkId`, `Proofs/Rpc/Config.lean`).
 The block that represents the Merge in the fork ID is an explicit input, distinct from the actual Paris activation block.
 The report's precompile addresses are exactly those that transaction processing warms (`configObject_precompiles`).
+`mem_configSystemContracts_iff` gives the system contracts of each fork.
+The beacon roots contract counts from Cancun.
+From Prague the history storage contract, the chain's deposit contract and the request contracts of the fork count too.
 Its blob schedule is `chainBlobSchedule` at the configuration's activation (`configObject_blobSchedule`).
 The named BPO forks keep Osaka's precompile names and system contracts (`configPrecompiles_bpo`, `configSystemContracts_bpo`).
 
@@ -5408,8 +5614,12 @@ Both theorems assume a lawful state type and a preset whose sizes in the block a
 After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
 No theorem states that yet.
 
-`IsUpdatesAnswer` is the rule of the source for the updates answer: known updates of the range, in increasing period order, starting with the earliest known one, at most `min(128, count)` of them.
-`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that the known updates of the range, cut to that limit, form such an answer.
+`IsUpdatesAnswer` is the rule of the source for the updates answer.
+It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
+`updatesInRange_answer` (`Consensus/Proofs/BeaconApi/LightClient.lean`) shows that `updatesInRange` gives such an answer.
+That answer runs from the earliest known period of the range to the first period that the node lacks, cut to the limit.
+`isUpdatesAnswer_iff` shows that the accepted answers are exactly its starts.
+The empty answer is accepted only when the range has no known update.
 `IsUpdatesAnswer.length_le` shows that no accepted answer holds more updates, and `IsUpdatesAnswer.length_le_limit` gives the limit itself.
 `decodeUpdateChunks_encode` shows that the SSZ chunks of updates decode back to the updates, each with its fork, on a chain that passes the check of fork digests.
 It assumes a preset with a nonempty logs bloom and sync committee, as the round trip of SSZ for these containers does.
@@ -5709,7 +5919,11 @@ Points that remain open:
 - The source fixes the proposer lookahead at 64 items, the mainnet value; EthLib follows the preset, as the SSZ type of the source does, so the minimal preset gives 16.
 - The schema describes the nine validator statuses in words only.
   EthLib takes their conditions from the validator status document that the schema links, which is not a pinned file.
-- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap; `IsUpdatesAnswer` asks only for increasing periods.
+- The source asks for updates "in consecutive order (by period)", which may mean increasing periods or periods with no gap.
+  EthLib reads it as periods with no gap, in `IsUpdatesAnswer` and in `isValidLightClientUpdatesByRangeResponse` (`Consensus/ReqResp/Validity.lean`).
+  The [sync protocol](https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/specs/altair/light-client/sync-protocol.md#validate_light_client_update) rejects an update whose signature period is more than one period after the period of the finalized header of the store.
+  The period of an update is that of its attested header, which is at most its signature period.
+  So a light client that applies the answer in order cannot use an update after a gap.
 - The source writes the context of an updates chunk as the digest of a fork version and the genesis validators root, the form before Fulu.
   EthLib takes the digest of the epoch of the attested header, which from Fulu also depends on the blob schedule.
 - The source bounds the range of the updates answer by the period of the head; the answer leaves that bound to the updates that the caller gives.
@@ -6077,6 +6291,270 @@ The source leaves three points about the data API open, and EthLib specifies non
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
 
+### Keymanager API
+
+The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
+EthLib cites its release `v1.1.0`, commit `51f2a5c9`.
+The source has no test vectors, so the Python suite reads the examples of its schemas; `tests/consensus/README.md` lists them.
+[`ARCHITECTURE.md`](ARCHITECTURE.md#interfaces) accepts this specification only with feedback from the implementers that use it: validator clients and key-management tools.
+The points that the source leaves open are listed below, with the reading that EthLib takes, until they answer.
+
+The values of the API are its keys, addresses, integers, signatures, strings, keystores and slashing protection data, and the objects built from them (`Consensus/KeymanagerApi/Types.lean`).
+Each reader refuses a document that the schema of the source does not allow, except the reader of a signed voluntary exit, as listed below.
+Each writer gives a document that its reader reads back, except for the two values held as text, described below.
+`readFeeRecipient_feeRecipientJson`, `readGasLimit_gasLimitJson`, `readSignerDefinition_signerDefinitionJson` and the other round-trip theorems (`Consensus/Proofs/KeymanagerApi/Types.lean`) show this for each other schema.
+`readUint64_str_ok_iff` shows that an integer reads from a string exactly when the string matches the pattern of the source, `^(0|[1-9][0-9]{0,19})$`, and its value is below `2^64`.
+`eq_str_of_readUint64` shows that it reads from nothing but a string.
+`readPubkey_hexCase` and `readEthAddress_hexCase` show that a key and an address read the same with any characters after `0x` in uppercase.
+
+A keystore and slashing protection data are JSON documents held as text in a string.
+Their readers and writers take a parser and a printer of JSON text as an operation boundary, whose card is in `Consensus/KeymanagerApi/Types.lean`.
+The exports supply the parser and the printer of the Lean toolchain.
+Both are `partial` definitions, so no theorem relates them, and none states that the parser reads back the printed text.
+The parser also builds an object as another tree than the writer of EthLib does.
+So the two documents can differ as Lean values while they hold the same names and values.
+So the round trip of slashing protection data is proved for its document (`slashingProtectionOfDocument_toJson`), not for its text.
+The Python suite reads the text of the source's examples and compares the documents that the writer prints.
+
+The source leaves six points about its values open:
+
+- Its pattern of `Uint64` admits 20 digits, so values up to `10^20 - 1`.
+  The schema is named after 64-bit integers, so EthLib refuses a value of `2^64` or more.
+- It gives no checksum rule for the letter case of an address, so EthLib checks none.
+- It does not say whether an object may carry names that its schema does not declare.
+  OpenAPI allows them unless a schema says otherwise, so EthLib ignores them.
+  The reader of a signed voluntary exit is that of the Beacon API.
+  It refuses such names, and it also reads an integer from a bare JSON number.
+- The schema of a signed voluntary exit lists no field as required.
+  The container has every field, so EthLib requires all four: the message, its epoch, its validator index and the signature.
+- It does not say whether an optional field may be `null`.
+  OpenAPI 3.0 allows `null` only for a schema marked `nullable`, and none is, so EthLib refuses it.
+- The graffiti is a string, and the block field that it fills is 32 bytes.
+  EthLib reads it as a string; how it becomes 32 bytes is a question for the call that sets it.
+
+The call `POST /eth/v1/keystores` imports ERC-2335 keystores with their EIP-3076 slashing protection data (`Consensus/KeymanagerApi/LocalKeys.lean`).
+The key state of a validator client is a pure value: its local keys, its remote keys and its EIP-3076 record.
+A request whose lists of keystores and passwords differ in length is refused (`importKeystores_eq_error_of_length_ne`, `Consensus/Proofs/KeymanagerApi/LocalKeys.lean`), with HTTP 400 and the state unchanged (`postKeystores_of_length_ne`).
+A request with no keystore succeeds with no status, whatever its data (`importKeystores_of_keystores_eq_nil`).
+A call that succeeds gives one status for each keystore, in order (`length_of_importKeystores`).
+A keystore with the status `imported` holds a key that the client holds afterwards (`mem_localKeys_of_importKeystores`), and no key held before is removed (`localKeys_prefix_of_importKeystores`).
+A keystore is a `duplicate` exactly when its key was held before the call, or a keystore before it in the request imported it (`duplicate_iff_of_importKeystores`).
+After a call, the record refuses every block and every vote that it refused before (`checkBlock_of_importKeystores`, `checkAttestation_of_importKeystores`).
+For a key imported with slashing protection data, a block or vote that the record accepts meets the conditions of EIP-3076 against the entries of that key (`checkBlockSigning_of_importKeystores`, `checkAttestationSigning_of_importKeystores`).
+The record imports those entries by the minimal strategy of EIP-3076.
+So such a block is after every block of the key in the data (`lt_slot_of_importKeystores`).
+Such a vote has a source at least, and a target after, those of every vote of the key in the data (`sourceEpoch_targetEpoch_of_importKeystores`).
+The key derivation of a keystore is bounded by limits that the caller sets, since the source sets none.
+The Python suite runs the example of the issue and the cases of the source's use case "Add a key", with keystores that it builds.
+
+The source leaves six points about the import open, and EthLib takes these readings:
+
+- Which keys' slashing protection data is loaded.
+  The [import flow](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#import) loads it "only if there is a keystore that matches, and passes other validations".
+  The [use case](https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/use-cases/README.md#add-a-key) says that data of keys that are not imported "will still be imported".
+  Step 3 of the flow allows the data to be "loaded in its entirety, or imported on a per-key basis", and its step 4 loads it only for a matching keystore.
+  EthLib takes the per-key reading of step 4: it loads the entries of each imported key, and no others.
+  So the data of a keystore that is a duplicate is not loaded either.
+  Loading more data would refuse more messages, so the other reading is not less safe.
+- What `duplicate` compares against: "already known to the keymanager", or "not currently active".
+  EthLib compares against the local keys only, so a remote key of the same public key does not make a keystore a duplicate.
+- Which public key identifies a keystore.
+  ERC-2335 makes the `pubkey` field optional, so EthLib derives the key from the decrypted secret and does not read the field.
+- Whether a key imported through the API is read-only: EthLib imports it as one that can be deleted.
+- Whether the genesis validators root of the data must match the chain: EthLib does not compare it, as EIP-3076 import does not.
+- For an empty request, the flow lets a client read the data and fail on it; EthLib answers HTTP 200 with no status.
+
+The calls `GET` and `DELETE /eth/v1/keystores` list the keys of a client and delete some of them (`Consensus/KeymanagerApi/DeleteKeys.lean`).
+The list gives the public key of each key that the client holds, in order (`map_validatingPubkey_listKeys`, `Consensus/Proofs/KeymanagerApi/DeleteKeys.lean`).
+A delete gives one status for each key of the request, in order (`length_data_deleteKeys`, `getElem?_data_deleteKeys`), and keeps the record (`protection_of_deleteKeys`), as the source requires.
+Afterwards the client holds no key of the request, unless it holds that key read-only (`isReadonly_of_isActive_deleteKeys`).
+A key named twice in a request is not deleted the second time (`ne_deleted_of_deleteKeys`).
+The data returned names only keys of the request whose status is `deleted` or `not_active` (`exists_of_mem_slashingProtection_deleteKeys`).
+For each such key it holds every block and vote that the record holds (`blocksOf_slashingProtection_deleteKeys`, `attestationsOf_slashingProtection_deleteKeys`).
+A delete sent again to the state that it leaves returns the same data (`slashingProtection_deleteKeys_again`), so that "both will have access to slashing protection data".
+The Python suite runs the source's use case "Delete a key", which the flow's steps also give.
+
+The source leaves two points about the delete open, and EthLib takes these readings:
+
+- A read-only key "cannot be deleted from the API", but the source gives no status for a request that names one.
+  EthLib keeps the key and gives it the status `error`, the only one that fits (`error_iff_of_deleteKeys`).
+  So it returns no data for that key, as the source asks for a key with an `error` status.
+  No call of the API makes a key read-only, so the Python suite cannot reach this case.
+- The flow sets every status to `error` when the export of the data fails.
+  EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
+
+The calls on `/eth/v1/validator/{pubkey}/` with `feerecipient`, `gas_limit` and `graffiti` get, set and delete a setting of each key (`Consensus/KeymanagerApi/Settings.lean`).
+Each setting maps keys to values, and a key without a mapping gets the default that the client fixes at its start.
+For each of the three settings, a set then a get of the key gives the value set (`Setting.get_set`, `Consensus/Proofs/KeymanagerApi/Settings.lean`), and a delete then a get gives the default (`Setting.get_of_delete`).
+A set or a delete on one key leaves the value of every other key unchanged (`Setting.get_set_of_ne`, `Setting.get_of_delete_of_ne`).
+Each call on a key that the client does not manage gets HTTP 404 and changes nothing (`handle_of_isManaged_eq_false`), and a delete on a key that it manages removes its mapping (`Setting.delete_of_isManaged`).
+A set through the API that gets HTTP 202, then a get, gives the value set (`handle_get_of_handle_set`).
+A set of the zero fee recipient gets HTTP 400 and changes nothing (`handle_feeRecipient_zero`).
+The three settings meet the law that these statements take (`feeRecipientSetting_lawful`, `gasLimitSetting_lawful`, `graffitiSetting_lawful`).
+The Python suite runs the example of issue #2140 on the fee recipient, and sets a gas limit and a graffiti.
+
+The source leaves seven points about the settings open, and EthLib takes these readings:
+
+- The get and the set list HTTP 404 only as "Path not found", unlike the delete.
+  EthLib answers HTTP 404 to each call on a key that the client does not manage, so that a set on an unmanaged key leaves no mapping that a delete could not remove.
+  A key deleted through the API keeps its mappings, which apply again if it is imported again.
+- The set of a gas limit does not mark its body as required, unlike the other two; EthLib requires it.
+- The source forbids the zero fee recipient and names no code; EthLib answers HTTP 400.
+- The graffiti is a JSON string, and the block field is 32 bytes; EthLib keeps the string as it is, with no length check.
+- A delete may get HTTP 403 when the setting lives in configuration files; that depends on storage and is not modelled.
+- The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
+- The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
+
+The call `POST /eth/v1/validator/{pubkey}/voluntary_exit` signs a voluntary exit with a key of the client (`Consensus/KeymanagerApi/VoluntaryExit.lean`).
+It reads the state that the client takes from its beacon node, which the call takes as a view of the chain.
+For a client whose keys have the public keys of their secret keys, a signed exit verifies under the key of its validator (`verify_of_signVoluntaryExit`, `Consensus/Proofs/KeymanagerApi/VoluntaryExit.lean`).
+It verifies against the signing root of the exit, under the domain of a voluntary exit in that state, which is the check that the processing of an exit makes.
+From Deneb, by [EIP-7044](https://eips.ethereum.org/EIPS/eip-7044#specification), the domain is fixed on the Capella fork version, so the exit verifies in every state of the same chain and configuration at a fork from Deneb on (`verify_of_signVoluntaryExit_of_dencun_le`).
+That theorem assumes that the validator at the index of the exit keeps its key in that state, which a chain does but the statement does not derive.
+That each key has the public key of its secret key is also an assumption: the import sets it for each key that it adds, and no call changes a key, but no theorem states it of a run of calls.
+The Python suite signs the exit of the case `basic` of the voluntary exits of consensus-specs, at Capella and at Deneb, and gets its signature byte for byte.
+
+The source leaves three points about the exit open, and EthLib takes these readings:
+
+- A key that the client holds but whose validator is not in the state, or not active.
+  EthLib answers HTTP 400 when no validator has the key, and does not check that the validator is active; the chain checks that when it processes the exit.
+- Whether a remote key, which the client does not hold, is served: EthLib answers HTTP 404, as for an unknown key.
+- How the client learns the current epoch and the registry: from the state that it is given.
+
+A key moved between two clients keeps its slashing protection, by the use case "Move a key" of the source (`Consensus/Proofs/KeymanagerApi/Move.lean`).
+The old client holds the key, and every key that it holds under that public key can be deleted.
+With a read-only copy, the delete refuses the key and returns no data for it, so the statement needs this.
+A delete of that key alone gives data, and an import of its keystore with that data into the new client imports it.
+Then the new client accepts a block or a vote of the key only if the old client accepted it (`checkBlock_of_move`, `checkAttestation_of_move`), and the old client no longer holds the key as a local key (`isActive_of_move`).
+The scope is one key and one move.
+The data passes from the delete to the import as a value: the round trip of its document is proved, and that of its text is not, as said above.
+No step compares the genesis validators root of the data with that of either client.
+The Python suite runs a move between two clients, through the JSON text of the data.
+
+The calls on `/eth/v1/remotekeys` list, import and delete the keys that a client signs with through a remote signer (`Consensus/KeymanagerApi/RemoteKeys.lean`).
+An import and a delete give one status for each key of the request (`length_importRemoteKeys`, `length_deleteRemoteKeys`, `Consensus/Proofs/KeymanagerApi/RemoteKeys.lean`).
+Each is the status of its key on the state that the keys before it leave (`getElem?_importRemoteKeys`, `getElem?_deleteRemoteKeys`), as `fst_importRemoteKey` and `fst_deleteRemoteKey` give it.
+After an import, each key with the status `imported` is a remote key (`mem_remoteKeys_importRemoteKeys`), and no remote key is lost (`remoteKeys_prefix_importRemoteKeys`).
+After a delete, no key with the status `deleted` is a remote key (`not_mem_remoteKeys_deleteRemoteKeys`).
+Importing one key that the client does not know imports it, deleting it then deletes it (`fst_deleteRemoteKeys_importRemoteKeys`), and the remote keys are those before (`remoteKeys_deleteRemoteKeys_importRemoteKeys`).
+The model takes the remote keys of a state to have distinct public keys.
+The Python suite runs the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
+
+The source leaves five points about remote keys open, and EthLib takes these readings:
+
+- Whether a local key is "already known to the validator client" for a remote import.
+  EthLib reads it as known, so its remote import is a `duplicate`.
+  The local import of #2136 compares with the local keys only, so a key imported remotely and then locally is held both ways.
+  A local delete of such a key then returns its data while the remote signer can still sign with it; the implementers should say whether the local import must refuse it.
+- The source lists no HTTP 400 for the remote calls; EthLib answers a body that does not read with HTTP 400, as for the local calls.
+- What a missing `url` means is left to the client; EthLib keeps the key without one.
+- A remote key imported through the API is marked as one that can be deleted.
+- A remote key marked read-only stays on a delete, with the status `error`, as a local one does.
+
+### Remote-signing API
+
+The Remote-signing API, as `ethereum/remote-signing-api` release `v1.4.0` defines it, is the interface between a validator client and a remote signer, which holds the keys and signs for it.
+EthLib cites commit `44e9e0dc`.
+A client sends one JSON request per signature, and the field `type` names its kind.
+The signer must read exactly the object that the client meant, since the root it signs comes from that object.
+
+EthLib defines the eighteen kinds of request, thirteen from before Gloas and five that Gloas adds, with their JSON forms (`Consensus/RemoteSigningApi/Request.lean`).
+Each body is a container of the consensus layer, written in the JSON mapping of SSZ, or a small container of the schemas themselves, such as the slot of an aggregator selection.
+A versioned body names its version in upper case, as `PHASE0` to `GLOAS`, and the aggregate takes the shape of the fork of that version.
+`SigningRequest.toJson_total` (`Consensus/Proofs/RemoteSigningApi/Request.lean`) shows that the writer never fails, and `SigningRequest.ofJson_toJson` that every request it writes reads back as the same request.
+`getObjVal?_type_of_ofJson` shows that a request read from a document has the kind that its `type` names, and `ofJson_unknownType` that a `type` that names no kind is refused with that name.
+`version_of_ofJson_aggregateAndProofV2` and `version_of_ofJson_blockV2` show that a versioned request has the version that its body names.
+
+The five kinds that Gloas adds sign a payload bid, a payload envelope, the data of a payload attestation, the preferences of a proposer, and the authentication of a Builder API request.
+Each carries its body under the version `GLOAS`, the only version the source defines, and EthLib reads the body as its container at Glamsterdam.
+`version_of_readGloasData` shows that such a body is read only when it names `GLOAS`, and the Python suite checks that `FULU` is refused, with the key of the body and the name it found.
+The authentication of a Builder API request has no fork info, like a deposit, and its data is "non-empty" and at most 4096 bytes.
+`ofJson_emptyAuthData` shows that a document whose data reads as empty is refused for that reason, and `ofJson_longAuthData` that data of more than 4096 bytes is refused with the limit and its size.
+So the reader never cuts the data down, and every such request read has between 1 and 4096 bytes of data.
+The Python suite reads the 29 examples that match the schemas, and checks that writing each again gives the same document.
+It checks that the other three examples are refused: the two named below, and the envelope, whose logs bloom holds 262 bytes where the bloom has 256.
+With a bloom of 256 bytes, the envelope reads back.
+The source names no preset, and its examples mix the two.
+The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
+So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
+
+A signer signs a root that it computes from the request (`Consensus/RemoteSigningApi/SigningRoot.lean`).
+The source names a domain only for the kinds that Gloas adds, so the root of every other kind comes from the duty that it serves: its object, its domain type and its epoch.
+The domain comes from the fork info, by the rule of the domain of a state: the previous fork version before the fork epoch, the current one from it, with the root of the genesis validators.
+`getDomain_eq_forkInfoDomain` (`Consensus/Proofs/RemoteSigningApi/SigningRoot.lean`) shows that this is the domain of a state with that fork info.
+For each duty before Gloas, a theorem shows that under the fork info of a state the request has the root that the duty signs in that state, for the same object; for example `getAttestationSignature_eq_of_requestSigningRoot`.
+A sync committee message is signed in the current epoch of the state, so its theorem also takes the slot of the message in that epoch.
+`getBlockSignature_eq_of_requestSigningRoot_header` shows that from Bellatrix, where a request holds only the header of a block, its root is the root of the block, so the proposer's signature verifies.
+`verifyRegistrationSignature_of_requestSigningRoot` shows that a registration gets the root that the check of a registration verifies.
+`isValidDepositSignature_of_requestSigningRoot` shows the same for a deposit whose genesis fork version is that of the configuration.
+The kinds that Gloas adds sign under the domain types that the source names.
+`getExecutionPayloadBidSignature_eq_of_requestSigningRoot` and `getPayloadAttestationMessageSignature_eq_of_requestSigningRoot` show that a bid and the data of a payload attestation get the roots that their duties sign.
+`verifyBuilderRequestAuthSignature_of_requestSigningRoot` shows that the authentication of a Builder API request gets the root that its check verifies.
+Two kinds differ from their duties, and their theorems take a hypothesis each, which Gap A lists.
+An envelope is signed by its builder in the current epoch of the state, and by the request in the epoch of the slot of its payload; `getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot` assumes that the two epochs take the same fork version.
+Proposer preferences are signed at the fork version that the configuration gives to the proposal epoch, and the request takes the version of its fork info; `proposerPreferencesSigningRoot_eq_of_requestSigningRoot` assumes that the two agree.
+
+Each kind has one domain type (`RequestType.domainType`), and `requestDomain_prefix` shows that the domain of a request starts with it, whatever the fork info.
+`requestDomain_ne` shows that two requests whose kinds have different domain types never share a domain.
+`RequestType.domainType_eq_iff` shows that only three pairs of kinds share a domain type: the two block kinds, the two aggregate kinds, and the bid with the envelope.
+So the selection proof of a slot and the RANDAO reveal of an epoch with the same number hash different signing data, and one signature serves for both only through a SHA-256 collision.
+These theorems are about domains, not signing roots; that two different signing data have different roots needs the collision resistance of SHA-256, which EthLib does not assume here.
+The examples of the kinds that Gloas adds carry no signing root.
+The Python suite computes the roots of the payload attestation, the preferences and the authentication with its own merkleization and compares them; the bid and the envelope are progressive containers (EIP-7688), so it records their roots as a change detector.
+The Python suite checks the `signingRoot` of each of the 24 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
+The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
+The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
+
+The signer itself is a state of secret keys and a record of slashing protection (`Consensus/RemoteSigningApi/Endpoints.lean`).
+It lists the public keys of its secret keys, and its sign endpoint reads the request, then the key of the path, then finds the secret key, computes the root, asks slashing protection, and signs.
+The source fixes the status codes, 400 for a bad request, 404 for an unknown key and 412 for slashing protection, but not the rules of slashing protection, so the rules are a parameter.
+`sign_status_eq_404_iff` (`Consensus/Proofs/RemoteSigningApi/Endpoints.lean`) shows that the endpoint answers 404 exactly when the request reads and its key is not held.
+`sign_signed` shows that a signature it returns verifies under the key of the path, for the root that the signer computes for the request.
+`sign_state_of_not_signed` shows that a call that does not sign leaves the state as it was.
+The instance from EIP-3076 checks and records blocks and votes, and lets every other kind pass.
+`sign_block` and `sign_vote` show that each signed block or vote passed its check against the record before its call, and enters the record, and `sign_keeps` that no call removes a record.
+`signingRoot_eq_of_signedBlocks` shows that in any run of calls, two blocks of one slot signed for one key have one signing root, whatever the record the run starts with.
+`signingRoot_eq_of_signedVotes` shows the same for two votes signed for one key that `isSlashableAttestationData` forbids together.
+So a slashable pair from one signer needs a collision of the signing root, as for the signer of § Slashing protection.
+The Python suite signs each example that reads with a fixed key and checks the signature with `py_ecc`, checks a repeated, a conflicting and an unknown-key request for the `BLOCK_V2 (GLOAS)` example, and checks a refused double vote.
+
+The signer answers with its signature as JSON under `signature`, or as the hex alone, and lists its keys as a JSON array of hex (`Consensus/RemoteSigningApi/Response.lean`).
+The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Response.lean`), so `ofApiJson_toApiJson` reads it back as written.
+`publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
+The export of the public keys endpoint writes the key list; the JSON signature response has no export, since the export of the sign endpoint returns the signature as bytes.
+
+The source leaves fourteen points about the requests open, and EthLib reads each one as follows:
+
+- The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
+  EthLib follows the schemas, so it refuses both examples.
+- No schema of a body marks a field as required, not even `Fork` or the body of `DEPOSIT`.
+  Only `fork_info`, the top-level objects and the versioned bodies list required fields.
+  EthLib reads each body as its container, which requires every field.
+- The schemas do not forbid keys beyond those they name.
+  EthLib ignores such a key at the top level of a request and in a versioned body, and refuses one inside a container, as its JSON mapping of SSZ does everywhere.
+- The schemas name no version for the forks of the blob schedule, BPO1 to BPO5, which change only blob parameters (EIP-7892).
+  The Beacon API gives them the version of Fulu; the source does not say which version a request at such a fork carries.
+- The source does not say whether a signer must refuse a `version` other than the fork that `fork_info` gives at the epoch of the message.
+  EthLib reads the body under the version it names, whatever the fork info says.
+- The source does not say at which epoch each kind is signed; EthLib takes the epoch of the duty.
+  The epoch matters only for a message before the fork epoch of the fork info, where the previous version applies.
+- From Deneb the chain checks a voluntary exit under the fork version of Capella (EIP-7044), but the request carries only its fork info.
+  The source's example signs with the version of its fork info, so EthLib does too.
+  `voluntaryExitDomain_of_requestSigningRoot` gives the root that the check of an exit verifies, under the hypothesis that the fork info gives the version of the exit domain at the epoch of the exit.
+  Gap A lists that hypothesis.
+- The source says only that the signing root of a request is "for optional verification"; it does not say what a signer does when it differs from its own.
+  EthLib refuses such a request with 400, since client and signer then disagree on what is signed.
+- The source does not say which kinds slashing protection covers.
+  The instance of EIP-3076 covers blocks and votes only, so a payload attestation or an envelope is not protected.
+- The source does not order the checks of the sign endpoint when several fail; EthLib reads the request first, so a request that does not read gets 400 whatever its key.
+- The source says that the path holds the "BLS public key in hex format", with no pattern; EthLib requires the `0x` prefix and accepts hex digits in either case.
+- The schemas give each integer the type of a string.
+  The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
+- The rule that the authentication data is not empty is in the description of its schema, not in a schema keyword.
+  EthLib refuses empty data.
+- The source defines only `GLOAS` for the five kinds that Gloas adds.
+  From Hegotá, EthLib's bid gains the bits of the inclusion list, and a request for it waits for a release that names a later version.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -6136,6 +6614,9 @@ The churn limit of validators before Electra and the Phase 0 weak subjectivity p
 Both run only before Electra, where the type of the registry keeps it within the limit of the preset (`BeaconState.registryWithinLimit_of_lt`).
 There the count is below `2^64` (`length_getActiveValidatorIndices_lt`), so the conversion keeps its value (`toNat_length_getActiveValidatorIndices`) and agrees with the specification.
 The genesis validity check, fork choice, gossip and the honest-validator duties call the pure list directly, and keep the difference.
+
+The Keymanager API has no official vectors, and its source leaves points open.
+EthLib takes a reading for each, listed under Keymanager API, until the implementers of the API answer.
 
 Some official vectors expect more than a source says.
 The transaction tests of ethereum/tests reject 43 results whose gas limit is `2^64`, or whose gas limit times gas price exceeds `2^256 - 1`.
@@ -6288,6 +6769,14 @@ The signers then hold at most the active balance at the end of every epoch, not 
 The theorem also assumes a positive inclusion delay, a positive withdrawal delay, and an increment at most the activation balance; mainnet meets all three.
 `processSlotsAcross_exists_ok_of_chain_altairWitnessState` instantiates the mainnet corollary at the Altair witness, so its hypotheses can hold together.
 
+The root of a voluntary exit request (`voluntaryExitDomain_of_requestSigningRoot`) holds under the hypothesis that the fork info of the request gives, at the epoch of the exit, the version of the exit domain.
+From Deneb that is the version of Capella (EIP-7044), and the Remote-signing API does not say whether the client sends it or the signer substitutes it.
+The hypothesis stays until the implementers of remote signers answer it.
+
+Two roots of the kinds that Gloas adds hold under a hypothesis, which the Remote-signing API leaves open.
+The root of an envelope (`getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot`) assumes that the epoch of the slot of its payload and the current epoch of the state take the same fork version; the source names the domain type of an envelope, not its epoch.
+The root of proposer preferences (`proposerPreferencesSigningRoot_eq_of_requestSigningRoot`) assumes that the fork info gives, at the proposal epoch, the version that the configuration gives; when that epoch is in the next fork, the two differ, and the source does not say which the signer uses.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
@@ -6318,12 +6807,11 @@ The Python bindings expose the block cipher, CTR and GCM, as `encrypt_block`, `d
 A security theorem rests on a model, such as a random oracle for a hash.
 Each such theorem of EthLib rests on the idealisations listed below, and on any hypothesis that its statement names.
 The two theorems of Casper FFG share one bullet, as do the signature theorems of the light client.
-The binding of a proof of possession shares the bullet of leanXMSS, and the codeword searches of each scheme share the bullet of that scheme:
+The codeword searches of each scheme share the bullet of that scheme:
 
 - leanXMSS: the hash `H`, Keccak-256, is a random oracle on byte strings.
   The theorem says nothing about an attack that uses the structure of Keccak.
-  The binding of an EIP-8450 proof of possession rests on the same oracle.
-  So do the failure bounds of the codeword searches of leanXMSS.
+  The failure bounds of the codeword searches of leanXMSS rest on the same oracle.
 - leanSPHINCS: the hash `H`, Keccak-256, is a random oracle on byte strings, as for leanXMSS.
   The unforgeability theorem says nothing about an attack that uses the structure of Keccak.
   It counts classical queries only, so it says nothing about a quantum adversary.
@@ -6366,13 +6854,27 @@ The binding of a proof of possession shares the bullet of leanXMSS, and the code
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
-- Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`).
-  BLS signatures with proofs of possession are meant to give this, except with small probability, and EthLib proves only the bound below.
+- Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`, `Consensus/Proofs/SignatureChecks.lean`).
+  BLS signatures with proofs of possession are meant to make a forged aggregate unlikely, and EthLib proves only the bound below.
   `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds the forger of such aggregates on EthLib's bytes, with both hashes as random oracles.
   That is the draft's scheme, whose proofs of possession hash the key under the key tag.
   Ethereum registers keys with deposit signatures under the message tag instead, which that game does not model.
   `LightClientForgery.forgeAdvantage_le` bounds the probability that the light client accepts a forged signature of one designated honest member, when every signer carries a proof of possession that passes PopVerify, §3.3.3.
-  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives its probability.
+  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives the probability of a forgery for one member.
+  Over every input, the BLS checks accept the honest signature of any valid key on any message (`verify_sign`, `fastAggregateVerify_sign`).
+  So with those checks, this assumption holds only for a relation that relates every valid key to every message, and those theorems then do not say who signed.
+  A form restricted to the calls of one update is not stated yet.
+- Direct accountable safety, signed form: the accepted aggregate checks that blocks of the two runs made accept only if every key of the call signed its message (`SignatureChecks.AggregateSoundOn`, `Consensus/Proofs/SignatureChecks.lean`).
+  The accepted header checks of their proposer slashings accept only if the key signed the header (`SignatureChecks.VerifySoundOn`).
+  For the relation of real signatures, these say that none of those calls accepted a forgery.
+  That relation relates a key held by the adversary to every message the adversary chose to sign with it.
+  `Security.byteForgeAdvantage_le_coCdhAdvantage_of_byteHashCallBound` (`Cryptography/Proofs/Bls/Security/Refinement.lean`) bounds a forger of one signature of one honest key on EthLib's bytes, under chosen messages, in the random oracle model.
+  Its bound is `q` times the advantage of a named co-Diffie-Hellman solver, where `q` counts hash calls.
+  No theorem extends it to every honest key of the runs, so it does not prove the assumption on the header calls.
+  A bound would give a probability; reading it as the absence of forgery in one pair of runs is left informal.
+  No theorem bounds the assumption on the aggregate calls for Ethereum.
+  The bound with proofs of possession needs PopProve under the key tag, and Ethereum registers keys with deposit signatures under the message tag, which that game does not model.
+  Without proofs of possession the aggregate assumption can fail for an honest key that never signed (`fastAggregateVerify_rogue`, `Cryptography/Proofs/Bls/SignaturesUnique.lean`).
 - ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
   In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
   The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
@@ -6447,12 +6949,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 526 operations and 51 size constants.
-The Python extension calls 526 of the operations and 51 of the constants.
+Lean exports 530 operations and 51 size constants.
+The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11851 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (207), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
+11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -6589,7 +7091,6 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Consensus/Proofs/DepositRandomOracleAccepted.lean`
 - `EthLib/Consensus/Proofs/Gossip/`
 - `EthLib/Consensus/Proofs/LightClient/`
-- `EthLib/Consensus/Proofs/PqKeys/`
 - `EthLib/Consensus/Proofs/SigningRandomOracle.lean`
 - `EthLib/Cryptography/Proofs/Aes/`
 - `EthLib/Cryptography/Proofs/BadOnBudget.lean`
@@ -6598,14 +7099,17 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/DerivationTable.lean`
 - `EthLib/Cryptography/Proofs/EvalDistEq.lean`
 - `EthLib/Cryptography/Proofs/ExceptTAnswers.lean`
+- `EthLib/Cryptography/Proofs/Hash/`
 - `EthLib/Cryptography/Proofs/HashSig/`
 - `EthLib/Cryptography/Proofs/IndependentAnswers.lean`
 - `EthLib/Cryptography/Proofs/IndependentOutside.lean`
+- `EthLib/Cryptography/Proofs/Indifferentiability.lean`
 - `EthLib/Cryptography/Proofs/Kzg/`
 - `EthLib/Cryptography/Proofs/LazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/LogKeys.lean`
 - `EthLib/Cryptography/Proofs/LoggedUntilBad.lean`
 - `EthLib/Cryptography/Proofs/Merkle/`
+- `EthLib/Cryptography/Proofs/OneCallPermutation.lean`
 - `EthLib/Cryptography/Proofs/ProgrammedPermutation.lean`
 - `EthLib/Cryptography/Proofs/QueryAvoidance.lean`
 - `EthLib/Cryptography/Proofs/RandomOracleFromCache.lean`

@@ -134,7 +134,7 @@ The forks after Glamsterdam fail with code 0, since EthLib does not specify thei
 def receiptsMatchExport (version : UInt64) (fork root receipts : ByteArray) : Result Bool := do
   let v ← readVersion version
   let fork ← forkUpTo .glamsterdam fork
-  let some (root : Base.Hash32) := (if h : root.size = 32 then some ⟨root.data, h⟩ else none)
+  let some (root : Base.Hash32) := Base.exactBytes? 32 root
     | throw (0, "receipts root is not 32 bytes")
   match Serialization.Rlp.decode receipts with
   | .ok (.list items) => return receiptsMatch v fork root items
@@ -152,8 +152,7 @@ def accessListsAnswerExport (version : UInt64) (request response : ByteArray)
   let req ← run (Message.decode v GET_BLOCK_ACCESS_LISTS_ID request)
   let resp ← run (Message.decode v BLOCK_ACCESS_LISTS_ID response)
   let hashes ← expected.toList.mapM fun b =>
-    if h : b.size = 32 then pure (⟨b.data, h⟩ : Base.Hash32)
-    else throw (0, "an access list hash is not 32 bytes")
+    Base.exactBytes 32 b fun _ => (0, "an access list hash is not 32 bytes")
   return Message.accessListsResponse hashes req resp
 
 /-- A message for a refused partial list, phrased for someone reading a Python traceback. -/

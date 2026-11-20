@@ -7,6 +7,8 @@ public import EthLib.Base.Bytes
 
 The bytes of a fixed-size object have its length.
 
+A read of a buffer gives the entries of its array of bytes.
+
 A read of those bytes returns the object.
 
 So two objects with the same bytes are the same object.
@@ -48,12 +50,20 @@ theorem byteArray_set_eq_set! (bytes : ByteArray) (index : Nat) (value : UInt8)
 @[simp] theorem size_packBytes {n : Nat} (v : Vector UInt8 n) :
     (packBytes v).size = n := v.size_toArray
 
+/-- A read of a buffer gives the entries of its array of bytes, from the offset on.
+
+Proofs rewrite with it to reason about the array of bytes. -/
+theorem readBytes_eq_ofFn_data (b : ByteArray) (offset n : Nat) (h : offset + n ≤ b.size) :
+    readBytes b offset n h =
+      Vector.ofFn fun i => b.data[offset + i.val]'(by simp only [ByteArray.size] at h; omega) :=
+  rfl
+
 /-- Reading the bytes of an object returns that object. -/
 @[simp] theorem readBytes_packBytes {n : Nat} (v : Vector UInt8 n) (h) :
     readBytes (packBytes v) 0 n h = v := by
   apply Vector.ext
   intro i hi
-  simp [readBytes, packBytes]
+  simp [readBytes_eq_ofFn_data, packBytes]
 
 /-- Two objects with the same bytes are the same object. -/
 theorem packBytes_injective {n : Nat} :
@@ -66,20 +76,125 @@ theorem packBytes_injective {n : Nat} :
 @[simp] theorem packBytes_mk_data {n : Nat} (b : ByteArray) (h : b.data.size = n) :
     packBytes (⟨b.data, h⟩ : Vector UInt8 n) = b := rfl
 
-/-- The bytes of an object, read back at its size, give the object. -/
-@[simp] theorem exactBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
-    exactBytes? n (packBytes v) = some v := by
-  rw [exactBytes?, dite_eq_left (size_packBytes v)]
-  rfl
+/-- An array of the wanted length reads as its own elements. -/
+theorem exactArray?_of_size_eq {α : Type} {n : Nat} {a : Array α} (h : a.size = n) :
+    exactArray? n a = some ⟨a, h⟩ :=
+  dite_eq_left h
 
-/-- An object read from a buffer has the bytes of that buffer. -/
-theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
-    (h : exactBytes? n b = some v) : packBytes v = b := by
-  unfold exactBytes? at h
+/-- An array of any other length reads as nothing. -/
+theorem exactArray?_of_size_ne {α : Type} {n : Nat} {a : Array α} (h : a.size ≠ n) :
+    exactArray? n a = none :=
+  dite_eq_right h
+
+/-- The elements of a vector, read back at its length, give the vector. -/
+@[simp] theorem exactArray?_toArray {α : Type} {n : Nat} (v : Vector α n) :
+    exactArray? n v.toArray = some v :=
+  exactArray?_of_size_eq v.size_toArray
+
+/-- An array of the wanted length reads as its own elements. -/
+theorem exactArray_of_size_eq {α ε : Type} {n : Nat} {a : Array α} (bad : Nat → ε)
+    (h : a.size = n) : exactArray n a bad = .ok ⟨a, h⟩ := by
+  simp [exactArray, exactArray?_of_size_eq h]
+
+/-- An array of any other length gives the error built from its length. -/
+theorem exactArray_of_size_ne {α ε : Type} {n : Nat} {a : Array α} (bad : Nat → ε)
+    (h : a.size ≠ n) : exactArray n a bad = .error (bad a.size) := by
+  simp [exactArray, exactArray?_of_size_ne h]
+
+/-- The elements of a vector, read back at its length, give the vector. -/
+@[simp] theorem exactArray_toArray {α ε : Type} {n : Nat} (v : Vector α n) (bad : Nat → ε) :
+    exactArray n v.toArray bad = .ok v :=
+  exactArray_of_size_eq bad v.size_toArray
+
+/-- An array reads as a vector exactly when the vector has the elements of the array. -/
+theorem exactArray_eq_ok_iff {α ε : Type} {n : Nat} {a : Array α} {bad : Nat → ε}
+    {v : Vector α n} : exactArray n a bad = .ok v ↔ v.toArray = a := by
+  by_cases h : a.size = n
+  · rw [exactArray_of_size_eq bad h]
+    constructor
+    · intro made
+      cases made
+      rfl
+    · rintro rfl
+      rfl
+  · rw [exactArray_of_size_ne bad h]
+    constructor
+    · intro made
+      cases made
+    · rintro rfl
+      exact absurd v.size_toArray h
+
+/-- A vector read from an array has the elements of that array. -/
+theorem toArray_of_exactArray? {α : Type} {n : Nat} {a : Array α} {v : Vector α n}
+    (h : exactArray? n a = some v) : v.toArray = a := by
+  unfold exactArray? at h
   split at h
   · cases h
     rfl
   · cases h
+
+/-- The bytes of an object, read back at its size, give the object. -/
+@[simp] theorem exactBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
+    exactBytes? n (packBytes v) = some v :=
+  exactArray?_toArray v
+
+/-- A buffer of the wanted length reads as its own bytes. -/
+theorem exactBytes?_of_size_eq {n : Nat} {b : ByteArray} (h : b.size = n) :
+    exactBytes? n b = some ⟨b.data, h⟩ :=
+  exactArray?_of_size_eq h
+
+/-- A buffer of any other length reads as nothing. -/
+theorem exactBytes?_of_size_ne {n : Nat} {b : ByteArray} (h : b.size ≠ n) :
+    exactBytes? n b = none :=
+  exactArray?_of_size_ne h
+
+/-- A buffer of the wanted length reads as its own bytes. -/
+theorem exactBytes_of_size_eq {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat → ε)
+    (h : b.size = n) : exactBytes n b bad = .ok ⟨b.data, h⟩ :=
+  exactArray_of_size_eq bad h
+
+/-- A buffer of any other length gives the error built from its length. -/
+theorem exactBytes_of_size_ne {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat → ε)
+    (h : b.size ≠ n) : exactBytes n b bad = .error (bad b.size) :=
+  exactArray_of_size_ne bad h
+
+/-- A buffer built from an object's array, read back at its size, gives the object. -/
+@[simp] theorem exactBytes_mk_toArray {ε : Type} {n : Nat} (v : Vector UInt8 n) (bad : Nat → ε) :
+    exactBytes n ⟨v.toArray⟩ bad = .ok v :=
+  exactBytes_of_size_eq (b := ⟨v.toArray⟩) bad v.size_toArray
+
+/-- The packed bytes of an object, read back at its size, give the object. -/
+@[simp] theorem exactBytes_packBytes {ε : Type} {n : Nat} (v : Vector UInt8 n) (bad : Nat → ε) :
+    exactBytes n (packBytes v) bad = .ok v :=
+  exactArray_toArray v bad
+
+/-- A buffer reads as an object exactly when the object has the bytes of the buffer. -/
+theorem exactBytes_eq_ok_iff {ε : Type} {n : Nat} {b : ByteArray} {bad : Nat → ε}
+    {v : Vector UInt8 n} : exactBytes n b bad = .ok v ↔ v.toArray = b.data :=
+  exactArray_eq_ok_iff
+
+/-- A buffer fails to read exactly when it has another length, with the error for that length. -/
+theorem exactBytes_eq_error_iff {ε : Type} {n : Nat} {b : ByteArray} {bad : Nat → ε} {e : ε} :
+    exactBytes n b bad = .error e ↔ b.size ≠ n ∧ e = bad b.size := by
+  by_cases h : b.size = n
+  · rw [exactBytes_of_size_eq bad h]
+    constructor
+    · intro made
+      cases made
+    · rintro ⟨other, -⟩
+      exact absurd h other
+  · rw [exactBytes_of_size_ne bad h]
+    constructor
+    · intro made
+      cases made
+      exact ⟨h, rfl⟩
+    · rintro ⟨-, rfl⟩
+      rfl
+
+/-- An object read from a buffer has the bytes of that buffer. -/
+theorem packBytes_of_exactBytes? {n : Nat} {b : ByteArray} {v : Vector UInt8 n}
+    (h : exactBytes? n b = some v) : packBytes v = b := by
+  rw [packBytes, toArray_of_exactArray? h]
 
 /-- A byte of an object is the byte at the same index of its bytes. -/
 theorem getElem_eq_get!_packBytes {n : Nat} (v : Vector UInt8 n) (i : Nat) (h : i < n) :

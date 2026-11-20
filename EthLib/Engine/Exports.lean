@@ -3,6 +3,7 @@ module
 public import EthLib.Engine.Exports.BeaconApiEvents
 public import EthLib.Engine.Exports.BuildPayload
 public import EthLib.Engine.Exports.Capabilities
+public import EthLib.Engine.Exports.Errors
 public import EthLib.Engine.Exports.ExecutionEngine
 public import EthLib.Engine.Exports.ForkchoiceUpdated
 public import EthLib.Engine.Exports.GetBlobs

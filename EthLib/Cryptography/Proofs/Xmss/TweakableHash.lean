@@ -19,6 +19,21 @@ namespace EthLib.Cryptography.Xmss
 
 open EthLib.Cryptography.Xmss.Constants
 
+/-- Byte `i` of a half of a hash value is byte `16 h + i` of the value, for half `h`. -/
+theorem getElem_halfOf (half : Fin 2) (full : Vector UInt8 32) (i : Nat) (hi : i < DIGEST_LEN) :
+    (halfOf half full)[i] =
+      full[16 * half.val + i]'(by have := half.isLt; simp only [DIGEST_LEN] at hi; omega) := by
+  simp only [halfOf, Vector.getElem_cast, Vector.getElem_extract]
+
+/-- A half of a hash value is the vector of its 16 bytes, read one by one. -/
+theorem halfOf_eq_ofFn (half : Fin 2) (full : Vector UInt8 32) :
+    halfOf half full = Vector.ofFn fun i => full[16 * half.val + i.val]'(by
+      have := half.isLt
+      have := i.isLt
+      simp only [DIGEST_LEN] at *
+      omega) :=
+  Vector.ext fun i hi => by rw [getElem_halfOf _ _ _ hi, Vector.getElem_ofFn]
+
 /-- `P | A | M` determines `P`, `A` and `M`. -/
 theorem thInput_inj {pp pp' : PublicParam} {a a' : Address} {m m' : ByteArray}
     (h : thInput pp a m = thInput pp' a' m') : pp = pp' ∧ a = a' ∧ m = m' := by

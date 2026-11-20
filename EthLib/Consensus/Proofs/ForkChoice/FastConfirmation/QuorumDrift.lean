@@ -456,7 +456,7 @@ private theorem call_runs
     Store.getCurrentTarget_eq_ok_iff.mp targetOk
   dsimp only at held ⊢
   obtain ⟨boundary, aBlock, boundaryOk, aFound, aLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock early checkpointOk
+    Store.isAncestor_of_getCheckpointBlock checkpointOk
   have boundaryNat := (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2
   have atStart : boundary % preset.SLOTS_PER_EPOCH = 0 := by
     apply UInt64.toNat_inj.mp
@@ -600,9 +600,9 @@ private theorem runs_of_call
   -- The receiver holds the same target state, and its state runs on from the middle state.
   have forward := e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
     (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) k w receiver
-  obtain ⟨-, aBlockW, -, aFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock early read
+  obtain ⟨-, aBlockW, -, aFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨ancW, heldW, -⟩ := forward.reachable.blockStatesFromParents aFoundW
-  obtain rfl : anc = ancW := e.blockStates_eq anchored caller receiver (start u caller)
+  obtain rfl : anc = ancW := e.blockStates_eq anchored (start u caller)
     (start w receiver) (agree u caller w receiver n k callTime receiveTime) held heldW
   have stateLater : start' ≤ state.slot := by
     have := UInt64.le_iff_toNat_le.mp later
@@ -735,7 +735,7 @@ private theorem runs_of_finalized
   · -- After the anchor: the split is the finalized block's state at the start of its epoch.
     have finStored := finHeld guard
     obtain ⟨startF, fBlock, startFOk, fFound, fLe, -⟩ :=
-      Store.isAncestor_of_getCheckpointBlock early (ancRead guard)
+      Store.isAncestor_of_getCheckpointBlock (ancRead guard)
     have startFNat := (computeStartSlotAtEpoch_ok_iff.mp startFOk).2
     have finSlot : fin.slot = fBlock.slot :=
       (forward u caller n).reachable.blockState_slot_eq anchorSlot fFound finStored
@@ -756,10 +756,10 @@ private theorem runs_of_finalized
       startFOk finStored held (ancRead guard) ancReach
       (by rw [middleSlot, UInt64.le_iff_toNat_le]; exact finalizedLe)
     -- The receiver holds the same finalized block's state, and so the same split state.
-    obtain ⟨-, fBlockW, -, fFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock early
+    obtain ⟨-, fBlockW, -, fFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock
       (finRead guard)
     obtain ⟨finW, finStoredW, -⟩ := (forward w receiver k).reachable.blockStatesFromParents fFoundW
-    obtain rfl : fin = finW := e.blockStates_eq anchored caller receiver (start u caller)
+    obtain rfl : fin = finW := e.blockStates_eq anchored (start u caller)
       (start w receiver) (agree u caller w receiver n k callTime receiveTime) finStored finStoredW
     obtain ⟨split', lookF', toCounted⟩ := lookahead_runsTo anchorSlot (forward w receiver k)
       startFOk finStoredW stored (finRead guard) reach

@@ -34,7 +34,8 @@ theorem mapM_toChunk_map_toArray :
     ∀ chunks : List Bytes32, (chunks.map Vector.toArray).mapM toChunk = .ok chunks
   | [] => rfl
   | chunk :: rest => by
-    simp [List.mapM_cons, toChunk, mapM_toChunk_map_toArray rest, bind, Except.bind, pure,
+    have read : toChunk chunk.toArray = .ok chunk := toChunk_ok_iff.mpr rfl
+    simp [List.mapM_cons, read, mapM_toChunk_map_toArray rest, bind, Except.bind, pure,
       Except.pure]
 
 /-- A branch that a full node builds for a node of a value proves that node.

@@ -213,8 +213,7 @@ def splitLastTwo : List Record → Option (List Record × Record × Record)
 
 /-- The 32 bytes of a TotalDifficulty or Accumulator record. -/
 def bytes32Of (record : Record) : Except Era1Error Bytes32 :=
-  if h : record.data.size = 32 then .ok ⟨record.data.data, h⟩
-  else .error (.wrongSize record.type record.data.size)
+  exactBytes 32 record.data (.wrongSize record.type)
 
 /-- The data of the compressed record of the block `i`. -/
 def decompressRecord (i : Nat) (record : Record) : Except Era1Error ByteArray :=

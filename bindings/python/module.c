@@ -130,6 +130,8 @@ PyObject* DEPOSIT_TREE_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
+PyObject* KEYMANAGER_ERROR;
+PyObject* REMOTE_SIGNING_ERROR;
 PyObject* BINDING_ERROR;
 PyObject* RPC_ERROR;
 
@@ -884,6 +886,10 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_relay_submission_bid},
   {"consensus_relay_validators", py_consensus_relay_validators,
    METH_VARARGS, DOC_consensus_relay_validators},
+  {"consensus_keymanager_json", py_consensus_keymanager_json, METH_VARARGS,
+   DOC_consensus_keymanager_json},
+  {"consensus_keymanager_run", py_consensus_keymanager_run, METH_VARARGS,
+   DOC_consensus_keymanager_run},
   {"consensus_relay_delivered_payload", py_consensus_relay_delivered_payload,
    METH_VARARGS, DOC_consensus_relay_delivered_payload},
   {"consensus_relay_received_bid", py_consensus_relay_received_bid,
@@ -1026,6 +1032,14 @@ static PyMethodDef methods[] = {
    DOC_consensus_read_slashing_interchange},
   {"consensus_import_slashing_interchange", py_consensus_import_slashing_interchange,
    METH_VARARGS, DOC_consensus_import_slashing_interchange},
+  {"consensus_read_signing_request", py_consensus_read_signing_request, METH_VARARGS,
+   DOC_consensus_read_signing_request},
+  {"consensus_signing_request_root", py_consensus_signing_request_root, METH_VARARGS,
+   DOC_consensus_signing_request_root},
+  {"consensus_remote_signer_sign", py_consensus_remote_signer_sign, METH_VARARGS,
+   DOC_consensus_remote_signer_sign},
+  {"consensus_remote_signer_public_keys", py_consensus_remote_signer_public_keys, METH_VARARGS,
+   DOC_consensus_remote_signer_public_keys},
   {"consensus_check_block_signing", py_consensus_check_block_signing, METH_VARARGS,
    DOC_consensus_check_block_signing},
   {"consensus_check_attestation_signing", py_consensus_check_attestation_signing, METH_VARARGS,
@@ -1070,11 +1084,6 @@ static PyMethodDef methods[] = {
   {"consensus_get_validators_custody_requirement",
    py_consensus_get_validators_custody_requirement, METH_VARARGS,
    DOC_consensus_get_validators_custody_requirement},
-  {"pq_keys_ssz", py_pq_keys_ssz, METH_VARARGS, DOC_pq_keys_ssz},
-  {"pq_keys_possession_signing_root", py_pq_keys_possession_signing_root, METH_VARARGS,
-   DOC_pq_keys_possession_signing_root},
-  {"pq_keys_is_valid_possession_proof", py_pq_keys_is_valid_possession_proof, METH_VARARGS,
-   DOC_pq_keys_is_valid_possession_proof},
   {"consensus_verify_data_column_sidecar", py_consensus_verify_data_column_sidecar, METH_VARARGS,
    DOC_consensus_verify_data_column_sidecar},
   {"consensus_verify_data_column_sidecar_inclusion_proof",
@@ -1333,6 +1342,7 @@ static PyMethodDef methods[] = {
    DOC_engine_exchange_capabilities},
   {"engine_get_client_version", py_engine_get_client_version, METH_VARARGS,
    DOC_engine_get_client_version},
+  {"engine_error_object", py_engine_error_object, METH_VARARGS, DOC_engine_error_object},
   {"engine_rewrite_params", py_engine_rewrite_params, METH_VARARGS,
    DOC_engine_rewrite_params},
   {"engine_prepare_execution_payload", py_engine_prepare_execution_payload, METH_VARARGS,
@@ -1443,6 +1453,8 @@ PyInit__native(void) {
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
+    KEYMANAGER_ERROR = PyObject_GetAttrString(errors, "KeymanagerError");
+    REMOTE_SIGNING_ERROR = PyObject_GetAttrString(errors, "RemoteSigningError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);

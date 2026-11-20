@@ -19899,7 +19899,7 @@ private theorem charge_due (h : Setting config checks g split fin pulled anc cou
     fun wC' found => ?_⟩
   obtain rfl : wC' = last := Option.some.inj (found.symm.trans located)
   have near := h.near
-  have lookahead := h.window.lookahead
+  have lookahead : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := h.window
   rw [sameActivation]
   omega
 
@@ -28071,7 +28071,7 @@ The two stores agree on their blocks, so the earlier read passes to the other st
 private theorem pin_finRead {A B : Store preset fork}
     (reachedA : Store.Reachable config anchorState anchorBlock A)
     (reachedB : Store.Reachable config anchorState anchorBlock B)
-    (preGloas : fork < .glamsterdam) (sound : Invariant anchorState)
+    (sound : Invariant anchorState)
     (anchorSlot : anchorBlock.slot = anchorState.slot)
     (params : DirectSafety.Parameters preset) (nonzero : HeldStateRootsNonzero A)
     (unknownParent : A.blocks[anchorBlock.parentRoot]? = none)
@@ -28106,27 +28106,27 @@ private theorem pin_finRead {A B : Store preset fork}
   -- The target block reads it too, and so it reads the finalized block of the target state.
   have targetFinalized : A.getCheckpointBlock block A.finalizedCheckpoint.epoch =
       .ok A.finalizedCheckpoint.root :=
-    (Store.getCheckpointBlock_trans preGloas targetRead finalizedLe) ▸ headRead
+    (Store.getCheckpointBlock_trans targetRead finalizedLe) ▸ headRead
   -- The block of the target state reads the finalized block of that state.
   obtain ⟨-, -, -, ancReads⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedA sound anchorSlot params nonzero ancOk
   have ancRead := ancReads later
   have middle : A.getCheckpointBlock A.finalizedCheckpoint.root anc.finalizedCheckpoint.epoch =
       .ok anc.finalizedCheckpoint.root := by
-    rw [← Store.getCheckpointBlock_trans preGloas targetFinalized ancLe]
+    rw [← Store.getCheckpointBlock_trans targetFinalized ancLe]
     exact ancRead
   -- The other store's justified chain reads the caller's finalized block, which it holds.
   have justifiedRead := finality justifiedLe
   obtain ⟨-, finalizedBlock, -, finalizedHeld, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas justifiedRead
+    Store.isAncestor_of_getCheckpointBlock justifiedRead
   obtain ⟨boundary, checkpointBlock, boundaryOk, checkpointHeld, checkpointLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas ancRead
+    Store.isAncestor_of_getCheckpointBlock ancRead
   have aboveAnchor : anchorBlock.slot ≤ boundary :=
     UInt64.le_trans (reachedA.anchorSlot_le (UInt64.le_of_eq anchorSlot) checkpointHeld)
       checkpointLe
   have received := Store.getCheckpointBlock_of_same_blocks reachedB same boundaryOk aboveAnchor
     ⟨finalizedBlock, finalizedHeld⟩ middle
-  rw [Store.getCheckpointBlock_trans preGloas justifiedRead ancLe]
+  rw [Store.getCheckpointBlock_trans justifiedRead ancLe]
   exact received
 
 /-- The a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
@@ -28258,13 +28258,13 @@ private theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : 
         ((e.world k).state w).getCheckpointBlock root anc.finalizedCheckpoint.epoch =
           .ok anc.finalizedCheckpoint.root := by
       intro laterAnc
-      have justifiedRead := pin_finRead reachedA.reachable reachedB.reachable preGloas sound
+      have justifiedRead := pin_finRead reachedA.reachable reachedB.reachable sound
         anchorSlot parameters nonzeroA (absent u caller n callTime)
         (agree u caller w receiver n k callTime high)
         (chain u caller n n (Nat.le_refl _) callTime)
         (finality u caller w receiver n k callTime high) nodeOk epochOk targetOk ancOk laterAnc
         finalizedLe justifiedLe
-      rw [Store.getCheckpointBlock_trans preGloas rootRead (UInt64.le_trans ancLe justifiedLe)]
+      rw [Store.getCheckpointBlock_trans rootRead (UInt64.le_trans ancLe justifiedLe)]
       exact justifiedRead
     have counts : CountedState ((e.world k).state w) config state :=
       ⟨root, base, held, shape.imp id fun ⟨slot', childRoot, child, found, parent, le, ok⟩ =>
@@ -28356,7 +28356,7 @@ private theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.ma
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_mainnet
     genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
     guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_mainnet CapOrder.mainnet
-    ActivationWithinMaxEffective.mainnet Preset.SeedLookaheadAtLeastThree.mainnet
+    ActivationWithinMaxEffective.mainnet Preset.seedLookaheadAtLeastThree_mainnet
     maxEffectiveBalancesAligned_mainnet withdrawDelay (by decide) (by decide) (by decide)
     PinPresetFacts.mainnet
 
@@ -28368,7 +28368,7 @@ private theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.mi
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_minimal
     genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
     guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_minimal CapOrder.minimal
-    ActivationWithinMaxEffective.minimal Preset.SeedLookaheadAtLeastThree.minimal
+    ActivationWithinMaxEffective.minimal Preset.seedLookaheadAtLeastThree_minimal
     maxEffectiveBalancesAligned_minimal withdrawDelay (by decide) (by decide) (by decide)
     PinPresetFacts.minimal
 

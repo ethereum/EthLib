@@ -170,7 +170,7 @@ def readBytes (path : String) (size : Nat) (document : Json) :
     Except SlashingProtectionError (Vector UInt8 size) := do
   let text ← readString path document
   match Serialization.Ssz.ofHex text with
-  | .ok bytes => if sized : bytes.size = size then .ok ⟨bytes, sized⟩ else .error (.field path)
+  | .ok bytes => exactBytes size ⟨bytes⟩ fun _ => .field path
   | .error _ => .error (.field path)
 
 /-- An array, each element read in turn. -/
@@ -273,6 +273,14 @@ def blocksOf (interchange : Interchange) (pubkey : BLSPubkey) : List SignedBlock
 def attestationsOf (interchange : Interchange) (pubkey : BLSPubkey) :
     List SignedAttestationRecord :=
   (interchange.data.filter (·.pubkey = pubkey)).flatMap (·.signedAttestations)
+
+/-- Whether a file names a key in one of its entries. -/
+def namesKey (interchange : Interchange) (pubkey : BLSPubkey) : Bool :=
+  interchange.data.any fun entry => decide (entry.pubkey = pubkey)
+
+/-- The entries of a file that name a key of a list, in order, with the chain of the file. -/
+def entriesOf (interchange : Interchange) (keys : List BLSPubkey) : Interchange :=
+  { interchange with data := interchange.data.filter (·.pubkey ∈ keys) }
 
 /-- The record after a key signs a block, as one more entry of that key. -/
 def recordBlock (interchange : Interchange) (pubkey : BLSPubkey) (slot : Slot)

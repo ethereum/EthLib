@@ -57,56 +57,20 @@ private theorem getCheckpointBlock_ok_iff {root target : Root} {epoch : Epoch} :
     cases reached : store.getAncestor ⟨root, .pending⟩ start <;>
       simp [reached, Except.mapError, bind, Except.bind, pure, Except.pure]
 
-/-- A pending node descends from the pending node of each root on its chain.
-
-Before Gloas the walk keeps the pending status, as each parent is pending then. -/
-private theorem isAncestor_of_ancestorRoots (lower : store.ParentsBelow) {root target : Root}
-    {slot : Slot} (walk : store.ancestorRoots root slot target) :
-    store.isAncestor ⟨root, .pending⟩ ⟨target, .pending⟩ = .ok true := by
-  obtain ⟨node, reached, rfl⟩ := walk
-  by_cases gloas : .glamsterdam ≤ fork
-  · obtain ⟨block, found, le⟩ := getAncestor_le reached
-    have stops : store.getAncestor ⟨root, .pending⟩ block.slot = .ok node := by
-      rw [getAncestor_trans le reached, getAncestor_of_le found (UInt64.le_refl _)]
-    simp [isAncestor_pending gloas, block_ok_iff.mpr found, stops, bind, Except.bind, pure,
-      Except.pure]
-  · obtain ⟨-, origin, -⟩ := getAncestor_climbs (lower := lower) reached
-    obtain ⟨nodeRoot, status⟩ := node
-    have pending : status = .pending := by
-      rcases origin with same | ⟨_, _, _, _, _, _, parentStatus, _⟩
-      · cases same
-        rfl
-      · exact parentStatus.trans (parentPayloadStatus_of_lt (Nat.lt_of_not_le gloas))
-    subst pending
-    exact isAncestor_of_getAncestor reached
-
 /-- Two checkpoint blocks of one chain, at ordered epochs, are on one chain themselves.
 
 The earlier block is the ancestor of the later one at the first slot of the earlier epoch. -/
-private theorem getCheckpointBlock_of_le (lower : store.ParentsBelow)
+private theorem getCheckpointBlock_of_le
     {root early late : Root} {earlyEpoch lateEpoch : Epoch} (ordered : earlyEpoch ≤ lateEpoch)
     (earlyBlock : store.getCheckpointBlock root earlyEpoch = .ok early)
     (lateBlock : store.getCheckpointBlock root lateEpoch = .ok late) :
     store.isAncestor ⟨late, .pending⟩ ⟨early, .pending⟩ = .ok true ∧
       store.getCheckpointBlock late earlyEpoch = .ok early := by
-  obtain ⟨startEarly, startedEarly, nodeEarly, walkEarly, rfl⟩ :=
-    getCheckpointBlock_ok_iff.mp earlyBlock
-  obtain ⟨startLate, startedLate, node, reached, rfl⟩ := getCheckpointBlock_ok_iff.mp lateBlock
-  have startLe : startEarly ≤ startLate := by
-    rw [computeStartSlotAtEpoch_ok_iff] at startedEarly startedLate
-    rw [UInt64.le_iff_toNat_le, startedEarly.2, startedLate.2]
-    exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp ordered)
-  -- The walk to the earlier start can stop at the later block on the way.
-  have walk : store.ancestorRoots node.root startEarly nodeEarly.root := by
-    have same := getAncestor_root (store := store) node .pending startEarly
-    rw [← getAncestor_trans startLe reached, walkEarly] at same
-    cases reaching : store.getAncestor ⟨node.root, .pending⟩ startEarly with
-    | error e => simp [reaching, Functor.map, Except.map] at same
-    | ok other =>
-      simp only [reaching, Functor.map, Except.map, Except.ok.injEq] at same
-      exact ⟨other, reaching, same.symm⟩
-  exact ⟨isAncestor_of_ancestorRoots lower walk,
-    getCheckpointBlock_ok_iff.mpr ⟨startEarly, startedEarly, walk⟩⟩
+  -- The earlier read of the root goes through the later checkpoint.
+  have read : store.getCheckpointBlock late earlyEpoch = .ok early :=
+    (getCheckpointBlock_trans lateBlock ordered) ▸ earlyBlock
+  obtain ⟨_, _, _, _, _, descends⟩ := isAncestor_of_getCheckpointBlock read
+  exact ⟨descends, read⟩
 
 end Store
 
@@ -639,7 +603,6 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
     (genesis : Genesis config checks g)
     (pre : Run config checks g ⟨fork, anchorState⟩)
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
-    (unknownParent : store.blocks[anchorBlock.parentRoot]? = none)
     (unknownEarlier : earlier.blocks[anchorBlock.parentRoot]? = none)
     (importedEarlier : earlier.BlockStatesFromParents config (· = checks) anchorState anchorBlock)
     (earlyEarlier : ∀ next ∈ config.nextFork fork,
@@ -689,7 +652,6 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
   have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
     have := parameters.roots
     omega
-  have lower := reachable.parentsBelow anchorSlot unknownParent
   have afterJ : getCurrentEpoch anchorState < j.epoch :=
     UInt64.lt_iff_toNat_lt.mpr (Nat.lt_of_lt_of_le (UInt64.lt_iff_toNat_lt.mp afterF)
       (UInt64.le_iff_toNat_le.mp ordered))
@@ -731,7 +693,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_of_view {confi
           UInt64.le_trans anchorSlot (slot_le_of_getCurrentEpoch_lt positive afterF startOk)
         have blockBF := getCheckpointBlock_eq_of_checkpointPath headersA headersB lastA lastB
           startOk later paths blockA
-        exact .inl (Store.getCheckpointBlock_of_le lower ordered blockBF blockB)
+        exact .inl (Store.getCheckpointBlock_of_le ordered blockBF blockB)
       · exact .inr ⟨stateA, left, va, ⟨rootA, heldA⟩, fieldA.symm, .inr (evidence zero)⟩
     · exact .inr ⟨stateA, left, va, ⟨rootA, heldA⟩, fieldA.symm, .inr (evidence zero)⟩
   · -- Different paths conflict, and direct accountable safety covers the two views.
@@ -811,7 +773,7 @@ private theorem Store.Reachable.finalized_ancestor_or_accountable_between {confi
       (fun _ _ held => heldEnough (.inr held)) (·.currentJustifiedCheckpoint) _ afterJ
       (.inl ⟨rfl, .inl rfl⟩)
   rcases reachable.finalized_ancestor_or_accountable_of_view reachableEarlier parameters genesis
-      pre anchorSlot unknownParent unknownEarlier importedEarlier earlyEarlier afterF ordered
+      pre anchorSlot unknownEarlier importedEarlier earlyEarlier afterF ordered
       heldB fieldB selectedB terminalB pathB enough (fun _ _ held => heldEnough (.inl held)) with
     read | ⟨stateA, left, va, heldA, fieldA, bound⟩
   · exact .inr (.inl read)
@@ -1044,7 +1006,7 @@ private theorem Store.Reachable.held_finalized_read_or_accountable {config : Con
       (reachable.linked_of_unknown (UInt64.le_of_eq anchorSlot) unknownParent) imported early pre
       held
     rcases reachable.finalized_ancestor_or_accountable_of_view reachableEarlier parameters genesis
-        pre (UInt64.le_of_eq anchorSlot) unknownParent unknownEarlier importedEarlier earlyEarlier
+        pre (UInt64.le_of_eq anchorSlot) unknownEarlier importedEarlier earlyEarlier
         (UInt64.not_le.mp atAnchor) ordered (vb := .realized) held rfl (.inl rfl) trivial path
         enough (fun _ _ found => heldEnough (.inl found)) with
       ⟨-, read⟩ | ⟨stateA, left, va, heldA, fieldA, bound⟩
@@ -1333,6 +1295,95 @@ private theorem Execution.held_floors {ν κ : Type*} [DecidableEq ν]
     · exact heldEnough a honestA i timeA root state held upper after
     · exact heldEnough b honestB j timeB root state held upper after
 
+/-- One honest node's finalized checkpoint is on another's justified chain, or there is evidence.
+
+The second node's justified checkpoint is at the epoch of the first node's finalized one, or later.
+
+Both nodes are at events by the time, and every honest justified epoch is at most the horizon.
+
+Otherwise the second justified root does not read the first finalized root at that epoch.
+
+The evidence gives runs from the anchor to held states of the two stores, and terminal views.
+
+A view of the first holds the finalized checkpoint, and a view of the second the justified one.
+
+It is the direct-safety evidence on those runs, whose drift counts from the anchor. -/
+theorem Execution.finalized_read_or_accountable {ν κ : Type*} [DecidableEq ν]
+    {config : Config} {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
+    {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
+    {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
+    {anchor : Store preset fork} {g : ForkedBeaconState preset} {time : ℕ} {horizon : Epoch}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor)
+    (parameters : DirectSafety.Parameters preset) (genesis : Genesis config checks g)
+    (pre : Run config checks g ⟨fork, anchorState⟩)
+    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (nonzero : anchorBlock.stateRoot ≠ Vector.replicate 32 0)
+    (unknown : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    (bounded : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ((e.world k).state w).justifiedCheckpoint.epoch ≤ horizon)
+    (early : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ next ∈ config.nextFork fork, ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      state.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat)
+    (enough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      ∀ tail : Run config checks ⟨fork, anchorState⟩ ⟨fork, state⟩,
+      DirectSafety.EnoughStake (pre.append tail) horizon.toNat)
+    (heldEnough : ∀ w ∈ J, ∀ k, (e.world k).time ≤ time →
+      ∀ (root : Root) (state : BeaconState preset fork),
+      ((e.world k).state w).blockStates[root]? = some state →
+      (getCurrentEpoch state).toNat ≤ horizon.toNat + 1 →
+      GENESIS_EPOCH + 1 < getCurrentEpoch state →
+      3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat <
+        2 * Models.stake (DirectSafety.effectiveWeight state) (DirectSafety.activeKeys state))
+    {a b : ν} (honestA : a ∈ J) (honestB : b ∈ J) {i j : ℕ}
+    (timeA : (e.world i).time ≤ time) (timeB : (e.world j).time ≤ time)
+    (ordered : ((e.world i).state a).finalizedCheckpoint.epoch ≤
+      ((e.world j).state b).justifiedCheckpoint.epoch) :
+    ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch =
+      .ok ((e.world i).state a).finalizedCheckpoint.root ∨
+    ((e.world i).state a).finalizedCheckpoint.epoch ≤
+        ((e.world j).state b).justifiedCheckpoint.epoch ∧
+      ((e.world j).state b).getCheckpointBlock ((e.world j).state b).justifiedCheckpoint.root
+        ((e.world i).state a).finalizedCheckpoint.epoch ≠
+          .ok ((e.world i).state a).finalizedCheckpoint.root ∧
+      ∃ (stateA stateB : BeaconState preset fork)
+        (left : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateA⟩)
+        (right : Run config checks ⟨fork, anchorState⟩ ⟨fork, stateB⟩)
+        (va : DirectSafety.TerminalView ⟨fork, stateA⟩)
+        (vb : DirectSafety.TerminalView ⟨fork, stateB⟩),
+        (∃ rootA : Root, ((e.world i).state a).blockStates[rootA]? = some stateA) ∧
+        (∃ rootB : Root, ((e.world j).state b).blockStates[rootB]? = some stateB) ∧
+        va.state.finalizedCheckpoint = ((e.world i).state a).finalizedCheckpoint ∧
+        vb.state.currentJustifiedCheckpoint = ((e.world j).state b).justifiedCheckpoint ∧
+        DirectSafety.AccountableOrHashEvidence pre left right
+          ((e.world j).state b).justifiedCheckpoint.epoch.toNat := by
+  by_cases readOk : ((e.world j).state b).getCheckpointBlock
+      ((e.world j).state b).justifiedCheckpoint.root
+      ((e.world i).state a).finalizedCheckpoint.epoch =
+        .ok ((e.world i).state a).finalizedCheckpoint.root
+  · exact .inl readOk
+  have forward (n : ℕ) (w : ν) (honest : w ∈ J) := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
+  obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honestA honestB timeA timeB
+    (bounded b honestB j timeB)
+  rcases (forward j b honestB).reachable.finalized_prefix_or_accountable
+      (forward i a honestA).reachable parameters genesis pre anchorSlot boundary nonzero
+      (unknown b honestB j timeB) (unknown a honestA i timeA)
+      (forward j b honestB).blockStatesFromParents (forward i a honestA).blockStatesFromParents
+      (early b honestB j timeB) (early a honestA i timeA) ordered calls terminal with
+    read | ⟨stateA, stateB, left, right, va, vb, heldA, heldB, fieldA, fieldB, evidence⟩
+  · exact absurd read readOk
+  · exact .inr ⟨ordered, readOk, stateA, stateB, left, right, va, vb, heldA, heldB, fieldA, fieldB,
+      evidence⟩
+
 /-- The earlier finalized checkpoint is on the later justified chain at every honest node.
 
 Otherwise a bounded pair of events gives accountable stake or hash evidence from held states.
@@ -1410,19 +1461,16 @@ theorem Execution.finalized_prefix_or_accountable {ν κ : Type*} [DecidableEq �
   push Not at family
   obtain ⟨w, honest, i, k, later, inTime, failed⟩ := family
   have earlyTime := (e.monotone_time later).trans inTime
-  have forward (n : ℕ) := e.forwardReachableWith
-    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) n w honest
+  have forward := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w honest
   have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
   have ordered := UInt64.le_trans (e.checkpointsAdvance_of_le w later).2.epoch_le
-    ((forward k).reachable.finalized_le_justified sound)
-  obtain ⟨calls, terminal⟩ := e.held_floors enough heldEnough honest honest earlyTime inTime
-    (bounded w honest k inTime)
-  have result := (forward k).reachable.finalized_prefix_or_accountable (forward i).reachable
-    parameters genesis pre anchorSlot boundary nonzero (unknown w honest k inTime)
-    (unknown w honest i earlyTime) (forward k).blockStatesFromParents
-    (forward i).blockStatesFromParents (early w honest k inTime)
-    (early w honest i earlyTime) ordered calls terminal
-  exact .inr ⟨w, honest, i, k, later, inTime, ordered, failed, result.resolve_left failed⟩
+    (forward.reachable.finalized_le_justified sound)
+  rcases e.finalized_read_or_accountable anchored start parameters genesis pre anchorSlot boundary
+      nonzero unknown bounded early enough heldEnough honest honest earlyTime inTime ordered with
+    read | ⟨-, -, evidence⟩
+  · exact absurd read failed
+  · exact .inr ⟨w, honest, i, k, later, inTime, ordered, failed, evidence⟩
 
 /-- Justified checkpoints of one epoch agree across honest nodes, or two held states give evidence.
 

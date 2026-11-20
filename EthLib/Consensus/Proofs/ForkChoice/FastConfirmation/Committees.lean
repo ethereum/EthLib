@@ -69,7 +69,9 @@ theorem epochAtSlot_le_of_not_isFullValidatorSetCovered {startSlot endSlot slot 
 
 The range starts at or before the slot of the block.
 
-It ends at the last slot before the current one, and holds no whole epoch.
+It ends at the last slot before the current one.
+
+The current slot is at most one epoch after the start of the range.
 
 The rule reads the committees in the state of the head, which descends from the block.
 
@@ -78,7 +80,8 @@ The store is built with one setting of the checks, and the anchor block is not a
 Both lookaheads of the seed are at least one epoch.
 
 The ring of mixes is longer than the minimum lookahead plus two epochs. -/
-theorem Store.ForwardReachableWith.supportersOf_mem_committees {checks : SignatureChecks}
+theorem Store.ForwardReachableWith.supportersOf_mem_committees_of_near
+    {checks : SignatureChecks}
     (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
     (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
@@ -90,7 +93,8 @@ theorem Store.ForwardReachableWith.supportersOf_mem_committees {checks : Signatu
     (blockOk : store.block root = .ok block) (startLe : startSlot ≤ block.slot)
     (lastOk : subChecked currentSlot 1 = .ok lastSlot)
     (descends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
-    (partialRange : isFullValidatorSetCovered preset startSlot lastSlot = .ok false)
+    (near : (computeEpochAtSlot preset currentSlot).toNat ≤
+      (computeEpochAtSlot preset startSlot).toNat + 1)
     (participantsOk : store.getCommitteesBetweenSlots head startSlot lastSlot = .ok participants) :
     ∀ v ∈ store.supportersOf balanceSource ⟨root, .pending⟩, v ∈ participants := by
   intro v supporter
@@ -116,23 +120,14 @@ theorem Store.ForwardReachableWith.supportersOf_mem_committees {checks : Signatu
   have one : (1 : UInt64).toNat = 1 := rfl
   rw [one] at lastLe lastValue
   rw [UInt64.le_iff_toNat_le] at low high startLe headLe
-  have voteNear := epochAtSlot_le_of_not_isFullValidatorSetCovered partialRange
-    (slot := attestation.data.slot) (by omega)
-  have currentNear := epochAtSlot_le_of_not_isFullValidatorSetCovered partialRange
-    (slot := currentSlot) (by omega)
-  have startBlock : (computeEpochAtSlot preset startSlot).toNat ≤
-      (computeEpochAtSlot preset block.slot).toNat := by
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_le_div_right startLe
-  have startVote : (computeEpochAtSlot preset startSlot).toNat ≤
-      (computeEpochAtSlot preset attestation.data.slot).toNat := by
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_le_div_right low
+  have voteNear := epoch_le_of_slot_le (preset := preset) attestation.data.slot currentSlot
+    (by omega)
+  have startBlock := epoch_le_of_slot_le (preset := preset) startSlot block.slot startLe
+  have startVote := epoch_le_of_slot_le (preset := preset) startSlot attestation.data.slot low
   have headCurrent : (getCurrentEpoch headState).toNat ≤
       (computeEpochAtSlot preset currentSlot).toNat := by
     rw [getCurrentEpoch_toNat]
-    simp only [computeEpochAtSlot, UInt64.toNat_div]
-    exact Nat.div_le_div_right headLe
+    exact epoch_le_of_slot_le _ _ headLe
   -- The target state and the head state agree on the committees of the vote.
   obtain ⟨targetState, index, committee, targetFound, below, committeeOk, member⟩ :=
     origin.exists_mem_committee
@@ -143,6 +138,42 @@ theorem Store.ForwardReachableWith.supportersOf_mem_committees {checks : Signatu
   exact Store.mem_getCommitteesBetweenSlots participantsOk low high
     (Store.blockState_ok_iff.mpr headFound) (count ▸ below)
     ((kept _ _ rfl).trans committeeOk) member
+
+/-- Each supporter of a block is a member of the committees that the rule reads for a range.
+
+The range starts at or before the slot of the block.
+
+It ends at the last slot before the current one, and holds no whole epoch.
+
+The rule reads the committees in the state of the head, which descends from the block.
+
+The store is built with one setting of the checks, and the anchor block is not after its state.
+
+Both lookaheads of the seed are at least one epoch.
+
+The ring of mixes is longer than the minimum lookahead plus two epochs. -/
+theorem Store.ForwardReachableWith.supportersOf_mem_committees {checks : SignatureChecks}
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (reached : Store.ForwardReachableWith config checks anchorState anchorBlock store)
+    (minLookahead : 1 ≤ preset.MIN_SEED_LOOKAHEAD.toNat)
+    (maxLookahead : 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat)
+    (ring : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {head root : Root} {block : BeaconBlock preset fork} {balanceSource : BeaconState preset fork}
+    {currentSlot startSlot lastSlot : Slot} {participants : Std.TreeSet ValidatorIndex}
+    (slotOk : store.getCurrentSlot config = .ok currentSlot)
+    (blockOk : store.block root = .ok block) (startLe : startSlot ≤ block.slot)
+    (lastOk : subChecked currentSlot 1 = .ok lastSlot)
+    (descends : store.isAncestor ⟨head, .pending⟩ ⟨root, .pending⟩ = .ok true)
+    (partialRange : isFullValidatorSetCovered preset startSlot lastSlot = .ok false)
+    (participantsOk : store.getCommitteesBetweenSlots head startSlot lastSlot = .ok participants) :
+    ∀ v ∈ store.supportersOf balanceSource ⟨root, .pending⟩, v ∈ participants :=
+  reached.supportersOf_mem_committees_of_near anchorSlot minLookahead maxLookahead ring slotOk
+    blockOk startLe lastOk descends
+    (epochAtSlot_le_of_not_isFullValidatorSetCovered partialRange (by
+      obtain ⟨-, value⟩ := subChecked_ok_iff.mp lastOk
+      simp only [UInt64.toNat_one] at value
+      omega))
+    participantsOk
 
 /-- Lemmas 4 and 3 for a confirmed block whose range of the adversary holds part of an epoch.
 

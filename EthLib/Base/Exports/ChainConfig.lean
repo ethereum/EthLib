@@ -94,8 +94,7 @@ def depositContractOfJson (j : Json) : Result Address := do
   unless digits.length = 40 do throw (0, "config: depositContractAddress is not forty hex digits")
   let some bytes := hexBytes? digits
     | throw (0, "config: depositContractAddress is not hex")
-  if h : bytes.data.size = 20 then return ⟨bytes.data, h⟩
-  else throw (0, "config: depositContractAddress is not 20 bytes")
+  Base.exactBytes 20 bytes fun _ => (0, "config: depositContractAddress is not 20 bytes")
 
 /-- A chain configuration given as JSON, with no blob schedule of its own when none is given.
 

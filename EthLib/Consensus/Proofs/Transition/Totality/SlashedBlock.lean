@@ -181,45 +181,17 @@ private theorem same_withdrawals {s t : BeaconState preset fork} {capella : .sha
       (fun _ => rfl) (fun one two => two.trans one)
       (fun withdrawn => by rw [applyWithdrawal_eq withdrawn]) _ _ _ _ _ _ applied
     all_goals exact fun _ _ => rfl
-  unfold processWithdrawals at ok
-  split at ok
-  · split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, applied⟩ := ok
-      exact expected applied
-    · cases ok
-      rfl
-  · simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, applied⟩ := ok
-    exact expected applied
+  exact processWithdrawals_of (fun a b => b.slashings = a.slashings) rfl (fun _ => expected) ok
 
 private theorem same_blockExecution {s t : BeaconState preset fork}
     {engine : ExecutionEngine preset fork} {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork}
     (ok : processBlockExecution config checks engine s body bellatrix = .ok t) :
-    t.slashings = s.slashings := by
-  have payload {a b : BeaconState preset fork}
-      {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
-      (paid : processExecutionPayload config engine a body execution = .ok b) :
-      b.slashings = a.slashings := by
-    obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid
-    rfl
-  unfold processBlockExecution at ok
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, bid⟩ := ok
-    obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
-    have kept := same_withdrawals withdrawn
-    exact kept
-  split at ok
-  · simp only [bind_ok_iff] at ok
-    obtain ⟨_, withdrawn, paid⟩ := ok
-    exact (payload paid).trans (same_withdrawals withdrawn)
-  · dsimp only at ok
-    split at ok
-    · exact payload ok
-    · cases ok
-      rfl
+    t.slashings = s.slashings :=
+  processBlockExecution_of (fun a b => b.slashings = a.slashings) (fun _ => rfl)
+    (fun one two => two.trans one)
+    (fun paid => by obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok paid; rfl)
+    (fun bid => by obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid; rfl) same_withdrawals ok
 
 /-- A fold whose every step keeps the slashed balances keeps them. -/
 private theorem same_foldlM {α ε : Type} {step : BeaconState preset fork → α → Except ε _}
@@ -381,19 +353,11 @@ private theorem sum_range_add_le {f g : Nat → Nat} {i bonus : Nat} :
       have top := others count (by omega) (Ne.symm last)
       omega
 
-/-- Slashing a validator not yet slashed moves its effective balance to the slashed balances.
-
-The registry keeps its size.
-
-Over the registry, the slashed balances plus the effective balances not slashed do not grow. -/
-private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIndex}
-    {whistleblower : Option ValidatorIndex} {v : Validator} (found : getValidator a i = .ok v)
-    (fresh : v.slashed = false) (ok : slashValidator config a i whistleblower = .ok b) :
-    b.validators.data.size = a.validators.data.size ∧
-      potential a.validators.data.size b ≤ potential a.validators.data.size a := by
-  have sized := (sameSizes_slashValidator ok).1
+/-- Slashing a validator raises the slashed balances by at most its effective balance. -/
+private theorem slashedBalanceSum_slash {a b : BeaconState preset fork} {i : ValidatorIndex}
+    {whistleblower : Option ValidatorIndex} (ok : slashValidator config a i whistleblower = .ok b) :
+    slashedBalanceSum b ≤ slashedBalanceSum a + effectiveAt ⟨fork, a⟩ i.toNat := by
   have kept := effectiveKept_slash ok
-  have frame := (frame_slashValidator ok).toFrame
   obtain ⟨exited, validator, delay, marked, slashed, total, slashings, lowered, _, _, raised, last,
     exitedOk, _, _, markedOk, readOk, totalOk, writeOk, loweredOk, _, _, raisedOk, lastOk,
     done⟩ := slashValidator_ok ok
@@ -408,7 +372,6 @@ private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIn
       (same_increase lastOk).trans ((same_increase raisedOk).trans lowerSlashings)
     subst done
     split <;> exact ⟨validators, written⟩
-  refine ⟨sized, ?_⟩
   have earlier : marked.slashings = a.slashings :=
     (same_setValidator markedOk).trans (same_exit exitedOk)
   -- The slashed balances rise by the effective balance of the validator.
@@ -428,7 +391,8 @@ private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIn
       (by simp only [List.length_map, Vector.length_toList]; exact toNat_mod_lt nonzero)
       total.toNat
     simpa using moved
-  -- The validator is marked slashed, and keeps its effective balance.
+  -- The validator keeps its effective balance.
+  obtain ⟨_, found, -⟩ := initiateValidatorExit_ok exitedOk
   rw [getValidator_eq_getValidatorAt, getValidatorAt_eq_ok_iff] at found
   have inside := (Array.getElem?_eq_some_iff.mp found).1
   rw [setValidator_eq_setValidatorAt] at markedOk
@@ -438,12 +402,38 @@ private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIn
     rw [tail.1]
     simp [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
   have same := kept i.toNat inside
-  simp only [effectiveAt, marks, found, Option.map_some, Option.getD_some] at same
-  have dropped : unslashedBalanceSum b a.validators.data.size + validator.effectiveBalance.toNat ≤
+  simp only [effectiveAt, marks, Option.map_some, Option.getD_some] at same
+  unfold effectiveAt
+  rw [← same]
+  omega
+
+/-- Slashing a validator not yet slashed moves its effective balance to the slashed balances.
+
+The registry keeps its size.
+
+Over the registry, the slashed balances plus the effective balances not slashed do not grow. -/
+private theorem potential_slash {a b : BeaconState preset fork} {i : ValidatorIndex}
+    {whistleblower : Option ValidatorIndex} {v : Validator} (found : getValidator a i = .ok v)
+    (fresh : v.slashed = false) (ok : slashValidator config a i whistleblower = .ok b) :
+    b.validators.data.size = a.validators.data.size ∧
+      potential a.validators.data.size b ≤ potential a.validators.data.size a := by
+  have sized := (sameSizes_slashValidator ok).1
+  have kept := effectiveKept_slash ok
+  have frame := (frame_slashValidator ok).toFrame
+  have raised := slashedBalanceSum_slash ok
+  have flagged := (slashValidator_slashedFlag ok).1
+  refine ⟨sized, ?_⟩
+  -- The validator is now slashed, and keeps its effective balance.
+  simp only [slashedFlag, getValidator_eq_getValidatorAt, Except.map] at flagged
+  rw [getValidator_eq_getValidatorAt, getValidatorAt_eq_ok_iff] at found
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  have same := kept i.toNat inside
+  have dropped : unslashedBalanceSum b a.validators.data.size + v.effectiveBalance.toNat ≤
       unslashedBalanceSum a a.validators.data.size := by
     rw [unslashedBalanceSum_eq, unslashedBalanceSum_eq]
     refine sum_range_add_le inside ?_ fun j below _ => unslashedAt_le kept frame below
-    simp [unslashedAt, marks, found, fresh, same]
+    split at flagged <;> simp_all [unslashedAt, effectiveAt, getValidatorAt_eq_ok_iff]
+  simp only [effectiveAt, found, Option.map_some, Option.getD_some] at raised
   unfold potential
   omega
 
@@ -486,17 +476,7 @@ private theorem Kept.operationsInput {engine : ExecutionEngine preset fork}
     (fun _ paid => ?_) (fun headed => ?_) (fun _ executed => ?_) (fun revealed => ?_)
     (fun _ voted => ?_)
   · -- The payload of the parent exits and consolidates validators, but adds none.
-    have registry := processParentExecutionPayload_step_of
-      (fun a b => EffectiveKept a b ∧ b.validators.data.size = a.validators.data.size)
-      (fun a => ⟨effectiveKept_refl a, rfl⟩)
-      (fun one two => ⟨effectiveKept_trans one.1 two.1 (Nat.le_of_eq one.2.symm),
-        two.2.trans one.2⟩)
-      (fun _ validators => ⟨effectiveKept_data (congrArg (·.data) validators),
-        by rw [validators]⟩)
-      (fun requested => ⟨effectiveKept_withdrawalRequest requested,
-        (sameSizes_processWithdrawalRequest requested).1⟩)
-      (fun requested => ⟨effectiveKept_consolidationRequest requested,
-        (sameSizes_processConsolidationRequest requested).1⟩) paid
+    have registry := effectiveKept_parentPayload paid
     exact ⟨⟨same_parentPayload paid, registry.1,
       (frame_processParentExecutionPayload paid).toFrame⟩, registry.2⟩
   · have frame := (frame_processBlockHeader headed).toFrame
@@ -657,60 +637,6 @@ def blockSlashingCount (body : BeaconBlockBody preset fork) : Nat :=
 
 section Counted
 
-/-- Slashing a validator raises the slashed balances by at most its effective balance. -/
-private theorem slashedBalanceSum_slash {a b : BeaconState preset fork} {i : ValidatorIndex}
-    {whistleblower : Option ValidatorIndex} {v : Validator} (found : getValidator a i = .ok v)
-    (ok : slashValidator config a i whistleblower = .ok b) :
-    slashedBalanceSum b ≤ slashedBalanceSum a + effectiveAt ⟨fork, a⟩ i.toNat := by
-  have kept := effectiveKept_slash ok
-  obtain ⟨exited, validator, delay, marked, slashed, total, slashings, lowered, _, _, raised, last,
-    exitedOk, _, _, markedOk, readOk, totalOk, writeOk, loweredOk, _, _, raisedOk, lastOk,
-    done⟩ := slashValidator_ok ok
-  -- The last steps change only the balances and the builder payments.
-  have tail : b.validators = marked.validators ∧ b.slashings = slashings := by
-    have lowerValidators := decreaseBalance_validators loweredOk
-    have lowerSlashings := same_decrease loweredOk
-    have validators : last.validators = marked.validators :=
-      (increaseBalance_validators lastOk).trans
-        ((increaseBalance_validators raisedOk).trans lowerValidators)
-    have written : last.slashings = slashings :=
-      (same_increase lastOk).trans ((same_increase raisedOk).trans lowerSlashings)
-    subst done
-    split <;> exact ⟨validators, written⟩
-  have earlier : marked.slashings = a.slashings :=
-    (same_setValidator markedOk).trans (same_exit exitedOk)
-  -- The slashed balances rise by the effective balance of the validator.
-  have nonzero : preset.EPOCHS_PER_SLASHINGS_VECTOR ≠ 0 := by
-    intro zero
-    simp [readCircular, zero] at readOk
-  simp only [readCircular, nonzero, ↓reduceDIte, Except.ok.injEq] at readOk
-  simp only [writeCircularRooted, nonzero, ↓reduceDIte, Except.ok.injEq] at writeOk
-  obtain ⟨_, totalNat⟩ := Base.Uint64.addChecked_ok_iff.mp totalOk
-  have summed : slashedBalanceSum b + slashed.toNat =
-      slashedBalanceSum a + total.toNat := by
-    unfold slashedBalanceSum
-    rw [tail.2, ← writeOk, ← readOk, ← earlier]
-    simp only [Serialization.Ssz.RootedVector.elements_set, Vector.toList_set, List.map_set]
-    have moved := sum_set_add (l := marked.slashings.elements.toList.map (·.toNat))
-      (i := (getCurrentEpoch a % preset.EPOCHS_PER_SLASHINGS_VECTOR).toNat)
-      (by simp only [List.length_map, Vector.length_toList]; exact toNat_mod_lt nonzero)
-      total.toNat
-    simpa using moved
-  -- The validator keeps its effective balance.
-  rw [getValidator_eq_getValidatorAt, getValidatorAt_eq_ok_iff] at found
-  have inside := (Array.getElem?_eq_some_iff.mp found).1
-  rw [setValidator_eq_setValidatorAt] at markedOk
-  obtain ⟨insideExited, rfl⟩ := setValidatorAt_ok markedOk
-  have marks : b.validators.data[i.toNat]? = some { validator with
-      slashed := true, withdrawableEpoch := validator.withdrawableEpoch ⊔ delay } := by
-    rw [tail.1]
-    simp [BeaconState.putValidator, Serialization.Ssz.RootedForkList.data_set]
-  have same := kept i.toNat inside
-  simp only [effectiveAt, marks, Option.map_some, Option.getD_some] at same
-  unfold effectiveAt
-  rw [← same]
-  omega
-
 /-- Each effective balance is at most the largest cap. -/
 private def Bounded (state : BeaconState preset fork) : Prop :=
   ∀ j, effectiveAt ⟨fork, state⟩ j ≤ preset.largestEffectiveBalance
@@ -758,11 +684,11 @@ private theorem foldlM_counted {α β ε : Type} {step : β → α → Except ε
 
 /-- Slashing a validator keeps the bound, and raises the slashed balances by at most the cap. -/
 private theorem Bounded.slash {a b : BeaconState preset fork} {i : ValidatorIndex}
-    {whistleblower : Option ValidatorIndex} {v : Validator} (found : getValidator a i = .ok v)
-    (ok : slashValidator config a i whistleblower = .ok b) (bounded : Bounded a) :
+    {whistleblower : Option ValidatorIndex} (ok : slashValidator config a i whistleblower = .ok b)
+    (bounded : Bounded a) :
     Bounded b ∧ slashedBalanceSum b ≤ slashedBalanceSum a + 1 * preset.largestEffectiveBalance :=
   ⟨bounded.of_kept (effectiveKept_slash ok) (Nat.le_of_eq (sameSizes_slashValidator ok).1),
-    (slashedBalanceSum_slash found ok).trans
+    (slashedBalanceSum_slash ok).trans
       (Nat.add_le_add_left ((bounded _).trans (Nat.le_of_eq (Nat.one_mul _).symm)) _)⟩
 
 private theorem Bounded.proposerSlashing {a b : BeaconState preset fork}
@@ -770,8 +696,8 @@ private theorem Bounded.proposerSlashing {a b : BeaconState preset fork}
     (ok : processProposerSlashing config checks a slashing = .ok b) (bounded : Bounded a) :
     Bounded b ∧ slashedBalanceSum b ≤ slashedBalanceSum a + 1 * preset.largestEffectiveBalance := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
-  obtain ⟨_, _, _, _, _, _, _, found, _, _, _, _, _, _, slashed⟩ := ok
-  exact Bounded.slash found slashed bounded
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := ok
+  exact Bounded.slash slashed bounded
 
 /-- An attester slashing raises the slashed balances by at most the largest cap per signer.
 
@@ -791,11 +717,11 @@ private theorem Bounded.attesterSlashing {a b : BeaconState preset fork}
     (fun step _ _ ok before => by
       obtain ⟨middle, slashedAny⟩ := step
       simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, found, ok⟩ := ok
+      obtain ⟨_, _, ok⟩ := ok
       split at ok
       · simp only [bind_ok_iff, liftAccessor_ok, pure, Except.pure, Except.ok.injEq] at ok
         obtain ⟨_, slashed, rfl⟩ := ok
-        exact Bounded.slash found slashed before
+        exact Bounded.slash slashed before
       · cases ok
         exact ⟨before, Nat.le_add_right _ _⟩) folded bounded
   refine ⟨counted.1, counted.2.trans (Nat.add_le_add_left ?_ _)⟩

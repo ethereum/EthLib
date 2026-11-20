@@ -55,6 +55,16 @@ directories = ["tests/consensus/builder_api"]
 commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
 directories = ["tests/consensus/relay_api"]
 
+[repositories."ethereum/keymanager-APIs"]
+commit = "51f2a5c90e9d301c3e9980da402ec70ae82f0991"
+release = "v1.1.0"
+directories = ["tests/consensus/keymanager_api"]
+
+[repositories."ethereum/remote-signing-api"]
+commit = "44e9e0dcc115c91f8b739684f4789a8310476bd9"
+release = "v1.4.0"
+directories = ["tests/consensus/remote_signing_api"]
+
 [repositories."ethereum/c-kzg-4844"]
 commit = "a751e2d92abcd63b01d1400789789f5ea289a8b0"
 directories = ["tests/cryptography/kzg"]
@@ -86,6 +96,11 @@ commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
 
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
+
+# A mainnet block after Shapella, which the check of a received body reads.
+[repositories."ethereum/portal-spec-tests"]
+commit = "938744a83d4f85dcdcf9bac12b798e15f2eac2b1"
+directories = ["bindings/python/tests/eth/portal_block_data"]
 
 [repositories."bitcoinjs/tiny-secp256k1"]
 commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"
@@ -162,7 +177,7 @@ release = "v5.3.0"
 
 # The leanSPHINCS tests read the known answer of an independent implementation at this commit.
 [repositories."leanEthereum/leanVM"]
-commit = "5e3ade21d339a45e1b3b0dba97ad9300ab50e49b"
+commit = "fa4b43935667234e8e29c6cc19ffcfb3ab5164d5"
 
 # The libp2p tests read the hex examples and the key vector of these documents.
 # The mplex and yamux tests also read their frame layouts.
@@ -267,7 +282,6 @@ sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
 "tests/cryptography/vrf" = "An independent implementation for the known answers, and EthLib"
 "tests/cryptography/sphincs" = "EthLib, and an independent implementation for the known answers"
 "tests/cryptography/xmss" = "EthLib, and an independent implementation for the known answers"
-"tests/consensus/pq_keys" = "Derived with the Python SSZ of ethereum/ssz-specs release v0.1.0, and EthLib for the proofs"
 "tests/serialization/ssz_limits" = "Derived with the Python SSZ of ethereum/ssz-specs release v0.1.0"
 "bindings/python/tests/aes/cavp" = "KAT_AES.zip, aesmct.zip and gcmtestvectors.zip of NIST CAVP"
 "bindings/python/tests/keccak/kat" = "KeccakKAT-3.zip of the Keccak team"

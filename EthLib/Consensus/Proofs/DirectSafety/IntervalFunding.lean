@@ -986,6 +986,34 @@ theorem replayRewards_induction {fork : Fork} (P : BalanceReplay preset fork →
       obtain ⟨rewards, _, rewarded, rewardOk, middle, folded, last⟩ := ok
       exact deltas (.inr rfl) _ (passes (deltas (.inl rfl) _ initial rewardOk) folded) last
 
+/-- The rewards pass records reward, penalty and inactivity events only.
+
+So a log with only those sources keeps only those sources. -/
+theorem replayRewards_sources {fork : Fork} {pre post : BalanceReplay preset fork}
+    (initial : ∀ e ∈ pre.2,
+      e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)
+    (ok : replayRewards (config := config) pre = .ok post) :
+    ∀ e ∈ post.2, e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity :=
+  replayRewards_induction (fun pre => ∀ e ∈ pre.2,
+      e.source = .rewards ∨ e.source = .penalties ∨ e.source = .inactivity)
+    (fun held ok => by
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, _, _, rfl⟩ := ok
+      intro e member
+      rcases List.mem_append.mp member with old | new
+      · exact held e old
+      · obtain rfl := List.mem_singleton.mp new
+        exact .inl rfl)
+    (fun penalty held ok => by
+      simp only [recordBalance, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at ok
+      obtain ⟨_, _, _, _, rfl⟩ := ok
+      intro e member
+      rcases List.mem_append.mp member with old | new
+      · exact held e old
+      · obtain rfl := List.mem_singleton.mp new
+        exact .inr penalty)
+    initial ok
+
 def EventsBounded (events : List (BalanceEvent preset)) : Prop :=
   ∀ event ∈ events, event.credits ≤ event.creditLimit ∧ event.debits ≤ event.debitLimit
 

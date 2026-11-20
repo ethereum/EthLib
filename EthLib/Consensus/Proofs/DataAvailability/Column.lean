@@ -8,6 +8,7 @@ public import EthLib.Serialization.Proofs.Ssz.Typed.ForkKind
 public import EthLib.Serialization.Proofs.Ssz.Typed.Since
 public import EthLib.Cryptography.Proofs.Kzg.RecoveryRoundTrip
 public import EthLib.Cryptography.Proofs.Kzg.PeerDasColumnGames
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: the data column sidecars
@@ -21,6 +22,14 @@ The largest size of a sidecar covers the blob limit at every epoch.
 Two sidecars whose branches verify for one body root carry one root of commitments.
 
 Otherwise the two climbs to the body root hash two different messages to one SHA-256 output.
+
+The sidecars built from the rows of a block hold one column each, with the shared fields given.
+
+Before Gloas a build that succeeds has as many rows as commitments.
+
+Built from a block before Gloas, each one carries its header and passes its inclusion check.
+
+Built from a block from Gloas on, each one names the block by its root and its slot.
 
 The check of the proofs of a sidecar is the batch check of one column.
 
@@ -313,6 +322,124 @@ theorem size_le_computeMaxDataColumnSidecarSize {preset : Preset} {config : Conf
   rw [toNat_computeMaxDataColumnSidecarSize]
   exact Nat.le_min.mpr ⟨Nat.add_le_add_left more _, fits⟩
 
+open Cryptography.Kzg in
+/-- A build of the sidecars that succeeds has as many rows as commitments.
+
+It needs a fork before Gloas, where the sidecars carry the commitments. -/
+theorem getDataColumnSidecars_length_of_lt_glamsterdam {preset : Preset} {fork : Fork}
+    {header : Until .glamsterdam fork SignedBeaconBlockHeader}
+    {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {branch : Until .glamsterdam fork
+      (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)}
+    {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
+    {rows : List (Array Cell × Array KZGProof)} {sidecars : List (DataColumnSidecar preset fork)}
+    (beforeGloas : fork < .glamsterdam)
+    (built : getDataColumnSidecars preset header commitments branch root slot rows = .ok sidecars) :
+    rows.length = (commitments beforeGloas).data.size := by
+  unfold getDataColumnSidecars at built
+  dsimp only at built
+  simp only [beforeGloas, ↓reduceDIte] at built
+  split at built
+  · cases built
+  · rename_i same
+    exact Classical.not_not.mp same
+
+open Cryptography.Kzg in
+/-- The built sidecars of a block number one per column, and entry `i` holds column `i`.
+
+Entry `i` has index `i`, with the cell and the proof at position `i` of every row, in row order.
+
+Every entry carries the given header, commitments, branch, slot and root.
+
+It holds for any rows, at every preset and every fork. -/
+theorem getDataColumnSidecars_spec {preset : Preset} {fork : Fork}
+    {header : Until .glamsterdam fork SignedBeaconBlockHeader}
+    {commitments : Until .glamsterdam fork (BlobKZGCommitments preset fork)}
+    {branch : Until .glamsterdam fork
+      (Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat)}
+    {root : Since .glamsterdam fork Root} {slot : Since .glamsterdam fork Slot}
+    {rows : List (Array Cell × Array KZGProof)} {sidecars : List (DataColumnSidecar preset fork)}
+    (built : getDataColumnSidecars preset header commitments branch root slot rows = .ok sidecars) :
+    sidecars.length = preset.NUMBER_OF_COLUMNS.toNat ∧
+      ∀ (i : Nat) (inside : i < sidecars.length),
+        sidecars[i].index = i.toUInt64 ∧
+        sidecars[i].column.data.toList.map some = rows.map (·.1[i]?) ∧
+        sidecars[i].kzgProofs.data.toList.map some = rows.map (·.2[i]?) ∧
+        sidecars[i].kzgCommitments = commitments ∧ sidecars[i].signedBlockHeader = header ∧
+        sidecars[i].kzgCommitmentsInclusionProof = branch ∧ sidecars[i].slot = slot ∧
+        sidecars[i].beaconBlockRoot = root := by
+  unfold getDataColumnSidecars at built
+  dsimp only at built
+  -- Every branch that does not fail is the map over the column indices.
+  split at built <;> try split at built
+  case isTrue.isTrue => cases built
+  all_goals
+    have parts := map_of_mapM_ok
+      (p := fun (s : DataColumnSidecar preset fork) => (s.index, s.column.data.toList.map some,
+        s.kzgProofs.data.toList.map some, s.kzgCommitments, s.signedBlockHeader,
+        s.kzgCommitmentsInclusionProof, s.slot, s.beaconBlockRoot))
+      (q := fun i => (i.toUInt64, rows.map (·.1[i]?), rows.map (·.2[i]?), commitments, header,
+        branch, slot, root))
+      (fun i s made => by
+        obtain ⟨cells, picked, made⟩ := bind_ok_iff.mp made
+        obtain ⟨proofs, proved, made⟩ := bind_ok_iff.mp made
+        split at made
+        · split at made
+          · cases made
+            -- Each row gives its entry at the index of the column, or the build fails.
+            have cellsOf := map_of_mapM_ok (p := some) (q := fun row => row.1[i]?)
+              (fun row cell step => by
+                obtain ⟨cs, ps⟩ := row
+                simp only at step
+                split at step
+                · rename_i found
+                  cases step
+                  exact found.symm
+                · cases step) picked
+            have proofsOf := map_of_mapM_ok (p := some) (q := fun row => row.2[i]?)
+              (fun row proof step => by
+                obtain ⟨cs, ps⟩ := row
+                simp only at step
+                split at step
+                · rename_i found
+                  cases step
+                  exact found.symm
+                · cases step) proved
+            simp [cellsOf, proofsOf]
+          · cases made
+        · cases made)
+      built
+    have lengths : sidecars.length = preset.NUMBER_OF_COLUMNS.toNat := by
+      simpa using congrArg List.length parts
+    refine ⟨lengths, fun i inside => ?_⟩
+    have entry := congrArg (·[i]?) parts
+    simp only [List.getElem?_map, List.getElem?_eq_getElem inside,
+      List.getElem?_range (lengths ▸ inside), Option.map_some, Option.some.injEq,
+      Prod.mk.injEq] at entry
+    exact entry
+
+open Cryptography.Kzg in
+/-- Each sidecar built from a block names the block by its root and its slot.
+
+It needs a fork from Gloas on. -/
+theorem getDataColumnSidecarsFromBlock_root {preset : Preset} {fork : Fork}
+    (deneb : .dencun ≤ fork) (gloas : .glamsterdam ≤ fork) {signed : SignedBeaconBlock preset fork}
+    {rows : List (Array Cell × Array KZGProof)} {sidecars : List (DataColumnSidecar preset fork)}
+    (built : getDataColumnSidecarsFromBlock deneb signed rows = .ok sidecars) :
+    ∀ sidecar ∈ sidecars,
+      SszType.hashTreeRoot signed.message = .ok (sidecar.beaconBlockRoot gloas) ∧
+        sidecar.slot gloas = signed.message.slot := by
+  have later : ¬fork < .glamsterdam := fun before => not_glamsterdam_le before gloas
+  unfold getDataColumnSidecarsFromBlock at built
+  simp only [later, ↓reduceDIte] at built
+  obtain ⟨root, rooted, built⟩ := bind_ok_iff.mp built
+  obtain ⟨-, entries⟩ := getDataColumnSidecars_spec built
+  intro sidecar member
+  obtain ⟨i, inside, rfl⟩ := List.getElem_of_mem member
+  obtain ⟨-, -, -, -, -, -, slots, roots⟩ := entries i inside
+  rw [slots, roots]
+  exact ⟨rooted, rfl⟩
+
 section Inclusion
 
 variable {preset : Preset} {fork : Fork}
@@ -340,19 +467,19 @@ theorem blobKzgCommitmentsInclusionProof_valid (deneb : .dencun ≤ fork ∧ for
   unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex at built
   simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind,
     Except.bind] at built
-  split at built
-  · rename_i exact
-    cases built
-    have depth : Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
-      have := (Bool.and_eq_true_iff.mp valid).1
-      simp only [beq_iff_eq] at this
-      simp only [List.size_toArray] at exact
-      omega
-    refine ⟨leaf, root, rooted, bodyRoot, depth, ?_⟩
-    have listed : (⟨nodes.toArray, exact⟩ : Vector Bytes32 _).toList = nodes := by simp
-    rw [listed, ← depth]
-    exact valid
-  · cases built
+  -- The branch holds the nodes, so it has their number.
+  have listed : branch.toList = nodes := by
+    have same := congrArg Array.toList (Base.exactArray_eq_ok_iff.mp built)
+    exact same
+  have length : nodes.length = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+    rw [← listed, Vector.length_toList]
+  have depth : Nat.log2 27 = preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat := by
+    have := (Bool.and_eq_true_iff.mp valid).1
+    simp only [beq_iff_eq] at this
+    omega
+  refine ⟨leaf, root, rooted, bodyRoot, depth, ?_⟩
+  rw [listed, ← depth]
+  exact valid
 
 /-- For both presets, the branch of the list of commitments of a body is built.
 
@@ -373,10 +500,7 @@ theorem blobKzgCommitmentsInclusionProof_ok (named : preset = .mainnet ∨ prese
     omega
   unfold blobKzgCommitmentsInclusionProof blobKzgCommitmentsGindex
   simp only [blobKzgCommitmentsField_gindex deneb, proved, mapM_toChunk, bind, Except.bind]
-  split
-  · exact ⟨_, rfl⟩
-  · rename_i short
-    exact absurd (by simpa using length) short
+  exact ⟨_, Base.exactArray_of_size_eq _ (by simpa using length)⟩
 
 /-- A column sidecar whose inclusion check passes carries the root of the commitments of a body.
 
@@ -422,6 +546,55 @@ theorem verifyDataColumnSidecarInclusionProof_body (fulu : .fusaka ≤ fork)
   rw [depth] at valid honest
   exact ⟨leaf, other, leafRooted, otherRooted,
     isValidMerkleBranch_findBranchCollision (by decide) depth valid honest⟩
+
+/-- The inclusion check of the commitments of a body passes with their built branch.
+
+It checks against the root of that body.
+
+This holds from Deneb to the forks before Gloas, for every preset. -/
+theorem verifyKzgCommitmentsInclusionProof_built (deneb : .dencun ≤ fork ∧ fork < .glamsterdam)
+    {body : BeaconBlockBody preset fork} {root : Root}
+    (rooted : SszType.hashTreeRoot body = .ok root)
+    {branch : Vector Bytes32 preset.KZG_COMMITMENTS_INCLUSION_PROOF_DEPTH.toNat}
+    (built : blobKzgCommitmentsInclusionProof body = .ok branch) :
+    verifyKzgCommitmentsInclusionProof preset (body.blobKzgCommitments deneb) branch root =
+      true := by
+  obtain ⟨leaf, other, leafRooted, bodyRoot, depth, honest⟩ :=
+    blobKzgCommitmentsInclusionProof_valid deneb built
+  rw [rooted] at bodyRoot
+  cases bodyRoot
+  have below : getSubtreeIndex 27 = .ok (27 % 2 ^ Nat.log2 27) := by
+    simp [getSubtreeIndex, gindexDepth, gindexBelow, bind, Except.bind, pure, Except.pure]
+  unfold verifyKzgCommitmentsInclusionProof blobKzgCommitmentsGindex
+  simp only [blobKzgCommitmentsField_gindex deneb, leafRooted, below]
+  exact honest
+
+open Cryptography.Kzg in
+/-- Each sidecar built from a block passes its inclusion check.
+
+It carries the signed header of the block and the commitments of its body.
+
+It needs a fork from Deneb to the forks before Gloas, and holds for every preset. -/
+theorem getDataColumnSidecarsFromBlock_valid (deneb : .dencun ≤ fork)
+    (beforeGloas : fork < .glamsterdam) {signed : SignedBeaconBlock preset fork}
+    {rows : List (Array Cell × Array KZGProof)} {sidecars : List (DataColumnSidecar preset fork)}
+    (built : getDataColumnSidecarsFromBlock deneb signed rows = .ok sidecars) :
+    ∀ sidecar ∈ sidecars, signed.signedHeader = .ok (sidecar.signedBlockHeader beforeGloas) ∧
+      sidecar.kzgCommitments beforeGloas =
+        signed.message.body.blobKzgCommitments ⟨deneb, beforeGloas⟩ ∧
+      verifyDataColumnSidecarInclusionProof preset beforeGloas sidecar = true := by
+  unfold getDataColumnSidecarsFromBlock at built
+  simp only [beforeGloas, ↓reduceDIte] at built
+  obtain ⟨header, headed, built⟩ := bind_ok_iff.mp built
+  obtain ⟨branch, proved, built⟩ := bind_ok_iff.mp built
+  obtain ⟨-, entries⟩ := getDataColumnSidecars_spec built
+  intro sidecar member
+  obtain ⟨i, inside, rfl⟩ := List.getElem_of_mem member
+  obtain ⟨-, -, -, commits, heads, branches, -, -⟩ := entries i inside
+  have rooted := (signedHeader_eq_ok_iff.mp headed).1
+  unfold verifyDataColumnSidecarInclusionProof
+  rw [commits, heads, branches]
+  exact ⟨headed, rfl, verifyKzgCommitmentsInclusionProof_built ⟨deneb, beforeGloas⟩ rooted proved⟩
 
 end Inclusion
 

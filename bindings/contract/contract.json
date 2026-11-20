@@ -7816,6 +7816,59 @@
    "docstring":
    "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."},
   {"summary":
+   "A request of the Remote-signing API, read and written again as the signer reads it.",
+   "signature": "(name: str, document: Any) -> Any",
+   "operation": "EthLib.Consensus.Exports.readSigningRequestExport",
+   "method": "consensus_read_signing_request",
+   "errors":
+   [{"type": "EthLib.Consensus.RemoteSigningApi.RequestError",
+     "codes":
+     [{"constructor": "notAnObject", "code": 1},
+      {"constructor": "missingField", "code": 2},
+      {"constructor": "badField", "code": 3},
+      {"constructor": "unknownType", "code": 4},
+      {"constructor": "unknownVersion", "code": 5},
+      {"constructor": "emptyAuthData", "code": 6}]}],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "A request of the Remote-signing API, read and written again as the signer reads it.\n\nThe arguments are the name of the preset and the JSON document of the request.\n\nThe result holds every field that the request reads, and no other field.\n\nAn unknown preset has code 0.\n\nA document that is not a request has the code of its error."},
+  {"summary":
+   "The root that a remote signer signs for a request of the Remote-signing API.",
+   "signature": "(name: str, config: str, document: Any) -> bytes",
+   "operation": "EthLib.Consensus.Exports.signingRequestRootExport",
+   "method": "consensus_signing_request_root",
+   "errors":
+   [{"type": "EthLib.Consensus.RemoteSigningApi.RequestError",
+     "codes":
+     [{"constructor": "notAnObject", "code": 1},
+      {"constructor": "missingField", "code": 2},
+      {"constructor": "badField", "code": 3},
+      {"constructor": "unknownType", "code": 4},
+      {"constructor": "unknownVersion", "code": 5},
+      {"constructor": "emptyAuthData", "code": 6}]}],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The root that a remote signer signs for a request of the Remote-signing API.\n\nThe arguments are the name of the preset, the name of the configuration and the document.\n\nThe configuration gives the genesis fork version of a registration and of a Builder API request.\n\nAn unknown preset or configuration has code 0.\n\nA document that is not a request has the code of its error."},
+  {"summary":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.",
+   "signature":
+   "(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, document: Any) -> tuple[int, bytes | None, bytes]",
+   "operation": "EthLib.Consensus.Exports.remoteSignerSignExport",
+   "method": "consensus_remote_signer_sign",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.\n\nThe arguments are the preset, the configuration, the secret keys and the record.\n\nThen come the path and the request.\n\nThe result is the status, the signature when the status is 200, and the record after the call.\n\nAn unknown preset or configuration has code 0.\n\nSo do a secret key that is not one and a record that does not read."},
+  {"summary":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.",
+   "signature": "(keys: list[bytes]) -> Any",
+   "operation": "EthLib.Consensus.Exports.remoteSignerPublicKeysExport",
+   "method": "consensus_remote_signer_public_keys",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.\n\nThe argument is the list of its secret keys, each 32 big-endian bytes.\n\nA key that is not one has code 0."},
+  {"summary":
    "Whether a key may sign a block of a slot with a signing root, given a record.",
    "signature":
    "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",
@@ -7887,6 +7940,35 @@
       {"constructor": "targetEpochTooLow", "code": 7}]}],
    "error_class": "SlashingProtectionError",
    "docstring": "The record after a key signs a vote, as JSON text."},
+  {"summary":
+   "A value of a schema of the Keymanager API, read from its JSON and written back.",
+   "signature": "(schema: str, document: Any) -> Any",
+   "operation": "EthLib.Consensus.Exports.keymanagerJsonExport",
+   "method": "consensus_keymanager_json",
+   "errors":
+   [{"type": "EthLib.Consensus.KeymanagerApi.KeymanagerError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "notJson", "code": 2},
+      {"constructor": "slashingProtection", "code": 3}]}],
+   "error_class": "KeymanagerError",
+   "docstring":
+   "A value of a schema of the Keymanager API, read from its JSON and written back.\n\nThe arguments are the name of the schema in the source, such as `Pubkey`, and the value.\n\nHex is written in lowercase, and a document held as text is printed in compact form."},
+  {"summary":
+   "The responses of calls made one after another on a validator client, then its state.",
+   "signature":
+   "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
+   "operation": "EthLib.Consensus.Exports.keymanagerRunExport",
+   "method": "consensus_keymanager_run",
+   "errors":
+   [{"type": "EthLib.Consensus.KeymanagerApi.KeymanagerError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "notJson", "code": 2},
+      {"constructor": "slashingProtection", "code": 3}]}],
+   "error_class": "KeymanagerError",
+   "docstring":
+   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, then the defaults of the client.\n\nThe defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.\n\nA view of the chain may follow: the names of its preset, configuration and fork, and a state.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
   {"summary":
    "From Bellatrix: whether a block carries a payload other than the empty one.",
    "signature": "(name: str, fork: str, block: bytes) -> bool",
@@ -9608,113 +9690,6 @@
    "error_class": "ConsensusError",
    "docstring":
    "Whether the digest of each epoch at which it can change reads back the fork at that epoch.\n\nThe first such epoch with a digest then has the fork of every epoch with that digest.\n\nThe configuration of the name holds, with the replacements that a `dict` gives."},
-  {"summary":
-   "The root of the value that the bytes encode, and the bytes of that value, as a pair.",
-   "signature": "(type: str, data: bytes) -> tuple[bytes, bytes]",
-   "operation": "EthLib.Consensus.Exports.pqKeysSszExport",
-   "method": "pq_keys_ssz",
-   "errors":
-   [{"type": "EthLib.Serialization.Ssz.Err",
-     "codes":
-     [{"constructor": "typeMismatch", "code": 1},
-      {"constructor": "overLimit", "code": 2},
-      {"constructor": "scope", "code": 3},
-      {"constructor": "scopeTooSmall", "code": 4},
-      {"constructor": "scopeUndivided", "code": 5},
-      {"constructor": "scopeWidthless", "code": 6},
-      {"constructor": "firstOffset", "code": 7},
-      {"constructor": "offsetUnordered", "code": 8},
-      {"constructor": "offsetPastScope", "code": 9},
-      {"constructor": "offsetUnaligned", "code": 10},
-      {"constructor": "offsetBelowTable", "code": 11},
-      {"constructor": "truncated", "code": 12},
-      {"constructor": "notABit", "code": 13},
-      {"constructor": "count", "code": 14},
-      {"constructor": "paddingBits", "code": 15},
-      {"constructor": "emptyEncoding", "code": 16},
-      {"constructor": "noDelimiter", "code": 17},
-      {"constructor": "trailingZeros", "code": 18},
-      {"constructor": "noSelector", "code": 19},
-      {"constructor": "unknownSelector", "code": 20},
-      {"constructor": "badDeclaration", "code": 21},
-      {"constructor": "notAPosition", "code": 22},
-      {"constructor": "notEntitled", "code": 23},
-      {"constructor": "undeclared", "code": 24},
-      {"constructor": "capacityNegative", "code": 25},
-      {"constructor": "layoutNotBits", "code": 26},
-      {"constructor": "notAGindex", "code": 27},
-      {"constructor": "rootHasNoBranch", "code": 28},
-      {"constructor": "emptyRequest", "code": 29},
-      {"constructor": "repeatedIndex", "code": 30},
-      {"constructor": "nestedIndex", "code": 31},
-      {"constructor": "branchLength", "code": 32},
-      {"constructor": "leafCount", "code": 33},
-      {"constructor": "proofLength", "code": 34},
-      {"constructor": "proofIncomplete", "code": 35},
-      {"constructor": "pathIntoMixin", "code": 36},
-      {"constructor": "pathIntoPacked", "code": 37},
-      {"constructor": "pathIntoGap", "code": 38},
-      {"constructor": "pathPastSpine", "code": 39},
-      {"constructor": "noParts", "code": 40},
-      {"constructor": "noPartsMixin", "code": 41},
-      {"constructor": "noMixin", "code": 42},
-      {"constructor": "noChunkCount", "code": 43},
-      {"constructor": "notSteppable", "code": 44},
-      {"constructor": "noSuchField", "code": 45},
-      {"constructor": "noSuchOption", "code": 46},
-      {"constructor": "noSuchPosition", "code": 47},
-      {"constructor": "merkleizeLimit", "code": 48},
-      {"constructor": "zeroTreeWidth", "code": 49},
-      {"constructor": "vectorEmpty", "code": 50},
-      {"constructor": "layoutWidth", "code": 51},
-      {"constructor": "layoutTrailingGap", "code": 52},
-      {"constructor": "layoutTooWide", "code": 53},
-      {"constructor": "layoutFieldCount", "code": 54},
-      {"constructor": "unionEmpty", "code": 55},
-      {"constructor": "unionSelectorRange", "code": 56},
-      {"constructor": "unionIncompatible", "code": 57},
-      {"constructor": "unionSelectorRepeated", "code": 58},
-      {"constructor": "uintWidth", "code": 59},
-      {"constructor": "offsetOverflow", "code": 60},
-      {"constructor": "containerEmpty", "code": 61},
-      {"constructor": "hexPrefix", "code": 62},
-      {"constructor": "hexDigits", "code": 63},
-      {"constructor": "hexLength", "code": 64},
-      {"constructor": "bitfieldPadding", "code": 65},
-      {"constructor": "bitfieldDelimiter", "code": 66},
-      {"constructor": "bitfieldTrailingZeros", "code": 67},
-      {"constructor": "uintRange", "code": 68},
-      {"constructor": "documentOverLimit", "code": 69},
-      {"constructor": "elementKind", "code": 70},
-      {"constructor": "noDefault", "code": 71},
-      {"constructor": "undeclaredField", "code": 72},
-      {"constructor": "missingField", "code": 73},
-      {"constructor": "structNotAnObject", "code": 74},
-      {"constructor": "undeclaredSelector", "code": 75},
-      {"constructor": "notUtf8", "code": 76}]}],
-   "error_class": "SszError",
-   "docstring":
-   "The root of the value that the bytes encode, and the bytes of that value, as a pair.\n\nThe arguments are the name of the container and the bytes."},
-  {"summary":
-   "The root that a proof of possession signs, on the chain with the given genesis validators.",
-   "signature":
-   "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes) -> bytes",
-   "operation": "EthLib.Consensus.PqKeys.possessionSigningRoot",
-   "method": "pq_keys_possession_signing_root",
-   "errors": [],
-   "error_class": "ConsensusError",
-   "docstring":
-   "The root that a proof of possession signs, on the chain with the given genesis validators.\n\nIt is the signing root of the message that names both keys.\n\nIts domain is that of a proof of possession at the genesis fork version."},
-  {"summary":
-   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256.",
-   "signature":
-   "(name: str, genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, proof: bytes) -> bool",
-   "operation": "EthLib.Consensus.PqKeys.isValidPqPossessionProof",
-   "method": "pq_keys_is_valid_possession_proof",
-   "errors": [],
-   "error_class": "ConsensusError",
-   "docstring":
-   "Whether a proof of possession of a leanXMSS key for a BLS key is valid, with Keccak-256."},
   {"summary": "Whether a sidecar, given as bytes, has a valid shape.",
    "signature":
    "(name: str, fork: str, data: bytes, block: bytes, config: dict[str, Any] | None) -> bool",
@@ -10567,7 +10542,7 @@
       {"constructor": "notUtf8", "code": 76}]}],
    "error_class": "ConsensusError",
    "docstring":
-   "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nA light client update is the slot of its attested header and the name of the fork of its chunk.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
+   "Whether a response is valid for its request, as a Boolean.\n\nThe arguments are the name of the preset and the configuration, the fork and the protocol ID.\n\nThey go on with the request as SSZ bytes, the items of the response and the committee.\n\nEach item is the tuple of what the check reads, in the order of the fields of its form.\n\nA block is its slot, parent root and root; a sidecar its slot, block root and index.\n\nAn envelope is its slot, block root, parent hash and block hash.\n\nAn inclusion list is its slot, validator index and dependent root.\n\nA light client update is the slot of its attested header and the name of the fork of its chunk.\n\nA light client bootstrap is the slot and root of its beacon header and the fork of its chunk.\n\nThe committee is read only for inclusion lists, and must then have one validator per seat.\n\nA protocol without a check of its response, such as status, has code 0."},
   {"summary": "The largest length of the payload of a gossip topic at a fork.",
    "signature": "(name: str, fork: str, topic: str) -> int",
    "operation": "EthLib.Consensus.Exports.gossipTopicBoundExport",
@@ -14280,7 +14255,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, without the parent's state.\n\nThe arguments are the chain configuration and the request."},
@@ -14326,7 +14302,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The payload status of an `engine_newPayload` request, on a chain that holds the parent.\n\nThe arguments are the chain configuration, the state, the recent blocks, two totals and the request.\n\nThe totals are the terminal total difficulty, and the total difficulty of the last recent block.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0.\n\nA valid payload also gives the RLP forms of its header and of the accounts after it.\n\nOtherwise both are `None`."},
@@ -14344,7 +14321,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]},
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]},
     {"type": "EthLib.Engine.PayloadError",
      "codes":
      [{"constructor": "invalidTransaction", "code": 401},
@@ -14413,7 +14391,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The response to an `engine_forkchoiceUpdated` request, against a tree of known blocks.\n\nThe arguments are the configuration, the tree and the known finalized block.\n\nThe terminal total difficulty and the request follow.\n\nThe terminal total difficulty must be below `2^256`, or the export raises with code 0."},
@@ -14430,7 +14409,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_getBlobs` request, from a blob pool.\n\nThe arguments are the pool's entries, whether it serves, its limit, the fork and the request.\n\nEach entry is the versioned hash, the blob, the blob proof and the 128 cells with their proofs.\n\nAny of the last three may be `None`, and so may each cell."},
@@ -14448,7 +14428,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_getPayload` request, from the configuration and a store snapshot.\n\nThe arguments are the chain configuration, the entries of the store and the request.\n\nEach entry is the payload ID, the fork name and the four results of the payload build export.\n\nThen come its network blob transactions, the override flag and the block access list or `None`."},
@@ -14465,7 +14446,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to a payload bodies request, from a store of bodies.\n\nThe arguments are the store's entries, the latest known block, the limit and the request.\n\nEach entry is the block hash, its canonical number or `None`, and its fork name.\n\nThen come its transactions, its withdrawals or `None`, and its block access list or `None`."},
@@ -14492,7 +14474,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "A payload status read from its JSON, as `json.loads` gives it.\n\nThe result is the name of the status, the latest valid hash and the validation error.\n\nA status that does not decode is an invalid parameter, with code 32602."},
@@ -14510,7 +14493,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "A forkchoice response read from its JSON, as `json.loads` gives it.\n\nThe result is the status name, the latest valid hash, the validation error and the payload ID.\n\nA response that does not decode is an invalid parameter, with code 32602."},
@@ -14528,7 +14512,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The result of an `engine_getPayload` method at a fork, read from its JSON and written back.\n\nThe arguments are the method name, the fork name and the result, as `json.loads` gives it.\n\nA result that does not decode is an invalid parameter, with code 32602.\n\nAn unknown method name, or a fork after Glamsterdam, has code 0."},
@@ -14545,7 +14530,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The result of an `engine_getPayloadBodiesByHash` or `ByRange` method, read and written back.\n\nThe arguments are the method name and the result, as `json.loads` gives it.\n\nA result that does not decode is reported as invalid parameters, with code 32602.\n\nAn unknown method name has code 0."},
@@ -14563,7 +14549,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The result of an `engine_getBlobs` method, read from its JSON and written back.\n\nThe arguments are the method name and the result, as `json.loads` gives it.\n\nA result that does not decode is reported as invalid parameters, with code 32602.\n\nAn unknown method name has code 0."},
@@ -14581,7 +14568,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_exchangeTransitionConfigurationV1` request, from a configuration.\n\nThe arguments are the terminal total difficulty, block hash and block number, and the request."},
@@ -14598,7 +14586,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_exchangeCapabilities` request: the methods that EthLib defines.\n\nThe argument is the request."},
@@ -14616,10 +14605,20 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The answer to an `engine_getClientVersionV1` request, from a version object.\n\nThe arguments are the code, name, version and commit of the object, and the request."},
+  {"summary":
+   "The error object of the Engine API error with a code: its negative code, message and data.",
+   "signature": "(code: int) -> str",
+   "operation": "EthLib.Engine.Exports.errorObjectExport",
+   "method": "engine_error_object",
+   "errors": [],
+   "error_class": "EngineError",
+   "docstring":
+   "The error object of the Engine API error with a code: its negative code, message and data.\n\nThe argument is the code without its sign, such as 38006.\n\nThe result is the JSON text of the object, as a response carries it.\n\nThe data is `null`, since only `-32000` carries data, and no Engine API error has that code.\n\nA code of no Engine API error raises with code 0."},
   {"summary":
    "The parameters of an Engine API request, read by the decoder and written by the writer.",
    "signature": "(method: str, params: list[Any]) -> list[Any]",
@@ -14633,7 +14632,8 @@
       {"constructor": "invalidForkchoiceState", "code": 38002},
       {"constructor": "tooLargeRequest", "code": 38004},
       {"constructor": "invalidPayloadAttributes", "code": 38003},
-      {"constructor": "unknownPayload", "code": 38001}]}],
+      {"constructor": "unknownPayload", "code": 38001},
+      {"constructor": "tooDeepReorg", "code": 38006}]}],
    "error_class": "EngineError",
    "docstring":
    "The parameters of an Engine API request, read by the decoder and written by the writer.\n\nThe arguments are the full name of the method and its parameters.\n\nThe parameters are the value of their JSON, as `json.loads` gives it."},

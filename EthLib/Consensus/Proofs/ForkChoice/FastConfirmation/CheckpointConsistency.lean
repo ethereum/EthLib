@@ -108,7 +108,7 @@ It accepted the current-target test.
 
 Honest heads descend from the origin from that call up to `coveredUntil`.
 
-No theorem derives that coverage: a caller supplies it. -/
+The checked-call headlines take that coverage from the caller; a run of calls derives it. -/
 def TargetChecked (margin : ℕ) (anchorRoot : Root) (u : ValidatorIndex) (n : ℕ)
     (epoch : Epoch) (root : Root) (coveredUntil : ℕ) : Prop :=
   ∃ k ≤ n, ∃ origin,
@@ -253,7 +253,7 @@ private theorem comparable_of_target_read {sender receiver : Store preset fork}
     (read : sender.getCheckpointBlock head checkpoint.epoch = .ok checkpoint.root) :
     receiver.isAncestor ⟨checkpoint.root, .pending⟩ ⟨root, .pending⟩ = .ok true ∨
       receiver.isAncestor ⟨root, .pending⟩ ⟨checkpoint.root, .pending⟩ = .ok true := by
-  obtain ⟨_, block, _, held, _, targetAbove⟩ := Store.isAncestor_of_getCheckpointBlock before read
+  obtain ⟨_, block, _, held, _, targetAbove⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨rb, rk⟩ := Store.held_of_isAncestor supports
   rcases Store.comparable_of_ancestors before held rk targetAbove supports with h | h
   · exact .inl (copy_ancestor anchorSlot senderReached reached before same checkpointKnown h)
@@ -263,12 +263,11 @@ private theorem comparable_of_target_read {sender receiver : Store preset fork}
 private theorem exists_blockState_of_currentTarget {u : ValidatorIndex} {n : ℕ} {head : Root}
     {target : Checkpoint}
     (reachable : Store.Reachable config anchorState anchorBlock ((e.world n).state u))
-    (preGloas : fork < .glamsterdam)
     (targetOk : ((e.world n).state u).getCurrentTarget config head = .ok target) :
     ∃ anc : BeaconState preset fork,
       ((e.world n).state u).blockStates[target.root]? = some anc := by
   obtain ⟨epoch, checkpoint, _, read, rfl⟩ := Store.getCurrentTarget_eq_ok_iff.mp targetOk
-  obtain ⟨_, block, _, held, _, _⟩ := Store.isAncestor_of_getCheckpointBlock preGloas read
+  obtain ⟨_, block, _, held, _, _⟩ := Store.isAncestor_of_getCheckpointBlock read
   obtain ⟨anc, stored, _⟩ := reachable.blockStatesFromParents held
   exact ⟨anc, stored⟩
 
@@ -338,7 +337,6 @@ private theorem pinned_count {u : ValidatorIndex} {n margin : ℕ} {head : Root}
     (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (params : DirectSafety.Parameters preset)
     (nonzero : HeldStateRootsNonzero ((e.world n).state u))
-    (preGloas : fork < .glamsterdam)
     (reserved : ReservedTargetVotes (e := e) margin u n head) :
     ∃ M, HonestTargetVotes e M u n head ∧
       ∀ {pulled anc fin : BeaconState preset fork} {target : Checkpoint},
@@ -359,7 +357,7 @@ private theorem pinned_count {u : ValidatorIndex} {n margin : ℕ} {head : Root}
       refine ⟨0, fun _ _ _ _ _ _ _ _ _ targetOk' => ?_, fun _ targetOk' => ?_⟩ <;>
         simp only [targetOk, reduceCtorEq] at targetOk'
     | ok target =>
-      obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget reachable preGloas targetOk
+      obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget reachable targetOk
       obtain ⟨fin, finRead, finAnchor, -⟩ :=
         Store.Reachable.finalizedState_of_blockState reachable sound anchorSlot params nonzero ancOk
       refine ⟨margin + pinReserve config pulled anc fin,
@@ -421,7 +419,7 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
     (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (preGloas : fork < .glamsterdam) {time : ℕ}
+    {time : ℕ}
     (roots : HeldBlockStateRootsNonzero (e := e) time)
     (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ time → (e.world j).time ≤ time →
       ∀ (r : Root) (left right : BeaconBlock preset fork),
@@ -444,7 +442,7 @@ private theorem checkpoint_slot_le_of_duty {anchor : Store preset fork}
   obtain ⟨_, -, targetRead⟩ := honestData.target_read reachedV anchorSlot
     anchorBoundary (roots v honest k' k'Bound) reachedW checkpointKnown
   obtain ⟨boundary, block, boundaryOk, held, le, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   have same := agree v honest w receiver k' k k'Bound kBound _ _ _ held checkpointKnown
   subst same
   exact ⟨boundary, boundaryOk, le⟩
@@ -622,7 +620,7 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
     rw [target]
     exact jk
   obtain ⟨boundary, boundaryOk, cpBefore⟩ := checkpoint_slot_le_of_duty anchored start anchorSlot
-    anchorBoundary preGloas roots agree honest receiver duty (by omega) kBound jkData
+    anchorBoundary roots agree honest receiver duty (by omega) kBound jkData
   have baseEpochEq : computeEpochAtSlot preset sb.slot = baseEpoch := by
     simpa [Store.getBlockEpoch, Store.block_ok_iff.mpr sk, bind, Except.bind, pure,
       Except.pure] using baseEpochOk
@@ -679,7 +677,7 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
     exact callBefore (UInt64.le_iff_toNat_le.mpr (by simpa using Nat.le_of_sub_eq_zero eqNat))
   -- The count carries the pin reserve of the call's pulled-up, target and finalized states.
   have nonzero := roots u caller n nBound
-  obtain ⟨M, count, countMargin⟩ := pinned_count sr sound anchorSlot params nonzero preGloas
+  obtain ⟨M, count, countMargin⟩ := pinned_count sr sound anchorSlot params nonzero
     (targetVotes slot slotOk offStart)
   -- Off the first slot, a counted quorum pins the justification to the target, or an unseen voter.
   have numeric {state : BeaconState preset fork} {total : Gwei} {target' : Checkpoint}
@@ -704,7 +702,7 @@ private theorem justified_comparable_of_pin {anchor : Store preset fork} {Δ tim
         ((e.world k).state w).isAncestor ⟨root, .pending⟩
           ⟨((e.world k).state w).justifiedCheckpoint.root, .pending⟩ = .ok true := by
     have targetEpoch : target'.epoch = epoch := Except.ok.inj (targetEpochOk.symm.trans epochOk)
-    obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget sr preGloas targetOk
+    obtain ⟨anc, ancOk⟩ := exists_blockState_of_currentTarget sr targetOk
     obtain ⟨fin, finRead, finAnchor, -⟩ :=
       Store.Reachable.finalizedState_of_blockState sr sound anchorSlot params nonzero ancOk
     rw [countMargin stateOk targetOk ancOk finRead finAnchor] at bound

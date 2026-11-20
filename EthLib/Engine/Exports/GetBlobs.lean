@@ -53,9 +53,8 @@ def pooledOf (entry : PoolEntry) : Result (Bytes32 × PooledBlob) := do
   let (hash, blob, proof, cells) := entry
   let cells ← match cells with
     | none => pure (Vector.replicate CELLS_PER_EXT_BLOB none)
-    | some cells =>
-      if h : cells.length = CELLS_PER_EXT_BLOB then pure ⟨cells.toArray, by simpa using h⟩
-      else throw (0, s!"pool: {cells.length} cells, not {CELLS_PER_EXT_BLOB}")
+    | some cells => exactArray CELLS_PER_EXT_BLOB cells.toArray fun count =>
+      (0, s!"pool: {count} cells, not {CELLS_PER_EXT_BLOB}")
   return (hash, ⟨blob, proof, cells⟩)
 
 /-- The version of a method name `engine_getBlobsV1` to `engine_getBlobsV4`. -/

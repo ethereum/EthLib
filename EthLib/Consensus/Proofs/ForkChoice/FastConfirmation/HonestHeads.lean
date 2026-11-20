@@ -13,7 +13,7 @@ import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.SourceWindowMargin
 /-!
 # Proofs: up-to-date honest stores have a head
 
-Before Gloas, an up-to-date honest store can compute its head.
+At every fork, an up-to-date honest store can compute its head.
 
 The exceptions are a collision of bounded honest stores, and direct-safety evidence from a store.
 
@@ -31,7 +31,9 @@ A checkpoint state, once stored, stays.
 
 So the store holds the state, and the head follows from the stake ceiling and the boost's fit.
 
-This is part of [#2060][issue], for the forks before Gloas.
+From Gloas the head also needs room in the anchor's registry and a cap on each justified stake.
+
+This is part of [#2060][issue].
 
 [issue]: https://github.com/ethereum/EthLib/issues/2060
 -/
@@ -152,25 +154,27 @@ private theorem isViableLeaf_exists
   simp only [epochOk, sourceOk, checkpointOk, boundOk, bind, Except.bind, Except.mapError]
   split <;> exact ⟨_, rfl⟩
 
-/-- Before Gloas, the viable nodes of a forward-reachable store can be computed.
+/-- The viable nodes of a forward-reachable store can be computed.
 
-The store must hold its justified block, and the parameters of the committee windows must fit.
+The store must hold its justified block.
+
+The epoch of the latest 64-bit time plus the history of mixes must fit in 64 bits.
 
 The history of mixes must span two epochs, the grace of a voting source. -/
-private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
+private theorem getFilteredNodeTree_exists
     (forward : Store.ForwardReachable config anchorState anchorBlock store)
     (sound : Invariant anchorState) (slots : 0 < config.SLOT_DURATION_MS)
-    (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
     (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
     (unknown : store.blocks[anchorBlock.parentRoot]? = none)
-    (fit : config.CommitteeWindowsFit preset)
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (justifiedHeld : ∃ block, store.blocks[store.justifiedCheckpoint.root]? = some block) :
     ∃ nodes, store.getFilteredNodeTree config = .ok nodes := by
-  have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt preGloas
   have reachable := forward.reachable
-  have lower := reachable.parentsBelow (UInt64.le_of_eq anchorSlot) unknown
-  obtain ⟨current, currentOk, -, -⟩ := forward.slots_le_current slots (UInt64.le_of_eq anchorSlot)
+  have lower := reachable.parentsBelow anchorSlot unknown
+  obtain ⟨current, currentOk, -, -⟩ := forward.slots_le_current slots anchorSlot
   have epochOk : store.getCurrentStoreEpoch config = .ok (computeEpochAtSlot preset current) := by
     simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
   -- The current epoch leaves room for two more epochs, by the fit of the seeds.
@@ -183,18 +187,17 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
     rw [epochNat, ← Nat.div_div_eq_div_mul]
     exact Nat.div_le_div_right currentLe
   have room : (computeEpochAtSlot preset current).toNat + 2 < 2 ^ 64 := by
-    have := fit.seeds
+    have := seeds
     omega
   -- The finalized epoch is between the anchor's epoch and the current one.
   have finalLe : store.finalizedCheckpoint.epoch ≤ computeEpochAtSlot preset current :=
     UInt64.le_trans (reachable.finalized_le_justified sound)
-      (forward.justified_epoch_le_current sound slots (UInt64.le_of_eq anchorSlot) epochOk).1
+      (forward.justified_epoch_le_current sound slots anchorSlot epochOk).1
   have anchorLe : getCurrentEpoch anchorState ≤ store.finalizedCheckpoint.epoch := by
     rcases UInt64.le_total store.finalizedCheckpoint.epoch (getCurrentEpoch anchorState) with
       le | le
     · exact UInt64.le_of_eq (reachable.finalized_eq_anchor_of_epoch_le le).1.symm
     · exact le
-  have positive := fit.positive
   obtain ⟨boundary, boundaryOk⟩ : ∃ boundary,
       computeStartSlotAtEpoch preset store.finalizedCheckpoint.epoch = .ok boundary := by
     have fits : store.finalizedCheckpoint.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat < 2 ^ 64 := by
@@ -210,7 +213,7 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
   have aboveAnchor : anchorBlock.slot ≤ boundary := by
     have floor := computeStartSlotAtEpoch_computeEpochAtSlot (preset := preset) anchorState.slot
     refine UInt64.le_trans (le_computeStartSlotAtEpoch_of_isStartSlotAtEpoch anchorBoundary
-      (UInt64.le_of_eq anchorSlot) floor) ?_
+      anchorSlot floor) ?_
     rw [UInt64.le_iff_toNat_le, (computeStartSlotAtEpoch_ok_iff.mp floor).2,
       (computeStartSlotAtEpoch_ok_iff.mp boundaryOk).2]
     exact Nat.mul_le_mul_right _ (UInt64.le_iff_toNat_le.mp anchorLe)
@@ -218,7 +221,7 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
   have orphansLe : ∀ (root : Root) (orphan : BeaconBlock preset fork),
       store.blocks[root]? = some orphan → store.blocks[orphan.parentRoot]? = none →
       orphan.slot ≤ boundary := fun _ _ found orphan =>
-    UInt64.le_trans (reachable.orphans_le (UInt64.le_of_eq anchorSlot) found orphan anchorFound)
+    UInt64.le_trans (reachable.orphans_le anchorSlot found orphan anchorFound)
       aboveAnchor
   -- Each held node computes its viable nodes, by descent on the rank.
   suffices held : ∀ (node : ForkChoiceNode) (block : BeaconBlock preset fork),
@@ -230,15 +233,14 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
   induction hrank : store.nodeRank node using Nat.strong_induction_on generalizing node with
   | _ rank ih =>
   intro block found
-  obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
-    simp [Store.getNodeChildren, notGloas, pure, Except.pure]
+  obtain ⟨children, childrenOk, heldChildren⟩ := Store.getNodeChildren_held lower found
   rw [Store.filterNodeTree, childrenOk]
   simp only [bind, Except.bind]
   split
   · obtain ⟨ancestor, walk⟩ := Store.getAncestor_ok_of_orphans_le lower orphansLe
       (node := ⟨node.root, .pending⟩) found
     obtain ⟨viable, viableOk⟩ := isViableLeaf_exists forward sound slots
-      (UInt64.le_of_eq anchorSlot) epochOk room found ⟨ancestor.root, by
+      anchorSlot epochOk room found ⟨ancestor.root, by
         simp [Store.getCheckpointBlock, boundaryOk, walk, Except.mapError, bind, Except.bind,
           pure, Except.pure]⟩
     simp only [viableOk]
@@ -249,15 +251,7 @@ private theorem getFilteredNodeTree_exists (preGloas : fork < .glamsterdam)
           store.filterNodeTree config child
         else throw (.parentSlotNotLower child.root)) = .ok below := by
       intro child member
-      obtain ⟨childPending, childBlock, childFound, parentRoot⟩ :=
-        (Store.mem_getNodeChildren preGloas childrenOk).mp member
-      have below : block.slot < childBlock.slot := lower _ childBlock block childFound
-        (parentRoot ▸ found)
-      have lowerRank : store.nodeRank child < store.nodeRank node := by
-        simp only [Store.nodeRank, childFound, found, childPending, ↓reduceIte]
-        have := UInt64.lt_iff_toNat_lt.mp below
-        have := childBlock.slot.toNat_lt
-        split <;> omega
+      obtain ⟨childBlock, childFound, lowerRank⟩ := heldChildren child member
       simp only [lowerRank, ↓reduceDIte]
       exact ih _ (hrank ▸ lowerRank) child rfl childBlock childFound
     obtain ⟨viable, viableOk⟩ := flatMapM_exists_ok each
@@ -311,14 +305,14 @@ private theorem Execution.justifiedState_of_anchor {anchor : Store preset fork}
   rw [same]
   simp [Store.checkpointState, kept, pure, Except.pure]
 
-/-- Before Gloas, an up-to-date honest store holds the state of its justified checkpoint.
+/-- An up-to-date honest store holds the state of its justified checkpoint.
 
 Otherwise bounded honest stores collide, or a store's finalized checkpoints give evidence.
 
 The evidence is that of direct safety, relative to the anchor. -/
 private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
-    (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
     (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
@@ -387,7 +381,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have dueLt := fits.due_lt_slot nextOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextOk slotTimeOk followingTimeOk deadline
   -- The duty vote carries the signed data, so its target is the justified checkpoint.
-  obtain ⟨dataSlot, dataEpoch, head, headBlock, headOk, headKnown, dataRoot, notFuture⟩ :=
+  obtain ⟨dataSlot, dataEpoch, head, headBlock, -, headKnown, dataRoot, notFuture⟩ :=
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start hv deadline dueOk dueLt
   have signedEpoch : data.target.epoch = computeEpochAtSlot preset data.slot := by
     obtain ⟨_, _, _, _, _, _, _, _, made⟩ := honestData
@@ -429,11 +423,11 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have targetRead := vote.data_target anchored anchorSlot anchorBoundary start hv
     (roots v hv n nBound)
   obtain ⟨targetBoundary, targetBlock, targetBoundaryOk, targetKnown, -, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas targetRead
+    Store.isAncestor_of_getCheckpointBlock targetRead
   have chainRead := chain w hw arrival k arrivalLe hk
   rw [← targetEq] at chainRead
   obtain ⟨finalBoundary, finalBlock, finalBoundaryOk, finalKnown, finalLe, -⟩ :=
-    Store.isAncestor_of_getCheckpointBlock preGloas chainRead
+    Store.isAncestor_of_getCheckpointBlock chainRead
   have aboveAnchor : anchorBlock.slot ≤ finalBoundary := UInt64.le_trans
     ((forward w hw k).reachable.anchorSlot_le (UInt64.le_of_eq anchorSlot) finalKnown) finalLe
   have voterRead := Store.getCheckpointBlock_of_same_blocks (forward v hv n).reachable
@@ -447,19 +441,31 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have headCheckpoint : ((e.world n).state v).getCheckpointBlock attestation.data.beaconBlockRoot
       ((e.world arrival).state w).finalizedCheckpoint.epoch =
         .ok ((e.world arrival).state w).finalizedCheckpoint.root := by
-    rw [Store.getCheckpointBlock_trans preGloas targetRead finalLeTarget]
+    rw [Store.getCheckpointBlock_trans targetRead finalLeTarget]
     exact voterRead
   -- So the head reaches the receiver by arrival, with its checkpoint blocks.
   obtain ⟨_, finalized, _, finalizedKnown, _, _⟩ := Store.isAncestor_of_getCheckpointBlock
-    preGloas (chain w hw arrival arrival (le_refl _) arrivalBound)
-  rcases e.blocks_of_partiallySynchronous sync preGloas admitted anchored start hv hw
+    (chain w hw arrival arrival (le_refl _) arrivalBound)
+  rcases e.blocks_of_partiallySynchronous_of_anchorSlot sync (fun _ => UInt64.le_of_eq anchorSlot)
+      admitted anchored hv hw (start v hv) (start w hw)
       (by simpa using late) arrivalBound arrivalCurrent ⟨finalized, finalizedKnown⟩
       (dataRoot ▸ headKnown) headCheckpoint with ⟨votedKnown, transport⟩ | collision
   swap
   · exact absurd collision noCollision
   have receiverRead := transport _ _ finalLeTarget targetRead
-  rcases vote.accepted_at_next_slot preGloas anchored start hv hw committees dataSlot dataEpoch
-      nextOk arrivalSlot arrivalBound nBound votedKnown notFuture receiverRead with
+  -- From Gloas the vote's index names the payload of its head, which then reaches the receiver.
+  have payload : ∀ gloas : .glamsterdam ≤ fork,
+      ((e.world arrival).state w).validatePayloadVote gloas attestation headBlock = .ok () := by
+    intro gloas
+    rcases vote.validatePayloadVote_or_collision sync gloas (UInt64.le_of_eq anchorSlot) anchored
+        hv hw (start v hv) (start w hw) (by rw [← nTime]; exact late) arrivalBound
+        (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted) ▸
+          Store.onExecutionPayloadEnvelope_verified accepted) votedKnown with checked | collision
+    · exact checked
+    · exact absurd collision noCollision
+  rcases vote.accepted_at_next_slot_of_payloadVote anchored start hv hw committees dataSlot
+      nextOk arrivalSlot arrivalBound nBound votedKnown notFuture payload
+      receiverRead with
     ⟨⟨after, accepted⟩, reads⟩ | collision
   swap
   · exact absurd collision noCollision
@@ -471,64 +477,52 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have kept := e.checkpointStates_of_le w arrivalLe (Store.checkpointState_ok_iff.mp stateOk)
   exact Store.checkpointState_ok_iff.mpr kept
 
-/-- Every up-to-date honest store in the interval whose viable nodes can be computed has a head. -/
+/-- An honest store that holds its justified state computes its viable nodes.
+
+It is forward reachable from the anchor, which the head computation reads too.
+
+The epoch of the latest 64-bit time plus the history of mixes must fit in 64 bits. -/
+private theorem Execution.filteredTree_of_justifiedState {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (sound : Invariant anchorState)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {w : ValidatorIndex} (hw : w ∈ J) (k : ℕ)
+    (unknown : ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    {state : BeaconState preset fork}
+    (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state) :
+    Store.ForwardReachable config anchorState anchorBlock ((e.world k).state w) ∧
+      ∃ nodes, ((e.world k).state w).getFilteredNodeTree config = .ok nodes := by
+  have reached := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
+  have forward := reached.forwardReachable
+  -- The justified block is held, as the store holds the justified state.
+  obtain ⟨base, -, baseFound, -⟩ :=
+    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
+  exact ⟨forward, getFilteredNodeTree_exists forward sound slots anchorSlot anchorBoundary unknown
+    seeds history (forward.reachable.known_of_blockState baseFound)⟩
+
+/-- Every up-to-date honest store in the interval has a head. -/
 def HonestHeadsExist (first last : Nat) : Prop :=
-  ∀ w ∈ J, ∀ k (nodes : List ForkChoiceNode), first ≤ (e.world k).time → (e.world k).time ≤ last →
+  ∀ w ∈ J, ∀ k, first ≤ (e.world k).time → (e.world k).time ≤ last →
     UpToDate config checks sources (e.world k).time ((e.world k).view w) ((e.world k).state w) →
-    ((e.world k).state w).getFilteredNodeTree config = .ok nodes →
     ∃ hd, ((e.world k).state w).getHead config = .ok hd
 
-/-- Before Gloas, an up-to-date honest store up to `last` with a readable filtered tree has a head.
+/-- Before Gloas, every up-to-date honest store up to `last` has a head.
 
 Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
 
 The evidence is relative to the anchor.
 
+The epoch of the latest 64-bit time plus the history of mixes must fit in 64 bits.
+
 The claim holds from every start time. -/
 theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
     (slots : 0 < config.SLOT_DURATION_MS)
-    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
-    (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
-    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
-    (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
-    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
-    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
-    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
-    (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 last)
-    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
-    {horizon : Epoch} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
-    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
-    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
-    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
-    (enough : HeldRunStakeFloor (e := e) pre horizon last)
-    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
-    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) last)
-    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17)) (first : ℕ) :
-    HonestHeadsExist (e := e) first last ∨
-    HonestCollision (e := e) last ∨
-    HistoricalDirectSafetyEvidence (e := e) pre last := by
-  -- The store holds the state of its justified checkpoint, through an honest vote for it.
-  rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
-      anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
-      enough terminal with states | alternative
-  · left
-    intro w hw k nodes _ inTime upToDate tree
-    obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
-    -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
-    exact Store.getHead_exists preGloas
-      (e.forwardReachable (fun u hu => (start u hu) ▸ Store.ForwardReachable.anchor anchored) k w
-        hw) (UInt64.le_of_eq anchorSlot) (absent w hw k inTime) positive scoreFits tree stateOk
-      (ceiling w hw k _ state inTime stateOk)
-  · exact .inr alternative
-
-/-- Before Gloas, the caller of a checked call reads its head at each rollover up to `last`.
-
-Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
-
-The evidence is relative to the anchor. -/
-theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
-    (slots : 0 < config.SLOT_DURATION_MS)
-    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
     (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
     (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
     (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
@@ -545,37 +539,441 @@ theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous 
     (terminal : HeldTerminalStakeFloor (e := e) horizon last)
     (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) last)
     (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
-    (fit : config.CommitteeWindowsFit preset)
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64) (first : ℕ) :
+    HonestHeadsExist (e := e) first last ∨
+    HonestCollision (e := e) last ∨
+    HistoricalDirectSafetyEvidence (e := e) pre last := by
+  -- The store holds the state of its justified checkpoint, through an honest vote for it.
+  rcases e.justifiedState_or_evidence sync slots admitted fits prompt votes anchored start
+      anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
+      enough terminal with states | alternative
+  · left
+    have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+    have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+      have := parameters.lookahead
+      omega
+    intro w hw k _ inTime upToDate
+    obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
+    obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+      (UInt64.le_of_eq anchorSlot) anchorBoundary seeds history hw k (absent w hw k inTime)
+      stateOk
+    -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
+    exact Store.getHead_exists preGloas forward (UInt64.le_of_eq anchorSlot) (absent w hw k inTime)
+      parameters.slots scoreFits tree stateOk (ceiling w hw k _ state inTime stateOk)
+  · exact .inr alternative
+
+/-- Before Gloas, the caller of a checked call reads its head at each rollover up to `last`.
+
+Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
+
+The evidence is relative to the anchor.
+
+The steps of a checked call that read the caller's head take this read.
+
+With it, an accepted current-target test has its honest signers up to these alternatives.
+
+A confirmed root stays in the filtered tree up to these alternatives and that step's own evidence.
+
+That evidence is held-state finality evidence or cross-store justified evidence. -/
+theorem Execution.callRolloverRead_or_evidence {Δ : ℕ} (sync : e.Synchronous Δ)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    (preGloas : fork < .glamsterdam) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
+    (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    {horizon : Epoch} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    (ceiling : CheckpointStakeCeiling (e := e) (2 * 10 ^ 17) last)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
     {u : ValidatorIndex} (caller : u ∈ J) (n : ℕ) (head : Root) :
     CallRolloverRead (e := e) u n head last ∨
     HonestCollision (e := e) last ∨
     HistoricalDirectSafetyEvidence (e := e) pre last := by
-  rcases e.justifiedState_or_evidence sync slots preGloas admitted fits prompt votes anchored start
+  rcases e.honestHeadsExist_or_evidence sync slots preGloas admitted fits prompt votes anchored
+      start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
+      enough terminal ceiling scoreFits seeds 0 with heads | alternative
+  swap
+  · exact .inr alternative
+  -- At each rollover the caller is up to date, so it has a head.
+  left
+  intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
+  exact heads u caller k (Nat.zero_le _) (atTime ▸ beginLe) upToDate
+
+/-! ## From Gloas: honest registries stay within the limit -/
+
+/-- Honest held block states and justified states have their registries within the limit. -/
+private def HonestRegistriesWithinLimit (last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k, (e.world k).time ≤ last →
+    HeldRegistriesWithinLimit ((e.world k).state w) ∧
+    ∀ state : BeaconState preset fork,
+      ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+        .ok state → state.RegistryWithinLimit
+
+/-- From Gloas, honest registries stay within the limit while the stores' epochs stay bounded.
+
+The anchor's registry must leave room up to that bound, and the anchor state must be sound.
+
+Soundness bounds the anchor's justified epoch, so the store's justified epoch is not past the clock.
+-/
+private theorem Execution.honestRegistries_of_room (slots : 0 < config.SLOT_DURATION_MS)
+    (gloas : .glamsterdam ≤ fork) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (sound : Invariant anchorState) {horizon : Epoch} {last : ℕ}
+    (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (room : AnchorRegistryRoom preset anchorState horizon) :
+    HonestRegistriesWithinLimit (e := e) last := by
+  intro w member k time
+  have forward := e.forwardReachable
+    (fun w hw => (start w hw) ▸ Store.ForwardReachable.anchor anchored) k w member
+  obtain ⟨current, currentOk, _, _⟩ :=
+    forward.slots_le_current slots anchorSlot
+  have epochOk : ((e.world k).state w).getCurrentStoreEpoch config =
+      .ok (computeEpochAtSlot preset current) := by
+    simp [Store.getCurrentStoreEpoch, currentOk, bind, Except.bind, pure, Except.pure]
+  have clockLe := bounded w member k _ time epochOk
+  obtain ⟨blockBound, checkpointBound⟩ := forward.reachable.validators_size_le_of_gloas gloas
+  -- A state within the horizon that grew only by its epochs fits in the room of the anchor.
+  have within : ∀ state : BeaconState preset fork, getCurrentEpoch state ≤ horizon →
+      state.validators.data.size ≤ anchorState.validators.data.size +
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) →
+      state.RegistryWithinLimit := by
+    intro state le bound
+    have epochs := UInt64.le_iff_toNat_le.mp le
+    have more : preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+        ((getCurrentEpoch state).toNat - (getCurrentEpoch anchorState).toNat) ≤
+        preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
+          (horizon.toNat - (getCurrentEpoch anchorState).toNat) :=
+      Nat.mul_le_mul_left _ (by omega)
+    unfold AnchorRegistryRoom at room
+    show state.validators.data.size ≤ preset.VALIDATOR_REGISTRY_LIMIT.toNat
+    omega
+  have blockLe := forward.blockState_epoch_le_current slots anchorSlot epochOk
+  refine ⟨fun root state held => within state (UInt64.le_trans (blockLe root state held) clockLe)
+    (blockBound root state held), fun state stateOk => ?_⟩
+  have found := Store.checkpointState_ok_iff.mp stateOk
+  refine within state ?_ (checkpointBound _ state found)
+  -- The justified state is a held block state, or that state processed to its epoch's start.
+  obtain ⟨base, startSlot, baseHeld, startOk, kept⟩ :=
+    forward.reachable.checkpointStatesFromBlocks found
+  rcases kept with ⟨-, rfl⟩ | ⟨-, _, -, processed⟩
+  · exact UInt64.le_trans (blockLe _ _ baseHeld) clockLe
+  have justifiedLe := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+    (forward.justified_epoch_le_current sound slots anchorSlot epochOk).1
+    clockLe)
+  rw [UInt64.le_iff_toNat_le, getCurrentEpoch_toNat, (processSlots_slot processed).2,
+    (computeStartSlotAtEpoch_ok_iff.mp startOk).2]
+  exact Nat.le_trans (Nat.div_le_of_le_mul (Nat.le_of_eq (Nat.mul_comm _ _))) justifiedLe
+
+/-! ## From Gloas: active equivocators are registered or evidence holds -/
+
+/-- A held block reads the store's finalized checkpoint when it comes from the block's state.
+
+It may come from the state itself or from its pull-up, or be at the anchor's epoch. -/
+private theorem finalized_read_of_held {store : Store preset fork}
+    (reachable : Store.Reachable config anchorState anchorBlock store)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (unknown : store.blocks[anchorBlock.parentRoot]? = none)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (nonzero : Serialization.Ssz.SszType.hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0))
+    {root : Root} {state : BeaconState preset fork}
+    (held : store.blockStates[root]? = some state)
+    (own : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch →
+      store.finalizedCheckpoint = state.finalizedCheckpoint ∨
+        ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
+          store.finalizedCheckpoint = pulled.finalizedCheckpoint) :
+    store.getCheckpointBlock root store.finalizedCheckpoint.epoch =
+      .ok store.finalizedCheckpoint.root := by
+  by_cases later : getCurrentEpoch anchorState < store.finalizedCheckpoint.epoch
+  · have member : store.finalizedCheckpoint ∈ [state.currentJustifiedCheckpoint,
+          state.previousJustifiedCheckpoint, state.finalizedCheckpoint] ∨
+        ∃ pulled, processJustificationAndFinalization state = .ok pulled ∧
+          store.finalizedCheckpoint ∈ [pulled.currentJustifiedCheckpoint,
+            pulled.previousJustifiedCheckpoint, pulled.finalizedCheckpoint] := by
+      rcases own later with same | ⟨pulled, ok, same⟩
+      · exact .inl (by simp [same])
+      · exact .inr ⟨pulled, ok, by simp [same]⟩
+    rcases reachable.getCheckpointBlock_of_blockState sound (UInt64.le_of_eq anchorSlot) positive
+      window held member later with ⟨read, -⟩ | zero
+    · exact read
+    · exact absurd zero nonzero
+  · obtain ⟨epochEq, hashed⟩ := reachable.finalized_eq_anchor_of_epoch_le (UInt64.not_lt.mp later)
+    obtain ⟨block, found⟩ := reachable.known_of_blockState held
+    rw [epochEq]
+    exact reachable.getCheckpointBlock_anchor anchorSlot boundary unknown found hashed
+
+/-- Each held block reads, on its own chain, a finalized checkpoint its store held earlier.
+
+That checkpoint is at the finalized epoch of the block's state or later.
+
+The store starts at the anchor store and stays reachable from the anchor along its run. -/
+private theorem Execution.heldFinalized_read {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (sound : Invariant anchorState) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (boundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (positive : 0 < preset.SLOTS_PER_EPOCH.toNat)
+    (window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat)
+    (nonzero : Serialization.Ssz.SszType.hashTreeRoot anchorState ≠ .ok (Vector.replicate 32 0))
+    {w : ValidatorIndex} (start : e.start w = anchor)
+    (reachable : ∀ i, Store.Reachable config anchorState anchorBlock ((e.world i).state w)) (n : ℕ)
+    (unknown : ∀ k ≤ n, ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    {root : Root} {state : BeaconState preset fork}
+    (held : ((e.world n).state w).blockStates[root]? = some state) :
+    ∃ i ≤ n, ((e.world i).state w).getCheckpointBlock root
+        ((e.world i).state w).finalizedCheckpoint.epoch =
+          .ok ((e.world i).state w).finalizedCheckpoint.root ∧
+      state.finalizedCheckpoint.epoch ≤ ((e.world i).state w).finalizedCheckpoint.epoch := by
+  induction n generalizing root state with
+  | zero =>
+    refine ⟨0, Nat.le_refl _, ?_, ((reachable 0).ordered_finalized sound).2 held⟩
+    -- The anchor store's finalized checkpoint is at the anchor's epoch.
+    refine finalized_read_of_held (reachable 0) sound anchorSlot boundary (unknown 0 le_rfl)
+      positive window nonzero held fun later => absurd later ?_
+    obtain ⟨anchorRoot, -, -, -, -, finalized, -⟩ := getForkchoiceStore_anchor anchored
+    rw [e.world_zero]
+    change ¬ getCurrentEpoch anchorState < (e.start w).finalizedCheckpoint.epoch
+    rw [start, finalized]
+    exact UInt64.lt_irrefl _
+  | succ n ih =>
+    by_cases old : ((e.world n).state w).blockStates[root]? = some state
+    · obtain ⟨i, le, rest⟩ := ih (fun k le => unknown k (Nat.le_succ_of_le le)) old
+      exact ⟨i, Nat.le_succ_of_le le, rest⟩
+    refine ⟨n + 1, Nat.le_refl _, ?_, ((reachable (n + 1)).ordered_finalized sound).2 held⟩
+    have reached := reachable (n + 1)
+    have keep {s t : Store preset fork} (states : t.blockStates = s.blockStates)
+        (before : s = (e.world n).state w) (after : t = (e.world (n + 1)).state w) : False := by
+      subst s t
+      exact old (states ▸ held)
+    rcases e.state_succ n w with same | ⟨_, moved⟩
+    · exact absurd (same ▸ held) old
+    cases moved with
+    | tick _ _ a => exact (keep (Store.onTick_frame a).2.2.2 rfl rfl).elim
+    | blockAttestation _ _ _ _ a => exact (keep (Store.onAttestation_frame a).2.2.1 rfl rfl).elim
+    | blockAttesterSlashing _ _ _ _ a =>
+      exact (keep (Store.onAttesterSlashing_frame a).2.2.1 rfl rfl).elim
+    | attestation _ a => exact (keep (Store.onAttestation_frame a).2.2.1 rfl rfl).elim
+    | attesterSlashing _ a => exact (keep (Store.onAttesterSlashing_frame a).2.2.1 rfl rfl).elim
+    | payloadAttestation _ a =>
+      exact (keep (Store.onPayloadAttestationMessage_onlyPtcVotes a).frame.2.2 rfl rfl).elim
+    | envelope _ a => exact (keep (Store.onExecutionPayloadEnvelope_frame a).2.2 rfl rfl).elim
+    | inclusionList _ a => exact (keep (Store.onInclusionList_frame a).2.2 rfl rfl).elim
+    | @block signed _ added =>
+      have original := added
+      rcases Store.onBlock_pulledUp added with same | ⟨blockRoot, inserted, pulled, base, now,
+          hashed, fresh, blocks, states, run, -, -, baseFinalized, -, moved⟩
+      · exact absurd (same ▸ held) old
+      have heldAt := held
+      rw [states, Std.TreeMap.getElem?_insert] at heldAt
+      split at heldAt
+      · rename_i same
+        cases heldAt
+        obtain rfl : blockRoot = root := Std.LawfulEqCmp.eq_of_compare same
+        -- The new finalized checkpoint is the old one, the state's, or its pull-up's.
+        have adopted : ((e.world (n + 1)).state w).finalizedCheckpoint = base.finalizedCheckpoint ∨
+            ((e.world (n + 1)).state w).finalizedCheckpoint = pulled.finalizedCheckpoint := by
+          rcases moved with ⟨-, eq⟩ | ⟨-, eq⟩ <;> rw [eq]
+          · exact (Store.updateCheckpoints_finalizedCheckpoint _ _ _).imp_left
+              (·.trans (by simp))
+          · exact .inl (by simp)
+        have own := finalized_read_of_held reached sound anchorSlot boundary
+          (unknown (n + 1) le_rfl) positive window nonzero held
+        rcases adopted with eq | eq
+        · rcases baseFinalized with kept | eq'
+          · rw [eq, kept]
+            obtain ⟨-, ⟨finalizedSlot, startOk, lt⟩, parentRead⟩ :=
+              Store.onBlock_checks hashed fresh original
+            rcases Store.onBlock_same_or_insert original with same | ⟨-, -, -, -, pre, -, preFound,
+                -, -⟩
+            · exact absurd (same ▸ held) old
+            obtain ⟨parent, parentKnown⟩ := (reachable n).known_of_blockState preFound
+            have grows := fun {r : Root} {b : BeaconBlock preset fork}
+                (f : ((e.world n).state w).blocks[r]? = some b) =>
+              Store.onBlock_blocks_of_found added f
+            have found : ((e.world (n + 1)).state w).blocks[blockRoot]? = some signed.message := by
+              rw [blocks]
+              simp
+            have parentFound := grows parentKnown
+            have parentLower := reached.parentsBelow (UInt64.le_of_eq anchorSlot)
+              (unknown (n + 1) le_rfl) _ _ _ found parentFound
+            have unfoldRead : ∀ r, ((e.world (n + 1)).state w).getCheckpointBlock r
+                ((e.world n).state w).finalizedCheckpoint.epoch =
+                  (·.root) <$> ((e.world (n + 1)).state w).getAncestor ⟨r, .pending⟩
+                    finalizedSlot := by
+              intro r
+              simp only [Store.getCheckpointBlock, startOk, Except.mapError, bind, Except.bind]
+              rfl
+            rw [unfoldRead, Store.getAncestor_step found (UInt64.not_le.mpr lt) parentFound
+              parentLower, Store.getAncestor_root _ .pending, ← unfoldRead]
+            exact Store.getCheckpointBlock_of_blocks grows parentRead
+          · exact own fun _ => .inl (eq.trans eq')
+        · exact own fun _ => .inr ⟨pulled, run, eq⟩
+      · exact absurd heldAt old
+
+/-- Each honest store's justified state registers the active equivocators of its held blocks. -/
+private def HonestActiveEquivocatorsRegistered (last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k (state : BeaconState preset fork), (e.world k).time ≤ last →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    ActiveEquivocatorsRegistered ((e.world k).state w) state
+
+/-- Honest justified states register the equivocators active in held blocks, or evidence holds.
+
+The evidence is relative to the anchor. -/
+private theorem Execution.activeEquivocatorsRegistered_or_evidence {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (slots : 0 < config.SLOT_DURATION_MS)
+    {horizon : Epoch} {last : ℕ} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last) :
+    HonestActiveEquivocatorsRegistered (e := e) last ∨
+      HistoricalDirectSafetyEvidence (e := e) pre last := by
+  -- With no honest event in time, every store claim is vacuous.
+  by_cases some : ∃ u ∈ J, ∃ n, (e.world n).time ≤ last
+  swap
+  · push Not at some
+    exact .inl fun w honest k _ inTime => absurd inTime (Nat.not_le.mpr (some w honest k))
+  obtain ⟨u, uHonest, n₀, n₀Time⟩ := some
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  -- Each justified checkpoint reads every earlier finalized checkpoint of its store.
+  rcases e.finalizedFamily_or_historical_evidence anchored start sound anchorSlot anchorBoundary
+      slots bounded roots absent parameters genesis pre heldEarly enough terminal uHonest
+      n₀Time with chain | evidence
+  swap
+  · exact .inr evidence
+  left
+  intro w hw k state time stateOk root block held blockFound heldFound index _ validator
+    registered active
+  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := parameters.slots
+  have window : 2 * preset.SLOTS_PER_EPOCH.toNat ≤ preset.SLOTS_PER_HISTORICAL_ROOT.toNat := by
+    have := parameters.roots
+    omega
+  have forward := e.forwardReachableWith
+    (fun v hv => (start v hv) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
+  have nonzero : Serialization.Ssz.SszType.hashTreeRoot anchorState ≠
+      .ok (Vector.replicate 32 0) := by
+    rw [forward.reachable.anchorState_root]
+    exact fun same => e.anchor_stateRoot_nonzero anchored start roots uHonest n₀Time
+      (Except.ok.inj same)
+  -- The held block reads a finalized checkpoint of an earlier store, at or past its finality.
+  obtain ⟨j, jLe, read, finalLe⟩ := e.heldFinalized_read anchored sound anchorSlot
+    anchorBoundary positive window nonzero (start w hw)
+    (fun i => e.reachable (fun v hv => (start v hv) ▸ Store.Reachable.anchor anchored) i w hw) k
+    (fun j le => absent w hw j ((e.monotone_time le).trans time)) heldFound
+  have sourceWalk := Store.getCheckpointBlock_of_blocks
+    (fun found => e.blocks_of_le jLe found) read
+  -- The justified checkpoint reads the same checkpoint.
+  have walk := chain w hw j k jLe time
+  obtain ⟨base, target, baseFound, targetOk, advanced⟩ := e.checkpointStates_fixedChecks anchored
+    start hw (Store.checkpointState_ok_iff.mp stateOk)
+  obtain ⟨justifiedBlock, justifiedFound⟩ := forward.reachable.known_of_blockState baseFound
+  obtain ⟨startSlot, -, startOk, -, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read
+  have epochLe : ((e.world j).state w).finalizedCheckpoint.epoch ≤
+      ((e.world k).state w).justifiedCheckpoint.epoch :=
+    UInt64.le_trans (e.checkpointsAdvance_of_le w jLe).2.epoch_le
+      (forward.reachable.finalized_le_justified sound)
+  have bound : startSlot ≤ max justifiedBlock.slot target := by
+    have one := (computeStartSlotAtEpoch_ok_iff.mp startOk).2
+    have two := (computeStartSlotAtEpoch_ok_iff.mp targetOk).2
+    have le := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat (UInt64.le_iff_toNat_le.mp epochLe)
+    rw [UInt64.le_iff_toNat_le, toNat_max]
+    omega
+  exact forward.registered_of_shared_checkpoint (UInt64.le_of_eq anchorSlot) sound
+    (UInt64.lt_iff_toNat_lt.mpr positive) walk justifiedFound startOk bound baseFound advanced
+    sourceWalk blockFound heldFound finalLe registered active
+
+/-! ## From Gloas: up-to-date honest stores have a head -/
+
+/-- Honest justified states up to time `last` have effective balances that add up to at most `cap`.
+
+An assumption on the run: the supply of ether bounds the stake of the whole registry. -/
+def CheckpointRegistryStakeCeiling (cap last : ℕ) : Prop :=
+  ∀ w ∈ J, ∀ k (state : BeaconState preset fork), (e.world k).time ≤ last →
+    ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint = .ok state →
+    effectiveBalanceSum state ≤ cap
+
+/-- From Gloas, an up-to-date honest store up to `last` has a head.
+
+Otherwise two honest stores collide by `last`, or direct-safety evidence holds.
+
+The evidence is relative to the anchor.
+
+The anchor's registry must leave room up to the horizon.
+
+Every honest justified state must have effective balances that add up to at most `2 * 10^17` Gwei.
+
+The committee windows must fit, and the proposer boost and the head reads must fit that cap.
+
+The claim holds from every start time. -/
+theorem Execution.honestHeadsExist_or_evidence_of_gloas {Δ : ℕ} (sync : e.Synchronous Δ)
+    (gloas : .glamsterdam ≤ fork) {last : ℕ} (admitted : BlocksAdmitted e 0 Δ last)
+    (fits : DelayFits fork config genesisTimeMs Δ) (prompt : Prompt e last)
+    (votes : ValidatedDutyVotes (e := e) last) {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (anchorSlot : anchorBlock.slot = anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (signed : JustifiedHonestlySigned (e := e) anchor.justifiedCheckpoint.epoch 0 last)
+    (roots : HeldBlockStateRootsNonzero (e := e) last) (absent : AnchorParentAbsent (e := e) last)
+    {horizon : Epoch} (bounded : HonestStoreEpochsBounded (e := e) horizon last)
+    (parameters : DirectSafety.Parameters preset) {g : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (pre : Run config checks g ⟨fork, anchorState⟩)
+    (heldEarly : HeldStatesBeforeUpgrade (e := e) last)
+    (enough : HeldRunStakeFloor (e := e) pre horizon last)
+    (terminal : HeldTerminalStakeFloor (e := e) horizon last)
+    (scoreFits : config.ProposerScoreFits preset (2 * 10 ^ 17))
+    (fit : config.CommitteeWindowsFit preset)
+    (weights : config.HeadWeightsFit preset (2 * 10 ^ 17))
+    (room : AnchorRegistryRoom preset anchorState horizon)
+    (supply : CheckpointRegistryStakeCeiling (e := e) (2 * 10 ^ 17) last) (first : ℕ) :
+    HonestHeadsExist (e := e) first last ∨
+    HonestCollision (e := e) last ∨
+    HistoricalDirectSafetyEvidence (e := e) pre last := by
+  have slots : 0 < config.SLOT_DURATION_MS := UInt64.lt_trans (by decide) weights.slots
+  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
+  -- The store holds the state of its justified checkpoint, through an honest vote for it.
+  rcases e.justifiedState_or_evidence sync slots admitted fits prompt votes anchored start
       anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre heldEarly
       enough terminal with states | alternative
   swap
   · exact .inr alternative
-  rcases e.honestHeadsExist_or_evidence sync slots fit.positive preGloas admitted fits prompt votes
-      anchored start anchorSlot anchorBoundary signed roots absent bounded parameters genesis pre
-      heldEarly enough terminal ceiling scoreFits 0 with heads | alternative
+  -- The justified state registers the equivocators that the head reads count.
+  rcases e.activeEquivocatorsRegistered_or_evidence anchored start anchorSlot anchorBoundary slots
+      bounded roots absent parameters genesis pre heldEarly enough terminal with
+    registered | evidence
   swap
-  · exact .inr alternative
-  -- At each rollover the caller is up to date, so it holds its justified state and has a head.
+  · exact .inr (.inr evidence)
+  have registries := e.honestRegistries_of_room slots gloas anchored start
+    (UInt64.le_of_eq anchorSlot) sound bounded room
   left
-  have sound : Invariant anchorState := (DirectSafety.run_justified_separated pre genesis).1
-  intro _ _ _ begin _ _ _ _ beginLe k atTime upToDate
-  have inTime : (e.world k).time ≤ last := atTime ▸ beginLe
-  have forward := e.forwardReachable
-    (fun w hw => (start w hw) ▸ Store.ForwardReachable.anchor anchored) k u caller
-  have reached := e.forwardReachableWith
-    (fun w hw => (start w hw) ▸ Store.ForwardReachableWith.anchor anchored) k u caller
-  -- The justified block is held, as the store holds the justified state.
-  obtain ⟨state, stateOk⟩ := states u caller k inTime upToDate
-  obtain ⟨base, -, baseFound, -⟩ :=
-    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-  obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists preGloas forward sound slots anchorSlot
-    anchorBoundary (absent u caller k inTime) fit history
-    (forward.reachable.known_of_blockState baseFound)
-  exact heads u caller k nodes (Nat.zero_le _) inTime upToDate tree
+  have history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat := by
+    have := parameters.lookahead
+    omega
+  intro w hw k _ inTime upToDate
+  obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
+  obtain ⟨held, within⟩ := registries w hw k inTime
+  obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+    (UInt64.le_of_eq anchorSlot) anchorBoundary fit.seeds history hw k (absent w hw k inTime)
+    stateOk
+  exact Store.getHead_exists_of_gloas gloas forward (UInt64.le_of_eq anchorSlot)
+    (absent w hw k inTime) fit scoreFits weights tree stateOk (within state stateOk) held
+    (supply w hw k state inTime stateOk) (registered w hw k state inTime stateOk)
 
 end EthLib.Consensus.Models.Network

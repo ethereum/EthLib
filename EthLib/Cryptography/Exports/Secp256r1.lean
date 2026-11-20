@@ -1,9 +1,10 @@
 module
 
 public import EthLib.Base.Exports
+public import EthLib.Base.BigEndian
 public import EthLib.Cryptography.Secp256r1.Curve
 public import EthLib.Cryptography.Secp256r1.Errors
-public import EthLib.Cryptography.Secp256k1.Encoding
+public import EthLib.Cryptography.Ecdsa.Encoding
 
 /-!
 # `Exports.Secp256r1`
@@ -24,6 +25,7 @@ public section
 namespace EthLib.Cryptography.Secp256r1.Exports
 
 open EthLib.Exports (Result)
+open EthLib.Cryptography.Ecdsa (SIGNATURE_LEN)
 
 
 /-- The length of a public key: `x` then `y`, 32 bytes each. -/
@@ -31,9 +33,6 @@ def PUBLIC_KEY_LEN : Nat := 64
 
 /-- The length of a hash. -/
 def HASH_LEN : Nat := 32
-
-/-- The length of a signature: `r` then `s`, 32 bytes each. -/
-def SIGNATURE_LEN : Nat := 64
 
 /-- Run a fallible computation, with its error as a code and a message. -/
 def runSecp256r1 {α : Type} (act : Except Secp256r1Error α) : Result α :=
@@ -57,12 +56,6 @@ def readHash (bytes : ByteArray) : Except Secp256r1Error Nat :=
   if bytes.size = HASH_LEN then .ok (Base.bytesToNat bytes.data.toList)
   else .error (.badHashSize bytes.size)
 
-/-- The integers `r` and `s` of a 64-byte signature, or an error for any other length. -/
-def readSignature (bytes : ByteArray) : Except Secp256r1Error (Nat × Nat) :=
-  if bytes.size = SIGNATURE_LEN then
-    .ok (Base.bytesToNat (bytes.data.toList.take 32), Base.bytesToNat (bytes.data.toList.drop 32))
-  else .error (.badSignatureSize bytes.size)
-
 /-! ## Sizes
 
 The Python C extension reads every size through these at module-init time. -/
@@ -83,7 +76,7 @@ def constSignatureLen (_ : Unit) : UInt64 := UInt64.ofNat SIGNATURE_LEN
 def verifyExport (publicKey hash signature : ByteArray) : Result UInt8 := runSecp256r1 do
   let q ← readPublicKey publicKey
   let e ← readHash hash
-  let (r, s) ← readSignature signature
+  let (r, s) ← Cryptography.Ecdsa.read signature .badSignatureSize
   return if verify q e r s then 1 else 0
 
 end EthLib.Cryptography.Secp256r1.Exports

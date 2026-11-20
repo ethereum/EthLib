@@ -6780,7 +6780,7 @@ private theorem Run.start_state {x y : ForkedBeaconState preset} (tail : Run con
   have lowY := UInt64.le_iff_toNat_le.mp activeY
   have highY := ordered vy foundY
   have exitBound := vy.exitEpoch.toNat_lt
-  have fixedWindow := window.lookahead
+  have fixedWindow : 3 ≤ preset.MAX_SEED_LOOKAHEAD.toNat := window
   -- Activity at the epoch `A` of the key, as the end state reads it.
   have activeAtA : isActiveAt y.state vy.activationEpoch i = true := by
     refine isActiveAt_eq_true_iff.mpr ⟨vy, foundY, ?_⟩

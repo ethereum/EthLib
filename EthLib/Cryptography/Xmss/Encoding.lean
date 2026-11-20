@@ -32,12 +32,16 @@ open EthLib.Cryptography.Xmss.Constants
 
 namespace Internal
 
+/-- Digit `i` of a digest: the base-4 digit of weight `4^i` of its little-endian integer.
+
+Byte `floor(i / 4)` holds digit `i`, in its bits `2 (i mod 4)` and `2 (i mod 4) + 1`. -/
+def digit (d : Digest) (i : Fin DIGITS) : Fin CHAIN_LENGTH :=
+  let byte := d[i.val / 4]'(by have := i.isLt; simp only [DIGITS, DIGEST_LEN] at *; omega)
+  ⟨byte.toNat >>> (2 * (i.val % 4)) % CHAIN_LENGTH, Nat.mod_lt _ (by decide)⟩
+
 /-- The 64 digits of a digest, codeword or not. -/
 def digits (d : Digest) : Vector (Fin CHAIN_LENGTH) DIGITS :=
-  -- The digest is read once, as one 128-bit little-endian integer.
-  let value := bytesToUint d
-  -- Digit `i` is the base-4 digit of weight `4^i`.
-  Vector.ofFn fun i => ⟨value / 4 ^ i.val % CHAIN_LENGTH, Nat.mod_lt _ (by decide)⟩
+  Vector.ofFn (digit d)
 
 /-- The sum of the digits of a one-time key's chains. -/
 def digitSum (x : Vector (Fin CHAIN_LENGTH) V) : Nat :=
@@ -49,12 +53,16 @@ end Internal
 
 Returns nothing when the digest is not a codeword. -/
 def codeword? (d : Digest) : Option (Vector (Fin CHAIN_LENGTH) V) :=
-  let x := Internal.digits d
-  -- The first 58 digits name a position on each chain.
-  let chains : Vector (Fin CHAIN_LENGTH) V :=
-    Vector.ofFn fun i => x[i.val]'(by have := i.isLt; simp only [V, DIGITS] at *; omega)
   -- Digits 58 to 63 have no chain, so a codeword sets them to zero.
-  let tailZero := (x.toList.drop V).all (·.val == 0)
-  if tailZero && Internal.digitSum chains == TARGET_SUM then some chains else none
+  let tailZero := (List.finRange (DIGITS - V)).all fun j =>
+    (Internal.digit d ⟨V + j.val, by have := j.isLt; simp only [V, DIGITS] at *; omega⟩).val == 0
+  -- Most digests fail that test, so the other 58 digits are read only after it.
+  if tailZero then
+    let x := Internal.digits d
+    -- The first 58 digits name a position on each chain.
+    let chains : Vector (Fin CHAIN_LENGTH) V :=
+      Vector.ofFn fun i => x[i.val]'(by have := i.isLt; simp only [V, DIGITS] at *; omega)
+    if Internal.digitSum chains == TARGET_SUM then some chains else none
+  else none
 
 end EthLib.Cryptography.Xmss

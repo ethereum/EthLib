@@ -11,9 +11,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The key generator is pinned by its digest in `tests/consensus/pq_keys/SHA256SUMS`.
-EXCLUDED = {"tests/consensus/pq_keys/generate.py"}
-
 # A line that starts a list item.
 LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])(?:\s|$)")
 # A line of a provenance record, such as `Commit: <hash>`, which is a field and not a sentence.
@@ -190,7 +187,7 @@ def main(argv: list[str]) -> int:
         root = Path.cwd()
     found = []
     for path, lines in targets:
-        if path in EXCLUDED or not (root / path).is_file():
+        if not (root / path).is_file():
             continue
         found += check_text(path, (root / path).read_text(encoding="utf-8"), lines)
     message = "sentence runs onto this line; give each sentence a line of its own"

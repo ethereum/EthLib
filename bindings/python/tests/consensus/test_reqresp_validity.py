@@ -7,6 +7,7 @@ from ethlib.consensus import (
     ResponseBlock,
     ResponseEnvelope,
     ResponseInclusionList,
+    ResponseLightClientBootstrap,
     ResponseLightClientUpdate,
     ResponseSidecar,
 )
@@ -30,10 +31,11 @@ from raising import raises
 # - MAX_REQUEST_LIGHT_CLIENT_UPDATES is 128, and a sync committee period has 8192 slots.
 # - The periods of Altair, Deneb, Electra and Fulu start at 290, 1053, 1422 and 1607.
 #
-# The light client check reads the fork epochs and the length of a period, which minimal changes.
+# The light client checks read the fork epochs and the lengths of an epoch and a period.
+# The minimal preset and configuration change all three.
 # The minimal preset and configuration change none of the values that the other checks read.
 # The limits above and the number of columns and seats are the same as on mainnet.
-# So only the light client check runs under the name minimal.
+# So only the light client checks run under the name minimal.
 
 PREFIX = "/eth2/beacon_chain/req/"
 
@@ -218,7 +220,9 @@ def _update(period: int, fork: str = "pectra", slot: int = 0) -> ResponseLightCl
         pytest.param([], True, id="empty"),
         pytest.param([_update(1500)], True, id="first-period"),
         pytest.param([_update(p) for p in range(1500, 1504)], True, id="every-period"),
-        pytest.param([_update(1501), _update(1503)], True, id="skipped-period"),
+        pytest.param([_update(1501), _update(1502)], True, id="later-first-period"),
+        pytest.param([_update(1501), _update(1503)], False, id="skipped-period"),
+        pytest.param([_update(1500), _update(1503)], False, id="gap-after-first"),
         pytest.param([_update(1503, slot=8191)], True, id="last-slot"),
         pytest.param([_update(1500, slot=-1)], False, id="before-start"),
         pytest.param([_update(1504)], False, id="after-end"),
@@ -270,8 +274,8 @@ def test_light_client_updates_by_range_request_limit() -> None:
     assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
 
 
-def test_light_client_updates_by_range_ascending_periods_imply_count_bound() -> None:
-    # Updates at ascending periods inside a range of count periods number at most the count.
+def test_light_client_updates_by_range_consecutive_periods_imply_count_bound() -> None:
+    # Updates at consecutive periods inside a range of count periods number at most the count.
     # So a response over the count also breaks the order, and the count has no case of its own.
     request, protocol = _u64(1500, 2), _id("light_client_updates_by_range")
     both = [_update(1500), _update(1501)]
@@ -297,6 +301,76 @@ def test_light_client_updates_by_range_unknown_fork() -> None:
     protocol = _id("light_client_updates_by_range")
     with raises(ConsensusError, "no fork named nofork") as info:
         consensus.reqresp_is_valid_response("pectra", protocol, UPDATES_BY_RANGE, [(0, "nofork")])
+    assert info.value.code == 0
+
+
+# Light client bootstrap: the request is the root C of a block.
+# Each bootstrap is the slot and root of its beacon header and the fork of its chunk.
+# Epoch 74240 opens Altair, so its first slot is 2375680.
+
+ALTAIR_SLOT = 74240 * 32
+
+
+def _bootstrap(
+    period: int, root: bytes = C, fork: str = "pectra", slot: int = 0
+) -> ResponseLightClientBootstrap:
+    # A bootstrap whose header is at a slot of the period.
+    return (period * SLOTS_PER_PERIOD + slot, root, fork)
+
+
+@pytest.mark.parametrize(
+    "items, valid",
+    [
+        pytest.param([], True, id="empty"),
+        pytest.param([_bootstrap(1500)], True, id="requested-root"),
+        pytest.param([_bootstrap(1606, slot=8191)], True, id="last-slot-of-electra"),
+        pytest.param([_bootstrap(1500, B)], False, id="other-root"),
+        pytest.param([_bootstrap(1500), _bootstrap(1500)], False, id="two-bootstraps"),
+        pytest.param([_bootstrap(1500, fork="fusaka")], False, id="later-fork"),
+        pytest.param([_bootstrap(1500, fork="dencun")], False, id="earlier-fork"),
+        pytest.param([_bootstrap(1607)], False, id="electra-after-fulu"),
+    ],
+)
+def test_light_client_bootstrap(items: list[ResponseLightClientBootstrap], valid: bool) -> None:
+    protocol = _id("light_client_bootstrap")
+    assert consensus.reqresp_is_valid_response("pectra", protocol, C, items) is valid
+
+
+def test_light_client_bootstrap_fork_of_chunk() -> None:
+    # The fork of the chunk is that of the epoch of the header, not the serving fork.
+    protocol = _id("light_client_bootstrap")
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, C, [_bootstrap(1606)])
+    later = [_bootstrap(1607, fork="fusaka")]
+    assert consensus.reqresp_is_valid_response("fusaka", protocol, C, later)
+    assert not consensus.reqresp_is_valid_response("fusaka", protocol, C, [_bootstrap(1607)])
+
+
+def test_light_client_bootstrap_before_altair() -> None:
+    # A block before Altair has no bootstrap, at any fork of the chunk.
+    protocol = _id("light_client_bootstrap")
+    for chunk_fork in ("phase0", "altair"):
+        items = [(ALTAIR_SLOT - 1, C, chunk_fork)]
+        assert not consensus.reqresp_is_valid_response("altair", protocol, C, items)
+    first = [(ALTAIR_SLOT, C, "altair")]
+    assert consensus.reqresp_is_valid_response("altair", protocol, C, first)
+
+
+def test_light_client_bootstrap_minimal() -> None:
+    # The minimal configuration puts every fork from Altair at the far future epoch.
+    # So the epoch of slot 0 is in Phase 0.
+    # No bootstrap is valid there, while the empty response is.
+    protocol = _id("light_client_bootstrap")
+    assert consensus.reqresp_is_valid_response("altair", protocol, C, [], name="minimal")
+    for chunk_fork in ("phase0", "altair"):
+        items = [(0, C, chunk_fork)]
+        result = consensus.reqresp_is_valid_response("altair", protocol, C, items, name="minimal")
+        assert not result
+
+
+def test_light_client_bootstrap_unknown_fork() -> None:
+    protocol = _id("light_client_bootstrap")
+    with raises(ConsensusError, "no fork named nofork") as info:
+        consensus.reqresp_is_valid_response("pectra", protocol, C, [(0, C, "nofork")])
     assert info.value.code == 0
 
 
@@ -576,7 +650,7 @@ def test_committee_read_only_for_inclusion_lists() -> None:
         ("pectra", _id("ping")),
         ("pectra", _id("metadata", 2)),
         ("pectra", _id("goodbye")),
-        ("pectra", _id("light_client_bootstrap")),
+        ("pectra", _id("light_client_optimistic_update")),
         ("pectra", _id("light_client_finality_update")),
     ],
 )

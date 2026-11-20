@@ -128,14 +128,29 @@ def test_updates_answer_starts_at_the_earliest_known_period() -> None:
 
     # A range that starts before the first known period starts with its update.
     assert payloads(period, 6) == [data]
-    # A period with no update inside the range is skipped.
-    assert payloads(period, 10) == [data, other]
+    # A period with no update inside the range ends the answer, so the periods have no gap.
+    assert payloads(period, 10) == [data]
+    # A range that starts in that gap starts with the next known update.
+    assert payloads(period + 6, 10) == [other]
     # A count of one gives only the first known update of the range, if the range holds one.
     assert payloads(period + 3, 1) == []
     assert payloads(period + 5, 1) == [data]
     # A range past every known period is empty, and so is a count of zero.
     assert payloads(period + 8, 10) == []
     assert payloads(period + 5, 0) == []
+
+
+def test_updates_answer_holds_the_updates_of_consecutive_periods() -> None:
+    served = Served(ALTAIR_CASE)
+    period, _, fork, data = served.updates[0]
+    other = served.updates[1][3]
+    # The node knows the updates of periods one, two and four after the first one.
+    known = [(period + 1, fork, data), (period + 2, fork, other), (period + 4, fork, data)]
+    body = consensus.api_light_client_updates_ssz(
+        "minimal", served.root, known, period, 10, served.config
+    )
+    # The answer holds the updates of periods one and two, and stops before the gap at three.
+    assert [payload for _, payload in _chunks(body)] == [data, other]
 
 
 def test_updates_answer_holds_at_most_128_updates() -> None:

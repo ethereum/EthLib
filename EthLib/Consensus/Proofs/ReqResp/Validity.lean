@@ -17,8 +17,11 @@ What the validity of a response says about its blocks or sidecars.
 - Its first block has the requested root, and each block is the parent of the one before it.
 - Its slots decrease along the whole list.
 - A valid response to a request for light client updates by range has at most 128 updates.
-- Their periods lie in the requested periods, and increase along the whole list.
+- Their periods lie in the requested periods, and each is the period after the one before it.
+- So the period of each update is that of the first update plus its index.
 - The fork of each update is the fork of the epoch of its attested header, from Altair.
+- A valid response to a request for a light client bootstrap has at most one bootstrap.
+- Its root is the requested root, and its fork is the fork of the epoch of its header, from Altair.
 - A valid response to a request for sidecars by range lies in the requested slots.
 - Along the whole list, its sidecars increase in slot, then in index within one block.
 - Two of its sidecars at the same slot name the same block.
@@ -186,12 +189,28 @@ theorem isValidLightClientUpdatesByRangeResponse_iff (preset : Preset) (config :
         Base.Fork.altair ≤ update.fork ∧
         update.fork = config.forkAtEpoch (computeEpochAtSlot preset update.attestedSlot)) ∧
       (∀ i (h : i + 1 < updates.length),
-        computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot <
-          computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot) := by
+        (computeSyncCommitteePeriodAtSlot preset updates[i + 1].attestedSlot).toNat =
+          (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat + 1) := by
   have limit : MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat = 128 := rfl
   simp only [isValidLightClientUpdatesByRangeResponse, ResponseUpdate.forkMatches,
-    Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff, beq_iff_eq]
+    lightClientForkMatches, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, allAdjacent_iff,
+    beq_iff_eq]
   simp only [ResponseUpdate.period, UInt64.le_iff_toNat_le, limit, and_assoc]
+
+/-- In a valid response for light client updates by range, periods have no gap.
+
+The period of each update is the period of the first update plus the index of the update. -/
+theorem period_eq_of_isValidLightClientUpdatesByRangeResponse {preset : Preset}
+    {config : Config} {request : LightClientUpdatesByRangeRequest} {updates : List ResponseUpdate}
+    (valid : isValidLightClientUpdatesByRangeResponse preset config request updates = true)
+    (i : Nat) (h : i < updates.length) :
+    (computeSyncCommitteePeriodAtSlot preset updates[i].attestedSlot).toNat =
+      (computeSyncCommitteePeriodAtSlot preset (updates[0]'(by omega)).attestedSlot).toNat + i := by
+  obtain ⟨-, -, -, next⟩ :=
+    (isValidLightClientUpdatesByRangeResponse_iff preset config request updates).mp valid
+  induction i with
+  | zero => rfl
+  | succ i ih => rw [next i h, ih (by omega)]; omega
 
 /-- In a valid response for light client updates by range, periods increase along the whole list.
 
@@ -205,7 +224,21 @@ theorem pairwise_of_isValidLightClientUpdatesByRangeResponse {preset : Preset} {
   exact pairwise_of_allAdjacent (s := fun (a b : ResponseUpdate) =>
       computeSyncCommitteePeriodAtSlot preset a.attestedSlot <
         computeSyncCommitteePeriodAtSlot preset b.attestedSlot)
-    (fun _ _ h => of_decide_eq_true h) (fun _ _ _ => UInt64.lt_trans) valid.2
+    (fun _ _ h => UInt64.lt_iff_toNat_lt.mpr (by
+      have := beq_iff_eq.mp h
+      simp only [ResponseUpdate.period] at this
+      omega))
+    (fun _ _ _ => UInt64.lt_trans) valid.2
+
+/-- The rules that a valid response for a light client bootstrap meets, and no others. -/
+theorem isValidLightClientBootstrapResponse_iff (preset : Preset) (config : Config)
+    (request : Root) (bootstraps : List ResponseBootstrap) :
+    isValidLightClientBootstrapResponse preset config request bootstraps = true ↔
+      bootstraps.length ≤ 1 ∧
+      ∀ bootstrap ∈ bootstraps, bootstrap.root = request ∧ Base.Fork.altair ≤ bootstrap.fork ∧
+        bootstrap.fork = config.forkAtEpoch (computeEpochAtSlot preset bootstrap.slot) := by
+  simp only [isValidLightClientBootstrapResponse, lightClientForkMatches, Bool.and_eq_true,
+    decide_eq_true_eq, List.all_eq_true, beq_iff_eq]
 
 /-- A blob sidecar may follow another when it is the next blob of its block or opens a later one.
 

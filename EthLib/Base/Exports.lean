@@ -6,7 +6,7 @@ public import EthLib.Base.Fork
 /-!
 # `EthLib.Base.Exports`
 
-The result type that every fallible C export returns.
+The result type that every fallible C export returns, and the readers that several exports share.
 
 The C layer of the bindings reads this type, so its layout is part of the binary interface.
 

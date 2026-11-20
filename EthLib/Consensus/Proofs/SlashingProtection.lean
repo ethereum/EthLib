@@ -6,6 +6,7 @@ public import EthLib.Consensus.Proofs.Transition.Block
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 public import Std.Data.TreeMap.Lemmas
+import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: slashing protection
@@ -303,6 +304,33 @@ theorem blocksOf_recordBlock (interchange : Interchange) (pubkey : BLSPubkey) (s
       interchange.blocksOf pubkey ++ [⟨slot, some signingRoot⟩] := by
   simp [Interchange.blocksOf, Interchange.recordBlock, List.filter_append]
 
+/-- Recording a block of a key leaves the blocks of every other key as they were. -/
+theorem blocksOf_recordBlock_of_ne {record : Interchange} {pubkey other : BLSPubkey}
+    {slot : Slot} {root : Root} (differ : other ≠ pubkey) :
+    (record.recordBlock pubkey slot root).blocksOf other = record.blocksOf other := by
+  simp [Interchange.blocksOf, Interchange.recordBlock, List.filter_append, Ne.symm differ]
+
+/-- Recording a vote of a key leaves the votes of every other key as they were. -/
+theorem attestationsOf_recordAttestation_of_ne {record : Interchange} {pubkey other : BLSPubkey}
+    {source target : Epoch} {root : Root} (differ : other ≠ pubkey) :
+    (record.recordAttestation pubkey source target root).attestationsOf other =
+      record.attestationsOf other := by
+  simp [Interchange.attestationsOf, Interchange.recordAttestation, List.filter_append,
+    Ne.symm differ]
+
+/-- Recording a block leaves the votes of every key as they were. -/
+theorem attestationsOf_recordBlock {record : Interchange} {pubkey other : BLSPubkey}
+    {slot : Slot} {root : Root} :
+    (record.recordBlock pubkey slot root).attestationsOf other = record.attestationsOf other := by
+  simp [Interchange.attestationsOf, Interchange.recordBlock, List.filter_append]
+
+/-- Recording a vote leaves the blocks of every key as they were. -/
+theorem blocksOf_recordAttestation {record : Interchange} {pubkey other : BLSPubkey}
+    {source target : Epoch} {root : Root} :
+    (record.recordAttestation pubkey source target root).blocksOf other =
+      record.blocksOf other := by
+  simp [Interchange.blocksOf, Interchange.recordAttestation, List.filter_append]
+
 /-- A vote is a vote of a key exactly when an entry of that key holds it. -/
 theorem mem_attestationsOf {interchange : Interchange} {pubkey : BLSPubkey}
     {attestation : SignedAttestationRecord} :
@@ -317,6 +345,30 @@ theorem mem_blocksOf {interchange : Interchange} {pubkey : BLSPubkey}
     block ∈ interchange.blocksOf pubkey ↔
       ∃ entry ∈ interchange.data, entry.pubkey = pubkey ∧ block ∈ entry.signedBlocks := by
   simp [Interchange.blocksOf, and_assoc]
+
+/-- The entries that name the keys of a list hold all the blocks of each of those keys. -/
+theorem blocksOf_entriesOf {interchange : Interchange} {keys : List BLSPubkey}
+    {pubkey : BLSPubkey} (kept : pubkey ∈ keys) :
+    (interchange.entriesOf keys).blocksOf pubkey = interchange.blocksOf pubkey := by
+  simp only [Interchange.blocksOf, Interchange.entriesOf, List.filter_filter]
+  congr 1
+  apply List.filter_congr
+  intro entry _
+  by_cases same : entry.pubkey = pubkey
+  · simp [same, kept]
+  · simp [same]
+
+/-- The entries that name the keys of a list hold all the votes of each of those keys. -/
+theorem attestationsOf_entriesOf {interchange : Interchange} {keys : List BLSPubkey}
+    {pubkey : BLSPubkey} (kept : pubkey ∈ keys) :
+    (interchange.entriesOf keys).attestationsOf pubkey = interchange.attestationsOf pubkey := by
+  simp only [Interchange.attestationsOf, Interchange.entriesOf, List.filter_filter]
+  congr 1
+  apply List.filter_congr
+  intro entry _
+  by_cases same : entry.pubkey = pubkey
+  · simp [same, kept]
+  · simp [same]
 
 /-! ## A signer's history -/
 
@@ -382,17 +434,18 @@ theorem checked_of_signBlocks {signingRootOf : BeaconBlockHeader → Root} {pubk
       rw [blocksOf_recordBlock]
       exact List.mem_append_left _ kept
 
-/-- Two votes slashable either way round have one signing root, if the record check passed.
+/-- Two votes slashable either way round have one root, if the record check passed.
 
-The check compares the record of the earlier vote with the later vote. -/
-theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationData → Root}
-    {earlier later : AttestationData}
-    (passed : (⟨earlier.source.epoch, earlier.target.epoch, some (signingRootOf earlier)⟩ :
+The check compares the record of the earlier vote, with its root, with the later vote and its root.
+-/
+theorem root_eq_of_isSlashableWith_eq_false {earlier later : AttestationData}
+    {earlierRoot laterRoot : Root}
+    (passed : (⟨earlier.source.epoch, earlier.target.epoch, some earlierRoot⟩ :
       SignedAttestationRecord).isSlashableWith later.source.epoch later.target.epoch
-        (signingRootOf later) = false)
+        laterRoot = false)
     (slashable : isSlashableAttestationData earlier later = true ∨
       isSlashableAttestationData later earlier = true) :
-    signingRootOf earlier = signingRootOf later := by
+    earlierRoot = laterRoot := by
   apply Classical.byContradiction
   intro distinct
   simp only [SignedAttestationRecord.isSlashableWith, Bool.or_eq_false_iff] at passed
@@ -404,6 +457,19 @@ theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationD
   · simp [below, above] at inside
   · simp [same, distinct] at double
   · simp [below, above] at around
+
+/-- Two votes slashable either way round have one signing root, if the record check passed.
+
+The check compares the record of the earlier vote with the later vote. -/
+theorem signingRoot_eq_of_isSlashableWith_eq_false {signingRootOf : AttestationData → Root}
+    {earlier later : AttestationData}
+    (passed : (⟨earlier.source.epoch, earlier.target.epoch, some (signingRootOf earlier)⟩ :
+      SignedAttestationRecord).isSlashableWith later.source.epoch later.target.epoch
+        (signingRootOf later) = false)
+    (slashable : isSlashableAttestationData earlier later = true ∨
+      isSlashableAttestationData later earlier = true) :
+    signingRootOf earlier = signingRootOf later :=
+  root_eq_of_isSlashableWith_eq_false passed slashable
 
 /-! ## A file that drops older messages -/
 
@@ -855,6 +921,20 @@ theorem checkAttestationSigning_of_foldl_importFile {files : List Interchange}
         (fun old kept => above old (List.mem_append_right _ kept))
         (fun old kept => after old (List.mem_append_right _ kept))
     · exact all file (List.mem_cons_of_mem _ member)
+
+/-- After one import, the record accepts a block only if the record before it accepts it. -/
+theorem checkBlock_of_importFile {held file : Interchange} {pubkey : BLSPubkey} {slot : Slot}
+    {root : Root} (passed : (held.importFile file).checkBlock pubkey slot root = .ok ()) :
+    held.checkBlock pubkey slot root = .ok () :=
+  checkBlockSigning_of_foldl_importFile (files := [file]) passed held (List.mem_cons_self ..)
+
+/-- After one import, the record accepts a vote only if the record before it accepts it. -/
+theorem checkAttestation_of_importFile {held file : Interchange} {pubkey : BLSPubkey}
+    {source target : Epoch} {root : Root}
+    (passed : (held.importFile file).checkAttestation pubkey source target root = .ok ()) :
+    held.checkAttestation pubkey source target root = .ok () :=
+  checkAttestationSigning_of_foldl_importFile (files := [file]) passed held
+    (List.mem_cons_self ..)
 
 /-! ## Imports between signed blocks -/
 

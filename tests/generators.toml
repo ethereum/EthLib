@@ -178,8 +178,8 @@ source = "tests/cryptography/keystore/unicode/NormalizationTest.txt:1-3"
 
 [generators."leanVM leanSPHINCS"]
 computes = "the Rust leanSPHINCS of leanVM, with Keccak-256 from RustCrypto sha3, whose test pins known_answer.hex"
-version = "leanVM 5e3ade21, sha3 0.11.0"
-source = "https://github.com/leanEthereum/leanVM/blob/5e3ade21d339a45e1b3b0dba97ad9300ab50e49b/crates/signatures/src/lean_sphincs/known_answer.hex"
+version = "leanVM fa4b4393, sha3 0.11.0"
+source = "https://github.com/leanEthereum/leanVM/blob/fa4b43935667234e8e29c6cc19ffcfb3ab5164d5/crates/lean_sphincs/tests/lean_sphincs/known_answer.hex"
 
 [generators."Lighthouse test generator, PR 4958"]
 computes = "test_generator.rs of Lighthouse, whose verdicts are written in the program and run against Lighthouse's slashing protection"
@@ -340,18 +340,20 @@ cases = ["**"]
 generator = "not established"
 checked = "relay-specs at a4e0a50d holds no generator code, and its README names no tool that writes the examples"
 
+[[directories."tests/consensus/keymanager_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "keymanager-APIs at 51f2a5c9 holds no program that writes the OpenAPI document or the types files, and the README names none"
+
+[[directories."tests/consensus/remote_signing_api"]]
+cases = ["**"]
+generator = "not established"
+checked = "remote-signing-api at 44e9e0dc holds no generator code, its workflows only lint, bundle and release the OpenAPI document, and its README names no tool that writes the examples"
+
 [[directories."tests/consensus/beacon_api"]]
 cases = ["**"]
 generator = "not established"
 checked = "beacon-APIs at 7911555e holds no program that writes the OpenAPI document or the types files, and the README names none"
-
-[[directories."tests/consensus/pq_keys"]]
-cases = ["ssz/**", "possession/*/data.yaml"]
-generator = "EthLib script on eth-ssz-specs 0.1.0"
-
-[[directories."tests/consensus/pq_keys"]]
-cases = ["possession/*/proof.yaml"]
-generator = "ethlib"
 
 [[directories."tests/cryptography/bls"]]
 cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**"]
@@ -541,6 +543,11 @@ generator = "EELS 2.19.0"
 [[directories."tests/execution/transactions"]]
 cases = ["**"]
 generator = "execution-specs filler, no transition tool"
+
+[[directories."bindings/python/tests/eth/portal_block_data"]]
+cases = ["block-data-19426587.yaml"]
+generator = "not established"
+checked = "the file holds the header, body and receipts of mainnet block 19426587, and portal-spec-tests 45e46aa names no exporting tool"
 
 [[directories."tests/execution/genesis"]]
 cases = ["**"]

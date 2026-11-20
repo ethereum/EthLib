@@ -10,8 +10,10 @@ from ethlib.errors import (
     ConsensusError,
     DepositTreeError,
     ForkChoiceError,
+    KeymanagerError,
     LightClientError,
     ProposerError,
+    RemoteSigningError,
     SlashingProtectionError,
     TransitionError,
     ValidatorDutyError,
@@ -237,6 +239,27 @@ def relay_validators(
     return _native.consensus_relay_validators(name, fork, state, registry)
 
 
+def keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a Keymanager API schema, checked and written back as canonical JSON."""
+    return _native.consensus_keymanager_json(schema, document)
+
+
+def keymanager_run(
+    memory: int,
+    work: int,
+    fee_recipient: bytes,
+    gas_limit: int,
+    graffiti: str,
+    protection: str,
+    chain: tuple[str, str, str, bytes] | None,
+    calls: list[tuple[str, str, Any]],
+) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
+    return _native.consensus_keymanager_run(
+        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls
+    )
+
+
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
     """A delivered payload of the relay data API, checked and written back as canonical JSON."""
     return _native.consensus_relay_delivered_payload(document)
@@ -303,33 +326,6 @@ def upgrade_operation(name: str, type_name: str, data: bytes) -> tuple[bytes, by
     return _native.consensus_upgrade_operation(name, type_name, data)
 
 
-def pq_keys_ssz(type_name: str, data: bytes) -> tuple[bytes, bytes]:
-    """The root of the EIP-8450 container that SSZ bytes encode, and its bytes encoded again."""
-    return _native.pq_keys_ssz(type_name, data)
-
-
-def pq_keys_possession_signing_root(
-    genesis_validators_root: bytes, pubkey: bytes, xmss_public_key: bytes, name: str = "mainnet"
-) -> bytes:
-    """The root that an EIP-8450 proof of possession signs."""
-    return _native.pq_keys_possession_signing_root(
-        name, genesis_validators_root, pubkey, xmss_public_key
-    )
-
-
-def pq_keys_is_valid_possession_proof(
-    genesis_validators_root: bytes,
-    pubkey: bytes,
-    xmss_public_key: bytes,
-    proof: bytes,
-    name: str = "mainnet",
-) -> bool:
-    """Whether an EIP-8450 proof of possession is valid."""
-    return _native.pq_keys_is_valid_possession_proof(
-        name, genesis_validators_root, pubkey, xmss_public_key, proof
-    )
-
-
 def compute_shuffled_permutation(count: int, seed: bytes, name: str = "mainnet") -> list[int]:
     """The shuffled position of every index below the count."""
     return _native.consensus_compute_shuffled_permutation(name, count, seed)
@@ -388,12 +384,15 @@ ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
 # A light client update: the slot of its attested header and the fork of its chunk.
 ResponseLightClientUpdate: TypeAlias = tuple[int, str]
+# A light client bootstrap: the slot and root of its beacon header and the fork of its chunk.
+ResponseLightClientBootstrap: TypeAlias = tuple[int, bytes, str]
 ResponseItems: TypeAlias = (
     Sequence[ResponseBlock]
     | Sequence[ResponseSidecar]
     | Sequence[ResponseEnvelope]
     | Sequence[ResponseInclusionList]
     | Sequence[ResponseLightClientUpdate]
+    | Sequence[ResponseLightClientBootstrap]
 )
 
 
@@ -1953,6 +1952,35 @@ def import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     return _native.consensus_import_slashing_interchange(held, file)
 
 
+def read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    return _native.consensus_read_signing_request(name, document)
+
+
+def signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    return _native.consensus_signing_request_root(name, config, document)
+
+
+def remote_signer_sign(
+    name: str,
+    config: str,
+    keys: list[bytes],
+    protection: bytes,
+    identifier: str,
+    document: Any,
+) -> tuple[int, bytes | None, bytes]:
+    """The status, signature and slashing protection record of a remote signer's sign endpoint."""
+    return _native.consensus_remote_signer_sign(
+        name, config, keys, protection, identifier, document
+    )
+
+
+def remote_signer_public_keys(keys: list[bytes]) -> Any:
+    """The public keys of a remote signer that holds secret keys, as its endpoint lists them."""
+    return _native.consensus_remote_signer_public_keys(keys)
+
+
 def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
     """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
     _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
@@ -2317,9 +2345,6 @@ __all__ = [
     "consensus_version",
     "consensus_version_fork",
     "upgrade_operation",
-    "pq_keys_ssz",
-    "pq_keys_possession_signing_root",
-    "pq_keys_is_valid_possession_proof",
     "compute_shuffled_permutation",
     "compute_shuffled_index",
     "reqresp_protocol_ids",
@@ -2335,6 +2360,7 @@ __all__ = [
     "ResponseEnvelope",
     "ResponseInclusionList",
     "ResponseLightClientUpdate",
+    "ResponseLightClientBootstrap",
     "ResponseItems",
     "reqresp_is_valid_response",
     "compute_subnet_for_attestation",
@@ -2364,6 +2390,14 @@ __all__ = [
     "check_attestation_signing",
     "record_block_signing",
     "record_attestation_signing",
+    "KeymanagerError",
+    "keymanager_json",
+    "keymanager_run",
+    "RemoteSigningError",
+    "read_signing_request",
+    "signing_request_root",
+    "remote_signer_sign",
+    "remote_signer_public_keys",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
