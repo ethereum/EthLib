@@ -16,6 +16,10 @@ Key generation, signing, verification and reading a signature's leaf index cross
 
 So do the sizes and the two parameters of a codeword, as constants.
 
+Key generation also returns the secret key, which holds the built top tree, as an opaque object.
+
+The C side keeps it per seed, and signs with it.
+
 The scheme is a black box to callers: no hash, chain or tree is exported.
 -/
 
@@ -98,25 +102,33 @@ def constTargetSum (_ : Unit) : UInt64 :=
 
 /-- The public key grown from a seed.
 
-It builds the whole top tree, `2^16` one-time keys. -/
-@[export eth_xmss_key_gen]
-def keyGenExport (seed : ByteArray) : Result ByteArray :=
-  runXmss do
-    let seed ← Base.exactBytes SEED_LEN seed .badSeedSize
-    -- The secret half is dropped: the seed regrows it.
-    let (_, pk) := keyGen seed
-    return encodePublicKey pk
+It builds the whole top tree, `2^16` one-time keys.
 
-/-- Sign a message at a leaf index with the key grown from a seed. -/
-@[export eth_xmss_sign]
-def signExport (seed : ByteArray) (leafIndex : LeafIndex) (msg : ByteArray) :
-    Result ByteArray :=
+It returns the secret key too, which holds that tree, as an opaque object.
+
+The C side keeps it per seed, so a first signature does not build the top tree again. -/
+@[export eth_xmss_key_gen]
+def keyGenExport (seed : ByteArray) : Result (ByteArray × SecretKey) :=
   runXmss do
     let seed ← Base.exactBytes SEED_LEN seed .badSeedSize
-    let msg ← Base.exactBytes MESSAGE_LEN msg .badMessageSize
-    -- Signing needs no public key, so the top tree's root is never computed here.
-    let sig ← sign ⟨seed⟩ leafIndex msg
-    return encodeSignature sig
+    let (pk, sk) := keyGen seed
+    return (encodePublicKey pk, sk)
+
+/-- The updated key and the signature of a message at a leaf index, signed with a secret key.
+
+The C side keeps the key of each seed, and passes it back here to sign.
+
+It keeps the updated key even when signing fails, so a tree built stays.
+
+A message of the wrong length leaves the key as it is. -/
+@[export eth_xmss_sign]
+def signExport (sk : SecretKey) (leafIndex : LeafIndex) (msg : ByteArray) :
+    SecretKey × Result ByteArray :=
+  match Base.exactBytes MESSAGE_LEN msg .badMessageSize with
+  | .error err => (sk, runXmss (.error err))
+  | .ok msg =>
+    let (sig, sk) := sign sk leafIndex msg
+    (sk, runXmss (encodeSignature <$> sig))
 
 /-- Whether a signature signs a message under a public key, as 1 or 0.
 

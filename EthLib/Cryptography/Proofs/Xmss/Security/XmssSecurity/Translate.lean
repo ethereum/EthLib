@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Address
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Codeword
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Scheme
 public import EthLib.Cryptography.Proofs.Merkle.Completeness
+public import EthLib.Cryptography.Proofs.Xmss.Reference
 
 /-!
 # Proofs: EthLib's hashing is the model's

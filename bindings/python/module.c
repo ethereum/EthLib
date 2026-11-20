@@ -1526,6 +1526,7 @@ PyInit__native(void) {
     SALSA_BLOCK_SIZE = (size_t) eth_scrypt_const_salsa_block_size(lean_box(0));
     SCRYPT_BLOCK_SIZE = (size_t) eth_scrypt_const_block_size(lean_box(0));
 
+    if (xmss_key_cache_init() < 0) return NULL;
 
     initialized = 1;
   }
@@ -1536,6 +1537,9 @@ PyInit__native(void) {
   /* The module runs without the GIL on a free-threaded build.
    *
    * Each call builds its own Lean objects, and no two threads share one.
+   * The one exception is the cache of leanXMSS secret keys, which signing reuses across calls.
+   * Each key is marked multi-threaded before it is stored, so its reference count is atomic.
+   * A lock guards the slots of the cache, and no Lean code runs under it.
    * The objects that the Lean modules build when they load are persistent, so no count of theirs
    * changes after the load.
    * The decoded KZG setup is a closed term evaluated on its first use.

@@ -56,7 +56,7 @@ So the code makes its calls as the note defines them, one by one and in a fixed 
 
 - a vector of hashes is computed entry 0 first (`ofFnInOrder`);
 - a node computes its left subtree, then its right subtree, then its own hash;
-- `sign` builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it.
+- signing builds the root `X^0_{16,b}` of bottom tree `b` from the whole tree, as the note defines it.
 
 Every secret derives from the scheme seed `S = H("leanXMSS" | S_0)`, and so does the public parameter, which the public key publishes.
 These derivations are the public parameter, the chain starts and the randomizer bases.
@@ -74,11 +74,17 @@ The definitions take the derivations as one function argument of type `SeedPrf`,
 | `verify` | `Verify.lean` | `eth_xmss_verify` | `xmss.verify` |
 | `signatureIndex` | `Serialization.lean` | `eth_xmss_signature_index` | `xmss.signature_index` |
 
-The secret key is the 32-byte seed, and everything else derives from it.
-So the exports of `keyGen` and `sign` take the seed and rebuild what they need on each call.
-`keyGen` builds the top tree, which means `2^16` one-time keys.
-`sign` builds the bottom tree once, which gives both the bottom key's path and the root.
-It then computes the top key's path, so a signature costs about one tree on each layer.
+The note's secret key is the 32-byte seed, and everything else derives from it.
+Here the secret key also keeps what signing reads: the scheme seed, the public parameter, the top tree, and the bottom trees it signed in last.
+`keyGen` builds the top tree to compute the public key, `2^16` one-time keys, so the key keeps that tree at no extra cost.
+`sign` returns the signature and an updated key.
+A signature at leaf index `idx` needs bottom tree `b = floor(idx / 2^16)` and the signature of its root by top key `b`.
+That top signature is the same for all `2^16` indices of the tree.
+So the key keeps up to 8 bottom trees, each with that top signature, and drops the one it used longest ago.
+A signature in a kept tree costs one one-time signature; otherwise it costs one bottom tree and the top key's search.
+Signing never rebuilds the top tree.
+
+The C extension keeps the secret key of the last 2 seeds it saw, so `xmss.key_gen(seed)` and `xmss.sign(seed, ...)` keep their signatures and take only the seed.
 
 Never sign two different messages at one leaf index with one key.
 A one-time key that signs two different messages can reveal enough chain values for a forgery, and nothing in EthLib records which leaf indices a key has signed, so the caller must prevent reuse.
@@ -101,9 +107,16 @@ The other cases are EthLib's own, and nothing outside EthLib checks them yet.
 
 The proofs are in `EthLib/Cryptography/Proofs/Xmss/`.
 
+**The kept trees change no signature.**
+The note's signer is stateless: it rebuilds every tree from the seed.
+The proofs write it out as a reference (`statelessSignWith`, `Proofs/Xmss/Reference.lean`), which nothing exports or runs.
+A key that `keyGen`, then any sequence of `sign` calls, gives is called reachable.
+A reachable key signs exactly as the stateless signer, byte for byte, at every leaf index (`SecretKey.Reachable.sign_fst`, `Sign.lean`).
+Key generation gives the public key of the stateless scheme (`keyGenWith_fst`).
+
 **Correctness.**
 The first thing a signature scheme must do is accept honest signatures.
-A key from `keyGen` verifies every signature that `sign` makes with it (`verify_keyGen_sign`, `Correctness.lean`).
+The public key of a seed verifies every signature that a reachable key of that seed makes (`verify_keyGen_sign`, `Correctness.lean`).
 Because the hash is an argument, the same holds for every hash function, not only Keccak-256 (`verifyWith_keyGenWith_signWith`).
 
 **What verification checks.**
@@ -112,7 +125,7 @@ This turns the code of `verify` into a statement a reader can check against the 
 
 **Signing.**
 To sign, WOTS+C tries randomizers one after another until the digest of the message is a codeword, a step called grinding.
-Grinding returns the least trial whose digest is a codeword (`findFirst_spec`), and signing fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
+Grinding returns the least trial whose digest is a codeword (`findFirst_spec`), and signing with a reachable key fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
 leanSPHINCS shares that search and the hash chains, in [`Wots.lean`](../Wots.lean).
 
 **The code.**
@@ -133,6 +146,7 @@ That length is 48 bytes on the bottom layer and 32 on the top.
 Before a key's search, the signer hashes no such input.
 Its other calls carry other addresses, and the input that grows the scheme seed has 40 bytes, too short to be a trial input.
 The theorem assumes that the cache holds no trial input of the two keys when signing starts, as an empty cache does (`prEvent_signWith_error_le_empty`).
+It also assumes that a bottom tree of the index that the key keeps holds a top signature, not an error, as a key from `keyGen` does, since it keeps none.
 Then the cache still holds none when each search starts, so each search fails with probability at most `exp(-4000)`.
 
 **Domain separation.**
@@ -152,10 +166,11 @@ The leaf index read alone is the first 4 bytes, as a little-endian integer (`sig
 A signature from `sign` reads back the index it was signed at (`signatureIndex_sign`, `Sign.lean`).
 
 **Unforgeability.**
-In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
-`q` counts every hash call of the experiment, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^33` per signing request (`SOUNDNESS.md`).
+In the random oracle model, an adversary forges with probability at most `q / 2^127` (`unforgeable`, `Unforgeability.lean`).
+The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle, and its signer keeps its key across requests.
+`q` bounds the hash calls of the same game with the stateless signer, key generation and signing included, so it is never below about `2^23.7`, plus more than `2^33` per signing request (`SOUNDNESS.md`).
 With all `2^32` leaf indices signed, `q` exceeds `2^65`, so over the key's lifetime the bound is above `2^-62`.
-The game is the note's section "Security", run on `keyGenWith`, `signWith` and `verifyWith` with `H` a query to the oracle.
+The two games give the adversary the same answers, so it wins each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
 The proof, adapted from leanerVM's, reasons over these same definitions (`Proofs/Xmss/Security/`).
 
 ## What is not proved

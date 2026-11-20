@@ -450,6 +450,18 @@ Not yet released.
   `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
   That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
 
+- In Lean, an XMSS secret key holds the trees it signs with, and signing returns the updated key ([#3404](https://github.com/ethereum/EthLib/pull/3404)).
+  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 8` bottom trees, each with the top signature of its root.
+  `Xmss.keyGen seed` returns the public key first, then the secret key, and the secret key keeps the top tree that key generation builds.
+  `Xmss.sign sk idx m` returns the signature with the updated key; in a kept bottom tree it makes one one-time signature and never rebuilds a tree.
+  The stateless signer of the note moves to the proofs as `Xmss.statelessSignWith`, with `signDerived`, `signLayer` and `publicKeyOf`; nothing exports it.
+  `Xmss.SecretKey.Reachable.sign_fst` proves that every key that key generation and any sequence of signatures reach signs as the stateless signer, byte for byte.
+  Correctness, the failure bound, the cost bounds and the unforgeability theorems are restated over the new signer, and the pull request lists every changed statement.
+  The unforgeability game's signer keeps its key across requests, and its budget counts the calls of the same game with the stateless signer.
+  The Python API is unchanged: `xmss.key_gen`, `xmss.sign`, `xmss.verify` and `xmss.signature_index` take and return the same values.
+  The extension keeps the secret keys of the last 2 seeds, so a signature in a kept bottom tree no longer rebuilds two trees.
+  The export `eth_xmss_key_gen` also returns the secret key, and `eth_xmss_sign` takes the secret key and returns the updated key with the result.
+
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
   It no longer asks that the envelope leaves the store unchanged.

@@ -58,36 +58,36 @@ structure ReasonAdversary where
 /-- `Sig(sk, idx, m)` on each request.
 
 The log records whether it succeeded, as the winning rule needs. -/
-def reasonSigningOracle (sk : SecretKey) :
+def statelessReasonSigningOracle (sk : Seed) :
     QueryImpl ReasonSigningSpec (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) :=
   fun request => WriterT.mk ((fun result => (result, [⟨request, result.toOption⟩])) <$>
-    liftM (signWith H sk request.leafIndex request.message))
+    liftM (statelessSignWith H sk request.leafIndex request.message))
 
 /-- The game up to its result: keys, the adversary with its log, then the verification. -/
-noncomputable def reasonRun (adversary : ReasonAdversary) :
+noncomputable def statelessReasonRun (adversary : ReasonAdversary) :
     OracleComp OracleWorld (Forgery × QueryLog SigningSpec × Bool) := do
   let seed ← liftM sampleSeed
-  let (sk, pk) ← liftM (keyGenWith H seed)
+  let (sk, pk) ← liftM (statelessKeyGenWith H seed)
   let ((forgery, log) : Forgery × QueryLog SigningSpec) ←
     (simulateQ (QueryImpl.ofLift OracleWorld
-      (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + reasonSigningOracle sk)
+      (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) + statelessReasonSigningOracle sk)
       (adversary.main pk)).run
   let verified ← liftM (verifyWith H pk forgery.message forgery.signature)
   return (forgery, log, verified)
 
 /-- The game against the counted random oracle of the theorem, from an empty cache. -/
-noncomputable def reasonExperiment (adversary : ReasonAdversary) :
+noncomputable def statelessReasonExperiment (adversary : ReasonAdversary) :
     ProbComp ((Forgery × QueryLog SigningSpec × Bool) × Nat) :=
-  (simulateQ countedOracle (reasonRun adversary)).run.run' ∅
+  (simulateQ countedOracle (statelessReasonRun adversary)).run.run' ∅
 
 /-- The probability that the adversary forges, under the winning rule of the theorem. -/
-noncomputable def reasonForgeAdvantage (adversary : ReasonAdversary) : ℝ≥0∞ :=
-  Pr{let result ← reasonExperiment adversary}[
+noncomputable def statelessReasonForgeAdvantage (adversary : ReasonAdversary) : ℝ≥0∞ :=
+  Pr{let result ← statelessReasonExperiment adversary}[
     (Valid result.1.2.1 ∧ ¬Contains result.1.2.1 result.1.1) ∧ result.1.2.2 = true]
 
 /-- The probability that some signing request of the game fails. -/
-noncomputable def signingFailure (adversary : ReasonAdversary) : ℝ≥0∞ :=
-  Pr{let result ← reasonExperiment adversary}[∃ entry ∈ result.1.2.1, entry.2 = none]
+noncomputable def statelessSigningFailure (adversary : ReasonAdversary) : ℝ≥0∞ :=
+  Pr{let result ← statelessReasonExperiment adversary}[∃ entry ∈ result.1.2.1, entry.2 = none]
 
 /-! ## The reduction -/
 
@@ -212,10 +212,11 @@ theorem simulateQ_hideReasonsImpl_toLeft {β : Type} (c : OracleComp OracleWorld
   congr 1
 
 /-- Hash and coin queries pass through, and a signing request runs the signer. -/
-def signerImpl (sk : SecretKey) :
+def signerImpl (sk : Seed) :
     QueryImpl (OracleWorld + ReasonSigningSpec) (OracleComp OracleWorld) :=
   QueryImpl.ofLift OracleWorld (OracleComp OracleWorld) +
-    fun (request : SignRequest) => (liftM (signWith H sk request.leafIndex request.message) :
+    fun (request : SignRequest) =>
+      (liftM (statelessSignWith H sk request.leafIndex request.message) :
       OracleComp OracleWorld (Except XmssError Signature))
 
 /-- A signing request logs whether it succeeded; other queries log nothing. -/
@@ -231,9 +232,9 @@ def hiddenReply : (t : (OracleWorld + ReasonSigningSpec).Domain) →
   | .inr request, result => withHiddenReason request result.toOption
 
 /-- The variant game's oracles: the signer's reply as it is. -/
-theorem reasonOracles_eq (sk : SecretKey) :
+theorem statelessReasonOracles_eq (sk : Seed) :
     QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
-        reasonSigningOracle sk
+        statelessReasonSigningOracle sk
       = logReply (signerImpl sk) signerEntry fun _ answer => answer := by
   funext t
   rcases t with t | request
@@ -241,9 +242,9 @@ theorem reasonOracles_eq (sk : SecretKey) :
   · rfl
 
 /-- The theorem's oracles, behind the reduction: a failure reads as the bottom layer's. -/
-theorem hiddenOracles_eq (sk : SecretKey) :
+theorem hiddenOracles_eq (sk : Seed) :
     (QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
-        signingOracle sk) ∘ₛ hideReasonsImpl
+        statelessSigningOracle sk) ∘ₛ hideReasonsImpl
       = logReply (signerImpl sk) signerEntry hiddenReply := by
   funext t
   rcases t with t | request
@@ -253,7 +254,7 @@ theorem hiddenOracles_eq (sk : SecretKey) :
         OracleComp (OracleWorld + SigningSpec) (Option Signature))) = _
     rw [simulateQ_map, simulateQ_spec_query]
     apply WriterT.ext
-    simp only [QueryImpl.add_apply_inr, signingOracle, WriterT.run_map',
+    simp only [QueryImpl.add_apply_inr, statelessSigningOracle, WriterT.run_map',
       QueryImpl.run_withLogging_apply]
     simp [logReply, signerImpl, signerEntry, hiddenReply]
     rfl
@@ -266,24 +267,24 @@ noncomputable def verifiedMain (adversary : ReasonAdversary) (pk : PublicKey) :
       (liftM (verifyWith H pk forgery.message forgery.signature) : OracleComp OracleWorld Bool)
 
 /-- The keys of both games: a seed, then key generation. -/
-noncomputable def keys : OracleComp OracleWorld (SecretKey × PublicKey) :=
-  liftM sampleSeed >>= fun seed => liftM (keyGenWith H seed)
+noncomputable def keys : OracleComp OracleWorld (Seed × PublicKey) :=
+  liftM sampleSeed >>= fun seed => liftM (statelessKeyGenWith H seed)
 
-theorem reasonRun_eq (adversary : ReasonAdversary) :
-    reasonRun adversary = keys >>= fun keys =>
+theorem statelessReasonRun_eq (adversary : ReasonAdversary) :
+    statelessReasonRun adversary = keys >>= fun keys =>
       (fun p => (p.1.1, p.2, p.1.2)) <$>
         (simulateQ (logReply (signerImpl keys.1) signerEntry fun _ answer => answer)
           (verifiedMain adversary keys.2)).run := by
-  unfold reasonRun keys verifiedMain
-  simp only [bind_assoc, ← reasonOracles_eq, run_simulateQ_bind_toLeft]
+  unfold statelessReasonRun keys verifiedMain
+  simp only [bind_assoc, ← statelessReasonOracles_eq, run_simulateQ_bind_toLeft]
   simp [map_bind]
 
-theorem gameCore_hideReasons_eq (adversary : ReasonAdversary) :
-    gameCore (hideReasons adversary) = keys >>= fun keys =>
+theorem statelessGameCore_hideReasons_eq (adversary : ReasonAdversary) :
+    statelessGameCore (hideReasons adversary) = keys >>= fun keys =>
       (fun p => decide (Valid p.2 ∧ ¬Contains p.2 p.1.1) && p.1.2) <$>
         (simulateQ (logReply (signerImpl keys.1) signerEntry hiddenReply)
           (verifiedMain adversary keys.2)).run := by
-  unfold gameCore keys verifiedMain hideReasons
+  unfold statelessGameCore keys verifiedMain hideReasons
   simp only [bind_assoc, ← hiddenOracles_eq, QueryImpl.simulateQ_compose, simulateQ_bind,
     simulateQ_map, simulateQ_hideReasonsImpl_toLeft]
   simp [map_bind, run_simulateQ_toLeft]
@@ -313,23 +314,24 @@ theorem signerEntry_hiddenReply (t : (OracleWorld + ReasonSigningSpec).Domain)
 The adversary forges at most as often as its reduction, plus the probability of a failure.
 
 The reduction plays the theorem's game. -/
-theorem reasonForgeAdvantage_le (adversary : ReasonAdversary) :
-    reasonForgeAdvantage adversary
-      ≤ forgeAdvantage (hideReasons adversary) + signingFailure adversary := by
-  have hwin : reasonForgeAdvantage adversary
-      = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
+theorem statelessReasonForgeAdvantage_le (adversary : ReasonAdversary) :
+    statelessReasonForgeAdvantage adversary
+      ≤ statelessForgeAdvantage (hideReasons adversary) + statelessSigningFailure adversary := by
+  have hwin : statelessReasonForgeAdvantage adversary
+      = Pr{let x ← (simulateQ romImpl (statelessReasonRun adversary)).run' ∅}[
           (Valid x.2.1 ∧ ¬Contains x.2.1 x.1) ∧ x.2.2 = true] :=
     prEvent_countedOracle _ fun x : Forgery × QueryLog SigningSpec × Bool =>
       (Valid x.2.1 ∧ ¬Contains x.2.1 x.1) ∧ x.2.2 = true
-  have hfail : signingFailure adversary
-      = Pr{let x ← (simulateQ romImpl (reasonRun adversary)).run' ∅}[
+  have hfail : statelessSigningFailure adversary
+      = Pr{let x ← (simulateQ romImpl (statelessReasonRun adversary)).run' ∅}[
           ∃ entry ∈ x.2.1, entry.2 = none] :=
     prEvent_countedOracle _ fun x : Forgery × QueryLog SigningSpec × Bool =>
       ∃ entry ∈ x.2.1, entry.2 = none
-  have hgame : forgeAdvantage (hideReasons adversary)
-      = Pr{let x ← (simulateQ romImpl (gameCore (hideReasons adversary))).run' ∅}[x = true] :=
+  have hgame : statelessForgeAdvantage (hideReasons adversary)
+      = Pr{let x ← (simulateQ romImpl (statelessGameCore (hideReasons adversary))).run' ∅}[
+          x = true] :=
     prEvent_countedOracle _ fun x : Bool => x = true
-  rw [hwin, hfail, hgame, reasonRun_eq, gameCore_hideReasons_eq]
+  rw [hwin, hfail, hgame, statelessReasonRun_eq, statelessGameCore_hideReasons_eq]
   simp only [simulateQ_bind, StateT.run'_eq, StateT.run_bind, map_bind]
   refine prEvent_bind_le_add _ _ _ _ _ _ fun p => ?_
   simp only [simulateQ_map, StateT.run_map, Functor.map_map]
@@ -352,12 +354,12 @@ theorem reasonForgeAdvantage_le (adversary : ReasonAdversary) :
 Take an adversary whose reduction to the theorem's game makes at most `q >= 1` hash calls.
 
 It forges with probability at most `q / 2^127`, plus the probability that a request fails. -/
-theorem reasonForgeAdvantage_le_add (q : Nat) (hq : 1 ≤ q) (adversary : ReasonAdversary)
+theorem statelessReasonForgeAdvantage_le_add (q : Nat) (hq : 1 ≤ q) (adversary : ReasonAdversary)
     (hbound : HasHashQueryBound (hideReasons adversary) q) :
-    reasonForgeAdvantage adversary
-      ≤ q / ((2 ^ 127 : Nat) : ℝ≥0∞) + signingFailure adversary :=
-  (reasonForgeAdvantage_le adversary).trans
-    (add_le_add_left (unforgeable q hq _ hbound) _)
+    statelessReasonForgeAdvantage adversary
+      ≤ q / ((2 ^ 127 : Nat) : ℝ≥0∞) + statelessSigningFailure adversary :=
+  (statelessReasonForgeAdvantage_le adversary).trans
+    (add_le_add_left (statelessForgeAdvantage_le q hq _ hbound) _)
 
 /-- Each adversary of the theorem's game keeps its budget when read in this game.
 

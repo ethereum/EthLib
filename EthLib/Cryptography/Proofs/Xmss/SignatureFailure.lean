@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Proofs.Xmss.Constants
 public import EthLib.Cryptography.Proofs.QueryAvoidance
 public import EthLib.Cryptography.Proofs.Xmss.Address
 public import EthLib.Cryptography.Proofs.Xmss.CodewordSearch
+public import EthLib.Cryptography.Proofs.Xmss.Reference
 
 /-!
 # Proofs: a whole signature rarely fails, in the random-oracle model
@@ -318,7 +319,7 @@ theorem publicParamOf_isQueryBoundP (s : Seed) (layer : Layer) (e : UInt32) (k :
   isQueryBoundP_bind_zero _ _ (isQueryBoundP_queryH_of_ne k _ _
     (encodeAddress_ne_of_type_ne _ _ _ _ _ _ (by decide))) fun _ => isQueryBoundP_pure _ _ _
 
-/-- **A leanXMSS signature fails with probability at most `2 exp(-4000)`.**
+/-- **A signature of the stateless signer fails with probability at most `2 exp(-4000)`.**
 
 The hash is a lazily sampled random oracle, and signing starts from any cache.
 
@@ -328,14 +329,14 @@ The cache must hold no trial input of the two keys that sign:
 - the top key above it: inputs at its message address with a 32-byte payload.
 
 Each layer's search then fails with probability at most `exp(-4000)`. -/
-theorem prEvent_signWith_error_le (sk : SecretKey) (idx : LeafIndex) (msg : Message)
+theorem prEvent_statelessSignWith_error_le (seed : Seed) (idx : LeafIndex) (msg : Message)
     (cache : XmssSecurity.HashSpec.QueryCache)
     (hbottom : CacheAvoids (IsBottomTrialQuery idx) cache)
     (htop : CacheAvoids (IsTopTrialQuery idx) cache) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
-      (signWith Hq sk idx msg)).run' cache}[z.isOk = false]
+      (statelessSignWith Hq seed idx msg)).run' cache}[z.isOk = false]
       ≤ 2 * ENNReal.ofReal (Real.exp (-4000)) := by
-  unfold signWith
+  unfold statelessSignWith
   refine prEvent_run'_romImpl_bind_le (fun c => CacheAvoids (IsBottomTrialQuery idx) c ∧
     CacheAvoids (IsTopTrialQuery idx) c) _ _ _ ?_ fun s c hc => ?_
   · exact fun z hz =>
@@ -350,11 +351,111 @@ theorem prEvent_signWith_error_le (sk : SecretKey) (idx : LeafIndex) (msg : Mess
     ⟨cache_eq_none_of_mem_support_run_romImpl (publicParamOf_isQueryBoundP _ _ _ _) hc.1 hz,
     cache_eq_none_of_mem_support_run_romImpl (publicParamOf_isQueryBoundP _ _ _ _) hc.2 hz⟩
 
-/-- From an empty cache, a leanXMSS signature fails with probability at most `2 exp(-4000)`. -/
-theorem prEvent_signWith_error_le_empty (sk : SecretKey) (idx : LeafIndex) (msg : Message) :
+/-- From an empty cache, a stateless signature fails with probability at most `2 exp(-4000)`. -/
+theorem prEvent_statelessSignWith_error_le_empty (seed : Seed) (idx : LeafIndex) (msg : Message) :
     Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
-      (signWith Hq sk idx msg)).run' ∅}[z.isOk = false]
+      (statelessSignWith Hq seed idx msg)).run' ∅}[z.isOk = false]
       ≤ 2 * ENNReal.ofReal (Real.exp (-4000)) :=
-  prEvent_signWith_error_le sk idx msg ∅ (fun _ _ => rfl) fun _ _ => rfl
+  prEvent_statelessSignWith_error_le seed idx msg ∅ (fun _ _ => rfl) fun _ _ => rfl
+
+/-! ## The specification's signer fails rarely -/
+
+/-- **The top key's signature of a root fails with probability at most `exp(-4000)`.**
+
+The cache holds no trial input of the top key. -/
+theorem prEvent_signRootWith_error_le (sk : SecretKey) (b : Nat) (root : Digest)
+    (cache : XmssSecurity.HashSpec.QueryCache)
+    (hcache : CacheAvoids (IsTrialQuery (addrMsg .top (UInt32.ofNat b)) 32) cache) :
+    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+      (signRootWith Hq sk b root)).run' cache}[z.isOk = false]
+      ≤ ENNReal.ofReal (Real.exp (-4000)) := by
+  unfold signRootWith
+  rw [run'_simulateQ_romImpl_bind]
+  refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1 = none) _ fun z _ hz => ?_).trans ?_
+  · rcases z with ⟨_ | ⟨rho, y⟩, c'⟩
+    · exact absurd rfl hz
+    · simp [Except.isOk, Except.toBool]
+  · rw [prEvent_run_romImpl_fst _ _ fun r => r = none]
+    refine prEvent_otsSign_none_le _ _ .top _ _ cache ?_
+    rwa [Base.size_packBytes]
+
+/-- **A leanXMSS signature fails with probability at most `2 exp(-4000)`.**
+
+The hash is a lazily sampled random oracle, and signing starts from any cache and any key.
+
+The cache must hold no trial input of the two keys that sign:
+
+- the bottom key `idx`: inputs at its message address with a 48-byte payload;
+- the top key above it: inputs at its message address with a 32-byte payload.
+
+A bottom tree of `idx` that the key keeps must hold a top signature, not an error.
+
+Each layer's search then fails with probability at most `exp(-4000)`. -/
+theorem prEvent_signWith_error_le (sk : SecretKey) (idx : LeafIndex) (msg : Message)
+    (cache : XmssSecurity.HashSpec.QueryCache)
+    (hbottom : CacheAvoids (IsBottomTrialQuery idx) cache)
+    (htop : CacheAvoids (IsTopTrialQuery idx) cache)
+    (hkept : ∀ t ∈ sk.cache, t.index = bottomTree idx → t.top.isOk = true) :
+    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+      (signWith Hq sk idx msg)).run' cache}[z.1.isOk = false]
+      ≤ 2 * ENNReal.ofReal (Real.exp (-4000)) := by
+  unfold signWith
+  rw [run'_simulateQ_romImpl_bind]
+  refine (prEvent_bind_le_prEvent_add_mul_prEvent_not_of_support _ _
+    (fun z => z.1 = none) _ (ε := ENNReal.ofReal (Real.exp (-4000)))
+    fun z hz hok => ?_).trans ?_
+  · -- The bottom key signed; the top layer's trial inputs are still fresh.
+    rcases z with ⟨_ | ⟨rho, y⟩, c⟩
+    · exact absurd rfl hok
+    have hc : CacheAvoids (IsTopTrialQuery idx) c := cache_eq_none_of_mem_support_run_romImpl
+      (otsSign_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) htop hz
+    dsimp only
+    unfold fetchTreeWith
+    split
+    · -- A kept tree holds a top signature, and no hash is called.
+      next t ht =>
+      have htok : t.top.isOk = true :=
+        hkept t (List.mem_of_find?_eq_some ht) (by simpa using List.find?_some ht)
+      rw [pure_bind]
+      cases htt : t.top with
+      | ok top => simp [Except.isOk, Except.toBool]
+      | error err => rw [htt] at htok; cases htok
+    · -- A new tree: its build, then the top key's search.
+      unfold cacheTreeWith
+      simp only [bind_assoc, pure_bind]
+      refine prEvent_run'_romImpl_bind_le (CacheAvoids (IsTopTrialQuery idx)) _ _ _ ?_
+        fun tree c' hc' => ?_
+      · intro z hz
+        exact cache_eq_none_of_mem_support_run_romImpl
+          (build_isQueryBoundP_otherLayer bottom_ne_top _ _ _ _ _ _) hc hz
+      rw [run'_simulateQ_romImpl_bind]
+      refine (prEvent_bind_le_prEvent_of_support _ _ (fun z => z.1.isOk = false) _
+        fun z _ hz => ?_).trans ?_
+      · rcases z with ⟨_ | top, c''⟩
+        · exact absurd rfl hz
+        · simp [Except.isOk, Except.toBool]
+      · rw [prEvent_run_romImpl_fst _ _ fun r : Except XmssError LayerSignature => r.isOk = false]
+        exact prEvent_signRootWith_error_le sk _ _ c' hc'
+  · -- The bottom key fails rarely, and the top layer after it.
+    rw [prEvent_run_romImpl_fst _ _ fun r => r = none, two_mul]
+    refine add_le_add (prEvent_otsSign_none_le _ _ .bottom _ _ cache ?_)
+      (mul_le_of_le_one_right' (prEvent_le_one _))
+    have hsize : (packBytes msg).size + 16 = 48 := by
+      rw [Base.size_packBytes]
+      rfl
+    rw [hsize, UInt32.ofNat_toNat]
+    exact hbottom
+
+/-- From an empty cache, a leanXMSS signature fails with probability at most `2 exp(-4000)`.
+
+A bottom tree of `idx` that the key keeps must hold a top signature.
+
+A key of key generation keeps no bottom tree. -/
+theorem prEvent_signWith_error_le_empty (sk : SecretKey) (idx : LeafIndex) (msg : Message)
+    (hkept : ∀ t ∈ sk.cache, t.index = bottomTree idx → t.top.isOk = true) :
+    Pr{let z ← (simulateQ XmssSecurity.HashSpec.romImpl
+      (signWith Hq sk idx msg)).run' ∅}[z.1.isOk = false]
+      ≤ 2 * ENNReal.ofReal (Real.exp (-4000)) :=
+  prEvent_signWith_error_le sk idx msg ∅ (fun _ _ => rfl) (fun _ _ => rfl) hkept
 
 end EthLib.Cryptography.Xmss
