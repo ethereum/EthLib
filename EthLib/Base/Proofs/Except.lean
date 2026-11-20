@@ -24,6 +24,11 @@ theorem eq_of_ensure_eq_error {ε : Type} {condition : Prop} [Decidable conditio
   unfold ensure at failed
   split at failed <;> simp_all
 
+/-- A step after a success runs on the value of that success.
+
+Rewriting with it, instead of unfolding the bind, leaves the value unevaluated. -/
+theorem ok_bind {ε α β : Type} (a : α) (g : α → Except ε β) : (Except.ok a >>= g) = g a := rfl
+
 /-- Two steps in sequence fail when the first fails, or when the second fails on its value. -/
 theorem bind_eq_error {ε α β : Type} {x : Except ε α} {g : α → Except ε β} {e : ε}
     (h : x >>= g = .error e) : x = .error e ∨ ∃ a, x = .ok a ∧ g a = .error e := by

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Proofs.Bls.Isogeny
 public import EthLib.Cryptography.Proofs.Bls.HashToCurveMap
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the hash to G2 returns a valid point
@@ -128,10 +129,6 @@ theorem psi2_neg (P : G2) : psi2 (G2.neg P) = G2.neg (psi2 P) := by
   · simp [hp]
   · simp [hp, neg_mul]
 
-/-- Binding a success passes its value to the continuation. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Except BlsError β) :
-    (Except.ok a >>= f) = f a := rfl
-
 -- The pair matcher is named on purpose: its equation selects the branch without evaluation.
 set_option linter.auxLemma false in
 /-- Every successful `hashToG2` output clears the cofactor of a nonsingular point on the twist. -/
@@ -142,18 +139,18 @@ theorem hashToG2_eq_clearCofactor {msg dst : ByteArray} {P : G2}
   cases hf : (hashToFieldFp2 msg dst 2 : Except BlsError (Vector Fp2 2)) with
   | error e => rw [hf] at h; cases h
   | ok us =>
-    rw [hf, ok_bind] at h
+    rw [hf, Base.ok_bind] at h
     cases h0 : simpleSwu us[0] with
     | error e => rw [h0] at h; cases h
     | ok p0 =>
-      rw [h0, ok_bind] at h
+      rw [h0, Base.ok_bind] at h
       cases h1 : simpleSwu us[1] with
       | error e => rw [h1] at h; cases h
       | ok p1 =>
         rw [h1] at h
         rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)] at h
         simp (config := { zeta := false, iota := false }) only
-          [psi2.match_1.eq_1, ok_bind, pure, Except.pure, Except.ok.injEq] at h
+          [psi2.match_1.eq_1, Base.ok_bind, pure, Except.pure, Except.ok.injEq] at h
         refine ⟨_, ?_, h.symm⟩
         exact G2.valid_add (simpleSwu_isoMapG2_valid h0) (simpleSwu_isoMapG2_valid h1)
 
@@ -190,9 +187,9 @@ theorem hashToG2_total (msg dst : ByteArray) :
   obtain ⟨p0, h0⟩ := simpleSwu_ok us[0]
   obtain ⟨p1, h1⟩ := simpleSwu_ok us[1]
   have hok : ∃ P : G2, hashToG2 msg dst = .ok P := by
-    rw [hashToG2, hus, ok_bind, h0, ok_bind, h1]
+    rw [hashToG2, hus, Base.ok_bind, h0, Base.ok_bind, h1]
     rw [← Prod.mk.eta (p := p0), ← Prod.mk.eta (p := p1)]
-    simp (config := { zeta := false, iota := false }) only [psi2.match_1.eq_1, ok_bind]
+    simp (config := { zeta := false, iota := false }) only [psi2.match_1.eq_1, Base.ok_bind]
     exact ⟨_, rfl⟩
   rcases hok with ⟨P, hP⟩
   exact ⟨P, hP, hashToG2_valid hP⟩
