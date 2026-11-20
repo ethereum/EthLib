@@ -18,7 +18,7 @@ Their logs are numbered from 0 across the block, and the lookup of one receipt k
 The receipt objects of a block are built exactly when two conditions hold.
 
 - The block has as many receipts as transactions.
-- Each transaction has a hash, and a signature that names a sender.
+- Each transaction has a hash, and a signature that names a sender at the fork of the block.
 
 From Byzantium, the status of a receipt object is `0x1` exactly when the receipt is a success.
 
@@ -259,7 +259,7 @@ theorem receiptInfos_eq_ok {r : BlockRecord} {config : ChainConfig} {infos : Lis
 
 /-- The object of a receipt is built when its transaction has a hash and a sender.
 
-The address of a creation never fails, since each nonce is below `2^256`. -/
+Computing the address of a creation never fails, since each nonce is below `2^256`. -/
 private theorem exists_receiptInfo {r : BlockRecord} (config : ChainConfig)
     (index before firstLog : Nat) {tx : Transaction} (receipt : Receipt r.fork)
     (hs : ∃ sender, recoverSender r.fork tx = .ok sender)
@@ -275,7 +275,7 @@ private theorem exists_receiptInfo {r : BlockRecord} (config : ChainConfig)
     simp [hti, ha, bind, Except.bind, pure, Except.pure, Functor.map, Except.map, Except.mapError]
   | some _ => simp [hti, bind, Except.bind, pure, Except.pure]
 
-/-- Some receipt objects are built when each transaction has a hash and a sender. -/
+/-- From any index, receipt objects are built when each transaction has a hash and a sender. -/
 private theorem exists_receiptInfosFrom {r : BlockRecord} (config : ChainConfig) :
     ∀ {l : List (Transaction × Receipt r.fork)} (index before firstLog : Nat),
       (∀ p ∈ l, (∃ sender, recoverSender r.fork p.1 = .ok sender) ∧
@@ -299,7 +299,7 @@ private theorem exists_receiptInfosFrom {r : BlockRecord} (config : ChainConfig)
 - The block has as many receipts as transactions.
 - Each transaction has a hash, and its signature names a sender at the fork of the block.
 
-The address of a creation never fails, since each nonce is below `2^256`. -/
+Creations add no condition: each nonce is below `2^256`, so its address is always computed. -/
 theorem exists_receiptInfos_eq_ok_iff {r : BlockRecord} {config : ChainConfig} :
     (∃ infos, r.receiptInfos config = .ok infos) ↔
       r.block.transactions.length = r.receipts.length ∧ ∀ tx ∈ r.block.transactions,

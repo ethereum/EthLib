@@ -164,9 +164,9 @@ private theorem appendInduction {α : Type} {motive : List α → Prop} (nil : m
     rw [List.reverse_cons]
     exact append_singleton _ _ ih
 
-/-- The last receipt of a run of transactions has the cumulative gas of the run.
+/-- In a run of transactions, the last receipt has the cumulative gas of the run.
 
-Its priority fees sum those of the output of each transaction, at the gas that output used.
+The priority fees of the run sum those of the output of each transaction, at the gas it used.
 
 The run of each transaction follows the run of those before it. -/
 private theorem applyTransactions_priorityFees {env : BlockEnvironment fork} {body : BodyState}

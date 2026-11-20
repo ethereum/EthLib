@@ -4930,8 +4930,8 @@ These properties hold whenever the receipt objects of a block are built.
 They are built exactly when the block has one receipt for each transaction, and each transaction has a hash and a sender (`exists_receiptInfos_eq_ok_iff`).
 That sender is the one that the signature names at the fork of the block.
 Otherwise they fail with `-32603`.
-The contract address of a creation never fails, since each nonce is below `2^256` (`createAddress_ok`, `Proofs/Evm/Call/ContractAddress.lean`).
-In a valid view, a canonical block after the lowest keeps the receipts of its run, one for each transaction (`Valid.length_receipts`).
+Computing the contract address of a creation never fails, since each nonce is below `2^256` (`createAddress_ok`, `Proofs/Evm/Call/ContractAddress.lean`).
+In a valid view, a canonical block after the lowest has one receipt for each transaction (`Valid.length_receipts`), since it keeps the receipts of its run.
 The run of a body gives one receipt for each transaction (`applyTransactions_receipts_length`, `Proofs/Blocks/Transition.lean`).
 Each signature of the block names a sender (`Valid.exists_recoverSender`, `Proofs/Rpc/Block.lean`).
 Each transaction of the block has a hash (`Valid.exists_transactionHash`), since the run computes the transactions root from their bytes (`transactionsRoot_eq_ok_iff`, `Proofs/Blocks/TypedRoots.lean`).
