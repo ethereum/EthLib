@@ -80,8 +80,6 @@ Before Electra the index is the requested committee index, and in Electra and Fu
 
 From Gloas it is 0 at the slot of the head block, else it records whether the head payload is full.
 
-A head payload whose status is still pending gives the error with code 500.
-
 A head block whose payload is not yet verified gives the error with code 503.
 
 A slot before the head, or after the current slot of the store, gives the error with code 400. -/
