@@ -14,8 +14,8 @@ Each join, publish and heartbeat of the run uses a lawful choice.
   No mesh holds a peer twice, and no fanout holds a peer twice.
   The topics of the peers list each peer at most once.
 - So in each state that a run reaches, the peers that announced each topic appear once each.
-- A run from a router with no mesh, no fanout and no topics of peers reaches only such states.
-- So a join with a lawful choice from such a state keeps every mesh free of a repeated peer.
+- From a router with no mesh, no fanout and no topics of peers, every run keeps all three.
+- So a join with a lawful choice after such a run keeps every mesh free of a repeated peer.
 -/
 
 @[expose] public section
@@ -137,8 +137,6 @@ theorem steps_nodup_of_empty (steps : List (RouterState → RouterState))
 /-- A join after a run from a router with no mesh, no fanout and no topics of peers repeats no peer.
 
 That holds of each mesh after the join.
-
-It is the result above for the run followed by one join.
 
 Each step of the run must be a step of the router, and the join needs a lawful choice. -/
 theorem steps_join_mesh_nodup (steps : List (RouterState → RouterState))

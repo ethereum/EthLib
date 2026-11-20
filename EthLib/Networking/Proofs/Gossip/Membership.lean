@@ -201,20 +201,9 @@ theorem leave_peerTopics : (leave c now topic s).1.peerTopics = s.peerTopics := 
   unfold leave
   split <;> rfl
 
-/-- A publish keeps every mesh. -/
-theorem publish_mesh {m : Message} :
-    (publish p c sel standing msgId now m s).1.mesh = s.mesh := by
-  unfold publish publishPeers
-  by_cases hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
-  · simp [hn]
-  · by_cases h1 : c.floodPublish = true
-    · simp [hn, h1]
-    · by_cases h2 : m.topic ∈ s.topics
-      · simp [hn, h1, h2]
-      · simp [hn, h1, h2]
-
-/-- A publish keeps the topics of the peers. -/
-theorem publish_peerTopics {m : Message} :
+/-- A publish keeps every mesh and the topics of the peers. -/
+private theorem publish_fields {m : Message} :
+    (publish p c sel standing msgId now m s).1.mesh = s.mesh ∧
     (publish p c sel standing msgId now m s).1.peerTopics = s.peerTopics := by
   unfold publish publishPeers
   by_cases hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
@@ -224,6 +213,16 @@ theorem publish_peerTopics {m : Message} :
     · by_cases h2 : m.topic ∈ s.topics
       · simp [hn, h1, h2]
       · simp [hn, h1, h2]
+
+/-- A publish keeps every mesh. -/
+theorem publish_mesh {m : Message} :
+    (publish p c sel standing msgId now m s).1.mesh = s.mesh :=
+  (publish_fields p c sel standing msgId now s).1
+
+/-- A publish keeps the topics of the peers. -/
+theorem publish_peerTopics {m : Message} :
+    (publish p c sel standing msgId now m s).1.peerTopics = s.peerTopics :=
+  (publish_fields p c sel standing msgId now s).2
 
 /-- Choosing the peers of a publish keeps each fanout free of a repeated peer.
 

@@ -2697,7 +2697,7 @@ With flood publishing, a message not in the seen cache goes to every such peer o
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
 It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
 
-The fanout of a topic and the peers that announced it repeat no peer in the states that the router reaches.
+Along a run of lawful router steps from an empty router, the fanout of a topic and the peers that announced it repeat no peer.
 A subscription change replaces every entry of its sender, so it keeps each peer listed at most once among the topics of the peers (`applySubscription_nodup`).
 `receiveRpc_peerTopics_nodup` carries this over an RPC, the only step that changes those topics.
 Then the peers that announced each topic appear once each (`topicPeers_nodup`).
@@ -2710,7 +2710,7 @@ In each state that the run reaches, no mesh and no fanout holds a peer twice, an
 The topics of the peers also list each peer at most once, so a second run can start from that state.
 `steps_nodup_of_empty` states this for a run from a router with no mesh, no fanout and no topics of peers.
 `steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
-That join keeps every mesh free of a repeated peer, with no hypothesis on the state it joins from.
+That join keeps every mesh free of a repeated peer, with no hypothesis on the fanout or on the peers of its topic.
 `receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
 No step changes the explicit peers or adds one to a mesh, but no theorem states along a run that they stay outside every mesh.
 
