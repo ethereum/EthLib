@@ -430,6 +430,10 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the light client signature theorems assume soundness only on the one aggregate call of the update ([#3432](https://github.com/ethereum/EthLib/issues/3432)).
+  `validateLightClientUpdate_signed` and `validateLightClientUpdate_signed_outside` take `SignatureChecks.AggregateSoundOn` on `updateSignatureCall` in place of `SignatureChecks.AggregateSound`.
+  The new hypothesis is weaker, so the theorems are stronger; a caller with `sound : checks.AggregateSound signed` passes `sound.on _` (`SignatureChecks.AggregateSound.on`).
+
 - In Lean, `payloadInputs_processOperations` holds at every fork and no longer takes `gloas : .glamsterdam ≤ fork`.
   Before Gloas the deposits and, from Electra, the requests of the execution layer keep the inputs of a payload too.
   A caller drops the first explicit argument.

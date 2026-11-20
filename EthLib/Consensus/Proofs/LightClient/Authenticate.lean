@@ -30,6 +30,8 @@ Its committee, which the bootstrap proves, is the current committee of the state
 
 The signature needs an assumption: an aggregate verifies only if every signer signed the message.
 
+The assumption covers only the one aggregate check that the client makes on the update.
+
 Under it, every member whose bit is set signed the signing root of the attested header.
 
 No signature scheme meets it with certainty.
@@ -530,18 +532,37 @@ theorem SyncCommittee.size_participantKeys (committee : SyncCommittee preset)
   simp only [List.size_toArray]
   exact length_filterMap_zip_bits _ _ (by simp)
 
+/-- The one aggregate call that the client checks on an update, as a set of calls.
+
+The call holds the keys of the members whose bit is set, for the committee of the store.
+
+It holds the signing root of the attested header, as bytes, and the signature of the aggregate.
+
+The set is empty when the signing root cannot be computed, and the client then rejects the update.
+-/
+def updateSignatureCall (config : Config) (store : LightClientStore preset fork)
+    (update : LightClientUpdate preset fork) (genesisValidatorsRoot : Root) :
+    Array Cryptography.Bls.BLSPubkey × ByteArray × Cryptography.Bls.BLSSignature → Prop :=
+  fun call => ∃ signingRoot,
+    syncCommitteeSigningRoot config update genesisValidatorsRoot = .ok signingRoot ∧
+      call = ((store.signatureCommittee update).participantKeys update.syncAggregate,
+        packBytes signingRoot, update.syncAggregate.syncCommitteeSignature)
+
 /-- What the signature of an accepted update authenticates, under the assumption on it.
+
+The assumption covers only the aggregate call that the client checks on this update.
 
 The update names the committee of the store for its signature period.
 
-At least the minimum of its members signed the signing root of the attested header. -/
+Keys of at least the minimum of its seats signed the signing root of the attested header. -/
 theorem validateLightClientUpdate_signed {config : Config} {checks : SignatureChecks}
     {store : LightClientStore preset fork} {update : LightClientUpdate preset fork}
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (accepted : validateLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok ())
     {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop}
-    (sound : checks.AggregateSound signed) :
+    (sound : checks.AggregateSoundOn
+      (updateSignatureCall config store update genesisValidatorsRoot) signed) :
     ∃ signingRoot, syncCommitteeSigningRoot config update genesisValidatorsRoot =
         .ok signingRoot ∧
       preset.MIN_SYNC_COMMITTEE_PARTICIPANTS.toNat ≤
@@ -551,7 +572,7 @@ theorem validateLightClientUpdate_signed {config : Config} {checks : SignatureCh
   obtain ⟨participants, -, -, -, signingRoot, rooted, verified⟩ :=
     validateLightClientUpdate_proves accepted
   refine ⟨signingRoot, rooted, by rw [SyncCommittee.size_participantKeys]; exact participants,
-    fun key member => sound _ _ _ verified _ member⟩
+    fun key member => sound _ _ _ ⟨signingRoot, rooted, rfl⟩ verified _ member⟩
 
 /-- An accepted update was signed by a member outside any set that holds fewer committee seats.
 
@@ -559,7 +580,7 @@ Take a set of keys, such as those that may sign anything.
 
 Suppose it holds fewer seats of the signing committee than there are signers.
 
-Under the assumption on aggregate signatures, a signer outside the set signed the signing root.
+Under the assumption on the aggregate call of the update, a signer outside the set signed the root.
 
 That root is the signing root of the attested header. -/
 theorem validateLightClientUpdate_signed_outside {config : Config} {checks : SignatureChecks}
@@ -567,7 +588,9 @@ theorem validateLightClientUpdate_signed_outside {config : Config} {checks : Sig
     {currentSlot : Slot} {genesisValidatorsRoot : Root}
     (accepted : validateLightClientUpdate config checks store update currentSlot
       genesisValidatorsRoot = .ok ())
-    {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop} (sound : checks.AggregateSound signed)
+    {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop}
+    (sound : checks.AggregateSoundOn
+      (updateSignatureCall config store update genesisValidatorsRoot) signed)
     (excluded : Cryptography.Bls.BLSPubkey → Bool)
     (few : (store.signatureCommittee update).pubkeys.toList.countP excluded <
       update.syncAggregate.participants) :
