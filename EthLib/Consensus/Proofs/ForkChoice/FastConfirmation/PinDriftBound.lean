@@ -33476,6 +33476,8 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
         3 * stake (fun v => balanceAt pulled v.toNat) V ≤
       2 * total.toNat + pulledTotal.toNat + pinReserve config pulled anc fin +
         3 * stake (fun v => balanceAt counted v.toNat) {v ∈ quorumVoters counted | v ∈ V} := by
+  have nn {ι : Type} (S : Finset ι) (f : ι → ℕ) : (0 : ℤ) ≤ ∑ x ∈ S, (f x : ℤ) :=
+    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
   obtain ⟨tail⟩ := h.toPulled
   obtain ⟨tailC⟩ := h.toCounted
   -- Both replays read the events up to the call's epoch.
@@ -33560,9 +33562,9 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have b20 := sc_3a_split (config := config) h
   have b21 := bud_capSlots (config := config) h
   have w4 : 0 ≤ ∑ v ∈ (K4 pulled counted V), (whistC tailC highC v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have w6 : 0 ≤ ∑ v ∈ (K6 pulled counted), (whistC tailC highC v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have b9 := bud_joining (config := config) (pulled := pulled) (anc := anc) (fin := fin)
   -- The upward bands of the charged keys of `SC` are not read by the drift.
   have bandPosSC : (0 : ℤ) ≤ ((∑ v ∈ scCharged pulled counted split tailC,
@@ -33576,29 +33578,29 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   simp only [← Finset.mul_sum] at b6 b14
   zify at *
   have syncPos : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF events x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have syncPosC : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF eventsC x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   -- `bud_sync` weighs the shared segment's debits of `K4` three times, and `stub_N` once.
   have syncPosF : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncD eventsF x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   -- `bud_units` also weighs the units of `SC` and `CS`, which the drift does not read.
   have unitPosSC : 0 ≤ ∑ x ∈ SC pulled counted split,
       (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have unitPosCS : 0 ≤ ∑ x ∈ CS counted split,
       (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   -- The compounding in `bud_credits` pays a tenth of the shared credits that `stub_P` reads.
   have scChargedPre : 0 ≤
       ∑ v ∈ scCharged pulled counted split tailC, (whistC pre highC v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have wShareSC : 0 ≤ ((wShare preset fork (∑ v ∈ SC pulled counted split,
       propN pre highC v.toNat) : ℕ) : ℤ) := Int.natCast_nonneg _
   have syncPre : 0 ≤ ∑ v ∈ SC pulled counted split, (syncCr eventsP v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have proposerPre : 0 ≤ ∑ x ∈ K5 counted V, (propN pre highC x.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have xPos : 0 ≤ (33 * ((pinTerms config pulled anc fin).consolidationsX : ℤ) + 9) / 10 := by
     positivity
   have proposerPos : 0 ≤ ((pinTerms config pulled anc fin).depth : ℤ) *
@@ -33608,15 +33610,15 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   -- A key of `K6` whose exit R reads weighs once in the drift and three times in `exiting`.
   have exitingK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
       (pinTerms config pulled anc fin).exitingB v.toNat = true, (balanceAt pulled v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   have riseK6 : 0 ≤ ∑ v ∈ K6 pulled counted with
       (pinTerms config pulled anc fin).exitingB v.toNat = true,
         ((pinTerms config pulled anc fin).rise v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   -- The keys slashed at C add a nonnegative leak to the left side of `bud_syncLeak`.
   have leakSC : 0 ≤ ∑ v ∈ SC pulled counted split,
       (inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat : ℤ) :=
-    Finset.sum_nonneg fun _ _ => Int.natCast_nonneg _
+    nn _ _
   by_cases gH : (pinTerms config pulled anc fin).gainHigh = true
   · simp only [gH, ↓reduceIte] at b14 b21 u2
     linarith
