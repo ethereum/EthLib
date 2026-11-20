@@ -46,4 +46,9 @@ theorem map_ok_iff {ε α β : Type} {f : α → β} {x : Except ε α} {y : β}
     f <$> x = .ok y ↔ ∃ a, x = .ok a ∧ f a = y := by
   cases x <;> simp [Functor.map, Except.map]
 
+/-- A success relabelled and passed on is the value passed on. -/
+theorem mapError_ok_bind {ε ε' α β : Type} (f : ε → ε') (a : α) (k : α → Except ε' β) :
+    (Except.mapError f (.ok a) >>= k) = k a :=
+  rfl
+
 end EthLib.Base
