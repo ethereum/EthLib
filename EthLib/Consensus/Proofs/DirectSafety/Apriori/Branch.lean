@@ -878,12 +878,11 @@ private theorem ScoresBelow.pass {f : Fork} {s cached just pass : BeaconState pr
 
 It raises it only when it ends an epoch, and so moves the epoch on by one. -/
 theorem ScoresBelow.step {m l : ForkedBeaconState preset} (step : Step config checks m l)
-    {n bound : Nat} (altair : .altair ≤ m.fork) (inside : n ≤ m.state.validators.data.size)
+    {n bound : Nat} (altair : .altair ≤ m.fork)
     (early : l.fork < .glamsterdam) (era : .pectra ≤ m.fork ∨ l.fork < .pectra)
     (below : ScoresBelow n bound m) :
     ScoresBelow n (bound + config.INACTIVITY_SCORE_BIAS.toNat *
       ((getCurrentEpoch l.state).toNat - (getCurrentEpoch m.state).toNat)) l :=
-  have _ := inside
   ScoresBelowAt.step_all (bound := fun _ => bound) step altair early era below
 
 /-- From Altair, each score of a state is at most the start score that the floor reads. -/

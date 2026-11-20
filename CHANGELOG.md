@@ -9,6 +9,11 @@ Not yet released.
 
 ### Breaking changes
 
+- `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
+  Its proof does not read it.
+  Migration: a caller drops that argument.
+  The new statement implies the old one, so a caller that proved the hypothesis only for this call can drop its proof.
+
 - `pinReserve` has a new body: it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
   `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
   Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
