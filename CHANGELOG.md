@@ -230,10 +230,6 @@ Not yet released.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
 
-- `FloorTrace.run_potential_floor` bounds the balance of an unslashed key along a run from Fusaka before Gloas.
-  Its balance plus the sync and partial debits stays above a closed form that loses a pass rate of the effective balance each epoch.
-  The pin's low-balance floor and its fall floor read it.
-
 - `FloorTrace.run_effective_origin` says where a key's effective balance after a run from Fusaka comes from.
   It is its value at the start, or an update set it at most to the balance at the last state where it changed.
   The run splits at that state, with the effective balance constant after it and aligned.
@@ -259,7 +255,6 @@ Not yet released.
 
 - `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
   The pin's bound on the penalties and partials of a key on R's branch reads it.
-  `run_partial_queue_kept` follows from it.
 
 - `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
   The pin's deposit-queue bound for the keys that vote on R's branch reads it.

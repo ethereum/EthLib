@@ -6872,35 +6872,5 @@ theorem run_partial_queue_net {cost : BalanceEvent preset → Nat}
   have first := firsts called present
   omega
 
-/-- A cost of the partial payments of a branch fits the queued entries that it selects.
-
-They are the entries of the queue at the start, and those appended along the branch.
-
-Each is due by the cutoff.
-
-Each appended entry is due no earlier than the withdrawal delay after the start.
-
-It waits for an exit epoch at or after the first exit epoch of its request.
-
-That epoch is after the start. -/
-theorem run_partial_queue_kept {cost : BalanceEvent preset → Nat}
-    {keep : PendingPartialWithdrawal → Bool}
-    (charged : PartialCost (config := config) (checks := checks) cost keep) (high cutoff : Nat)
-    (electra : .pectra ≤ x.fork) {y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (early : y.fork < .glamsterdam)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff) :
-    ∃ added : List PendingPartialWithdrawal,
-      (∀ entry ∈ added, (getCurrentEpoch x.state).toNat +
-        config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat ≤ entry.withdrawableEpoch.toNat) ∧
-      (events.map cost).sum ≤
-        ((((x.state.pendingPartialWithdrawals electra).data.toList.filter keep).filter
-          (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map (·.amount.toNat)).sum +
-        (((added.filter keep).filter (fun entry => entry.withdrawableEpoch.toNat ≤ cutoff)).map
-          (·.amount.toNat)).sum := by
-  obtain ⟨added, late, net⟩ := run_partial_queue_net charged high cutoff electra tail early
-    replayed endpoint
-  exact ⟨added, late, Nat.le_of_add_right_le net⟩
-
 end
 end EthLib.Consensus.DirectSafety

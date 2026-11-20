@@ -91,9 +91,6 @@ private abbrev KeepsCommittees (state after : BeaconState preset fork) : Prop :=
   after.currentSyncCommittee = state.currentSyncCommittee ∧
     after.nextSyncCommittee = state.nextSyncCommittee
 
-private theorem KeepsCommittees.refl (state : BeaconState preset fork) :
-    KeepsCommittees state state := ⟨rfl, rfl⟩
-
 private theorem KeepsCommittees.trans {a b c : BeaconState preset fork}
     (ab : KeepsCommittees a b) (bc : KeepsCommittees b c) : KeepsCommittees a c :=
   ⟨bc.1.trans ab.1, bc.2.trans ab.2⟩
