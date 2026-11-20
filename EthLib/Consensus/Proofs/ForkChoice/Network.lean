@@ -472,10 +472,12 @@ theorem Execution.reachable {ν κ : Type*} [DecidableEq ν] {checks : Signature
   e.state_induction start (fun _ _ _ _ _ _ reachable moved => moved.reachable reachable) n
 
 /-- A store that starts at the anchor store stays reachable from the anchor. -/
-theorem Execution.reachable_of_start {ν κ : Type*} [DecidableEq ν] {checks : SignatureChecks}
-    {sources : BlockSources preset fork} {signed : Message preset fork → Set (ν × κ)}
+theorem Execution.reachable_of_start {ν κ : Type*} [DecidableEq ν] {config : Config}
+    {checks : SignatureChecks} {sources : BlockSources preset fork}
+    {signed : Message preset fork → Set (ν × κ)}
     {sends : ν → ℕ → Set (Message preset fork) → Store preset fork → Message preset fork → Prop}
     {J : Set ν} (e : Execution (forkChoice config checks sources signed sends) J)
+    {anchorState : BeaconState preset fork} {anchorBlock : BeaconBlock preset fork}
     {anchor : Store preset fork}
     (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor) {v : ν}
     (start : e.start v = anchor) (i : ℕ) :
