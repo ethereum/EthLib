@@ -14,13 +14,15 @@ The count of message IDs for snap and eth is nonzero exactly on the capabilities
 
 An account reads back from its slim form.
 
-The encoded slim form of an account converts to its full encoding.
+The slim form of an account converts to its full encoding, and a byte string is never a body.
 
 Each message reads back from its ID and its RLP item on the versions that use its ID.
 
 The decoder reads no other ID or item, so it takes no field more or less than the writer writes.
 
 snap/2 rejects the trie node messages of snap/1, and snap/1 the access list messages of snap/2.
+
+A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
 
 The codes and the access lists of a checked answer are the requested ones.
 
@@ -42,7 +44,8 @@ namespace EthLib.Execution.Network
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-instance : LawfulCodec RangeEntry where
+/-- An entry reads back from its item, for an account body and for slot data alike. -/
+instance {α : Type} [Codec α] [LawfulCodec α] : LawfulCodec (RangeEntry α) where
   ofItem_toItem e := by
     show RangeEntry.ofItem (RangeEntry.toItem e) = _
     simp only [RangeEntry.ofItem, RangeEntry.toItem, Item.fields, Item.toItems, List.length_cons,
@@ -72,14 +75,15 @@ theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
 
-/-- The encoded slim form converts to the full encoding of its account. -/
-theorem fullAccount_encode_slimAccount {account : State.Account} {root : Hash32}
-    {body full : ByteArray} (hbody : encode (slimAccount account root) = .ok body)
+/-- The slim form converts to the full encoding of its account. -/
+theorem fullAccount_slimAccount {account : State.Account} {root : Hash32} {full : ByteArray}
     (hfull : State.encodeAccount account root = .ok full) :
-    fullAccount body = some full := by
-  simp [fullAccount, decode_encode _ _ hbody, ofSlimAccount_slimAccount, hbody, hfull,
-    bne, BEq.beq, ByteArray.beq, Except.toOption]
-  exact Array.isEqv_self _
+    fullAccount (slimAccount account root) = some full := by
+  simp [fullAccount, ofSlimAccount_slimAccount, hfull, Except.toOption]
+
+/-- A byte string is never the body of an account, whatever bytes it holds. -/
+theorem fullAccount_bytes (bytes : ByteArray) : fullAccount (.bytes bytes) = none := by
+  simp [fullAccount, ofSlimAccount, Item.fields, Item.toItems, bind, Except.bind]
 
 namespace SnapVersion
 
@@ -203,6 +207,28 @@ theorem ofItem_snap1_accessLists (item : Item) :
     ofItem .snap1 0x08 item = .error (.unknownId 0x08) ∧
       ofItem .snap1 0x09 item = .error (.unknownId 0x09) := by
   simp [ofItem, usesId, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A version rejects every ID from `n` on as unknown exactly when its count of IDs is at most `n`.
+
+So the count of IDs of a version is the first ID from which every ID is unknown to it. -/
+theorem messageCount_le_iff_unknownId {version : SnapVersion} {n : Nat} :
+    version.messageCount ≤ n ↔
+      ∀ id, n ≤ id → ∀ item, ofItem version id item = .error (.unknownId id) := by
+  constructor
+  · intro h id hid item
+    have hu : usesId version id = false := by
+      cases version <;> simp [usesId, SnapVersion.messageCount] at h ⊢ <;> omega
+    simp [ofItem, hu, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · intro h
+    refine Nat.not_lt.mp fun hlt => ?_
+    have last (m : SnapMessage) (hm : usesId version m.id) (hid : m.id = version.messageCount - 1) :
+        False := by
+      have := h m.id (by omega) m.toItem
+      rw [ofItem_toItem hm] at this
+      cases this
+    cases version
+    · exact last (.trieNodes 0 []) (by decide) rfl
+    · exact last (.blockAccessLists 0 []) (by decide) rfl
 
 /-- A response that answers a request repeats its request ID. -/
 theorem requestId_of_answers {request response : SnapMessage}

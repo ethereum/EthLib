@@ -1185,7 +1185,7 @@
   "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`."
 
 #define DOC_snap_full_account \
-  "The full RLP form of an account in slim form."
+  "The full RLP form of an account, from the RLP encoding of its slim form."
 
 #define DOC_snap_verify_account_range \
   "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each."

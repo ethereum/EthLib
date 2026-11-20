@@ -16,7 +16,15 @@ From Glamsterdam, the receipts already hold the transfer logs of EIP-7708.
 
 So a block from Glamsterdam gives the same answer with transfers traced or not.
 
-A simulation whose blocks are all from Glamsterdam, gap blocks included, gives the same answer too.
+A block without transactions reports no call result, so it gives the same answer too.
+
+So does a simulation whose blocks are each from Glamsterdam or without transactions.
+
+It suffices that each block of the plan is from Glamsterdam or has no calls.
+
+A gap block has no calls.
+
+It also suffices that the active fork at the header of the base block is Glamsterdam or later.
 -/
 
 @[expose] public section
@@ -114,15 +122,27 @@ theorem simulateBlock_json_trace {chain chain' : BlockChain} {base : RecentBlock
     rw [same]
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- A simulation from Glamsterdam gives the same answer with transfers traced or not.
+/-- A block without transactions has an empty list of call results, with transfers traced or not. -/
+theorem callsJson_nil {b : SimulatedBlock} (h : b.record.block.transactions = []) (trace : Bool) :
+    b.callsJson trace = .ok (.arr #[]) := by
+  simp [SimulatedBlock.callsJson, h, pure, Except.pure, bind, Except.bind]
 
-It needs each block that the simulation gives, gap blocks included, to be from Glamsterdam.
+/-- A block without transactions is the same with transfers traced or not. -/
+theorem json_trace_of_nil {b : SimulatedBlock} (h : b.record.block.transactions = [])
+    (full validated : Bool) : b.json full validated true = b.json full validated false := by
+  unfold SimulatedBlock.json
+  rw [callsJson_nil h, callsJson_nil h]
+
+/-- A simulation gives the same answer with transfers traced or not.
+
+It needs each block that the simulation gives to be from Glamsterdam or to have no transactions.
 
 A failed simulation gives the same error both ways. -/
-theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
-    {choices : SimulateChoices}
+theorem simulate_traceTransfers_of_glamsterdam_le_or_nil {v : ChainView}
+    {payload : SimulatePayload} {p : BlockParam} {choices : SimulateChoices}
     (hfork : ∀ blocks, v.simulateBlocks payload p choices = .ok blocks →
-      ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork) (trace : Bool) :
+      ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork ∨ b.record.block.transactions = [])
+    (trace : Bool) :
     v.simulate { payload with traceTransfers := trace } p choices =
       v.simulate payload p choices := by
   cases h : v.simulateBlocks payload p choices with
@@ -133,10 +153,12 @@ theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p :
         b.json payload.returnFullTransactions payload.validation t =
           b.json payload.returnFullTransactions payload.validation false := by
       intro b hb t
-      obtain ⟨_, _, _, _, _, _, _, _, hBlk⟩ := simulateBlocks_mem_exists h b hb
       cases t
       · rfl
-      · exact simulateBlock_json_trace (hfork blocks h b hb) hBlk _ _
+      · rcases hfork blocks h b hb with hFork | hNil
+        · obtain ⟨_, _, _, _, _, _, _, _, hBlk⟩ := simulateBlocks_mem_exists h b hb
+          exact simulateBlock_json_trace hFork hBlk _ _
+        · exact json_trace_of_nil hNil _ _
     have agree := EthLib.Base.mapM_congr (xs := blocks)
       (φ := (·.json payload.returnFullTransactions payload.validation trace))
       (g := (·.json payload.returnFullTransactions payload.validation payload.traceTransfers))
@@ -144,5 +166,52 @@ theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p :
     simp only [ChainView.simulate, simulateBlocks_traceTransfers, h]
     exact congrArg (fun r : Except Serialization.JsonRpc.RpcError (List Lean.Json) =>
       r >>= fun l => pure (Lean.Json.arr l.toArray)) agree
+
+/-- A simulation from Glamsterdam gives the same answer with transfers traced or not.
+
+It needs each block that the simulation gives, gap blocks included, to be from Glamsterdam.
+
+A failed simulation gives the same error both ways. -/
+theorem simulate_traceTransfers {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices}
+    (hfork : ∀ blocks, v.simulateBlocks payload p choices = .ok blocks →
+      ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork) (trace : Bool) :
+    v.simulate { payload with traceTransfers := trace } p choices =
+      v.simulate payload p choices :=
+  simulate_traceTransfers_of_glamsterdam_le_or_nil
+    (fun blocks h b hb => .inl (hfork blocks h b hb)) trace
+
+/-- A simulation gives the same answer with transfers traced or not.
+
+It needs each block of the plan to be from Glamsterdam or to have no calls.
+
+A gap block needs nothing, since it has no calls.
+
+A failed simulation gives the same error both ways. -/
+theorem simulate_traceTransfers_of_plan {v : ChainView} {payload : SimulatePayload}
+    {p : BlockParam} {choices : SimulateChoices}
+    (hCalls : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∀ x ∈ plan.blocks, .glamsterdam ≤ x.2 ∨ x.1.request.calls = []) (trace : Bool) :
+    v.simulate { payload with traceTransfers := trace } p choices =
+      v.simulate payload p choices :=
+  simulate_traceTransfers_of_glamsterdam_le_or_nil
+    (simulateBlocks_glamsterdam_le_or_nil hCalls) trace
+
+/-- A simulation gives the same answer with transfers traced or not.
+
+It needs the active fork at the header of the base block to be Glamsterdam or later.
+
+A failed simulation gives the same error both ways. -/
+theorem simulate_traceTransfers_of_base {v : ChainView} {payload : SimulatePayload}
+    {p : BlockParam} {choices : SimulateChoices}
+    (hBase : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∃ fork, v.config.activeFork plan.base.block.header.number
+        plan.base.block.header.timestamp.toNat = some fork ∧ .glamsterdam ≤ fork)
+    (trace : Bool) :
+    v.simulate { payload with traceTransfers := trace } p choices =
+      v.simulate payload p choices :=
+  simulate_traceTransfers_of_plan (fun plan h x hx =>
+    let ⟨_, hFork, hGlamsterdam⟩ := hBase plan h
+    .inl (Nat.le_trans hGlamsterdam (planSimulate_fork_le h hFork x hx))) trace
 
 end EthLib.Execution.Rpc

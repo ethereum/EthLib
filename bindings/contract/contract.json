@@ -956,7 +956,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\n1. The scheme seed `S` and the public parameter `P`, from the secret key's seed.\n2. The signature from the derivations of `S` and from `P`.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
+   "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.\n\nIt returns the signature and the updated key.\n\n1. The bottom key `idx` signs the message.\n2. Bottom tree `b = floor(idx / 2^16)` gives the key's path, and its top signature.\n   The tree comes from the key, or is built and kept.\n\nWhen the bottom search succeeds, the updated key keeps tree `b`.\n\nA failed bottom search returns the key unchanged.\n\nA key that key generation and signing give signs as the note's stateless signer, by a theorem.\n\n# Warning\n\nNever sign two different messages at one leaf index with one secret key.\n\nThe top key `b` signs only the root of bottom tree `b`.\n\nSo it signs one message, however many leaf indices of that tree are used.\n\n# Errors\n\n- Either layer's one-time signature finds no codeword."},
   {"summary":
    "`Ver(pk, m, sigma)` over a hash `H`: whether a signature signs a message under a public key.",
    "signature": "(public_key: bytes, message: bytes, signature: bytes) -> bool",
@@ -12264,13 +12264,15 @@
    "error_class": "SnapError",
    "docstring":
    "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.\n\nIt must repeat the request ID, and hold at most one node per requested node.\n\nA path that cannot be read is an error."},
-  {"summary": "The full RLP form of an account in slim form.",
+  {"summary":
+   "The full RLP form of an account, from the RLP encoding of its slim form.",
    "signature": "(slim: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",
    "method": "snap_full_account",
    "errors": [],
    "error_class": "SnapError",
-   "docstring": "The full RLP form of an account in slim form."},
+   "docstring":
+   "The full RLP form of an account, from the RLP encoding of its slim form."},
   {"summary":
    "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.",
    "signature":

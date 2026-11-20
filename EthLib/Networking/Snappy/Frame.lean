@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Hash.Crc32c
+public import EthLib.Cryptography.Hash.Crc.Crc32c
 public import EthLib.Networking.Snappy.Block
 
 /-!

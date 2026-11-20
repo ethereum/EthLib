@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Consensus.Gossip.Bounds
 public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.ReqResp.ResponseBounds
 public import EthLib.Consensus.Proofs.ReqResp.Bounds
@@ -28,6 +29,10 @@ The fork of a chunk is a parameter, which the caller reads from the context byte
 - The decoder reads an error payload at the bounds of the error message type.
 - An error chunk that decodes holds an error message, whatever the bytes of its payload.
 - On a chain that passes the fork digest check, the receiver reads a chunk at the sender's type.
+- A protocol that serves the object of a gossip topic sends the message of that topic.
+  The message is that of the fork of the chunk, and the size limit is that of the topic.
+- At a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
+- At version 1, blocks by range and by root send a Phase 0 block, whatever the fork of the chunk.
 -/
 
 @[expose] public section
@@ -272,5 +277,72 @@ theorem decodeResponseChunk_forkOfDigest {α : Type} [SszType α] [LawfulSszType
     decodeResponseChunk_response (contextBytes := 4) (context := ⟨digest.toArray⟩) h wrote hcap
       hlimit (by simp [ByteArray.size])
   exact ⟨start, lo, hi, found, same, same ▸ bounds, decoded, read⟩
+
+/-- A protocol that serves the object of a gossip topic sends the message of that topic.
+
+The message has the type of the fork of the chunk, and the protocol has the size limit of the topic.
+
+Blocks by range and by root at every version but 1, and blocks by head, serve blocks.
+
+Light client finality and optimistic updates serve the updates of their topics.
+
+Blob and data column sidecars by range and by root serve the sidecar type of every subnet topic.
+
+Payload envelopes by range and by root serve payloads.
+
+Inclusion lists by indices serve inclusion lists. -/
+theorem responseDesc_eq_messageDesc {topic : GossipTopic}
+    (serves :
+      ((id.protocol = .beaconBlocksByRange ∨ id.protocol = .beaconBlocksByRoot) ∧ id.version ≠ 1 ∨
+          id.protocol = .beaconBlocksByHead) ∧ topic = .beaconBlock ∨
+        id.protocol = .lightClientFinalityUpdate ∧ topic = .lightClientFinalityUpdate ∨
+        id.protocol = .lightClientOptimisticUpdate ∧ topic = .lightClientOptimisticUpdate ∨
+        (id.protocol = .blobSidecarsByRange ∨ id.protocol = .blobSidecarsByRoot) ∧
+          (∃ subnet, topic = .blobSidecar subnet) ∨
+        (id.protocol = .dataColumnSidecarsByRange ∨ id.protocol = .dataColumnSidecarsByRoot) ∧
+          (∃ subnet, topic = .dataColumnSidecar subnet) ∨
+        (id.protocol = .executionPayloadEnvelopesByRange ∨
+            id.protocol = .executionPayloadEnvelopesByRoot) ∧ topic = .executionPayload ∨
+        id.protocol = .inclusionListsByIndices ∧ topic = .inclusionList) :
+    responseDesc preset config chunkFork id = some (topic.messageDesc preset chunkFork) ∧
+      id.protocol.sizeLimit preset config chunkFork = topic.sizeLimit preset config chunkFork := by
+  obtain ⟨protocol, version⟩ := id
+  simp only at serves ⊢
+  rcases serves with ⟨⟨named, later⟩ | rfl, rfl⟩ | rest
+  · rcases named with rfl | rfl <;>
+      simp only [responseDesc, GossipTopic.messageDesc] <;>
+      rw [ite_eq_right_of_eq_false _ _ (eq_false later)] <;>
+      simp [ReqRespProtocol.sizeLimit, GossipTopic.sizeLimit.eq_def]
+  · simp [responseDesc, GossipTopic.messageDesc, ReqRespProtocol.sizeLimit,
+      GossipTopic.sizeLimit.eq_def]
+  · rcases rest with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ | ⟨rfl | rfl, subnet, rfl⟩ |
+        ⟨rfl | rfl, subnet, rfl⟩ | ⟨rfl | rfl, rfl⟩ | ⟨rfl, rfl⟩ <;>
+      simp [responseDesc, GossipTopic.messageDesc, ReqRespProtocol.sizeLimit,
+        GossipTopic.sizeLimit.eq_def]
+
+/-- At version 1, blocks by range and by root send a Phase 0 block, whatever the fork of the chunk.
+
+That is the message of the block topic at Phase 0. -/
+theorem responseDesc_eq_messageDesc_phase0
+    (named : id.protocol = .beaconBlocksByRange ∨ id.protocol = .beaconBlocksByRoot)
+    (first : id.version = 1) :
+    responseDesc preset config chunkFork id =
+      some (GossipTopic.beaconBlock.messageDesc preset .phase0) := by
+  obtain ⟨protocol, version⟩ := id
+  simp only at named first
+  subst first
+  rcases named with rfl | rfl <;> simp [responseDesc, GossipTopic.messageDesc]
+
+/-- A chunk with the type and the size limit of a gossip topic has the bound of the topic.
+
+Its largest length is that bound, at a fork that lists the topic. -/
+theorem responseBounds_snd_eq_topicBound {topic : GossipTopic}
+    (h : responseDesc preset config chunkFork id = some (topic.messageDesc preset chunkFork))
+    (same : id.protocol.sizeLimit preset config chunkFork = topic.sizeLimit preset config chunkFork)
+    (listed : topic ∈ config.gossipTopics chunkFork) :
+    (responseBounds preset config chunkFork id).map Prod.snd =
+      topicBound preset config chunkFork topic := by
+  simp only [responseBounds, topicBound, topicDesc, listed, h, same, ↓reduceIte, Option.map_some]
+  cases topic.sizeLimit preset config chunkFork <;> rfl
 
 end EthLib.Consensus.Proofs.ReqResp.ResponseBounds

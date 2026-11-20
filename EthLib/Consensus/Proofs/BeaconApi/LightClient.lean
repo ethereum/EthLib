@@ -5,6 +5,7 @@ public import EthLib.Consensus.Proofs.ForkDigest
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Base.Proofs.LittleEndian
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
+import EthLib.Consensus.Proofs.BeaconApi.Encoding
 
 /-!
 # Proofs: the light client answers of the Beacon API
@@ -20,6 +21,10 @@ On a chain whose digests name their forks, the SSZ chunks of updates decode back
 On such a chain, bytes that decode are the chunks of the updates they give.
 
 Each latest update answer refuses with code 404 exactly when the node knows no update.
+
+It refuses with no other error, so a known update never gets code 500.
+
+That result needs a preset with a nonempty logs bloom and sync committee.
 -/
 
 @[expose] public section
@@ -629,6 +634,44 @@ theorem optimisticUpdateResponse_notFound_iff {fork : Fork}
   | some update =>
     refine iff_of_false ?_ (by simp)
     rw [optimisticUpdateResponse, versioned_error_iff (by decide)]
+    simp
+
+/-- The finality update response refuses exactly when the node knows no update.
+
+Its error is then the one with code 404 for a missing finality update.
+
+It needs a preset with a nonempty logs bloom and sync committee. -/
+theorem finalityUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} {error : ErrorMessage} :
+    finalityUpdateResponse latest = .error error ↔
+      latest = none ∧ error = noLatestUpdate "finality" := by
+  cases latest with
+  | none =>
+    exact ⟨fun refused => ⟨rfl, (Except.error.inj refused).symm⟩,
+      fun ⟨_, named⟩ => by subst named; rfl⟩
+  | some update =>
+    rw [finalityUpdateResponse, versioned_eq_error_iff
+      fun (finality : LightClientFinalityUpdate preset fork) _ => toApiJson_total finality]
+    simp
+
+/-- The optimistic update response refuses exactly when the node knows no update.
+
+Its error is then the one with code 404 for a missing optimistic update.
+
+It needs a preset with a nonempty logs bloom and sync committee. -/
+theorem optimisticUpdateResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {fork : Fork}
+    {latest : Option (LightClientUpdate preset fork)} {error : ErrorMessage} :
+    optimisticUpdateResponse latest = .error error ↔
+      latest = none ∧ error = noLatestUpdate "optimistic" := by
+  cases latest with
+  | none =>
+    exact ⟨fun refused => ⟨rfl, (Except.error.inj refused).symm⟩,
+      fun ⟨_, named⟩ => by subst named; rfl⟩
+  | some update =>
+    rw [optimisticUpdateResponse, versioned_eq_error_iff
+      fun (optimistic : LightClientOptimisticUpdate preset fork) _ => toApiJson_total optimistic]
     simp
 
 end EthLib.Consensus.BeaconApi

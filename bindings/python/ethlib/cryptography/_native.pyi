@@ -1589,7 +1589,7 @@ def snap_trie_nodes_answer(request: bytes, response: bytes) -> bool:
     ...
 
 def snap_full_account(slim: bytes) -> bytes:
-    """The full RLP form of an account in slim form."""
+    """The full RLP form of an account, from the RLP encoding of its slim form."""
     ...
 
 def snap_verify_account_range(root: bytes, start: bytes, accounts: list[tuple[bytes, bytes]], proof: list[bytes]) -> bool | None:

@@ -167,7 +167,7 @@ theorem liftM_seedPrf (s : Seed) :
 /-- The real game's oracles, for the secret key of a seed, are the game's over that seed. -/
 theorem reasonOracles_eq_failSignerOf (seed : Seed) :
     QueryImpl.ofLift OracleWorld (WriterT (QueryLog SigningSpec) (OracleComp OracleWorld)) +
-        reasonSigningOracle ⟨seed⟩ =
+        statelessReasonSigningOracle seed =
       failSignerOf (QueryImpl.id' OracleWorld)
         (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) seed)
         (seedPrf (hashOf (QueryImpl.id' OracleWorld))) := by
@@ -175,12 +175,12 @@ theorem reasonOracles_eq_failSignerOf (seed : Seed) :
   rcases t with t | request
   · rfl
   · rw [QueryImpl.add_apply_inr]
-    simp only [reasonSigningOracle, failSignerOf]
+    simp only [statelessReasonSigningOracle, failSignerOf]
     refine congrArg WriterT.mk ?_
     have hseed : (liftM (schemeSeed H seed) : OracleComp OracleWorld Seed) =
         schemeSeed (hashOf (QueryImpl.id' OracleWorld)) seed :=
       liftM_H _
-    simp only [signWith, liftM_bind, map_bind, hseed]
+    simp only [statelessSignWith, liftM_bind, map_bind, hseed]
     refine bind_congr fun s => ?_
     rw [publicParamOf_map_monad (fun {β} (c : OracleComp HashSpec β) =>
       (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
@@ -193,17 +193,18 @@ theorem reasonOracles_eq_failSignerOf (seed : Seed) :
 
 /-- The game of a signing failure, before the random oracle, as the game over the seed `S_0`. -/
 theorem reasonRun_eq_failGameOf (adversary : ReasonAdversary) :
-    reasonRun adversary = (liftM XmssSecurity.sampleMasterSeed : OracleComp OracleWorld _) >>=
+    statelessReasonRun adversary =
+      (liftM XmssSecurity.sampleMasterSeed : OracleComp OracleWorld _) >>=
       fun s0 => failGameOf (QueryImpl.id' OracleWorld)
         (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) (ofSeed s0))
         (seedPrf (hashOf (QueryImpl.id' OracleWorld))) adversary := by
-  unfold reasonRun sampleSeed
+  unfold statelessReasonRun sampleSeed
   simp only [liftM_map, bind_map_left]
   refine bind_congr fun s0 => ?_
   have hseed : (liftM (schemeSeed H (ofSeed s0)) : OracleComp OracleWorld Seed) =
       schemeSeed (hashOf (QueryImpl.id' OracleWorld)) (ofSeed s0) :=
     liftM_H _
-  simp only [failGameOf, keyGenWith, liftM_bind, liftM_pure, bind_assoc, pure_bind, hseed]
+  simp only [failGameOf, statelessKeyGenWith, liftM_bind, liftM_pure, bind_assoc, pure_bind, hseed]
   refine bind_congr fun s => ?_
   rw [publicKeyOf_map_monad (fun {β} (c : OracleComp HashSpec β) =>
     (liftM c : OracleComp OracleWorld β)) (fun b => liftM_pure b) (fun x f => liftM_bind x f),
@@ -215,12 +216,12 @@ theorem reasonRun_eq_failGameOf (adversary : ReasonAdversary) :
 
 /-- The real game draws `S_0`, and each request hashes it again into `S`, as the signer does. -/
 theorem signingFailure_eq (adversary : ReasonAdversary) :
-    signingFailure adversary =
+    statelessSigningFailure adversary =
       Pr{let s0 ← XmssSecurity.sampleMasterSeed
          let z ← (simulateQ romImpl (failGameOf (QueryImpl.id' OracleWorld)
            (schemeSeed (hashOf (QueryImpl.id' OracleWorld)) (ofSeed s0))
            (seedPrf (hashOf (QueryImpl.id' OracleWorld))) adversary)).run' ∅}[SomeFailure z] := by
-  refine (prEvent_countedOracle (reasonRun adversary) SomeFailure).trans ?_
+  refine (prEvent_countedOracle (statelessReasonRun adversary) SomeFailure).trans ?_
   rw [reasonRun_eq_failGameOf, XmssSecurity.Seeded.run'_lift_sample_bind]
   simp only [prEvent_norm]
 
@@ -301,7 +302,7 @@ Some request fails at most as often as in the ideal game of the scheme seed, plu
 The game with the scheme seed as a derivation query makes at most `q` hash queries. -/
 theorem signingFailure_le_seedGame (adversary : ReasonAdversary) {q : ℕ}
     (hq : IsQueryBoundP (seedGame adversary) IsHashD q) :
-    signingFailure adversary ≤
+    statelessSigningFailure adversary ≤
       Pr{let z ← (simulateQ (SecretEncoding.idealImpl HashSpec Unit HashOutput)
           (seedGame adversary)).run (∅, ∅)}[SomeFailure z.1] +
         q * (2 ^ 256 : ℝ≥0∞)⁻¹ := by
@@ -580,7 +581,7 @@ Some request then fails at most `2 q / 2^256` more often than in the derivations
 theorem signingFailure_le_prfGame (adversary : ReasonAdversary) {qH r : ℕ}
     (hh : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryHash qH)
     (hr : ∀ pk, IsQueryBoundP (adversary.main pk) IsAdversaryRequest r) :
-    signingFailure adversary ≤
+    statelessSigningFailure adversary ≤
       Pr{let z ← (simulateQ (SecretEncoding.idealImpl HashSpec PrfInput HashOutput)
           (prfGame adversary)).run (∅, ∅)}[SomeFailure z.1] +
         2 * (gameQueries qH r : ℝ≥0∞) * (2 ^ 256 : ℝ≥0∞)⁻¹ := by

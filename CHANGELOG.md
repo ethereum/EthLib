@@ -812,6 +812,24 @@ Not yet released.
   The new statement implies the old one, so a reader of the old statement drops the last conjunct.
   The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
 
+- The snap AccountRange message reads and writes each account body as the slim account list nested in its entry, the encoding used on the network ([#3491](https://github.com/ethereum/EthLib/issues/3491)).
+  `caps/snap.md` types the body `B`, and a byte string that holds the list is now no account body.
+  In Lean, `RangeEntry` takes the type of its data: an account entry is `RangeEntry Item`, and a slot entry `RangeEntry ByteArray`.
+  `fullAccount` takes the item of the body, and `fullAccount_slimAccount` replaces `fullAccount_encode_slimAccount`.
+  `AccountRangeWitness` loses its `slim` and `encode_slim` fields, since the entry carries the slim form itself.
+  In Python, `decode_message` reads the nested form, and still reads a message whose body is a byte string.
+  `full_account` and `verify_account_range` still take the RLP encoding of each body, and refuse a byte string as before.
+
+- In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
+  `creditBudget` reads it in place of `initialExcess`.
+  `initialExcess` is unchanged.
+  `creditBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
+  `Apriori.Internal.potential` moves from `Apriori/Ownership.lean` to `Apriori/Bound.lean`, where `initialCappedExcess` reads it; its name and value are unchanged.
+  In `Apriori.Internal`, pot 0 of `initialPot` is `potential x i - effectiveAt x i` for a key active at `x`, and `OwnedInitial` bounds its tokens with `initialCappedExcess`.
+  The `NewReference` clause of `ReserveCut` bounds `potential u i` in place of `max (effectiveAt u i) (actualBalanceAt u i)`.
+  The former clause implies the new one; a caller that read the balance from it reads `potential` instead.
+
 - In Lean, `processInactivityUpdates_frame` moves from `EthLib.Consensus.Proofs.Transition.EpochParticipation` to `EthLib.Consensus.Proofs.Transition.EpochUpdates`, next to the other frame facts of the epoch steps.
   Its name and statement are unchanged; a caller that imports only the former adds `import EthLib.Consensus.Proofs.Transition.EpochUpdates`.
 
@@ -855,6 +873,26 @@ Not yet released.
   `payloadInputs_processVoluntaryExit`, `payloadInputs_processBlsToExecutionChange` and `payloadInputs_processSyncAggregate` are removed; a caller writes `payloadInputsLaws.processVoluntaryExit`, `payloadInputsLaws.processBlsToExecutionChange` or `payloadInputsLaws.processSyncAggregate`.
   `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
   That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
+
+- In Lean, an XMSS secret key holds the trees it signs with, and signing returns the updated key ([#3404](https://github.com/ethereum/EthLib/pull/3404)).
+  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 8` bottom trees, each with the top signature of its root.
+  `Xmss.keyGen seed` returns the public key first, then the secret key, and the secret key keeps the top tree that key generation builds.
+  `Xmss.sign sk idx m` returns the signature with the updated key; in a kept bottom tree it makes one one-time signature and never rebuilds a tree.
+  The stateless signer of the note moves to the proofs as `Xmss.statelessSignWith`, with `signDerived`, `signLayer` and `publicKeyOf`; nothing exports it.
+  `Xmss.SecretKey.Reachable.sign_fst` proves that every key that key generation and any sequence of signatures reach signs as the stateless signer, byte for byte.
+  `Xmss.verify_keyGen_sign`, `Xmss.verifyWith_keyGenWith_signWith` and `Xmss.sign_error` take `sk.Reachable` in place of the key pair of `keyGen`; `Xmss.signatureIndex_sign` reads `(sign sk idx m).1`.
+  `Xmss.prEvent_signWith_error_le` and `..._empty` take `hkept`: a bottom tree of the index that the key keeps holds a top signature.
+  `Xmss.Cost.isQueryBoundP_signWith` and `Xmss.Cost.signCalls_eq` bound signing by `8603369879` calls; `isQueryBoundP_signWith_of_mem` and `signKeptCalls_eq` give `4294967500` in a kept tree.
+  The old statements hold for the stateless signer, under new names: `Xmss.signWith_run`, `sign_eq_ok`, `sign_error`, `prEvent_signWith_error_le` and `..._empty` become `statelessSignWith_run`, `statelessSign_eq_ok`, `statelessSign_error`, `prEvent_statelessSignWith_error_le` and `..._empty`.
+  `Xmss.Cost.isQueryBoundP_signWith` of the old signer becomes `Xmss.Cost.isQueryBoundP_statelessSignWith`, and `Unforgeability.isQueryBoundP_keyGenWith` and `isQueryBoundP_signWith` become `isQueryBoundP_statelessKeyGenWith` and `isQueryBoundP_statelessSignWith`.
+  `Xmss.Cost.isQueryBoundP_keyGenWith` keeps its name and its bound over the new key generation.
+  `Xmss.bottomTree_lt` moves from `Proofs/Xmss/Correctness.lean` to `Proofs/Xmss/Sign.lean`.
+  The unforgeability game's signer keeps its key across requests, and `Unforgeability.HasHashQueryBound` counts the calls of the same game with the stateless signer, `statelessExperiment`.
+  `Unforgeability.unforgeable`, `forgeAdvantage_le_adversaryBudget`, `forgeAdvantage_le_lifetime`, `reasonForgeAdvantage_le`, `reasonForgeAdvantage_le_add`, `signingFailure_le` and `reasonForgeAdvantage_le_bounded` keep their text over the new game.
+  Their old games are named `statelessGameCore`, `statelessExperiment`, `statelessForgeAdvantage`, `statelessReasonRun` and `statelessSigningFailure`, and `forgeAdvantage_eq_statelessForgeAdvantage` proves that both games win equally often.
+  The Python API is unchanged: `xmss.key_gen`, `xmss.sign`, `xmss.verify` and `xmss.signature_index` take and return the same values.
+  The extension keeps the secret keys of the last 2 seeds, so a signature in a kept bottom tree no longer rebuilds two trees.
+  The export `eth_xmss_key_gen` also returns the secret key, and `eth_xmss_sign` takes the secret key and returns the updated key with the result.
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.

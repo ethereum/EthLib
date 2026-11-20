@@ -35,7 +35,7 @@ Gap D asks whether the use of EthLib holds together.
 
 | ID | Risk | Mitigation in place | Applies to |
 |----|------|---------------------|------------|
-| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to consensus-specs `v1.7.0-beta.4` and other upstream sources; consistency theorems on the constants | P R B V |
+| A1 | A definition does not match its source | Definitions named and shaped after the source; vectors pinned to one commit or release of each upstream source, listed in `tests/sources.toml`; consistency theorems on the constants | P R B V |
 | A2 | A theorem holds only under a hypothesis | Each conditional theorem below lists its hypotheses | P |
 | A3 | Timing reveals secret data | None: no constant-time claim | R B |
 | A4 | A security theorem idealises a primitive | Each idealisation is listed in A4 | P |
@@ -78,35 +78,44 @@ No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
 
+The secret key keeps the top tree and the bottom trees it signed in last, and signing returns the updated key.
+`SecretKey.Reachable.sign_fst` (`Proofs/Xmss/Sign.lean`) proves that every key that `keyGen`, then any sequence of `sign` calls, gives signs as the note's stateless signer, byte for byte.
+That signer rebuilds every tree from the seed; it is written only in the proofs (`Proofs/Xmss/Reference.lean`) and is never exported.
+
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`).
-If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
+Take a key that `keyGen seed`, then any sequence of `sign` calls, gives.
+If `sign` returns a signature with it for a message at a leaf index, then `verify` accepts that signature under the public key of `keyGen seed`.
 It says nothing about unforgeability.
 
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
-Key generation makes at most `13434881` calls and signing at most `8616804556`.
+Key generation makes at most `13434881` calls.
+Signing makes at most `8603369879` calls with any key, and at most `4294967500` in a bottom tree the key keeps; it never computes the top tree.
 Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
+It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error.
 It proves that the signer's own calls before each search add none.
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
-So no theorem bounds the failure of a later signature, or of signing inside the game.
+So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
-Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
-In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
-Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
+Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/KeyedSigner.lean`).
+In the random oracle model, an adversary with a budget of `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
+Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle, and the signer keeps its key across requests.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
-The budget `q` counts the calls of key generation, the signer and the final verification too.
+The budget `q` bounds the calls of the same game with the stateless signer, key generation and the final verification included.
+Both games give the adversary the same answers, so it forges in each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
+No theorem bounds the forgery by the calls of the game with the kept key.
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
-The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+The constants are proved upper bounds on the calls of key generation, of one stateless signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-The library proves no smaller bound on the calls of a request.
+The library proves no smaller bound on the calls of a stateless signing request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -2276,9 +2285,18 @@ So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `app
 The bound on the parent is a hypothesis.
 The rule lets each block raise the gas limit by less than a 1024th, with no cap.
 So no theorem bounds the gas limit along a chain from its genesis.
+
 From Glamsterdam a receipt counts the gas after the refund, state gas included.
-The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
-Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+`processTransaction_gasUsed_le_add` (`Execution/Proofs/Transactions/Process.lean`) proves that a transaction uses at most the execution gas plus the state gas it adds to its block.
+Before Glamsterdam the block counts the gas used as execution gas, and no state gas (`processTransaction_blockGas_execution_of_lt`, `processTransaction_blockGas_state_of_lt`).
+From Glamsterdam it counts as execution gas at least the gas that the sender pays, minus the state gas (`gasUsed_sub_le_transactionBlockGas`).
+So each receipt records at most the execution gas plus the state gas of the body (`applyTransactions_cumulativeGasUsed_le_add`).
+The gas limit bounds each of the two (`applyTransactions_gas_le`), so a receipt records at most twice the gas limit.
+`stateTransition_gas_lt` derives both bounds for a block that passes its transition, at every fork that the transition runs.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^62`.
+The rule then keeps the gas limit of the block below `2^63` (`stateTransition_gasLimit_mul_lt`), so twice that limit stays below `2^64`.
+For a parent from `2^62` up to `2^63`, no theorem keeps the receipts from Glamsterdam below `2^64`.
+`processTransaction_logsWeight` and `encode_makeReceipt_processTransaction` hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
 
@@ -2428,7 +2446,10 @@ That bound is still `Q^2 / N`, not a sharper fixed-target bound.
 `verifyAccountRange_complete` and `verifyStorageRanges_complete` (`Execution/Proofs/Network/SnapRangeComplete.lean`) prove that honest snap answers from secured tries pass their checks, or `findCrossCollision` returns a Keccak-256 collision among proof nodes.
 The keys are listed by increasing hash, and the proof contains the proofs of the start and the last entry.
 That order assumes the keys of each trie have distinct Keccak-256 hashes; no search returns two keys with one hash.
-The account theorem uses successful slim and full encodings of each account; `fullAccount_encode_slimAccount` proves that the conversion returns the full form.
+The account theorem uses a successful full encoding of each account; `fullAccount_slimAccount` proves that the conversion returns the full form.
+An account body is the slim form nested in its entry as an RLP list, the encoding used on the network.
+[AccountRange (0x01)](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#accountrange-0x01) types it `B`, a byte string, and [ethereum/devp2p#295](https://github.com/ethereum/devp2p/pull/295) proposes the correction.
+`fullAccount_bytes` states that a byte string is never an account body, so the range check refuses an answer in that form.
 The storage theorem assumes whole tries before the last range; every range starts at the requested hash for one account and at the zero hash for several.
 `verifyAccountRange_complete_nil`, `verifyStorageRanges_complete_nil`, `verifyAccountRange_whole` and `verifyStorageRanges_whole` cover empty last ranges and whole tries; whole tries need no proof and no collision alternative.
 An empty AccountRange with no proof is the empty reply `noState`, rather than a claim about the trie.
@@ -2482,6 +2503,7 @@ An ID from `0x10` on goes to the shared capability that holds it, and `route` gi
 `messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Message.lean`) states that the IDs an eth version holds are those below the first ID from which its decoder rejects every ID as unknown.
 `Message.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that the eth decoder reads a message exactly from its own ID and item, on a version that uses its form.
 `SnapMessage.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Snap.lean`) states that the snap decoder reads a message exactly from its own ID and item, on a version that uses its ID.
+`SnapMessage.messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Snap.lean`) states that the IDs a snap version holds, reserved ones included, are those below the first ID from which its decoder rejects every ID as unknown.
 No theorem says anything about a sequence of frames beyond one step, or about timeouts.
 
 The source leaves three points open, and the session reads them as follows.
@@ -2746,7 +2768,16 @@ The topics of the peers also list each peer at most once, so a second run can st
 `steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
 That join keeps every mesh free of a repeated peer, with no hypothesis on the fanout or on the peers of its topic.
 `receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
-No step changes the explicit peers or adds one to a mesh, but no theorem states along a run that they stay outside every mesh.
+Every step keeps the explicit peers (`receiveRpc_explicit_eq`, `join_explicit_eq`, `leave_explicit_eq`, `publish_explicit_eq` and `heartbeat_explicit_eq`).
+If no explicit peer is in a mesh before a step, none is after it (`receiveRpc_explicit`, `join_explicit`, `leave_explicit` and `heartbeat_explicit`).
+An RPC adds to a mesh only a sender that is not explicit (`receiveRpc_mesh`).
+A leave removes at most the mesh of its topic, and a publish keeps every mesh (`publish_mesh`).
+A join and a heartbeat with a lawful choice add only peers that this node may GRAFT, as `join_graftable` states for a join.
+`graftable` excludes every explicit peer.
+`steps_explicit` carries both facts along a run whose start has no explicit peer in a mesh.
+`steps_receiveRpc_forward_nodup` combines it with `steps_nodup_of_empty` for a run from a router with no mesh, no fanout and no topics of peers, followed by one RPC.
+That RPC sends each message it forwards at most once to each peer, by `receiveRpc_forward_nodup`.
+The result needs a positive lifetime of the seen cache, and the explicit peers of the start listed once each.
 
 The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
 `Select.first_lawful` proves that this choice is lawful.
@@ -2943,6 +2974,10 @@ It also reads the epoch of a fork left at the far future, which no message carri
 There the digest in a bootnode record of each chain reads back the fork that the record's next fork version implies.
 On mainnet the check reads the root from the pinned genesis state, so it runs only with the archives.
 `decodeResponseChunk_forkOfDigest` (`Consensus/Proofs/ReqResp/ResponseBounds.lean`) draws the consequence for req/resp: on a chain that passes the check, the receiver reads a chunk at the type of the sender's fork.
+When a gossip topic carries the same object, that type is the message type of the topic, except at version 1 of blocks by range and by root.
+`responseDesc_eq_messageDesc` states it for blocks, finality and optimistic light client updates, sidecars, payload envelopes and inclusion lists, with the size limit of the topic.
+`responseBounds_snd_eq_topicBound` draws the consequence: at a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
+`responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block at every fork, since that version has no context bytes.
 
 ### Weak subjectivity
 
@@ -4493,7 +4528,7 @@ The terms doubled in the first line are stake that can leave the support of `x`.
 They are departures, partial withdrawals, scheduled exits, slack below the effective balance, penalties and rounding.
 `gainBudget` is stake that can join or grow: `activationBudget`, `creditBudget` and `pendingSourceExcess`.
 From Electra it also includes `roundingBudget` and `dueConsolidationCarry`.
-`creditBudget` is the excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
+`creditBudget` is the capped excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
 The remaining terms cover the edges of the window.
 They are two adjacent exit epochs, the stake active only at the previous epoch, and the growth room of an exit cohort.
 
@@ -4908,8 +4943,19 @@ It reports `2^17` blob gas for each versioned hash.
 From Dencun, its blob gas price is the base fee per blob gas that the blob schedule of the chain, at the fork, number and timestamp of the block, gives for the excess blob gas of its header.
 No text of a receipt or a log defines `logIndex`; the section "Log index" of the [notes of `eth_simulateV1`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/docs-api/docs/ethsimulatev1-notes.mdx) states the rule and says that receipts use it.
 These properties hold whenever the receipt objects of a block are built.
-They fail with `-32603` when a block does not have one receipt for each transaction, or when the node cannot compute a sender, a hash or a contract address.
-No theorem yet shows that they succeed on the blocks of a valid view.
+They are built exactly when the block has one receipt for each transaction, and each transaction has a hash and a sender (`exists_receiptInfos_eq_ok_iff`).
+That sender is the one that the signature names at the fork of the block.
+Otherwise they fail with `-32603`.
+Computing the contract address of a creation never fails, since each nonce is below `2^256` (`createAddress_ok`, `Proofs/Evm/Call/ContractAddress.lean`).
+In a valid view, a canonical block after the lowest has one receipt for each transaction (`Valid.length_receipts`), since it keeps the receipts of its run.
+The run of a body gives one receipt for each transaction (`applyTransactions_receipts_length`, `Proofs/Blocks/Transition.lean`).
+Each signature of the block names a sender (`Valid.exists_recoverSender`, `Proofs/Rpc/Block.lean`).
+Each transaction of the block has a hash (`Valid.exists_transactionHash`), since the run computes the transactions root from their bytes (`transactionsRoot_eq_ok_iff`, `Proofs/Blocks/TypedRoots.lean`).
+So the receipt objects of the block are built (`Valid.exists_receiptInfos`).
+The method for the receipts of a block answers them for a parameter that resolves to that block (`Valid.exists_blockReceipts`).
+The method for one receipt answers the object at the index of a transaction that the lookup by hash finds there (`Valid.exists_transactionReceipt`).
+The lowest block, the blocks off the canonical chain and the pending block are inputs of the view.
+So no theorem says that their receipt objects are built.
 From Byzantium, the outcome of a receipt object is a status, `true` exactly when the receipt is a success (`outcomeOf_of_byzantium`), which the object writes as `status` `0x1`; before Byzantium it is the state root, which the object writes as `root` (`outcomeOf_of_lt_byzantium`).
 In a valid view, take a canonical block after the lowest.
 Each receipt has the Bloom filter of its logs, and so does each receipt object (`Valid.bloom_receipts`, `Valid.logsBloom_receiptInfos`).
@@ -5141,13 +5187,25 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`, `Proofs/Rpc/SimulateCalls.lean`).
+A block without transactions has an empty list of call results either way (`callsJson_nil`).
+So it is the same with the flag or without (`json_trace_of_nil`).
 Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
-So when every block of a simulation is from Glamsterdam, the whole answer is the same with the flag or without (`simulate_traceTransfers`).
+So when each block of a simulation is from Glamsterdam or has no transactions, the answer is the same either way (`simulate_traceTransfers_of_glamsterdam_le_or_nil`, `Proofs/Rpc/SimulateCalls.lean`).
+That covers a simulation whose blocks are all from Glamsterdam (`simulate_traceTransfers`).
+A block simulated without calls has no transactions (`simulateBlock_transactions`, `Proofs/Rpc/SimulateBlocks.lean`).
+A property holds for each block of a simulation when two kinds of blocks have it (`simulateBlocks_forall`).
+They are the blocks simulated from the base block with an empty request, as gap blocks are, and the blocks of the plan.
+Suppose that each block of the plan is from Glamsterdam or has no calls.
+Then each block of the simulation, gap blocks included, is from Glamsterdam or has no transactions (`simulateBlocks_glamsterdam_le_or_nil`).
+So the answer is the same either way (`simulate_traceTransfers_of_plan`, `Proofs/Rpc/SimulateCalls.lean`).
 A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
-Two cases have no theorem yet:
-- a block before Glamsterdam without calls, such as a gap block, is the same either way, but no theorem states this.
-- no theorem derives the hypothesis on the blocks from the configuration and the base block.
+The order check makes each block of the plan later than the base block, in number and in time (`lt_of_checkOrder`, `Proofs/Rpc/Simulate.lean`).
+The plan gives each block the active fork at the number and the time of that block (`ChainView.planSimulate`, `Execution/Rpc/Simulate.lean`).
+Under any configuration, the active fork never decreases as the number and the time grow (`ChainConfig.activeFork_mono`, `Base/Proofs/ChainConfig.lean`).
+So each block of the plan has a fork no earlier than the active fork of the header of the base block (`planSimulate_fork_le`, `Proofs/Rpc/SimulateBlocks.lean`).
+When that fork is Glamsterdam or later, the answer is the same either way (`simulate_traceTransfers_of_base`, `Proofs/Rpc/SimulateCalls.lean`).
+When that fork is before Glamsterdam, or no fork is active at the base block, no theorem derives the hypothesis on the blocks of the plan.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -5610,7 +5668,18 @@ It checks the attestation data index of Deneb, Electra and Fulu stores, and code
 It checks the aggregates and contributions against bytes it builds itself.
 It checks codes 404 and 503 for the aggregate, and codes 400, 404 and 503 for the contribution.
 It checks the codes of the aggregate before Electra only, so only the theorems speak for the single attestations.
-No theorem states when these answers refuse with code 500.
+`aggregateAttestation_internal_iff_of_lt_electra` and `aggregateAttestation_internal_iff_of_electra` state when the aggregate answer refuses with code 500.
+It refuses so exactly when the block of the first match is verified and the construction of the aggregate fails.
+From Electra that refusal also needs a committee index below `MAX_COMMITTEES_PER_SLOT`, since an index not below it gets code 400 by `aggregateAttestation_error_iff_of_electra`.
+No theorem states when the construction of an aggregate fails, so these two theorems leave its faults open.
+`produceSyncCommitteeContribution_internal_iff` states the same for the contribution answer, once the slot, the subcommittee index and the root pass their checks.
+It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
+The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
+The answer hands the construction only the messages of members.
+A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
+No theorem states when the attestation data and payload attestation data answers refuse with code 500.
+No theorem states it for the aggregate and contribution responses either, which also refuse so when writing the value as JSON fails.
+`toApiJson_total` excludes that failure for a lawful type.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
@@ -5627,16 +5696,32 @@ The proof also reads `stateRoot_blockStates`, which shows that the state kept un
 
 The handlers of `Store.Reachable` leave out `onInvalidPayload`, which runs when the execution layer finds a payload invalid.
 From Heze they also leave out `Store.recordValidatedInclusionListSatisfaction`, which records whether a payload that turns valid satisfies its inclusion lists.
-The first step removes a block only together with its state, and the second touches neither the blocks nor the states.
-So both keep the two facts that the proof reads.
-No theorem states that yet, so after either step only `bootstrapFor_valid` applies, with its assumptions on the store.
+`Store.onInvalidPayload_blocks_blockStates` (`Consensus/Proofs/ForkChoice/Optimistic.lean`) shows that the first step keeps both the block and the state of each root, or removes both.
+`Store.recordValidatedInclusionListSatisfaction_eq` (`Consensus/Proofs/ForkChoice/OptimisticSync.lean`) shows that the second touches neither the blocks nor the states.
+The bootstrap answer of a root depends only on the configuration, the block and the state under that root, and the fork of the store.
+`bootstrapFor_onInvalidPayload` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) shows that the first step keeps the answer of each root whose block stays.
+`bootstrapFor_recordValidatedInclusionListSatisfaction` shows that the second step keeps the answer of every root.
+`bootstrapFor_valid_of_onInvalidPayload` and `bootstrapFor_valid_of_recordValidatedInclusionListSatisfaction` carry `bootstrapFor_valid_of_reachable` over the two steps, through the two theorems above.
+The proof of the first also reads `bootstrapFor_of_missing` (`Consensus/Proofs/BeaconApi/LightClientBootstrap.lean`), since a served root has its block.
+So a bootstrap served after either step starts a light client, with the same assumptions on the schedule, the state type and the preset.
+A root that the first step removes has neither its block nor its state, so `bootstrapFor_of_missing` gives it the error with code 404.
+No theorem covers a store that the handlers reach after either step.
 
 `bootstrapFor_error` shows that each refusal of the bootstrap is the error with code 404 that names the root, and `bootstrapFor_error_code` gives the code.
 The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` lists that code when "`LightClientBootstrap` instance cannot be produced for the given block root".
 `bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
 `bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets that error.
 `bootstrapFor_of_lt_altair` shows that error for a root whose post state is before the Altair fork epoch, for a store of any fork and under any schedule.
-No theorem states whether a served bootstrap can get code 500, when it is written in JSON or in SSZ.
+`bootstrapResponse_eq_error_iff` shows that the JSON answer refuses exactly when the bootstrap does, with the same error.
+So in JSON a served bootstrap never gets code 500.
+It applies `versioned_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) with `toApiJson_total` (`Consensus/Proofs/BeaconApi/Encoding.lean`), by which the JSON writer never fails on a value of a lawful type.
+`bootstrapResponse_error` combines it with `bootstrapFor_error`: each refusal of the JSON answer is the error with code 404 that names the root.
+Both assume a preset with a nonempty logs bloom and sync committee, as the laws of SSZ for the light client containers do.
+In SSZ, `SszType.serialize_ok_or_overflow` (`Serialization/Proofs/Ssz/Typed/Class.lean`) shows that writing a value of a lawful type fails only when a composite part reaches `2^32` bytes.
+The keys of a sync committee reach that size when it holds more than `2^32 / 48` keys.
+The SSZ answer of the bootstrap (`Consensus/Exports/BeaconApiLightClient.lean`) writes it with a check of that size for each composite part.
+So under a preset with such a sync committee, the SSZ answer of a served bootstrap gets code 500.
+No theorem states that, nor that a bootstrap of the mainnet or the minimal preset stays below that size.
 
 `bootstrapFor_error_iff_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) is about a store that the handlers reach from an anchor that the fork choice accepts.
 It covers each root whose block and post state such a store holds, with that state from the Altair fork epoch on.
@@ -5657,8 +5742,8 @@ With Electra after Fulu, a Fulu store can refuse a root before the Electra fork 
 With Gloas after Heze, a Heze store can refuse a root before the Gloas fork epoch.
 No theorem states these refusals.
 Both theorems assume a lawful state type and a preset whose sizes in the block are nonzero.
-After either step that `Store.Reachable` leaves out, each root that the store still holds keeps its answer.
-No theorem states that yet.
+After either step that `Store.Reachable` leaves out, each root whose block the store still holds keeps the answer that both theorems give.
+`bootstrapFor_onInvalidPayload` and `bootstrapFor_recordValidatedInclusionListSatisfaction` show this, with the assumptions of both theorems read at the store before the step.
 
 `IsUpdatesAnswer` is the rule of the source for the updates answer.
 It holds known updates of consecutive periods of the range, with no gap, starting with the earliest known one, at most `min(128, count)` of them.
@@ -5673,7 +5758,10 @@ The decoder also refuses a chunk whose digest is not the digest of the epoch of 
 `encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
 `finalityUpdateResponse_notFound_iff` and `optimisticUpdateResponse_notFound_iff` show that each latest update answer refuses with code 404 exactly when the node knows no update of its kind.
 The files `finality_update.yaml` and `optimistic_update.yaml` of that release list that code when "No `LightClientFinalityUpdate` is available" and "No `LightClientOptimisticUpdate` is available".
-No theorem states whether a known update can get code 500 when it is written in JSON.
+`finalityUpdateResponse_eq_error_iff` and `optimisticUpdateResponse_eq_error_iff` show that each latest update answer refuses exactly when the node knows no update of its kind.
+Its error is then the one with code 404, so a known update never gets code 500.
+Both apply `versioned_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) with `toApiJson_total` (`Consensus/Proofs/BeaconApi/Encoding.lean`), and assume a preset with a nonempty logs bloom and sync committee.
+The JSON answer for a range of updates writes each update with the same writer, and no theorem states that it never gets code 500.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.
@@ -6112,8 +6200,9 @@ Points that remain open:
 ### Builder API
 
 The Builder API connects a proposer to the builders that bid for its payload, as `ethereum/builder-specs` defines it.
-EthLib cites commit `fce64468` of that repository.
-For Bellatrix to Fulu, its specification text matches release `v0.6.1`; the changes are formatting, `deprecated` flags and notes that point to the Gloas replacements.
+EthLib cites commit `ea92eff` of that repository.
+For Bellatrix to Fulu, its specification text matches release `v0.6.1`, except for formatting, `deprecated` flags, notes that point to the Gloas replacements and links pinned to consensus-specs releases.
+Its pseudocode also corrects that of the release, so that it states the rules that EthLib follows.
 EthLib specifies the messages, their signatures, their SSZ encodings and the version names of their JSON bodies; it leaves out the transport.
 
 A JSON response names the fork of its data by the consensus version of the Beacon API, from Bellatrix on.
@@ -6142,10 +6231,6 @@ The source adds the ten seconds to the clock as a 64-bit integer, which fails pa
 The source keeps only the message of each registration; EthLib keeps the signed registration, which holds that message.
 The Relay API serves the signed registration of each upcoming proposer ([`responses.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml)), so a relay needs the signature too.
 `Registry.find?_insert_self` shows that the registry gives back the signed registration just inserted for its key.
-The pseudocode of the source has two defects, which EthLib reads by their evident meaning:
-
-- `process_registration` reads `pubkey`, which it never binds; EthLib reads the key of the registration.
-- It rebinds `registration` to the message, then passes it to the signature check, which takes the signed registration; EthLib checks the signed registration.
 
 The endpoint takes a list of registrations.
 The source does not say whether one invalid entry rejects the whole list, nor whether earlier entries of the same list count as kept registrations.
@@ -6161,11 +6246,6 @@ EthLib answers 500, the internal error of the source, when the proposer of the s
 `processBid_getBid` shows that such a bid is accepted when the payload extends the state, pays the registered fee recipient, and the signature verifies.
 The source gives the bid of a builder for Bellatrix only.
 From Deneb the commitments to the blobs, and from Electra the requests, are inputs, since the source gives no function that fills them.
-The pseudocode of the source has three defects, which EthLib reads by their evident meaning:
-
-- `get_bid` takes `execution_payload` but reads `payload`; EthLib reads the argument.
-- `verify_bid_signature` computes its signing root from `signed_registration.message`, a name it never binds; EthLib uses the message of the bid, as `get_bid_signature` does.
-- `process_bid` calls `verify_bid_signature` without asserting its result, so read literally it accepts any signature; EthLib refuses a bid whose signature does not verify.
 
 From Gloas, a builder checks a request for a bid with six rules, and a proposer checks a bid it fetched with eight rules and the signature.
 `isEligibleForBidGloas_ok_true_iff` (`Consensus/Proofs/BuilderApi/GloasBid.lean`) states the builder's rules.
@@ -6278,13 +6358,14 @@ The rule names no slot, so EthLib keeps the submissions of one slot in a store, 
 From Bellatrix to Fulu, a relay serves a submission to proposers as a bid of the Builder API.
 `SubmitBlockRequest.bid_total` shows that the bid always computes, and `SubmitBlockRequest.bid_header` that it holds the header of the payload.
 `SubmitBlockRequest.bid_value_pubkey` shows that it holds the value of the bid trace and the key it is served under.
-`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#bidding) require.
+`SubmitBlockRequest.bid_commitments` shows that from Deneb it holds the commitments of the blobs bundle, as the [Deneb bidding rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#bidding) require.
 `SubmitBlockRequest.bid_requests` shows that from Electra it holds the requests of the submission.
 `SubmitBlockRequest.bid_unblind` shows that a blinded body that carries the header of the bid unblinds to a body that holds the payload of the submission.
 The source does not fix the key that signs the served bid, so it is an input.
-From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
+From Deneb, the [block scoring rules](https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/deneb/builder.md#block-scoring-1) forbid a relay to serve a submission whose value fails the check of the bid value.
 That check needs the balance change of the fee recipient from a simulation of the payload.
-It also subtracts withdrawal amounts in Gwei from that change in Wei, with no conversion, so EthLib does not yet say which submissions a relay may serve.
+It subtracts the amounts of the withdrawals to the fee recipient, each converted from Gwei to Wei, from that change in Wei.
+EthLib does not yet specify this check, so it does not say which submissions a relay may serve; [#2125](https://github.com/ethereum/EthLib/issues/2125) tracks the check.
 
 The source leaves four points about a submission open, and EthLib specifies none of them:
 
@@ -6607,7 +6688,7 @@ Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate
 They come in three kinds.
 A `partial` definition is defined by `partial` recursion.
 An `opaque` one is an opaque constant.
-A `reaches-opaque` one unfolds to an opaque constant, such as `Loop.forIn`, which `while` compiles to.
+A `reaches-opaque` one unfolds to an opaque constant: `while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition of Lean core.
 
 `lake exe check-decls` reports each one, and `scripts/check_decls_baseline.txt` lists those that remain, with the reason for each group.
 The list below is generated from that file, and it is empty when none remains.
@@ -7020,7 +7101,7 @@ The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
+12095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -7099,8 +7180,9 @@ leanchecker replays every declaration of EthLib into Lean's kernel, proof bodies
 First, the workflow checks that leanchecker rejects a fixture theorem of `False` that the kernel never checked.
 The replay uses Lean's own kernel, so it does not protect against a bug in that kernel (C1).
 
-The workflow runs every Monday and on each push to `master`, but a newer push cancels a replay still in progress.
-So only the weekly run is sure to finish.
+The workflow runs every Monday and on each push to `master`.
+On `master` a running replay finishes, and a newer push replaces only a run that has not started.
+So a replay can skip a commit, but the latest commit on `master` is always replayed.
 
 ## Gap D: does the use of EthLib hold together?
 
