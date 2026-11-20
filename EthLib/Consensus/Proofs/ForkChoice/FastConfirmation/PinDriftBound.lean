@@ -7433,7 +7433,7 @@ private def propC {x y : ForkedBeaconState preset} (tail : Run config checks x y
 
 A credited stake compounds by at most a tenth.
 
-The stubs charge an exact tenth of the keys' total, at ten times their terms.
+The bounds of the terms charge an exact tenth of the keys' total, at ten times their terms.
 
 The consolidation credits are under `consolidationsX`, so their compounding is not charged here. -/
 private def propN {x y : ForkedBeaconState preset} (tail : Run config checks x y)
@@ -7446,7 +7446,7 @@ They are `credC` without its consolidation credits.
 
 A credited stake compounds by at most a tenth.
 
-The stubs charge an exact tenth of the keys' total, at ten times their terms. -/
+The bounds of the terms charge an exact tenth of the keys' total, at ten times their terms. -/
 private def credN {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
   (creditScan (fun s => decide (s = .rewards)) (fun s => decide (s = .deposits)) v high tail).1
@@ -9766,7 +9766,7 @@ private def cP : ℤ := ∑ v ∈ U pulled counted,
 private def cJ : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ AC counted ∧ v ∈ Q counted ∧ v ∉ AR pulled then (eC counted v : ℤ) else 0
 
-/-- K7, keys active at C and outside its quorum (slashed at C): minus twice their stake at C.
+/-- The keys active at C and outside its quorum (slashed at C): minus twice their stake at C.
 
 It also subtracts their stake at R if they are active there. -/
 private def cK7 : ℤ := ∑ v ∈ U pulled counted,
@@ -9823,7 +9823,7 @@ private theorem active_of_activeVoters (early : fork < .glamsterdam)
     simpa [activeVoters] using member
   exact (mem_getActiveValidatorIndices (s.validators.bound early)).mp listed
 
-/-! ## Per-term stubs -/
+/-! ## The bounds of the terms -/
 
 section Stubs
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
@@ -19458,7 +19458,7 @@ private theorem consAmt_zero (h : Setting config checks g split fin pulled anc c
   simp only [List.filter_append, List.map_append, List.sum_append] at bound
   omega
 
-/-- The consolidation credits of C's branch, charged to `consolidationsX` (the S9 ruling).
+/-- The consolidation credits of C's branch, charged to `consolidationsX`.
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
 
@@ -23025,7 +23025,7 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
   dsimp only
   rw [sameEpoch]
 
-/-- S1 (syncSeats), in the third window: the base bound with the shared segment's K debits.
+/-- The sync seats, in the third window: the base bound with the shared segment's K debits.
 
 It also holds the shares of `CS` and of the shared segment's exited keys of `SC`.
 
@@ -25442,7 +25442,7 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
   · have pFour := Nat.mul_le_mul_left Q four
     omega
 
-/-- (W-S, the keys of `SC`) The slack and the rounding of their rewards are paid by their shares.
+/-- The slack and the rounding of the rewards of the keys of `SC` are paid by their shares.
 
 A key of the split's registry is read at its bound and the slack that `registry` adds.
 
@@ -26030,7 +26030,7 @@ private theorem cs_key_round (h : Setting config checks g split fin pulled anc c
       rw [Nat.mul_add] at pB
       omega
 
-/-- (W-S, the keys of `CS`) The slack and the rounding of their rewards are paid by their shares.
+/-- The slack and the rounding of the rewards of the keys of `CS` are paid by their shares.
 
 A created key that has exited is read at its charge and its credits.
 
@@ -26131,7 +26131,7 @@ private theorem whistle_slack_cs (h : Setting config checks g split fin pulled a
       consAmt eventsC i)
   linarith
 
-/-- (W-S) The slack and the rounding of the slashed keys' rewards are paid by the shares and bands.
+/-- The slack and the rounding of the slashed keys' rewards are paid by the shares and bands.
 
 The keys of `SC` and the created keys draw on their own shares. -/
 private theorem whistle_slack (h : Setting config checks g split fin pulled anc counted V)
@@ -26345,7 +26345,7 @@ private theorem charged_window (h : Setting config checks g split fin pulled anc
     exact ⟨(charge_due h tailC inactive inRun index).2.2,
       fun d dRun dIndex => (charge_due h tailC inactive dRun dIndex).2.1, c, inRun, index⟩
 
-/-- (W-X) The keys that R exits are paid by `reserveW`, with the queue window of the created ones.
+/-- The keys that R exits are paid by `reserveW`, with the queue window of the created ones.
 
 A key of the split's registry that is not slashed at R is a term of `exitedSlashable`.
 
@@ -26767,7 +26767,7 @@ private theorem free_key (h : Setting config checks g split fin pulled anc count
         omega
     omega
 
-/-- The stake at C of keys active at C and outside its quorum is paid by `K7`, twice. -/
+/-- The stake at C of keys active at C and outside its quorum is paid twice by `cK7`. -/
 private theorem free_k7 (T : Finset ValidatorIndex)
     (member : ∀ v ∈ T, v ∈ AC counted ∧ v ∉ Q counted) :
     ((2 * ∑ v ∈ T, balanceAt counted v.toNat : ℕ) : ℤ) ≤ -cK7 pulled counted := by
@@ -26801,7 +26801,7 @@ They are active at both branches.
 
 A slashable key whose floor does not cover its reward is flagged, and `flagged` pays it at `ebUp`.
 
-The others pay from their stake at C and its seat debits, by K7.
+The others pay from their stake at C and its seat debits, by `cK7`.
 
 The seat debits of C's branch are paid by `seatShortfall`.
 
@@ -26950,7 +26950,7 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
     rw [seatEq, totalEq]
     exact Nat.mul_le_mul_left 2 (debits.trans (Nat.mul_le_mul_right _
       (Nat.mul_le_mul_right _ (Nat.mul_le_mul_right _ epochs))))
-  -- K7 pays twice the stake at C of the keys, which are active at C and slashed there
+  -- `cK7` pays twice the stake at C of the keys, which are active at C and slashed there
   have k7 : ((2 * ∑ i ∈ FW, balanceAt counted i : ℕ) : ℤ) ≤ -cK7 pulled counted := by
     have toSC := sum_SC_filter_positions h (fun i => ((¬ (pinTerms config pulled anc
       fin).slashedRB i = true ∧ ¬ exitedSlashable anc pulled i = true) ∧
@@ -26995,7 +26995,7 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
   push_cast at natZ
   linarith
 
-/-- (W-L) A key of the split's registry that only C activates pays from its row of R.
+/-- A key of the split's registry that only C activates pays from its row of R.
 
 At R it is in `late` or in `pendingR`, which only `stub_J`'s keys of `K6` claim.
 
@@ -27083,7 +27083,7 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
 
 /-- W from the keys' payers.
 
-The slashed keys' rewards are paid by the shares, `reserveW`, `flagged`, K7 and `cS`.
+The slashed keys' rewards are paid by the shares, `reserveW`, `flagged`, `cK7` and `cS`.
 
 The seat debits, the keys' own `rise` and R's slashing of the key pay the rest.
 
@@ -32598,7 +32598,9 @@ private theorem registry_bounds (h : Setting config checks g split fin pulled an
         endEpochC replayedC replayedP step member i inside flag charged cfront cstep cpost csite
         charge started
 
-/-- W (`reserveW`, `flagged`, `seatShortfall`, K7, cS): whistleblower rewards on C's branch.
+/-- The whistleblower rewards on C's branch.
+
+They are paid by `reserveW`, `flagged`, `seatShortfall`, `cK7` and `cS`.
 
 They have weight 3.
 
@@ -34076,7 +34078,7 @@ private theorem stub_J (h : Setting config checks g split fin pulled anc counted
 
 end Stubs
 
-/-! ## The top-level step, from the stubs -/
+/-! ## The top-level step, from the bounds of the terms -/
 
 section Closure
 variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconState preset fork}
@@ -34215,7 +34217,7 @@ private theorem stake_le_total {state : BeaconState preset fork} {total : Gwei}
   rw [value]
   exact le_max_right _ _
 
-/-- The top-level step, closed from the stubs.
+/-- The top-level step, closed from the bounds of the terms.
 
 The quorum at the counting state and `V` at the pulled-up state weigh three each.
 
