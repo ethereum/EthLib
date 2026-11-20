@@ -141,12 +141,14 @@ private theorem BlockKeeps.trans {first second third : BeaconState preset fork}
       exact active.1
   · exact one.2 electra i v z found middle far still
 
-private theorem activationLe_of_active {v : Validator} {e : Epoch}
+/-- An active validator was activated at or before the epoch. -/
+theorem activationLe_of_active {v : Validator} {e : Epoch}
     (active : isActiveValidator v e = true) : v.activationEpoch ≤ e := by
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
   exact active.1
 
-private theorem activationLe_of_slashable {v : Validator} {e : Epoch}
+/-- A slashable validator was activated at or before the epoch. -/
+theorem activationLe_of_slashable {v : Validator} {e : Epoch}
     (slashable : isSlashableValidator v e = true) : v.activationEpoch ≤ e := by
   simp only [isSlashableValidator, Bool.and_eq_true, decide_eq_true_eq] at slashable
   exact slashable.1.2

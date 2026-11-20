@@ -1376,20 +1376,15 @@ private theorem assigned_of_active {v : Validator} {epoch : Epoch}
   change (2 ^ 64 - 1 : Nat) < v.exitEpoch.toNat at less
   omega
 
-private theorem activation_le_of_active {v : Validator} {epoch : Epoch}
-    (active : isActiveValidator v epoch = true) : v.activationEpoch ≤ epoch := by
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  exact active.1
-
 private theorem assigned_and_reached_of_active {v : Validator} {epoch : Epoch} {reached : Prop}
     (active : isActiveValidator v epoch = true) :
     v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ (reached → v.activationEpoch ≤ epoch) :=
-  ⟨assigned_of_active active, fun _ => activation_le_of_active active⟩
+  ⟨assigned_of_active active, fun _ => activationLe_of_active active⟩
 
 private theorem assigned_and_le_of_active {v : Validator} {epoch : Epoch}
     (active : isActiveValidator v epoch = true) :
     v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ v.activationEpoch ≤ epoch :=
-  ⟨assigned_of_active active, activation_le_of_active active⟩
+  ⟨assigned_of_active active, activationLe_of_active active⟩
 
 private theorem assigned_of_slashable {v : Validator} {epoch : Epoch}
     (slashable : isSlashableValidator v epoch = true) : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
@@ -3043,12 +3038,12 @@ private theorem CapStepR.consolidationRequest {f : Fork} {s t : BeaconState pres
       assigned_of_active (epoch := getCurrentEpoch s) (read found ▸ valid.1.2)
     have active : ∀ v, s.validators.data[index.toNat]? = some v →
         v.activationEpoch ≤ getCurrentEpoch s := fun v found =>
-      activation_le_of_active (epoch := getCurrentEpoch s) (read found ▸ valid.1.2)
+      activationLe_of_active (e := getCurrentEpoch s) (read found ▸ valid.1.2)
     exact ⟨step, (fun held => retained held assigned), partials, charge assigned,
       fun held => scheduled held active⟩
   · exact CapStep.consolidate accepted.sourceAt accepted.sourceStays
       (assigned_of_active (epoch := getCurrentEpoch s) accepted.sourceActive)
-      (activation_le_of_active (epoch := getCurrentEpoch s) accepted.sourceActive)
+      (activationLe_of_active (e := getCurrentEpoch s) accepted.sourceActive)
       ⟨target, accepted.targetAt,
         assigned_and_le_of_active (epoch := getCurrentEpoch s) accepted.targetActive⟩ queued
 

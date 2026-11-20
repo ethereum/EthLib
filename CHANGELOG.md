@@ -717,6 +717,9 @@ Not yet released.
 - `voters_sum_le` says that a sum over some voters of a function of their positions is at most its sum over those positions.
   The pin's drift bound reads it.
 
+- `activationLe_of_active` and `activationLe_of_slashable` say that an active or slashable validator was activated at or before the epoch.
+  `ActivationExitOrder` reads both for its exit, slashing and consolidation steps, and `ValidatorStep` reads the first.
+
 - `DirectSafety.Apriori.Internal.keys_debits_le` says that the debits of one event over a set of keys are at most its debits over the registry.
   The pin's debit bounds read it.
 

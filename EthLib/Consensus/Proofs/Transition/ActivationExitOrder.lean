@@ -63,16 +63,6 @@ private theorem gap_far {v : Validator} (gap : Gap preset v)
   rw [pending] at bound
   omega
 
-private theorem active_le {v : Validator} {e : Epoch}
-    (active : isActiveValidator v e = true) : v.activationEpoch ≤ e := by
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  exact active.1
-
-private theorem slashable_le {v : Validator} {e : Epoch}
-    (active : isSlashableValidator v e = true) : v.activationEpoch ≤ e := by
-  simp only [isSlashableValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  exact active.1.2
-
 /-- An assigned exit waits the withdrawal delay before the validator can withdraw. -/
 private def Delayed (config : Config) (v : Validator) : Prop :=
   v.exitEpoch ≠ FAR_FUTURE_EPOCH →
@@ -350,7 +340,7 @@ private theorem processProposerSlashing {slashing : ProposerSlashing}
     Kept config state after := by
   simp only [Consensus.processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at ok
   obtain ⟨_, _, _, _, _, _, v, found, _, slashable, _, _, _, _, slashed⟩ := ok
-  exact slashValidator found (slashable_le slashable) slashed
+  exact slashValidator found (activationLe_of_slashable slashable) slashed
 
 private theorem slashIfSlashable {step next : BeaconState preset fork × Bool}
     {index : ValidatorIndex} (ok : Consensus.slashIfSlashable config step index = .ok next) :
@@ -383,7 +373,7 @@ private theorem processVoluntaryExit {signed : SignedVoluntaryExit}
   unfold Consensus.processVoluntaryExit at ok
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at ok
   obtain ⟨v, found, _, active, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := ok
-  exact initiateValidatorExit found (active_le active) exited
+  exact initiateValidatorExit found (activationLe_of_active active) exited
 
 private theorem applyPendingDeposit {deposit : PendingDeposit}
     (ok : Consensus.applyPendingDeposit config checks state deposit = .ok after) :
@@ -446,7 +436,7 @@ private theorem processWithdrawalRequest {electra : .pectra ≤ fork} {request :
     ⟨_, _, _, _, withdrawn⟩
   · exact refl _
   · exact initiateValidatorExit (config := config) (getValidator_eq_ok_iff.mpr accepted.found)
-      (active_le (isActiveValidator_of_canRequest accepted.allowed)) exited
+      (activationLe_of_active (isActiveValidator_of_canRequest accepted.allowed)) exited
   · exact of_data (congrArg (·.data) (requestPartialWithdrawal_kept withdrawn).1)
       (frame_requestPartialWithdrawal withdrawn).finalized
       (frame_requestPartialWithdrawal withdrawn).slot
@@ -521,7 +511,7 @@ private theorem processConsolidationRequest {electra : .pectra ≤ fork}
   · exact refl _
   · exact switchToCompoundingValidator switched
   -- The source is active, so its activation epoch is at most the current one.
-  · exact queueConsolidation accepted.sourceAt (active_le accepted.sourceActive) queued
+  · exact queueConsolidation accepted.sourceAt (activationLe_of_active accepted.sourceActive) queued
 
 private theorem processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (ok : Consensus.processDepositRequest state electra request = .ok after) :
@@ -613,7 +603,7 @@ private theorem updateRegistryEntry {index : Nat}
       simpa [setValidator_eq_setValidatorAt, indexEq] using markedOk
     apply first.trans (initiateValidatorExit (getValidator_setValidator_self set) ?_ exited)
     simp only [Bool.and_eq_true] at active
-    exact active_le active.1
+    exact activationLe_of_active active.1
   · cases ok; exact first
 
 private theorem updateRegistryEntryElectra {epoch : Epoch} {index : Nat}
@@ -635,7 +625,7 @@ private theorem updateRegistryEntryElectra {epoch : Epoch} {index : Nat}
     apply initiateValidatorExit
       (by simpa [getValidator_eq_getValidatorAt, indexEq] using found) ?_ exited
     simp only [Bool.and_eq_true] at active
-    exact active_le active.1
+    exact activationLe_of_active active.1
   split at ok
   · rename_i eligible
     apply setValidatorAt found (liftAccessor_ok.mp ok) _ id _ _ (reaches := fun gap _ assigned =>
