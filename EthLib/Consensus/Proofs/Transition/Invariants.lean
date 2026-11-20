@@ -914,15 +914,6 @@ theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validato
     rw [balance]
     exact holds old (mem_of_getValidatorAt found)
 
-end EpochBaseLaws
-
-namespace EpochStepLaws
-
-variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochStepLaws R)
-
-include laws
-
 theorem processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : Consensus.processVoluntaryExit config checks state signed = .ok after) :
     R state after := by
@@ -958,7 +949,7 @@ theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggreg
   rw [← Array.foldlM_toList] at folded
   exact laws.foldlM (fun _ _ _ ok => laws.applySyncReward ok) folded
 
-end EpochStepLaws
+end EpochBaseLaws
 
 namespace EpochFrameBaseLaws
 
@@ -2172,30 +2163,6 @@ theorem processRandaoMixesReset (computed : Consensus.processRandaoMixesReset st
   obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
   exact (laws.randaoMixes _ _)
 
-theorem processHistoricalRootsUpdate
-    (computed : Consensus.processHistoricalRootsUpdate state = .ok after) : R state after := by
-  unfold Consensus.processHistoricalRootsUpdate at computed
-  split at computed
-  · cases computed
-  simp only [bind_ok_iff, liftAccessor_ok] at computed
-  obtain ⟨_, _, computed⟩ := computed
-  split at computed
-  · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at computed
-    obtain ⟨_, _, _, _, rfl⟩ := computed
-    exact (laws.historicalRoots _ _)
-  · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ laws.refl _
-
-theorem processParticipationRecordUpdates
-    (computed : Consensus.processParticipationRecordUpdates state = .ok after) :
-    R state after := by
-  unfold Consensus.processParticipationRecordUpdates at computed
-  split at computed
-  · cases computed
-  simp only [pure, Except.pure, Except.ok.injEq] at computed
-  subst computed
-  exact (laws.participationRecords _)
-
 end EpochStepLaws
 
 namespace EpochBaseLaws
@@ -2241,14 +2208,29 @@ theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
   · subst summaries
     exact laws.refl _
 
-end EpochBaseLaws
+theorem processHistoricalRootsUpdate
+    (computed : Consensus.processHistoricalRootsUpdate state = .ok after) : R state after := by
+  unfold Consensus.processHistoricalRootsUpdate at computed
+  split at computed
+  · cases computed
+  simp only [bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, computed⟩ := computed
+  split at computed
+  · simp only [bind_ok_iff, liftSsz_ok, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, _, _, rfl⟩ := computed
+    exact (laws.historicalRoots _ _)
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    exact computed ▸ laws.refl _
 
-namespace EpochStepLaws
-
-variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochStepLaws R)
-
-include laws
+theorem processParticipationRecordUpdates
+    (computed : Consensus.processParticipationRecordUpdates state = .ok after) :
+    R state after := by
+  unfold Consensus.processParticipationRecordUpdates at computed
+  split at computed
+  · cases computed
+  simp only [pure, Except.pure, Except.ok.injEq] at computed
+  subst computed
+  exact (laws.participationRecords _)
 
 theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
     (computed : Consensus.processSyncCommitteeUpdates state altair = .ok after) :
@@ -2260,19 +2242,27 @@ theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
     | exact laws.refl _
     | exact (laws.syncCommittees _ _ _)
 
-theorem processProposerLookahead {fulu : .fusaka ≤ fork}
-    (computed : Consensus.processProposerLookahead state fulu = .ok after) : R state after := by
-  simp only [Consensus.processProposerLookahead, bind_ok_iff, pure, Except.pure,
-    Except.ok.injEq] at computed
-  obtain ⟨_, _, _, _, rfl⟩ := computed
-  exact (laws.proposerLookahead _ _)
-
 theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
     (computed : Consensus.processPtcWindow state gloas = .ok after) : R state after := by
   simp only [Consensus.processPtcWindow, bind_ok_iff, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact (laws.ptcWindow _ _)
+end EpochBaseLaws
+
+namespace EpochStepLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochStepLaws R)
+
+include laws
+
+theorem processProposerLookahead {fulu : .fusaka ≤ fork}
+    (computed : Consensus.processProposerLookahead state fulu = .ok after) : R state after := by
+  simp only [Consensus.processProposerLookahead, bind_ok_iff, pure, Except.pure,
+    Except.ok.injEq] at computed
+  obtain ⟨_, _, _, _, rfl⟩ := computed
+  exact (laws.proposerLookahead _ _)
 
 /-- One stage that is neither justification, the payments, the flag rotation nor the deposits.
 

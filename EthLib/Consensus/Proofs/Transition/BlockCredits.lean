@@ -417,7 +417,7 @@ private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit
 
 private theorem kept_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks s signed = .ok t) : Kept s t :=
-  ⟨(frame_processVoluntaryExit computed).toFrame, payloadInputs_processVoluntaryExit computed,
+  ⟨(frame_processVoluntaryExit computed).toFrame, payloadInputsLaws.processVoluntaryExit computed,
     stepKeeps_processVoluntaryExit computed, effectiveKept_voluntaryExit computed,
     registryLifecycle_processVoluntaryExit computed, lives_processVoluntaryExit computed⟩
 
@@ -427,7 +427,7 @@ private theorem kept_processBlsToExecutionChanges {body : BeaconBlockBody preset
   split at computed
   · rw [← Array.foldlM_toList] at computed
     exact Kept.foldlM (fun _ _ _ ok => ⟨(frame_processBlsToExecutionChange ok).toFrame,
-      payloadInputs_processBlsToExecutionChange ok, stepKeeps_processBlsToExecutionChange ok,
+      payloadInputsLaws.processBlsToExecutionChange ok, stepKeeps_processBlsToExecutionChange ok,
       effectiveKept_blsChange ok, registryLifecycle_processBlsToExecutionChange ok,
       (by obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
           exact Lives.setValidator found set ⟨rfl, fun _ => ⟨UInt64.le_refl _, .inr rfl⟩⟩)⟩)
@@ -909,7 +909,7 @@ private theorem steady_processBlockExecution {engine : ExecutionEngine preset fo
 private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks s altair aggregate = .ok t) : Kept s t :=
-  ⟨(frame_processSyncAggregate computed).toFrame, payloadInputs_processSyncAggregate computed,
+  ⟨(frame_processSyncAggregate computed).toFrame, payloadInputsLaws.processSyncAggregate computed,
     stepKeeps_processSyncAggregate computed,
     effectiveKept_data (congrArg (·.data) (processSyncAggregate_kept computed).1),
     .of_data (by rw [(processSyncAggregate_kept computed).1]),
