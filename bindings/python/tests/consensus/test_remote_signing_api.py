@@ -2,10 +2,12 @@
 
 import copy
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
+from py_ecc.bls import G2ProofOfPossession
 from ruamel.yaml import YAML
 
 from ethlib import consensus
@@ -553,3 +555,106 @@ def test_gloas_recorded_root(name: str):
     for preset in ("minimal", "mainnet"):
         root = consensus.signing_request_root(preset, CONFIG, example)
         assert "0x" + root.hex() == RECORDED[name]
+
+
+# A fixed secret key of the signer in the tests of the endpoints.
+SECRET = 42
+KEY = SECRET.to_bytes(32, "big")
+PUBKEY = "0x" + bytes(G2ProofOfPossession.SkToPk(SECRET)).hex()
+OTHER_PUBKEY = "0x" + bytes(G2ProofOfPossession.SkToPk(43)).hex()
+
+
+def _record(blocks: list[tuple[int, str]] = ()) -> bytes:
+    """An EIP-3076 record that holds blocks of the test key, as (slot, signing root)."""
+    entry = {
+        "pubkey": PUBKEY,
+        "signed_blocks": [{"slot": str(slot), "signing_root": root} for slot, root in blocks],
+        "signed_attestations": [],
+    }
+    metadata = {"interchange_format_version": "5", "genesis_validators_root": "0x" + "00" * 32}
+    return json.dumps({"metadata": metadata, "data": [entry] if blocks else []}).encode()
+
+
+def test_public_keys():
+    assert consensus.remote_signer_public_keys([KEY]) == [PUBKEY]
+    assert consensus.remote_signer_public_keys([]) == []
+
+
+SIGNED = sorted(name for name in WELL_SPELLED + ["AGGREGATION_SLOT"] if name not in WRONG_ROOT)
+
+
+@pytest.mark.parametrize("name", SIGNED)
+def test_sign_example(name: str):
+    example = _well_spelled(name)
+    preset = sorted(_presets(name))[0]
+    status, signature, _ = consensus.remote_signer_sign(
+        preset, CONFIG, [KEY], _record(), PUBKEY, example
+    )
+    assert status == 200
+    root = consensus.signing_request_root(preset, CONFIG, example)
+    assert G2ProofOfPossession.Verify(_hex(PUBKEY), root, signature)
+
+
+@pytest.mark.parametrize("name", sorted(WRONG_ROOT))
+def test_sign_refuses_another_root(name: str):
+    status, signature, record = consensus.remote_signer_sign(
+        "mainnet", CONFIG, [KEY], _record(), PUBKEY, EXAMPLES[name]
+    )
+    assert (status, signature, json.loads(record)) == (400, None, json.loads(_record()))
+
+
+def test_sign_example_of_the_issue():
+    example = copy.deepcopy(EXAMPLES["BLOCK_V2 (GLOAS)"])
+    record = _record([(0, example["signingRoot"])])
+    # A repeat of the recorded block of slot 0 is signed.
+    status, signature, _ = consensus.remote_signer_sign(
+        PRESET, CONFIG, [KEY], record, PUBKEY, example
+    )
+    assert status == 200 and signature is not None
+    # Another body at slot 0 conflicts with the record.
+    example["beacon_block"]["block_header"]["body_root"] = "0x" + "11" * 32
+    del example["signingRoot"]
+    status, signature, after = consensus.remote_signer_sign(
+        PRESET, CONFIG, [KEY], record, PUBKEY, example
+    )
+    assert (status, signature) == (412, None)
+    assert json.loads(after) == json.loads(record)
+    # A key that the signer does not hold.
+    status, _, _ = consensus.remote_signer_sign(
+        PRESET, CONFIG, [KEY], record, OTHER_PUBKEY, EXAMPLES["BLOCK_V2 (GLOAS)"]
+    )
+    assert status == 404
+
+
+def test_sign_records_a_vote_and_refuses_a_double_vote():
+    example = copy.deepcopy(EXAMPLES["ATTESTATION"])
+    status, _, record = consensus.remote_signer_sign(
+        PRESET, CONFIG, [KEY], _record(), PUBKEY, example
+    )
+    assert status == 200
+    votes = json.loads(record)["data"][0]["signed_attestations"]
+    assert votes == [
+        {"source_epoch": "0", "target_epoch": "0", "signing_root": example["signingRoot"]}
+    ]
+    example["attestation"]["beacon_block_root"] = "0x" + "22" * 32
+    del example["signingRoot"]
+    status, signature, after = consensus.remote_signer_sign(
+        PRESET, CONFIG, [KEY], record, PUBKEY, example
+    )
+    assert (status, signature, after) == (412, None, record)
+
+
+@pytest.mark.parametrize(
+    ("identifier", "document", "status"),
+    [
+        (PUBKEY[2:], EXAMPLES["RANDAO_REVEAL"], 400),
+        (PUBKEY, {"type": "RANDAO_REVEAL"}, 400),
+        (OTHER_PUBKEY, {"type": "RANDAO_REVEAL"}, 400),
+        (OTHER_PUBKEY, EXAMPLES["RANDAO_REVEAL"], 404),
+        (PUBKEY.upper().replace("0X", "0x"), EXAMPLES["RANDAO_REVEAL"], 200),
+    ],
+    ids=["no prefix", "bad request", "bad request first", "unknown key", "upper case"],
+)
+def test_sign_status(identifier: str, document: Any, status: int):
+    result = consensus.remote_signer_sign(PRESET, CONFIG, [KEY], _record(), identifier, document)
+    assert result[0] == status

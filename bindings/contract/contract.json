@@ -7850,6 +7850,25 @@
    "docstring":
    "The root that a remote signer signs for a request of the Remote-signing API.\n\nThe arguments are the name of the preset, the name of the configuration and the document.\n\nThe configuration gives the genesis fork version of a registration and of a Builder API request.\n\nAn unknown preset or configuration has code 0.\n\nA document that is not a request has the code of its error."},
   {"summary":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.",
+   "signature":
+   "(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, document: Any) -> tuple[int, bytes | None, bytes]",
+   "operation": "EthLib.Consensus.Exports.remoteSignerSignExport",
+   "method": "consensus_remote_signer_sign",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.\n\nThe arguments are the preset, the configuration, the secret keys and the record.\n\nThen come the path and the request.\n\nThe result is the status, the signature when the status is 200, and the record after the call.\n\nAn unknown preset or configuration has code 0.\n\nSo do a secret key that is not one and a record that does not read."},
+  {"summary":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.",
+   "signature": "(keys: list[bytes]) -> Any",
+   "operation": "EthLib.Consensus.Exports.remoteSignerPublicKeysExport",
+   "method": "consensus_remote_signer_public_keys",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.\n\nThe argument is the list of its secret keys, each 32 big-endian bytes.\n\nA key that is not one has code 0."},
+  {"summary":
    "Whether a key may sign a block of a slot with a signing root, given a record.",
    "signature":
    "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",

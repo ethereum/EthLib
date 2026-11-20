@@ -1024,6 +1024,12 @@ def bindings : List Binding := [
   ⟨"consensus_signing_request_root", `EthLib.Consensus.Exports.signingRequestRootExport,
     "(name: str, config: str, document: Any) -> bytes",
     [`EthLib.Consensus.RemoteSigningApi.RequestError], some "RemoteSigningError"⟩,
+  ⟨"consensus_remote_signer_sign", `EthLib.Consensus.Exports.remoteSignerSignExport,
+    "(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, " ++
+      "document: Any) -> tuple[int, bytes | None, bytes]",
+    [], some "RemoteSigningError"⟩,
+  ⟨"consensus_remote_signer_public_keys", `EthLib.Consensus.Exports.remoteSignerPublicKeysExport,
+    "(keys: list[bytes]) -> Any", [], some "RemoteSigningError"⟩,
   ⟨"consensus_check_block_signing", `EthLib.Consensus.Exports.checkBlockSigningExport,
     "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",
     [`EthLib.Consensus.SlashingProtectionError], some "SlashingProtectionError"⟩,

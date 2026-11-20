@@ -6436,12 +6436,25 @@ The Python suite checks the `signingRoot` of each of the 24 examples of kinds be
 The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
 The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
 
+The signer itself is a state of secret keys and a record of slashing protection (`Consensus/RemoteSigningApi/Endpoints.lean`).
+It lists the public keys of its secret keys, and its sign endpoint reads the request, then the key of the path, then finds the secret key, computes the root, asks slashing protection, and signs.
+The source fixes the status codes, 400 for a bad request, 404 for an unknown key and 412 for slashing protection, but not the rules of slashing protection, so the rules are a parameter.
+`sign_status_eq_404_iff` (`Consensus/Proofs/RemoteSigningApi/Endpoints.lean`) shows that the endpoint answers 404 exactly when the request reads and its key is not held.
+`sign_signed` shows that a signature it returns verifies under the key of the path, for the root that the signer computes for the request.
+`sign_state_of_not_signed` shows that a call that does not sign leaves the state as it was.
+The instance from EIP-3076 checks and records blocks and votes, and lets every other kind pass.
+`sign_block` and `sign_vote` show that each signed block or vote passed its check against the record before its call, and enters the record, and `sign_keeps` that no call removes a record.
+`signingRoot_eq_of_signedBlocks` shows that in any run of calls, two blocks of one slot signed for one key have one signing root, whatever the record the run starts with.
+`signingRoot_eq_of_signedVotes` shows the same for two votes signed for one key that `isSlashableAttestationData` forbids together.
+So a slashable pair from one signer needs a collision of the signing root, as for the signer of § Slashing protection.
+The Python suite signs each example that reads with a fixed key and checks the signature with `py_ecc`, checks a repeated, a conflicting and an unknown-key request for the `BLOCK_V2 (GLOAS)` example, and checks a refused double vote.
+
 The signer answers with its signature as JSON under `signature`, or as the hex alone, and lists its keys as a JSON array of hex (`Consensus/RemoteSigningApi/Response.lean`).
 The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Response.lean`), so `ofApiJson_toApiJson` reads it back as written.
 `publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
-No export or Python test covers the two responses yet; the sign endpoint will use them.
+The export of the public keys endpoint writes the key list; the JSON signature response has no export, since the export of the sign endpoint returns the signature as bytes.
 
-The source leaves eleven points about the requests open, and EthLib reads each one as follows:
+The source leaves fourteen points about the requests open, and EthLib reads each one as follows:
 
 - The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
   EthLib follows the schemas, so it refuses both examples.
@@ -6461,6 +6474,11 @@ The source leaves eleven points about the requests open, and EthLib reads each o
   `voluntaryExitDomain_of_requestSigningRoot` gives the root that the check of an exit verifies, under the hypothesis that the fork info gives the version of the exit domain at the epoch of the exit.
   Gap A lists that hypothesis.
 - The source says only that the signing root of a request is "for optional verification"; it does not say what a signer does when it differs from its own.
+  EthLib refuses such a request with 400, since client and signer then disagree on what is signed.
+- The source does not say which kinds slashing protection covers.
+  The instance of EIP-3076 covers blocks and votes only, so a payload attestation or an envelope is not protected.
+- The source does not order the checks of the sign endpoint when several fail; EthLib reads the request first, so a request that does not read gets 400 whatever its key.
+- The source says that the path holds the "BLS public key in hex format", with no pattern; EthLib requires the `0x` prefix and accepts hex digits in either case.
 - The schemas give each integer the type of a string.
   The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
 - The rule that the authentication data is not empty is in the description of its schema, not in a schema keyword.
@@ -6862,12 +6880,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 528 operations and 51 size constants.
-The Python extension calls 528 of the operations and 51 of the constants.
+Lean exports 530 operations and 51 size constants.
+The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11849 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2629), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1597), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (828), `x25519.c` (21), `xmss.c` (134).
+11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
