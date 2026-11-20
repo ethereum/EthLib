@@ -96,22 +96,112 @@ def randomizerBase (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UIn
     (msg : ByteArray) : m Randomizer := do
   return halfOf 0 (← prf pp (addrRnd layer e) msg)
 
+/-! ## Randomizers as words
+
+A randomizer search keeps its randomizers, and the digests of its trials, as two 64-bit words. -/
+
+/-- A 16-byte string as two 64-bit words: its little-endian integer, split at bit 64. -/
+structure WordPair where
+  /-- Bytes 0 to 7, byte 0 least significant. -/
+  lo : UInt64
+  /-- Bytes 8 to 15, byte 8 least significant. -/
+  hi : UInt64
+
+namespace WordPair
+
+/-- The integer below `2^128` that the two words make: `lo + 2^64 * hi`. -/
+def toNat (w : WordPair) : Nat :=
+  w.lo.toNat + 2 ^ 64 * w.hi.toNat
+
+/-- The 16 bytes of the two words, least significant first.
+
+Byte `j` is bits `8j` to `8j + 7` of the low word, or of the high word from byte 8 on. -/
+def bytes (w : WordPair) : Vector UInt8 16 :=
+  #v[w.lo.toUInt8, (w.lo >>> 8).toUInt8, (w.lo >>> 16).toUInt8, (w.lo >>> 24).toUInt8,
+    (w.lo >>> 32).toUInt8, (w.lo >>> 40).toUInt8, (w.lo >>> 48).toUInt8, (w.lo >>> 56).toUInt8,
+    w.hi.toUInt8, (w.hi >>> 8).toUInt8, (w.hi >>> 16).toUInt8, (w.hi >>> 24).toUInt8,
+    (w.hi >>> 32).toUInt8, (w.hi >>> 40).toUInt8, (w.hi >>> 48).toUInt8, (w.hi >>> 56).toUInt8]
+
+/-- The two words of 16 bytes: bytes 0 to 7 and bytes 8 to 15, each read as a Keccak lane. -/
+def ofBytes (v : Vector UInt8 16) : WordPair :=
+  ⟨Hash.Keccak.Internal.laneAt (packBytes v) 0, Hash.Keccak.Internal.laneAt (packBytes v) 8⟩
+
+end WordPair
+
+/-- The randomizer of trial `c` as words: `R_0 + c mod 2^128`, with `R_0` as words.
+
+The low words add modulo `2^64`, and the low word wraps exactly when it ends below `R_0`'s.
+
+That wrap carries 1 into the high word, which adds the rest of `c` and drops its own carry. -/
+def trialWords (base : WordPair) (c : Nat) : WordPair :=
+  let lo := base.lo + UInt64.ofNat c
+  let carry : UInt64 := if lo < base.lo then 1 else 0
+  ⟨lo, base.hi + UInt64.ofNat (c >>> 64) + carry⟩
+
 /-- `rho_c = LE_128(LE^-1(R_0) + c mod 2^128)`: the randomizer of trial `c`.
 
 A sum, not a hash, so each trial costs the one hash of its digest.
 
-The sum runs byte by byte, least significant first, and drops the carry past the top byte. -/
+The sum runs on the two 64-bit words of the little-endian integer. -/
 def trialRandomizer (base : Randomizer) (c : Nat) : Randomizer :=
-  go base c 0
-where
-  /-- Add `carry` into the bytes from byte `i` up. -/
-  go (acc : Randomizer) (carry i : Nat) : Randomizer :=
-    if h : i < RANDOMIZER_LEN then
-      -- The byte keeps the low 8 bits of the sum, and the rest carries into the next byte.
-      let sum := acc[i].toNat + carry
-      go (acc.set i (UInt8.ofNat sum)) (sum / 256) (i + 1)
-    else acc
-  termination_by RANDOMIZER_LEN - i
+  (trialWords (WordPair.ofBytes base) c).bytes
+
+/-! ## Randomizer trials -/
+
+/-- The trials of one search: whether the digest of a randomizer is a codeword, and which.
+
+Every trial hashes the same bytes `P | A_msg(l, e) | M`, followed by its own randomizer.
+
+It is a structure, not a function, so a source does its per-search work once.
+
+The compiler merges a function that returns a function into one function of all the arguments.
+
+That merged function would redo, on every trial, the work meant for once per search. -/
+structure Trials (m : Type → Type) where
+  /-- The codeword the digest of a randomizer is, if any. -/
+  codeword : Randomizer → m (Option (Vector (Fin CHAIN_LENGTH) V))
+
+/-- The trials of every search, from the fixed bytes that start each trial's input.
+
+A search builds its trials once, so the work that only the fixed bytes need is done once.
+
+A source is the scheme's only when its trials give the codewords that `H` gives.
+
+Nothing checks it: the theorems are about the default source, which hashes each trial with `H`. -/
+abbrev TrialSource (m : Type → Type) :=
+  ByteArray → Trials m
+
+/-- The trials as `H` computes them: a trial hashes the fixed bytes followed by the randomizer. -/
+def hashTrials : TrialSource m :=
+  fun before => ⟨fun rho => codeword? <$> (do return halfOf 0 (← H (before ++ packBytes rho)))⟩
+
+/-- The trials as Keccak-256 computes them, with one permutation each.
+
+The randomizer is the last 16 bytes of the input.
+
+When they fill two whole lanes of the last block, only those two lanes change between trials.
+
+The state before the last permutation is then built once, with the randomizer bytes set to zero.
+
+A trial XORs its randomizer into the two lanes, permutes, and reads the digest from lanes 0 and 1.
+
+Otherwise each trial hashes its whole input.
+
+These are the trials of Keccak-256, by a theorem. -/
+def keccakTrials : TrialSource Id := fun before =>
+  -- The randomizer starts on a lane, and the padding of the last block comes after it.
+  if before.size % 8 = 0 ∧ before.size % Hash.Keccak.RATE_256 + 16 < Hash.Keccak.RATE_256 then
+    let zeros := ByteArray.mk (Array.replicate 16 0)
+    let S := Hash.Keccak.stateBeforeLastPermutation Hash.Keccak.keccakF Hash.Keccak.RATE_256
+      (before ++ zeros)
+    -- The randomizer fills lanes k and k + 1 of the last block.
+    let k := before.size % Hash.Keccak.RATE_256 / 8
+    ⟨fun rho =>
+      let w := WordPair.ofBytes rho
+      let T := Hash.Keccak.keccakF ((S.xorLane (k + 1) w.hi).xorLane k w.lo)
+      -- The digest is the first 16 bytes of the output: lanes 0 and 1.
+      pure (codeword? (WordPair.bytes ⟨T.a0, T.a1⟩))⟩
+  else hashTrials hashId before
 
 namespace Internal
 
@@ -119,20 +209,39 @@ namespace Internal
 
 Returns the first trial's randomizer whose digest is a codeword, with the codeword.
 
-Each trial hashes `P | A_msg(l, e) | M | rho_c` to get the digest of its randomizer.
+With the default source, each trial hashes `P | A_msg(l, e) | M | rho_c` to get its digest.
 
-Only `rho_c` changes between trials, so the bytes before it are built once. -/
+Only `rho_c` changes between trials, so the trials are built once from the bytes before it.
+
+The base is read as words once, and each trial's randomizer is the sum of trial `c`. -/
 def findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (msg : ByteArray)
-    (base : Randomizer) (c fuel : Nat) :
+    (base : Randomizer) (c fuel : Nat) (trials : TrialSource m := hashTrials H) :
     m (Option (Randomizer × Vector (Fin CHAIN_LENGTH) V)) :=
   -- The input of every trial starts with `P | A_msg(l, e) | M`.
-  let before := thInput pp (addrMsg layer e) msg
-  Wots.findFirst (trialRandomizer base)
-    (fun rho => codeword? <$> (do return halfOf 0 (← H (before ++ packBytes rho)))) c fuel
+  let t := trials (thInput pp (addrMsg layer e) msg)
+  -- The base as words, read once, so that each trial's randomizer is a sum of words.
+  let b := WordPair.ofBytes base
+  Wots.findFirst (fun c => (trialWords b c).bytes) t.codeword c fuel
 
 end Internal
 
 /-! ## Signing and recovering the leaf -/
+
+namespace Internal
+
+/-- `Ots.sign(l, e, M)`, with the trials of its search taken from a source. -/
+def otsSignTrials (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
+    (msg : ByteArray) (trials : TrialSource m) : m (Option (Randomizer × Vector Digest V)) := do
+  -- Step 1: grind the randomizer until the digest is a codeword.
+  let base ← randomizerBase pp prf layer e msg
+  let some (rho, x) ← findCodeword H pp layer e msg base 0 MAX_RANDOMIZER_TRIALS trials
+    | return none
+  -- Step 2: reveal each chain at the position its digit names, chain 0 first.
+  let starts ← chainStarts pp prf layer e
+  let y ← ofFnInOrder V fun i => chain H pp layer e i 0 x[i] (by simp) starts[i]
+  return some (rho, y)
+
+end Internal
 
 /-- `Ots.sign(l, e, M)`: the randomizer and the 58 chain values that sign `M`.
 
@@ -142,17 +251,12 @@ Reveals chain `i` at position `x_i`.
 
 Returns nothing when no trial gives a codeword.
 
-Deterministic, so signing one message again gives the same signature. -/
+Deterministic, so signing one message again gives the same signature.
+
+Each trial of the search hashes its input with `H`. -/
 def otsSign (pp : PublicParam) (prf : SeedPrf m) (layer : Layer) (e : UInt32)
-    (msg : ByteArray) : m (Option (Randomizer × Vector Digest V)) := do
-  -- Step 1: grind the randomizer until the digest is a codeword.
-  let base ← randomizerBase pp prf layer e msg
-  let some (rho, x) ← Internal.findCodeword H pp layer e msg base 0 MAX_RANDOMIZER_TRIALS
-    | return none
-  -- Step 2: reveal each chain at the position its digit names, chain 0 first.
-  let starts ← chainStarts pp prf layer e
-  let y ← ofFnInOrder V fun i => chain H pp layer e i 0 x[i] (by simp) starts[i]
-  return some (rho, y)
+    (msg : ByteArray) : m (Option (Randomizer × Vector Digest V)) :=
+  Internal.otsSignTrials H pp prf layer e msg (hashTrials H)
 
 /-- `Ots.leaf(l, e, M, rho, y)`: the leaf a claimed one-time signature leads to.
 

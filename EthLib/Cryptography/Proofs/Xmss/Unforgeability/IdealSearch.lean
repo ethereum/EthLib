@@ -194,7 +194,9 @@ theorem simulateQ_findCodeword (pp : PublicParam) (layer : Layer) (e : UInt32) (
       Internal.findCodeword hashD pp layer e msg base c fuel := by
   rw [findCodeword_map_monad (simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput))
     (fun b => simulateQ_pure _ b) (fun x f => simulateQ_bind _ x f)]
-  simp only [simulateQ_queryH]
+  have h : (fun x => simulateQ (HashSpec.withDerivationsLift PrfInput HashOutput)
+      (queryH x : OracleComp OracleWorld (Vector UInt8 32))) = hashD := funext simulateQ_queryH
+  rw [h]
 
 /-- In the ideal game, the search runs as over the random oracle, and keeps the table. -/
 theorem run_findCodeword_idealImpl (pp : PublicParam) (layer : Layer) (e : UInt32)
@@ -503,7 +505,7 @@ theorem failsAtMost_otsSign (Q : ℕ) (pp : PublicParam) (layer : Layer) (e : UI
     (msg : ByteArray) :
     FailsAtMost (fun r => r = none) Q ((Q : ℝ≥0∞) / 2 ^ 96 + ENNReal.ofReal (Real.exp (-4000)))
       (otsSign hashD pp prfD layer e msg) := by
-  unfold otsSign
+  unfold otsSign Internal.otsSignTrials
   rw [← bind_assoc]
   refine (FailsAtMost.bind (ε₂ := 0) (failsAtMost_search Q pp layer e msg)
     fun r hr => ?_).mono_bound (add_zero _).le

@@ -89,6 +89,7 @@ theorem isQueryBoundP_signRootWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : S
     (b : Nat) (root : Digest) :
     IsQueryBoundP (signRootWith H sk b root) p (2 ^ 32 + 204) := by
   unfold signRootWith
+  simp only [Internal.otsSignTrials_hashTrials]
   refine (isQueryBoundP_bind (m := 0)
     (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ _ _ _) fun r _ => ?_).mono
     (le_of_eq (Nat.add_zero _))
@@ -133,7 +134,8 @@ theorem isQueryBoundP_signWith (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : Secre
     (idx : LeafIndex) (msg : Message) :
     IsQueryBoundP (signWith H sk idx msg) p
       (2 * MAX_RANDOMIZER_TRIALS + 205 * 2 ^ LAYER_HEIGHT + 407) := by
-  unfold signWith
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
   refine (isQueryBoundP_bind (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ .bottom _ _)
     fun r _ => ?_).mono (n := 2 ^ 32 + 204 + (2 ^ LAYER_HEIGHT * 205 - 1 + (2 ^ 32 + 204)))
     (by simp [MAX_RANDOMIZER_TRIALS, LAYER_HEIGHT])
@@ -151,7 +153,8 @@ A key that signing returned after a successful bottom search keeps that tree. -/
 theorem isQueryBoundP_signWith_of_mem (hH : ∀ x, IsQueryBoundP (H x) p 1) (sk : SecretKey)
     (idx : LeafIndex) (msg : Message) (hkept : ∃ t ∈ sk.cache, t.index = bottomTree idx) :
     IsQueryBoundP (signWith H sk idx msg) p (MAX_RANDOMIZER_TRIALS + 204) := by
-  unfold signWith
+  unfold signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
   refine (isQueryBoundP_bind (m := 0)
     (isQueryBoundP_otsSign hH (isQueryBoundP_seedPrf hH _) _ .bottom _ _) fun r _ => ?_).mono
     (by simp [MAX_RANDOMIZER_TRIALS])

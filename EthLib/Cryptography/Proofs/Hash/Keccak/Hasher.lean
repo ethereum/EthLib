@@ -44,17 +44,6 @@ theorem absorbBlock_congr {rate : Nat} (lanes : 8 ∣ rate) (S : State) {a b : B
     · rfl
   simp only [absorbBlock, hlane]
 
-/-- Absorbing `m + n` blocks absorbs the first `m`, then the `n` after them. -/
-theorem absorbBlocks_add (f : State → State) (rate : Nat) (bytes : ByteArray) (m n start : Nat)
-    (S : State) :
-    absorbBlocks f rate bytes (m + n) start S
-      = absorbBlocks f rate bytes n (start + rate * m) (absorbBlocks f rate bytes m start S) := by
-  induction m generalizing start S with
-  | zero => simp [absorbBlocks]
-  | succ m ih =>
-    rw [Nat.succ_add, absorbBlocks, ih, absorbBlocks, Nat.mul_succ, Nat.add_comm (rate * m),
-      Nat.add_assoc]
-
 /-- Absorbing `n` blocks reads only their `rate * n` bytes. -/
 theorem absorbBlocks_congr (f : State → State) {rate : Nat} (lanes : 8 ∣ rate) (n : Nat)
     (S : State) {a b : ByteArray} {s t : Nat}
@@ -157,7 +146,7 @@ theorem absorb_absorb (h : Hasher256) (a b : ByteArray) :
 theorem digest_absorb_empty (msg : ByteArray) :
     (Hasher256.empty.absorb msg).digest = keccak256 msg := by
   simp only [Hasher256.absorb, Hasher256.digest, Hasher256.empty, ByteArray.empty_append, keccak256,
-    spongeAbsorb, blockCount]
+    spongeAbsorb_eq, blockCount]
   generalize hq : msg.size / RATE_256 = q
   have hle : RATE_256 * q ≤ msg.size := hq ▸ Nat.mul_div_le _ _
   -- The bytes after the whole blocks are `len mod 136` long, so the padding is the same.

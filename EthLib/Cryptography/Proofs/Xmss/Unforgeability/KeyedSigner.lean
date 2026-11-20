@@ -184,6 +184,7 @@ theorem erases_signLayer_signRootWith (h : KeyInv seed sk cache) {b : Nat}
     Erases cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top b (packBytes root))
       (signRootWith Hh sk b root) := by
   unfold signLayer signRootWith
+  simp only [Internal.otsSignTrials_hashTrials]
   refine Erases.bind (Erases.refl _ _) _ _ fun o => ?_
   rcases o with _ | ⟨rho, y⟩
   · exact .pure _
@@ -197,6 +198,7 @@ theorem resolves_signLayer_of_signRootWith (h : KeyInv seed sk cache) {b : Nat}
     Resolves cache (signLayer Hh sk.publicParam (seedPrf Hh sk.schemeSeed) .top b
       (packBytes root)) r := by
   unfold signRootWith at hr
+  simp only [Internal.otsSignTrials_hashTrials] at hr
   unfold signLayer
   obtain ⟨o, ho, hr⟩ := hr.of_bind
   refine ho.bind ?_
@@ -234,7 +236,8 @@ theorem keyInv_fetchTreeWith (h : KeyInv seed sk cache) {b : Nat} (hb : b < 2 ^ 
 theorem keyInv_signWith (h : KeyInv seed sk cache) {idx : LeafIndex} {msg : Message}
     {r : Except XmssError Signature} {sk' : SecretKey}
     (hr : Resolves cache (signWith Hh sk idx msg) (r, sk')) : KeyInv seed sk' cache := by
-  unfold signWith at hr
+  unfold signWith Internal.signWithTrials at hr
+  simp only [Internal.otsSignTrials_hashTrials] at hr
   obtain ⟨o, -, hr⟩ := hr.of_bind
   rcases o with _ | ⟨rho, y⟩
   · obtain ⟨-, rfl⟩ := Prod.mk.inj hr.pure_inv.symm
@@ -257,7 +260,8 @@ theorem erases_statelessSignWith_signWith (h : KeyInv seed sk cache) (idx : Leaf
   unfold statelessSignWith
   refine Erases.bind_known (erases_pure_of_resolves h.seed_resolves) _ _ ?_
   refine Erases.bind_known (erases_pure_of_resolves h.param_resolves) _ _ ?_
-  unfold signDerived signWith
+  unfold signDerived signWith Internal.signWithTrials
+  simp only [Internal.otsSignTrials_hashTrials]
   rw [map_bind]
   refine Erases.bind (Erases.refl _ _) _ _ fun o => ?_
   rcases o with _ | ⟨rho, y⟩

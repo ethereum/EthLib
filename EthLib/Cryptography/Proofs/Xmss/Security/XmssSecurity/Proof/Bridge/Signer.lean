@@ -248,7 +248,7 @@ theorem realTopLayer (h : Prepared seed d result cache) (key : TopIndex) :
       (match (modelSecretKey d result).topSigned key with
         | some _ => .ok (ofLayerSig (Concrete.topPart (modelSecretKey d result) key))
         | none => .error (.noAdmissibleEncoding .top key.val)) := by
-  unfold Xmss.signLayer Xmss.otsSign
+  unfold Xmss.signLayer Xmss.otsSign Xmss.Internal.otsSignTrials
   rw [Xmss.Unforgeability.ofNat_val_topIndex, randomizerBase_queryH]
   simp only [bind_assoc]
   have hbase : cache (topRndInput d.parameter seed (key, h.root key))
@@ -323,7 +323,7 @@ theorem erases_sign (h : Prepared seed d result cache) (index : LeafIndex) (mess
         OracleComp HashSpec (Option Signature))) := by
   unfold Xmss.signDerived tableSign
   -- Only the bottom key is unfolded: the top layer resolves as a whole.
-  rw [Xmss.otsSign.eq_1, Xmss.Unforgeability.toNat_ofLeafIndex,
+  rw [Xmss.otsSign.eq_1, Xmss.Internal.otsSignTrials.eq_1, Xmss.Unforgeability.toNat_ofLeafIndex,
     Xmss.Unforgeability.ofNat_val_leafIndex, randomizerBase_queryH]
   simp only [bind_assoc, map_bind]
   have hR0 : cache (rndInput d.parameter seed ⟨index, message⟩) = some (d.rnd ⟨index, message⟩) :=

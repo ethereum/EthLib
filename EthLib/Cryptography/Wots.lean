@@ -36,7 +36,7 @@ def chain {α : Type} {n : Nat} (step : Fin n → α → m α) (start : Nat) :
 /-- Try the trials from `c` onward, at most `fuel` of them.
 
 Returns the first trial whose test gives a codeword, with the codeword. -/
-def findFirst {κ β : Type} (trial : Nat → κ) (test : κ → m (Option β)) (c : Nat) :
+@[specialize] def findFirst {κ β : Type} (trial : Nat → κ) (test : κ → m (Option β)) (c : Nat) :
     (fuel : Nat) → m (Option (κ × β))
   | 0 => pure none
   | fuel + 1 => do

@@ -85,7 +85,8 @@ theorem verifyWith_keyGenWith_signWith {seed : Seed} {sk : SecretKey} {idx : Lea
 /-- Correctness, with Keccak-256: the public key of a seed verifies what its keys sign. -/
 theorem verify_keyGen_sign {seed : Seed} {sk : SecretKey} {idx : LeafIndex} {m : Message}
     {σ : Signature} (hsk : sk.Reachable hashId seed) (hs : (sign sk idx m).1 = .ok σ) :
-    verify (keyGen seed).1 m σ = true :=
-  verifyWith_keyGenWith_signWith (f := hash) hsk hs
+    verify (keyGen seed).1 m σ = true := by
+  rw [sign_eq] at hs
+  exact verifyWith_keyGenWith_signWith (f := hash) hsk hs
 
 end EthLib.Cryptography.Xmss
