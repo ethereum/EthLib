@@ -21,8 +21,8 @@ The multiplexer always has its own negotiation, since inlining it in the handsha
 
 The consensus layer names only Noise, and whether a node may propose another first is open.
 
-[up]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/connections/README.md#upgrading-connections
-[noise]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/noise/README.md#negotiation
+[up]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/connections/README.md#upgrading-connections
+[noise]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/noise/README.md#negotiation
 -/
 
 @[expose] public section

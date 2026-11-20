@@ -54,7 +54,7 @@ def test_traffic_after_agreement_is_left_unread() -> None:
 
 
 # libp2p/specs, connections/README.md, "Upgrading Connections".
-# Commit c750236de43cd8b246a824b377dfdb26bae686db.
+# Commit 4facaf9876da1eb7d6e066982010c81495ebb965.
 # The listener refuses TLS, then accepts Noise.
 def test_connection_upgrade_example() -> None:
     listener = multistream.listen([NOISE], frames(HEADER, TLS, NOISE))

@@ -32,7 +32,7 @@ A dialer that gets an answer that is neither its proposal nor `na` stops in a st
 The sources fix no reaction to such an answer.
 
 [mss]: https://github.com/multiformats/multistream-select/blob/9a1fbe8edadebea223f47102f1913b8026c23a1c/README.md#protocol
-[conn]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/connections/README.md#multistream-select
+[conn]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/connections/README.md#multistream-select
 [rec]: https://github.com/multiformats/multistream-select/blob/9a1fbe8edadebea223f47102f1913b8026c23a1c/README.md#implementation-recommendations
 -/
 

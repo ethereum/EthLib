@@ -33,7 +33,7 @@ So this side accepts and drops them, until the peer closes or resets.
 
 A closed or reset stream stays in the table, so its ID and opener cannot open a stream again.
 
-[mplex]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/mplex/README.md#protocol
+[mplex]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/mplex/README.md#protocol
 -/
 
 @[expose] public section
