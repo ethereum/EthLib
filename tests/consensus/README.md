@@ -298,6 +298,7 @@ It checks the example of issue #2136 and the cases of the use case "Add a key" i
 It also lists the keys of a client, and runs the use case "Delete a key" of the source, with the request `a, a, b, c` and its statuses.
 It runs the calls on remote keys with the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
 It moves a key from one client to another with a delete and an import, as the use case "Move a key" of the source says.
+It runs the example of issue #2140 on the fee recipient, and sets the gas limit and the graffiti of a key, with the examples of the types as the defaults of the client.
 
 The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
 The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.

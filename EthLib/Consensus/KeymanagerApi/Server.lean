@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.KeymanagerApi.LocalKeys
 public import EthLib.Consensus.KeymanagerApi.RemoteKeys
+public import EthLib.Consensus.KeymanagerApi.Settings
 
 /-!
 # `Consensus.KeymanagerApi.Server`
@@ -30,6 +31,13 @@ def pathSegments (path : String) : List String :=
 def notFound : Response :=
   ⟨404, errorResponseJson ⟨"Path not found"⟩⟩
 
+/-- A call on the key that a segment of a path names; a segment that is no key gets HTTP 400. -/
+def withPubkey (segment : String) (state : KeyState)
+    (call : Cryptography.Bls.BLSPubkey → Response × KeyState) : Response × KeyState :=
+  match readPubkey "pubkey" (.str segment) with
+  | .ok pubkey => call pubkey
+  | .error _ => (badRequest "the public key of the path does not read", state)
+
 /-- The response of the call that a method and a path name, and the state after it. -/
 def handle (text : JsonText) (config : ClientConfig) (state : KeyState) (method path : String)
     (body : Json) : Response × KeyState :=
@@ -40,6 +48,12 @@ def handle (text : JsonText) (config : ClientConfig) (state : KeyState) (method 
   | "GET", ["eth", "v1", "remotekeys"] => getRemoteKeys state
   | "POST", ["eth", "v1", "remotekeys"] => postRemoteKeys state body
   | "DELETE", ["eth", "v1", "remotekeys"] => deleteRemoteKeysCall state body
+  | method, ["eth", "v1", "validator", key, "feerecipient"] =>
+    withPubkey key state fun pubkey => feeRecipientCalls.handle config state method pubkey body
+  | method, ["eth", "v1", "validator", key, "gas_limit"] =>
+    withPubkey key state fun pubkey => gasLimitCalls.handle config state method pubkey body
+  | method, ["eth", "v1", "validator", key, "graffiti"] =>
+    withPubkey key state fun pubkey => graffitiCalls.handle config state method pubkey body
   | _, _ => (notFound, state)
 
 end EthLib.Consensus.KeymanagerApi
