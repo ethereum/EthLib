@@ -202,7 +202,7 @@ theorem fromBytesBE_toBytesBE (a : Fr) :
   rw [Base.packBytes_mk_data a.toBytesBE (size_data_toBytesBE a),
     show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]
 
-/-- A successful `fromBytesBE` implies two facts.
+/-- A successful decoding of 32 bytes implies two facts.
 
 The value is the big-endian decoding, and the value is canonical. -/
 theorem fromBytesBE_ok {b : Vector UInt8 32} {f : Fr}

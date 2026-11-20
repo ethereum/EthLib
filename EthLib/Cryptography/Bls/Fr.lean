@@ -147,7 +147,9 @@ It rejects an integer of at least `r`.
 
 The bytes go straight into limbs, with no integer between. -/
 def fromBytesBE (b : Vector UInt8 32) : Except BlsError Fr :=
-  -- A test that never fails on a vector, so that the kernel stops here on unknown bytes.
+  -- A vector always has 32 bytes, so this branch is never taken.
+  --
+  -- The test keeps the kernel from unfolding the limb decoder on bytes it does not know.
   if (Base.packBytes b).size ≠ 32 then .error .nonCanonicalFieldElement
   else
     match Montgomery.ofBytesBE (Base.packBytes b) 0 with

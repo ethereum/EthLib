@@ -97,7 +97,7 @@ theorem SecretKey.fromBytes_of_size_ne {bytes : ByteArray} (h : bytes.size ≠ 3
   unfold SecretKey.fromBytes
   rw [show exactBytes? 32 bytes = none by simp [exactBytes?, EthLib.Base.exactArray?, h]]
 
-/-- On 32 bytes, the secret key decoder gives a key exactly when the decoder of scalars gives it. -/
+/-- On 32 bytes, the key decoder gives a key exactly when the scalar decoder gives its value. -/
 theorem SecretKey.fromBytes_packBytes_eq_ok_iff {b : Vector UInt8 32} {sk : SecretKey} :
     SecretKey.fromBytes (packBytes b) = .ok sk ↔ Fr.fromBytesBE b = .ok sk.val := by
   obtain ⟨x, hx⟩ := sk
