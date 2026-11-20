@@ -30119,86 +30119,6 @@ private theorem created_late (h : Setting config checks g split fin pulled anc c
   fun w found => (window_short h).trans_le
     (Nat.add_le_add_right (created_exitAfterFin h created w found) _)
 
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key that the shared segment created is bounded at each slashing step on C's branch.
-
-The key is in the split's registry, beyond the finalized one, and unslashed at the split.
-
-`whistleEnv` reads R's number for the key at that index, which is the same key.
-
-The slack pays C's own credits.
-
-A key off the kept arm is bounded by the largest cap.
-
-A key on it is closed by the frozen core.
-
-The core starts at the first state of the key on the shared segment and ends at the step's state. -/
-private theorem registry_created (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1) {events : List (BalanceEvent preset)}
-    (replayed : tail.balanceEvents high = .ok events)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
-    (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
-    (i : ℕ)
-    (beyondFin : fin.validators.data.size ≤ i) (inSplit : i < split.validators.data.size)
-    (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
-    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
-      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
-    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
-      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high eventsC
-        eventsF events fin i := by
-  classical
-  by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
-  · obtain ⟨v, rfl⟩ := Uint64.exists_toNat_eq
-      (inSplit.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early split))
-    obtain ⟨c, toC, fromC, cutC, insideC, -, before, floorStart, -⟩ :=
-      created_first_state h fromFin beyondFin inSplit
-    exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
-      replayedC step member v.toNat toC fromC cutC insideC before (.inr floorStart) unslashed flag
-      (fun w found _ => late_of_exitAfterFin h v.toNat (created_exitAfterFin h beyondFin) w found)
-      kept
-  · exact registry_headroom (config := config) h tailC step member i kept _
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A finalized key that exits at or after the finalized epoch is bounded at each slashing step.
-
-It serves the keys late or pending at R, which `whistleEnv` reads without `ebUp`.
-
-The key is in the finalized registry, so the start state is the finalized state.
-
-A key off the kept arm is bounded by the largest cap, and a key on it by the frozen core. -/
-private theorem registry_late (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1) {events : List (BalanceEvent preset)}
-    (replayed : tail.balanceEvents high = .ok events)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) {eventsF : List (BalanceEvent preset)}
-    (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
-    (i : ℕ)
-    (inFin : i < fin.validators.data.size)
-    (exitAfterFin : ∀ w, pulled.validators.data[i]? = some w →
-      (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat)
-    (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
-    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
-      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
-    effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
-      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high eventsC
-        eventsF events fin i := by
-  classical
-  by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
-  · exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
-      replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
-      (finalized_start h i).1 (.inl (finalized_start h i).2) unslashed flag
-      (fun w found _ => late_of_exitAfterFin h i exitAfterFin w found) kept
-  · exact registry_headroom (config := config) h tailC step member i kept _
-
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
 The key is absent from the finalized registry, and its rise is on the kept arm.
@@ -31952,8 +31872,18 @@ private theorem registry_bounds (h : Setting config checks g split fin pulled an
   refine ⟨fun {a b} step member i inside unslashed flag => ?_,
     fun {a b} step member i inside unslashed flag charged => ?_⟩
   · by_cases beyond : fin.validators.data.size ≤ i
-    · exact registry_created h tail high endEpoch replayed fromFin replayedF tailC highC
-        endEpochC replayedC step member i beyond inside unslashed flag
+    · -- A key created after the finalized state.
+      by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
+      · obtain ⟨v, rfl⟩ := Uint64.exists_toNat_eq
+          (inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early split))
+        obtain ⟨c, toC, fromC, cutC, insideC, -, before, floorStart, -⟩ :=
+          created_first_state h fromFin beyond inside
+        exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC
+          endEpochC replayedC step member v.toNat toC fromC cutC insideC before (.inr floorStart)
+          unslashed flag
+          (fun w found _ => late_of_exitAfterFin h v.toNat (created_exitAfterFin h beyond) w found)
+          kept
+      · exact registry_headroom (config := config) h tailC step member i kept _
     · have inFin : i < fin.validators.data.size := Nat.lt_of_not_le beyond
       obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[i]? = some w :=
         ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le inside grows)⟩
@@ -31976,11 +31906,16 @@ private theorem registry_bounds (h : Setting config checks g split fin pulled an
             (fun w' found' => by
               obtain rfl := Option.some.inj (found.symm.trans found')
               exact exited) flag slashedR
-      · exact registry_late h tail high endEpoch replayed fromFin replayedF tailC highC
-          endEpochC replayedC step member i inFin
-          (fun w' found' => by
-            obtain rfl := Option.some.inj (found.symm.trans found')
-            omega) unslashed flag
+      · -- A finalized key that exits at or after the finalized epoch.
+        by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
+        · exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC
+            endEpochC replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
+            (finalized_start h i).1 (.inl (finalized_start h i).2) unslashed flag
+            (fun w' found' _ => late_of_exitAfterFin h i
+              (fun w'' found'' => by
+                obtain rfl := Option.some.inj (found.symm.trans found'')
+                omega) w' found') kept
+        · exact registry_headroom (config := config) h tailC step member i kept _
   · -- the charge of the key on C's run, found from the exit that the step assigns
     obtain ⟨c, chargeMember, chargeIndex⟩ := List.any_eq_true.mp charged
     have indexEq : c.index = i := by simpa using chargeIndex
