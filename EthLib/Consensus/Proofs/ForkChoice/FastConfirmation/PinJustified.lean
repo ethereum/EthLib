@@ -250,8 +250,9 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     obtain ⟨pulledEpoch, split, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, finalizedS, calledS,
         laterS⟩ :=
       setting_runs_of_call anchored start anchorSlot slots positive genesis pre preGloas fusaka
-        forkWindow bounded agree bands caps facts.activation sound caller callTime pulledOk targetOk
-        ancOk finHeld finAnchor ancReads receiver high held
+        forkWindow bounded bands caps facts.activation caller callTime pulledOk targetOk
+        ancOk finHeld finAnchor ancReads receiver high (agree u caller w receiver n k callTime high)
+        held
         (shape.imp id fun ⟨slot', _, _, _, _, _, ok⟩ => ⟨slot', ok⟩) finReadRoot
         (by rw [targetEpoch, ← justifiedEpoch]; exact justifiedLe')
         (UInt64.le_iff_toNat_le.mpr inside)

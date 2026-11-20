@@ -637,13 +637,8 @@ theorem setting_runs_of_call
     (history : Run config .bls g ⟨fork, anchorState⟩) (early : fork < .glamsterdam)
     (fulu : .fusaka ≤ fork) (window : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
     (bounded : HonestStoreEpochsBounded (e := e) horizon limit)
-    (agree : ∀ a ∈ J, ∀ b ∈ J, ∀ i j, (e.world i).time ≤ limit → (e.world j).time ≤ limit →
-      ∀ (r : Root) (left right : BeaconBlock preset fork),
-      ((e.world i).state a).blocks[r]? = some left →
-      ((e.world j).state b).blocks[r]? = some right → left = right)
     (bands : preset.IncrementWithinUpwardBand)
     (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
-    (sound : Invariant anchorState)
     {u : ValidatorIndex} (caller : u ∈ J) {n : ℕ} (callTime : (e.world n).time ≤ limit)
     {head : Root} {pulled anc fin : BeaconState preset fork} {target : Checkpoint}
     (pulledOk : ((e.world n).state u).getPulledUpHeadState config head = .ok pulled)
@@ -656,6 +651,9 @@ theorem setting_runs_of_call
       ((e.world n).state u).getCheckpointBlock target.root anc.finalizedCheckpoint.epoch =
         .ok anc.finalizedCheckpoint.root)
     {w : ValidatorIndex} (receiver : w ∈ J) {k : ℕ} (receiveTime : (e.world k).time ≤ limit)
+    (agree : ∀ (r : Root) (left right : BeaconBlock preset fork),
+      ((e.world n).state u).blocks[r]? = some left →
+      ((e.world k).state w).blocks[r]? = some right → left = right)
     {root : Root} {rootState counted : BeaconState preset fork}
     (stored : ((e.world k).state w).blockStates[root]? = some rootState)
     (reach : counted = rootState ∨ ∃ slot, processSlots config .bls rootState slot = .ok counted)
@@ -672,166 +670,119 @@ theorem setting_runs_of_call
         anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split ∧
         getCurrentEpoch split ≤ getCurrentEpoch pulled ∧
         getCurrentEpoch pulled ≤ getCurrentEpoch counted := by
+  obtain ⟨sound, -, -⟩ := DirectSafety.run_justified_separated history genesis
   have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
     e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
       (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) i v honest
   obtain ⟨-, heldBefore⟩ := held_beforeFork window positive slots anchorSlot
     (forward u caller n).forwardReachable (fun epoch ok => bounded u caller n epoch callTime ok)
-  -- The runs of the pin's window, from a split state at the start of the finalized epoch.
-  --
-  -- The call is the pulled-up head state and the current target of an honest store.
-  --
-  -- The counting state is on the chain of a block of another honest store.
-  --
-  -- Once finality has passed the anchor, that chain reads the finalized checkpoint.
-  --
-  -- It is the one that the target block's state holds.
-  --
-  -- The split state is the lookahead of the finalized block's state to the start of its epoch.
-  --
-  -- Before finality has passed the anchor, the split state is the anchor state.
-  --
-  -- A boundary state of the split's epoch, with the bands of hysteresis, runs to the split state.
-  --
-  -- From the split state, runs reach the call's middle state and the counting state.
-  --
+  obtain ⟨-, heldBeforeW⟩ := held_beforeFork window positive slots anchorSlot
+    (forward w receiver k).forwardReachable
+    (fun epoch ok => bounded w receiver k epoch receiveTime ok)
   -- The call's own branch is as `runs_of_call` gives it.
   --
-  -- It has a boundary state with the bands at the start of the target's epoch.
-  --
-  -- At most one block lies between that state and the middle state.
+  -- The middle state is the lookahead of the target block's state to the start of its epoch.
   --
   -- A tail runs from the middle state to the pulled-up state.
-  have rich :
-      getCurrentEpoch pulled = target.epoch ∧
-        ∃ common split : BeaconState preset fork,
-          Hysteresis common ∧ Nonempty (Run config .bls g ⟨fork, common⟩) ∧
-          Nonempty (Run config .bls ⟨fork, common⟩ ⟨fork, split⟩) ∧
-          Nonempty (Run config .bls ⟨fork, fin⟩ ⟨fork, split⟩) ∧
-          getCurrentEpoch split = getCurrentEpoch common ∧
-          (∀ electra : .pectra ≤ fork,
-            split.pendingPartialWithdrawals electra = fin.pendingPartialWithdrawals electra) ∧
-          anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split ∧
-        ∃ boundaryE middleE : BeaconState preset fork,
-          getCurrentEpoch boundaryE = target.epoch ∧ getCurrentEpoch middleE = target.epoch ∧
-          Hysteresis boundaryE ∧ Nonempty (Run config .bls g ⟨fork, boundaryE⟩) ∧
-          (∀ electra : .pectra ≤ fork,
-            middleE.pendingPartialWithdrawals electra = anc.pendingPartialWithdrawals electra) ∧
-          ∃ (edgeE : Run config .bls ⟨fork, boundaryE⟩ ⟨fork, middleE⟩)
-            (_ : Run config .bls ⟨fork, split⟩ ⟨fork, middleE⟩)
-            (tailM : Run config .bls ⟨fork, middleE⟩ ⟨fork, pulled⟩)
-            (_ : Run config .bls ⟨fork, split⟩ ⟨fork, counted⟩),
-            edgeE.blockCount ≤ 1 ∧
-            edgeE.blockCount + tailM.blockCount ≤
-              pulled.slot.toNat - target.epoch.toNat * preset.SLOTS_PER_EPOCH.toNat + 1 := by
-    have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
-      e.forwardReachableWith (anchorState := anchorState) (anchorBlock := anchorBlock)
-        (fun a member => (start a member) ▸ Store.ForwardReachableWith.anchor anchored) i v honest
-    obtain ⟨-, heldBefore⟩ := held_beforeFork window positive slots anchorSlot
-      (forward u caller n).forwardReachable (fun epoch ok => bounded u caller n epoch callTime ok)
-    obtain ⟨-, heldBeforeW⟩ := held_beforeFork window positive slots anchorSlot
-      (forward w receiver k).forwardReachable
-      (fun epoch ok => bounded w receiver k epoch receiveTime ok)
-    obtain ⟨pulledEpoch, epochBefore, startE, startEOk, ancLe, boundaryE, middleE, lookE,
-      middleSlot, boundarySlot, bandedE, firstE, queueE, edgeE, tailM, single, countedE⟩ :=
-      call_runs anchored start anchorSlot slots positive genesis history early fulu window bounded
-        bands caps activation caller callTime pulledOk targetOk held
-    have startENat := (computeStartSlotAtEpoch_ok_iff.mp startEOk).2
-    have epochAt {s : BeaconState preset fork} {epoch : Epoch} {slot : Slot}
-        (startOk : computeStartSlotAtEpoch preset epoch = .ok slot) (atSlot : s.slot = slot) :
-        getCurrentEpoch s = epoch := by
-      simp only [getCurrentEpoch, atSlot]
-      exact computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive) startOk
-    have middleBefore : (∀ next ∈ config.nextFork fork,
-        middleE.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
-      epochBefore _ (by rw [middleSlot, startENat, Nat.mul_div_cancel _ positive])
-    have countedBefore : (∀ next ∈ config.nextFork fork,
-        counted.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
-      beforeFork_of_epoch window positive
-        (by rw [← getCurrentEpoch_toNat]; exact UInt64.le_iff_toNat_le.mp inside)
-    have countedLater := UInt64.le_iff_toNat_le.mp later
-    rw [getCurrentEpoch_toNat] at countedLater
-    have ancReach := reach_of_lookahead lookE
-    refine ⟨pulledEpoch, ?_⟩
-    by_cases guard : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
-    · -- After the anchor: the split is the finalized block's state at the start of its epoch.
-      have finStored := finHeld guard
-      obtain ⟨startF, fBlock, startFOk, fFound, fLe, -⟩ :=
-        Store.isAncestor_of_getCheckpointBlock (ancRead guard)
-      have startFNat := (computeStartSlotAtEpoch_ok_iff.mp startFOk).2
-      have finSlot : fin.slot = fBlock.slot :=
-        (forward u caller n).reachable.blockState_slot_eq anchorSlot fFound finStored
-      -- The finalized epoch is at most the target's: the target block's state settled it.
-      have ancHolds := ((forward u caller n).reachable.ordered sound).2 held
-      have settled := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
-        (Store.finalized_le_currentJustified ancHolds.ordered)
-        (UInt64.le_trans ancHolds.settled (getPreviousEpoch_le _)))
-      have ancEpoch : (getCurrentEpoch anc).toNat ≤ target.epoch.toNat := by
-        rw [getCurrentEpoch_toNat]
-        have := UInt64.le_iff_toNat_le.mp ancLe
-        rw [startENat] at this
-        exact Nat.div_le_of_le_mul (by rw [Nat.mul_comm]; exact this)
-      have finalizedLe : startF.toNat ≤ startE.toNat := by
-        rw [startFNat, startENat]
-        exact Nat.mul_le_mul_right _ (by omega)
-      obtain ⟨split, lookF, toMiddleE⟩ := lookahead_runsTo anchorSlot (forward u caller n)
-        startFOk finStored held (ancRead guard) ancReach
-        (by rw [middleSlot, UInt64.le_iff_toNat_le]; exact finalizedLe)
-      -- The receiver holds the same finalized block's state, and so the same split state.
-      obtain ⟨-, fBlockW, -, fFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock
-        (finRead guard)
-      obtain ⟨finW, finStoredW, -⟩ :=
-        (forward w receiver k).reachable.blockStatesFromParents fFoundW
-      obtain rfl : fin = finW := e.blockStates_eq anchored (start u caller)
-        (start w receiver) (agree u caller w receiver n k callTime receiveTime) finStored finStoredW
-      obtain ⟨split', lookF', toCounted⟩ := lookahead_runsTo anchorSlot (forward w receiver k)
-        startFOk finStoredW stored (finRead guard) reach
-        (by
-          rw [UInt64.le_iff_toNat_le, startFNat]
-          exact (Nat.le_div_iff_mul_le positive).mp (by omega))
-      obtain rfl : split = split' := Except.ok.inj (lookF.symm.trans lookF')
-      -- The boundary state of the finalized epoch, before the split state.
-      have atStartF : startF % preset.SLOTS_PER_EPOCH = 0 := by
-        apply UInt64.toNat_inj.mp
-        rw [UInt64.toNat_mod, startFNat, Nat.mul_mod_left, UInt64.toNat_zero]
-      have startFBefore :=
-        epochBefore startF (by rw [startFNat, Nat.mul_div_cancel _ positive]; omega)
-      obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore finStored
-      obtain ⟨splitSlot, common, commonSlot, banded, toCommon, edge, -, queue⟩ :=
-        boundary_of_lookahead genesis history early fulu bands caps activation atStartF
-          startFBefore finRun (finSlot ▸ fLe) lookF
-      obtain ⟨fromFin⟩ := (RunsTo.ofReach (checks := .bls) (reach_of_lookahead lookF)).2
-        (splitSlot ▸ startFBefore)
-      obtain ⟨toMiddle⟩ := toMiddleE.2 middleBefore
-      obtain ⟨tailS⟩ := toCounted.2 countedBefore
-      refine ⟨common, split, banded, toCommon, ⟨edge⟩, ⟨fromFin⟩,
-        (epochAt startFOk splitSlot).trans (epochAt startFOk commonSlot).symm, queue,
-        UInt64.le_of_eq (epochAt startFOk splitSlot).symm, boundaryE, middleE,
-        epochAt startEOk boundarySlot, epochAt startEOk middleSlot, bandedE, firstE, queueE, edgeE,
-        toMiddle, tailM, tailS, single, countedE⟩
-    · -- Before finality passes the anchor: the split is the anchor state itself.
-      obtain rfl := finAnchor (UInt64.not_lt.mp guard)
-      obtain ⟨common, -, commonEpoch, banded, toCommon, edge⟩ :=
-        run_boundaryEpoch genesis bands caps activation history early fulu
-      obtain ⟨ancRun⟩ := run_of_held (forward u caller n) heldBefore held
-      obtain ⟨ancToMiddle⟩ := (RunsTo.ofReach (checks := .bls) ancReach).2 middleBefore
-      obtain ⟨rootRun⟩ := run_of_held (forward w receiver k) heldBeforeW stored
-      obtain ⟨rootToCounted⟩ := (RunsTo.ofReach (checks := .bls) reach).2 countedBefore
-      exact ⟨common, fin, banded, toCommon, edge, ⟨.nil⟩, commonEpoch.symm, fun _ => rfl,
-        UInt64.not_lt.mp guard, boundaryE, middleE, epochAt startEOk boundarySlot,
-        epochAt startEOk middleSlot, bandedE, firstE, queueE, edgeE, ancRun.append ancToMiddle,
-        tailM, rootRun.append rootToCounted, single, countedE⟩
-  obtain ⟨pulledEpoch, common, split, -, -, -, ⟨fromFin⟩, -, -, ancLe, boundaryE, middleE, -, -,
-    -, -, -, edgeE, toMiddle, tailM, tailS, -, -⟩ :=
-    rich
-  have toPulled := toMiddle.append tailM
-  refine ⟨pulledEpoch, split, ?_, ⟨fromFin⟩, ⟨toPulled⟩, ⟨tailS⟩, ancLe,
-    currentEpoch_le_of_chainSteps toPulled.chainSteps, pulledEpoch ▸ later⟩
+  obtain ⟨pulledEpoch, epochBefore, startE, startEOk, ancLe, _, middleE, lookE, middleSlot, -, -,
+    -, -, _, tailM, -⟩ :=
+    call_runs anchored start anchorSlot slots positive genesis history early fulu window bounded
+      bands caps activation caller callTime pulledOk targetOk held
+  have startENat := (computeStartSlotAtEpoch_ok_iff.mp startEOk).2
+  have epochAt {s : BeaconState preset fork} {epoch : Epoch} {slot : Slot}
+      (startOk : computeStartSlotAtEpoch preset epoch = .ok slot) (atSlot : s.slot = slot) :
+      getCurrentEpoch s = epoch := by
+    simp only [getCurrentEpoch, atSlot]
+    exact computeEpochAtSlot_computeStartSlotAtEpoch (UInt64.lt_iff_toNat_lt.mpr positive) startOk
+  have middleBefore : (∀ next ∈ config.nextFork fork,
+      middleE.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
+    epochBefore _ (by rw [middleSlot, startENat, Nat.mul_div_cancel _ positive])
+  have countedBefore : (∀ next ∈ config.nextFork fork,
+      counted.slot.toNat < next.2.toNat * preset.SLOTS_PER_EPOCH.toNat) :=
+    beforeFork_of_epoch window positive
+      (by rw [← getCurrentEpoch_toNat]; exact UInt64.le_iff_toNat_le.mp inside)
+  have countedLater := UInt64.le_iff_toNat_le.mp later
+  rw [getCurrentEpoch_toNat] at countedLater
+  have ancReach := reach_of_lookahead lookE
+  refine ⟨pulledEpoch, ?_⟩
+  -- The split state, with its runs from genesis through `fin` to the middle and counted states.
+  --
+  -- Once finality has passed the anchor, it is the lookahead of `fin` to its epoch's start.
+  --
+  -- The counting state's chain reads the same finalized checkpoint, so it has the same split.
+  --
+  -- Before finality has passed the anchor, the split state is the anchor state.
+  suffices runs : ∃ split : BeaconState preset fork,
+      Nonempty (Run config .bls g ⟨fork, fin⟩) ∧
+      Nonempty (Run config .bls ⟨fork, fin⟩ ⟨fork, split⟩) ∧
+      Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, middleE⟩) ∧
+      Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, counted⟩) ∧
+      anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split by
+    obtain ⟨split, toFin, fromFin, ⟨toMiddle⟩, toCounted, finalizedLe⟩ := runs
+    have toPulled := toMiddle.append tailM
+    exact ⟨split, toFin, fromFin, ⟨toPulled⟩, toCounted, finalizedLe,
+      currentEpoch_le_of_chainSteps toPulled.chainSteps, pulledEpoch ▸ later⟩
   by_cases guard : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
-  · obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore (finHeld guard)
-    exact ⟨history.append finRun⟩
-  · obtain rfl := finAnchor (UInt64.not_lt.mp guard)
-    exact ⟨history⟩
+  · -- After the anchor: the split is the finalized block's state at the start of its epoch.
+    have finStored := finHeld guard
+    obtain ⟨startF, fBlock, startFOk, fFound, fLe, -⟩ :=
+      Store.isAncestor_of_getCheckpointBlock (ancRead guard)
+    have startFNat := (computeStartSlotAtEpoch_ok_iff.mp startFOk).2
+    have finSlot : fin.slot = fBlock.slot :=
+      (forward u caller n).reachable.blockState_slot_eq anchorSlot fFound finStored
+    -- The finalized epoch is at most the target's: the target block's state settled it.
+    have ancHolds := ((forward u caller n).reachable.ordered sound).2 held
+    have settled := UInt64.le_iff_toNat_le.mp (UInt64.le_trans
+      (Store.finalized_le_currentJustified ancHolds.ordered)
+      (UInt64.le_trans ancHolds.settled (getPreviousEpoch_le _)))
+    have ancEpoch : (getCurrentEpoch anc).toNat ≤ target.epoch.toNat := by
+      rw [getCurrentEpoch_toNat]
+      have := UInt64.le_iff_toNat_le.mp ancLe
+      rw [startENat] at this
+      exact Nat.div_le_of_le_mul (by rw [Nat.mul_comm]; exact this)
+    have finalizedLe : startF.toNat ≤ startE.toNat := by
+      rw [startFNat, startENat]
+      exact Nat.mul_le_mul_right _ (by omega)
+    obtain ⟨split, lookF, toMiddleE⟩ := lookahead_runsTo anchorSlot (forward u caller n)
+      startFOk finStored held (ancRead guard) ancReach
+      (by rw [middleSlot, UInt64.le_iff_toNat_le]; exact finalizedLe)
+    -- The receiver holds the same finalized block's state, and so the same split state.
+    obtain ⟨-, fBlockW, -, fFoundW, -, -⟩ := Store.isAncestor_of_getCheckpointBlock
+      (finRead guard)
+    obtain ⟨finW, finStoredW, -⟩ :=
+      (forward w receiver k).reachable.blockStatesFromParents fFoundW
+    obtain rfl : fin = finW := e.blockStates_eq anchored (start u caller)
+      (start w receiver) agree finStored finStoredW
+    obtain ⟨split', lookF', toCounted⟩ := lookahead_runsTo anchorSlot (forward w receiver k)
+      startFOk finStoredW stored (finRead guard) reach
+      (by
+        rw [UInt64.le_iff_toNat_le, startFNat]
+        exact (Nat.le_div_iff_mul_le positive).mp (by omega))
+    obtain rfl : split = split' := Except.ok.inj (lookF.symm.trans lookF')
+    -- The split state is at the start of the finalized epoch.
+    have atStartF : startF % preset.SLOTS_PER_EPOCH = 0 := by
+      apply UInt64.toNat_inj.mp
+      rw [UInt64.toNat_mod, startFNat, Nat.mul_mod_left, UInt64.toNat_zero]
+    have startFBefore :=
+      epochBefore startF (by rw [startFNat, Nat.mul_div_cancel _ positive]; omega)
+    obtain ⟨finRun⟩ := run_of_held (forward u caller n) heldBefore finStored
+    obtain ⟨splitSlot, -⟩ :=
+      boundary_of_lookahead genesis history early fulu bands caps activation atStartF
+        startFBefore finRun (finSlot ▸ fLe) lookF
+    obtain ⟨fromFin⟩ := (RunsTo.ofReach (checks := .bls) (reach_of_lookahead lookF)).2
+      (splitSlot ▸ startFBefore)
+    obtain ⟨toMiddle⟩ := toMiddleE.2 middleBefore
+    obtain ⟨tailS⟩ := toCounted.2 countedBefore
+    exact ⟨split, ⟨history.append finRun⟩, ⟨fromFin⟩, ⟨toMiddle⟩, ⟨tailS⟩,
+      UInt64.le_of_eq (epochAt startFOk splitSlot).symm⟩
+  · -- Before finality passes the anchor: the split is the anchor state itself.
+    obtain rfl := finAnchor (UInt64.not_lt.mp guard)
+    obtain ⟨ancRun⟩ := run_of_held (forward u caller n) heldBefore held
+    obtain ⟨ancToMiddle⟩ := (RunsTo.ofReach (checks := .bls) ancReach).2 middleBefore
+    obtain ⟨rootRun⟩ := run_of_held (forward w receiver k) heldBeforeW stored
+    obtain ⟨rootToCounted⟩ := (RunsTo.ofReach (checks := .bls) reach).2 countedBefore
+    exact ⟨fin, ⟨history⟩, ⟨.nil⟩, ⟨ancRun.append ancToMiddle⟩, ⟨rootRun.append rootToCounted⟩,
+      UInt64.not_lt.mp guard⟩
 
 /-- The quorum of each call of an honest store drifts by at most its reserve, at every receiver.
 
