@@ -23674,6 +23674,7 @@ The depth is small against an increment, from `key` and a rate of at least four.
 private theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
       w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
     (absent : split.validators.data.size ≤ v.toNat) (P : ℕ)
@@ -23685,9 +23686,8 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
     (key : 11 * (min (pinTerms config pulled anc fin).depth
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
       (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
-        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-    {Z : ℕ} (flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z) :
+        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) :
+    let Z := credC tailC highC v.toNat + whistC tailC highC v.toNat + syncCr eventsC v.toNat
     ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
       (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
       (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
@@ -23703,12 +23703,17 @@ private theorem created_ceiling (h : Setting config checks g split fin pulled an
           (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) +
         preset.downwardBand := by
   classical
+  intro Z
   obtain ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, inside, funded, hysteresis, reserve,
     walk, -, ahead⟩ := created_start h tailC highC endEpochC
       activated absent
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  have flows : grossScan v.toNat highC tailC +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z :=
+    (credits_le_sources shared h.genesis tailC h.early electra v.toNat highC replayedC).1
   have incPos := h.bands.1
   have alignedMax := (cap_values_aligned h.aligned).2
   have fuluZ : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)
@@ -23863,6 +23868,25 @@ private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc
     (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _)))
     (wide_of_lowGain h lowGain)
 
+/-- The kept arm's test bounds the gain at the full depth. -/
+private theorem keptArm_eq (i : ℕ)
+    (kept : (pinTerms config pulled anc fin).keptArm i = true) :
+    11 * (pinTerms config pulled anc fin).depth *
+        ((pinTerms config pulled anc fin).gainRate i + 1) ≤
+      (pinTerms config pulled anc fin).ebUp i := by
+  simp only [pinTerms, Bool.and_eq_true, decide_eq_true_eq] at kept
+  exact kept.2
+
+/-- The kept arm bounds the gain per increment up to the full depth. -/
+private theorem key_of_kept (h : Setting config checks g split fin pulled anc counted V)
+    (i D : ℕ) (depth : D ≤ (pinTerms config pulled anc fin).depth)
+    (kept : (pinTerms config pulled anc fin).keptArm i = true) :
+    11 * D * ((pinTerms config pulled anc fin).perIncrement *
+        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+      WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+  exact rate_per_increment _ _ _ _ _ _ h.bands.1 (by decide) (ebUp_aligned h i)
+    (Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 depth)) (keptArm_eq i kept))
+
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
 Its credits since its creation are credits of C's branch, which `created_ceiling` reads.
@@ -23910,15 +23934,8 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
   have activated := activated_of_activeVoters h.early member_active
   have absent : split.validators.data.size ≤ v.toNat := Nat.le_of_not_lt created
   have key := key_of_lowGain h lowGain
-  -- the credits of the run are in the flows
-  obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
-    syncCr eventsC v.toNat := ⟨_, rfl⟩
-  have flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z :=
-    hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
-      (by simpa using electra) v.toNat highC replayedC).1
   obtain ⟨z, pre, post, cut, positive, ahead, bound⟩ := created_ceiling h tailC highC endEpochC
-    activated absent (pinTerms config pulled anc fin).perIncrement rfl key flows
+    replayedC activated absent (pinTerms config pulled anc fin).perIncrement rfl key
   -- the state `a` is a state of the run, so it is before `z` or after it
   have inPath : a ∈ tailC.balancePath := by
     rw [cut', Run.balancePath_append]
@@ -23950,7 +23967,7 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
       ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) ≤
         (pinTerms config pulled anc fin).depth := Nat.min_le_left _ _
   simp only [createdCeil, lowGain, Bool.false_eq_true, ↓reduceIte]
-  rw [← hZ, Nat.mul_assoc (11 * Z / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat))] at *
+  rw [Nat.mul_assoc (11 * _ / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat))] at ceiling
   exact ceiling.trans (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add_left
     (Nat.mul_le_mul_right _ minLe) _) (Nat.mul_le_mul_right _ minLe)) le_rfl)
 
@@ -27045,8 +27062,6 @@ private theorem flow_key (h : Setting config checks g split fin pulled anc count
         ((pinTerms config pulled anc fin).perIncrement *
           (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-  have incPos := h.bands.1
-  have wdPos : 0 < WEIGHT_DENOMINATOR.toNat := by decide
   have arm : (pinTerms config pulled anc fin).keptArm i = true ∨
       (i ∉ (pinTerms config pulled anc fin).positions ∧
         (pinTerms config pulled anc fin).gainHigh = false) := by
@@ -27055,13 +27070,7 @@ private theorem flow_key (h : Setting config checks g split fin pulled anc count
     rw [ite_eq_right_iff.mpr (fun c => absurd c none)] at pos
     exact Nat.lt_irrefl 0 pos
   rcases arm with kept | ⟨-, low⟩
-  · have rateLow : 11 * (pinTerms config pulled anc fin).depth *
-        ((pinTerms config pulled anc fin).gainRate i + 1) ≤
-          (pinTerms config pulled anc fin).ebUp i := by
-      have := kept
-      simp only [pinTerms, Bool.and_eq_true, decide_eq_true_eq] at this
-      exact this.2
-    exact rate_per_increment _ _ _ _ _ _ incPos wdPos (ebUp_aligned h i) rateLow
+  · exact key_of_kept h i _ (Nat.le_refl _) kept
   · exact wide_of_lowGain h low
 
 /-- The rate of one increment, at the pin's base reward, is at least two.
@@ -28456,16 +28465,6 @@ private def keyCeiling (anc : BeaconState preset fork)
     slashR (pinTerms config pulled anc fin) i + bandC tailC highC i +
     bandR (eventsF ++ events) i + bandX fin highC i
 
-/-- The low-rate arm of `rise` is chosen when the depth is within the delay and the gain is low. -/
-private theorem keptArm_eq (config : Config)
-    (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
-    (pinTerms config state ancestor finalizedState).keptArm i =
-      (decide ((pinTerms config state ancestor finalizedState).depthFin ≤
-          config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) &&
-        decide (11 * (pinTerms config state ancestor finalizedState).depth *
-          ((pinTerms config state ancestor finalizedState).gainRate i + 1) ≤
-            (pinTerms config state ancestor finalizedState).ebUp i)) := rfl
-
 /-- The gain of the flows `Z0` and a penalty `W` is within a tenth of `Z0`, rounded up, and a unit.
 
 The gain of the flows alone is within a tenth of them, by `key`.
@@ -28570,22 +28569,7 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
       WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     subst ht
-    have rateLow : 11 * (pinTerms config pulled anc fin).depth *
-        ((pinTerms config pulled anc fin).gainRate i + 1) ≤
-          (pinTerms config pulled anc fin).ebUp i := by
-      rw [keptArm_eq] at kept
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at kept
-      exact kept.2
-    refine rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
-      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum (pinTerms config pulled anc fin).perIncrement
-      ((pinTerms config pulled anc fin).ebUp i) _ incPos (by decide) (ebUp_aligned h i) ?_
-    have rate : (pinTerms config pulled anc fin).gainRate i =
-        (pinTerms config pulled anc fin).ebUp i / preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-          (pinTerms config pulled anc fin).perIncrement *
-            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := rfl
-    rw [← rate]
-    exact Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (min_le_left _ _)))
-      rateLow
+    exact key_of_kept h i _ (Nat.min_le_left _ _) kept
   have hunit : t.unitGain = t.depth * (t.perIncrement *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) := by
     subst ht
@@ -29006,9 +28990,6 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
               ((getCurrentEpoch pulled).toNat + 1))) +
       ((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum +
         slashW (pinTerms config pulled anc fin) v.toNat) + (Cr + (gc + (D * q + D))))
-    (rateLow : 11 * (pinTerms config pulled anc fin).depth *
-      ((pinTerms config pulled anc fin).gainRate v.toNat + 1) ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat)
     (maxLe : M ≤ (pinTerms config pulled anc fin).ebUp v.toNat +
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
         ((syncD eventsF v.toNat + syncD events v.toNat +
@@ -29051,23 +29032,13 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   classical
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   -- the gain of the flows, and of the base stake, is the flow gain with a unit and the base gain
-  have alignedE0 := ebUp_aligned h v.toNat
   have hDle : D ≤ (pinTerms config pulled anc fin).depth := hD ▸ min_le_left _ _
-  have hq' : q = (pinTerms config pulled anc fin).ebUp v.toNat /
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
-        (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := by
-    rw [hq, hP]
-    rfl
-  have key := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P
-    ((pinTerms config pulled anc fin).ebUp v.toNat) D h.bands.1 (by decide) alignedE0
-    (by
-      rw [← hq', hq]
-      exact Nat.le_trans (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 hDle)) rateLow)
   obtain ⟨toFin⟩ := h.toFin
   have hperIncrement : (pinTerms config pulled anc fin).perIncrement = P := by
     rw [hP]
     rfl
+  have key := key_of_kept h v.toNat D hDle kept
+  rw [hperIncrement] at key
   have hunit : (pinTerms config pulled anc fin).unitGain =
       (pinTerms config pulled anc fin).depth * (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
         WEIGHT_DENOMINATOR.toNat + 2) := by
@@ -29405,11 +29376,10 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     replayedF replayed v splitSize
     (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat)
     (fun pre post _ => effective_le_cap_pulled h (fromFin.append pre) post v.toNat)
-  have memberSplit : (⟨fork, split⟩ : ForkedBeaconState preset) ∈
-      (fromFin.append tail).balancePath := by
-    obtain ⟨front, atEnd⟩ := Run.balancePath_last fromFin
-    rw [Run.balancePath_append, atEnd]
-    simp
+  have splitOn {x : ForkedBeaconState preset} (pre : Run config checks x ⟨fork, split⟩) :
+      (⟨fork, split⟩ : ForkedBeaconState preset) ∈ (pre.append tail).balancePath := by
+    rw [Run.balancePath_append]
+    exact List.mem_append_left _ (List.mem_of_mem_getLast? (Run.balancePath_ends pre).2)
   -- the envelope and the floor read the key's run from `c` to R's whole
   have cutRest : toC.append (fromC.append tail) = fromFin.append tail := by
     rw [Run.append_assoc, cutC]
@@ -29425,12 +29395,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
   have slashedLate := slashed_withdrawable_of_clean h tail v cleanSplit splitSize h.finalized
   have envAll := envelope_of_voter h fromFin tail replayedF replayed v toC (fromC.append tail)
     cutRest clean slashedLate inside start late
-  have memberSplitC : (⟨fork, split⟩ : ForkedBeaconState preset) ∈
-      (fromC.append tail).balancePath := by
-    obtain ⟨front, atEnd⟩ := Run.balancePath_last fromC
-    rw [Run.balancePath_append, atEnd]
-    simp
-  have startEff := envAll (⟨fork, split⟩ : ForkedBeaconState preset) memberSplitC
+  have startEff := envAll (⟨fork, split⟩ : ForkedBeaconState preset) (splitOn fromC)
   have floorR : min (actualBalanceAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat)
       (PinTerms.capAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat) ≤
       actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
@@ -29439,12 +29404,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     have := voter_floorAt h fromFin tail v toC (fromC.append tail) cutRest clean slashedLate inside
       late fromC tail rfl replayed
     omega
-  have rateLow : 11 * (pinTerms config pulled anc fin).depth *
-      ((pinTerms config pulled anc fin).gainRate v.toNat + 1) ≤
-        (pinTerms config pulled anc fin).ebUp v.toNat := by
-    rw [keptArm_eq] at kept
-    simp only [Bool.and_eq_true, decide_eq_true_eq] at kept
-    exact kept.2
+  have rateLow := keptArm_eq v.toNat kept
   obtain ⟨P, hP⟩ : ∃ P, P = ((getBaseRewardPerIncrement preset
       (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
           ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
@@ -29507,17 +29467,21 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       ((eventsF.map (syncDebit v.toNat)).sum + (events.map (syncDebit v.toNat)).sum +
         slashW (pinTerms config pulled anc fin) v.toNat) + (Cr + (gc + (D * q + D))) :=
     ⟨_, rfl⟩
+  -- Before the split C shares R's path, so only the tail needs C's credit bounds.
+  have onSharedOrTail {z : ForkedBeaconState preset}
+      (member : z ∈ (fromC.append tailC).balancePath) :
+      z ∈ (fromC.append tail).balancePath ∨ z ∈ tailC.balancePath := by
+    rw [Run.balancePath_append] at member
+    rcases List.mem_append.mp member with front | later
+    · exact .inl (by rw [Run.balancePath_append]; exact List.mem_append_left _ front)
+    · exact .inr (List.mem_of_mem_tail later)
   have onC : ∀ z ∈ (fromC.append tailC).balancePath,
       min (actualBalanceAt z v.toNat) (PinTerms.capAt z v.toNat) ≤ Bc := by
     intro z member
-    rw [Run.balancePath_append] at member
-    rcases List.mem_append.mp member with front | later
-    · have inR : z ∈ (fromC.append tail).balancePath := by
-        rw [Run.balancePath_append]
-        exact List.mem_append_left _ front
-      have := onR z inR
+    rcases onSharedOrTail member with inR | later
+    · have := onR z inR
       omega
-    · have := bound z (List.mem_of_mem_tail later)
+    · have := bound z later
       omega
   have atC : min (actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat)
       (PinTerms.capAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) ≤ Bc := by
@@ -29561,7 +29525,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
     have mapped : effectiveAt (⟨fork, split⟩ : ForkedBeaconState preset) v.toNat ∈
         (fromFin.append tail).balancePath.map fun z => effectiveAt z v.toNat :=
-      List.mem_map.mpr ⟨_, memberSplit, rfl⟩
+      List.mem_map.mpr ⟨_, splitOn fromFin, rfl⟩
     rw [hM, List.foldl_max_eq_max (List.ne_nil_of_mem mapped)]
     refine Nat.max_le.2 ⟨Nat.zero_le _, (List.max_le_iff (List.ne_nil_of_mem mapped)).2 ?_⟩
     intro x hx
@@ -29646,14 +29610,10 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         (PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
           (Cr + (gc + (D * q + D))))
         (fun z member => by
-          rw [Run.balancePath_append] at member
-          rcases List.mem_append.mp member with front | later
-          · have inR : z ∈ (fromC.append tail).balancePath := by
-              rw [Run.balancePath_append]
-              exact List.mem_append_left _ front
-            have := capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) v.toNat z inR
+          rcases onSharedOrTail member with inR | later
+          · have := capCeil_path (fromC.append tail) h.caps h.early (Nat.le_refl _) v.toNat z inR
             omega
-          · have := bound0 z (List.mem_of_mem_tail later)
+          · have := bound0 z later
             have := Nat.min_le_right
               (actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
                 ((events.map (penaltyDebit v.toNat)).sum + (events.map (floorPartialDebit v)).sum) +
@@ -29682,7 +29642,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     (voter_not_withdrawn h fromFin tail v unslashed late
       (Nat.lt_of_lt_of_le inside (registryGrows_of_chainSteps fromC.chainSteps)))
     P hP Df D q gc Cr M Bc _ hDf hD hq hM hform hBc
-    rateLow maxLe (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) startLe stay
+    maxLe (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) startLe stay
     cappedY creditsLe noCredit
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
@@ -29938,18 +29898,9 @@ private theorem created_key_ceiling (h : Setting config checks g split fin pulle
         (slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
           bandR (eventsF ++ events) v.toNat)) + bandX fin highC v.toNat := by
   classical
-  obtain ⟨shared⟩ := h.toFin
-  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  -- the credits of the run are in the flows
-  obtain ⟨Z, hZ⟩ : ∃ Z, Z = credC tailC highC v.toNat + whistC tailC highC v.toNat +
-    syncCr eventsC v.toNat := ⟨_, rfl⟩
-  have flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC) ≤ Z :=
-    hZ ▸ (credits_le_sources (shared.append fromFin) h.genesis tailC h.early
-      (by simpa using electra) v.toNat highC replayedC).1
-  obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC activated
-    absent
-    (pinTerms config pulled anc fin).perIncrement rfl key flows
+  obtain ⟨z, pre, post, -, positive, -, bound⟩ := created_ceiling h tailC highC endEpochC replayedC
+    activated absent (pinTerms config pulled anc fin).perIncrement rfl key
+  set Z := credC tailC highC v.toNat + whistC tailC highC v.toNat + syncCr eventsC v.toNat with hZ
   have atEnd : (⟨fork, counted⟩ : ForkedBeaconState preset) ∈ post.balancePath := by
     obtain ⟨front, eq⟩ := Run.balancePath_last post
     rw [eq]
@@ -30038,30 +29989,9 @@ private theorem key_core_created (h : Setting config checks g split fin pulled a
   classical
   by_cases absent : split.validators.data.size ≤ v.toNat
   · have activated := activated_of_quorum h.early voter
-    have incPos := h.bands.1
-    have rateLow : 11 * (pinTerms config pulled anc fin).depth *
-        ((pinTerms config pulled anc fin).ebUp v.toNat /
-            preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-          (pinTerms config pulled anc fin).perIncrement *
-            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 1) ≤
-          (pinTerms config pulled anc fin).ebUp v.toNat := by
-      rw [keptArm_eq] at kept
-      simp only [Bool.and_eq_true, decide_eq_true_eq] at kept
-      exact kept.2
-    have wide := rate_per_increment preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum
-      (pinTerms config pulled anc fin).perIncrement
-      ((pinTerms config pulled anc fin).ebUp v.toNat) (pinTerms config pulled anc fin).depth
-      incPos (by decide) (ebUp_aligned h v.toNat) rateLow
-    have key : 11 * (min (pinTerms config pulled anc fin).depth
-        ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
-          ((pinTerms config pulled anc fin).perIncrement *
-            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
-        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat :=
-      Nat.lt_of_le_of_lt (Nat.mul_le_mul_right _ (Nat.mul_le_mul_left 11 (Nat.min_le_left _ _)))
-        wide
     have core := created_key_ceiling (events := events) (eventsF := eventsF) h tail fromFin tailC
-      highC endEpochC replayedC activated absent key (Or.inl kept)
+      highC endEpochC replayedC activated absent
+      (key_of_kept h v.toNat _ (Nat.min_le_left _ _) kept) (Or.inl kept)
       (created_band h fromFin (getCurrentEpoch pulled).toNat (Nat.le_succ _) replayedF tailC highC
         endEpochC replayedC activated absent)
     unfold keyCeiling
