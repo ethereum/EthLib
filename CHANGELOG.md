@@ -48,13 +48,12 @@ Not yet released.
   `segment_events_cases` builds on it, and the pin's credit scan of a segment reads it.
 
 - `DirectSafety.Apriori.Internal.segment_events_cases` splits the events of a segment of a branch that starts in an epoch.
-  The segment stays in its epoch, or it ends with the slot of the epoch boundary after an inner run, whose epoch passes it gives by source.
+  The segment stays in its epoch, or it ends with the slot of the epoch boundary after an inner run, and it gives the epoch passes of that run by their source.
   The cohort's penalties in `Penalties` and one key's pass debits in the pin's drift bound read it.
 
 - `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
   `pinReserve` is `(pinTerms config state ancestor finalizedState).total`.
-  Through `pinTerms`, it reads Apriori's churn model instead of the three removed `PinTerms` churn definitions.
-  Its value stays the same when `MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA` is a multiple of the balance increment, as on mainnet and minimal, and is at least as large otherwise.
+  Through `pinTerms`, it reads the churn of the a priori drift bound.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.
 
 - `PinTerms.capAt`, `PinTerms.dueAmount` and `PinTerms.exitedSlashable` read a key's cap, its due partial withdrawals and its exit from a state, as `pinTerms` does.
@@ -101,9 +100,9 @@ Not yet released.
 
 - `DirectSafety.Apriori.Internal.perIncrement_exists` is public: the base reward per increment exists at a positive total when the scaled factor fits.
   The pin reads it to show that its base reward per increment is at least four.
-  The pin's preset facts gain `fits`, that the scaled base reward factor fits in a `Gwei`, which both presets meet.
-  They also gain `activation`, that the activation balance is at most the largest effective balance before Electra, which both presets meet.
-  The pin reads it for the bands of hysteresis through a chain of upgrades.
+  The pin's preset facts include `fits`, that the scaled base reward factor fits in a `Gwei`, which both presets meet.
+  They also include `activation`, that the activation balance is at most the largest effective balance before Electra, which both presets meet.
+  The pin reads `activation` for the bands of hysteresis through a chain of upgrades.
 
 - `DirectSafety.Apriori.Internal.run_cuts_of_additive` sums a bound over the one-epoch segments of a branch, for any quantity that adds over `Run.append`.
   `run_cuts_le` is its instance for the cost of the replayed events.
@@ -274,7 +273,7 @@ Not yet released.
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
   They also accept a different guard in place of the final key's exit.
   It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
-  Master's headers are the cases with the exit guard.
+  The existing statements are the cases with the exit guard.
   `FloorTrace.run_of_le_cap_general` takes the same guard and covers an activated key or a branch from Fulu.
   `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
   The pin's drift bound reads them for keys that are not yet active.
@@ -728,7 +727,7 @@ Not yet released.
 - `PinDrift.le_pinReserve` is public: under a `PinDrift.Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
   It takes the setting and the two total active balances.
 
-- `PinGuarded` requires the a priori guard at a call's finalized state only for the head the honest store selects.
+- `PinGuarded` is public: the a priori guard at a call's finalized state, for the head that each honest store selects, within the withdrawal delay from that state.
 
 - `justifiedPinned_of_setting` is public: the voters of a call pin the justified checkpoints of the call's epoch.
   It assumes no bound on finality lag: past the withdrawal delay the reserve already covers three times the voters' stake.

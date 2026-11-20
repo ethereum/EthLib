@@ -108,6 +108,8 @@ private theorem pin_finRead {A B : Store preset fork}
 
 The guard uses the epoch of the pulled-up head state.
 
+It is asked only within the withdrawal delay from the finalized state, where the proof reads it.
+
 Until the target state's finality advances past the anchor, its finalized state is the anchor. -/
 def PinGuarded (last : ℕ) : Prop :=
   ∀ u ∈ J, ∀ n (node : ForkChoiceNode) (pulled anc fin : BeaconState preset fork)
@@ -120,6 +122,8 @@ def PinGuarded (last : ℕ) : Prop :=
     (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
       ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin) →
     (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) →
+    (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat →
     DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
 
 /-- Past the withdrawal delay the reserve covers three times the stake of any active voters. -/
@@ -281,7 +285,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
       rw [justifiedEpoch] at near
       exact near
     have guard := guarded u caller n node pulled anc fin target callTime nodeOk pulledOk targetOk
-      ancOk finHeld finAnchor
+      ancOk finHeld finAnchor lag
     have setting : Setting config .bls g split fin pulled anc state voters :=
       ⟨genesis, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, preGloas, fusaka, bands, caps,
         exitWindow, parameters, maxAligned, twoSlots, lag, ⟨total, totalOk⟩,

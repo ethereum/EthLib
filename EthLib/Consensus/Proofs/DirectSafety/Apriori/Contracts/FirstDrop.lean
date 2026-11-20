@@ -683,18 +683,6 @@ theorem hysteresis_of_crossing_slot {m n : ForkedBeaconState preset}
     omega
   exact hysteresis_of_advanceSlot bands advanced boundary
 
-/-- A slot step ends at most one epoch later. -/
-private theorem epoch_succ_of_slot {m n : ForkedBeaconState preset}
-    (ok : advanceSlotAcross config checks m = .ok n) :
-    (getCurrentEpoch n.state).toNat ≤ (getCurrentEpoch m.state).toNat + 1 := by
-  obtain ⟨after, advanced, upgraded⟩ := bind_ok_iff.mp ok
-  have slot : n.state.slot = after.slot := processUpgrades_slot upgraded
-  obtain ⟨nextSlot, cached, epoched, sum, -, -, rfl⟩ := advanceSlot_ok advanced
-  rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat, slot]
-  simp only
-  rw [sum, Nat.succ_div]
-  split <;> omega
-
 /-- A step that crosses an epoch is a slot step. -/
 theorem slot_of_crossing {m n : ForkedBeaconState preset} (step : Step config checks m n)
     (crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat) :
@@ -1150,7 +1138,7 @@ private theorem FloorTrace.run_of_le_cap_general_or_fulu
       · have crossing : (getCurrentEpoch m.state).toNat < (getCurrentEpoch n.state).toNat := by
           omega
         have ok := slot_of_crossing step crossing
-        have succ := epoch_succ_of_slot ok
+        have succ := (ChainStep.slot ok).epoch_le_succ
         have hyst := hysteresis_of_crossing_slot ok bands forkM early crossing
         have matched : n.state.balances.data.size = n.state.validators.data.size :=
           reachable_balancesMatch (shared.append (pre.snoc step)) genesis
