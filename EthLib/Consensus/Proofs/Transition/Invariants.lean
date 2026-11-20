@@ -718,9 +718,13 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
       exits, aligned⟩, rfl, rfl, rfl, rfl⟩, .of_eq rfl rfl⟩
   · cases computed
 
-/-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
+/-- The base laws that carry a reflexive, transitive relation through most steps of an epoch.
 
 They leave out justification, the builder payments and the rotation of the flags.
+
+They also leave out a write of the RANDAO mixes or of the lookahead of proposers.
+
+The step laws add those two.
 
 A validator write at a plain position must relate its states when it meets four conditions.
 
@@ -734,8 +738,8 @@ Its effective balance is a whole number of increments, when the preset and the s
 
 The other laws cover balance changes, exits and record updates.
 
-They leave out new validators and the queue of pending deposits, which the frame laws below add. -/
-structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
+They leave out new validators and the queue of pending deposits, which the frame base laws add. -/
+structure EpochBaseLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
   setValidatorAt : ∀ {state after : BeaconState preset fork} {position : Nat}
@@ -756,7 +760,6 @@ structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork
   eth1DataVotes : ∀ state votes, R state { state with eth1DataVotes := votes }
   inactivityScores : ∀ state scores, R state { state with inactivityScores := scores }
   slashings : ∀ state slashings, R state { state with slashings }
-  randaoMixes : ∀ state randaoMixes, R state { state with randaoMixes }
   historicalRoots : ∀ state historicalRoots, R state { state with historicalRoots }
   historicalSummaries : ∀ state summaries, R state { state with historicalSummaries := summaries }
   participationRecords : ∀ state, R state
@@ -766,25 +769,34 @@ structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork
     R state { state with pendingConsolidations := consolidations }
   syncCommittees : ∀ state current next,
     R state { state with currentSyncCommittee := current, nextSyncCommittee := next }
-  proposerLookahead : ∀ state lookahead, R state { state with proposerLookahead := lookahead }
   ptcWindow : ∀ state window, R state { state with ptcWindow := window }
 
-/-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
+/-- The base laws, plus a write of the RANDAO mixes and a write of the lookahead of proposers. -/
+structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
+    extends EpochBaseLaws R where
+  randaoMixes : ∀ state randaoMixes, R state { state with randaoMixes }
+  proposerLookahead : ∀ state lookahead, R state { state with proposerLookahead := lookahead }
 
-They are the laws of the steps, plus two.
+/-- The base laws of the epoch steps, with new validators and the queue of pending deposits.
 
 A new validator with a key that no validator has must relate its states.
 
-So must a write of the queue of pending deposits and of the deposit balance to consume.
-
-They leave out justification, the builder payments and the rotation of the flags. -/
-structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
-    extends EpochStepLaws R where
+So must a write of the queue of pending deposits and of the deposit balance to consume. -/
+structure EpochFrameBaseLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
+    extends EpochBaseLaws R where
   addValidatorToRegistry : ∀ {state after pubkey withdrawalCredentials amount},
     addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after →
     pubkey ∉ validatorKeys state → R state after
   pendingDeposits : ∀ state deposits carried, R state
     { state with pendingDeposits := deposits, depositBalanceToConsume := carried }
+
+/-- The laws that carry a reflexive, transitive relation through most steps of an epoch.
+
+They are the laws of the steps and the base laws of the frame.
+
+They leave out justification, the builder payments and the rotation of the flags. -/
+structure EpochFrameLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
+    extends EpochStepLaws R, EpochFrameBaseLaws R
 
 /-- The mutator frame satisfies the frame laws of the epoch steps. -/
 theorem mutatorEpochFrameLaws : EpochFrameLaws (@MutatorFrame preset fork) where
@@ -838,10 +850,10 @@ theorem blockEpochFrameLaws : EpochFrameLaws (@BlockFrame preset fork) where
     (mutatorEpochFrameLaws.proposerLookahead state lookahead).toBlockFrame
   ptcWindow state window := (mutatorEpochFrameLaws.ptcWindow state window).toBlockFrame
 
-namespace EpochStepLaws
+namespace EpochBaseLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochStepLaws R)
+  (laws : EpochBaseLaws R)
 
 include laws
 
@@ -901,6 +913,15 @@ theorem setValidatorAt_of_sameBalance {position : Nat} {validator old : Validato
     rw [balance]
     exact holds old (mem_of_getValidatorAt found)
 
+end EpochBaseLaws
+
+namespace EpochStepLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochStepLaws R)
+
+include laws
+
 theorem processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : Consensus.processVoluntaryExit config checks state signed = .ok after) :
     R state after := by
@@ -938,10 +959,10 @@ theorem processSyncAggregate {altair : .altair ≤ fork} {aggregate : SyncAggreg
 
 end EpochStepLaws
 
-namespace EpochFrameLaws
+namespace EpochFrameBaseLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochFrameLaws R)
+  (laws : EpochFrameBaseLaws R)
 
 include laws
 
@@ -952,6 +973,15 @@ theorem applyPendingDeposit {deposit : PendingDeposit}
   · exact laws.refl _
   · exact laws.increaseBalance raised
   · exact laws.addValidatorToRegistry added fresh
+
+end EpochFrameBaseLaws
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+
+include laws
 
 theorem applyDepositElectra {electra : .pectra ≤ fork} {pubkey : BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei} {signature : BLSSignature}
@@ -1965,10 +1995,10 @@ private theorem queueForActivation_pubkey {validator queued : Validator}
     queued.pubkey = validator.pubkey := by
   rcases queueForActivation_cases computed with rfl | ⟨_, rfl⟩ <;> rfl
 
-namespace EpochStepLaws
+namespace EpochBaseLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochStepLaws R)
+  (laws : EpochBaseLaws R)
 
 include laws
 
@@ -2133,6 +2163,15 @@ theorem processSlashingsReset (computed : Consensus.processSlashingsReset state 
   obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq computed
   exact laws.slashings _ _
 
+end EpochBaseLaws
+
+namespace EpochStepLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochStepLaws R)
+
+include laws
+
 theorem processRandaoMixesReset (computed : Consensus.processRandaoMixesReset state = .ok after) :
     R state after := by
   obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
@@ -2161,6 +2200,15 @@ theorem processParticipationRecordUpdates
   simp only [pure, Except.pure, Except.ok.injEq] at computed
   subst computed
   exact (laws.participationRecords _)
+
+end EpochStepLaws
+
+namespace EpochBaseLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochBaseLaws R)
+
+include laws
 
 theorem processInactivityUpdates {altair : .altair ≤ fork}
     (computed : Consensus.processInactivityUpdates config state altair = .ok after) :
@@ -2220,6 +2268,15 @@ theorem processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
   all_goals first
     | exact laws.refl _
     | exact (laws.historicalSummaries _ _)
+
+end EpochBaseLaws
+
+namespace EpochStepLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochStepLaws R)
+
+include laws
 
 theorem processSyncCommitteeUpdates {altair : .altair ≤ fork}
     (computed : Consensus.processSyncCommitteeUpdates state altair = .ok after) :
@@ -2341,10 +2398,10 @@ theorem processEpoch_split_of_lt_altair (before : fork < .altair)
 
 end EpochStepLaws
 
-namespace EpochFrameLaws
+namespace EpochFrameBaseLaws
 
 variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochFrameLaws R)
+  (laws : EpochFrameBaseLaws R)
 
 include laws
 
@@ -2364,6 +2421,15 @@ theorem processPendingDeposits {electra : .pectra ≤ fork}
   all_goals
     exact laws.trans (laws.passPendingDeposits ‹_›)
       (laws.pendingDeposits _ _ _)
+
+end EpochFrameBaseLaws
+
+namespace EpochFrameLaws
+
+variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
+  (laws : EpochFrameLaws R)
+
+include laws
 
 theorem processPendingBalances
     (computed : Consensus.processPendingBalances config checks state = .ok after) :
