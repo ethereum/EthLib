@@ -66,11 +66,11 @@ Not yet released.
   The pin's reader reads it.
 
 - `Run.slashed_withdrawable_eq` says that a validator that is slashed, with an assigned exit, keeps its withdrawable epoch along a run.
-  The pin's floors read it for the keys that C slashes before the split.
+  The pin's floors read it for the keys that the counting branch slashes before the split.
 
 - `Run.withdrawable_eq_exit_delay` says that a validator reached from genesis, if it is not slashed, has no withdrawable epoch before its exit is assigned.
   After the exit is assigned, its withdrawable epoch is exactly the withdrawal delay after it.
-  It extends `Run.exit_withdrawable_delay` with the upper bound, and the pin's floors read it for the keys that C exits.
+  It extends `Run.exit_withdrawable_delay` with the upper bound, and the pin's floors read it for the keys that the counting branch exits.
   The private invariant `ActivationExitOrder.Holds` gains the upper bound as a fifth conjunct.
   The new `Holds` implies the old one, so each reader of the old four conjuncts is unchanged.
 
@@ -80,7 +80,7 @@ Not yet released.
   `run_boundaryEpoch` and the pin's charge lemmas read it.
 
 - `DirectSafety.Apriori.Internal.FloorTrace.run_potential_floor_slash` is public: a key unslashed at the start of a run keeps its balance within the closed form of a slash, over one more epoch.
-  The pin's `segment_potential_slash` reads it for the floor of a key that C's run slashes.
+  The pin's `segment_potential_slash` reads it for the floor of a key that the counting run slashes.
 
 - `Run.exit_activated` says that a validator with an assigned exit, in a run from genesis, has reached its activation epoch.
   It lets a reader of `Step.slashed_activated` discharge its `exited` premise.
@@ -238,7 +238,7 @@ Not yet released.
 
 - `DirectSafety.selected_deposit_le` says that a balance event credits a set of keys, none of them withdrawable before it, at most the gains of the keys that are not withdrawable.
   For a deposit event from Electra, that sum is its funding credit.
-  The pin's bound on the deposits credited to the active keys of C's run reads it, in `deposit_each_le`.
+  The pin's bound on the deposits credited to the active keys of the counting run reads it, in `deposit_each_le`.
 
 - `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
   They also accept a different guard in place of the final key's exit.
@@ -251,7 +251,7 @@ Not yet released.
 - `FloorTrace.run_effective_origin` says where a key's effective balance after a run from Fusaka comes from.
   It is its value at the start, or an update set it at most to the balance at the last state where it changed.
   The run splits at that state, with the effective balance constant after it and aligned.
-  The stay step of the pin's C-floor reads it.
+  The stay step of the pin's counting-branch floor reads it.
 
 - `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
   The pin's drift bound reads it.
@@ -262,7 +262,7 @@ Not yet released.
 
 - `processEpochAltair_credentials` says that an epoch from Altair keeps the withdrawal credentials of each validator in the registry before it.
   `processEffectiveBalanceUpdates_owned` says that the pass of the effective balances finds a balance at each position of its registry.
-  The pin's balance bound for a key that switches to compounding on C's branch reads both.
+  The pin's balance bound for a key that switches to compounding on the counting branch reads both.
 
 - `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
   It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
@@ -272,10 +272,10 @@ Not yet released.
   The pin's balance bound for a key that switches to compounding reads these four lemmas.
 
 - `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
-  The pin's bound on the penalties and partials of a key on R's branch reads it.
+  The pin's bound on the penalties and partials of a key on the pulled-up branch reads it.
 
 - `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
-  The pin's deposit-queue bound for the keys that vote on R's branch reads it.
+  The pin's deposit-queue bound for the keys that vote on the pulled-up branch reads it.
 
 - `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
   They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
@@ -717,7 +717,7 @@ Not yet released.
 - `add_le_of_lt_of_aligned` says that a whole number of increments above another is at least one increment above it.
   The pin's effective-balance bounds read it.
 
-- `voters_sum_le` says that a sum over some voters of a function of their positions is at most its sum over those positions.
+- `Models.Network.voters_sum_le` says that a sum over some voters of a function of their positions is at most its sum over those positions.
   The pin's drift bound reads it.
 
 - `activationLe_of_active` and `activationLe_of_slashable` say that an active or slashable validator was activated at or before the epoch.
