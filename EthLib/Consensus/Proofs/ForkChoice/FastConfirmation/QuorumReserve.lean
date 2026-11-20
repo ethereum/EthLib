@@ -577,17 +577,19 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let whistleblowerR := ((∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       max (effective i + rise i) (finEB i)) + seatExcess * inc) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
-  let slashedR := (positions.filter fun i => slashed i = true ∧ recentSlashing i = true).card
+  let slashedRB (i : ℕ) := decide (slashed i = true ∧ recentSlashing i = true)
+  let slashedR := (positions.filter fun i => slashedRB i = true).card
   -- The largest gain rate of one key, its gain rate at the largest effective balance.
   let gainRateMax := capMax / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- A late key is charged three times its effective balance here, and its rise once.
   --
   -- A key active by the finalized state can have a larger balance there, and its reward is charged.
+  let lateB (i : ℕ) := (validator i).any (fun v =>
+    decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
+      decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat))
   let late := if tight then 0 else
-    ∑ i ∈ positions with (validator i).any (fun v =>
-      decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
-        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
+    ∑ i ∈ positions with lateB i = true,
       (3 * effective i + rise i +
         3 * ((finEB i - effective i - rise i + (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat))
@@ -686,10 +688,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- It is the ejection balance less an increment, kept positive and at most `newKeyFloor`.
   let exitFloor := max 1 (min (config.EJECTION_BALANCE.toNat - inc) newKeyFloor)
   let newKeySlack := newKeyFloor - exitFloor
-  let lowKeys := (positions.filter fun i =>
-    (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat) &&
-      decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧
-      lowEB i < newKeyFloor).card
+  let lowB (i : ℕ) := decide ((validator i).any (fun v =>
+    decide (finalized < v.withdrawableEpoch.toNat) &&
+      decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor)
+  let lowKeys := (positions.filter fun i => lowB i = true).card
   -- Outside the tight window, keys can start to exit on the other branch.
   --
   -- The queues admit at most this many keys at `exitFloor` each.
@@ -720,15 +722,15 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
   -- A carry is a balance that can let several keys exit, so it counts by `exitFloor` too.
-  let queueKeys := (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry) /
-    exitFloor + 2 + lowKeys + newKeySeats
+  let queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry
+  let queueKeys := queueWindow / exitFloor + 2 + lowKeys + newKeySeats
   -- An exiting key weighs three times, so each credited one needs two more upward bands.
   --
   -- Those are the keys whose exit the call reads and those the queues let exit there.
-  let exitingCount := (positions.filter fun i => (before i || current i) = true ∧
-      (slashed i = false ∨ recentSlashing i = true) ∧
-      ((validator i).map fun v =>
-        decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true).card
+  let exitingB (i : ℕ) := decide ((before i || current i) = true ∧
+    (slashed i = false ∨ recentSlashing i = true) ∧
+    ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true)
+  let exitingCount := (positions.filter fun i => exitingB i = true).card
   let exitingBands := 2 * (exitingCount + queueKeys) * preset.upwardBand
   let queueRise := if tight then 0 else
     3 * queueKeys * (preset.upwardBand + depth * gainRateMax)
@@ -782,10 +784,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- So it lands at the earliest `MAX_SEED_LOOKAHEAD + 1` epochs later; the tight window has none.
   --
   -- Its effective balance there is at most its effective balance here and its rise.
-  let exitedR := ∑ i ∈ positions with (validator i).any (fun v =>
-      decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
-        decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
-    (effective i + rise i)
+  let exitedRB (i : ℕ) := (validator i).any (fun v =>
+    decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
+      decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat))
+  let exitedR := ∑ i ∈ positions with exitedRB i = true, (effective i + rise i)
   -- A credit on the other branch alone compounds its gains over the rest of the window.
   --
   -- While eleven gains over the depth stay below the cap, `credits`' eleven tenths pay a new key's.
@@ -883,25 +885,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     otherGain, keptArm, creditLow, creditCap, gainHigh := !decide lowRate, pendingRB,
     joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
     joinRise,
-    exitingB := fun i => decide ((before i || current i) = true ∧
-      (slashed i = false ∨ recentSlashing i = true) ∧
-      ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true),
-    lateB := fun i => (validator i).any (fun v =>
-      decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
-        decide (finalized + preset.MAX_SEED_LOOKAHEAD.toNat < v.activationEpoch.toNat)),
-    exitedRB := fun i => (validator i).any (fun v =>
-      decide (finalized + 1 + preset.MAX_SEED_LOOKAHEAD.toNat ≤ v.exitEpoch.toNat) &&
-        decide (v.exitEpoch.toNat + 1 ≤ epoch.toNat)),
-    slashedR,
-    slashedRB := fun i => decide (slashed i = true ∧ recentSlashing i = true),
+    exitingB, lateB, exitedRB, slashedR, slashedRB,
     withdrawnRB := fun i => (validator i).any fun v =>
       decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1),
-    tight, queueKeys,
-    queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry,
-    gainRateMax, exitFloor, lowKeys,
-    lowB := fun i => decide ((validator i).any (fun v =>
-      decide (finalized < v.withdrawableEpoch.toNat) &&
-        decide (v.activationEpoch.toNat ≤ epoch.toNat)) ∧ lowEB i < newKeyFloor),
+    tight, queueKeys, queueWindow, gainRateMax, exitFloor, lowKeys, lowB,
     lowEB, newKeySeats, newKeySlack, newKeyFloor, leakAt, ebUp, leak, partialsDue, base0, gainRate,
     floorC, drop }
 
