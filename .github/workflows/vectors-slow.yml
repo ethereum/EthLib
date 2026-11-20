@@ -122,7 +122,9 @@ jobs:
           - suite: nist-cavp
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/aes/test_cavp_gcm.py
-          # A newer release of a pinned suite, or the tests of the next execution fork, fails the job.
+          # A newer release of a pinned suite fails the job.
+          # So does an asset of a pinned release that tests/sources.toml does not place.
+          # So do the tests of the next execution fork.
           - suite: releases
             bindings: false
             run: uv run --no-project --python 3.12 python scripts/check_spec_releases.py
