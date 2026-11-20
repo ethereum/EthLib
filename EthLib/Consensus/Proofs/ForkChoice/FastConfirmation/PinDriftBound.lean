@@ -35162,11 +35162,11 @@ private theorem stake_le_total {state : BeaconState preset fork} {total : Gwei}
 
 /-- The top-level step, closed from the stubs.
 
-It closes only with the extra term `3 · Σ_{(K5 counted V)} (rise + credC)`.
+The quorum at the counting state and `V` at the pulled-up state weigh three each.
 
-The C-side rise of keys that are previous-epoch-only in C weighs 3 in the drift.
+Their sum is at most twice the counting total, the pulled-up total and `pinReserve`.
 
-No term of `pinReserve` charges it at 3. -/
+It also adds three times the counting stake of the quorum voters that are in `V`. -/
 theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)

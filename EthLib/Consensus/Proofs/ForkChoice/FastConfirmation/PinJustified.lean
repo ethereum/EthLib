@@ -137,7 +137,7 @@ def PinGuarded (last : ℕ) : Prop :=
 
 /-- The voters of a call pin the justified checkpoints of the call's epoch.
 
-A set of honest voters, with stake over a third of the total, reserve and margin, pins them.
+Take honest voters whose stake exceeds a third of the total plus the margin and the pin reserve.
 
 A justified checkpoint of the call's epoch then has a signer among them, or two honest stores collide.
 

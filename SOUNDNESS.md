@@ -3469,7 +3469,14 @@ The run also assumes `JustifiedPinned` at margin 0, `ByzantineCountedStake ancho
 The endpoint derives the signed justification inside, as the historical-anchor headlines do.
 It derives it from the Byzantine bound, a positive inclusion delay and the two conditions on the anchor.
 The Byzantine bound and the two conditions on the anchor are assumptions on the run; the anchor store checks neither condition.
-No theorem derives `JustifiedPinned` yet.
+`justifiedPinned_of_setting` proves `JustifiedPinned` at any margin, as `justifiedPinned_of_setting.mainnet` and `.minimal` on the two deployed presets.
+Its conclusion allows a collision of two honest stores.
+It assumes the nonzero roots of the held block states and the absent parent of the anchor.
+It assumes the bounded honest store epochs, the stake floors, the unslashed counted voters and the withdrawal delay.
+It also assumes the finality of honest stores and the guard `PinGuarded` at each call's finalized state.
+The fork is from Fusaka and before Gloas, and the next fork is past the horizon.
+It derives the agreement of honest blocks, the held states before the next fork and the justified chain of each store itself.
+The endpoint above still assumes `JustifiedPinned`; no theorem calls `justifiedPinned_of_setting` yet.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
