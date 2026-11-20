@@ -23,7 +23,9 @@ The stages of an epoch before the RANDAO reset keep them, and so does a pending 
 
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
-The operations, the sync aggregate and the vote on the deposit contract keep them, at every fork.
+The operations keep them at every fork.
+
+The sync aggregate from Altair and the vote on the deposit contract before Heze keep them too.
 
 A full parent changes only the latest block hash among them, and the header step only the header.
 
@@ -308,7 +310,7 @@ theorem payloadInputs_processConsolidationRequest {electra : .pectra ≤ fork}
   · exact payloadInputs_switchToCompoundingValidator switched
   · exact payloadInputs_queueConsolidation queued
 
-/-- Before Gloas, the requests of the execution layer in a block keep the inputs of a payload. -/
+/-- From Electra to Fulu, the requests of the execution layer keep the inputs of a payload. -/
 theorem payloadInputs_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
     (computed : processExecutionRequests config state body electra = .ok after) :
@@ -533,8 +535,7 @@ theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposi
   · exact payloadInputsLaws.applyPendingDeposit applied
 
 /-- The operations of a block keep the inputs of a payload, at every fork. -/
-theorem payloadInputs_processOperations
-    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+theorem payloadInputs_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
     PayloadInputs state after := by
   obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=

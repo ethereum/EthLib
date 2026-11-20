@@ -9,7 +9,7 @@ Not yet released.
 
 ### Proof additions
 
-- In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that before Gloas the requests of the execution layer in a block keep the inputs of a payload.
+- In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
 
 - Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
   `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
@@ -427,7 +427,7 @@ Not yet released.
 ### Changes that break callers
 
 - In Lean, `payloadInputs_processOperations` holds at every fork and no longer takes `gloas : .glamsterdam ≤ fork`.
-  Before Gloas the deposits and the requests of the execution layer keep the inputs of a payload too.
+  Before Gloas the deposits and, from Electra, the requests of the execution layer keep the inputs of a payload too.
   A caller drops the first explicit argument.
 
 - In Lean, signed direct safety catches collisions of signing roots ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
