@@ -36,7 +36,7 @@ namespace EthLib.Execution.Evm.Precompiles.Blake2f
 /-- The price of a 213-byte input is one gas per round. -/
 theorem gasCost_of_size (data : ByteArray) (h : data.size = INPUT_BYTES) :
     gasCost data = GAS_PER_ROUND * (readRounds ⟨data.data, h⟩).toNat := by
-  simp [gasCost, Base.exactBytes?, Base.exactArray?, h]
+  simp [gasCost, Base.exactBytes?_of_size_eq h]
 
 /-- A call with a 213-byte input and too little gas runs out of gas, whatever its flag byte. -/
 theorem blake2f_outOfGas (data : ByteArray) (h : data.size = INPUT_BYTES) {gas : Nat}

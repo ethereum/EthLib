@@ -2,6 +2,7 @@ module
 
 public import EthLib.Networking.Encoding.Protobuf
 public import EthLib.Networking.Proofs.Encoding.Varint
+public import EthLib.Base.Proofs.ByteReader
 
 /-!
 # Proofs: the protobuf wire format
@@ -55,15 +56,8 @@ theorem readKey_encodeKey {field wire : Nat} (h0 : 0 < field) (hmax : field ≤ 
 
 /-- Reading `n` bytes from `n` bytes and more returns them, and the bytes after them. -/
 theorem readFixed_append {n : Nat} (bytes : Vector UInt8 n) (rest : List UInt8) :
-    readFixed n (bytes.toList ++ rest) = .ok (bytes, rest) := by
-  have hl : bytes.toList.length = n := bytes.length_toList
-  have hle : n ≤ (bytes.toList ++ rest).length := by simp [hl]
-  simp only [readFixed, dite_eq_left_of_eq_true (eq_true hle)]
-  congr 2
-  · apply Vector.ext
-    intro i hi
-    simp [Vector.getElem_toList, hl]
-  · simp [hl]
+    readFixed n (bytes.toList ++ rest) = .ok (bytes, rest) :=
+  Base.ByteReader.vector_append _ bytes rest
 
 /-- Reading a length-delimited value back from its encoding returns it. -/
 theorem readLen_encodeValue {field : Nat} {bytes : ByteArray} (h : bytes.size < 2 ^ 64)
@@ -71,10 +65,11 @@ theorem readLen_encodeValue {field : Nat} {bytes : ByteArray} (h : bytes.size < 
   have hn : (UInt64.ofNat bytes.size).toNat = bytes.size := by
     rw [UInt64.toNat_ofNat_of_lt']
     simpa [UInt64.size] using h
-  have hle : bytes.size ≤ (bytes.data.toList ++ rest).length := by simp
-  simp only [encodeValue, List.append_assoc, readLen, readVarint_encode, bind, Except.bind, hn,
-    readFixed, dite_eq_left_of_eq_true (eq_true hle)]
-  simp [pure, Except.pure]
+  simp only [encodeValue, List.append_assoc, readLen, readVarint_encode, bind, Except.bind]
+  -- The bytes of the value are those of the object of its size.
+  rw [hn, show bytes.data.toList = (⟨bytes.data, rfl⟩ : Vector UInt8 bytes.size).toList from rfl,
+    readFixed_append]
+  rfl
 
 /-- A key takes at least one byte. -/
 theorem encodeKey_ne_nil (field wire : Nat) : encodeKey field wire ≠ [] :=

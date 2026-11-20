@@ -280,9 +280,9 @@ def blobAndProofV2OfJson (j : Json) : Read BlobAndProofV2 := do
   unless hasExactly fs ["blob", "proofs"] do reject "blobAndProof: not the fields of version 2"
   let blob ← fixed "blob" BYTES_PER_BLOB (← field "blobAndProof" fs "blob")
   let proofs ← array "proofs" (fixed "proof" 48) (← field "blobAndProof" fs "proofs")
-  if h : proofs.length = CELLS_PER_EXT_BLOB then
-    return { blob, proofs := ⟨proofs.toArray, by simpa using h⟩ }
-  else reject s!"proofs: {proofs.length}, not {CELLS_PER_EXT_BLOB}"
+  let proofs ← exactArray CELLS_PER_EXT_BLOB proofs.toArray fun count =>
+    s!"proofs: {count}, not {CELLS_PER_EXT_BLOB}"
+  return { blob, proofs }
 
 /-- A cell and its proof at one position, which must both be present or both be `null`. -/
 def cellAndProof : Option Cell × Option KZGProof → Read (Option (Cell × KZGProof))

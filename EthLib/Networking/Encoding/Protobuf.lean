@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Networking.Encoding.Varint
+public import EthLib.Base.ByteReader
 
 /-!
 # The protobuf wire format
@@ -123,9 +124,7 @@ def readKey (bytes : List UInt8) : Except ProtobufError (Nat × Nat × List UInt
 
 /-- The first `n` bytes of the input, and the bytes after them. -/
 def readFixed (n : Nat) (bytes : List UInt8) : Except ProtobufError (Vector UInt8 n × List UInt8) :=
-  if h : n ≤ bytes.length then
-    .ok (⟨(bytes.take n).toArray, by simp [Nat.min_eq_left h]⟩, bytes.drop n)
-  else .error (.truncated n bytes.length)
+  Base.ByteReader.vector (.truncated n bytes.length) n bytes
 
 /-- A length-delimited value: a varint length, then that many bytes. -/
 def readLen (bytes : List UInt8) : Except ProtobufError (ByteArray × List UInt8) := do

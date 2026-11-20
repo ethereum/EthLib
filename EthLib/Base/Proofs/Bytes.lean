@@ -76,20 +76,30 @@ theorem packBytes_injective {n : Nat} :
 @[simp] theorem packBytes_mk_data {n : Nat} (b : ByteArray) (h : b.data.size = n) :
     packBytes (⟨b.data, h⟩ : Vector UInt8 n) = b := rfl
 
+/-- An array of the wanted length reads as its own elements. -/
+theorem exactArray?_of_size_eq {α : Type} {n : Nat} {a : Array α} (h : a.size = n) :
+    exactArray? n a = some ⟨a, h⟩ :=
+  dite_eq_left h
+
+/-- An array of any other length reads as nothing. -/
+theorem exactArray?_of_size_ne {α : Type} {n : Nat} {a : Array α} (h : a.size ≠ n) :
+    exactArray? n a = none :=
+  dite_eq_right h
+
 /-- The elements of a vector, read back at its length, give the vector. -/
 @[simp] theorem exactArray?_toArray {α : Type} {n : Nat} (v : Vector α n) :
-    exactArray? n v.toArray = some v := by
-  rw [exactArray?, dite_eq_left v.size_toArray]
+    exactArray? n v.toArray = some v :=
+  exactArray?_of_size_eq v.size_toArray
 
 /-- An array of the wanted length reads as its own elements. -/
 theorem exactArray_of_size_eq {α ε : Type} {n : Nat} {a : Array α} (bad : Nat → ε)
     (h : a.size = n) : exactArray n a bad = .ok ⟨a, h⟩ := by
-  simp [exactArray, exactArray?, h]
+  simp [exactArray, exactArray?_of_size_eq h]
 
 /-- An array of any other length gives the error built from its length. -/
 theorem exactArray_of_size_ne {α ε : Type} {n : Nat} {a : Array α} (bad : Nat → ε)
     (h : a.size ≠ n) : exactArray n a bad = .error (bad a.size) := by
-  simp [exactArray, exactArray?, h]
+  simp [exactArray, exactArray?_of_size_ne h]
 
 /-- The elements of a vector, read back at its length, give the vector. -/
 @[simp] theorem exactArray_toArray {α ε : Type} {n : Nat} (v : Vector α n) (bad : Nat → ε) :
@@ -127,6 +137,16 @@ theorem toArray_of_exactArray? {α : Type} {n : Nat} {a : Array α} {v : Vector 
 @[simp] theorem exactBytes?_packBytes {n : Nat} (v : Vector UInt8 n) :
     exactBytes? n (packBytes v) = some v :=
   exactArray?_toArray v
+
+/-- A buffer of the wanted length reads as its own bytes. -/
+theorem exactBytes?_of_size_eq {n : Nat} {b : ByteArray} (h : b.size = n) :
+    exactBytes? n b = some ⟨b.data, h⟩ :=
+  exactArray?_of_size_eq h
+
+/-- A buffer of any other length reads as nothing. -/
+theorem exactBytes?_of_size_ne {n : Nat} {b : ByteArray} (h : b.size ≠ n) :
+    exactBytes? n b = none :=
+  exactArray?_of_size_ne h
 
 /-- A buffer of the wanted length reads as its own bytes. -/
 theorem exactBytes_of_size_eq {ε : Type} {n : Nat} {b : ByteArray} (bad : Nat → ε)

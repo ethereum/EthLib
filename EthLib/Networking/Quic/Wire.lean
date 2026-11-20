@@ -65,6 +65,10 @@ abbrev Reader (α : Type) := Base.ByteReader.Reader Error α
 abbrev bytes (n : Nat) : Reader (List UInt8) := fun input =>
   Base.ByteReader.bytes (.truncated n input.length) n input
 
+/-- Read a fixed-length byte vector without defaulting or padding. -/
+abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
+  Base.ByteReader.vector (.truncated n input.length) n input
+
 /-- Read a big-endian integer of the given byte width. -/
 abbrev uint (n : Nat) : Reader Nat := fun input =>
   Base.ByteReader.uint (.truncated n input.length) n input
