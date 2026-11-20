@@ -28,6 +28,8 @@ The writer fails when the node cannot encode the block, or recover a sender in i
 In a valid view, a canonical block after the lowest has an object exactly when it has an RLP form.
 
 From Fusaka, the size check gives that form, of at most 8 MiB, so the object exists.
+
+In a valid view, each signature of a canonical block after the lowest names a sender.
 -/
 
 public section
@@ -290,7 +292,7 @@ private theorem blockJson_of_rawBlock {r : BlockRecord} (full : Bool) {raw : Byt
 namespace ChainView
 
 /-- In a valid view, each signature of a canonical block after the lowest names a sender. -/
-private theorem Valid.exists_recoverSender {v : ChainView} {checkSeal : Bool}
+theorem Valid.exists_recoverSender {v : ChainView} {checkSeal : Bool}
     (hv : v.Valid checkSeal) {i : Nat} (hi : i + 1 < v.canonical.length) :
     ∀ tx ∈ v.canonical[i + 1].block.transactions,
       ∃ sender, recoverSender v.canonical[i + 1].fork tx = .ok sender := by
