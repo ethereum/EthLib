@@ -9414,28 +9414,44 @@ private theorem credited_keys_le (h : Setting config checks g split fin pulled a
 /-! ## The classes of keys and their costs -/
 
 section Costs
+
 variable (pulled counted : BeaconState preset fork) (V : Finset ValidatorIndex)
 
+/-- The keys active at C. -/
 private def AC := activeVoters counted
+
+/-- The keys active at R. -/
 private def AR := activeVoters pulled
+
+/-- The keys counted in C's quorum. -/
 private def Q := quorumVoters counted
+
+/-- The keys that the costs sum over: counted at C, or active at C or R. -/
 private def U := Q counted ∪ AC counted ∪ AR pulled
+
+/-- The balance of a key at C. -/
 private def eC (v : ValidatorIndex) : ℕ := balanceAt counted v.toNat
+
+/-- The balance of a key at R. -/
 private def eR (v : ValidatorIndex) : ℕ := balanceAt pulled v.toNat
 
 /-- V keys active in C: twice their fall. -/
 private def cV1 : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ V ∧ v ∈ AC counted then (eR pulled v : ℤ) - eC counted v else 0
+
 /-- V keys not active in C: twice their stake at R. -/
 private def cV2 : ℤ :=
   ∑ v ∈ U pulled counted, if v ∈ V ∧ v ∉ AC counted then (eR pulled v : ℤ) else 0
+
 /-- (K4 pulled counted V), other keys active in both and counted in C: once their rise. -/
 private def cN : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ AC counted ∧ v ∈ AR pulled ∧ v ∈ Q counted ∧ v ∉ V then
     (eC counted v : ℤ) - eR pulled v else 0
+
 /-- (K5 counted V), other keys previous-epoch-only in C: three times their stake at C. -/
 private def cP : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ Q counted ∧ v ∉ AC counted ∧ v ∉ V then (eC counted v : ℤ) else 0
+
 /-- (K6 pulled counted), keys counted in C and not active at R: once their stake at C. -/
 private def cJ : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ AC counted ∧ v ∈ Q counted ∧ v ∉ AR pulled then (eC counted v : ℤ) else 0
@@ -9446,14 +9462,24 @@ It also subtracts their stake at R if they are active there. -/
 private def cK7 : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ AC counted ∧ v ∉ Q counted then
     -(2 * (eC counted v : ℤ)) - (if v ∈ AR pulled then (eR pulled v : ℤ) else 0) else 0
+
 /-- cS, other keys active at R, not at C and outside C's quorum: minus their stake at R. -/
 private def cS : ℤ := ∑ v ∈ U pulled counted,
   if v ∈ AR pulled ∧ v ∉ AC counted ∧ v ∉ Q counted ∧ v ∉ V then -(eR pulled v : ℤ) else 0
+
+/-- The keys of `V` not active at C. -/
 private def VN : Finset ValidatorIndex := V.filter (· ∉ AC counted)
+
+/-- The keys outside `V` active at C and R and counted in C's quorum. -/
 private def K4 : Finset ValidatorIndex :=
   (AC counted).filter fun v => v ∈ AR pulled ∧ v ∈ Q counted ∧ v ∉ V
+
+/-- The keys outside `V` counted in C's quorum but not active at C. -/
 private def K5 : Finset ValidatorIndex := (Q counted).filter fun v => v ∉ AC counted ∧ v ∉ V
+
+/-- The keys active and counted at C but not active at R. -/
 private def K6 : Finset ValidatorIndex := (AC counted).filter fun v => v ∈ Q counted ∧ v ∉ AR pulled
+
 /-- SC, keys of R's registry unslashed at the split and slashed at C. -/
 private def SC (split : BeaconState preset fork) : Finset ValidatorIndex :=
   ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter fun v =>
@@ -9588,8 +9614,7 @@ The second is for a V key that is not active in C: the same, and the charges tha
 
 The shared run from the finalized block adds the key's sync debits to the sum.
 
-C's tail adds its sync movement.
--/
+C's tail adds its sync movement. -/
 private theorem stub_V_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {eventsF eventsC : List (BalanceEvent preset)}
@@ -10438,12 +10463,6 @@ The floor starts from the smaller of the key's balance and its cap at the finali
 
 It falls by what `fall` charges, in `X`: the leak and the gain over the depth, and the partials.
 
-If the test of `fall` holds, the balance stays within a band of the envelope.
-
-Then the effective balance stays at its finalized value, by `stay`.
-
-Otherwise the floor is rounded down to an increment, by `cfloor_endpoint`.
-
 The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
 
 The hypothesis `stay` keeps the effective balance at its finalized value if the test holds.
@@ -11104,12 +11123,14 @@ private def CompKept {f : Fork} (s t : BeaconState preset f) : Prop :=
     ∃ later, t.validators.data[v.toNat]? = some later ∧
       hasCompoundingWithdrawalCredential later = hasCompoundingWithdrawalCredential validator
 
+/-- Compounding is kept across two steps when each step keeps it. -/
 private theorem CompKept.trans {f : Fork} {s u t : BeaconState preset f} (one : CompKept s u)
     (two : CompKept u t) : CompKept s t := fun v validator located => by
   obtain ⟨middle, middleFound, same⟩ := one v validator located
   obtain ⟨later, laterFound, same'⟩ := two v middle middleFound
   exact ⟨later, laterFound, same'.trans same⟩
 
+/-- A block ledger with no credited keys keeps compounding. -/
 private theorem CompKept.of_ledger {f : Fork} {s t : BeaconState preset f}
     {paid : Finset ValidatorIndex} {sync other slash : ValidatorIndex → ℕ}
     (ledger : BlockLedger.Ledger s t paid ∅ sync other slash) : CompKept s t :=
@@ -12275,6 +12296,7 @@ private theorem card_big_charges_le (h : Setting config checks g split fin pulle
   have window := charges_le_queueWindow h tailC
   simp only [smul_eq_mul] at each
   omega
+
 /-- The exits and consolidations initiated on C's branch, against `queueExit`.
 
 There are none in the tight window. -/
@@ -12990,8 +13012,7 @@ private theorem charge_epoch_le_of_K5 (h : Setting config checks g split fin pul
 
 /-- The quarter of any total has a base reward per increment, if any total has one.
 
-The factor times the increment fits in a `UInt64` for every total, and the quarter is positive.
--/
+The factor times the increment fits in a `UInt64` for every total, and the quarter is positive. -/
 private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrement : Gwei}
     (perOk : getBaseRewardPerIncrement preset total = .ok perIncrement) (T : Gwei) :
     ∃ pq, getBaseRewardPerIncrement preset
@@ -14138,15 +14159,7 @@ The cap of the key may rise once, at a step that makes it compound.
 
 The cap of a key in the registry is the activation balance, or the largest balance if it compounds.
 
-The balance counts up to the cap at each state, so a ceiling on it holds before and after the rise.
-
-A key whose cap does not rise is the constant-cap case.
-
-Otherwise the run splits at the step that makes the key compound.
-
-The part before it has the activation balance as its cap, and the part after it the largest balance.
-
-The step leaves the epoch, so it keeps the effective balance. -/
+The balance counts up to the cap, so a ceiling on it holds before and after the rise. -/
 private theorem effective_ceiling_flip (h : Setting config checks g split fin pulled anc counted V)
     {x y : BeaconState preset fork} (tail : Run config checks ⟨fork, x⟩ ⟨fork, y⟩)
     (invariant : Invariant x) (i : ℕ) (inside : i < x.validators.data.size)
@@ -14308,8 +14321,7 @@ private theorem effective_le_cap_run (h : Setting config checks g split fin pull
     {c : BeaconState preset fork} (toC : Run config checks ⟨fork, fin⟩ ⟨fork, c⟩)
     (fromC : Run config checks ⟨fork, c⟩ ⟨fork, split⟩) {y : BeaconState preset fork}
     (r : Run config checks ⟨fork, split⟩ ⟨fork, y⟩) (i : ℕ) :
-    ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinTerms.capAt z i
-      := fun z member => by
+    ∀ z ∈ (fromC.append r).balancePath, effectiveAt z i ≤ PinTerms.capAt z i := fun z member => by
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨zs, rfl, ⟨r1⟩, -⟩ := balancePath_state (fromC.append r) member
   exact effective_le_cap_at (shared.append (toC.append r1)) h.genesis h.caps h.early i
@@ -14352,21 +14364,11 @@ open DirectSafety.Apriori.Internal in
 
 The key is in the low regime, so its effective balance bound `ebUp` closes the ceiling.
 
-The balance counts up to the key's cap at each state, which rises at most once along C's run.
-
-The balance at the split is at most R's balance plus R's debits, by the floor premise.
-
-The start of the ceiling is that bound, held to the cap at the split.
-
-R's balance can exceed that cap, and the balance counts only up to it.
-
-R's penalty and partial debits are at most the leak at the cap and the net partials.
-
 The credits are `Cr`, which covers C's net credits `credits`, and the sync debits of R's.
 
 `flipCover` makes `Cr` cover all of C's gross credits, when the cap rises on C's run.
 
-Its gain is at most a tenth of the credits, sync debits, slack and base gain. -/
+The gain is at most a tenth of the credits, sync debits, slack and base gain. -/
 private theorem c_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {e : BeaconState preset fork}
@@ -14791,29 +14793,11 @@ The finalized state is `c` for a key of the finalized registry.
 
 A key that R's run creates has its first state `c` after the split.
 
-The effective balance of a key at `c` is within `ebUp` and the finalized one.
+At `c` the effective balance is within `ebUp` and the finalized one, or within its balance floor.
 
-Or it is within the floor of its balance there.
+After `c` it is within `ebUp` and the whole increments of its sync debits and `W`.
 
-A key that the shared segment created starts from the floor of its balance.
-
-That floor is within the balance ceiling, so the effective balance there is too.
-
-It is within `ebUp` and a few increments at each state after `c`.
-
-The increments are the whole ones of its sync debits and its slashing slack.
-
-The balance at each state of R's run from `c` is at least R's less R's debits.
-
-The balance counts up to the cap of the key at that state, which rises at most once.
-
-The passes and partials cost at most the leak at the cap and the net partials, by `debits_le_top`.
-
-The sync debits and `W` are the rest, and `floorAt` supplies the floor from each state.
-
-A ceiling on the balance along the run gives one on the effective balance.
-
-The bound `ebUp` reads it at the top. -/
+`floorAt` bounds the balance at each state by R's balance and debits, which gives the ceiling. -/
 private theorem prefix_envelope (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
