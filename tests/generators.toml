@@ -387,6 +387,10 @@ generator = "pyspec v1.7.0-alpha.13"
 cases = ["cases.json"]
 generator = "EthLib script on eth-ssz-specs 0.1.0"
 
+[[directories."tests/serialization/ssz_proofs"]]
+cases = ["cases.json"]
+generator = "EthLib script on eth-ssz-specs 0.1.0"
+
 # The cryptographic suites.
 
 [[directories."bindings/python/tests/aes/cavp"]]

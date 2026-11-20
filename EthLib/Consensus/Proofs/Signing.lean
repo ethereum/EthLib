@@ -246,6 +246,77 @@ theorem computeSigningRoot_ne_or_collision {α : Type} [SszType α] [LawfulSszTy
         exact bMember
   · exact .inl same
 
+/-- The inputs of the binary hashes in the root of the signing data of an object root and a domain.
+
+They are those of the tree of the signing data, which holds the object root and the domain. -/
+def signingDataMessages (objectRoot : Root) (domain : Domain) : List Bytes :=
+  valueMessages (desc SigningData) (toValue (SigningData.mk objectRoot domain))
+
+/-- Every variable-size count of signing data fits its 256-bit word, since it has no list. -/
+private theorem signingData_commitmentSized (data : SigningData) :
+    CommitmentSized (desc SigningData) (toValue data) := by
+  refine .container fun pair member => ?_
+  simp [desc, toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals exact .byteVector _ _
+
+/-- Two objects signed in two different domains have different signing roots, or SHA-256 collides.
+
+The objects may be of two types, and the collision is between messages of their signing data. -/
+theorem computeSigningRoot_ne_or_collision_of_domain_ne {α β : Type} [SszType α]
+    [SszType β] {first : α} {second : β} {firstDomain secondDomain : Domain}
+    {firstObjectRoot secondObjectRoot firstRoot secondRoot : Root}
+    (differ : firstDomain ≠ secondDomain)
+    (firstObject : hashTreeRoot first = .ok firstObjectRoot)
+    (secondObject : hashTreeRoot second = .ok secondObjectRoot)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x ∈ signingDataMessages firstObjectRoot firstDomain,
+      ∃ y ∈ signingDataMessages secondObjectRoot secondDomain, MessageCollision x y := by
+  by_cases same : firstRoot = secondRoot
+  · subst same
+    -- Each signing root is the root of the signing data of its object root.
+    simp only [computeSigningRoot, firstObject, secondObject, bind, Except.bind]
+      at firstSigned secondSigned
+    -- Two signing data values with one root are equal, or two messages of their trees collide.
+    rcases hashTreeRoot_binding (signingData_commitmentSized _) (signingData_commitmentSized _)
+        firstSigned secondSigned with
+      equal | ⟨firstTree, secondTree, firstOk, secondOk, a, b, -, aMember, bMember, collision⟩
+    · exact absurd (SigningData.mk.inj equal).2 differ
+    · refine .inr ⟨a, ?_, b, ?_, collision⟩
+      · rw [signingDataMessages, valueMessages_of_valueTree firstOk]
+        exact aMember
+      · rw [signingDataMessages, valueMessages_of_valueTree secondOk]
+        exact bMember
+  · exact .inl same
+
+/-- Two objects signed under two domain types have two different signing roots, or SHA-256 collides.
+
+Each domain is that of its domain type, of any fork version and of any genesis validators root.
+
+So, unless the node hash collides, no signing root in one domain type is one in another.
+
+For instance, no attestation has the signing root of a deposit. -/
+theorem computeSigningRoot_ne_or_collision_of_domainType_ne {config : Config} {α β : Type}
+    [SszType α] [SszType β] {first : α} {second : β} {firstType secondType : DomainType}
+    {firstVersion secondVersion : Version} {firstGenesis secondGenesis : Root}
+    {firstDomain secondDomain : Domain}
+    {firstObjectRoot secondObjectRoot firstRoot secondRoot : Root}
+    (differ : firstType ≠ secondType)
+    (firstDomained :
+      computeDomain config firstType firstVersion firstGenesis = .ok firstDomain)
+    (secondDomained :
+      computeDomain config secondType secondVersion secondGenesis = .ok secondDomain)
+    (firstObject : hashTreeRoot first = .ok firstObjectRoot)
+    (secondObject : hashTreeRoot second = .ok secondObjectRoot)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x ∈ signingDataMessages firstObjectRoot firstDomain,
+      ∃ y ∈ signingDataMessages secondObjectRoot secondDomain, MessageCollision x y :=
+  computeSigningRoot_ne_or_collision_of_domain_ne
+    (computeDomain_ne differ firstDomained secondDomained) firstObject secondObject firstSigned
+    secondSigned
+
 /-- Before Fulu, the fork digest is the first four bytes of the root of the fork data. -/
 theorem computeForkDigest_of_lt_fulu {config : Config} {genesisValidatorsRoot root : Root}
     {epoch : Epoch} (beforeFulu : epoch < config.FULU_FORK_EPOCH)
