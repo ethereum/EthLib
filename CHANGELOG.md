@@ -381,7 +381,8 @@ Not yet released.
 
 - `effectiveKept_parentPayload` states that the payload of the parent keeps the size of the registry and each effective balance in it.
 
-- `EpochBaseLaws` and `EpochFrameBaseLaws` are the laws of the epoch steps that keep the RANDAO mixes and the lookahead of proposers.
+- `EpochBaseLaws` and `EpochFrameBaseLaws` are the laws of the epoch steps without a write of the RANDAO mixes or of the lookahead of proposers.
+  So a relation that keeps both can satisfy them.
   `EpochStepLaws` and `EpochFrameLaws` extend them with those two laws, and have the same fields by name.
   `payloadInputsLaws` gives the frame base laws for `PayloadInputs`.
   `payloadInputs_epochPrefix` states that the stages of an epoch before the RANDAO reset keep the inputs of a payload.
@@ -416,11 +417,12 @@ Not yet released.
   `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
   The SPHINCS+ and XMSS proofs now use it.
 
-- In Lean, the laws of the epoch steps that need neither the RANDAO mixes nor the lookahead of proposers move to the base laws.
+- In Lean, 22 laws of the epoch steps move to the base laws, and three to the frame base laws.
   `EpochStepLaws.foldlM`, `EpochStepLaws.setValidator`, `EpochStepLaws.setValidator_of_sameBalance`, `EpochStepLaws.setValidatorAt_of_sameBalance`, `EpochStepLaws.applyDeltas`, `EpochStepLaws.applyAllDeltas`, `EpochStepLaws.processRewardsAndPenalties`, `EpochStepLaws.updateRegistryEntry`, `EpochStepLaws.activateValidator`, `EpochStepLaws.updateRegistryEntryElectra`, `EpochStepLaws.processRegistryUpdates`, `EpochStepLaws.applySlashingPenalty`, `EpochStepLaws.applySlashingPenaltyElectra`, `EpochStepLaws.processSlashings`, `EpochStepLaws.processEth1DataReset`, `EpochStepLaws.updateEffectiveBalance`, `EpochStepLaws.processEffectiveBalanceUpdates`, `EpochStepLaws.processSlashingsReset`, `EpochStepLaws.processInactivityUpdates`, `EpochStepLaws.passPendingConsolidations`, `EpochStepLaws.processPendingConsolidations` and `EpochStepLaws.processHistoricalSummariesUpdate` are renamed `EpochBaseLaws.foldlM`, `EpochBaseLaws.setValidator`, `EpochBaseLaws.setValidator_of_sameBalance`, `EpochBaseLaws.setValidatorAt_of_sameBalance`, `EpochBaseLaws.applyDeltas`, `EpochBaseLaws.applyAllDeltas`, `EpochBaseLaws.processRewardsAndPenalties`, `EpochBaseLaws.updateRegistryEntry`, `EpochBaseLaws.activateValidator`, `EpochBaseLaws.updateRegistryEntryElectra`, `EpochBaseLaws.processRegistryUpdates`, `EpochBaseLaws.applySlashingPenalty`, `EpochBaseLaws.applySlashingPenaltyElectra`, `EpochBaseLaws.processSlashings`, `EpochBaseLaws.processEth1DataReset`, `EpochBaseLaws.updateEffectiveBalance`, `EpochBaseLaws.processEffectiveBalanceUpdates`, `EpochBaseLaws.processSlashingsReset`, `EpochBaseLaws.processInactivityUpdates`, `EpochBaseLaws.passPendingConsolidations`, `EpochBaseLaws.processPendingConsolidations` and `EpochBaseLaws.processHistoricalSummariesUpdate`, and each takes `EpochBaseLaws`.
   `EpochFrameLaws.applyPendingDeposit`, `EpochFrameLaws.passPendingDeposits` and `EpochFrameLaws.processPendingDeposits` are renamed `EpochFrameBaseLaws.applyPendingDeposit`, `EpochFrameBaseLaws.passPendingDeposits` and `EpochFrameBaseLaws.processPendingDeposits`, and each takes `EpochFrameBaseLaws`.
   A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws` or `laws.toEpochFrameBaseLaws`.
-  `EpochStepLaws.mk` and `EpochFrameLaws.mk` now take the parent structures, not the former flat positional arguments.
+  `EpochStepLaws.mk` now takes the base laws and its two own laws, not the former flat positional arguments.
+  `EpochFrameLaws.mk` takes the step laws and the two laws of the frame.
   An instance written with named fields, as a `where` literal, is unchanged.
   One built with `⟨…⟩` or `.mk` and positional arguments switches to a `where` literal.
 

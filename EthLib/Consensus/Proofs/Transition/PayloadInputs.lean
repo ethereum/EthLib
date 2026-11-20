@@ -20,7 +20,7 @@ From Fulu the header step also reads the proposer lookahead, so these fields inc
 
 Most steps of a block keep all of these fields, when they succeed.
 
-Several steps of an epoch keep them too, and so does a pending deposit.
+The stages of an epoch before the RANDAO reset keep them, and so does a pending deposit.
 
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
@@ -176,7 +176,7 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
 
 /-- The inputs of a payload satisfy the frame base laws of the epoch steps.
 
-Those laws leave out the mixes and the lookahead. -/
+Those laws leave out a write of the mixes or of the lookahead, which would change these inputs. -/
 theorem payloadInputsLaws : EpochFrameBaseLaws (@PayloadInputs preset fork) where
   refl := PayloadInputs.refl
   trans := PayloadInputs.trans

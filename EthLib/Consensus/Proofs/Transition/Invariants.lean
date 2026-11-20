@@ -722,7 +722,9 @@ theorem frame_addValidatorToRegistry {pubkey : BLSPubkey}
 
 They leave out justification, the builder payments and the rotation of the flags.
 
-They also leave out the RANDAO mixes and the lookahead of proposers, which the step laws add.
+They also leave out a write of the RANDAO mixes or of the lookahead of proposers.
+
+The step laws add those two.
 
 A validator write at a plain position must relate its states when it meets four conditions.
 
@@ -736,7 +738,7 @@ Its effective balance is a whole number of increments, when the preset and the s
 
 The other laws cover balance changes, exits and record updates.
 
-They leave out new validators and the queue of pending deposits, which the frame laws below add. -/
+They leave out new validators and the queue of pending deposits, which the frame base laws add. -/
 structure EpochBaseLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop where
   refl : ∀ state, R state state
   trans : ∀ {first second third}, R first second → R second third → R first third
@@ -769,7 +771,7 @@ structure EpochBaseLaws (R : BeaconState preset fork → BeaconState preset fork
     R state { state with currentSyncCommittee := current, nextSyncCommittee := next }
   ptcWindow : ∀ state window, R state { state with ptcWindow := window }
 
-/-- The laws of the epoch steps, with the RANDAO mixes and the lookahead of proposers. -/
+/-- The base laws, plus a write of the RANDAO mixes and a write of the lookahead of proposers. -/
 structure EpochStepLaws (R : BeaconState preset fork → BeaconState preset fork → Prop) : Prop
     extends EpochBaseLaws R where
   randaoMixes : ∀ state randaoMixes, R state { state with randaoMixes }
