@@ -2099,19 +2099,6 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       have step := slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle
       exact ⟨by omega, by omega⟩
 
-/-- An active validator's activation is before the far-future epoch. -/
-theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activation_ne_far_of_active {w :
-  Validator} {e : Epoch}
-    (active : isActiveValidator w e = true) : w.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  have low := UInt64.le_iff_toNat_le.mp (activationLe_of_active active)
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  have high := UInt64.lt_iff_toNat_lt.mp active.2
-  have bound := w.exitEpoch.toNat_lt
-  intro far
-  rw [far] at low
-  have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  omega
-
 /-- A voter that is active at a state has its activation assigned and reached. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_activeVoters (early :
   fork < .glamsterdam)
@@ -2119,7 +2106,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_ac
     ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
       w.activationEpoch ≤ getCurrentEpoch s := by
   obtain ⟨w, found, active⟩ := Internal.active_of_activeVoters early member
-  exact ⟨w, found, Internal.activation_ne_far_of_active active, activationLe_of_active active⟩
+  exact ⟨w, found, Consensus.Internal.assigned_of_active active, activationLe_of_active active⟩
 
 /-- A voter of the quorum has its activation assigned and reached.
 
@@ -2135,7 +2122,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_of_qu
   · exact Internal.activated_of_activeVoters early (by simpa [activeVoters] using now)
   · obtain ⟨w, found, active⟩ :=
       (mem_getActiveValidatorIndices (s.validators.bound early)).mp before
-    exact ⟨w, found, Internal.activation_ne_far_of_active active,
+    exact ⟨w, found, Consensus.Internal.assigned_of_active active,
       UInt64.le_trans (activationLe_of_active active) (getPreviousEpoch_le s)⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in

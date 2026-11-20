@@ -29,6 +29,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
+public import EthLib.Base.Proofs.Nat
 
 /-!
 # The fall of an effective balance over the end of an epoch
@@ -61,15 +62,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 /-- How far an effective balance can fall when the update reads a balance of at least `low`. -/
 private def fallGap (inc down effective low : ℕ) : ℕ :=
   if effective ≤ low + down then 0 else effective - (low - low % inc)
-
-/-- A balance rounded down to an increment grows with the balance. -/
-theorem rounded_mono (inc : ℕ) {low high : ℕ} (le : low ≤ high) :
-    low - low % inc ≤ high - high % inc := by
-  have one := Nat.mod_add_div low inc
-  have two := Nat.mod_add_div high inc
-  have three := Nat.div_le_div_right (c := inc) le
-  have four := Nat.mul_le_mul_left inc three
-  omega
 
 /-- The allowed fall shrinks as the balance read grows. -/
 private theorem fallGap_anti (inc down effective : ℕ) {low high : ℕ} (le : low ≤ high) :

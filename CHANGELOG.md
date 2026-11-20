@@ -776,8 +776,11 @@ Not yet released.
   Registry updates and pending deposits before it keep existing effective balances, and the stages after it keep the validators and the balances.
   The pin's floor of a key's effective balance reads it.
 
-- `rounded_mono` says that a balance rounded down to an increment grows with the balance.
-  The pin's effective-balance bounds read it.
+- `rounded_mono` in `Base.Proofs.Nat` says that rounding down to a multiple of an increment preserves order.
+  `EffectiveFall` and `InactivityLeakVoterRun` use it for their rounding bounds, and the pin uses it for its effective-balance bounds.
+
+- `Internal.assigned_of_active` is moved to `Transition.ActiveKept` and says that an active validator has an assigned activation epoch.
+  `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
 
 ### Changes that break callers
 

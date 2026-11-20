@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakRun
 public import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
+import EthLib.Base.Proofs.Nat
 
 /-!
 # Proofs: the voters of a leak keep a stake read at the start of the run
@@ -42,14 +43,6 @@ variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : Signat
 def cappedFloor (preset : Preset) (cap balance : Gwei) : Nat :=
   (min balance cap).toNat - (min balance cap).toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat
 
-/-- Rounding down to a multiple of a step keeps the order. -/
-private theorem sub_mod_le_sub_mod {low high : Nat} (step : Nat) (le : low ≤ high) :
-    low - low % step ≤ high - high % step := by
-  have lowSplit := Nat.mod_add_div low step
-  have highSplit := Nat.mod_add_div high step
-  have quotients := Nat.mul_le_mul_left step (Nat.div_le_div_right (c := step) le)
-  omega
-
 /-- An updated effective balance is at least the old one or the rounded capped balance.
 
 The cap is the largest effective balance that the update takes. -/
@@ -60,13 +53,13 @@ theorem min_le_updatedEffectiveBalance {cap balance effective updated : Gwei}
   · exact Nat.min_le_left _ _
   refine Nat.le_trans (Nat.min_le_right _ _) ?_
   rw [cappedFloor, Uint64.toNat_min, Uint64.toNat_min, toNat_rounded]
-  exact Nat.le_min.mpr ⟨sub_mod_le_sub_mod _ (Nat.min_le_left _ _),
+  exact Nat.le_min.mpr ⟨rounded_mono _ (Nat.min_le_left _ _),
     Nat.le_trans (Nat.sub_le _ _) (Nat.min_le_right _ _)⟩
 
 /-- A larger capped balance stays at least as large once rounded down to an increment. -/
 theorem cappedFloor_mono {cap low high : Gwei} (le : min low cap ≤ min high cap) :
     cappedFloor preset cap low ≤ cappedFloor preset cap high :=
-  sub_mod_le_sub_mod _ (UInt64.le_iff_toNat_le.mp le)
+  rounded_mono _ (UInt64.le_iff_toNat_le.mp le)
 
 /-- A run of a leak keeps the effective balance of a voter above a bound read at the start.
 

@@ -147,6 +147,21 @@ theorem activationLe_of_active {v : Validator} {e : Epoch}
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
   exact active.1
 
+namespace Internal
+
+/-- An active validator's activation is before the far-future epoch. -/
+theorem assigned_of_active {v : Validator} {epoch : Epoch}
+    (active : isActiveValidator v epoch = true) : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
+  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
+  intro far
+  have less := UInt64.lt_iff_toNat_lt.mp (UInt64.lt_of_le_of_lt active.1 active.2)
+  rw [far] at less
+  have bound := v.exitEpoch.toNat_lt
+  change (2 ^ 64 - 1 : Nat) < v.exitEpoch.toNat at less
+  omega
+
+end Internal
+
 /-- A slashable validator was activated at or before the epoch. -/
 theorem activationLe_of_slashable {v : Validator} {e : Epoch}
     (slashable : isSlashableValidator v e = true) : v.activationEpoch ≤ e := by

@@ -19,6 +19,7 @@ import EthLib.Consensus.Proofs.Transition.InactivityLeakVoter
 import EthLib.Consensus.Proofs.Transition.ValidatorKeys
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaised
 import EthLib.Consensus.Proofs.Transition.DepositCarryCore
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 
 /-!
@@ -1364,16 +1365,6 @@ private theorem ScheduledFree.withdrawals {f : Fork}
       apply UInt64.le_iff_toNat_le.mpr
       rw [Uint64.toNat_min]
       exact Nat.min_le_left _ _))
-
-private theorem assigned_of_active {v : Validator} {epoch : Epoch}
-    (active : isActiveValidator v epoch = true) : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-  simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  intro far
-  have less := UInt64.lt_iff_toNat_lt.mp (UInt64.lt_of_le_of_lt active.1 active.2)
-  rw [far] at less
-  have bound := v.exitEpoch.toNat_lt
-  change (2 ^ 64 - 1 : Nat) < v.exitEpoch.toNat at less
-  omega
 
 private theorem assigned_and_reached_of_active {v : Validator} {epoch : Epoch} {reached : Prop}
     (active : isActiveValidator v epoch = true) :

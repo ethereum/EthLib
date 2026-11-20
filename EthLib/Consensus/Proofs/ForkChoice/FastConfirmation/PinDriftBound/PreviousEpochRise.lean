@@ -1935,7 +1935,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_csUnits (h 
   obtain ⟨-, absent, -⟩ := Finset.mem_filter.mp inCS
   obtain ⟨w, found, live⟩ := isActiveAt_eq_true_iff.mp active
   have deposit := Internal.created_deposit h fromFin replayedF tailC highC endEpochC replayedC
-    ⟨w, found, Internal.activation_ne_far_of_active live, activationLe_of_active live⟩ absent
+    ⟨w, found, Consensus.Internal.assigned_of_active live, activationLe_of_active live⟩ absent
   have cSplit := Internal.credC_split tailC highC v.toNat
   have nSplit := Internal.credN_split tailC highC v.toNat
   unfold Internal.flowCredit
@@ -1992,7 +1992,7 @@ private theorem created_slots_le (h : Setting config checks g split fin pulled a
   · obtain ⟨member, active⟩ := Finset.mem_filter.mp inCS
     obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
     exact deposit v
-      ⟨w, found, Internal.activation_ne_far_of_active isActive, activationLe_of_active isActive⟩
+      ⟨w, found, Consensus.Internal.assigned_of_active isActive, activationLe_of_active isActive⟩
       (Finset.mem_filter.mp member).2.1
 
 /-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.

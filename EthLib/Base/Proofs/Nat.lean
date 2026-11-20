@@ -20,6 +20,15 @@ Whole increments of a total, each paid a share of a factor, get at most the tota
 
 namespace EthLib.Base
 
+/-- Rounding down to a multiple of a step keeps the order. -/
+theorem rounded_mono (inc : Nat) {low high : Nat} (le : low ≤ high) :
+    low - low % inc ≤ high - high % inc := by
+  have one := Nat.mod_add_div low inc
+  have two := Nat.mod_add_div high inc
+  have three := Nat.div_le_div_right (c := inc) le
+  have four := Nat.mul_le_mul_left inc three
+  omega
+
 /-- A number `x` below `p` with `x mod n = r` is `r`, when `p <= r + n`.
 
 The quotient is then 0, since a quotient of 1 or more would put `x` at `r + n` or above. -/
