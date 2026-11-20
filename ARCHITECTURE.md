@@ -466,6 +466,11 @@ A rule of one layer does not branch at a fork that changes only the other layer.
 At Altair, an execution rule behaves as at London.
 The beacon chain starts at Phase 0, so a theorem about the consensus layer assumes `fork ≥ .phase0` where it needs to.
 
+A rule written once has a cost.
+An edit made for one fork can change the rule at earlier forks, and no build error says so.
+`lake exe rule-history` writes the value of each rule of the execution layer at each fork to `tests/execution/history/rules.tsv`.
+CI fails when the code computes another value, so such a change shows in the pull request that makes it.
+
 ### Constants that change at forks
 
 A constant whose value changes at forks is a field of one structure, the parameters of the forks of its layer.
@@ -566,6 +571,8 @@ Four more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAcces
 They are not default targets.
 Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
 `CheckTheoremSupport` holds the source attribute inspection used by `check-theorems`.
+`rule-history` writes the value of each fork-indexed rule at each fork.
+Its test cases are in one more library of `scripts/`, `RuleHistoryTest`, which `scripts/test_rule_history.sh` builds.
 
 The package requires Mathlib and VCVio, a library of probabilistic computations.
 Only the properties and the models may import them, or Batteries.

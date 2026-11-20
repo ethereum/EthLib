@@ -413,6 +413,20 @@ A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.
 
+Then check the values of the rules that forks change:
+
+```bash
+lake exe rule-history --check
+```
+
+It computes the value of each fork-indexed rule of the execution layer at each fork, and compares them with `tests/execution/history/rules.tsv`.
+An edit made for one fork can change the rule at an earlier fork, and the check shows that change.
+The file records what the code computes, so it is a change detector, as [Known answers](#known-answers) says.
+When a change is intended, run `lake exe rule-history` to rewrite the file.
+The pull request then names the source of each changed line.
+
+When you change the tool, also run `scripts/test_rule_history.sh`.
+
 Then check which theorems the specification keeps:
 
 ```bash

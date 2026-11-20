@@ -153,6 +153,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: lake exe check-accessors
 
+      # Each fork-indexed rule must compute the values in tests/execution/history/rules.tsv.
+      # A pull request that changes a line names the source that requires it.
+      - name: rule history
+        if: ${{ !cancelled() }}
+        run: lake exe rule-history --check
+
       # The check must report exactly what its fixtures plant.
       - name: declaration check fixtures
         if: ${{ !cancelled() }}
@@ -162,6 +168,11 @@ jobs:
       - name: accessor check fixtures
         if: ${{ !cancelled() }}
         run: scripts/test_check_accessors.sh
+
+      # The rule history must write exactly the lines that its fixtures plant.
+      - name: rule history fixtures
+        if: ${{ !cancelled() }}
+        run: scripts/test_rule_history.sh
 
       - name: specification theorems
         if: ${{ !cancelled() }}

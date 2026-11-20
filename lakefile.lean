@@ -182,6 +182,23 @@ lean_lib «CheckAccessorsTest» where
   srcDir := "scripts"
   roots := #[`CheckAccessorsTest]
 
+/-- Writes the value of each fork-indexed rule at each fork, from the compiled code.
+
+Run it after `lake build EthLib` with `lake exe rule-history`.
+
+With `--check`, it fails when `tests/execution/history/rules.tsv` differs from the code. -/
+lean_exe «rule-history» where
+  srcDir := "scripts"
+  root := `RuleHistory
+  supportInterpreter := true
+
+/-- Rules that the rule history must list, and declarations that it must skip.
+
+Not a default target: `scripts/test_rule_history.sh` builds and checks it. -/
+lean_lib «RuleHistoryTest» where
+  srcDir := "scripts"
+  roots := #[`RuleHistoryTest]
+
 /-- Source attribute inspection used by the theorem placement check. -/
 lean_lib «CheckTheoremSupport» where
   srcDir := "scripts"
