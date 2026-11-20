@@ -17321,20 +17321,6 @@ private def whistleSlack (t : PinTerms preset) {x y : ForkedBeaconState preset}
   whistleSlackBase t tail rrun highC high eventsC eventsF events fin i +
     (if 0 < slashW t i then t.unitGain else 0)
 
-/-- A bound by the slack without the unit of a slashed key is a bound by `whistleSlack`.
-
-`whistleSlack` is `whistleSlackBase` and the unit of gain of a key that R slashes. -/
-private theorem slack_close {t : PinTerms preset} {x y : ForkedBeaconState preset}
-    {tail : Run config checks x y} {x' y' : ForkedBeaconState preset}
-    {rrun : Run config checks x' y'} {highC high : ℕ}
-    {eventsC eventsF events : List (BalanceEvent preset)} {fin : BeaconState preset fork}
-    {i X E : ℕ}
-    (bound : X ≤ E + whistleSlackBase t tail rrun highC high eventsC eventsF events fin i +
-      (if 0 < slashW t i then t.unitGain else 0)) :
-    X ≤ E + whistleSlack t tail rrun highC high eventsC eventsF events fin i := by
-  unfold whistleSlack
-  omega
-
 /-- What a created key's charge adds to the effective balance of the key at an earlier exit.
 
 It is the band, the gains at the largest rate and the key's credits on C's branch. -/
@@ -22320,7 +22306,7 @@ The slashing's increment is `whistleEnv`'s when R's branch slashes the key.
 
 `Cr` and the sync debits are credits of the slack.
 
-The flows' gain is within a tenth of them, rounded up, with a unit for the penalty `addend`.
+The flows' gain is within a tenth of them, rounded up, with a unit for the penalty of R's slashing.
 
 The key's bands and unit of the prefix are within those of the whole run. -/
 private theorem whistle_of_close (h : Setting config checks g split fin pulled anc counted V)
@@ -22329,7 +22315,7 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
     (pre : Run config checks x y) (tailC : Run config checks x' y')
     (rrun : Run config checks r r') (highC high : ℕ)
     (eventsC eventsPre eventsF events : List (BalanceEvent preset))
-    (i Cr X addend : ℕ)
+    (i Cr X : ℕ)
     (close : X ≤ balanceAt pulled i + t.rise i +
       (syncD eventsF i + syncD events i + Cr + inducedR t rrun i +
         flowK t pre highC eventsPre events eventsF i +
@@ -22342,10 +22328,9 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
     (hwhist : whistC pre highC i ≤ whistC tailC highC i)
     (hsync : syncCr eventsPre i ≤ syncCr eventsC i)
     (hband : bandC pre highC i ≤ bandC tailC highC i)
-    (kept : t.keptArm i = true)
-    (hA : 0 < slashW t i → t.unitGain ≤ addend) :
+    (kept : t.keptArm i = true) :
     X ≤ whistleEnv t pulled anc fin i +
-      whistleSlack t tailC rrun highC high eventsC eventsF events fin i + addend := by
+      whistleSlack t tailC rrun highC high eventsC eventsF events fin i := by
   have incPos := h.bands.1
   have key : 11 * min t.depth t.depthFin * (t.perIncrement *
       (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
@@ -22403,10 +22388,6 @@ private theorem whistle_of_close (h : Setting config checks g split fin pulled a
     · omega
     · exact Nat.zero_le _
     · exact Nat.le_refl _
-  have extra : (if 0 < slashW t i then t.unitGain else 0) ≤ addend := by
-    split_ifs with p
-    · exact hA p
-    · exact Nat.zero_le _
   unfold whistleSlack whistleSlackBase
   rw [fK, gainEq] at close
   omega
@@ -23641,12 +23622,10 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
     (late : ∀ w, pulled.validators.data[i]? = some w → w.slashed = false →
       (getCurrentEpoch pulled).toNat + 1 <
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (kept : (pinTerms config pulled anc fin).keptArm i = true)
-    (addend : ℕ) (hA : 0 < slashW (pinTerms config pulled anc fin) i →
-      (pinTerms config pulled anc fin).unitGain ≤ addend) :
+    (kept : (pinTerms config pulled anc fin).keptArm i = true) :
     effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-        eventsC eventsF events fin i + addend := by
+        eventsC eventsF events fin i := by
   classical
   obtain ⟨pre, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
   obtain ⟨af, as⟩ := a
@@ -23661,7 +23640,7 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
         effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤ balanceAt fin i)
   · have bound := short_in_fin h fromC tailC step member i inside leftShort.2.2
       (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-        eventsC eventsF events fin i + addend) leftShort.1.2
+        eventsC eventsF events fin i) leftShort.1.2
     omega
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have near := h.near
@@ -23712,7 +23691,7 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
     eventsC eventsPre eventsF events v.toNat
     (credC pre highC v.toNat + whistC pre highC v.toNat +
       (eventsPre.map (syncCredit v.toNat)).sum)
-    (balanceAt as v.toNat) addend core (by omega) p2.1 p1 p2.2.1 p3 p2.2.2 kept hA
+    (balanceAt as v.toNat) core (by omega) p2.1 p1 p2.2.1 p3 p2.2.2 kept
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry that is off the kept arm is bounded by the largest cap.
@@ -23916,12 +23895,10 @@ private theorem registry_created (h : Setting config checks g split fin pulled a
     (beyondFin : fin.validators.data.size ≤ i) (inSplit : i < split.validators.data.size)
     (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
-      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
-    (addend : ℕ) (hA : 0 < slashW (pinTerms config pulled anc fin) i →
-      (pinTerms config pulled anc fin).unitGain ≤ addend) :
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
     effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high eventsC
-        eventsF events fin i + addend := by
+        eventsF events fin i := by
   classical
   by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
   · obtain ⟨v, rfl⟩ := exists_index h.early inSplit
@@ -23930,11 +23907,8 @@ private theorem registry_created (h : Setting config checks g split fin pulled a
     exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
       replayedC step member v.toNat toC fromC cutC insideC before (.inr floorStart) unslashed flag
       (fun w found _ => late_of_exitAfterFin h v.toNat (created_exitAfterFin h beyondFin) w found)
-      kept addend hA
-  · have := registry_headroom (config := config) h tailC step member i kept
-      (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-        eventsC eventsF events fin i + addend)
-    omega
+      kept
+  · exact registry_headroom (config := config) h tailC step member i kept _
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A finalized key that exits at or after the finalized epoch is bounded at each slashing step.
@@ -23960,23 +23934,18 @@ private theorem registry_late (h : Setting config checks g split fin pulled anc 
       (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat)
     (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
     (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
-      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
-    (addend : ℕ) (hA : 0 < slashW (pinTerms config pulled anc fin) i →
-      (pinTerms config pulled anc fin).unitGain ≤ addend) :
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
     effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high eventsC
-        eventsF events fin i + addend := by
+        eventsF events fin i := by
   classical
   by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
   · exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
       replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
       (fun p mem => Or.inl (by simpa [Run.balancePath] using mem))
       (.inl ⟨effective_fin_le_ebUp h i, Nat.le_refl _⟩) unslashed flag
-      (fun w found _ => late_of_exitAfterFin h i exitAfterFin w found) kept addend hA
-  · have := registry_headroom (config := config) h tailC step member i kept
-      (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-        eventsC eventsF events fin i + addend)
-    omega
+      (fun w found _ => late_of_exitAfterFin h i exitAfterFin w found) kept
+  · exact registry_headroom (config := config) h tailC step member i kept _
 
 /-- The per-key core of the rise for a counted voter created after the finalized state.
 
