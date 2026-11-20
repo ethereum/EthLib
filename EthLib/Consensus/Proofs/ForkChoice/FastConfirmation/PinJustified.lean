@@ -179,7 +179,6 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     (bands : preset.IncrementWithinUpwardBand) (caps : CapOrder preset)
     (exitWindow : preset.SeedLookaheadAtLeastThree)
     (maxAligned : MaxEffectiveBalancesAligned preset)
-    (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (long : 1 < preset.SLOTS_PER_EPOCH)
     (facts : PinPresetFacts preset) :
     JustifiedPinned (e := e) anchorEpoch margin first last := by
@@ -247,7 +246,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     have counts : CountedState ((e.world k).state w) config state :=
       ⟨root, base, held, shape.imp id fun ⟨slot', childRoot, child, found, parent, le, ok⟩ =>
         ⟨.bls, slot', childRoot, child, found, parent, le, ok⟩⟩
-    obtain ⟨pulledEpoch, split, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, finalizedS, calledS,
+    obtain ⟨pulledEpoch, split, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, finalizedS,
         laterS⟩ :=
       setting_runs_of_call anchored start anchorSlot slots positive genesis pre preGloas fusaka
         forkWindow bounded bands caps facts.activation caller callTime pulledOk targetOk
@@ -264,8 +263,8 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
       ancOk finHeld finAnchor
     have setting : Setting config .bls g split fin pulled anc state voters :=
       ⟨genesis, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, preGloas, fusaka, bands, caps,
-        exitWindow, parameters, maxAligned, twoSlots, withdrawDelay, guard.2, ⟨total, totalOk⟩,
-        facts, guard.1, finalizedS, calledS, laterS, nearPulled,
+        exitWindow, parameters, maxAligned, twoSlots, guard.2, ⟨total, totalOk⟩,
+        facts, guard.1, finalizedS, laterS, nearPulled,
         fun v member => ⟨(votersOk v member).2,
           unslashed w receiver k state high counts v (votersOk v member).1⟩⟩
     obtain ⟨events, replayed⟩ :=
@@ -312,11 +311,9 @@ variable [DecidablePred (· ∈ J)] {anchor : Store preset fork} {g : ForkedBeac
   (guarded : PinGuarded (e := e) last)
   (preGloas : fork < .glamsterdam) (fusaka : .fusaka ≤ fork)
   (forkWindow : ∀ next ∈ config.nextFork fork, horizon.toNat < next.2.toNat)
-  (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
 
 include bls anchored start anchorSlot anchorEpochOk anchorHeader anchorZero slots genesis pre roots
   absent bounded enough terminal unslashed finality guarded preGloas fusaka forkWindow
-  withdrawDelay
 
 /-- On the mainnet preset, the voters of a call pin the justified checkpoints of its epoch. -/
 theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
@@ -326,8 +323,7 @@ theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_mainnet
     genesis pre roots absent bounded enough terminal unslashed finality guarded preGloas fusaka
     forkWindow Preset.incrementWithinUpwardBand_mainnet CapOrder.mainnet
-    Preset.seedLookaheadAtLeastThree_mainnet maxEffectiveBalancesAligned_mainnet withdrawDelay
-    (by decide) PinPresetFacts.mainnet
+    Preset.seedLookaheadAtLeastThree_mainnet maxEffectiveBalancesAligned_mainnet (by decide) PinPresetFacts.mainnet
 
 /-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch. -/
 theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
@@ -337,8 +333,7 @@ theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_minimal
     genesis pre roots absent bounded enough terminal unslashed finality guarded preGloas fusaka
     forkWindow Preset.incrementWithinUpwardBand_minimal CapOrder.minimal
-    Preset.seedLookaheadAtLeastThree_minimal maxEffectiveBalancesAligned_minimal withdrawDelay
-    (by decide) PinPresetFacts.minimal
+    Preset.seedLookaheadAtLeastThree_minimal maxEffectiveBalancesAligned_minimal (by decide) PinPresetFacts.minimal
 
 end Deployed
 

@@ -7360,17 +7360,35 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   parameters : DirectSafety.Parameters preset
   aligned : MaxEffectiveBalancesAligned preset
   twoSlots : 2 ≤ preset.SLOTS_PER_EPOCH.toNat
-  delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   shallow : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
     config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
   facts : PinPresetFacts preset
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
   finalized : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split
-  called : getCurrentEpoch split ≤ getCurrentEpoch pulled
   later : getCurrentEpoch pulled ≤ getCurrentEpoch counted
   near : (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch pulled).toNat + 1
   voting : ∀ v ∈ V, v ∈ activeVoters pulled ∧ (slashedFlagAt counted v.toNat).getD false = false
+
+/-- The call's epoch is at or after the split's, since a run leads from one to the other. -/
+private theorem Setting.called {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) :
+    getCurrentEpoch split ≤ getCurrentEpoch pulled := by
+  obtain ⟨toPulled⟩ := h.toPulled
+  exact currentEpoch_le_of_chainSteps toPulled.chainSteps
+
+/-- The withdrawal delay is positive, since it is at least the two epochs past the finalized one. -/
+private theorem Setting.delay {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) :
+    0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat := by
+  obtain ⟨fromFin⟩ := h.fromFin
+  obtain ⟨toPulled⟩ := h.toPulled
+  have order : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch pulled).toNat :=
+    UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps (fromFin.append toPulled).chainSteps)
+  have := h.shallow
+  omega
 
 /-! ## Flows of the two branches -/
 

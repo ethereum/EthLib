@@ -625,7 +625,7 @@ The finalized block's state `fin` is reached from genesis, and the split state f
 
 From the split state, runs reach the pulled-up head state and the counting state.
 
-The split state is at or after the finalized epoch and at or before the call's epoch. -/
+The split state is at or after the finalized epoch. -/
 theorem setting_runs_of_call
     {e : Execution (honestForkChoice config .bls sources anchorState anchorBlock assignment
       genesisTimeMs) J}
@@ -668,7 +668,6 @@ theorem setting_runs_of_call
         Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, pulled⟩) ∧
         Nonempty (Run config .bls ⟨fork, split⟩ ⟨fork, counted⟩) ∧
         anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split ∧
-        getCurrentEpoch split ≤ getCurrentEpoch pulled ∧
         getCurrentEpoch pulled ≤ getCurrentEpoch counted := by
   obtain ⟨sound, -, -⟩ := DirectSafety.run_justified_separated history genesis
   have forward (v : ValidatorIndex) (honest : v ∈ J) (i : ℕ) :=
@@ -720,8 +719,7 @@ theorem setting_runs_of_call
       anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split by
     obtain ⟨split, toFin, fromFin, ⟨toMiddle⟩, toCounted, finalizedLe⟩ := runs
     have toPulled := toMiddle.append tailM
-    exact ⟨split, toFin, fromFin, ⟨toPulled⟩, toCounted, finalizedLe,
-      currentEpoch_le_of_chainSteps toPulled.chainSteps, pulledEpoch ▸ later⟩
+    exact ⟨split, toFin, fromFin, ⟨toPulled⟩, toCounted, finalizedLe, pulledEpoch ▸ later⟩
   by_cases guard : getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch
   · -- After the anchor: the split is the finalized block's state at the start of its epoch.
     have finStored := finHeld guard
