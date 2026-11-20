@@ -9,10 +9,9 @@ Not yet released.
 
 ### Breaking changes
 
-- `pinReserve` is larger: it follows spec rev 2.5.4, and it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
+- `pinReserve` has a new body: it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
   `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
   Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
-  On mainnet the new reserve costs about 1.56 to 1.72 points of stake at depth 4.
   `quorumReserve_le_pinReserve` keeps its statement.
 
 - The `withdrawal` field of `EthLib.Consensus.Internal.CapStep` is stronger.
