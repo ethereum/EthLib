@@ -5636,7 +5636,18 @@ It checks the attestation data index of Deneb, Electra and Fulu stores, and code
 It checks the aggregates and contributions against bytes it builds itself.
 It checks codes 404 and 503 for the aggregate, and codes 400, 404 and 503 for the contribution.
 It checks the codes of the aggregate before Electra only, so only the theorems speak for the single attestations.
-No theorem states when these answers refuse with code 500.
+`aggregateAttestation_internal_iff_of_lt_electra` and `aggregateAttestation_internal_iff_of_electra` state when the aggregate answer refuses with code 500.
+It refuses so exactly when the block of the first match is verified and the construction of the aggregate fails.
+From Electra that refusal also needs a committee index below `MAX_COMMITTEES_PER_SLOT`, since an index not below it gets code 400 by `aggregateAttestation_error_iff_of_electra`.
+No theorem states when the construction of an aggregate fails, so these two theorems leave its faults open.
+`produceSyncCommitteeContribution_internal_iff` states the same for the contribution answer, once the slot, the subcommittee index and the root pass their checks.
+It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
+The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
+The answer hands the construction only the messages of members.
+A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
+No theorem states when the attestation data and payload attestation data answers refuse with code 500.
+No theorem states it for the aggregate and contribution responses either, which also refuse so when writing the value as JSON fails.
+`toApiJson_total` excludes that failure for a lawful type.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
