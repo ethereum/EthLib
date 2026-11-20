@@ -20,10 +20,10 @@ The attestation data, the aggregate and the contribution refuse an unverified pa
 
 SOUNDNESS.md records the points that the source leaves open.
 
-[attestation data]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/attestation_data.yaml
-[payload attestation data]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/payload_attestation_data.yaml
-[aggregate]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/aggregate_attestation.v2.yaml
-[contribution]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/sync_committee_contribution.yaml
+[attestation data]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/attestation_data.yaml
+[payload attestation data]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/payload_attestation_data.yaml
+[aggregate]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/aggregate_attestation.v2.yaml
+[contribution]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/sync_committee_contribution.yaml
 -/
 
 @[expose] public section

@@ -13,7 +13,7 @@ Each event is a message of a [server-sent event] stream: its topic, then its dat
 
 The events of objects that the node received and the events of the fork choice share these types.
 
-[event stream]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/eventstream/index.yaml
+[event stream]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/eventstream/index.yaml
 [server-sent event]: https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation
 -/
 

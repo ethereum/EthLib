@@ -6,7 +6,7 @@ from ethlib import consensus
 from ethlib.errors import ConsensusError
 from raising import raises
 
-# The enum ConsensusVersion of beacon-node-oapi.yaml, ethereum/beacon-APIs at 7911555e.
+# The enum ConsensusVersion of beacon-node-oapi.yaml, ethereum/beacon-APIs at 0ed1255.
 SCHEMA = ["phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu", "gloas"]
 # Every fork of the timeline, in the order of the Lean type, with its consensus version.
 TIMELINE = [

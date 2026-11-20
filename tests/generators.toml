@@ -353,7 +353,7 @@ checked = "remote-signing-api at 514525c holds no generator code, its workflows 
 [[directories."tests/consensus/beacon_api"]]
 cases = ["**"]
 generator = "not established"
-checked = "beacon-APIs at 7911555e holds no program that writes the OpenAPI document or the types files, and the README names none"
+checked = "beacon-APIs at 0ed1255 holds no program that writes the OpenAPI document or the types files, and the README names none"
 
 [[directories."tests/cryptography/bls"]]
 cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**"]

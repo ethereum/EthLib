@@ -31,10 +31,10 @@ Each accepted bid is weighted by its factor, and the local payload is weighted b
 
 The local payload wins a tie.
 
-[v3]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/block.v3.yaml
-[v4]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/validator/block.v4.yaml
-[builder configuration]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/gloas/builder_entry.yaml
-[consensus block value]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/beacon-node-oapi.yaml#L615-L624
+[v3]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/block.v3.yaml
+[v4]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/block.v4.yaml
+[builder configuration]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/gloas/builder_entry.yaml
+[consensus block value]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/beacon-node-oapi.yaml#L615-L624
 -/
 
 @[expose] public section

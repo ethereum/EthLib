@@ -16,7 +16,7 @@ A bid's terms say which builders may sign it, and set its floor, its cap and its
 
 The [Beacon API] defines these containers, which never reach a builder.
 
-[Beacon API]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/gloas/builder_entry.yaml
+[Beacon API]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/gloas/builder_entry.yaml
 -/
 
 @[expose] public section
@@ -76,7 +76,7 @@ instance : SszType BuilderConfig :=
 
 Its URL and its [authentication data] must not be empty, and its authentication must name the slot.
 
-[authentication data]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/types/gloas/request_auth.yaml
+[authentication data]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/types/gloas/request_auth.yaml
 -/
 def BuilderEntry.serves (entry : BuilderEntry) (slot : Slot) : Bool :=
   !entry.url.text.isEmpty && entry.auth.message.data.data.size != 0 &&
