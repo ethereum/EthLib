@@ -1034,6 +1034,9 @@ def bindings : List Binding := [
     "(interchange: bytes, pubkey: bytes, source_epoch: int, target_epoch: int, " ++
       "signing_root: bytes) -> bytes",
     [`EthLib.Consensus.SlashingProtectionError], some "SlashingProtectionError"⟩,
+  ⟨"consensus_keymanager_json", `EthLib.Consensus.Exports.keymanagerJsonExport,
+    "(schema: str, document: Any) -> Any",
+    [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_is_execution_block", `EthLib.Consensus.Exports.isExecutionBlockExport,
     "(name: str, fork: str, block: bytes) -> bool",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,

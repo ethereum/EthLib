@@ -6222,6 +6222,47 @@ The source leaves three points about the data API open, and EthLib specifies non
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
 
+### Keymanager API
+
+The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
+EthLib cites its release `v1.1.0`, commit `51f2a5c9`.
+The source has no test vectors, so the Python suite reads the examples of its schemas; `tests/consensus/README.md` lists them.
+[`ARCHITECTURE.md`](ARCHITECTURE.md#interfaces) accepts this specification only with feedback from the implementers that use it: validator clients and key-management tools.
+The points that the source leaves open are listed below, with the reading that EthLib takes, until they answer.
+
+The values of the API are its keys, addresses, integers, signatures, strings, keystores and slashing protection data, and the objects built from them (`Consensus/KeymanagerApi/Types.lean`).
+Each reader refuses a document that the schema of the source does not allow, except the reader of a signed voluntary exit, as listed below.
+Each writer gives a document that its reader reads back, except for the two values held as text, described below.
+`readFeeRecipient_feeRecipientJson`, `readGasLimit_gasLimitJson`, `readSignerDefinition_signerDefinitionJson` and the other round-trip theorems (`Consensus/Proofs/KeymanagerApi/Types.lean`) show this for each other schema.
+`readUint64_str_ok_iff` shows that an integer reads from a string exactly when the string matches the pattern of the source, `^(0|[1-9][0-9]{0,19})$`, and its value is below `2^64`.
+`eq_str_of_readUint64` shows that it reads from nothing but a string.
+`readPubkey_hexCase` and `readEthAddress_hexCase` show that a key and an address read the same with any characters after `0x` in uppercase.
+
+A keystore and slashing protection data are JSON documents held as text in a string.
+Their readers and writers take a parser and a printer of JSON text as an operation boundary, whose card is in `Consensus/KeymanagerApi/Types.lean`.
+The exports supply the parser and the printer of the Lean toolchain.
+Both are `partial` definitions, so no theorem relates them, and none states that the parser reads back the printed text.
+The parser also builds an object as another tree than the writer of EthLib does.
+So the two documents can differ as Lean values while they hold the same names and values.
+So the round trip of slashing protection data is proved for its document (`slashingProtectionOfDocument_toJson`), not for its text.
+The Python suite reads the text of the source's examples and compares the documents that the writer prints.
+
+The source leaves six points about its values open:
+
+- Its pattern of `Uint64` admits 20 digits, so values up to `10^20 - 1`.
+  The schema is named after 64-bit integers, so EthLib refuses a value of `2^64` or more.
+- It gives no checksum rule for the letter case of an address, so EthLib checks none.
+- It does not say whether an object may carry names that its schema does not declare.
+  OpenAPI allows them unless a schema says otherwise, so EthLib ignores them.
+  The reader of a signed voluntary exit is that of the Beacon API.
+  It refuses such names, and it also reads an integer from a bare JSON number.
+- The schema of a signed voluntary exit lists no field as required.
+  The container has every field, so EthLib requires all four: the message, its epoch, its validator index and the signature.
+- It does not say whether an optional field may be `null`.
+  OpenAPI 3.0 allows `null` only for a schema marked `nullable`, and none is, so EthLib refuses it.
+- The graffiti is a string, and the block field that it fills is 32 bytes.
+  EthLib reads it as a string; how it becomes 32 bytes is a question for the call that sets it.
+
 ### What cannot be proved yet
 
 Some definitions cannot be unfolded by the kernel, so the kernel cannot evaluate them, and their intended computational properties remain unproved.
@@ -6605,12 +6646,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 524 operations and 51 size constants.
-The Python extension calls 524 of the operations and 51 of the constants.
+Lean exports 525 operations and 51 size constants.
+The Python extension calls 525 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11787 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2585), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1585), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (822), `x25519.c` (21), `xmss.c` (134).
+11804 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2596), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1589), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (824), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

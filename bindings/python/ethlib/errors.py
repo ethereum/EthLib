@@ -129,6 +129,10 @@ class SlashingProtectionError(EthLibError, ValueError):
     """An interchange file does not read, or a signer must refuse a message."""
 
 
+class KeymanagerError(EthLibError, ValueError):
+    """A value or a request of the Keymanager API does not read."""
+
+
 class LightClientError(EthLibError, ValueError):
     """A light client rejected a bootstrap or an update."""
 
@@ -387,6 +391,7 @@ __all__ = [
     "ValidatorDutyError",
     "ProposerError",
     "SlashingProtectionError",
+    "KeymanagerError",
     "LightClientError",
     "ForkChoiceError",
     "HkdfError",

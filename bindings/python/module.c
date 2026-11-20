@@ -130,6 +130,7 @@ PyObject* DEPOSIT_TREE_ERROR;
 PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
+PyObject* KEYMANAGER_ERROR;
 PyObject* BINDING_ERROR;
 PyObject* RPC_ERROR;
 
@@ -884,6 +885,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_relay_submission_bid},
   {"consensus_relay_validators", py_consensus_relay_validators,
    METH_VARARGS, DOC_consensus_relay_validators},
+  {"consensus_keymanager_json", py_consensus_keymanager_json, METH_VARARGS,
+   DOC_consensus_keymanager_json},
   {"consensus_relay_delivered_payload", py_consensus_relay_delivered_payload,
    METH_VARARGS, DOC_consensus_relay_delivered_payload},
   {"consensus_relay_received_bid", py_consensus_relay_received_bid,
@@ -1439,6 +1442,7 @@ PyInit__native(void) {
     VALIDATOR_DUTY_ERROR = PyObject_GetAttrString(errors, "ValidatorDutyError");
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
+    KEYMANAGER_ERROR = PyObject_GetAttrString(errors, "KeymanagerError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);

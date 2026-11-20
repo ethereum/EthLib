@@ -782,6 +782,9 @@
 #define DOC_consensus_record_attestation_signing \
   "The record after a key signs a vote, as JSON text."
 
+#define DOC_consensus_keymanager_json \
+  "A value of a schema of the Keymanager API, read from its JSON and written back."
+
 #define DOC_consensus_is_execution_block \
   "From Bellatrix: whether a block carries a payload other than the empty one."
 

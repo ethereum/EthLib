@@ -1052,6 +1052,10 @@ def consensus_record_attestation_signing(interchange: bytes, pubkey: bytes, sour
     """The record after a key signs a vote, as JSON text."""
     ...
 
+def consensus_keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a schema of the Keymanager API, read from its JSON and written back."""
+    ...
+
 def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:
     """From Bellatrix: whether a block carries a payload other than the empty one."""
     ...

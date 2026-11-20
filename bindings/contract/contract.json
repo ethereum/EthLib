@@ -7888,6 +7888,20 @@
    "error_class": "SlashingProtectionError",
    "docstring": "The record after a key signs a vote, as JSON text."},
   {"summary":
+   "A value of a schema of the Keymanager API, read from its JSON and written back.",
+   "signature": "(schema: str, document: Any) -> Any",
+   "operation": "EthLib.Consensus.Exports.keymanagerJsonExport",
+   "method": "consensus_keymanager_json",
+   "errors":
+   [{"type": "EthLib.Consensus.KeymanagerApi.KeymanagerError",
+     "codes":
+     [{"constructor": "field", "code": 1},
+      {"constructor": "notJson", "code": 2},
+      {"constructor": "slashingProtection", "code": 3}]}],
+   "error_class": "KeymanagerError",
+   "docstring":
+   "A value of a schema of the Keymanager API, read from its JSON and written back.\n\nThe arguments are the name of the schema in the source, such as `Pubkey`, and the value.\n\nHex is written in lowercase, and a document held as text is printed in compact form."},
+  {"summary":
    "From Bellatrix: whether a block carries a payload other than the empty one.",
    "signature": "(name: str, fork: str, block: bytes) -> bool",
    "operation": "EthLib.Consensus.Exports.isExecutionBlockExport",
