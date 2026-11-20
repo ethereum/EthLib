@@ -424,10 +424,6 @@ private theorem add_spec {p q : Coordinates} (hp : OnCurve p) (hq : OnCurve q) :
 private abbrev Represents (p : Coordinates) (P : curve.Point) : Prop :=
   OnCurve p ∧ groupValue p = P
 
-private theorem Represents.double {p : Coordinates} {P : curve.Point}
-    (hp : Represents p P) : Represents (Coords.double 0 p) (P + P) :=
-  ⟨(double_spec hp.1).1, by rw [(double_spec hp.1).2, hp.2]⟩
-
 private theorem Represents.add {p q : Coordinates} {P Q : curve.Point}
     (hp : Represents p P) (hq : Represents q Q) :
     Represents (Coords.add 0 p q) (P + Q) :=
@@ -525,45 +521,6 @@ private noncomputable def addPacked (p : Coordinates) (window : Window)
     let q := table[i.val]
     addGenerator p q (digit >= window.pivot)
 
-
-/-- Add a point when the square and cube of the second denominator are available. -/
-private noncomputable def addCached (p q : Coordinates) (qz2 qz3 : Montgomery) :
-    Coordinates :=
-  if p.z = 0 then q
-  else if q.z = 0 then p
-  else
-    let zz := Montgomery.square p.z
-    let (u1, s1, z) := if q.z = 1 then (p.x, p.y, p.z) else
-      (p.x * qz2, p.y * qz3, p.z * q.z)
-    let h := q.x * zz - u1
-    let r := q.y * p.z * zz - s1
-    if h = 0 then
-      if r = 0 then Coords.double 0 p else Coords.infinity
-    else
-      let hh := Montgomery.square h
-      let hhh := h * hh
-      let v := u1 * hh
-      let x := Montgomery.square r - hhh - (v + v)
-      ⟨x, r * (v - x) - s1 * hhh, z * h⟩
-
-/-- Apply a fixed step to build eight consecutive odd multiples. -/
-private noncomputable def oddMultiplesBy (p : Coordinates) (next : Coordinates → Coordinates) :
-    Vector Coordinates 8 :=
-  let p3 := next p
-  let p5 := next p3
-  let p7 := next p5
-  let p9 := next p7
-  let p11 := next p9
-  let p13 := next p11
-  let p15 := next p13
-  #v[p, p3, p5, p7, p9, p11, p13, p15]
-
-/-- The odd multiples from `P` to `15 P`, indexed by `(multiple - 1) / 2`. -/
-private noncomputable def oddMultiples (p : Coordinates) : Vector Coordinates 8 :=
-  let d := Coords.double 0 p
-  let z2 := Montgomery.square d.z
-  let z3 := z2 * d.z
-  oddMultiplesBy p fun q => addCached q d z2 z3
 
 /-- One scalar and its odd-multiple table. -/
 private structure Stream (n : Nat) where
@@ -701,13 +658,6 @@ private noncomputable def packedChain (window : Window) (table : Vector Prepared
     let acc := addPackedPrepared acc table true qn db
     addPacked (addPacked acc window rt dc) window st dd
 
-/-- Split each scalar into the two words used by `packedChain`. -/
-private noncomputable def preparedChainPacked (window : Window) (table : Vector Prepared 8)
-    (pn qn : Bool) (rt st : Vector Coordinates window.entries) (fuel : Nat)
-    (p q r s : WordPair) : Coordinates :=
-  packedChain window table pn qn rt st fuel p.lo p.hi q.lo q.hi r.lo r.hi s.lo s.hi
-
-
 /-- The signed value of an odd-multiple index, or zero when no multiple is selected. -/
 private noncomputable def digitValue {n : Nat} : Option (Digit n) → Int
   | none => 0
@@ -716,7 +666,8 @@ private noncomputable def digitValue {n : Nat} : Option (Digit n) → Int
     if negative then -magnitude else magnitude
 
 /-- The signed digit with natural-number quotient and remainder. -/
-private noncomputable def recode (window : Window) (k : Nat) : Nat × Option (Digit window.entries) :=
+private noncomputable def recode (window : Window) (k : Nat) :
+    Nat × Option (Digit window.entries) :=
   if he : k % 2 = 0 then (k / 2, none)
   else
     let r := k % (4 * window.entries)
@@ -952,7 +903,8 @@ private abbrev order : Int := Fn.modulus
 private theorem order_pos : 0 < order := by decide
 
 /-- Round `x / n` to the nearest integer. -/
-private noncomputable def roundQuotient (x : Int) : Int := (x + (Fn.modulus : Int) / 2) / (Fn.modulus : Int)
+private noncomputable def roundQuotient (x : Int) : Int :=
+  (x + (Fn.modulus : Int) / 2) / (Fn.modulus : Int)
 
 /-- Split a scalar using the lattice with basis `(a, -b)` and `(a + b, a)`.
 
@@ -1799,13 +1751,6 @@ private theorem signed_smul (k : Int) (P : curve.Point) :
 private theorem generator_split_smul (l : Nat) (G : curve.Point) :
     (l % 2^128) • G + (l / 2^128) • ((2^128 : Nat) • G) = l • G := by
   rw [smul_smul, ← add_nsmul, Nat.mul_comm (l / 2^128), Nat.mod_add_div]
-private theorem ofMontgomeryCoords_eq_of_represents {r : Coordinates} {q : Point}
-    (hr : Represents r (Point.toPoint q)) (hq : q.isOnCurve = true) :
-    Point.ofMontgomeryCoords r = q := by
-  rw [ofMontgomeryCoords_eq_read]
-  have hs := Point.ofJacobian_spec hr.1
-  exact (Point.toPoint_inj hs.1 hq).mp (hs.2.trans hr.2)
-
 private noncomputable def signedPoint (negative : Bool) (p : Coordinates) : Coordinates :=
   if negative then negate p else p
 
@@ -1830,7 +1775,8 @@ private noncomputable def selectedTable (table : Vector Coordinates 8) (phi nega
     Vector Coordinates 8 :=
   table.map (fun p => signedPoint negative (selectedPoint phi p))
 
-private noncomputable def decodeDigit (window : Window) (digit : UInt64) : Option (Digit window.entries) :=
+private noncomputable def decodeDigit (window : Window) (digit : UInt64) :
+    Option (Digit window.entries) :=
   if digit == 0 then none else some (packedIndex window digit, digit >= window.pivot)
 
 private theorem low_bit_eq (word : UInt64) : (word &&& 1 == 0) = decide (word.toNat % 2 = 0) := by
@@ -2835,7 +2781,8 @@ private noncomputable def jointDigitIndex (a b : Int) : Fin 64 :=
     have hb := Int.emod_lt_of_pos b (by decide : (0 : Int) < 8)
     omega⟩
 
-private noncomputable def jointDigit (a b : Int) : UInt64 := jointDigits[(jointDigitIndex a b).val].toUInt64
+private noncomputable def jointDigit (a b : Int) : UInt64 :=
+  jointDigits[(jointDigitIndex a b).val].toUInt64
 
 private noncomputable def jointDecoded (digit : UInt64) : Int × Int :=
   if digit == 0 then (0, 0)
@@ -3020,26 +2967,6 @@ private theorem jointN_small : ∀ x y : Fin 13,
     jointN 5 ((x.val : Int)-6, (y.val : Int)-6) = (0,0) := by
   decide +kernel
 
-private theorem jointN_132 (s : Int × Int) (ha : signedRange s.1) (hb : signedRange s.2) :
-    jointN 132 s = (0,0) := by
-  have hbnd : pairBound (2^(0+127)+5) s := by
-    simp only [signedRange] at ha hb
-    norm_num [pairBound]
-    omega
-  have h := jointN_bound s 0 127 hbnd
-  let t := jointN 127 s
-  change pairBound 6 t at h
-  simp only [pairBound] at h
-  let u : Fin 13 := ⟨(t.1+6).toNat, by omega⟩
-  let v : Fin 13 := ⟨(t.2+6).toNat, by omega⟩
-  have hv := jointN_small u v
-  have he : ((u.val : Int)-6, (v.val : Int)-6) = t := by
-    apply Prod.ext <;> simp only [u, v] <;> omega
-  rw [he] at hv
-  change jointN (5+127) s = (0,0)
-  rw [jointN_add]
-  exact hv
-
 private theorem joint_even (s : Int × Int) (ha : s.1 % 2 = 0) (hb : s.2 % 2 = 0) :
     jointDigit s.1 s.2 = 0 ∧ jointStep s = (s.1 / 2, s.2 / 2) := by
   have hd := (jointDigit_valid s.1 s.2).1.mpr ⟨ha, hb⟩
@@ -3187,7 +3114,8 @@ private noncomputable def jointAdd (a b : Int × Int) : Int × Int := (a.1+b.1, 
 private noncomputable def jointAction (P : curve.Point) (c : Int × Int) : curve.Point :=
   c.1 • P + c.2 • (lambda.val • P)
 
-private noncomputable def jointOriented (rotation : UInt64) (negative : Bool) (c : Int × Int) : Int × Int :=
+private noncomputable def jointOriented (rotation : UInt64) (negative : Bool) (c : Int × Int) :
+    Int × Int :=
   let d := if rotation == 0 then c else if rotation == 1 then jointTurn c
     else jointTurn (jointTurn c)
   if negative then jointNeg d else d
@@ -3307,7 +3235,8 @@ private theorem jointEntry_phi2X (p : Coordinates) :
   apply sub_eq_zero.mp
   linear_combination -zValue p.x * jointBeta_relation
 
-private noncomputable def jointEntryCoords (q : JointEntry) (rotation : UInt64) (negative : Bool) : Coordinates :=
+private noncomputable def jointEntryCoords (q : JointEntry) (rotation : UInt64) (negative : Bool) :
+    Coordinates :=
   let x := if rotation == 0 then q.x else if rotation == 1 then q.phiX else q.phi2X
   let y := if negative then (0 : Montgomery) - q.y else q.y
   ⟨x, y, 1⟩
@@ -4001,45 +3930,6 @@ private theorem packedJointWords_represents {z : Montgomery}
     rw [jointAction, hav, hbv, hvar, add_assoc, hFixed]
   exact ⟨hAgree.1, hAgree.2.2.trans (hRep.2.trans hGroup)⟩
 
-private theorem addCached_eq (p q : Coordinates) :
-    addCached p q (Montgomery.square q.z) (Montgomery.square q.z * q.z) =
-      Coords.add 0 p q := by
-  simp only [addCached, Coords.add, Montgomery.square_eq_mul, prepared_mul]
-
-private theorem oddMultiples_eq (p : Coordinates) :
-    oddMultiples p = oddMultiplesBy p (fun q => Coords.add 0 q (Coords.double 0 p)) := by
-  unfold oddMultiples
-  exact congrArg (oddMultiplesBy p) (funext fun q => addCached_eq q (Coords.double 0 p))
-
-private theorem oddMultiplesBy_spec {p twice : Coordinates} {P : curve.Point}
-    (hp : Represents p P) (hd : Represents twice (P + P)) :
-    TableSpec (oddMultiplesBy p (fun q => Coords.add 0 q twice)) P := by
-  have h1 : Represents p ((1 : Nat) • P) := by simpa only [one_nsmul] using hp
-  have d : Represents twice ((2 : Nat) • P) := by simpa only [two_nsmul] using hd
-  have h3 := h1.add d
-  have h5 := h3.add d
-  have h7 := h5.add d
-  have h9 := h7.add d
-  have h11 := h9.add d
-  have h13 := h11.add d
-  have h15 := h13.add d
-  intro i
-  fin_cases i <;> simp only [oddMultiplesBy, Vector.getElem_mk, List.getElem_toArray,
-    List.getElem_cons_zero, List.getElem_cons_succ, Nat.reduceMul, Nat.reduceAdd]
-  · exact h1
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h3
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h5
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h7
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h9
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h11
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h13
-  · simpa only [← add_nsmul, Nat.reduceAdd] using h15
-
-private theorem oddMultiples_spec {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
-    TableSpec (oddMultiples p) P := by
-  rw [oddMultiples_eq]
-  exact oddMultiplesBy_spec hp hp.double
-
 private theorem signedTable_spec
     {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (k : Int) :
     TableSpec (signedTable k t) (if k < 0 then -P else P) := by
@@ -4543,57 +4433,6 @@ private theorem chain_spec
       abel
     have : Represents (chainFor window (fuel + 1) p q r s) _ := h4
     exact he ▸ this
-private theorem packedRecovery_represents {t : Vector Coordinates 8} {P : curve.Point}
-    (ht : TableSpec t P) (k l : Fn) :
-    let (a, b) := splitScalar k.val
-    let aw := WordPair.ofNat a.natAbs
-    let bw := WordPair.ofNat b.natAbs
-    let rw := WordPair.ofNat (l.val % 2^128)
-    let sw := WordPair.ofNat (l.val / 2^128)
-    Represents
-      (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
-        129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi)
-      (k.val • P + l.val • Point.toPoint .generator) := by
-  let a := (splitScalar k.val).1
-  let b := (splitScalar k.val).2
-  let aw := WordPair.ofNat a.natAbs
-  let bw := WordPair.ofNat b.natAbs
-  let rw := WordPair.ofNat (l.val % 2^128)
-  let sw := WordPair.ofNat (l.val / 2^128)
-  change Represents
-    (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
-      129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi) _
-  have hb := splitScalar_bound k.val
-  have hm : l.val % 2^128 < 2^128 := Nat.mod_lt _ (by decide)
-  have hq : l.val / 2^128 < 2^128 :=
-    Nat.div_lt_of_lt_mul (Nat.lt_trans l.isLt (by decide))
-  have haNat : aw.toNat = a.natAbs := WordPair.toNat_ofNat _ hb.1
-  have hbNat : bw.toNat = b.natAbs := WordPair.toNat_ofNat _ hb.2
-  have hmNat : rw.toNat = l.val % 2^128 := WordPair.toNat_ofNat _ hm
-  have hqNat : sw.toNat = l.val / 2^128 := WordPair.toNat_ofNat _ hq
-  have h := chain_spec .width14 129
-    ⟨aw, signedTable a t⟩
-    ⟨bw, signedTable b (t.map endomorphism)⟩
-    ⟨rw, generatorTable14⟩
-    ⟨sw, generatorHighTable14⟩ _ _ _ _
-    (signedTable_spec ht a)
-    (signedTable_spec (endomorphismTable_spec ht) b)
-    generatorTable_spec generatorHighTable_spec
-    (by simp only [haNat]; exact hb.1.le)
-    (by simp only [hbNat]; exact hb.2.le)
-    (by simp only [hmNat]; exact hm.le)
-    (by simp only [hqNat]; exact hq.le)
-  dsimp only [Stream.scalar] at h
-  have hv := h.2
-  rw [haNat, hbNat, hmNat, hqNat, signed_smul, signed_smul, add_assoc (_ + _),
-    generator_split_smul] at hv
-  have he := splitScalar_smul k.val P
-  rw [natCast_zsmul, smul_eq_val_nsmul, ZMod.val_natCast_of_lt k.isLt] at he
-  rw [he] at hv
-  erw [packedChain_eq_single, packedChainSingle_eq, preparedChain_eq,
-    selectedTable_sgn, selectedTable_sgn]
-  exact ⟨h.1, hv⟩
-
 private theorem selectedTable_component_spec
     {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (phi neg : Bool) :
     TableSpec (selectedTable t phi neg)
@@ -4829,6 +4668,7 @@ private theorem toPoint_mulAddGenerator {k l : Fn} {p : Point} (hp : p.isOnCurve
   have hs := Point.ofJacobian_spec h.1
   exact ⟨hs.1, hs.2.trans h.2⟩
 
+/-- The joint chain gives a point of the curve, for a point `P` on the curve. -/
 theorem isOnCurve_mulAddGenerator {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
     (mulAddGenerator k p l).isOnCurve = true :=
   (toPoint_mulAddGenerator hp).1
@@ -4895,6 +4735,7 @@ theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
       exact add_comm _ _
     · exact general_eq k p l q
 
+/-- On points of the curve, `k P + l Q` lies on the curve. -/
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
   rw [mulAdd_eq_jacobian]

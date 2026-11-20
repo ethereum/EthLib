@@ -113,44 +113,39 @@ private def jumpTable : Vector Nat 1024 := Vector.ofFn fun i =>
     jumpBlocks fuel (nextDelta + adjustment) ((a*f + b*g) >>> 6) ((c*f + d*g) >>> 6)
       (a*aa + b*ba) (a*ab + b*bb) (c*aa + d*ba) (c*ab + d*bb)
 
-/-- A signed integer in five words of two's complement. -/
-private structure Wide where
-  x0 : UInt64
-  x1 : UInt64
-  x2 : UInt64
-  x3 : UInt64
-  x4 : UInt64
+/-- A signed integer in five words of two's complement, least significant first. -/
+private abbrev Wide := Montgomery.Words64
 
 @[inline] private def Wide.ofNat (a : Nat) : Wide :=
   ⟨a.toUInt64, (a >>> 64).toUInt64, (a >>> 128).toUInt64, (a >>> 192).toUInt64,
     (a >>> 256).toUInt64⟩
 
 @[inline] private def Wide.lowNat (a : Wide) : Nat :=
-  a.x0.toNat + ((a.x1.toNat + ((a.x2.toNat + (a.x3.toNat <<< 64)) <<< 64)) <<< 64)
+  a.w0.toNat + ((a.w1.toNat + ((a.w2.toNat + (a.w3.toNat <<< 64)) <<< 64)) <<< 64)
 
 @[inline] private def Wide.isZero (a : Wide) : Bool :=
-  a.x0 ||| a.x1 ||| a.x2 ||| a.x3 ||| a.x4 == 0
+  a.w0 ||| a.w1 ||| a.w2 ||| a.w3 ||| a.top == 0
 
 @[inline] private def Wide.add (a b : Wide) : Wide :=
-  let x0 := plus a.x0 b.x0 0
-  let x1 := plus a.x1 b.x1 x0.hi
-  let x2 := plus a.x2 b.x2 x1.hi
-  let x3 := plus a.x3 b.x3 x2.hi
-  ⟨x0.lo, x1.lo, x2.lo, x3.lo, a.x4 + b.x4 + x3.hi⟩
+  let x0 := plus a.w0 b.w0 0
+  let x1 := plus a.w1 b.w1 x0.hi
+  let x2 := plus a.w2 b.w2 x1.hi
+  let x3 := plus a.w3 b.w3 x2.hi
+  ⟨x0.lo, x1.lo, x2.lo, x3.lo, a.top + b.top + x3.hi⟩
 
 @[inline] private def Wide.sub (a b : Wide) : Wide :=
-  let x0 := minus a.x0 b.x0 0
-  let x1 := minus a.x1 b.x1 x0.hi
-  let x2 := minus a.x2 b.x2 x1.hi
-  let x3 := minus a.x3 b.x3 x2.hi
-  ⟨x0.lo, x1.lo, x2.lo, x3.lo, a.x4 - b.x4 - x3.hi⟩
+  let x0 := minus a.w0 b.w0 0
+  let x1 := minus a.w1 b.w1 x0.hi
+  let x2 := minus a.w2 b.w2 x1.hi
+  let x3 := minus a.w3 b.w3 x2.hi
+  ⟨x0.lo, x1.lo, x2.lo, x3.lo, a.top - b.top - x3.hi⟩
 
 @[inline] private def Wide.neg (a : Wide) : Wide := Wide.sub ⟨0, 0, 0, 0, 0⟩ a
 
 @[inline] private def Wide.shr60 (a : Wide) : Wide :=
-  ⟨(a.x0 >>> 60) ||| (a.x1 <<< 4), (a.x1 >>> 60) ||| (a.x2 <<< 4),
-    (a.x2 >>> 60) ||| (a.x3 <<< 4), (a.x3 >>> 60) ||| (a.x4 <<< 4),
-    ((a.x4.toInt64) >>> (60 : UInt64).toInt64).toUInt64⟩
+  ⟨(a.w0 >>> 60) ||| (a.w1 <<< 4), (a.w1 >>> 60) ||| (a.w2 <<< 4),
+    (a.w2 >>> 60) ||| (a.w3 <<< 4), (a.w3 >>> 60) ||| (a.top <<< 4),
+    ((a.top.toInt64) >>> (60 : UInt64).toInt64).toUInt64⟩
 
 /-- Accumulate a pair of products with a single carry. -/
 @[inline] private def linWord (a b x y carry : UInt64) : Montgomery.Pair :=
@@ -170,38 +165,38 @@ private structure Wide where
   --
   -- Add its magnitude to the carry to complete the two's complement negation.
   let carry := (aa &&& maskA) + (bb &&& maskB)
-  let r0 := linWord aa bb (x.x0 ^^^ maskA) (y.x0 ^^^ maskB) carry
-  let r1 := linWord aa bb (x.x1 ^^^ maskA) (y.x1 ^^^ maskB) r0.hi
-  let r2 := linWord aa bb (x.x2 ^^^ maskA) (y.x2 ^^^ maskB) r1.hi
-  let r3 := linWord aa bb (x.x3 ^^^ maskA) (y.x3 ^^^ maskB) r2.hi
-  ⟨r0.lo, r1.lo, r2.lo, r3.lo, (x.x4 ^^^ maskA) * aa + (y.x4 ^^^ maskB) * bb + r3.hi⟩
+  let r0 := linWord aa bb (x.w0 ^^^ maskA) (y.w0 ^^^ maskB) carry
+  let r1 := linWord aa bb (x.w1 ^^^ maskA) (y.w1 ^^^ maskB) r0.hi
+  let r2 := linWord aa bb (x.w2 ^^^ maskA) (y.w2 ^^^ maskB) r1.hi
+  let r3 := linWord aa bb (x.w3 ^^^ maskA) (y.w3 ^^^ maskB) r2.hi
+  ⟨r0.lo, r1.lo, r2.lo, r3.lo, (x.top ^^^ maskA) * aa + (y.top ^^^ maskB) * bb + r3.hi⟩
 
 /-- Add a multiple of the modulus so the residue divides by `2^60`. -/
 @[inline] private def adjust (x p : Wide) (pinv : UInt64) : Wide :=
-  let q := (x.x0 * pinv) &&& 0xfffffffffffffff
-  let r0 := mac p.x0 q x.x0 0
-  let r1 := mac p.x1 q x.x1 r0.hi
-  let r2 := mac p.x2 q x.x2 r1.hi
-  let r3 := mac p.x3 q x.x3 r2.hi
-  Wide.shr60 ⟨r0.lo, r1.lo, r2.lo, r3.lo, p.x4 * q + x.x4 + r3.hi⟩
+  let q := (x.w0 * pinv) &&& 0xfffffffffffffff
+  let r0 := mac p.w0 q x.w0 0
+  let r1 := mac p.w1 q x.w1 r0.hi
+  let r2 := mac p.w2 q x.w2 r1.hi
+  let r3 := mac p.w3 q x.w3 r2.hi
+  Wide.shr60 ⟨r0.lo, r1.lo, r2.lo, r3.lo, p.top * q + x.top + r3.hi⟩
 
 @[noinline, specialize finish] private def normalize {A : Type} (finish : Wide → A)
     (d p : Wide) (neg : Bool) : A :=
   let d := if neg then d.neg else d
-  let d := if d.x4 >>> 63 == 0 then d else d.add p
-  let d := if d.x4 >>> 63 == 0 then d else d.add p
+  let d := if d.top >>> 63 == 0 then d else d.add p
+  let d := if d.top >>> 63 == 0 then d else d.add p
   let e := d.sub p
-  if e.x4 >>> 63 == 0 then finish e else finish d
+  if e.top >>> 63 == 0 then finish e else finish d
 
 @[noinline, specialize finish] private def run {A : Type} (finish : Wide → A)
     (p : Wide) (pinv : UInt64) :
     Nat → UInt64 → Wide → Wide → Wide → Wide → Option A
   | 0, _, f, g, d, _ =>
-    if g.isZero then some (normalize finish d p (f.x4 >>> 63 != 0)) else none
+    if g.isZero then some (normalize finish d p (f.top >>> 63 != 0)) else none
   | fuel + 1, δ, f, g, d, e =>
-    if g.isZero then some (normalize finish d p (f.x4 >>> 63 != 0))
+    if g.isZero then some (normalize finish d p (f.top >>> 63 != 0))
     else
-      let t := jumpBlocks 10 δ f.x0 g.x0 1 0 0 1
+      let t := jumpBlocks 10 δ f.w0 g.w0 1 0 0 1
       let nf := (lin t.aa t.ab f g).shr60
       let ng := (lin t.ba t.bb f g).shr60
       let nd := adjust (lin t.aa t.ab d e) p pinv
@@ -226,12 +221,12 @@ A candidate below `m` whose product with `a` is `1` mod `m` is accepted. -/
 open Secp256k1.Montgomery in
 /-- Read a 256-bit result of the inversion loop as a canonical residue. -/
 @[inline] private def finishWords (w : Wide) : Montgomery :=
-  let t : Words64 := ⟨w.x0, w.x1, w.x2, w.x3, 0⟩
+  let t : Words64 := ⟨w.w0, w.w1, w.w2, w.w3, 0⟩
   finish t (by
-    have h0 := w.x0.toNat_lt
-    have h1 := w.x1.toNat_lt
-    have h2 := w.x2.toNat_lt
-    have h3 := w.x3.toNat_lt
+    have h0 := w.w0.toNat_lt
+    have h1 := w.w1.toNat_lt
+    have h2 := w.w2.toNat_lt
+    have h3 := w.w3.toNat_lt
     simp only [t, value, lowValue, wordRadix, Fp.modulus, UInt64.toNat_zero,
       Nat.mul_zero, Nat.add_zero]
     omega)

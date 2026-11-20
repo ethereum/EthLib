@@ -17,6 +17,12 @@ Montgomery reduction, from [Montgomery (1985)][redc], cancels the low half of a 
 
 The complement is `2^256 - p = 2^32 + 977`.
 
+The reduction uses that small complement, so it is specific to `p`.
+
+That is why this form sits beside the Montgomery field on 32-bit limbs that other curves share.
+
+Its operations are proved against that shared field at the constants of `p`.
+
 A full product is reduced two words at a time, with the inverse of the complement mod `2^128`.
 
 A fused step is reduced one word at a time, with the inverse of the complement mod `2^64`.
@@ -27,7 +33,7 @@ That is the CIOS method of [Koç, Acar and Kaliski][cios].
 
 [redc]: <https://doi.org/10.1090/S0025-5718-1985-0777282-X>
 
-[cios]: <https://www.microsoft.com/en-us/research/publication/analyzing-and-comparing-montgomery-multiplication-algorithms/>
+[cios]: <https://doi.org/10.1109/40.502403>
 -/
 
 @[expose] public section
@@ -1910,122 +1916,13 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
 instance : Add Montgomery := ⟨add⟩
 instance : Sub Montgomery := ⟨sub⟩
 
-/-- The four low words. -/
-@[inline] def Words64.rawWords (x : Words64) : Raw := Raw.fromWords x
 /-- The integer of all five words. -/
 abbrev Words64.val (x : Words64) : Nat := value x
-
-private theorem raw_val_add (x : Raw) :
-    x.val = x.w0.toNat + x.w1.toNat*wordRadix + x.w2.toNat*wordRadix^2 +
-      x.w3.toNat*wordRadix^3 := by
-  simp only [Raw.val, lowValue, Raw.words, Nat.mul_comm]
-
-private theorem word_value_for_scale (w : Words64) :
-    w.val = w.rawWords.val + w.top.toNat*2^256 := by
-  change value w = w.rawWords.val + w.top.toNat*2^256
-  have h : w.rawWords.val = lowValue w := rfl
-  rw [h, value_as_nat, Nat.mul_comm w.top.toNat]
-/-- The four words shifted left by `s` bits, with the bits shifted out in the carry word. -/
-@[inline] def shift (s : UInt64) (w : Raw) : Words64 :=
-  let d := 64 - s
-  ⟨w.w0 <<< s,
-    (w.w1 <<< s) ||| (w.w0 >>> d),
-    (w.w2 <<< s) ||| (w.w1 >>> d),
-    (w.w3 <<< s) ||| (w.w2 >>> d),
-    w.w3 >>> d⟩
-
-/-- One word added to four words, with the carry in the fifth. -/
-@[inline] def addLow (w : Raw) (f : UInt64) : Words64 :=
-  let t0 := w.w0 + f
-  let t1 := w.w1 + yes (t0 < w.w0)
-  let t2 := w.w2 + yes (t1 < w.w1)
-  let t3 := w.w3 + yes (t2 < w.w2)
-  ⟨t0, t1, t2, t3, yes (t3 < w.w3)⟩
-
-/-- `2^s w`, with the carry word folded back by `2^256 = 2^32 + 977 mod p`. -/
-@[inline] def scaleInput (s : UInt64) (w : Raw) : Words64 :=
-  let shifted := shift s w
-  addLow shifted.rawWords (shifted.top * complement)
-
-private theorem read_lt (w : Raw) : w.val < (2^256) := by
-  have hc0 := UInt64.toNat_lt_size w.w0
-  have hc1 := UInt64.toNat_lt_size w.w1
-  have hc2 := UInt64.toNat_lt_size w.w2
-  have hc3 := UInt64.toNat_lt_size w.w3
-  change w.w0.toNat < wordRadix at hc0
-  change w.w1.toNat < wordRadix at hc1
-  change w.w2.toNat < wordRadix at hc2
-  change w.w3.toNat < wordRadix at hc3
-  simp only [raw_val_add, wordRadix] at *
-  omega
 
 private theorem radix_split (s : UInt64) (hs : s.toNat ≤ 3) :
     wordRadix = 2^(64-s.toNat) * 2^s.toNat := by
   change 2^64 = _
   rw [← Nat.pow_add, Nat.sub_add_cancel (show s.toNat ≤ 64 by omega)]
-
-private theorem shifted_right (s x : UInt64) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (x >>> (64-s)).toNat = x.toNat / 2^(64-s.toNat) := by
-  have hle : s ≤ 64 := UInt64.le_iff_toNat_le.mpr (by change s.toNat ≤ 64; omega)
-  rw [UInt64.toNat_shiftRight, UInt64.toNat_sub_of_le _ _ hle]
-  change x.toNat >>> ((64 - s.toNat) % 64) = _
-  rw [Nat.mod_eq_of_lt (by omega : 64 - s.toNat < 64), Nat.shiftRight_eq_div_pow]
-
-private theorem shifted_right_lt (s x : UInt64) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (x >>> (64-s)).toNat < 2^s.toNat := by
-  have hb : x.toNat < wordRadix := UInt64.toNat_lt_size x
-  rw [shifted_right s x hpos hs]
-  apply Nat.div_lt_of_lt_mul
-  rw [← radix_split s hs]
-  exact hb
-
-private theorem addLow_val (w : Raw) (f : UInt64) :
-    (addLow w f).val = w.val + f.toNat := by
-  let t0 := w.w0 + f
-  let t1 := w.w1 + yes (t0 < w.w0)
-  let t2 := w.w2 + yes (t1 < w.w1)
-  let t3 := w.w3 + yes (t2 < w.w2)
-  have h0 := add_with_carry w.w0 f
-  have h1 := add_with_carry w.w1 (yes (t0 < w.w0))
-  have h2 := add_with_carry w.w2 (yes (t1 < w.w1))
-  have h3 := add_with_carry w.w3 (yes (t2 < w.w2))
-  rw [word_value_for_scale, raw_val_add (addLow w f).rawWords]
-  change t0.toNat + t1.toNat * wordRadix + t2.toNat * wordRadix^2 + t3.toNat * wordRadix^3 +
-    (yes (t3 < w.w3)).toNat * (2^256) = w.val + f.toNat
-  rw [raw_val_add]
-  change t0.toNat + wordRadix * (yes (t0 < w.w0)).toNat = w.w0.toNat + f.toNat at h0
-  change t1.toNat + wordRadix * (yes (t1 < w.w1)).toNat =
-    w.w1.toNat + (yes (t0 < w.w0)).toNat at h1
-  change t2.toNat + wordRadix * (yes (t2 < w.w2)).toNat =
-    w.w2.toNat + (yes (t1 < w.w1)).toNat at h2
-  change t3.toNat + wordRadix * (yes (t3 < w.w3)).toNat =
-    w.w3.toNat + (yes (t2 < w.w2)).toNat at h3
-  simp only [wordRadix] at *
-  omega
-
-theorem scaleInput_lt (s : UInt64) (w : Raw) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (scaleInput s w).val < 2 * Fp.modulus := by
-  let shifted := shift s w
-  have htop : shifted.top.toNat < 2^s.toNat := shifted_right_lt s w.w3 hpos hs
-  have h8 : 2^s.toNat ≤ 8 := Nat.pow_le_pow_right (by decide) hs
-  have hlow := read_lt shifted.rawWords
-  change (addLow shifted.rawWords (shifted.top * complement)).val < 2 * Fp.modulus
-  rw [addLow_val, UInt64.toNat_mul]
-  change shifted.rawWords.val + shifted.top.toNat * 4294968273 % wordRadix < 2 * Fp.modulus
-  have hmod := Nat.mod_le (shifted.top.toNat * 4294968273) wordRadix
-  simp only [Fp.modulus] at *
-  omega
-
-
-/-- Multiplication by `2^s` for shifts of one, two or three bits. -/
-@[inline] def scale (s : UInt64) (w : Montgomery) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    Montgomery :=
-  let t := scaleInput s w.raw
-  let u := reduceMasked t
-  have hr := reduceMasked_spec t (scaleInput_lt s w.raw hpos hs)
-  ⟨Raw.fromWords u, by
-    rw [Raw.fromWords_val u hr.1, hr.2]
-    exact Nat.mod_lt _ (by decide)⟩
 
 /-- One word of a value shifted right by one bit.
 
@@ -2202,35 +2099,6 @@ private theorem productBorrow_spec (a b w cin : UInt64) :
   rw [add_exact (by rw [he]; exact hs), he]
   omega
 
-/-- Cancel the low word of a signed difference of partial products.
-
-The top word of the accumulator uses two's complement.
--/
-@[inline] def fusedStageProducts (a : Raw) (b : UInt64) (p0 p1 p2 p3 : Pair)
-    (t : Words64) : Words64 :=
-  let m0 := mac a.w0 b t.w0 0
-  let m1 := mac a.w1 b t.w1 m0.hi
-  let m2 := mac a.w2 b t.w2 m1.hi
-  let m3 := mac a.w3 b t.w3 m2.hi
-  let s4 := m3.hi + t.top
-  let s5 := ((0 : UInt64) - (t.top >>> 63)) + yes (s4 < m3.hi)
-  let n0 := subtractWordProduct p0 m0.lo 0
-  let n1 := subtractWordProduct p1 m1.lo n0.hi
-  let n2 := subtractWordProduct p2 m2.lo n1.hi
-  let n3 := subtractWordProduct p3 m3.lo n2.hi
-  let n4 := s4 - n3.hi
-  let n5 := s5 - yes (s4 < n3.hi)
-  red (fun q _ => mulHighComplement q) n0.lo n1.lo n2.lo n3.lo n4 n5
-
-/-- One step of a fused difference: add `a b`, subtract `c d`, and reduce once. -/
-@[inline] def fusedStage (a c : Raw) (b d : UInt64) (t : Words64) : Words64 :=
-  fusedStageProducts a b (wordProduct c.w0 d) (wordProduct c.w1 d)
-    (wordProduct c.w2 d) (wordProduct c.w3 d) t
-
-private theorem fusedStageProducts_eq_stage (a c : Raw) (b d : UInt64) (t : Words64) :
-    fusedStageProducts a b (wordProduct c.w0 d) (wordProduct c.w1 d)
-      (wordProduct c.w2 d) (wordProduct c.w3 d) t = fusedStage a c b d t := rfl
-
 /-- Add the radix to the signed accumulator so its bounds use natural numbers. -/
 def bias (w : Words64) : Words64 := { w with top := w.top + 1 }
 
@@ -2296,146 +2164,6 @@ private theorem red_bias (mulHi : UInt64 → UInt64 → UInt64) (s0 s1 s2 s3 s4 
   unfold red bias
   dsimp only
   split <;> simp only [add_swap64 (c := 1), swap]
-
-private theorem fusedStage_spec (a c : Raw) (b d : UInt64) (t : Words64)
-    (ha : a.val < Fp.modulus) (hc : c.val < Fp.modulus)
-    (htlo : 2^256 - Fp.modulus ≤ value (bias t))
-    (hthi : value (bias t) < 2 * Fp.modulus + 2^256) :
-    (2^256 - Fp.modulus ≤ value (bias (fusedStage a c b d t)) ∧
-      value (bias (fusedStage a c b d t)) < 2 * Fp.modulus + 2^256) ∧
-    ∃ q, wordRadix * value (bias (fusedStage a c b d t)) + c.val * d.toNat =
-      value (bias t) + a.val * b.toNat + q * Fp.modulus + 2^256 * (wordRadix-1) := by
-  let m0 := mac a.w0 b t.w0 0
-  let m1 := mac a.w1 b t.w1 m0.hi
-  let m2 := mac a.w2 b t.w2 m1.hi
-  let m3 := mac a.w3 b t.w3 m2.hi
-  let s4 := m3.hi + t.top
-  let s5 := ((0 : UInt64) - (t.top >>> 63)) + yes (s4 < m3.hi)
-  let n0 := productBorrow c.w0 d m0.lo 0
-  let n1 := productBorrow c.w1 d m1.lo n0.hi
-  let n2 := productBorrow c.w2 d m2.lo n1.hi
-  let n3 := productBorrow c.w3 d m3.lo n2.hi
-  let n4 := s4 - n3.hi
-  let borrow := yes (s4 < n3.hi)
-  let n5 := s5 - borrow
-  have ht : (t.top + 1).toNat < 3 := by
-    simp only [bias, value, wordRadix, Fp.modulus] at hthi
-    omega
-  have ⟨hs, hstop⟩ := addBiased_val m3.hi t.top ht
-  change s4.toNat + wordRadix*(s5+1).toNat =
-    m3.hi.toNat + (t.top+1).toNat + (wordRadix-1) at hs
-  change (s5+1).toNat ≤ 2 at hstop
-  have hn : borrow ≤ s5 + 1 := by
-    apply UInt64.le_iff_toNat_le.mpr
-    have hb : borrow.toNat ≤ 1 := yes_le_one (s4 < n3.hi)
-    by_cases h : borrow.toNat ≤ (s5+1).toNat
-    · exact h
-    · have hbs : (s5+1).toNat = 0 ∧ borrow.toNat = 1 := by omega
-      have hm := s4.toNat_lt
-      have hn3 := n3.hi.toNat_lt
-      have hh : s4.toNat = 2^64-1 := by
-        rw [hbs.1] at hs
-        simp only [wordRadix] at hs
-        omega
-      have he : ¬ s4 < n3.hi := by change ¬ s4.toNat < n3.hi.toNat; omega
-      have hb0 : borrow.toNat = 0 := by simp [borrow, he, yes, Bool.toUInt64]
-      omega
-  have hn5 : (n5+1).toNat + borrow.toNat = (s5+1).toNat := by
-    have hswap : n5 + 1 = s5 + 1 - borrow := by
-      apply UInt64.eq_sub_iff_add_eq.mpr
-      change (s5-borrow)+1+borrow = s5+1
-      rw [add_swap64, UInt64.sub_add_cancel]
-    rw [hswap, UInt64.toNat_sub_of_le _ _ hn]
-    have hh : borrow.toNat ≤ (s5+1).toNat := hn
-    omega
-  have hn4 := sub_split s4 n3.hi
-  change n4.toNat + n3.hi.toNat = s4.toNat + wordRadix*borrow.toNat at hn4
-  have e0 := mac_spec a.w0 b t.w0 0
-  have e1 := mac_spec a.w1 b t.w1 m0.hi
-  have e2 := mac_spec a.w2 b t.w2 m1.hi
-  have e3 := mac_spec a.w3 b t.w3 m2.hi
-  have f0 := productBorrow_spec c.w0 d m0.lo 0
-  have f1 := productBorrow_spec c.w1 d m1.lo n0.hi
-  have f2 := productBorrow_spec c.w2 d m2.lo n1.hi
-  have f3 := productBorrow_spec c.w3 d m3.lo n2.hi
-  change m0.lo.toNat + 2^64*m0.hi.toNat = _ at e0
-  change m1.lo.toNat + 2^64*m1.hi.toNat = _ at e1
-  change m2.lo.toNat + 2^64*m2.hi.toNat = _ at e2
-  change m3.lo.toNat + 2^64*m3.hi.toNat = _ at e3
-  change n0.lo.toNat + c.w0.toNat*d.toNat + 0 = m0.lo.toNat + wordRadix*n0.hi.toNat at f0
-  change n1.lo.toNat + c.w1.toNat*d.toNat + n0.hi.toNat =
-    m1.lo.toNat + wordRadix*n1.hi.toNat at f1
-  change n2.lo.toNat + c.w2.toNat*d.toNat + n1.hi.toNat =
-    m2.lo.toNat + wordRadix*n2.hi.toNat at f2
-  change n3.lo.toNat + c.w3.toNat*d.toNat + n2.hi.toNat =
-    m3.lo.toNat + wordRadix*n3.hi.toNat at f3
-  let row : Words64 := ⟨n1.lo, n2.lo, n3.lo, n4, n5⟩
-  have he : n0.lo.toNat + wordRadix * value (bias row) + c.val*d.toNat =
-      value (bias t) + a.val*b.toNat + 2^256 * (wordRadix-1) := by
-    simp only [row,bias,Raw.val,Raw.words,value,lowValue,wordRadix,Nat.add_mul,Nat.mul_assoc,
-      UInt64.toNat_zero,Nat.add_zero] at *
-    omega
-  let q := (n0.lo * inverseComplement).toNat
-  have out := red_spec (fun q _ => mulHighComplement q) mulHighComplement_spec
-    n0.lo n1.lo n2.lo n3.lo n4 (n5+1) (by omega)
-  rw [← red_bias] at out
-  change wordRadix*value (bias (fusedStage a c b d t)) =
-    n0.lo.toNat + wordRadix*value (bias row) + q*Fp.modulus at out
-  have hsum : wordRadix * value (bias (fusedStage a c b d t)) + c.val*d.toNat =
-      value (bias t) + a.val*b.toNat + q*Fp.modulus + 2^256*(wordRadix-1) := by omega
-  have amax : a.val*b.toNat ≤ Fp.modulus*(wordRadix-1) :=
-    Nat.mul_le_mul (by omega) (by have := b.toNat_lt; simp only [wordRadix]; omega)
-  have cmax : c.val*d.toNat ≤ Fp.modulus*(wordRadix-1) :=
-    Nat.mul_le_mul (by omega) (by have := d.toNat_lt; simp only [wordRadix]; omega)
-  have qmax : q*Fp.modulus ≤ Fp.modulus*(wordRadix-1) := by
-    rw [Nat.mul_comm q]
-    apply Nat.mul_le_mul_left
-    have := (n0.lo * inverseComplement).toNat_lt
-    simp only [wordRadix]
-    omega
-  exact ⟨by simp only [wordRadix, Fp.modulus] at *; omega, q, hsum⟩
-
-/-- Accumulate the difference of two products through the four Montgomery steps.
-
-It is the reference that the fused square is proved against. -/
-@[inline] def fusedAccum (a b c d : Raw) : Words64 :=
-  fusedStage a c b.w3 d.w3 (fusedStage a c b.w2 d.w2
-    (fusedStage a c b.w1 d.w1 (fusedStage a c b.w0 d.w0 ⟨0,0,0,0,0⟩)))
-
-theorem fusedAccum_spec (a b c d : Raw) (ha : a.val < Fp.modulus) (hc : c.val < Fp.modulus) :
-    (2^256 - Fp.modulus ≤ value (bias (fusedAccum a b c d)) ∧
-      value (bias (fusedAccum a b c d)) < 2 * Fp.modulus + 2^256) ∧
-    ∃ q, 2^256 * value (bias (fusedAccum a b c d)) + c.val*d.val =
-      a.val*b.val + q*Fp.modulus + (2^256)*(2^256) := by
-  let zero : Words64 := ⟨0,0,0,0,0⟩
-  let r0 := fusedStage a c b.w0 d.w0 zero
-  let r1 := fusedStage a c b.w1 d.w1 r0
-  let r2 := fusedStage a c b.w2 d.w2 r1
-  let r3 := fusedStage a c b.w3 d.w3 r2
-  obtain ⟨hb0, q0, e0⟩ := fusedStage_spec a c b.w0 d.w0 zero ha hc (by decide) (by decide)
-  obtain ⟨hb1, q1, e1⟩ := fusedStage_spec a c b.w1 d.w1 r0 ha hc hb0.1 hb0.2
-  obtain ⟨hb2, q2, e2⟩ := fusedStage_spec a c b.w2 d.w2 r1 ha hc hb1.1 hb1.2
-  obtain ⟨hb3, q3, e3⟩ := fusedStage_spec a c b.w3 d.w3 r2 ha hc hb2.1 hb2.2
-  change 2^256-Fp.modulus ≤ value (bias r3) ∧ value (bias r3) < 2*Fp.modulus+2^256 at hb3
-  refine ⟨hb3, q0+wordRadix*q1+wordRadix^2*q2+wordRadix^3*q3, ?_⟩
-  change wordRadix * value (bias r0) + c.val*d.w0.toNat =
-    _+a.val*b.w0.toNat+q0*Fp.modulus+_ at e0
-  change wordRadix * value (bias r1) + c.val*d.w1.toNat =
-    value (bias r0)+a.val*b.w1.toNat+q1*Fp.modulus+_ at e1
-  change wordRadix * value (bias r2) + c.val*d.w2.toNat =
-    value (bias r1)+a.val*b.w2.toNat+q2*Fp.modulus+_ at e2
-  change wordRadix * value (bias r3) + c.val*d.w3.toNat =
-    value (bias r2)+a.val*b.w3.toNat+q3*Fp.modulus+_ at e3
-  rw [show value (bias zero) = 2^256 by decide] at e0
-  change 2^256 * value (bias r3) + c.val*d.val =
-    a.val*b.val + (q0+wordRadix*q1+wordRadix^2*q2+wordRadix^3*q3)*Fp.modulus+_
-  rw [show d.val = d.w0.toNat+wordRadix*d.w1.toNat+wordRadix^2*d.w2.toNat+
-      wordRadix^3*d.w3.toNat from rfl,
-    show b.val = b.w0.toNat+wordRadix*b.w1.toNat+wordRadix^2*b.w2.toNat+
-      wordRadix^3*b.w3.toNat from rfl]
-  simp only [Nat.mul_add, Nat.add_mul, Nat.mul_left_comm a.val, Nat.mul_left_comm c.val,
-    Nat.mul_assoc, Fp.modulus, wordRadix] at *
-  omega
 
 private theorem biasTop_bound (t : Words64) (hhi : value (bias t) < 2*Fp.modulus+2^256) :
     (t.top+1).toNat < 3 := by
@@ -3039,35 +2767,9 @@ theorem scanProductDiff_spec (a b c d : Montgomery) :
   let h := (scanProductDiff_spec a b c d).1
   fusedFinish t h.1 h.2
 
-/-- Subtract a square in the same Montgomery stages as the positive product. -/
-@[inline] def fusedSquareAccum (a b c : Raw) : Words64 :=
-  let p00 := wordProduct c.w0 c.w0
-  let p01 := wordProduct c.w0 c.w1
-  let p02 := wordProduct c.w0 c.w2
-  let p03 := wordProduct c.w0 c.w3
-  let p11 := wordProduct c.w1 c.w1
-  let p12 := wordProduct c.w1 c.w2
-  let p13 := wordProduct c.w1 c.w3
-  let p22 := wordProduct c.w2 c.w2
-  let p23 := wordProduct c.w2 c.w3
-  let p33 := wordProduct c.w3 c.w3
-  fusedStageProducts a b.w3 p03 p13 p23 p33
-    (fusedStageProducts a b.w2 p02 p12 p22 p23 (fusedStageProducts a b.w1 p01 p11 p12 p13
-      (fusedStageProducts a b.w0 p00 p01 p02 p03 ⟨0,0,0,0,0⟩)))
-
-private theorem fusedSquareAccum_eq (a b c : Raw) :
-    fusedSquareAccum a b c = fusedAccum a b c c := by
-  simp only [fusedSquareAccum, fusedAccum, ← fusedStageProducts_eq_stage]
-  rw [← wordProduct_comm c.w0 c.w1, ← wordProduct_comm c.w0 c.w2,
-    ← wordProduct_comm c.w0 c.w3, ← wordProduct_comm c.w1 c.w2,
-    ← wordProduct_comm c.w1 c.w3, ← wordProduct_comm c.w2 c.w3]
-
-/-- Compute a product minus a square with one shared Montgomery reduction. -/
+/-- `a b - c^2`, as the product difference with `d = c`. -/
 @[inline] def productSubSquare (a b c : @& Montgomery) : Montgomery :=
-  let t := fusedSquareAccum a.raw b.raw c.raw
-  let h := (fusedAccum_spec a.raw b.raw c.raw c.raw a.lt c.lt).1
-  fusedFinish t (by simpa only [t, fusedSquareAccum_eq] using h.1)
-    (by simpa only [t, fusedSquareAccum_eq] using h.2)
+  productDiff a b c c
 
 end Montgomery
 

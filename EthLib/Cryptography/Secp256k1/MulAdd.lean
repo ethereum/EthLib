@@ -64,9 +64,13 @@ abbrev Coordinates := Coords Montgomery
 
 /-- `2 P`, with `Z' = Y Z` and the slope numerator `3 X^2 / 2`.
 
-It is formula (6) of Cohen, Miyaji and Ono for `a = 0`, scaled by `1/2` in `Z`.
+It is formula (6) of Cohen, Miyaji and Ono, [dbl-1998-cmo-2][cmo], for `a = 0`.
 
-So its `X`, `Y` and `Z` times 4, 8 and 2 are those of the shared doubling. -/
+It is scaled by `1/2` in `Z`.
+
+So its `X`, `Y` and `Z` times 4, 8 and 2 are those of the shared doubling.
+
+[cmo]: <https://hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html> -/
 @[inline] def doubleCore (p : Coordinates) : Coordinates :=
   let xx := Montgomery.square p.x
   let l := xx + Montgomery.halve xx
@@ -152,7 +156,7 @@ def generatorTable14 : Vector Coordinates 4096 := generatedMultiples 4096 Point.
 /-- The odd multiples of `2^128 G` for fourteen-bit windows. -/
 def generatorHighTable14 : Vector Coordinates 4096 := generatedMultiples 4096 generatorHighPoint
 
-/-- The width of the signed digits that select entries of the generator tables. -/
+/-- The width of the signed digits that select entries of a table of odd multiples. -/
 inductive Window where
   /-- Five bits, for the eight odd multiples of the variable point. -/
   | width5
@@ -404,11 +408,15 @@ The rounded quotients come from products by the scaled constants, as in Algorith
 @[inline] def endomorphismSquared (p : Coordinates) : Coordinates :=
   scaleX (Montgomery.ofFin (beta * beta)) p
 
-/-- The three X coordinates obtained by applying the curve endomorphism. -/
+/-- An entry of the joint table, with its denominator omitted. -/
 structure JointEntry where
+  /-- The `x` of the point. -/
   x : Montgomery
+  /-- The `x` of its image under the endomorphism. -/
   phiX : Montgomery
+  /-- The `x` of its image under the square of the endomorphism. -/
   phi2X : Montgomery
+  /-- The `y`, which the endomorphism keeps. -/
   y : Montgomery
 
 /-- The entry of a form with an omitted denominator.
@@ -517,7 +525,11 @@ The digit zero adds nothing. -/
     let y := if digit &&& 524288 == 0 then q.y else (0 : Montgomery) - q.y
     addCommon p x y
 
-/-- Combine up to three doublings when the intervening digits are zero. -/
+/-- `a P + b lambda P + c G + d 2^128 G`, with one joint digit for `a` and `b` at each step.
+
+The denominator `z` of the joint table stays omitted from the result.
+
+Up to three doublings combine when the digits between them are zero. -/
 @[specialize window] def packedJointChain (window : Window) (z : Montgomery)
     (table : Vector JointEntry 6) (rt st : Vector Coordinates window.entries) :
     Nat → UInt64 → UInt64 → UInt64 → UInt64 →
@@ -555,7 +567,11 @@ The digit zero adds nothing. -/
 termination_by fuel => fuel
 decreasing_by all_goals omega
 
-/-- Combine up to three doublings when the intervening digits are zero. -/
+/-- `a P + b lambda P + c G + d 2^128 G`, with a five-bit digit for each of `a` and `b`.
+
+The signs of `a` and `b` are separate flags, and the denominator `z` of the table stays omitted.
+
+Up to three doublings combine when the digits between them are zero. -/
 @[specialize window] def packedCommonChain (window : Window) (z : Montgomery)
     (table : Vector CommonEntry 8) (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
     Nat → UInt64 → UInt64 → UInt64 → UInt64 →

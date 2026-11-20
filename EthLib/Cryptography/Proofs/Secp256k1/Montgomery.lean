@@ -157,61 +157,6 @@ theorem rawToNat_lt (w : Raw) : rawToNat w < 2^256 := by
   rw [rawToNat_eq]
   exact lowValue_lt w.words
 
-private theorem shifted_left (s x : UInt64) (hs : s.toNat ≤ 3) :
-    (x <<< s).toNat = (x.toNat % 2^(64-s.toNat)) <<< s.toNat := by
-  rw [UInt64.toNat_shiftLeft, Nat.mod_eq_of_lt (by omega : s.toNat < 64),
-    Nat.shiftLeft_eq, Nat.shiftLeft_eq]
-  have h := radix_split s hs
-  change 2^64 = _ at h
-  rw [h, Nat.mul_mod_mul_right]
-
-private theorem shifted_lane (s hi lo : UInt64) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    ((hi <<< s) ||| (lo >>> (64-s))).toNat =
-      (hi <<< s).toNat + (lo >>> (64-s)).toNat := by
-  rw [UInt64.toNat_or, shifted_left s hi hs, ← Nat.shiftLeft_add_eq_or_of_lt
-    (shifted_right_lt s lo hpos hs)]
-
-private theorem shifted_word (s x : UInt64) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (x <<< s).toNat + wordRadix * (x >>> (64-s)).toNat = x.toNat * 2^s.toNat := by
-  rw [shifted_left s x hs, shifted_right s x hpos hs, Nat.shiftLeft_eq, radix_split s hs]
-  rw [Nat.mul_right_comm _ (2^s.toNat), ← Nat.add_mul, Nat.mod_add_div]
-
-/-- A shift keeps the bits above the four-word value in its fifth word. -/
-theorem shift_val (s : UInt64) (w : Raw) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (shift s w).val = w.val * 2^s.toNat := by
-  have h0 := shifted_word s w.w0 hpos hs
-  have h1 := shifted_word s w.w1 hpos hs
-  have h2 := shifted_word s w.w2 hpos hs
-  have h3 := shifted_word s w.w3 hpos hs
-  simp only [shift, word_value_for_scale, raw_val_add, Words64.rawWords, Raw.fromWords]
-  simp only [shifted_lane _ _ _ hpos hs, Nat.add_mul]
-  rw [Nat.mul_right_comm w.w1.toNat wordRadix (2^s.toNat),
-    Nat.mul_right_comm w.w2.toNat (wordRadix^2) (2^s.toNat),
-    Nat.mul_right_comm w.w3.toNat (wordRadix^3) (2^s.toNat)]
-  simp only [wordRadix] at *
-  omega
-
-/-- The reducer input folds the high part of the shifted value at `Fp.modulus`. -/
-theorem scaleInput_val (s : UInt64) (w : Raw) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (scaleInput s w).val + (shift s w).top.toNat * Fp.modulus = w.val * 2^s.toNat := by
-  let shifted := shift s w
-  have htop : shifted.top.toNat < 2^s.toNat := shifted_right_lt s w.w3 hpos hs
-  have h8 : 2^s.toNat ≤ 8 := Nat.pow_le_pow_right (by decide) hs
-  have hprod : (shifted.top * complement).toNat = shifted.top.toNat * 4294968273 := by
-    rw [UInt64.toNat_mul]
-    change shifted.top.toNat * 4294968273 % wordRadix = shifted.top.toNat * 4294968273
-    apply Nat.mod_eq_of_lt
-    simp only [wordRadix]
-    omega
-  change (addLow shifted.rawWords (shifted.top * complement)).val +
-    shifted.top.toNat * Fp.modulus = _
-  rw [addLow_val, hprod]
-  have hshift := shift_val s w hpos hs
-  rw [word_value_for_scale] at hshift
-  change shifted.rawWords.val + shifted.top.toNat * (2^256) = _ at hshift
-  simp only [Fp.modulus] at *
-  omega
-
 private theorem toMont_val (a : Montgomery) : Limbs.val (n := 8) (toMont a).limbs = a.raw.val := by
   exact (val_narrow _ rfl).trans a.raw.val_eq.symm
 
@@ -407,40 +352,11 @@ theorem toMont_sub (a b : Montgomery) : toMont (a-b) = toMont a - toMont b := by
   rw [toMont_val, toMont_val]
   rfl
 
-private theorem scale_val (s : UInt64) (w : Montgomery) (hpos : 0 < s.toNat) (hs : s.toNat ≤ 3) :
-    (scale s w hpos hs).raw.val = (w.raw.val * 2^s.toNat) % Fp.modulus := by
-  let t := scaleInput s w.raw
-  let u := reduceMasked t
-  have hr := reduceMasked_spec t (scaleInput_lt s w.raw hpos hs)
-  change (Raw.fromWords u).val = _
-  rw [Raw.fromWords_val u hr.1, hr.2, ← scaleInput_val s w.raw hpos hs,
-    Nat.add_mul_mod_self_right]
-
 private theorem element_ext {a b : Montgomery} (h : a.raw.val = b.raw.val) : a = b :=
   toMont_injective (mont_ext ((toMont_val a).trans (h.trans (toMont_val b).symm)))
 
 private theorem add_self_val (x : Montgomery) : (x+x).raw.val = x.raw.val * 2 % Fp.modulus := by
   rw [add_val, Nat.mul_two]
-
-/-- A one-bit shift gives the same residue as doubling. -/
-theorem scale_one (x : Montgomery) : scale 1 x (by decide) (by decide) = x+x := by
-  apply element_ext
-  exact (scale_val 1 x (by decide) (by decide)).trans (add_self_val x).symm
-
-/-- A two-bit shift gives the same residue as doubling twice. -/
-theorem scale_two (x : Montgomery) : scale 2 x (by decide) (by decide) = (x+x)+(x+x) := by
-  apply element_ext
-  rw [scale_val, add_self_val, add_self_val, Nat.mod_mul_mod, Nat.mul_assoc]
-  rfl
-
-/-- A three-bit shift gives the same residue as doubling three times. -/
-theorem scale_three (x : Montgomery) :
-    scale 3 x (by decide) (by decide) = ((x+x)+(x+x))+((x+x)+(x+x)) := by
-  apply element_ext
-  rw [scale_val, add_self_val, add_self_val, add_self_val,
-    Nat.mod_mul_mod]
-  rw [Nat.mul_assoc, Nat.mod_mul_mod, Nat.mul_assoc]
-  rfl
 
 /-- Adding the halved residue to itself recovers the original residue. -/
 theorem halve_add_self (a : Montgomery) : halve a + halve a = a := by
@@ -533,25 +449,10 @@ theorem productDiff_eq (a b c d : Montgomery) : productDiff a b c d = a*b - c*d 
   apply mod_add_cancel_right (z := c.raw.val*d.raw.val)
   exact (productDiff_val a b c d).trans (sub_scaled_residue hs hu hv).symm
 
-private theorem productSubSquare_val (a b c : Montgomery) :
-    (2^256 * (productSubSquare a b c).raw.val + c.raw.val*c.raw.val) % Fp.modulus =
-      a.raw.val*b.raw.val % Fp.modulus := by
-  let t := fusedSquareAccum a.raw b.raw c.raw
-  have h : (2^256-Fp.modulus ≤ value (bias t) ∧
-      value (bias t) < 2*Fp.modulus+2^256) ∧
-    ∃ q, 2^256*value (bias t) + c.raw.val*c.raw.val =
-      a.raw.val*b.raw.val + q*Fp.modulus + (2^256)*(2^256) := by
-    rw [show t = fusedAccum a.raw b.raw c.raw c.raw from fusedSquareAccum_eq a.raw b.raw c.raw]
-    exact fusedAccum_spec a.raw b.raw c.raw c.raw a.lt c.lt
-  exact fusedFinish_productVal t (a.raw.val*b.raw.val) (c.raw.val*c.raw.val) h
-
 /-- The fused square variant gives the product minus the square. -/
 theorem productSubSquare_eq (a b c : Montgomery) : productSubSquare a b c = a*b - square c := by
   rw [square_eq_mul, ← productDiff_eq]
-  apply element_ext
-  apply eq_of_radix_mul_mod (productSubSquare a b c).lt (productDiff a b c c).lt
-  apply mod_add_cancel_right (z := c.raw.val*c.raw.val)
-  exact (productSubSquare_val a b c).trans (productDiff_val a b c c).symm
+  rfl
 
 /-! ## The field read back
 

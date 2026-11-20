@@ -50,6 +50,7 @@ The base field also has a Montgomery form on four 64-bit words, in which product
 Scalar multiplication works on Jacobian coordinates in that form, and converts back once.
 In `k P + l Q`, when one point is the generator and the other lies on the curve, the other scalar is split with the curve's endomorphism.
 The generator's scalar is cut at bit 128, and the four half-length scalars share one chain of doublings.
+Any other input takes the shared chain of 256 doublings.
 The square root of the base field is a fixed chain of squarings and products in Montgomery form.
 The inverses mod `n` and mod `p` come from the divsteps of Bernstein and Yang.
 The extended Euclidean algorithm replaces any result that fails its check.
