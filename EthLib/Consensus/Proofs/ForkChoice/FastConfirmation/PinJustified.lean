@@ -191,8 +191,6 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     (maxAligned : MaxEffectiveBalancesAligned preset)
     (withdrawDelay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (long : 1 < preset.SLOTS_PER_EPOCH)
-    (room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat)
-    (below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (facts : PinPresetFacts preset) :
     JustifiedPinned (e := e) anchorEpoch margin first last := by
   subst bls
@@ -270,7 +268,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
     have setting : Setting config .bls g split fin pulled anc state voters :=
       ⟨genesis, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, preGloas, fusaka, bands, caps,
         exitWindow, parameters, maxAligned, twoSlots, withdrawDelay, guard.2, ⟨total, totalOk⟩,
-        room, below, facts, guard.1, finalizedS, calledS, laterS, nearPulled,
+        facts, guard.1, finalizedS, calledS, laterS, nearPulled,
         fun v member => ⟨(votersOk v member).2,
           unslashed w receiver k state high counts v (votersOk v member).1⟩⟩
     obtain ⟨events, replayed⟩ :=
@@ -279,7 +277,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
       toCounted.balanceEvents_ok preGloas (getCurrentEpoch pulled).toNat
     have pin := pinDrift_le_of_stubs setting toPulled (getCurrentEpoch pulled).toNat
       (Nat.le_succ _) replayed toCounted (getCurrentEpoch pulled).toNat nearPulled replayedC
-      (Nat.le_refl _) (Nat.le_refl _) facts.band totalOkC totalOk
+      (Nat.le_refl _) (Nat.le_refl _) totalOkC totalOk
     have splitStake := Finset.sum_filter_add_sum_filter_not (quorumVoters state) (· ∈ voters)
       (fun v => balanceAt state v.toNat)
     unfold Models.stake at pin quorum ⊢
@@ -341,7 +339,7 @@ theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
     genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
     guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_mainnet CapOrder.mainnet
     ActivationWithinMaxEffective.mainnet Preset.seedLookaheadAtLeastThree_mainnet
-    maxEffectiveBalancesAligned_mainnet withdrawDelay (by decide) (by decide) (by decide)
+    maxEffectiveBalancesAligned_mainnet withdrawDelay (by decide)
     PinPresetFacts.mainnet
 
 /-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch. -/
@@ -353,7 +351,7 @@ theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
     genesis pre roots absent heldEarly bounded enough terminal unslashed agree finality chain
     guarded preGloas fusaka forkWindow Preset.incrementWithinUpwardBand_minimal CapOrder.minimal
     ActivationWithinMaxEffective.minimal Preset.seedLookaheadAtLeastThree_minimal
-    maxEffectiveBalancesAligned_minimal withdrawDelay (by decide) (by decide) (by decide)
+    maxEffectiveBalancesAligned_minimal withdrawDelay (by decide)
     PinPresetFacts.minimal
 
 end Deployed

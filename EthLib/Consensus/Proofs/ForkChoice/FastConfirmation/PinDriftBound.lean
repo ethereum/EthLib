@@ -740,8 +740,6 @@ private theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high :
 
 Each field is a fact about the preset alone, and a deployed preset has it. -/
 structure PinPresetFacts (preset : Preset) : Prop where
-  /-- (preset fact) One epoch's base reward factor at an increment is at least `2 ^ 33`. -/
-  room : 2 ^ 33 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
   /-- (preset fact) The downward band is below an increment. -/
   below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) An increment is at least 900 times the slashings vector. -/
@@ -833,7 +831,7 @@ structure PinPresetFacts (preset : Preset) : Prop where
 
 /-- The mainnet preset has the preset facts of the pin. -/
 theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
     by decide, by decide, by decide, by decide, by decide, by decide,
@@ -841,7 +839,7 @@ theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
 
 /-- The minimal preset has the preset facts of the pin. -/
 theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
-  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
+  ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
     by decide, by decide, by decide, by decide, by decide, by decide,
@@ -8283,8 +8281,6 @@ structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeacon
   shallow : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
     config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   pulledTotal : ∃ t, getTotalActiveBalance pulled = .ok t
-  room : 2 ^ 32 ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat
-  below : preset.downwardBand < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   facts : PinPresetFacts preset
   guard : DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
   finalized : anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch split
@@ -12627,7 +12623,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
       rw [Nat.mul_comm (_ - _)] at times
       nlinarith
   have key := PinSplit2.passPenaltyRate_le_leak (config := config)
-    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize h.facts.room
+    (⟨fork, m⟩ : ForkedBeaconState preset) v T.toNat _ h.facts.incrementSize (Nat.le_trans (by norm_num) h.facts.rewardScale)
     T.toNat_lt aligned band scored
   dsimp only at key
   refine Nat.le_trans (Nat.le_of_eq rfl) (Nat.le_trans key ?_)
@@ -14445,7 +14441,7 @@ private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 <
 
 /-- The base reward per increment is at least four.
 
-The root of a quarter total is below `2 ^ 31`, and `room` makes the scaled factor at least `2 ^ 33`.
+The root of a quarter total is below `2 ^ 31`, and `rewardScale` makes the scaled factor at least `2 ^ 35`.
 
 Below the small total the root is at most a fifth of an increment, which the factor covers.
 
@@ -14476,7 +14472,7 @@ private theorem four_le_perIncrement (h : Setting config checks g split fin pull
       rw [UInt64.toNat_div]
       simp only [UInt64.reduceToNat]
       omega
-  have room := h.facts.room
+  have room := h.facts.rewardScale
   have reward := h.facts.reward
   have positive : 0 < q.toNat := by
     have size := h.facts.incrementSize
@@ -35163,7 +35159,6 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
     (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
-    (band : 10 * preset.upwardBand ≤ preset.MAX_EFFECTIVE_BALANCE.toNat)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
     3 * stake (fun v => balanceAt counted v.toNat) (quorumVoters counted) +
@@ -35220,7 +35215,7 @@ theorem pinDrift_le_of_stubs (h : Setting config checks g split fin pulled anc c
   have b17 := bud_exitingBands (config := config) h tailC highC
   have b18 := bud_pendingR (config := config) h
   have b15 := bud_consolidations (config := config) h fromFin tail high endEpoch replayed replayedF
-    highLeR tailC highC endEpochC replayedC highLe band
+    highLeR tailC highC endEpochC replayedC highLe h.facts.band
   have b16 := bud_exitedR (config := config) (pulled := pulled) (anc := anc) (fin := fin)
     (counted := counted)
   -- `bud_consolidations` pays the band of each due entry: the counted keys' bands and V's share.
