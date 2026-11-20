@@ -36,6 +36,7 @@ public import EthLib.Consensus.Exports.KeymanagerApi
 public import EthLib.Consensus.Exports.OptimisticSync
 public import EthLib.Consensus.Exports.Parameters
 public import EthLib.Consensus.Exports.RelayApi
+public import EthLib.Consensus.Exports.RemoteSigningApi
 public import EthLib.Consensus.Exports.ReqResp
 public import EthLib.Consensus.Exports.Rewards
 public import EthLib.Consensus.Exports.Shuffle

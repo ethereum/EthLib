@@ -13,6 +13,7 @@ from ethlib.errors import (
     KeymanagerError,
     LightClientError,
     ProposerError,
+    RemoteSigningError,
     SlashingProtectionError,
     TransitionError,
     ValidatorDutyError,
@@ -1942,6 +1943,11 @@ def import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     return _native.consensus_import_slashing_interchange(held, file)
 
 
+def read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    return _native.consensus_read_signing_request(name, document)
+
+
 def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
     """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
     _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
@@ -2354,6 +2360,8 @@ __all__ = [
     "KeymanagerError",
     "keymanager_json",
     "keymanager_run",
+    "RemoteSigningError",
+    "read_signing_request",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",

@@ -7816,6 +7816,22 @@
    "docstring":
    "The record after importing a file with the minimal strategy of EIP-3076, as JSON text."},
   {"summary":
+   "A request of the Remote-signing API, read and written again as the signer reads it.",
+   "signature": "(name: str, document: Any) -> Any",
+   "operation": "EthLib.Consensus.Exports.readSigningRequestExport",
+   "method": "consensus_read_signing_request",
+   "errors":
+   [{"type": "EthLib.Consensus.RemoteSigningApi.RequestError",
+     "codes":
+     [{"constructor": "notAnObject", "code": 1},
+      {"constructor": "missingField", "code": 2},
+      {"constructor": "badField", "code": 3},
+      {"constructor": "unknownType", "code": 4},
+      {"constructor": "unknownVersion", "code": 5}]}],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "A request of the Remote-signing API, read and written again as the signer reads it.\n\nThe arguments are the name of the preset and the JSON document of the request.\n\nThe result holds every field that the request reads, and no other field.\n\nAn unknown preset has code 0.\n\nA document that is not a request has the code of its error."},
+  {"summary":
    "Whether a key may sign a block of a slot with a signing root, given a record.",
    "signature":
    "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",

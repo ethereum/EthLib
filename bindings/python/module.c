@@ -131,6 +131,7 @@ PyObject* VALIDATOR_DUTY_ERROR;
 PyObject* PROPOSER_ERROR;
 PyObject* SLASHING_PROTECTION_ERROR;
 PyObject* KEYMANAGER_ERROR;
+PyObject* REMOTE_SIGNING_ERROR;
 PyObject* BINDING_ERROR;
 PyObject* RPC_ERROR;
 
@@ -1031,6 +1032,8 @@ static PyMethodDef methods[] = {
    DOC_consensus_read_slashing_interchange},
   {"consensus_import_slashing_interchange", py_consensus_import_slashing_interchange,
    METH_VARARGS, DOC_consensus_import_slashing_interchange},
+  {"consensus_read_signing_request", py_consensus_read_signing_request, METH_VARARGS,
+   DOC_consensus_read_signing_request},
   {"consensus_check_block_signing", py_consensus_check_block_signing, METH_VARARGS,
    DOC_consensus_check_block_signing},
   {"consensus_check_attestation_signing", py_consensus_check_attestation_signing, METH_VARARGS,
@@ -1445,6 +1448,7 @@ PyInit__native(void) {
     PROPOSER_ERROR = PyObject_GetAttrString(errors, "ProposerError");
     SLASHING_PROTECTION_ERROR = PyObject_GetAttrString(errors, "SlashingProtectionError");
     KEYMANAGER_ERROR = PyObject_GetAttrString(errors, "KeymanagerError");
+    REMOTE_SIGNING_ERROR = PyObject_GetAttrString(errors, "RemoteSigningError");
     BINDING_ERROR = PyObject_GetAttrString(errors, "BindingError");
     RPC_ERROR = PyObject_GetAttrString(errors, "RpcError");
     Py_DECREF(errors);
