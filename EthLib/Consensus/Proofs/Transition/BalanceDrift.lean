@@ -690,6 +690,30 @@ theorem hysteresis_of_advanceSlot (bands : preset.IncrementWithinUpwardBand)
     at epochOk
   exact (hysteresis_of_epochTransition bands epochOk).of_data rfl rfl fun _ => rfl
 
+/-- A slot step of a run from genesis to an epoch's first slot ends within the bands of hysteresis.
+
+The epoch transition of the step sets the bands.
+
+The upgrades of the slot keep them.
+
+Every effective balance is at most its cap before the upgrades. -/
+theorem hysteresis_of_run_slot {g middle last : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (bands : preset.IncrementWithinUpwardBand)
+    (caps : CapOrder preset) (activation : ActivationWithinMaxEffective preset)
+    (run : Run config checks g middle) (ok : advanceSlotAcross config checks middle = .ok last)
+    (early : last.fork < .glamsterdam) (first : last.state.slot % preset.SLOTS_PER_EPOCH = 0) :
+    Hysteresis last.state := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+  have middleEarly : middle.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded) early
+  have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
+  exact Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩)
+    (hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)) (caps.maxEffective_eq activation)
+    caps.compounding
+    (advanceSlot_capped advancedOk
+      (run.effectiveBalance_capped genesis caps.activation caps.compounding middleEarly))
+    upgraded
+
 /-- The state at the first slot of an epoch, reached by slot steps, is within the bands. -/
 theorem hysteresis_of_processSlots (bands : preset.IncrementWithinUpwardBand)
     {slot : Slot} (computed : processSlots config checks state slot = .ok after)

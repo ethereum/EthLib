@@ -86,20 +86,8 @@ private theorem run_boundaryEpoch {g : ForkedBeaconState preset}
     cases step with
     | slot ok =>
       by_cases first : last.state.slot % preset.SLOTS_PER_EPOCH = 0
-      · obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
-        have middleEarly : middle.fork < .glamsterdam :=
-          Nat.lt_of_le_of_lt (processUpgrades_fork_le (forked := ⟨middle.fork, advanced⟩) upgraded)
-            early
-        have kept : last.state.slot = advanced.slot := processUpgrades_slot upgraded
-        have banded := hysteresis_of_advanceSlot bands advancedOk (kept ▸ first)
-        -- The step before the upgrades keeps each effective balance at most its cap.
-        have capped := advanceSlot_capped advancedOk
-          (pre.effectiveBalance_capped genesis caps.activation caps.compounding
-            middleEarly)
-        exact ⟨last.state, fun _ => rfl, rfl,
-          Hysteresis.upgrade (forked := ⟨middle.fork, advanced⟩) banded
-            (caps.maxEffective_eq activation) caps.compounding
-            capped upgraded,
+      · exact ⟨last.state, fun _ => rfl, rfl,
+          hysteresis_of_run_slot genesis bands caps activation pre ok early first,
           ⟨pre.snoc (.slot ok)⟩, ⟨.nil⟩⟩
       · have next := (advanceSlotAcross_cases ok).1
         have notFirst : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
