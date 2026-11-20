@@ -6303,6 +6303,27 @@ private theorem deposits_scan_le (h : Setting config checks g split fin pulled a
       (eventsC.map fun e => if e.source = .deposits then X e else 0).sum := pre
   omega
 
+/-- A key that a step slashes is not yet withdrawable at the first state of that step.
+
+A key that has exited is not withdrawable, since a withdrawable key is not slashed.
+
+A key that has not exited has a withdrawable epoch at or after its exit, which is later. -/
+private theorem newly_slashed_unwithdrawable {g m n : ForkedBeaconState preset}
+    (genesis : Genesis config checks g) (caps : CapOrder preset) (toM : Run config checks g m)
+    (step : Step config checks m n) (early : n.fork < .glamsterdam) {i : ℕ} {old new : Validator}
+    (foundOld : m.state.validators.data[i]? = some old)
+    (foundNew : n.state.validators.data[i]? = some new)
+    (clean : old.slashed = false) (marked : new.slashed = true) :
+    (getCurrentEpoch m.state).toNat < old.withdrawableEpoch.toNat := by
+  by_cases exited : old.exitEpoch ≤ getCurrentEpoch m.state
+  · exact UInt64.lt_iff_toNat_lt.mp
+      ((Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable caps.activation
+        caps.compounding early i old new foundOld foundNew clean marked exited)
+  · have ordered := UInt64.le_iff_toNat_le.mp
+      ((Run.invariant genesis.invariant toM).exitsOrdered old (Array.mem_of_getElem? foundOld))
+    have before := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
+    omega
+
 /-- A key slashed at C and not slashed at the start of a deposit event is not withdrawable there.
 
 The key is not slashed at the step's start, and the run from there ends with it slashed.
@@ -6358,15 +6379,8 @@ private theorem slashed_deposit_held (h : Setting config checks g split fin pull
     · exact absurd ⟨bm, foundM, flag⟩ notM
   have earlyN : n.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps postR.chainSteps) h.early
-  have lateM : (getCurrentEpoch m.state).toNat < bm.withdrawableEpoch.toNat := by
-    have holds := Run.invariant (Genesis.invariant h.genesis) toM
-    have bound := UInt64.le_iff_toNat_le.mp (holds.exitsOrdered bm (Array.mem_of_getElem? foundM))
-    by_cases exited : bm.exitEpoch ≤ getCurrentEpoch m.state
-    · have slashable := (Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable
-        h.caps.activation h.caps.compounding earlyN i bm bn foundM foundN cleanM slashedN exited
-      exact UInt64.lt_iff_toNat_lt.mp slashable
-    · have := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
-      omega
+  have lateM : (getCurrentEpoch m.state).toNat < bm.withdrawableEpoch.toNat :=
+    newly_slashed_unwithdrawable h.genesis h.caps toM step earlyN foundM foundN cleanM slashedN
   have epochs : (getCurrentEpoch u.state).toNat ≤ (getCurrentEpoch m.state).toNat :=
     UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps preR.chainSteps)
   have sameNat := congrArg UInt64.toNat sameEpoch
@@ -13533,27 +13547,6 @@ private theorem prefix_leads {x m n : ForkedBeaconState preset} (pre : Run confi
   | snoc rest step2 =>
     obtain ⟨rfl, -, -⟩ := Run.snoc.inj cut
     exact ⟨(Run.nil.snoc step1).append rest⟩
-
-/-- A key that a step slashes is not yet withdrawable at the first state of that step.
-
-A key that has exited is not withdrawable, since a withdrawable key is not slashed.
-
-A key that has not exited has a withdrawable epoch at or after its exit, which is later. -/
-private theorem newly_slashed_unwithdrawable {g m n : ForkedBeaconState preset}
-    (genesis : Genesis config checks g) (caps : CapOrder preset) (toM : Run config checks g m)
-    (step : Step config checks m n) (early : n.fork < .glamsterdam) {i : ℕ} {old new : Validator}
-    (foundOld : m.state.validators.data[i]? = some old)
-    (foundNew : n.state.validators.data[i]? = some new)
-    (clean : old.slashed = false) (marked : new.slashed = true) :
-    (getCurrentEpoch m.state).toNat < old.withdrawableEpoch.toNat := by
-  by_cases exited : old.exitEpoch ≤ getCurrentEpoch m.state
-  · exact UInt64.lt_iff_toNat_lt.mp
-      ((Run.nil.snoc step).newly_slashed_initial_exited_unwithdrawable caps.activation
-        caps.compounding early i old new foundOld foundNew clean marked exited)
-  · have ordered := UInt64.le_iff_toNat_le.mp
-      ((Run.invariant genesis.invariant toM).exitsOrdered old (Array.mem_of_getElem? foundOld))
-    have before := UInt64.lt_iff_toNat_lt.mp (UInt64.not_le.mp exited)
-    omega
 
 /-- A key unslashed at `c` and slashed at a later state is withdrawable a vector past `fin`.
 
