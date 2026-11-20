@@ -4225,9 +4225,7 @@ private theorem Run.charge_deposit_credit_zero {g a b y : ForkedBeaconState pres
   simp only [List.filter_append, List.map_append, List.sum_append]
   omega
 
-/-- The same bound holds for a set of targets.
-
-The consolidation credits to the keys in `T` along the run of `Run.consolidation_credits_le_X`.
+/-- The consolidation credits to the keys in `T` along the run.
 
 They are at most the caps at X of the due entries of X's queue whose target is in `T`.
 
@@ -7651,7 +7649,7 @@ private def gainOn (preset : Preset) (depth P C : ℕ) : ℕ :=
 
 /-- The rounding slack of a key whose balance on R's branch took a sync debit that `high` omits.
 
-It is the step of `credR`, one increment and the downward band less one.
+It is one increment and the downward band less one.
 
 `branchR` charges that step for each of its keys. -/
 private def bandR (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
@@ -22721,9 +22719,9 @@ The slash charge is at least an increment and `2 * depthFin * flagRate`.
 
 The flag rate is at most the rate of an increment, and the slash charge has four of it for each epoch.
 
-The `syncProposer` part of `proposerCredit` is not used by `credR`.
+The `syncProposer` part of `proposerCredit` is not used by R's credits.
 
-`credR` leaves out sync events, so `bud_sync` takes it.
+R's credits leave out sync events, so `bud_sync` takes them.
 
 The keys of `SC` that R slashes after the split also draw on `branchR`, at weight three.
 
@@ -26357,7 +26355,7 @@ A key of the split's registry that is none of those, and not active at C, is not
 
 Its exit was assigned on C's branch.
 
-It pays its charge and its rise after it, by `rise_after_charge`, from the window.
+It pays its charge and its rise after it, from the window.
 
 A created key that has exited by C pays its charge from the window.
 

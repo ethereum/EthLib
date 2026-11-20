@@ -675,7 +675,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- It activates only with at least the activation balance, which it keeps until then.
   --
-  -- No lemma here proves yet that it keeps at least `newKeyFloor` from its activation.
+  -- The pin's drift bound proves that it keeps at least `newKeyFloor` from its activation.
   --
   -- That floor is less its own sync-seat debits and pending partial payments.
   let newKeyFloor := 2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
