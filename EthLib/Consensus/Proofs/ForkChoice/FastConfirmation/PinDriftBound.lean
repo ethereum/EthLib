@@ -33351,7 +33351,7 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) :
     ∃ (b : BeaconState preset fork) (toB : Run config checks g ⟨fork, b⟩)
       (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩),
-      toB.append pre = toFin.append fromFin ∧ getCurrentEpoch split = getCurrentEpoch b ∧
+      getCurrentEpoch split = getCurrentEpoch b ∧
       (Nonempty (Run config checks ⟨fork, fin⟩ ⟨fork, b⟩) ∨
         ∃ _ : Run config checks ⟨fork, b⟩ ⟨fork, fin⟩,
           getCurrentEpoch fin = getCurrentEpoch b) ∧
@@ -33370,7 +33370,7 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       obtain ⟨gf, gs⟩ := g
       subst gFork
       dsimp only at atGenesis
-      exact ⟨gs, Run.nil, toFin.append fromFin, run_nil_append _, UInt64.toNat_inj.mp (by omega),
+      exact ⟨gs, Run.nil, toFin.append fromFin, UInt64.toNat_inj.mp (by omega),
         .inr ⟨toFin, UInt64.toNat_inj.mp (by omega)⟩, (fun _ member => by cases member),
         .inr ⟨toFin, rfl⟩⟩
     · -- the boundary into the split's epoch is in the run to the finalized state
@@ -33384,7 +33384,7 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
       dsimp only at nFork
       subst nFork
       subst cut
-      refine ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin, Run.append_assoc _ _ _,
+      refine ⟨ns, pre0.snoc (Step.slot ok), rest.append fromFin,
         UInt64.toNat_inj.mp (by omega), .inr ⟨rest, nEpoch⟩, fun {u w} step member => ?_,
         .inr ⟨rest, rfl⟩⟩
       cases member with
@@ -33404,7 +33404,7 @@ private theorem split_epoch_start (toFin : Run config checks g ⟨fork, fin⟩)
     dsimp only at nFork
     subst nFork
     subst cut
-    refine ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest, (Run.append_assoc _ _ _).symm,
+    refine ⟨ns, toFin.append (pre0.snoc (Step.slot ok)), rest,
       nEpoch, .inl ⟨pre0.snoc (Step.slot ok)⟩, fun {u w} step member => ?_,
       .inl ⟨pre0.snoc (Step.slot ok), rfl⟩⟩
     rcases (Run.contains_append _ _ _).mp member with early | late
@@ -33493,7 +33493,7 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have tR := stake_le_total pulledOk
   obtain ⟨toFin⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨b, toB, pre, cut, sameEpoch, link, earlier, shape⟩ := split_epoch_start toFin fromFin
+  obtain ⟨b, toB, pre, sameEpoch, link, earlier, shape⟩ := split_epoch_start toFin fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
   obtain ⟨eventsP, replayedP⟩ := pre.balanceEvents_ok h.early highC
   have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
