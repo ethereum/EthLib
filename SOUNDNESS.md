@@ -2446,7 +2446,10 @@ That bound is still `Q^2 / N`, not a sharper fixed-target bound.
 `verifyAccountRange_complete` and `verifyStorageRanges_complete` (`Execution/Proofs/Network/SnapRangeComplete.lean`) prove that honest snap answers from secured tries pass their checks, or `findCrossCollision` returns a Keccak-256 collision among proof nodes.
 The keys are listed by increasing hash, and the proof contains the proofs of the start and the last entry.
 That order assumes the keys of each trie have distinct Keccak-256 hashes; no search returns two keys with one hash.
-The account theorem uses successful slim and full encodings of each account; `fullAccount_encode_slimAccount` proves that the conversion returns the full form.
+The account theorem uses a successful full encoding of each account; `fullAccount_slimAccount` proves that the conversion returns the full form.
+An account body is the slim form nested in its entry as an RLP list, the encoding used on the network.
+[AccountRange (0x01)](https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md#accountrange-0x01) types it `B`, a byte string, and [ethereum/devp2p#295](https://github.com/ethereum/devp2p/pull/295) proposes the correction.
+`fullAccount_bytes` states that a byte string is never an account body, so the range check refuses an answer in that form.
 The storage theorem assumes whole tries before the last range; every range starts at the requested hash for one account and at the zero hash for several.
 `verifyAccountRange_complete_nil`, `verifyStorageRanges_complete_nil`, `verifyAccountRange_whole` and `verifyStorageRanges_whole` cover empty last ranges and whole tries; whole tries need no proof and no collision alternative.
 An empty AccountRange with no proof is the empty reply `noState`, rather than a claim about the trie.
