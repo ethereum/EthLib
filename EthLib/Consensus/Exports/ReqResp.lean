@@ -182,13 +182,18 @@ def decodeItems {β : Type} (α : Type) [EthLib.Exports.FromPy α] (make : α �
   items.mapM fun item => do
     return make (← (EthLib.Exports.FromPy.fromPy item).mapError fun error => (0, error))
 
+/-- The root of the genesis validators, which the light client checks need, or code 0. -/
+def lightClientRoot : Option Root → Result Root
+  | some root => .ok root
+  | none => throw (0, "the light client checks need the root of the genesis validators")
+
 /-- Whether a response is valid for its request, under the protocol that an ID names.
 
 The fork is the one in effect when the request is served, and it must define the protocol. -/
 def reqRespResponseValidOf
-    (args : String × String × String × ByteArray × List PyValue × List UInt64) :
+    (args : String × String × String × ByteArray × List PyValue × List UInt64 × Option Root) :
     Result Bool := do
-  let (name, fork, protocol, request, items, committee) := args
+  let (name, fork, protocol, request, items, committee, genesisValidatorsRoot) := args
   let preset ← presetOf name
   let config ← configOf name
   let fork ← forkUpTo .hegota fork.toUTF8
@@ -212,16 +217,16 @@ def reqRespResponseValidOf
       (← decodeRequest BeaconBlocksByHeadRequest request) (← block items)
   | .lightClientUpdatesByRange =>
     let request ← decodeRequest LightClientUpdatesByRangeRequest request
-    let fields ← decodeItems (Slot × String) (fun fields => fields) items
-    let updates ← fields.mapM fun (attestedSlot, chunkFork) => do
-      return ResponseUpdate.mk attestedSlot (← forkUpTo .hegota chunkFork.toUTF8)
-    return isValidLightClientUpdatesByRangeResponse preset config request updates
+    let updates ← decodeItems (Slot × ForkDigest)
+      (fun (attestedSlot, digest) => ResponseUpdate.mk attestedSlot digest) items
+    return isValidLightClientUpdatesByRangeResponse preset config
+      (← lightClientRoot genesisValidatorsRoot) request updates
   | .lightClientBootstrap =>
     let request ← decodeRequest Root request
-    let fields ← decodeItems (Slot × Root × String) (fun fields => fields) items
-    let bootstraps ← fields.mapM fun (slot, root, chunkFork) => do
-      return ResponseBootstrap.mk slot root (← forkUpTo .hegota chunkFork.toUTF8)
-    return isValidLightClientBootstrapResponse preset config request bootstraps
+    let bootstraps ← decodeItems (Slot × Root × ForkDigest)
+      (fun (slot, root, digest) => ResponseBootstrap.mk slot root digest) items
+    return isValidLightClientBootstrapResponse preset config
+      (← lightClientRoot genesisValidatorsRoot) request bootstraps
   | .blobSidecarsByRange =>
     return isValidBlobSidecarsByRangeResponse config fork
       (← decodeRequest BlobSidecarsByRangeRequest request) (← sidecar items)
@@ -267,11 +272,13 @@ An envelope is its slot, block root, parent hash and block hash.
 
 An inclusion list is its slot, validator index and dependent root.
 
-A light client update is the slot of its attested header and the name of the fork of its chunk.
+A light client update is the slot of its attested header and the fork digest of its chunk.
 
-A light client bootstrap is the slot and root of its beacon header and the fork of its chunk.
+A light client bootstrap is the slot and root of its beacon header and the fork digest of its chunk.
 
 The committee is read only for inclusion lists, and must then have one validator per seat.
+
+The root of the genesis validators is read only for light clients, and must then be given.
 
 A protocol without a check of its response, such as status, has code 0. -/
 @[export eth_consensus_reqresp_response_valid]

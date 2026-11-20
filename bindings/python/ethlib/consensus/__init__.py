@@ -382,10 +382,10 @@ ResponseSidecar: TypeAlias = tuple[int, bytes, int]
 ResponseEnvelope: TypeAlias = tuple[int, bytes, bytes, bytes]
 # An inclusion list: its slot, its validator index and its dependent root.
 ResponseInclusionList: TypeAlias = tuple[int, int, bytes]
-# A light client update: the slot of its attested header and the fork of its chunk.
-ResponseLightClientUpdate: TypeAlias = tuple[int, str]
-# A light client bootstrap: the slot and root of its beacon header and the fork of its chunk.
-ResponseLightClientBootstrap: TypeAlias = tuple[int, bytes, str]
+# A light client update: the slot of its attested header and the fork digest of its chunk.
+ResponseLightClientUpdate: TypeAlias = tuple[int, bytes]
+# A light client bootstrap: the slot and root of its beacon header and the fork digest of its chunk.
+ResponseLightClientBootstrap: TypeAlias = tuple[int, bytes, bytes]
 ResponseItems: TypeAlias = (
     Sequence[ResponseBlock]
     | Sequence[ResponseSidecar]
@@ -403,12 +403,14 @@ def reqresp_is_valid_response(
     items: ResponseItems,
     committee: Sequence[int] = (),
     name: str = "mainnet",
+    genesis_validators_root: bytes | None = None,
 ) -> bool:
     """Whether the items of a response are valid for the SSZ request of a protocol ID at a fork."""
     # The committee counts only for inclusion lists, as the validator of each seat.
-    native_items: list[tuple[int | bytes | str, ...]] = list(items)
+    # The root of the genesis validators counts only for light clients, whose digests it sets.
+    native_items: list[tuple[int | bytes, ...]] = list(items)
     return _native.consensus_reqresp_response_valid(
-        name, fork, protocol, request, native_items, list(committee)
+        name, fork, protocol, request, native_items, list(committee), genesis_validators_root
     )
 
 
