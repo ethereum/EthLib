@@ -12066,24 +12066,23 @@ private theorem queueWindow_unfold (early : fork < .glamsterdam) (config : Confi
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queueWindow =
       (pinTerms config state ancestor finalizedState).depth *
-        (PinTerms.activationExitChurn preset config (PinTerms.wide state) +
-          PinTerms.consolidationChurn preset config (PinTerms.wide state)) +
+        (Apriori.activationExitChurn preset config (PinTerms.wide state) +
+          Apriori.consolidationChurn preset config (PinTerms.wide state)) +
         max preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
           config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat +
         max (if electra : .pectra ≤ fork then
           (finalizedState.consolidationBalanceToConsume electra).toNat else 0)
-          (PinTerms.consolidationChurn preset config (PinTerms.wide state)) := by
+          (Apriori.consolidationChurn preset config (PinTerms.wide state)) := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   unfold pinTerms
-  simp only [notGloas, PinTerms.wide, PinTerms.consolidationChurn, PinTerms.activationExitChurn,
-    PinTerms.balanceChurn, ↓reduceIte]
+  simp only [notGloas, ↓reduceIte]
 
 /-- A state with a total of at most `wide` has an exit churn limit of at most the pin's. -/
 private theorem exitRate_le {fork' : Fork} {s : BeaconState preset fork'}
     (early : fork' < .glamsterdam) {rate : Gwei} (wide : ℕ)
     (band : ∀ t : Gwei, getTotalActiveBalance s = .ok t → t.toNat ≤ wide)
     (computed : exitChurnLimit config s = .ok rate) :
-    rate.toNat ≤ PinTerms.activationExitChurn preset config wide := by
+    rate.toNat ≤ Apriori.activationExitChurn preset config wide := by
   have notGloas : ¬ .glamsterdam ≤ fork' := Nat.not_le_of_lt early
   obtain ⟨total, read⟩ : ∃ t, getTotalActiveBalance s = .ok t := by
     cases first : getTotalActiveBalance s with
@@ -12091,10 +12090,8 @@ private theorem exitRate_le {fork' : Fork} {s : BeaconState preset fork'}
       simp [exitChurnLimit, notGloas, getActivationExitChurnLimit, getBalanceChurnLimit, first,
         bind, Except.bind] at computed
     | ok t => exact ⟨t, rfl⟩
-  have le := band total read
-  rw [DirectSafety.Apriori.Internal.exit_rate_toNat early read computed]
-  exact min_le_min_left _ (rounded_mono _ (max_le_max_left _
-    (Nat.div_le_div_right le)))
+  exact (Apriori.Internal.exit_rate_le_churn early read computed).trans
+    (Apriori.Internal.exit_churn_mono (band total read))
 
 /-- A state with a total of at most `wide` has a consolidation churn limit of at most the pin's.
 
@@ -12103,7 +12100,7 @@ private theorem consRate_le {fork' : Fork} {s : BeaconState preset fork'}
     (early : fork' < .glamsterdam) {rate : Gwei} (wide : ℕ)
     (band : ∀ t : Gwei, getTotalActiveBalance s = .ok t → t.toNat ≤ wide)
     (computed : getConsolidationChurnLimit config s = .ok rate) :
-    rate.toNat ≤ PinTerms.consolidationChurn preset config wide := by
+    rate.toNat ≤ Apriori.consolidationChurn preset config wide := by
   have notGloas : ¬ .glamsterdam ≤ fork' := Nat.not_le_of_lt early
   obtain ⟨total, read⟩ : ∃ t, getTotalActiveBalance s = .ok t := by
     cases first : getTotalActiveBalance s with
@@ -12111,27 +12108,8 @@ private theorem consRate_le {fork' : Fork} {s : BeaconState preset fork'}
       simp [getConsolidationChurnLimit, notGloas, getBalanceChurnLimit, first, bind,
         Except.bind] at computed
     | ok t => exact ⟨t, rfl⟩
-  have le := band total read
-  have value : rate = roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-        (total / config.CHURN_LIMIT_QUOTIENT)) -
-      min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
-        (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-          (total / config.CHURN_LIMIT_QUOTIENT))) := by
-    simpa [getConsolidationChurnLimit, notGloas, getActivationExitChurnLimit,
-      getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure] using computed.symm
-  have fits : min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
-      (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-        (total / config.CHURN_LIMIT_QUOTIENT))) ≤
-      roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-        (total / config.CHURN_LIMIT_QUOTIENT)) :=
-    UInt64.le_iff_toNat_le.mpr (by rw [Uint64.toNat_min]; exact Nat.min_le_right _ _)
-  rw [value, UInt64.toNat_sub_of_le _ _ fits, Uint64.toNat_min, toNat_roundToIncrement,
-    Uint64.toNat_max, UInt64.toNat_div]
-  have rounded := rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat (max_le_max_left
-    config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-    (Nat.div_le_div_right (c := config.CHURN_LIMIT_QUOTIENT.toNat) le))
-  unfold PinTerms.consolidationChurn PinTerms.activationExitChurn PinTerms.balanceChurn
-  omega
+  exact (Apriori.Internal.consolidationChurnLimit_le early read computed).trans
+    (Apriori.Internal.consolidationChurn_mono (band total read))
 
 /-- The amount that `exitQ` reads is at most the amounts of the charges at its position.
 
@@ -12205,7 +12183,7 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
     omega
   have exitBound : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
       tailC.Contains step → ∀ rate : Gwei, exitChurnLimit config u.state = .ok rate →
-        rate.toNat ≤ PinTerms.activationExitChurn preset config (PinTerms.wide pulled) := by
+        rate.toNat ≤ Apriori.activationExitChurn preset config (PinTerms.wide pulled) := by
     intro u w step member rate computed
     obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
       DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
@@ -12213,7 +12191,7 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
     exact exitRate_le uEarly _ (band u (fromFin.append pre) uEarly (by omega)) computed
   have consTail : ∀ site ∈ tailC.consolidationSites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
       getConsolidationChurnLimit config site.state = .ok rate →
-        rate.toNat ≤ PinTerms.consolidationChurn preset config (PinTerms.wide pulled) := by
+        rate.toNat ≤ Apriori.consolidationChurn preset config (PinTerms.wide pulled) := by
     intro site member _ rate computed
     obtain ⟨u, w, step, contained, _, same⟩ := consolidationSite_rate tailC h.early site member
     obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
@@ -12223,7 +12201,7 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
       (same rate computed)
   have consFin : ∀ site ∈ fromFin.consolidationSites, ∀ (_h : .pectra ≤ site.fork) (rate : Gwei),
       getConsolidationChurnLimit config site.state = .ok rate →
-        rate.toNat ≤ PinTerms.consolidationChurn preset config (PinTerms.wide pulled) := by
+        rate.toNat ≤ Apriori.consolidationChurn preset config (PinTerms.wide pulled) := by
     intro site member _ rate computed
     obtain ⟨u, w, step, contained, _, same⟩ := consolidationSite_rate fromFin h.early site member
     obtain ⟨pre, post, _, uEarly, uEpoch⟩ :=
@@ -12235,20 +12213,20 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
         config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat ∧
       (split.consolidationBalanceToConsume electra).toNat ≤
         max (fin.consolidationBalanceToConsume electra).toNat
-          (PinTerms.consolidationChurn preset config (PinTerms.wide pulled)) :=
+          (Apriori.consolidationChurn preset config (PinTerms.wide pulled)) :=
     queueCarry_le_of_run shared h.genesis fromFin electra h.early electra _ consFin
   have window := departure_charges_le_window_electra_cap tailC electra h.early
     ((getCurrentEpoch counted).toNat - 1)
-    (PinTerms.consolidationChurn preset config (PinTerms.wide pulled))
-    (PinTerms.activationExitChurn preset config (PinTerms.wide pulled)) exitBound consTail
+    (Apriori.consolidationChurn preset config (PinTerms.wide pulled))
+    (Apriori.activationExitChurn preset config (PinTerms.wide pulled)) exitBound consTail
   dsimp only at window
   have depthEq : (pinTerms config pulled anc fin).depth =
       (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
   rw [queueWindow_unfold h.early]
   simp only [electra, ↓reduceDIte]
   generalize (pinTerms config pulled anc fin).depth = depth at depthEq ⊢
-  generalize PinTerms.activationExitChurn preset config (PinTerms.wide pulled) = E at *
-  generalize PinTerms.consolidationChurn preset config (PinTerms.wide pulled) = C at *
+  generalize Apriori.activationExitChurn preset config (PinTerms.wide pulled) = E at *
+  generalize Apriori.consolidationChurn preset config (PinTerms.wide pulled) = C at *
   have firstLe : (getCurrentEpoch counted).toNat - 1 + 2 - max (getCurrentEpoch split).toNat
       (split.earliestExitEpoch electra).toNat ≤ depth := by omega
   have secondLe : (getCurrentEpoch counted).toNat - 1 + 2 - max (getCurrentEpoch split).toNat
@@ -25794,12 +25772,8 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
     (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true) with hS2
   set S3 := ((slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size)).filter
     (fun i => ¬ isActiveAt counted (getCurrentEpoch counted) i = true) with hS3
-  set P := (Finset.range pulled.validators.data.size).filter fun i =>
-    ((pulled.validators.data[i]?).map (·.slashed)).getD false = false ∧
-      ((pulled.validators.data[i]?).map fun v =>
-        decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true ∧
-      (pulled.validators.data[i]?).any (fun v =>
-        decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true with hP
+  set P := (pinTerms config pulled anc fin).positions.filter
+    (PinTerms.exitedSlashable anc pulled · = true)
   have reserveEq : (pinTerms config pulled anc fin).reserveW =
       3 * (∑ i ∈ P, max (balanceAt pulled i + (pinTerms config pulled anc fin).rise i)
           (max ((pinTerms config pulled anc fin).bF i) (balanceAt fin i)) +
@@ -25828,7 +25802,8 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
     have marked := of_decide_eq_true (Finset.mem_filter.mp member).2
     obtain ⟨w, found⟩ := validator_of_flag (state := pulled) (Or.inl marked.2.2)
     exact Finset.mem_filter.mpr
-      ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1, marked⟩
+      ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1,
+        (Finset.mem_filter.mp member).2⟩
   -- the keys charged on C's run, of the split's registry or created on it
   have createdCharged : ∀ i ∈ S3, ∃ c ∈ tailC.departureCharges, c.index = i := by
     intro i member

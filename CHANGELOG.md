@@ -12,9 +12,6 @@ Not yet released.
 - `signers_elsewhere_of_unseated` says that no member of a sync committee takes the position of a validator whose key the committee lacks, regardless of the member's participation bit.
   `processSyncAggregate_proposer` reads it, and the pin's bound on a position that a sync aggregate moves reads it in `PinDriftBound`.
 
-- `DirectSafety.Apriori.Internal.exit_rate_toNat` says that, before Gloas, the exit churn limit of a state is the activation exit cap or the rounded-down churn share of its total, if that is less.
-  `exit_rate_le_churn` reads it, and the pin's bound on the exit churn limit of a state with a bounded total reads it in `PinDriftBound`.
-
 - `Step.eq_slot_of_crossing` says that a step of a run that crosses an epoch is a slot step, and gives the step as that slot.
   `DirectSafety.Apriori.Internal.slot_of_crossing` now follows from it, and its statement is unchanged.
   The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
@@ -28,10 +25,12 @@ Not yet released.
 
 - `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
   `pinReserve` is `(pinTerms config state ancestor finalizedState).total`.
+  Through `pinTerms`, it reads Apriori's churn model instead of the three removed `PinTerms` churn definitions.
+  Its value stays the same when `MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA` is a multiple of the balance increment, as on mainnet and minimal, and is at least as large otherwise.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.
 
 - `PinTerms.capAt`, `PinTerms.dueAmount` and `PinTerms.exitedSlashable` read a key's cap, its due partial withdrawals and its exit from a state, as `pinTerms` does.
-  `PinTerms.syncEnvelope`, `PinTerms.wide`, `PinTerms.balanceChurn`, `PinTerms.activationExitChurn` and `PinTerms.consolidationChurn` are the bounds that `pinTerms` computes from a total.
+  `PinTerms.syncEnvelope` and `PinTerms.wide` are bounds that `pinTerms` computes from a total.
   `joiningStake` is the stake joining the active set, which `quorumReserve` and `pinTerms` both read, with `quorumReserve`'s value and statement unchanged.
   The pin's drift bound in `PinDriftBound` reads them at other states and totals.
 

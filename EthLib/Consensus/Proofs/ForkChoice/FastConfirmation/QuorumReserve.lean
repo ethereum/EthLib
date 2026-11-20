@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalStatements
+public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Bound
 public import EthLib.Consensus.Churn
 public import EthLib.Consensus.Participation
 public import EthLib.Consensus.Transition.EpochRewards
@@ -199,21 +200,6 @@ def PinTerms.syncEnvelope (preset : Preset) (total : ℕ) : ℕ :=
 def PinTerms.wide (state : BeaconState preset fork) : ℕ :=
   3 * ((getTotalActiveBalance state).toOption.getD 0).toNat / 2
 
-/-- The pin's balance churn at a total, rounded down to an increment. -/
-def PinTerms.balanceChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
-  max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (wide / config.CHURN_LIMIT_QUOTIENT.toNat) -
-    max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (wide / config.CHURN_LIMIT_QUOTIENT.toNat) %
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-
-/-- The pin's activation and exit churn at a total, before Gloas. -/
-def PinTerms.activationExitChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
-  min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
-    (PinTerms.balanceChurn preset config wide)
-
-/-- The pin's consolidation churn at a total, before Gloas. -/
-def PinTerms.consolidationChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
-  PinTerms.balanceChurn preset config wide - PinTerms.activationExitChurn preset config wide
-
 /-- Whether a key of the call's state is unslashed and exits by the next epoch.
 
 It must also not be withdrawable by the finalized epoch of the call's ancestor.
@@ -374,14 +360,13 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The pin derives that band from the guard, and does not assume it.
   let wide := PinTerms.wide state
   let round (amount : ℕ) := amount - amount % inc
-  let activationExitChurn := PinTerms.activationExitChurn preset config wide
   let exitChurn := if .glamsterdam ≤ fork then
       round (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
         (wide / config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat))
-    else activationExitChurn
+    else DirectSafety.Apriori.activationExitChurn preset config wide
   let consolidationChurn := if .glamsterdam ≤ fork then
       round (wide / config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
-    else PinTerms.consolidationChurn preset config wide
+    else DirectSafety.Apriori.consolidationChurn preset config wide
   -- Another branch's consolidation carry was set from one epoch's churn, possibly before finality.
   --
   -- So it is charged at the larger of the finalized block's carry and the churn here.
