@@ -114,7 +114,7 @@ private theorem existing_low_le_charge (h : Setting config checks g split fin pu
   rw [Internal.lowEB_unfold, drop]
   exact bound
 
-/-- The low and new-key floors are ordered: `newKeyFloor` is `newKeySlack` above `exitFloor`. -/
+/-- The new-key floor equals the minimum departure charge plus the sync-debit allowance. -/
 private theorem exitFloor_add_slack (h : Setting config checks g split fin pulled anc counted V) :
     (pinTerms config pulled anc fin).exitFloor + (pinTerms config pulled anc fin).newKeySlack =
       (pinTerms config pulled anc fin).newKeyFloor := by
@@ -139,9 +139,9 @@ The key is missing at the finalized state, or its activation there is unassigned
 
 It activates on the run from the finalized state.
 
-So it keeps at least `newKeyFloor` of effective balance less its sync debits.
+So it keeps at least the new-key balance floor less its sync debits.
 
-A small charge is below `exitFloor`, so the debits exceed `newKeySlack`.
+A charge below the minimum implies sync debits above the allowance for a new key.
 
 It has no partial withdrawals queued, since a request needs an active key. -/
 private theorem pending_key_claim (h : Setting config checks g split fin pulled anc counted V)
@@ -274,9 +274,9 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
 
 /-- A key of `K5` that is not exiting at the call and has a small charge is low or loses seats.
 
-A small charge is below `exitFloor`.
+A small charge is below the minimum used to count departures.
 
-The key is then a low key, or its sync debits from the finalized state exceed `newKeySlack`.
+The key is then a low key, or its sync debits from finality exceed the new-key allowance.
 
 The debits are those of the replay of the run from the finalized state to C's state.
 
@@ -374,7 +374,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncDebits_wind
   rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at debits
   rwa [pulledOk]
 
-/-- The keys whose sync debits from the finalized state exceed `newKeySlack` are at most the seats.
+/-- The seat count bounds how many keys can exceed the new-key sync-debit allowance.
 
 The sync debits of any keys over the run from the finalized state to C's state fit one envelope.
 
@@ -424,7 +424,7 @@ private theorem card_seat_keys_le (h : Setting config checks g split fin pulled 
 
 A key is charged if the run has a departure charge at its position.
 
-Large charges count against the departure budget at `exitFloor` per key.
+Large charges spend at least the minimum departure charge per key.
 
 Small charges can be counted without reading R's exit flag.
 
@@ -507,9 +507,9 @@ private theorem charged_count (h : Setting config checks g split fin pulled anc 
   have near := h.near
   omega
 
-/-- K5 bands: the two bands beyond `credits`' one of each credited K5 key, weight 3.
+/-- Each credited K5 key counts at weight three and needs two extra rounding bands.
 
-Split by `exitingB`: the keys whose exit R reads and those the queues let exit on C. -/
+The bound separates scheduled exits seen by R from exits that start on C's branch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingBands (h : Setting
   config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ) :
@@ -857,7 +857,7 @@ private theorem stake_le_base {α : Type} {inc pq : ℕ} {P : Finset ℕ} {f : �
 
 /-- The epoch bound of the pin's rate on the pulled total is at most the proposer credit.
 
-The proposer base pays the bound, and `attesterExcess` pays one more increment's rate. -/
+The proposer base pays the bound, with an allowance at the rate for one extra increment. -/
 private theorem credit_arith {inc pi E T P A : ℕ} (incPos : 0 < inc) (hT : T = max inc E)
     (hP : pi * (E / inc) ≤ P) (hA : 1 ≤ A) :
     (324 * (pi * (T / inc)) + 216 * pi) / 896 ≤ P + A * pi := by
@@ -1278,7 +1278,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditedKey {x y : 
   decide (0 < Internal.grossScan v.toNat high tail +
     (Internal.creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat high tail))
 
-/-- `creditUnits` is `unitGain` for the credited-key slots and for two more of each exiting key.
+/-- The gain budget counts one unit per credited-key slot and two more per exiting key.
 
 The same holds for each queue key.
 
@@ -1694,7 +1694,7 @@ The reserve charges consolidation transfers and sync rewards separately.
 
 The deposits of a key slashed at C count only those before its slashing, in its share.
 
-`rewards` is the proposer credits of the five classes and the sync part against `proposerCredit`.
+The proposer budget covers the five classes' proposer rewards and the sync proposer share.
 
 `deposits` is the deposits of the classes against the deposit queue, at weight three.
 
@@ -2323,7 +2323,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cons_keys_le (h
       simpa using Internal.dueList_sum_le_all fin electra (getCurrentEpoch pulled).toNat T fun _ =>
         1
 
-/-- `consolidationsX` is the sum of the caps of the sources in X's queue that are due.
+/-- The consolidation budget sums the source caps of due entries in X's queue.
 
 It is zero beyond the withdrawal delay, so the setting's `shallow` selects the entries. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX_eq (h : Setting
@@ -2340,7 +2340,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX
   dsimp only
   simp only [shallow, electra, ↓reduceIte, ↓reduceDIte]
 
-/-- The caps are whole increments, so `consolidationsX` is too. -/
+/-- The source caps are whole increments, so their sum is too. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consolidationsX_aligned
     (h : Setting config checks g split fin pulled anc counted V) :
     (pinTerms config pulled anc fin).consolidationsX % preset.EFFECTIVE_BALANCE_INCREMENT.toNat =
@@ -2445,9 +2445,9 @@ A due entry that names one of them adds its band.
 
 A key of `V` or `K5` weighs three, and the others one.
 
-Each applied entry also adds one upward band to its target's rise.
+The target's rise includes the rounding from each applied entry.
 
-So the left side has `upwardBand` for each due entry of X's queue.
+Each due entry in X's queue adds one upward rounding band.
 
 An entry is charged its cap at X, which is at least `MAX_EFFECTIVE_BALANCE`.
 
@@ -2736,7 +2736,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.weighted_le {A 
   rw [Finset.sum_union (Finset.disjoint_union_left.mpr ⟨ac, bc⟩), Finset.sum_union ab]
   omega
 
-/-- `slashedRB` reads the slashed flag and the withdrawable epoch of the key's record. -/
+/-- The branch slashing test uses the key's slashed flag and withdrawable epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
     (pinTerms config state ancestor finalizedState).slashedRB i =
@@ -2755,7 +2755,7 @@ private theorem slashedRB_lt (config : Config)
   rw [Internal.slashedRB_eq] at h
   simp [none] at h
 
-/-- A slashed key counts in `slashedRB` when its withdrawable epoch is late enough.
+/-- A slashed key counts toward the branch charge if its withdrawable epoch is late enough.
 
 That epoch must be a slashing vector past the finalized epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_withdrawable (config :
@@ -2768,7 +2768,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_wi
   rw [Internal.slashedRB_eq]
   simpa [found, slashed] using late
 
-/-- A key unslashed at the split and slashed at R counts in `slashedRB`.
+/-- The branch charge counts a key unslashed at the split and slashed at R.
 
 R slashes it after the split, so its withdrawable epoch is a slashing vector past the split's. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_of_newly_slashed
@@ -3028,7 +3028,7 @@ Before the step the key is unslashed, and its withdrawable epoch is beyond the e
 
 After it the key is slashed, so its withdrawable epoch is beyond R's horizon.
 
-The floor is R's balance, the run's debits, and the one slack of the slashing that `slashW` holds.
+The floor allows for the run's debits and the maximum initial slashing penalty against R's balance.
 
 If the key is already slashed, the floor starts at that state. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slash_floor_across (h : Setting
@@ -3230,7 +3230,7 @@ The key is unslashed at `c`.
 
 A key slashed on R is not withdrawable until at least a slashings vector past finality.
 
-The pin counts it, so `slashW` holds the slack.
+The pin allows for the initial penalty at the largest effective-balance cap.
 
 The exit of the key at R is late for the whole run.
 
@@ -3326,7 +3326,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.voter_floorAt (
     rw [atZ]
     omega
 
-/-- The effective balance of a key at the finalized state is at most `ebUp`. -/
+/-- The effective-balance ceiling covers the key's finalized effective balance. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.effective_fin_le_ebUp (h : Setting
   config checks g split fin pulled anc counted V)
     (i : ℕ) :
@@ -3466,7 +3466,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The run from `c` is the rest of the run from the finalized state to R's, cut at `c`.
 
-It is within `ebUp` and a few increments, if it starts within `ebUp`.
+If it starts below the reserve's ceiling, it stays within that ceiling plus the allowed increments.
 
 It may start within the floor of its balance at `c` instead.
 
@@ -3513,7 +3513,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.envelope_of_vot
     replayed v toC rest cutC inside (Internal.slashW (pinTerms config pulled anc fin) v.toNat) start
     (Internal.voter_floorAt h fromFin tail v toC rest cutC clean slashedLate inside late)
 
-/-- The keys of a set that the pin counts as slashed on this branch are at most `slashedR`. -/
+/-- The branch slashing count bounds the number of charged slashings in any set of keys. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedRB_card_le (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (W : Finset ValidatorIndex) :
     (W.filter fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat =
@@ -3853,7 +3853,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cut_disjoint (h
 
 /-- The bands of the classes, of the charged `SC` keys and of the cut keys fit the seats and slots.
 
-The keys of `scCharged` with a credit on `pre` also pay an upward band.
+Keys slashed and charged to depart on C's branch also use a band if credited on `pre`.
 
 A key that proposed in `pre` pays it from a slot of the epoch.
 
@@ -4310,7 +4310,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc3a (config : Conf
       ¬ PinTerms.exitedSlashable anc pulled v.toNat = true) ∧
     isActiveAt counted (getCurrentEpoch counted) v.toNat = true
 
-/-- The cap that the keys of `K6` beyond R's registry take from `creditCap`.
+/-- The share of the cap budget for keys of `K6` outside R's registry.
 
 At a high gain rate each takes the largest cap. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.capUse (config : Config) (pulled anc

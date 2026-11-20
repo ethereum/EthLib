@@ -312,7 +312,7 @@ private theorem bF_of_exit (config : Config) (pulled anc fin : BeaconState prese
   rfl
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key of the split's registry that exited before the finalized state is bounded by `whistleEnv`.
+/-- The whistleblower stake bound covers keys of the split's registry that exited before finality.
 
 Keys slashed on R's branch instead use the bound from the finalized state.
 
@@ -741,13 +741,13 @@ private theorem slashW_le (h : Setting config checks g split fin pulled anc coun
     exact (Nat.le_add_right _ _).trans h.facts.slashBand
   · exact Nat.zero_le _
 
-/-- The leak induced by the sync debits of any keys fits `syncLeak` and the slashed keys' leak.
+/-- The leak budget covers extra penalties due to sync debits and slashings.
 
 A key withdrawn by R's horizon induces no leak.
 
 A key's induced leak is that of its debited increments and of its penalty's increment.
 
-The keys that R slashed after the finalized epoch are at most `slashedR`. -/
+The slashing allowance counts keys slashed by R after the finalized epoch. -/
 private theorem syncLeak_of_envelope (h : Setting config checks g split fin pulled anc counted V)
     (perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -835,7 +835,7 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A counted key's balance at C is at most its balance at R plus its rise and its flows.
 
-It adds the rise of the key and the credits, flows and slacks that `rise` does not read.
+It adds the key's rise together with credits, flows and rounding that the rise bound excludes.
 
 The slacks are one increment for a slashing on R's branch.
 
@@ -924,11 +924,11 @@ private theorem flow_gain_slack {I WD F P D Z0 W U : ℕ} (hI : 0 < I)
     simp only [Nat.add_zero]
     omega
 
-/-- The explicit closing of a key at its slashing state is within `whistleEnv` and `whistleSlack`.
+/-- The key's effective balance at slashing fits the reward budget's stake bound plus its slack.
 
 `pre` is C's run up to the state before the slashing, and `tailC` is the whole run.
 
-The slashing's increment is `whistleEnv`'s when R's branch slashes the key.
+The stake bound adds an increment if R's branch also slashed the key.
 
 `Cr` and the sync debits are credits of the slack.
 
@@ -1041,7 +1041,7 @@ private theorem prefix_prologue (h : Setting config checks g split fin pulled an
       v
     (by simpa using (Bool.and_eq_true_iff.mp flag).1)⟩
 
-/-- The credits of C's run before a key's slashing are within the credit terms of `whistleSlack`.
+/-- Credits before slashing on C's branch fit the reward budget's credit allowance.
 
 They are the key's block credits from rewards and its consolidation and deposit credits.
 
@@ -1172,7 +1172,7 @@ private theorem slash_gain_small {I db WD F P D W : ℕ} (hI : 0 < I)
 
 An unslashed key has its withdrawable epoch at its exit plus the delay, or both unset.
 
-Its exit is late at R, which `late` states.
+Its exit is late at R.
 
 A key that R slashes after the split has its withdrawable epoch a slashings vector past the split.
 
@@ -1303,9 +1303,9 @@ private theorem y_floor_le (I WD F P D Df q Cr Ds DsF W gc S U Fl : ℕ)
         have := hS hW0
         omega
 
-/-- The closing of a key, with the credits `Cr` that it holds, gives `keyCeiling`.
+/-- The balance ceiling includes the key's credits `Cr`.
 
-`Cr` is at most the credits of C's run, and the sync credits are at most `syncF`. -/
+`Cr` is at most the credits of C's run, and sync credits have a separate allowance. -/
 private theorem keyCeiling_of_close (anc : BeaconState preset fork)
     {ending : BeaconState preset fork}
     (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
@@ -1708,7 +1708,7 @@ The caps along the runs are those of each state, so a switch to compounding on e
 
 The credits `Cr` are all of C's, so they cover the cap's rise on C's run.
 
-`late` is read only for a key that is unslashed at R.
+The late-exit charge applies only to keys that are unslashed at R.
 
 At an end before R's epoch and no later than `c`, `shortStart` bounds the effective balance at `c`.
 
@@ -2132,11 +2132,11 @@ The closing reads the cap of each state, so the cap is not read as frozen.
 
 The step `a → b` of C's run slashes it, and `pre` is C's run up to `a`.
 
-Its credits are those of the prefix, within the terms of `whistleSlack`.
+The reward budget's credit allowance covers the credits of the prefix.
 
-The slashing's increment is `whistleEnv`'s.
+The reward budget's stake bound includes the slashing increment.
 
-An unslashed key at R is late for the whole run, which `late` states for the key. -/
+An unslashed key at R has a late exit for the whole run. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.registry_frozen (h : Setting config
   checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -2626,7 +2626,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 A key of R's registry rises from R to C by at most its rise term.
 
-It also rises by the credits and slacks that `rise` does not read.
+It also rises by credits and rounding allowances not included in the rise bound.
 
 The slacks are one increment for a slashing on R's branch.
 

@@ -2376,7 +2376,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.tight_iff (conf
         1 + preset.MAX_SEED_LOOKAHEAD.toNat := by
   simp only [pinTerms, decide_eq_true_eq]
 
-/-- Outside the tight window, `pendingR` is the stake and rise of the pending keys.
+/-- Outside the tight window, the pending-key charge includes the pending keys' stake and rise.
 
 It also holds the reward of what the finalized balance exceeds them by. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.pendingR_eq (config : Config)
@@ -2390,7 +2390,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.pendingR_eq (co
               ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
               (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) := rfl
 
-/-- The keys that `exitingB` marks have their effective balances in `exiting`. -/
+/-- The scheduled-exit charge covers the effective balance of keys marked as exiting. -/
 private theorem sum_le_exiting (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
     (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
@@ -2411,7 +2411,7 @@ private theorem exitingBands_eq (config : Config)
   dsimp only [pinTerms]
   simp only [decide_eq_true_eq]
 
-/-- At most as many keys as the positions that `exitingB` marks are marked. -/
+/-- The number of marked registry positions bounds any set of keys marked as exiting. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.card_exitingB_le (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (S : Finset ValidatorIndex)
     (member : ∀ v ∈ S, (pinTerms config state ancestor finalizedState).exitingB v.toNat = true) :
@@ -2424,7 +2424,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.card_exitingB_l
   exact Internal.mem_positions_filter config state ancestor finalizedState found
     (p := fun i => (pinTerms config state ancestor finalizedState).exitingB i = true) (member v hv)
 
-/-- The two further bands of the keys of `K5` are at most `exitingBands`, given their charges. -/
+/-- The exit rounding budget covers two more bands for each credited key of `K5`.
+
+Each such key must be marked as exiting or have a departure charge. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.two_bands_le_exitingBands (config :
   Config)
     (pulled anc fin counted : BeaconState preset fork) (V : Finset ValidatorIndex)
@@ -2666,7 +2668,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exiting (h 
           (Finset.mem_filter.mp member).2
     · exact (Finset.mem_filter.mp member).2
 
-/-- Outside the tight window, `late` is three times the stake of the late keys and their rise.
+/-- Outside the tight window, late exits charge three times the keys' stake plus their rise.
 
 It also holds the reward of what the finalized balance exceeds them by. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_eq (config : Config) (pulled
@@ -2718,7 +2720,7 @@ private theorem consRate_le {fork' : Fork} {s : BeaconState preset fork'}
   exact (Apriori.Internal.consolidationChurnLimit_le early read computed).trans
     (Apriori.Internal.consolidationChurn_mono (band total read))
 
-/-- The amount that `exitQ` reads is at most the amounts of the charges at its position.
+/-- A key's first charge by the cutoff is at most the sum of its charges by a later cutoff.
 
 Those charges are the ones with an epoch up to a later one. -/
 private theorem exitQ_amount_le (L : List DepartureCharge) (b₀ b v : ℕ) (le : b₀ ≤ b) :
@@ -2737,7 +2739,7 @@ private theorem exitQ_amount_le (L : List DepartureCharge) (b₀ b v : ℕ) (le 
       List.mem_map.mpr ⟨c, kept, by simp [both.1]⟩
     simpa using List.single_le_sum (fun _ _ => Nat.zero_le _) _ term
 
-/-- The `exitQ` of a set of keys is at most the amounts of the charges of the run.
+/-- The run's departure charges bound the charges due by the end for any set of keys.
 
 Those charges are the ones with an epoch up to one that the run's end does not pass. -/
 private theorem sum_exitQ_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
@@ -2854,7 +2856,7 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
   rw [Nat.mul_add depth E C]
   omega
 
-/-- The keys with a charge of at least `exitFloor` are at most the window over `exitFloor`. -/
+/-- Divide the queue budget by the minimum counted charge to bound the number of large exits. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.card_big_charges_le (h : Setting
   config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex) :
@@ -2880,7 +2882,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.card_big_charge
   simp only [smul_eq_mul] at each
   omega
 
-/-- The exits and consolidations initiated on C's branch, against `queueExit`.
+/-- The departure budget bounds exits and consolidations initiated on C's branch.
 
 There are none in the tight window. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queues (h : Setting config
@@ -3503,9 +3505,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charge_amounts_
     (by simp only; omega) S).trans ?_
   exact charges_le_queueWindow h tailC
 
-/-- Either a run has no counted charge of a key and `exitQ` is zero.
+/-- The departure charge is zero if the run has no charge for the key due by its last epoch.
 
-Or `exitQ` is the amount of a counted charge of the key.
+Otherwise it is the amount of a charge that is due by then.
 
 The counted charges are those whose exit epoch is at most the run's last epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exitQ_cases {x y :

@@ -78,7 +78,7 @@ variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconSt
 
 The charge is the key's effective balance before that step.
 
-It counts as `exitQ`, since a key of `K5` exits at C's epoch. -/
+It counts toward the charges due by C's epoch, since a key of `K5` exits in that epoch. -/
 private theorem K5_charge_site (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
     (member : v ∈ Internal.K5 counted V) (charged : ∃ c ∈ tailC.departureCharges, c.index = v.toNat)
@@ -565,7 +565,7 @@ The cap is fixed from the state `b` after the step that starts the exit.
 
 The step itself can switch the key to compounding: one payload can switch it, then start its exit.
 
-So the cap is at most `capAt b` on the whole run, and on `post`.
+The cap just after the exit starts therefore bounds it throughout the run.
 
 From `a` the balance can rise by the epoch rewards after the charge and by other credits.
 
@@ -1451,7 +1451,7 @@ private theorem registry_charge_split_epoch
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The registry keys of the split are bounded at each slashing step on C's branch.
 
-Every key is read at `whistleEnv` and the slack.
+Each key uses the whistleblower stake bound plus the allowance for credits and rounding.
 
 A key that C's branch charges to depart is also read at its charge.
 
@@ -1902,7 +1902,7 @@ private theorem beyond_key (h : Setting config checks g split fin pulled anc cou
 
 /-- The units of the active keys of `CS` are held by the units of the keys of `CS`.
 
-Off the high gain rate each active key of `CS` charges one `unitGain` for its stake at the slashing.
+At a low gain rate each active key of `CS` uses one gain unit for its stake at slashing.
 
 Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
 

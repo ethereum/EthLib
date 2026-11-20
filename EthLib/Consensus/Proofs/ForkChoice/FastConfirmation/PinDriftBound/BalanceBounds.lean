@@ -257,7 +257,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rate_per_increm
 
 The root of a quarter total is below `2 ^ 31`.
 
-And `rewardScale` makes the scaled factor at least `2 ^ 35`.
+The base reward factor times the balance increment is at least `2 ^ 35`.
 
 Below the small total the root is at most a fifth of an increment, which the factor covers.
 
@@ -408,7 +408,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.gain_tenth (I W
     _ ≤ WD * I * Zr := rate
     _ = I * WD * Zr := by ring
 
-/-- The gain at the base stake, with its tenth, is within `rise`'s gain slack. -/
+/-- The rise bound covers the gain on the base stake with an extra tenth. -/
 private theorem base_absorb (D Df q : ℕ) (hDf : D ≤ Df) :
     D * q + D + (D * q + D) / 10 ≤ Df * ((11 * q + 9) / 10 + 3) := by
   have step : 11 * q ≤ 10 * ((11 * q + 9) / 10) := by omega
@@ -837,7 +837,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_close (con
     capped ceiling slack
   rwa [max_assoc, max_self] at arith
 
-/-- The bound `ebUp` on a key's effective balance is its largest balance or its rounded top.
+/-- The effective-balance ceiling takes the largest of three values.
+
+It takes the effective balance at R, the finalized one or the rounded top limited by the cap.
 
 The top adds the leak at the cap, the net partials and a band to the balance at R.
 
@@ -884,7 +886,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.balances_aligne
     (shared.append (fromFin.append toPulled)) h.genesis h.aligned i,
     DirectSafety.Apriori.Internal.FloorTrace.effective_aligned shared h.genesis h.aligned i⟩
 
-/-- The aligned effective balances make the bound `ebUp` of a key a whole number of increments. -/
+/-- With aligned effective balances, the ceiling is a whole number of increments. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ebUp_aligned (h : Setting config
   checks g split fin pulled anc counted V) (i : ℕ) :
     (pinTerms config pulled anc fin).ebUp i % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
@@ -1016,7 +1018,7 @@ private theorem leakAt_add_le (config : Config) (pulled anc fin : BeaconState pr
   generalize inc * m * (M + B) / Q = z at *
   omega
 
-/-- The leak that a rise above `ebUp` by `a` increments of debits and `s` of a penalty induces.
+/-- Extra leak when debits and a penalty raise the bound on the earlier effective balance.
 
 The debits cost the leak of their increments at the key's reward, and the penalty one increment.
 
@@ -1442,9 +1444,9 @@ open DirectSafety.Apriori.Internal in
 
 The gain is small enough to use the key's effective balance envelope to bound its rewards.
 
-The credits are `Cr`, which covers C's net credits `credits`, and the sync debits of R's.
+The credit allowance `Cr` covers C's net credits, and the bound includes R's sync debits.
 
-`flipCover` makes `Cr` cover all of C's gross credits, when the cap rises on C's run.
+If the cap rises on C's run, `Cr` must cover C's gross credits instead.
 
 The gain is at most a tenth of the credits, sync debits, slack and base gain. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.c_ceiling (h : Setting config
@@ -1883,9 +1885,9 @@ The finalized state is `c` for a key of the finalized registry.
 
 A key that R's run creates has its first state `c` after the split.
 
-At `c` the effective balance is within `ebUp` and the finalized one, or within its balance floor.
+At `c` use the ceiling from the finalized balance or the floor of the actual balance there.
 
-After `c` it is within `ebUp` and the whole increments of its sync debits and `W`.
+After `c` add the whole increments of the sync debits and the slashing allowance `W`.
 
 R's balance and debits bound the balance at each state, which gives the ceiling. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.prefix_envelope (h : Setting config
@@ -2484,9 +2486,7 @@ It is the closed form less the debits, the band and the carried shortfall. -/
 private def potentialFloor (ρn ρd K X band slack cost : ℕ) : ℕ :=
   ((ρd - ρn * K) * (X + band) - ρn * slack) / ρd - (band + cost)
 
-/-- The queued partials of the key at the finalized state that are due by the call's cutoff.
-
-They are at most the key's `partialsDue`. -/
+/-- The partial withdrawal allowance covers the key's finalized queue entries due by the cutoff. -/
 private theorem partials_le_due (electra : .pectra ≤ fork) (v : ValidatorIndex) :
     ((((fin.pendingPartialWithdrawals electra).data.toList.filter
         fun entry => decide (entry.validatorIndex = v)).filter
@@ -2781,13 +2781,13 @@ private theorem low_arith (inc band ρn ρd K depth X s R pd sync L1 L2 E0 cap :
     generalize ((ρd - ρn * K) * (X + band) - ρn * s) / ρd = W at cancel hF
     omega
 
-/-- The low bound of an existing key, against the `lowEB` and `drop` of the reserve.
+/-- The reserve's lower balance estimate for an existing key allows for losses.
 
 The key is activated at the finalized state, charged on the run from the split, and exits by C.
 
 The bound is its effective balance at the call, less its sync debits.
 
-The form of `drop` carries the shortfall of the balance below the stored effective balance once.
+The loss allowance counts the shortfall below the stored effective balance once.
 
 It carries the leak at the base for each epoch of the depth. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.existing_low_explicit
@@ -2859,7 +2859,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.existing_low_ex
 
 `Y` stands for `max finEB base0`.
 
-`X` is the argument of `flagged`'s slashing loss. -/
+The flagged-key charge estimates the slashing loss at effective balance `X`. -/
 private theorem bridge (ρn ρd M k B0 DOWN slack a D X Y inc : Nat) (hM : 2 ≤ M)
     (closed : (M - 1) * ((ρd - ρn * (k + 1)) * (B0 + DOWN)) ≤
       M * (ρd * (a + D + DOWN) + ρn * slack) + ρd * (DOWN + slack))
@@ -3053,13 +3053,13 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
 
 The floor deducts the initial slashing penalty at the fork's quotient.
 
-The fall reads the leak at the base, and the band is a term of `X`, as `lowEB`'s drop reads them.
+The fall counts leak at the base balance and includes a rounding band in `X`.
 
 `Xs` is the effective balance that the slash is read at.
 
 It is at least the finalized one and an increment.
 
-`bridge` turns the closed form into the one at the balance and the slash's share `Xs / M`.
+The resulting floor uses the key's balance and the initial slashing penalty `Xs / M`.
 
 The bound allows one more epoch of penalties. -/
 private theorem floorC_margin_slash (h : Setting config checks g split fin pulled anc counted V)
@@ -3162,7 +3162,7 @@ private theorem floorC_margin_slash (h : Setting config checks g split fin pulle
   exact (fun (B X S q a dn : ℕ) (le : dn ≤ X) (b : B - (X - dn) - S ≤ a + q + dn) =>
     show B - X - S ≤ a + q by omega) _ _ _ _ _ _ downLe bound
 
-/-- The drop of `lowEB` and the fall `X` of the margin leave the rounded floor above `lowEB`.
+/-- The fall `X` leaves the rounded balance floor above the reserve's lower estimate.
 
 The drop has the increment where the fall has the partials due.
 
@@ -3173,15 +3173,15 @@ private theorem slash_low_arith (R pd dropV X base0 m sy G r inc A P dn : ℕ)
     R - dropV - m - sy ≤ G - r := by
   omega
 
-/-- The effective balance of a key at C is above its `lowEB`, less the slash's share.
+/-- The effective balance at C stays above the reserve's lower estimate less the slashing loss.
 
 The sync debits of the key are added to it.
 
 The key is unslashed at the finalized block, and it may be slashed at C.
 
-The share is read at the effective balance that `flagged` reads the slashing's loss at.
+The slashing loss uses the same effective balance as the flagged-key charge.
 
-The drop in `lowEB` holds the band and an increment, which cover the rounding of the floor. -/
+The lower estimate includes a band and an increment to cover rounding the floor. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.lowEB_slashed (h : Setting config
   checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -3681,7 +3681,7 @@ private theorem V_floor (h : Setting config checks g split fin pulled anc counte
       ρn ρd positive leaky above base0 X (base0 - X) (balanceAt fin v.toNat)
       hbase0 rfl hfin hfall sync test rp rest cut)
 
-/-- A V key that is active in C falls by at most `fall` and what C's floor leaves out.
+/-- An active V key's loss at C fits the reserve's fall charge and the losses C's floor omits.
 
 C's floor is below the key's effective balance at C's end, plus its sync debits and their band.
 

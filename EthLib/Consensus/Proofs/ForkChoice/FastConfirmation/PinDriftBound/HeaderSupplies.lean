@@ -158,7 +158,7 @@ A key of `SC` outside the tight window pays its stake three times and its rise.
 
 It also pays the reward of what its finalized balance exceeds them by, rounded up.
 
-In the tight window `late` is 0, and the sum over `SC` is empty, since its guard is false. -/
+In the tight window the late-exit charge is zero, and the guard excludes all keys of `SC`. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_late (h : Setting config checks
   g split fin pulled anc counted V) :
     3 * (∑ v ∈ (Internal.VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
@@ -320,7 +320,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_late (h : S
 
 A key of `SC` also pays the reward of what its finalized balance exceeds them by, rounded up.
 
-In the tight window `pendingR` is 0, and the sum over `SC` is empty, since its guard is false. -/
+In the tight window the pending-key charge is zero, and the guard excludes all keys of `SC`. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_pendingR (h : Setting config
   checks g split fin pulled anc counted V) :
     (∑ v ∈ (Internal.K6 pulled counted) with (pinTerms config pulled anc fin).pendingRB v.toNat =
@@ -447,15 +447,19 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc3a_unwithdraw
       (UInt64.le_iff_toNat_le.mpr withdrawn)).1
     simp [slashedC] at clean
 
-/-- A key of `sc3a` is active at R or at R's next epoch.
+/-- For a key of `SC` active at C, the remaining cases are active, late or pending at R.
+
+This excludes keys charged for a slashing on R's branch or a slashable exit.
+
+The active case includes R's next epoch.
 
 Outside the tight window it can instead be late or pending.
 
 In the tight window C's epoch is in the shared window, so R activates the key by then.
 
-Outside it, an exit by R's next epoch is a slashing on R's branch, which `slashedRB` counts.
+Outside it, an exit by R's next epoch due to slashing counts in the branch slashing charge.
 
-Otherwise `exitedSlashable` counts the exit.
+An unslashed key with such an exit counts in the slashable-exit charge instead.
 
 Or the key withdraws by the finalized epoch, which C's slashing excludes.
 
@@ -628,7 +632,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scSlashedReward (co
 
 /-- A key off the kept arm rises by its whole headroom to the largest cap.
 
-Within the withdrawal delay, the kept arm fails only at the gain test, which `lowRate` repeats.
+Within the withdrawal delay, the kept arm fails only if the gain is too large for the balance bound.
 
 So the rise bound uses the largest cap. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_of_notKept (h : Setting config
@@ -821,7 +825,7 @@ The slash and the band fit one increment.
 
 With a sync debit the rounding of `H` adds a second increment.
 
-Without one nothing is induced, since the effective balance stays within `ebUp`.
+Without a sync debit, the effective balance stays within the reserve's ceiling and adds no leak.
 
 The same effective-balance ceiling holds before the anchor.
 
@@ -1068,7 +1072,7 @@ The balance at the split is the key's effective balance at the epoch start, up t
 
 A queued partial paid before the finalized state leaves the balance at the finalized one.
 
-Otherwise R's tail takes its penalties and sync debits, and the leak that `rise` reads covers them.
+Otherwise the rise bound's leak allowance covers penalties and sync debits on R's tail.
 
 The reward for slashing a key in the shared segment divides this bound by the reward quotient.
 
@@ -1818,7 +1822,7 @@ It also holds the shares of `CS` and of the shared segment's exited keys of `SC`
 
 The shared segment's debits are one weighted sum over the disjoint classes.
 
-`cutKeys` holds the keys slashed at the split that R's call reads as slashed, at the same weight.
+Keys slashed at the split and still counted as slashed by R use the same weight.
 
 Their rewards round up, and the debits cover the rounding.
 

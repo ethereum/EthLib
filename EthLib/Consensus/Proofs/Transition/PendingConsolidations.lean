@@ -1925,8 +1925,7 @@ def Grows {f : Fork} (s t : BeaconState preset f) : Prop :=
 The entries before keep their order.
 
 Each new entry at the end has a source whose exit is assigned after the current epoch.
-
-This is `Grows` with the order of the queue kept. -/
+-/
 def Appends {f : Fork} (s t : BeaconState preset f) : Prop :=
   ∀ electra : .pectra ≤ f, ∃ added : List PendingConsolidation,
     (t.pendingConsolidations electra).data.toList =

@@ -3688,7 +3688,7 @@ private theorem intervalGain_replay_bound {g x y : ForkedBeaconState preset}
 
 /-- A balance event credits a set of keys at most the gains of the keys that are not withdrawable.
 
-Each key of the set must be absent from `e.before`'s registry or not yet withdrawable there.
+Each key must be absent from the registry or not yet withdrawable before the event.
 
 For a deposit event from Electra, that sum is its funding credit. -/
 theorem selected_deposit_le (S : Finset Nat) (e : BalanceEvent preset)

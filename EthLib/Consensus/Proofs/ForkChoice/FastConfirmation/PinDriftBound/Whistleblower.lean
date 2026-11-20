@@ -110,13 +110,13 @@ A prefix state of the finalized epoch can reach that balance.
 
 R's branch budget supplies that bound and an increment to cover the slashing penalty.
 
-A key that `exitedSlashable`, `late` or `pendingR` charges is read at its balance and rise, or `bF`.
+For slashable exits and charged late or pending keys, start with the balance at R plus its rise.
 
-It is also read at its effective balance at the finalized state.
+Take the larger of that sum and the finalized balance, including the rounded bound for early exits.
 
-It is read without `ebUp`, which can exceed them.
+These charges omit the general effective-balance ceiling, which can be higher.
 
-Otherwise it is also at least the key's bound `ebUp`. -/
+The remaining keys use that ceiling if it is higher. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleEnv (t : PinTerms preset)
   (pulled anc fin : BeaconState preset fork) (i : ℕ) :
     ℕ :=
@@ -127,11 +127,11 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleEnv (t : Pin
     max (balanceAt pulled i + t.rise i) (max (t.bF i) (balanceAt fin i))
   else max (max (t.ebUp i) (balanceAt pulled i + t.rise i)) (t.bF i)
 
-/-- A balance within the finalized effective balance is within `whistleEnv`, plus any slack.
+/-- The reward budget's stake bound plus any slack covers the finalized effective balance.
 
-The first two branches of `whistleEnv` hold the finalized effective balance.
+The slashed, exiting, late and pending cases include the finalized effective balance directly.
 
-The third holds `ebUp`, which is at least that. -/
+The other cases include it through the general effective-balance ceiling. -/
 private theorem short_end (h : Setting config checks g split fin pulled anc counted V) (i : ℕ)
     {X : ℕ} (hfin : X ≤ balanceAt fin i) (slack : ℕ) :
     X ≤ Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i + slack := by
@@ -140,7 +140,7 @@ private theorem short_end (h : Setting config checks g split fin pulled anc coun
   unfold Internal.whistleEnv
   split_ifs <;> omega
 
-/-- A state of C's run in the epoch of a state `c` has its effective balance within `whistleEnv`.
+/-- The reward stake bound applies on C's run within the epoch of the starting state `c`.
 
 The run from `c` to it stays in one epoch.
 
@@ -201,7 +201,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleSlackBase (t
       (if 0 < Internal.syncCr eventsF i then preset.upwardBand else 0)
   else 0
 
-/-- The credits of `whistleSlackBase`, and a second unit of gain for a key that R slashes.
+/-- The reward allowance adds a second gain unit to the credit slack when R slashes the key.
 
 The second unit pays the joint floor that R's slashing penalty can tip. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleSlack (t : PinTerms preset) {x y
@@ -843,7 +843,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_image_ofNat
     rw [← UInt64.toNat_ofNat_of_lt' (small a ha), ← UInt64.toNat_ofNat_of_lt' (small b hb), same]]
   exact Finset.sum_congr rfl fun i member => by rw [UInt64.toNat_ofNat_of_lt' (small i member)]
 
-/-- A slashed flag at a position of the registry is the flag that `slashedOnC` reads. -/
+/-- Reading a slashed flag succeeds exactly at an occupied registry position with that flag. -/
 private theorem slashedFlagAt_eq_some {s : BeaconState preset fork} {i : ℕ} {b : Bool} :
     slashedFlagAt s i = some b ↔
       i < s.validators.data.size ∧ (s.validators.data[i]?.map (·.slashed)).getD false = b := by
@@ -860,7 +860,7 @@ private theorem slashedFlagAt_eq_some {s : BeaconState preset fork} {i : ℕ} {b
     simp only [slashedFlagAt, Array.getElem?_eq_getElem inside, Option.map_some] at flag ⊢
     simpa using flag
 
-/-- The keys of `SC` are the keys of `slashedOnC` inside the split's registry, read at positions. -/
+/-- Within the split's registry, the positions newly slashed on C correspond to the keys of `SC`. -/
 private theorem sum_SC_positions (h : Setting config checks g split fin pulled anc counted V)
     (f : ℕ → ℕ) :
     ∑ v ∈ Internal.SC pulled counted split, f v.toNat =
@@ -892,7 +892,7 @@ private theorem sum_SC_positions (h : Setting config checks g split fin pulled a
       slashedFlagAt_eq_some.mpr ⟨Finset.mem_range.mp hrange, hcs⟩,
       slashedFlagAt_eq_some.mpr ⟨hin, hsl⟩⟩
 
-/-- The keys of `CS` are the keys of `slashedOnC` beyond the split's registry, read at positions. -/
+/-- Beyond the split's registry, the positions slashed on C correspond to the keys of `CS`. -/
 private theorem sum_CS_positions (h : Setting config checks g split fin pulled anc counted V)
     (f : ℕ → ℕ) :
     ∑ v ∈ Internal.CS counted split, f v.toNat =
@@ -920,7 +920,7 @@ private theorem sum_CS_positions (h : Setting config checks g split fin pulled a
     exact ⟨Finset.mem_image.mpr ⟨i, hrange, rfl⟩, Nat.not_lt.mp hout,
       slashedFlagAt_eq_some.mpr ⟨Finset.mem_range.mp hrange, hcs⟩⟩
 
-/-- The keys of `SC` that satisfy a test at their positions are those positions of `slashedOnC`. -/
+/-- A test on registry positions selects the same newly slashed keys from `SC`. -/
 private theorem sum_SC_filter_positions (h : Setting config checks g split fin pulled anc counted V)
     (p : ℕ → Prop) [DecidablePred p] (f : ℕ → ℕ) :
     ∑ v ∈ Internal.SC pulled counted split with p v.toNat, f v.toNat =
@@ -1204,9 +1204,9 @@ An exit unset at the split is set by the key's slashing on C's run, which charge
 
 An exit set at the split belongs to a key activated by the split's epoch.
 
-If R slashes the key, its withdrawal is a vector past the split, so `slashedRB` holds.
+If R slashes the key, the vector delays withdrawal enough for the branch slashing charge.
 
-Otherwise its exit is after R's next epoch, or `exitedSlashable` counts it.
+Otherwise it exits after R's next epoch or falls under the slashable-exit charge.
 
 An exit after R's next epoch leaves the key active at C. -/
 private theorem sc_inactive_charged (h : Setting config checks g split fin pulled anc counted V)
@@ -1362,11 +1362,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.replays_at_pull
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry, unslashed there, induces a leak on R's run only with a debit.
 
-Its envelope on R's run is `ebUp` with its debits and its penalty in whole increments.
+Its ceiling on R's run adds the debits and penalty in whole increments to the reserve's ceiling.
 
 The penalty is below an increment.
 
-So a key without a sync debit stays within `ebUp`, and induces no leak. -/
+So a key without a sync debit stays within the reserve's ceiling and adds no leak. -/
 private theorem induced_debited (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2644,7 +2644,7 @@ private theorem charged_window (h : Setting config checks g split fin pulled anc
 
 /-- The reward reserve covers keys that R exits, with a queue allowance for newly created keys.
 
-A key of the split's registry that is not slashed at R is a term of `exitedSlashable`.
+A key of the split's registry counts here if it is unslashed at R and not withdrawable by finality.
 
 It exits by R's next epoch.
 
@@ -2827,7 +2827,7 @@ private theorem whistle_exited (h : Setting config checks g split fin pulled anc
     (Nat.mul_le_mul_left 3 floors2)) (Nat.mul_le_mul_left 3 floors3)) (total.trans ?_)
   exact Nat.div_le_div_right (Nat.mul_le_mul_left 3 (by omega))
 
-/-- A key active at C has no exit by the finalized epoch at R, so its `bF` is zero.
+/-- A key active at C has no exit by the finalized epoch at R, so it has no early-exit balance.
 
 Such an exit is already set at the finalized state, which would leave the key inactive at C. -/
 private theorem bF_zero_of_active (h : Setting config checks g split fin pulled anc counted V)
@@ -2964,11 +2964,11 @@ private theorem free_slashable (h : Setting config checks g split fin pulled anc
 
 /-- The reward bound charges the key either as flagged or through its stake at C and seat debits.
 
-Its bound is `ebUp` or its balance and rise.
+The bound uses the reserve's effective-balance ceiling or the key's balance and rise.
 
-The excess over `ebUp` is at most its `rise`.
+The excess over that ceiling is at most the key's rise allowance.
 
-If the floor test fails, `flagged` pays the reward at `ebUp`.
+If the floor test fails, the flagged-key charge pays the reward at the reserve's ceiling.
 
 Otherwise the key's balance at C contributes to the reward bound.
 
@@ -3096,11 +3096,11 @@ These are the keys of the split's registry that C slashes and leaves active.
 
 R neither slashes them nor exits them.
 
-Outside the tight window, R does not count them in `late` or `pendingR`.
+Outside the tight window, R does not charge them as late exits or pending activations.
 
 They are active at both branches.
 
-A slashable key whose floor does not cover its reward is flagged, and `flagged` pays it at `ebUp`.
+A slashable key whose floor does not cover its reward is charged at the reserve's ceiling.
 
 The other keys draw on their stake at C and their seat debits.
 
@@ -3108,7 +3108,7 @@ C's branch has a separate allowance for seat debits.
 
 The sync budget covers the seat debits of the shared segment.
 
-The excess of the bound over `ebUp` is the key's own `rise`. -/
+The key's rise allowance covers the part above that ceiling. -/
 private theorem whistle_free (h : Setting config checks g split fin pulled anc counted V)
     (high : ℕ) (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -3314,7 +3314,7 @@ At R the key is late or pending, and only the upcoming-only quorum class can sha
 
 It needs no floor.
 
-Its effective part is that row's, three times for `late`, and its rise is the single claim.
+The late-exit charge triples the effective balance but counts the rise once.
 
 Its finalized balance can exceed its balance and rise at R.
 
@@ -3388,7 +3388,7 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
 
 The reserve covers the rewards through the keys' shares and the separate slashing charges.
 
-The seat debits, the keys' own `rise` and R's slashing of the key pay the rest.
+The seat debits, the keys' rise allowances and R's slashing charge pay the rest.
 
 `registry` is the bound of the keys of the split's registry on each step of C's branch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_whistle_of (h : Setting config
@@ -3650,7 +3650,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_joining : (
   dsimp only [pinTerms, quorumReserve]
   exact (show ∀ a b c : ℕ, a ≤ 2 * (a + b) + 3 * c by intros; omega) _ _ _
 
-/-- The weighted gains of the flows fit `creditLow`, the slashed term and the credits themselves.
+/-- The weighted gains fit the low-rate flow budget, the slashing budget and the credits.
 
 The gains are bounded linearly, at the rate `11 * D * FP / (I * WD)` of a unit of flow.
 
@@ -3901,7 +3901,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_rate (h : 
   rw [weights, denominator]
   omega
 
-/-- The bound `ebUp` of a key of the registry is at least one increment.
+/-- The reserve's effective-balance ceiling for a registry key is at least one increment.
 
 Its top holds the leak of the cap over the window.
 
@@ -3969,11 +3969,11 @@ private theorem whistleRead_le (t : PinTerms preset) (pulled anc counted : Beaco
   · exact min_le_left _ _
   · exact le_rfl
 
-/-- A key of R's registry is read at most twice the largest of its bounds by `whistleEnv`.
+/-- The reward stake bound for a key of R's registry is at most twice its largest balance bound.
 
-The increment that a key slashed on R's branch adds is at most its bound `ebUp`.
+The effective-balance ceiling covers the extra increment for a key slashed on R's branch.
 
-Every other branch reads at most the key's balance and rise, or `bF`, or its bound `ebUp`. -/
+The other cases use its balance plus rise, its early-exit balance or its balance ceiling. -/
 private theorem whistleEnv_le (t : PinTerms preset) (pulled anc fin : BeaconState preset fork)
     (i : ℕ) (inc : preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ t.ebUp i)
     (finLe : balanceAt fin i ≤ t.ebUp i) :
@@ -3982,7 +3982,7 @@ private theorem whistleEnv_le (t : PinTerms preset) (pulled anc fin : BeaconStat
   unfold Internal.whistleEnv
   split_ifs <;> omega
 
-/-- The keys of R's registry are read at twice the largest bounds that `otherCredits` pays. -/
+/-- The credit reserve allows twice the largest stake bound for each key of R's registry. -/
 private theorem whistleEnv_sum_le (h : Setting config checks g split fin pulled anc counted V)
     (T : Finset ℕ) (inside : ∀ i ∈ T, i < pulled.validators.data.size) :
     ∑ i ∈ T, Internal.whistleEnv (pinTerms config pulled anc fin) pulled anc fin i ≤
@@ -4140,7 +4140,7 @@ Each credit is rounded to at most its double, so the keys pay twice their credit
 
 Their whistleblower credits stay as they are, for the base to bound.
 
-The proposer credits, the sync flows and the consolidations fit the credit total of `otherCredits`.
+The credit reserve covers proposer credits, sync flows and consolidations.
 
 The bands of the consolidation targets are at most a fifth of the consolidation total.
 

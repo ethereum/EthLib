@@ -1479,15 +1479,13 @@ variable {preset : Preset} {config : Config}
 
 The rate is taken at the key's effective balance at the state.
 
-`pulledTotal` is R's total read.
-
-The `quarter` is a quarter of it from 18 increments, and a fifth of an increment below.
+Use a quarter of R's active balance from 18 increments, and a fifth of an increment below that.
 
 The reserve reads the base reward per increment at the quarter.
 
 The state's total is at least two thirds of R's, so its square root is at least the quarter's.
 
-The score bound `scoreBound` covers the pass's score after its update.
+The leak rate uses a bound on the pass's score after its update.
 
 That score is the score plus one bias.
 
@@ -3608,7 +3606,7 @@ private theorem keyDebits_append (i : ℕ) (a b : List (BalanceEvent preset)) :
   simp only [keyDebits, List.map_append, List.sum_append]
   omega
 
-/-- The key is charged `newBq` once it is slashed. -/
+/-- A slashed key is charged the rounded-up initial penalty at the minimum stake plus a band. -/
 private def slashedCharge (preset : Preset) (s : ForkedBeaconState preset) (i : ℕ) : ℕ :=
   if ∃ w, s.state.validators.data[i]? = some w ∧ w.slashed = true then newBq preset else 0
 
@@ -3636,7 +3634,7 @@ The slashing quotient is positive.
 
 The cap lies above `MAX_EFFECTIVE_BALANCE` and above the key's effective balance.
 
-The charge `newBq` covers `MAX_EFFECTIVE_BALANCE` and the band in units of the quotient. -/
+The charge covers the minimum stake plus the downward band after division by the quotient. -/
 private theorem Ctx.step_facts {g x m : ForkedBeaconState preset} {high : ℕ}
     (c : Ctx config checks g x high) (hm : Run config checks x m) (mEarly : m.fork < .glamsterdam)
     {i : ℕ} {val : Validator} (found : m.state.validators.data[i]? = some val) :

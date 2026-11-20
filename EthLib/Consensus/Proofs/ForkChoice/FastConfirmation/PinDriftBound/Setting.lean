@@ -567,9 +567,9 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashW (t : PinTerm
       (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat
   else 0
 
-/-- The leak a key's sync debits on R's run from the finalized block induce above `ebUp`.
+/-- The extra leak caused by sync debits on R's run from the finalized block.
 
-It is the leak at the largest effective balance on the run, less the leak at `ebUp`.
+It subtracts leak at the reserve's ceiling from leak at the run's highest effective balance.
 
 The extra leak is zero if the key is withdrawable by R's next epoch.
 
@@ -1426,7 +1426,7 @@ private theorem actualBalanceAt_le_of_down {f : Fork} {s u : BeaconState preset 
 
 The proposer of the block is the one that the state before the sync pass reads.
 
-The other passes record events that `PassCredits` describes.
+Earlier passes record neither sync nor consolidation events.
 
 The mixes must span more than the seed lookahead plus two epochs. -/
 private theorem blockReplay_proposer_credits {fork : Fork} {a t : BeaconState preset fork}
