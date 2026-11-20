@@ -54,6 +54,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.DirectSafety.SourceSafety
 public import EthLib.Consensus.Proofs.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.Proofs.KeymanagerApi.RemoteKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.Types
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation

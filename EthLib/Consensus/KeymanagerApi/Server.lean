@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.KeymanagerApi.RemoteKeys
 
 /-!
 # `Consensus.KeymanagerApi.Server`
@@ -36,6 +37,9 @@ def handle (text : JsonText) (config : ClientConfig) (state : KeyState) (method 
   | "GET", ["eth", "v1", "keystores"] => getKeystores state
   | "POST", ["eth", "v1", "keystores"] => postKeystores text config.limits state body
   | "DELETE", ["eth", "v1", "keystores"] => deleteKeystores text state body
+  | "GET", ["eth", "v1", "remotekeys"] => getRemoteKeys state
+  | "POST", ["eth", "v1", "remotekeys"] => postRemoteKeys state body
+  | "DELETE", ["eth", "v1", "remotekeys"] => deleteRemoteKeysCall state body
   | _, _ => (notFound, state)
 
 end EthLib.Consensus.KeymanagerApi
