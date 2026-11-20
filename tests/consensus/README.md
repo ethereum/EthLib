@@ -300,10 +300,11 @@ It also lists the keys of a client, and runs the use case "Delete a key" of the 
 The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
 The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.
 It defines the endpoint, and it holds one example request for each kind of request, and for each version of a versioned body.
-`bindings/python/tests/consensus/test_remote_signing_api.py` reads each example of a kind that exists before Gloas through the bindings, and checks that writing it again gives the same document.
+`bindings/python/tests/consensus/test_remote_signing_api.py` reads each example that matches the schemas through the bindings, and checks that writing it again gives the same document.
 Two examples do not spell their fields as the schemas do: the fork info of `AGGREGATION_SLOT`, and the whole deprecated `BLOCK` example, write camel case.
 The test checks that the bindings refuse them, and that the first one reads once its fork info takes the spelling of the schema.
 The examples name no preset, and five of them fix the size of a bitfield.
 The Altair block and the sync committee contribution have the sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 The test reads each example under every preset whose sizes it has, and checks the refusal under the other one.
-The examples of the kinds that Gloas adds are refused as unknown kinds.
+The test also reads the examples of the five kinds that Gloas adds.
+The envelope example has a logs bloom of 262 bytes, where the bloom has 256, so the test checks that the bindings refuse it, and that it reads once the bloom has 256 bytes.

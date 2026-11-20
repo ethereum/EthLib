@@ -13,7 +13,7 @@ A versioned body names the fork of its data in the field `version`.
 
 The [schemas] of the Remote-signing API fix each request, and the [sign endpoint] lists them.
 
-This module holds the thirteen kinds of request that exist before Gloas.
+It holds the thirteen kinds of request that exist before Gloas, and the five that Gloas adds.
 
 [schemas]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/schemas.yaml
 [sign endpoint]: https://github.com/ethereum/remote-signing-api/blob/44e9e0dcc115c91f8b739684f4789a8310476bd9/signing/paths/sign.yaml
@@ -159,6 +159,16 @@ inductive RequestType where
   | syncCommitteeContributionAndProof
   /-- The registration of a validator with builders. -/
   | validatorRegistration
+  /-- From Gloas, the bid of a builder for the payload of a slot. -/
+  | executionPayloadBid
+  /-- From Gloas, the envelope that reveals a payload. -/
+  | executionPayloadEnvelope
+  /-- From Gloas, the vote of a member of the payload timeliness committee. -/
+  | payloadAttestationMessage
+  /-- From Gloas, the preferences of a proposer for a proposal slot. -/
+  | proposerPreferences
+  /-- From Gloas, the authentication of a request of the Builder API. -/
+  | builderRequestAuth
   deriving DecidableEq, Repr
 
 namespace RequestType
@@ -167,7 +177,8 @@ namespace RequestType
 def all : List RequestType :=
   [aggregationSlot, aggregateAndProof, aggregateAndProofV2, attestation, block, blockV2,
     deposit, randaoReveal, voluntaryExit, syncCommitteeMessage, syncCommitteeSelectionProof,
-    syncCommitteeContributionAndProof, validatorRegistration]
+    syncCommitteeContributionAndProof, validatorRegistration, executionPayloadBid,
+    executionPayloadEnvelope, payloadAttestationMessage, proposerPreferences, builderRequestAuth]
 
 /-- The value of the field `type` for a kind of request. -/
 def name : RequestType → String
@@ -184,6 +195,11 @@ def name : RequestType → String
   | syncCommitteeSelectionProof => "SYNC_COMMITTEE_SELECTION_PROOF"
   | syncCommitteeContributionAndProof => "SYNC_COMMITTEE_CONTRIBUTION_AND_PROOF"
   | validatorRegistration => "VALIDATOR_REGISTRATION"
+  | executionPayloadBid => "EXECUTION_PAYLOAD_BID"
+  | executionPayloadEnvelope => "EXECUTION_PAYLOAD_ENVELOPE"
+  | payloadAttestationMessage => "PAYLOAD_ATTESTATION_MESSAGE"
+  | proposerPreferences => "PROPOSER_PREFERENCES"
+  | builderRequestAuth => "BUILDER_REQUEST_AUTH"
 
 /-- The kind of request with a name, if one has it. -/
 def ofName? (name : String) : Option RequestType :=
@@ -226,7 +242,15 @@ Each body is a container of the consensus layer, or a container of the schema it
 
 The aggregate of the second aggregate kind has the shape of the fork of its version.
 
-A deposit and a registration are signed outside any fork, so they carry no fork info. -/
+A deposit and a registration are signed outside any fork, so they carry no fork info.
+
+Each body that Gloas adds is versioned, and `GLOAS` is the only version the source defines.
+
+So the request holds the data at Glamsterdam, and its JSON names that version.
+
+The authentication of a Builder API request carries no fork info either.
+
+Its data must not be empty, as the description of its schema says. -/
 inductive SigningRequest (preset : Preset) where
   /-- The selection proof of an aggregator, over a slot. -/
   | aggregationSlot (signing : Signing) (body : AggregationSlot)
@@ -255,6 +279,18 @@ inductive SigningRequest (preset : Preset) where
   | syncCommitteeContributionAndProof (signing : Signing) (body : ContributionAndProof preset)
   /-- The registration of a validator, with its own signing root if the client sends one. -/
   | validatorRegistration (signingRoot : Option Root) (body : ValidatorRegistrationV1)
+  /-- The bid of a builder. -/
+  | executionPayloadBid (signing : Signing) (body : ExecutionPayloadBid preset .glamsterdam)
+  /-- The envelope of a payload. -/
+  | executionPayloadEnvelope (signing : Signing)
+      (body : ExecutionPayloadEnvelope preset .glamsterdam)
+  /-- The data of a payload attestation. -/
+  | payloadAttestationMessage (signing : Signing) (body : PayloadAttestationData)
+  /-- The preferences of a proposer. -/
+  | proposerPreferences (signing : Signing) (body : ProposerPreferences)
+  /-- The authentication of a Builder API request, whose data is not empty. -/
+  | builderRequestAuth (signingRoot : Option Root) (body : BuilderRequestAuth)
+      (nonEmpty : body.data.data.size ≠ 0)
 
 namespace SigningRequest
 
@@ -275,11 +311,18 @@ def type : SigningRequest preset → RequestType
   | .syncCommitteeSelectionProof .. => .syncCommitteeSelectionProof
   | .syncCommitteeContributionAndProof .. => .syncCommitteeContributionAndProof
   | .validatorRegistration .. => .validatorRegistration
+  | .executionPayloadBid .. => .executionPayloadBid
+  | .executionPayloadEnvelope .. => .executionPayloadEnvelope
+  | .payloadAttestationMessage .. => .payloadAttestationMessage
+  | .proposerPreferences .. => .proposerPreferences
+  | .builderRequestAuth .. => .builderRequestAuth
 
 /-- The version that a versioned body of a request names, if the request has one. -/
 def version? : SigningRequest preset → Option ConsensusVersion
   | .aggregateAndProofV2 _ version _ => some version
   | .blockV2 _ body => some body.version
+  | .executionPayloadBid .. | .executionPayloadEnvelope .. | .payloadAttestationMessage ..
+  | .proposerPreferences .. | .builderRequestAuth .. => some .gloas
   | _ => none
 
 end SigningRequest
@@ -337,6 +380,21 @@ def fields : SigningRequest preset → Except Err (List (String × Json))
     return ("contribution_and_proof", ← toApiJson body) :: (← signingFields signing)
   | .validatorRegistration signingRoot body =>
     return ("validator_registration", ← toApiJson body) :: signingRootFields signingRoot
+  | .executionPayloadBid signing body =>
+    return ("execution_payload_bid", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
+      (← signingFields signing)
+  | .executionPayloadEnvelope signing body =>
+    return ("execution_payload_envelope", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
+      (← signingFields signing)
+  | .payloadAttestationMessage signing body =>
+    return ("payload_attestation_message", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
+      (← signingFields signing)
+  | .proposerPreferences signing body =>
+    return ("proposer_preferences", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
+      (← signingFields signing)
+  | .builderRequestAuth signingRoot body _ =>
+    return ("builder_request_auth", ← (versionedJson .gloas "data" <$> toApiJson body)) ::
+      signingRootFields signingRoot
 
 /-- The JSON document of a request: its kind under `type`, then its other fields. -/
 def toJson (request : SigningRequest preset) : Except Err Json := do
@@ -364,6 +422,8 @@ inductive RequestError where
 
   The error gives the name of the version. -/
   | unknownVersion (key name : String)
+  /-- The authentication of a Builder API request has empty data. -/
+  | emptyAuthData
   deriving DecidableEq, Repr
 
 /-- The code of an error at the C boundary, one for each constructor. -/
@@ -373,6 +433,7 @@ def RequestError.code : RequestError → UInt32
   | .badField .. => 3
   | .unknownType _ => 4
   | .unknownVersion .. => 5
+  | .emptyAuthData => 6
 
 /-- The value under a key of an object, which must be present. -/
 def field (document : Json) (key : String) : Except RequestError Json :=
@@ -407,6 +468,14 @@ def readVersion (body : Json) (key : String) : Except RequestError ConsensusVers
   let .str name ← field body "version" | throw (.badField "version" .typeMismatch)
   let some version := versionOfName? name | throw (.unknownVersion key name)
   return version
+
+/-- The data of a body that Gloas adds, under a key, which must name the version `GLOAS`. -/
+def readGloasData (α : Type) [SszType α] [ApiSpelling α] (document : Json) (key : String) :
+    Except RequestError α := do
+  let body ← readObject document key
+  let version ← readVersion body key
+  unless version = .gloas do throw (.unknownVersion key (versionName version))
+  readValue α body "data"
 
 /-- The kind of request that the field `type` names. -/
 def readType (document : Json) : Except RequestError RequestType := do
@@ -483,5 +552,24 @@ def SigningRequest.ofJson (preset : Preset) (document : Json) :
   | .validatorRegistration =>
     return .validatorRegistration (← readSigningRoot document)
       (← readValue ValidatorRegistrationV1 document "validator_registration")
+  | .executionPayloadBid =>
+    return .executionPayloadBid (← readSigning document)
+      (← readGloasData (ExecutionPayloadBid preset .glamsterdam) document "execution_payload_bid")
+  | .executionPayloadEnvelope =>
+    return .executionPayloadEnvelope (← readSigning document)
+      (← readGloasData (ExecutionPayloadEnvelope preset .glamsterdam) document
+        "execution_payload_envelope")
+  | .payloadAttestationMessage =>
+    return .payloadAttestationMessage (← readSigning document)
+      (← readGloasData PayloadAttestationData document "payload_attestation_message")
+  | .proposerPreferences =>
+    return .proposerPreferences (← readSigning document)
+      (← readGloasData ProposerPreferences document "proposer_preferences")
+  | .builderRequestAuth =>
+    let signingRoot ← readSigningRoot document
+    let body ← readGloasData BuilderRequestAuth document "builder_request_auth"
+    if nonEmpty : body.data.data.size ≠ 0 then
+      return .builderRequestAuth signingRoot body nonEmpty
+    else throw .emptyAuthData
 
 end EthLib.Consensus.RemoteSigningApi

@@ -6321,14 +6321,22 @@ EthLib cites commit `44e9e0dc`.
 A client sends one JSON request per signature, and the field `type` names its kind.
 The signer must read exactly the object that the client meant, since the root it signs comes from that object.
 
-EthLib defines the thirteen kinds of request that exist before Gloas, with their JSON forms (`Consensus/RemoteSigningApi/Request.lean`).
+EthLib defines the eighteen kinds of request, thirteen from before Gloas and five that Gloas adds, with their JSON forms (`Consensus/RemoteSigningApi/Request.lean`).
 Each body is a container of the consensus layer, written in the JSON mapping of SSZ, or a small container of the schemas themselves, such as the slot of an aggregator selection.
 A versioned body names its version in upper case, as `PHASE0` to `GLOAS`, and the aggregate takes the shape of the fork of that version.
 `SigningRequest.toJson_total` (`Consensus/Proofs/RemoteSigningApi/Request.lean`) shows that the writer never fails, and `SigningRequest.ofJson_toJson` that every request it writes reads back as the same request.
 `getObjVal?_type_of_ofJson` shows that a request read from a document has the kind that its `type` names, and `ofJson_unknownType` that a `type` that names no kind is refused with that name.
 `version_of_ofJson_aggregateAndProofV2` and `version_of_ofJson_blockV2` show that a versioned request has the version that its body names.
-The Python suite reads the 25 examples of these kinds that spell their fields as the schemas do, and checks that writing each again gives the same document.
-It checks that the other two examples, named below, are refused.
+
+The five kinds that Gloas adds sign a payload bid, a payload envelope, the data of a payload attestation, the preferences of a proposer, and the authentication of a Builder API request.
+Each carries its body under the version `GLOAS`, the only version the source defines, and EthLib reads the body as its container at Glamsterdam.
+`version_of_readGloasData` shows that such a body is read only when it names `GLOAS`, and the Python suite checks that `FULU` is refused, with the key of the body and the name it found.
+The authentication of a Builder API request has no fork info, like a deposit, and its data is "non-empty" and at most 4096 bytes.
+`ofJson_emptyAuthData` shows that a document whose data reads as empty is refused for that reason, and `ofJson_longAuthData` that data of more than 4096 bytes is refused with the limit and its size.
+So the reader never cuts the data down, and every such request read has between 1 and 4096 bytes of data.
+The Python suite reads the 29 examples that match the schemas, and checks that writing each again gives the same document.
+It checks that the other three examples are refused: the two named below, and the envelope, whose logs bloom holds 262 bytes where the bloom has 256.
+With a bloom of 256 bytes, the envelope reads back.
 The source names no preset, and its examples mix the two.
 The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
@@ -6338,7 +6346,7 @@ The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Res
 `publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
 No export or Python test covers the two responses yet; the sign endpoint will use them.
 
-The source leaves six points about the requests open, and EthLib reads each one as follows:
+The source leaves eight points about the requests open, and EthLib reads each one as follows:
 
 - The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
   EthLib follows the schemas, so it refuses both examples.
@@ -6353,6 +6361,10 @@ The source leaves six points about the requests open, and EthLib reads each one 
   EthLib reads the body under the version it names, whatever the fork info says.
 - The schemas give each integer the type of a string.
   The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
+- The rule that the authentication data is not empty is in the description of its schema, not in a schema keyword.
+  EthLib refuses empty data.
+- The source defines only `GLOAS` for the five kinds that Gloas adds.
+  From Hegotá, EthLib's bid gains the bits of the inclusion list, and a request for it waits for a release that names a later version.
 
 ### What cannot be proved yet
 
