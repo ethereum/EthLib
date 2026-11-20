@@ -40,7 +40,7 @@ From Electra, they are the attesters of the single attestations with the same da
 
 Its committee bits name that one committee.
 
-Constructing either aggregate fails exactly when one of the faults of that construction occurs.
+Constructing either aggregate fails exactly when its committee, a message or the signatures fail.
 
 The contribution of a sync subcommittee sets the bit of each seat whose key signed a message.
 -/
@@ -759,7 +759,7 @@ Before Gloas, the committee has more members than the limit of an attestation.
 
 Aggregating the signatures of those single attestations fails.
 
-With no such single attestation the fifth fault occurs, since an empty list has no aggregate. -/
+When no such single attestation exists, the fifth fault occurs: an empty list has no aggregate. -/
 theorem exists_constructAggregateOfSingleAttestations_eq_error_iff
     {state : BeaconState preset fork} {data : AttestationData} {committeeIndex : CommitteeIndex}
     {singles : List SingleAttestation} :

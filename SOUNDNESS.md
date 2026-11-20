@@ -5641,12 +5641,13 @@ It refuses so exactly when the block of the first match is verified and the cons
 From Electra that refusal also needs a committee index below `MAX_COMMITTEES_PER_SLOT`, since an index not below it gets code 400 by `aggregateAttestation_error_iff_of_electra`.
 `exists_constructAggregate_eq_error_iff` (`Consensus/Proofs/HonestAggregation.lean`) states when the construction fails before Electra.
 The construction fails exactly when the committee has no value, an attestation with the data has bits of another size, or their aggregate signature fails.
-`exists_constructAggregateOfSingleAttestations_eq_error_iff` states it for single attestations, with the faults of the committee and the signatures but none on bits.
+`exists_constructAggregateOfSingleAttestations_eq_error_iff` states it for single attestations, with the faults of the committee and the signatures.
 The other faults are an index not below `MAX_COMMITTEES_PER_SLOT`, an attester outside the committee, and a committee above the limit of an attestation before Gloas.
-By `List.mem_of_find?_eq_some` the first match is in the list, and it has the data and, from Electra, the committee.
-So in the aggregate answer the construction never joins an empty list of signatures.
+By `List.mem_of_find?_eq_some` the first match is in the list, and by `List.find?_some` it matches the request, so from Electra it has the committee.
+No theorem states it, but in the aggregate answer the construction therefore never joins an empty list of signatures.
 `getBeaconCommittee_exists` (`Consensus/Proofs/Accessors.lean`) gives the committee a value for an index below the count of its slot, when the bounds fit.
-No theorem states the converse.
+The converse fails: the lookup does not check the index against that count, so an index at or above it can still give a committee.
+Neither construction checks that count, so either can build an aggregate that the rules of a block reject.
 No theorem states either that the aggregate of signatures that are not an empty list fails only on a signature that does not decode.
 `aggregateAttestation_internal_iff_of_lt_electra` with `exists_constructAggregate_eq_error_iff` gives code 500 exactly when the block of the first match is verified and a fault occurs.
 `aggregateAttestation_internal_iff_of_electra` with `exists_constructAggregateOfSingleAttestations_eq_error_iff` gives the same from Electra, for an index below `MAX_COMMITTEES_PER_SLOT`.
