@@ -2149,29 +2149,6 @@ theorem processSlashingsReset (computed : Consensus.processSlashingsReset state 
   obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq computed
   exact laws.slashings _ _
 
-end EpochBaseLaws
-
-namespace EpochStepLaws
-
-variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochStepLaws R)
-
-include laws
-
-theorem processRandaoMixesReset (computed : Consensus.processRandaoMixesReset state = .ok after) :
-    R state after := by
-  obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
-  exact (laws.randaoMixes _ _)
-
-end EpochStepLaws
-
-namespace EpochBaseLaws
-
-variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
-  (laws : EpochBaseLaws R)
-
-include laws
-
 theorem processInactivityUpdates {altair : .altair ≤ fork}
     (computed : Consensus.processInactivityUpdates config state altair = .ok after) :
     R state after := by
@@ -2248,6 +2225,7 @@ theorem processPtcWindow {gloas : .glamsterdam ≤ fork}
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, rfl⟩ := computed
   exact (laws.ptcWindow _ _)
+
 end EpochBaseLaws
 
 namespace EpochStepLaws
@@ -2256,6 +2234,11 @@ variable {R : BeaconState preset fork → BeaconState preset fork → Prop}
   (laws : EpochStepLaws R)
 
 include laws
+
+theorem processRandaoMixesReset (computed : Consensus.processRandaoMixesReset state = .ok after) :
+    R state after := by
+  obtain ⟨_, _, _, _, _, _, rfl⟩ := processRandaoMixesReset_eq computed
+  exact (laws.randaoMixes _ _)
 
 theorem processProposerLookahead {fulu : .fusaka ≤ fork}
     (computed : Consensus.processProposerLookahead state fulu = .ok after) : R state after := by
