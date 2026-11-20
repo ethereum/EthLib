@@ -13635,12 +13635,12 @@ private theorem exited_not_proposer (h : Setting config checks g split fin pulle
   rw [same, inactive] at active
   exact Bool.false_ne_true active
 
-/-- A key with a sync credit over the events of the shared segment has a gross credit on C's run.
+/-- A key with a sync credit over the events of the shared segment has a gross credit on a run.
 
-The run is the shared segment followed by C's tail. -/
+The run is the shared segment followed by a tail from the split. -/
 private theorem syncCr_gross_shared (h : Setting config checks g split fin pulled anc counted V)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (high : ℕ)
+    {z : BeaconState preset fork} (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, z⟩) (high : ℕ)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (v : ℕ) (positive : 0 < syncCr eventsF v) :
     0 < grossScan v high (fromFin.append tailC) := by
