@@ -1529,10 +1529,10 @@ Its §3.2 explains how it follows from the two lemmas.
 The steps are §3.2 of ePrint 2024/1362, for many blobs, and the framework of Hall-Andersen, Simkin and Wagner, ePrint 2023/1079.
 2025/1683 does not prove these steps again, and EthLib does not formalize them.
 
-`getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that the builder of the sidecars of a block gives one sidecar per column, for any rows.
+`getDataColumnSidecars_spec` (`Consensus/Proofs/DataAvailability/Column.lean`) shows that a build of the sidecars of a block that succeeds gives one sidecar per column, for any rows.
 Sidecar `i` has index `i`, and holds the cell and the proof at position `i` of every row, in row order.
 Every sidecar carries the given header, commitments, branch, slot and root.
-Before Gloas, `getDataColumnSidecars_length_of_lt_glamsterdam` shows that the rows number as many as the commitments.
+Before Gloas, `getDataColumnSidecars_length_of_lt_glamsterdam` shows that a build that succeeds has as many rows as commitments.
 `getDataColumnSidecarsFromColumnSidecar` calls that builder with the fields of one sidecar, so both theorems cover that rebuild.
 Before Gloas, `getDataColumnSidecarsFromBlock_valid` shows that each sidecar built from a block carries its signed header and the commitments of its body.
 The inclusion check of each such sidecar passes by `verifyKzgCommitmentsInclusionProof_built`.
@@ -1540,9 +1540,11 @@ The signed header carries the root of the body (`signedHeader_eq_ok_iff`), and t
 From Gloas, `getDataColumnSidecarsFromBlock_root` shows that each sidecar built from a block names the block by its root and its slot.
 No theorem states yet:
 
-- that a built sidecar passes its shape check, which also needs at least one blob and at most the blob limit of the epoch.
+- that a built sidecar passes its shape check, which also needs at least one blob.
+  Before Gloas that check needs at most the blob limit at the epoch of the header.
+  From Gloas it needs as many rows as the commitments of the bid, which the builder does not check.
 - that the batch check accepts a sidecar built from the cells and proofs of blobs.
-- that the builder succeeds when the rows match the commitments, each with a cell and a proof per column.
+- that the builder succeeds when each row has a cell and a proof per column, with as many rows as commitments before Gloas.
 
 `findSdh_valid_bytes` (`Proofs/Kzg/Binding.lean`) is the evaluation binding of single proofs.
 Let the check accept one commitment at one point with two different values.
