@@ -21442,7 +21442,11 @@ Those credits are within the terms of `whistleSlack`.
 
 The slashing's increment is `whistleEnv`'s.
 
-An end before R's epoch and no later than `c` keeps the balance of `c`, which `short` bounds.
+An end before R's epoch and no later than `c` keeps the balance of `c`.
+
+With the finalized start, `short_in_fin` bounds it by `whistleEnv`.
+
+With a floor start, the core reads it through `short_start_floor`.
 
 An unslashed key at R is late for the whole run, which `late` states for the key. -/
 private theorem registry_frozen (h : Setting config checks g split fin pulled anc counted V)
@@ -21475,12 +21479,7 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
         w.exitEpoch.toNat + config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm i = true)
     (addend : ℕ) (hA : 0 < slashW (pinTerms config pulled anc fin) i →
-      (pinTerms config pulled anc fin).unitGain ≤ addend)
-    (short : (getCurrentEpoch a.state).toNat < (getCurrentEpoch pulled).toNat →
-      (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch c).toNat →
-      effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
-        whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
-          eventsC eventsF events fin i + addend) :
+      (pinTerms config pulled anc fin).unitGain ≤ addend) :
     effectiveAt a i ≤ whistleEnv (pinTerms config pulled anc fin) pulled anc fin i +
       whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin i + addend := by
@@ -21490,9 +21489,16 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
   have sameFork : fork = af :=
     (fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)).symm
   subst sameFork
-  by_cases flat : (getCurrentEpoch as).toNat < (getCurrentEpoch pulled).toNat ∧
-      (getCurrentEpoch as).toNat ≤ (getCurrentEpoch c).toNat
-  · exact short flat.1 flat.2
+  -- a short end with the finalized start keeps its balance at `c`, within `whistleEnv`
+  by_cases leftShort : ((getCurrentEpoch as).toNat < (getCurrentEpoch pulled).toNat ∧
+      (getCurrentEpoch as).toNat ≤ (getCurrentEpoch c).toNat) ∧
+      (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤
+          (pinTerms config pulled anc fin).ebUp i ∧
+        effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) i ≤ balanceAt fin i)
+  · have bound := short_in_fin h fromC tailC step member i inside leftShort.2.2
+      (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+        eventsC eventsF events fin i + addend) leftShort.1.2
+    omega
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have near := h.near
   -- the replays are read at R's epoch
@@ -21521,7 +21527,19 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
   subst hvi
   have core := key_core_frozen_from h tail replayed' fromFin replayedF' pre highC
     (by omega) (by omega) replayedPre v unslashed late
-    toC fromC cutC inside before start (fun lt le _ _ _ => absurd ⟨lt, le⟩ flat) kept
+    toC fromC cutC inside before start
+    (fun lt le S U slack ceiling => by
+      rcases start with ⟨within, atFin⟩ | floorC
+      · exact absurd ⟨⟨lt, le⟩, within, atFin⟩ leftShort
+      · obtain ⟨toFin⟩ := h.toFin
+        have capped := effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat
+        have capsLater := cap_le_cap_of_run h.caps (fromC.append tail) h.early v.toNat
+        have forOf := capAt_le_capForOf (pinTerms config pulled anc fin) pulled v.toNat
+          (capAt_le_capMax h.caps (Nat.le_trans (by decide) h.fulu) v.toNat)
+        exact ⟨by omega, short_start_floor h.bands.1
+          (FloorTrace.effective_aligned (toFin.append toC) h.genesis h.aligned v.toNat) capped
+          ceiling floorC slack⟩)
+    kept
   have p1 := credC_prefix_le h pre step post highC replayedC v.toNat flag
   have p2 := prefix_credits_mono (counted := counted) pre step post highC v.toNat
   have p3 : (eventsPre.map (syncCredit v.toNat)).sum ≤ syncCr eventsC v.toNat :=
@@ -21796,17 +21814,17 @@ private theorem registry_created (h : Setting config checks g split fin pulled a
       created_first_state h fromFin beyondFin inSplit
     exact registry_frozen h tail high endEpoch replayed fromFin replayedF tailC highC endEpochC
       replayedC step member v.toNat toC fromC cutC insideC before (.inr floorStart) unslashed flag
-      (fun w fw _ => late_of_exitAfterFin h v.toNat (created_exitAfterFin h beyondFin) w fw) kept
-      addend hA sorry
+      (fun w found _ => late_of_exitAfterFin h v.toNat (created_exitAfterFin h beyondFin) w found)
+      kept addend hA
   · have := registry_headroom (config := config) h tailC step member i kept
       (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin i + addend)
     omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- A key of the finalized registry that is late or pending at R is bounded at each slashing step.
+/-- A finalized key that exits at or after the finalized epoch is bounded at each slashing step.
 
-`whistleEnv` reads such a key at its balance and rise, and at `bF`, without `ebUp`.
+It serves the keys late or pending at R, which `whistleEnv` reads without `ebUp`.
 
 The key is in the finalized registry, so the start state is the finalized state.
 
@@ -21823,9 +21841,6 @@ private theorem registry_late (h : Setting config checks g split fin pulled anc 
     {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
     (i : ℕ)
     (inFin : i < fin.validators.data.size)
-    (shape : (pinTerms config pulled anc fin).tight = false ∧
-      ((pinTerms config pulled anc fin).lateB i = true ∨
-        (pinTerms config pulled anc fin).pendingRB i = true))
     (exitAfterFin : ∀ w, pulled.validators.data[i]? = some w →
       (getCurrentEpoch fin).toNat ≤ w.exitEpoch.toNat)
     (unslashed : (split.validators.data[i]?.map (·.slashed)).getD false = false)
@@ -21842,7 +21857,7 @@ private theorem registry_late (h : Setting config checks g split fin pulled anc 
       replayedC step member i Run.nil fromFin (run_nil_append fromFin) inFin
       (fun p mem => Or.inl (by simpa [Run.balancePath] using mem))
       (.inl ⟨effective_fin_le_ebUp h i, Nat.le_refl _⟩) unslashed flag
-      (fun w fw _ => late_of_exitAfterFin h i exitAfterFin w fw) kept addend hA sorry
+      (fun w found _ => late_of_exitAfterFin h i exitAfterFin w found) kept addend hA
   · have := registry_headroom (config := config) h tailC step member i kept
       (whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
         eventsC eventsF events fin i + addend)
