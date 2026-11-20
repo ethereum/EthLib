@@ -772,6 +772,20 @@ Not yet released.
   The new statement implies the old one, so a reader of the old statement drops the last conjunct.
   The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
 
+- In Lean, signed direct safety catches collisions of signing roots ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the signed root, and `SignedConflict` asks that the two roots differ, so one signature never counts as two.
+  `signedConflict_of_accountable`, `accountableKeys_subset_signedConflictKeys`, `accountable_safety_signed` and `accountable_safety_signed_third` add the alternative `SigningEvidence`: SHA-256 collides among the messages of the signing roots that the checks of the runs compute.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` also give the domain and root of the check, and its place among the signings of the run.
+  The signing-value lemmas `wellFormed_signingShape_iff`, `fits_signingValue_iff`, `commitmentSized_signingValue_iff` and `signingValue_inj` move to `Consensus/Proofs/Signing.lean`, where they are public, with `signingValues_of_computeSigningRoot_eq`, `signingMessages` and `computeSigningRoot_ne_or_collision`.
+  `valueMessages` (`Serialization/Proofs/Ssz/Codec/ValueMessages.lean`) names the messages of the tree of a value, which the hash objects of direct safety read too.
+
+- In Lean, a signature of signed direct safety names the version of a fork of the config ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the version of its domain, and `SignedConflict` asks for the version of a fork of the config, the same for both headers.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` name the version that the state before the block reads.
+  `Run.forkVersions_ofConfig` shows that every state of a run from a genesis of deposits holds versions of forks of the config.
+  `chainStep_forkVersions` and `chainSteps_forkVersions` move from the Beacon API proofs to `Consensus/Proofs/Transition/ForkVersions.lean`, where they are public.
+  `signedConflict_of_accountable`, `accountable_safety_signed` and their corollaries keep their hypotheses and conclude this stronger form.
+
 - The light client checks of req/resp responses compare fork digests, not forks ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
   From Fulu, a change of blob parameters changes the digest within one fork, and a fork no longer tells those epochs apart.
   In Python, `reqresp_is_valid_response` takes a new argument `genesis_validators_root`, which the light client protocols need.

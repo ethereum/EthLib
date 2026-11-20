@@ -4377,13 +4377,21 @@ An aggregate call of that set accepts only if every key of the call signed its m
 Then each accountable key signed the signing roots of two attestation data that `isSlashableAttestationData` flags, each in an attester domain.
 Otherwise it signed the signing roots of two different headers of one slot, each in a proposer domain.
 Their proposer index holds the key in the registry at `x`, since the registry keeps its keys and its keys are distinct.
-Each domain is that of the genesis validators root of the runs and of some fork version, which need not be one of the config.
+Each domain is that of the genesis validators root of the runs and of the version of a fork of the config; the two headers take one fork.
+`Run.forkVersions_ofConfig` shows that each state of a run from a genesis of deposits holds two versions of forks of the config (`forkVersions_ofConfig_of_genesis_chainSteps`, `Consensus/Proofs/Transition/ForkVersions.lean`), so it reads only such versions.
+The version need not be that of the fork of the object's epoch.
+A state reads its previous version at any epoch before its fork epoch, and its current one at any later epoch, a header of a later fork included.
+When two forks share an epoch, the previous version is one that no epoch uses.
+The definition accepts the version of any fork of the config, including one that neither run reaches.
 `Run.genesisValidatorsRoot` shows that a run keeps that root.
-If SHA-256 collides on the two signing roots, the two signatures may be one.
+The two signed roots of a pair differ, so the two signatures are two.
+Otherwise `SigningEvidence` holds: two inputs of the SHA-256 node hash with one digest, among the messages of the signing roots that the checks of the runs compute (`signingMessages`, `attestationSignings`, `headerSignings`).
+`computeSigningRoot_ne_or_collision` (`Consensus/Proofs/Signing.lean`) shows that two different objects of one type whose counts fit their 256-bit words, as attestation data and headers do, have different signing roots, or such a collision, in any domains; `signingValues_of_computeSigningRoot_eq` (`Consensus/Proofs/Signing.lean`) reads equal signing roots as one root of two signing values.
+The theorems then conclude the bound, or `HashEvidence`, or `SigningEvidence`; neither alternative assumes that the hash is injective.
 `accountable_safety_signed` restates `accountable_safety` for the unslashed active keys at `x` that signed such a pair (`signedConflictKeys`).
 `accountableKeys_subset_signedConflictKeys` shows that they include the accountable keys.
-Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence.
-`accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes show evidence.
+Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence, or the signing roots of the checks collide (`SigningEvidence`).
+`accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes or the signing roots show evidence.
 The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
 No theorem shows that a block of either run could include a slashing built from those signatures.
 An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
