@@ -23,7 +23,9 @@ The stages of an epoch before the RANDAO reset keep them, and so does a pending 
 
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
-The sync aggregate and the vote on the deposit contract keep them, and from Gloas the operations.
+The operations keep them at every fork.
+
+The sync aggregate from Altair and the vote on the deposit contract before Heze keep them too.
 
 A full parent changes only the latest block hash among them, and the header step only the header.
 
@@ -308,6 +310,20 @@ theorem payloadInputs_processConsolidationRequest {electra : .pectra ≤ fork}
   · exact payloadInputs_switchToCompoundingValidator switched
   · exact payloadInputs_queueConsolidation queued
 
+/-- From Electra to Fulu, the requests of the execution layer keep the inputs of a payload. -/
+theorem payloadInputs_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config state body electra = .ok after) :
+    PayloadInputs state after := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+  exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processDepositRequest ok)
+      depositsOk).trans <|
+    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processWithdrawalRequest ok)
+      withdrawalsOk).trans <|
+    PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processConsolidationRequest ok)
+      consolidationsOk
+
 theorem payloadInputs_processBuilderDepositRequest {request : BuilderDepositRequest}
     (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
     PayloadInputs state after := by
@@ -504,28 +520,39 @@ theorem payloadInputs_processAttestation {attestation : Attestation preset fork}
     rw [← rest]
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- From Gloas the operations of a block keep the inputs of a payload. -/
-theorem payloadInputs_processOperations (gloas : .glamsterdam ≤ fork)
-    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+/-- A deposit keeps the inputs of a payload. -/
+theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
+    PayloadInputs state after := by
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact PayloadInputs.refl _
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact (payloadInputs_addValidatorToRegistry added).trans
+      ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact payloadInputsLaws.applyPendingDeposit applied
+
+/-- The operations of a block keep the inputs of a payload, at every fork. -/
+theorem payloadInputs_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
     PayloadInputs state after := by
-  simp only [processOperations, gloas, ↓reduceDIte, processOperationsGloas, bind_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
-    attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+  obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=
+    processOperations_folds_of PayloadInputs PayloadInputs.refl (fun one two => one.trans two)
+      (fun ok => payloadInputs_processDeposit ok)
+      (fun ok => payloadInputsLaws.processVoluntaryExit ok)
+      (fun ok => payloadInputsLaws.processBlsToExecutionChange ok)
+      (fun ok => payloadInputs_processExecutionRequests ok)
+      (fun ok => by
+        rw [processPayloadAttestation_eq ok]
+        exact PayloadInputs.refl _) computed
   exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processProposerSlashing ok)
       proposersOk).trans <|
     (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processAttesterSlashing ok)
       attestersOk).trans <|
     (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processAttestation ok)
-      attestedOk).trans <|
-    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputsLaws.processVoluntaryExit ok)
-      exitsOk).trans <|
-    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputsLaws.processBlsToExecutionChange ok)
-      changesOk).trans <|
-    PayloadInputs.foldlM (fun _ _ _ ok => by
-      rw [processPayloadAttestation_eq ok]
-      exact PayloadInputs.refl _) paid
+      attestedOk).trans rest
 
 /-- The vote on the deposit contract keeps the inputs of a payload. -/
 theorem payloadInputs_processEth1Data {before : fork < .hegota}
@@ -709,7 +736,7 @@ theorem processBlock_steps (gloas : .glamsterdam ≤ fork) {block : BeaconBlock 
     · exact payloadInputs_processEth1Data (votedOk before)
     · rw [kept (Nat.le_of_not_lt before)]
       exact PayloadInputs.refl _
-  have rest := voting.trans <| (payloadInputs_processOperations gloas operatedOk).trans <|
+  have rest := voting.trans <| (payloadInputs_processOperations operatedOk).trans <|
     payloadInputsLaws.processSyncAggregate synced
   exact ⟨parented, headed, withdrawn, bidded, _, parentOk, headedOk, withdrawnOk, biddedOk,
     rest.slot.trans randao.slot, rest.latestBlockHeader.trans randao.latestBlockHeader,
@@ -748,56 +775,6 @@ theorem latestBlockHash_processBlock (gloas : .glamsterdam ≤ fork)
     checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
   rw [hash, kept, latestExecutionPayloadBid_processExecutionPayloadBid bid, parentHash]
   exact congrFun (payloadInputs_processExecutionPayloadBid bid).latestBlockHash gloas
-
-/-- The operations of a block keep the latest block header, at every fork.
-
-Before Gloas the deposits and, from Electra, the requests of the execution layer run too. -/
-private theorem latestBlockHeader_processOperations {body : BeaconBlockBody preset fork}
-    {parentSlot : Slot}
-    (computed : processOperations config checks state body parentSlot = .ok after) :
-    after.latestBlockHeader = state.latestBlockHeader := by
-  have fold {α ε : Type} {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-      (kept : ∀ s x t, step s x = .ok t → t.latestBlockHeader = s.latestBlockHeader)
-      {s t : BeaconState preset fork} {items : List α} (ok : items.foldlM step s = .ok t) :
-      t.latestBlockHeader = s.latestBlockHeader :=
-    foldlM_ok_invariant (fun t => t.latestBlockHeader = s.latestBlockHeader)
-      (fun _ _ _ before ok => (kept _ _ _ ok).trans before) rfl ok
-  by_cases gloas : .glamsterdam ≤ fork
-  · exact (payloadInputs_processOperations gloas computed).latestBlockHeader
-  simp only [processOperations, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited, exits,
-    changed, changes, requests⟩ := computed
-  have changesKept : changed.latestBlockHeader = exited.latestBlockHeader := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact fold (fun _ _ _ ok =>
-        (payloadInputsLaws.processBlsToExecutionChange ok).latestBlockHeader) changes
-    · cases changes
-      rfl
-  have requestsKept : after.latestBlockHeader = changed.latestBlockHeader := by
-    split at requests
-    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requests
-      obtain ⟨_, deposited, _, withdrawn, consolidated⟩ := requests
-      exact (fold (fun _ _ _ ok =>
-        (payloadInputs_processConsolidationRequest ok).latestBlockHeader) consolidated).trans <|
-        (fold (fun _ _ _ ok =>
-          (payloadInputs_processWithdrawalRequest ok).latestBlockHeader) withdrawn).trans <|
-        fold (fun _ _ _ ok => (payloadInputs_processDepositRequest ok).latestBlockHeader) deposited
-    · cases requests
-      rfl
-  exact requestsKept.trans <| changesKept.trans <|
-    (fold (fun _ _ _ ok => (payloadInputsLaws.processVoluntaryExit ok).latestBlockHeader)
-      exits).trans <|
-    (fold (fun _ _ _ ok => by
-      obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok ok
-      exact (frame_applyDeposit applied).latestBlockHeader) deposits).trans <|
-    (fold (fun _ _ _ ok => (payloadInputs_processAttestation ok).latestBlockHeader)
-      attestations).trans <|
-    (fold (fun _ _ _ ok => (payloadInputs_processAttesterSlashing ok).latestBlockHeader)
-      attesters).trans <|
-    fold (fun _ _ _ ok => (payloadInputs_processProposerSlashing ok).latestBlockHeader) proposers
 
 /-- The execution part of a block keeps the latest block header. -/
 private theorem latestBlockHeader_processBlockExecution {body : BeaconBlockBody preset fork}
@@ -861,7 +838,7 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
           rfl
       exact ⟨state, headed, rfl, rfl, headedOk,
         (payloadInputsLaws.processSyncAggregate synced).latestBlockHeader.trans <|
-          (latestBlockHeader_processOperations operatedOk).trans <| votedKept.trans <|
+          (payloadInputs_processOperations operatedOk).latestBlockHeader.trans <| votedKept.trans <|
           (payloadInputs_processRandao revealedOk).latestBlockHeader.trans executedKept⟩
     · rename_i notAltair
       have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
@@ -872,7 +849,7 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
         bind_assoc, bind_ok_iff] at computed
       obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operatedOk⟩ := computed
       exact ⟨state, headed, rfl, rfl, headedOk,
-        (latestBlockHeader_processOperations operatedOk).trans <|
+        (payloadInputs_processOperations operatedOk).latestBlockHeader.trans <|
           (payloadInputs_processEth1Data votedOk).latestBlockHeader.trans
             (payloadInputs_processRandao revealedOk).latestBlockHeader⟩
 
@@ -904,19 +881,5 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
-
-/-- A deposit keeps the inputs of a payload. -/
-theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (computed : processDeposit config checks before state deposit = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
-  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
-  · exact PayloadInputs.refl _
-  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact (payloadInputs_addValidatorToRegistry added).trans
-      ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact payloadInputsLaws.applyPendingDeposit applied
 
 end EthLib.Consensus
