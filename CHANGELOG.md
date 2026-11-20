@@ -107,6 +107,10 @@ Not yet released.
 
 - In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
 
+- A double or surround vote of signed direct safety, with a signature by the key alone on each data, gives an attester slashing that a state accepts exactly when it can slash the validator, when the state reads the fork versions of the signatures and the validator is slashable there ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
+  `processAttesterSlashing_eq_slashValidator_of_single` shows that a slashing whose two attestations name one validator, with both signatures verifying in the domains the state reads and the validator slashable there, returns what slashing that validator returns.
+  `processAttesterSlashing_single_eq_slashValidator` and its run form apply it to `singleAttesterSlashing`, built from the two signed data of direct safety and two given signatures by the key alone, at a state that reads their fork versions and where the validator is slashable.
+
 - Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
   `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
   `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
@@ -773,6 +777,10 @@ Not yet released.
   Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
   The new statement implies the old one, so a reader of the old statement drops the last conjunct.
   The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
+
+- In Lean, the light client signature theorems assume soundness only on the one aggregate call of the update ([#3432](https://github.com/ethereum/EthLib/issues/3432)).
+  `validateLightClientUpdate_signed` and `validateLightClientUpdate_signed_outside` take `SignatureChecks.AggregateSoundOn` on `updateSignatureCall` in place of `SignatureChecks.AggregateSound`.
+  The new hypothesis is weaker, so the theorems are stronger; a caller with `sound : checks.AggregateSound signed` passes `sound.on _` (`SignatureChecks.AggregateSound.on`).
 
 - In Lean, `payloadInputs_processOperations` holds at every fork and no longer takes `gloas : .glamsterdam ≤ fork`.
   Before Gloas the deposits and, from Electra, the requests of the execution layer keep the inputs of a payload too.

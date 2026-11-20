@@ -639,8 +639,8 @@ One sync committee member is honest; the forger chooses the configuration, the s
 It wins if `validateLightClientUpdate` accepts the update with the honest member's bit set, with the oracle's hash of the signing root, and the honest member never signed that root.
 Its advantage is at most the byte bound above.
 `validateLightClientUpdate_oracleChecks` shows that with the real hash of the signing root, the game's check is the light client's check with the BLS checks.
-The light client theorems of `Authenticate.lean` still take `SignatureChecks.AggregateSound`, because they reason about one accepted update, not a probability.
-With the BLS checks, that assumption holds only for a trivial relation, as the light client bullet of A4 says.
+The light client theorems of `Authenticate.lean` take `SignatureChecks.AggregateSoundOn` on the one aggregate call of the update, because they reason about one accepted update, not a probability.
+For the relation of real signatures, that assumption says that this one call is not a forgery, as the light client bullet of A4 says.
 The game requires a proof of possession that passes PopVerify, §3.3.3, under the key tag.
 Ethereum registers a validator key with a deposit signature instead, a signature on a message that holds the key, under the message tag and the deposit domain.
 The bound does not cover that form of proof.
@@ -4087,14 +4087,15 @@ These two are rewrite lemmas: no theorem yet binds the rebuilt root to the paylo
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
-The signature theorems assume `SignatureChecks.AggregateSound` (`Consensus/Proofs/SignatureChecks.lean`), listed in A4.
+The signature theorems assume `SignatureChecks.AggregateSoundOn` (`Consensus/Proofs/SignatureChecks.lean`), listed in A4.
+It covers only `updateSignatureCall`, the one aggregate call that the client checks on the update.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
-With the BLS checks, the assumption holds only for a trivial relation (A4), so these theorems do not yet say who signed.
+`SignatureChecks.AggregateSound.on` shows that the assumption over every input implies it.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
-`SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+`SignatureChecks.not_aggregateSoundOn_acceptAll` shows that the assumption has content: the checks that accept every signature fail it on one call.
 `LightClientForgery.forgeAdvantage_le` bounds how often a forger makes the light client accept an aggregate with one designated honest member's bit set, on a root that member never signed.
 It assumes the random oracle model, a proof of possession for every signer, and at most `q` and `qK` hash calls; the bound is small if co-CDH is hard and the solver built from the forger is efficient, which no theorem bounds.
-It is not a proof of `AggregateSound`, and Ethereum's keys carry deposit signatures, not those proofs.
+It is not a proof of the assumption, and Ethereum's keys carry deposit signatures, not those proofs.
 The bound protects that member's bit only.
 Covering every honest member of a committee needs a guess among them, losing up to a factor of the number of honest seats; that step is not proved.
 Updates signed by corrupted members alone are still accepted, so the safety of headers also needs an honest supermajority of the committee.
@@ -4393,8 +4394,21 @@ The theorems then conclude the bound, or `HashEvidence`, or `SigningEvidence`; n
 Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence, or the signing roots of the checks collide (`SigningEvidence`).
 `accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes or the signing roots show evidence.
 The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
-No theorem shows that a block of either run could include a slashing built from those signatures.
+These theorems alone do not show that a block of either run could include a slashing built from those signatures.
 An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
+`singleAttesterSlashing` (`DirectSafety/Includable.lean`) is the attester slashing whose two attestations name one validator alone, with two given signatures.
+`processAttesterSlashing_single_eq_slashValidator` takes the two data of a double or surround vote with the domains and signing roots that their `SignedIn` holds, and two signatures by the key alone that verify on them.
+Those signatures are given, not derived: the relation of signatures does not give them, and a signature that merely exists is not one that someone holds.
+The aggregates that the runs accepted could serve instead when each of their indices names, in the slashing state, the key it named in the run; the slashing then also slashes the other slashable validators in both, and no theorem states that case yet.
+The state reads the fork version of each signature at the target epoch of its data, and has the genesis validators root of the runs.
+`processAttesterSlashing_single_eq_slashValidator_run` takes a state of a run from the genesis of the signatures, whose genesis validators root is then the right one.
+The validator is slashable at the epoch of the state, and the preset allows at least one attester; mainnet allows at least 2048.
+Then `processAttesterSlashing` returns what slashing the validator returns, so it accepts the slashing exactly when the state can slash the validator (`processAttesterSlashing_eq_slashValidator_of_single`, `Consensus/Proofs/Transition/AttesterSlashingAccepted.lean`).
+This is about the operation; it does not show that a whole block with it is valid.
+The fork windows cannot hold when a state of the chain reads neither version at that epoch, for example when the two versions are more than one fork apart; no theorem states this.
+No theorem shows that the state can slash the validator in general.
+That step can fail on checked arithmetic (exit queue, withdrawable epoch, slashings sum, balances) or on the proposer lookup.
+The pairs of headers are left out: they arise only from a proposer slashing that a tail already processed, so that run already slashed the key.
 The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
 
 `source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).
@@ -6881,16 +6895,17 @@ The codeword searches of each scheme share the bullet of that scheme:
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
-- Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`, `Consensus/Proofs/SignatureChecks.lean`).
+- Light client: the one aggregate check that the client makes on an update accepts only if every key of the call signed its message (`SignatureChecks.AggregateSoundOn` on `updateSignatureCall`, `Consensus/Proofs/LightClient/Authenticate.lean`).
   BLS signatures with proofs of possession are meant to make a forged aggregate unlikely, and EthLib proves only the bound below.
   `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds the forger of such aggregates on EthLib's bytes, with both hashes as random oracles.
   That is the draft's scheme, whose proofs of possession hash the key under the key tag.
   Ethereum registers keys with deposit signatures under the message tag instead, which that game does not model.
   `LightClientForgery.forgeAdvantage_le` bounds the probability that the light client accepts a forged signature of one designated honest member, when every signer carries a proof of possession that passes PopVerify, §3.3.3.
-  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives the probability of a forgery for one member.
-  Over every input, the BLS checks accept the honest signature of any valid key on any message (`verify_sign`, `fastAggregateVerify_sign`).
-  So with those checks, this assumption holds only for a relation that relates every valid key to every message, and those theorems then do not say who signed.
-  A form restricted to the calls of one update is not stated yet.
+  The relation of real signatures relates a key held by the adversary to every message, and an honest member to the roots it signed.
+  For it, the assumption says that no honest member whose bit is set was forged on the accepted call of the update.
+  Given an accepted update, this is close to the conclusion; the theorems add that the client's check is that call, and the bound on participants.
+  The bound gives the probability of a forgery for one member; reading it as the absence of forgery on one update is left informal.
+  The form over every input would hold, with the BLS checks, only for a relation that relates every valid key to every message (`verify_sign`, `fastAggregateVerify_sign`), so the theorems take the form on one call.
 - Direct accountable safety, signed form: the accepted aggregate checks that blocks of the two runs made accept only if every key of the call signed its message (`SignatureChecks.AggregateSoundOn`, `Consensus/Proofs/SignatureChecks.lean`).
   The accepted header checks of their proposer slashings accept only if the key signed the header (`SignatureChecks.VerifySoundOn`).
   For the relation of real signatures, these say that none of those calls accepted a forgery.

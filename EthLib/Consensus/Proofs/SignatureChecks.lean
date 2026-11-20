@@ -13,7 +13,7 @@ The assumption takes a relation that says which messages the holder of each key 
 
 It asks that an aggregate check accepts a message only if every key of the aggregate signed it.
 
-No signature scheme meets it with certainty, so the theorems take it as a hypothesis.
+No signature scheme meets it with certainty, so the theorems take a form of it as a hypothesis.
 
 The checks that accept every signature do not meet it, when no key signed any message.
 
@@ -46,7 +46,7 @@ It needs a proof of possession for every signer, and it is not a proof of this a
 
 Ethereum's keys carry deposit signatures instead.
 
-The theorems that reason about one accepted check take the assumption instead of the bound. -/
+The theorems take the form on a set of calls instead of the bound; this form implies it. -/
 def SignatureChecks.AggregateSound (checks : SignatureChecks)
     (signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop) : Prop :=
   ∀ keys message signature, checks.fastAggregateVerify keys message signature = true →
@@ -79,6 +79,13 @@ theorem SignatureChecks.not_aggregateSoundOn_acceptAll (key : Cryptography.Bls.B
     ¬SignatureChecks.acceptAll.AggregateSoundOn (· = (#[key], message, signature))
       fun _ _ => False :=
   fun sound => sound #[key] message signature rfl rfl key (by simp)
+
+/-- The assumption over every input gives the assumption on any set of calls. -/
+theorem SignatureChecks.AggregateSound.on {checks : SignatureChecks}
+    {signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop} (sound : checks.AggregateSound signed)
+    (calls : Array Cryptography.Bls.BLSPubkey × ByteArray × Cryptography.Bls.BLSSignature → Prop) :
+    checks.AggregateSoundOn calls signed :=
+  fun keys message signature _ => sound keys message signature
 
 /-- The assumption on the check of one signature by one key, for a given set of calls only.
 

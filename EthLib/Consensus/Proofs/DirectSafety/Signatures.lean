@@ -45,6 +45,8 @@ Otherwise the hashes of the runs show evidence.
 The two signed roots of a pair differ, or SHA-256 collides in the signing roots of the checks.
 
 These theorems do not show that a block of either run could include a slashing of those keys.
+
+With a signature by the key alone on each data, a separate module shows when a state accepts one.
 -/
 
 @[expose] public section

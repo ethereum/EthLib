@@ -47,6 +47,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.DepartureQueue
 public import EthLib.Consensus.Proofs.DirectSafety.FundingBlock
 public import EthLib.Consensus.Proofs.DirectSafety.FundingEpoch
 public import EthLib.Consensus.Proofs.DirectSafety.FundingSlot
+public import EthLib.Consensus.Proofs.DirectSafety.Includable
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalBounds
 public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
@@ -185,6 +186,7 @@ public import EthLib.Consensus.Proofs.Time
 public import EthLib.Consensus.Proofs.Transition.ActivationExitOrder
 public import EthLib.Consensus.Proofs.Transition.ActivationReserve
 public import EthLib.Consensus.Proofs.Transition.ActiveKept
+public import EthLib.Consensus.Proofs.Transition.AttesterSlashingAccepted
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedBlock
 public import EthLib.Consensus.Proofs.Transition.BalanceCappedWithdrawals
 public import EthLib.Consensus.Proofs.Transition.BalanceDrift
