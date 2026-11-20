@@ -12,7 +12,7 @@ from raising import raises
 from .expected_errors import expected_message, fork_schedule
 from .test_blocks import _first_item
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 # The networks of the release that run the rules of Amsterdam under a blob schedule of their own.
 # Each sets its schedule from genesis, or from the time 15,000 that its name gives.

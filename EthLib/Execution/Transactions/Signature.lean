@@ -98,13 +98,13 @@ From Spurious Dragon, `v = 35 + 2 c + y` signs the chain `c` with the recovery i
 
 [EIP-155](https://eips.ethereum.org/EIPS/eip-155#specification) adds that form.
 
-A chain of 2^64 or more is invalid, as [execution-specs][es] at commit `e27f097` rejects it.
+A chain of 2^64 or more is invalid, as [execution-specs][es] at commit `391d8a0` rejects it.
 
 No EIP fixes that bound, and EIP-2294, which is Stagnant, only suggests one.
 
 Any other `v` is invalid.
 
-[es]: https://github.com/ethereum/execution-specs/tree/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e -/
+[es]: https://github.com/ethereum/execution-specs/tree/391d8a05d5cb182542ac7e7330c858b6ee03f990 -/
 def legacyRecovery (fork : Fork) (v : U256) : Except TransactionError (Option U256 × Fin 2) :=
   if v.toNat = 27 then .ok (none, 0)
   else if v.toNat = 28 then .ok (none, 1)

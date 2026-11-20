@@ -23,7 +23,7 @@ EIP_1108_FORKS = since("istanbul")
 # Files: eip197_ec_pairing/test_ecpairing.py, eip197_ec_pairing/test_ecpairing_fuzzed.py
 # Files: eip196_ec_add_mul/test_gas.py, eip197_ec_pairing/test_gas.py
 # Repository: ethereum/execution-specs
-# Commit: e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e
+# Commit: 391d8a05d5cb182542ac7e7330c858b6ee03f990
 # Licence: CC0-1.0
 #
 # `extract_alt_bn128_cases.py` read the `pytest.param` lists with Python's `ast`.

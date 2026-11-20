@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ethlib.execution import blocks
+from ethlib.serialization import rlp
 from raising import raises
 
 _FILE = Path(__file__).resolve().parents[4] / "tests" / "execution" / "blocks"
@@ -30,6 +31,11 @@ ENCODING = {
 # The codes of the rules of the form: order, uniqueness and empty slots.
 FORM_CODES = range(401, 410)
 TOO_MANY_ITEMS = 410
+# The gas that each item of a list costs: an address or a storage key.
+# EIP-7928 gives it as ITEM_COST in "Block Access List Size Constraint".
+ITEM_COST = 2000
+# The exception of a payload whose list holds more items than its gas limit allows.
+GAS_LIMIT_EXCEEDED = "BlockException.BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED"
 
 # The hash of the empty list, the Keccak-256 hash of 0xc0, as EIP-7928 gives it.
 EMPTY_HASH = "1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347"
@@ -40,7 +46,9 @@ def _function(case) -> str:
 
 
 def _id(case) -> str:
-    return f"{case['test'].split('[')[-1][:70]}-{case['payload']}"
+    variant = case["test"].split("[")[-1].removeprefix("fork_Amsterdam-blockchain_test_engine")
+    parts = [_function(case), variant.strip("-]"), str(case["payload"])]
+    return "-".join(part for part in parts if part)
 
 
 def _message(case) -> str:
@@ -146,60 +154,6 @@ _MESSAGES = {
         "test_bal_invalid_engine_payload_encoding",
         "header_commits_to_payload_rlp-rlp_truncated_list",
     ): (_REJECTED + "inputTooShort 1 0"),
-    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_account_access"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_balance"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "out_of_bounds-extra_storage_write_touched"): (
-        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
-        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
-        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
-    ),
-    (
-        "test_bal_invalid_extraneous_entries",
-        "out_of_bounds-extra_storage_write_uninvolved_account",
-    ): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "same_tx-extra_account_access"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "same_tx-extra_balance"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "same_tx-extra_storage_write_touched"): (
-        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
-        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
-        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
-    ),
-    ("test_bal_invalid_extraneous_entries", "same_tx-extra_storage_write_uninvolved_account"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "system_tx-extra_account_access"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "system_tx-extra_balance"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
-    ("test_bal_invalid_extraneous_entries", "system_tx-extra_storage_write_touched"): (
-        _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
-        "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
-        "0x0000000000000000000000000000000000000000000000000000000000000000#256"
-    ),
-    ("test_bal_invalid_extraneous_entries", "system_tx-extra_storage_write_uninvolved_account"): (
-        _INVALID + "accountsNotAscending\n  #v[192, 246, 220, 158, 88, 54, 245, 76, 170, 219, "
-        "245, 156, 198, 147, 70, 197, 8, 225, 153, 43]"
-    ),
     (
         "test_bal_invalid_non_minimal_scalar_encoding",
         "header_commits_to_canonical_rlp-field_balance",
@@ -302,6 +256,15 @@ _MESSAGES = {
         _INVALID + "slotsNotAscending\n  #v[91, 70, 29, 63, 129, 119, 180, 238, 152, 26, 224, "
         "164, 55, 194, 242, 36, 191, 123, 64, 199]"
     ),
+    **{
+        ("test_bal_invalid_extraneous_entries", f"{padding}-{scope}-extra_storage_write_touched"): (
+            _INVALID + "readAndWritten\n  #v[41, 83, 111, 247, 58, 50, 236, 131, 154, 252, 215, "
+            "21, 242, 17, 134, 127, 146, 199, 162, 191]\n  "
+            "0x0000000000000000000000000000000000000000000000000000000000000000#256"
+        )
+        for padding in ("padding_none", "padding_to_cap", "padding_past_cap")
+        for scope in ("out_of_bounds", "same_tx", "system_tx")
+    },
     ("test_bal_invalid_tx_order", ""): (
         _INVALID + "balanceChangesNotAscending\n  #v[42, 220, 37, 102, 80, 24, 170, 31, 224, "
         "230, 188, 102, 109, 172, 143, 194, 105, 127, 249, 186]"
@@ -331,11 +294,13 @@ def test_encoding_rejected(case) -> None:
         blocks.block_access_list_hash(bytes.fromhex(case["bal"]))
 
 
-@pytest.mark.parametrize(
-    "case",
-    [c for c in INVALID if c["error"].endswith("BLOCK_ACCESS_LIST_GAS_LIMIT_EXCEEDED")],
-    ids=_id,
-)
+def _items(bal: bytes) -> int:
+    """The items of a list: each account, and each storage key that it writes or reads."""
+    accounts = rlp.decode(bal)
+    return len(accounts) + sum(len(account[1]) + len(account[2]) for account in accounts)
+
+
+@pytest.mark.parametrize("case", [c for c in INVALID if c["error"] == GAS_LIMIT_EXCEEDED], ids=_id)
 def test_too_many_items(case) -> None:
     with raises(blocks.BlockError, _message(case)) as error:
         blocks.check_block_access_list(bytes.fromhex(case["bal"]), case["gasLimit"])
@@ -388,12 +353,11 @@ FORM_ALSO = {
     "test_bal_invalid_complex_corruption",
     "test_bal_invalid_tx_order",
 }
-FORM_ALSO_EXTRA = (
-    "extra_account_access]",
-    "extra_balance]",
-    "extra_storage_write_touched]",
-    "extra_storage_write_uninvolved_account]",
-)
+FORM_ALSO_EXTRA = ("extra_storage_write_touched]",)
+# The payloads of the extraneous entries that are padded one item past the cap of their block.
+PAST_CAP = "padding_past_cap-"
+# The payloads of the extraneous entries that are padded to exactly the cap.
+TO_CAP = "padding_to_cap-"
 
 
 def _form_also(case) -> bool:
@@ -411,17 +375,16 @@ def test_cases_cover_each_kind() -> None:
     assert len(VALID) == 1146
     assert sum(_function(c) in FORM for c in INVALID) == 17
     assert sum(_function(c) in ENCODING for c in INVALID) == 18
-    assert sum(c["error"].endswith("GAS_LIMIT_EXCEEDED") for c in INVALID) == 5
+    assert sum(c["error"] == GAS_LIMIT_EXCEEDED for c in INVALID) == 5
     # Every other invalid case belongs to a test that needs block execution.
     # So a new kind of case that no test reads fails here.
     read = FORM | ENCODING
-    rest = [
-        c
-        for c in INVALID
-        if _function(c) not in read and not c["error"].endswith("GAS_LIMIT_EXCEEDED")
-    ]
+    rest = [c for c in INVALID if _function(c) not in read and c["error"] != GAS_LIMIT_EXCEEDED]
     assert rest == NEEDS_EXECUTION
-    assert (len(rest), sum(map(_form_also, rest))) == (80, 15)
+    past_cap = [c for c in rest if PAST_CAP in c["test"] and not _form_also(c)]
+    to_cap = [c for c in rest if TO_CAP in c["test"] and not _form_also(c)]
+    counts = (len(rest), sum(map(_form_also, rest)), len(past_cap), len(to_cap))
+    assert counts == (128, 12, 21, 21)
 
 
 @pytest.mark.parametrize("case", NEEDS_EXECUTION, ids=_id)
@@ -429,12 +392,23 @@ def test_needs_execution(case) -> None:
     # The blockchain tests of the same names run each of these blocks in the parity suite.
     # EthLib rejects each block there, since its list differs from the one that the body builds.
     # Here the form check alone rejects exactly the payloads that also break the form.
+    # A list padded past the cap of its block has too many items, unless its form fails first.
     bal = bytes.fromhex(case["bal"])
     if _form_also(case):
         with raises(blocks.BlockError, _message(case)) as error:
             blocks.check_block_access_list(bal, case["gasLimit"])
         assert error.value.code in FORM_CODES
+    elif PAST_CAP in case["test"]:
+        cap = case["gasLimit"] // ITEM_COST
+        message = _INVALID + f"tooManyItems {_items(bal)} {cap}"
+        assert _items(bal) == cap + 1
+        with raises(blocks.BlockError, message) as error:
+            blocks.check_block_access_list(bal, case["gasLimit"])
+        assert error.value.code == TOO_MANY_ITEMS
     else:
+        # A list padded to the cap holds exactly as many items as its block allows.
+        if TO_CAP in case["test"]:
+            assert _items(bal) == case["gasLimit"] // ITEM_COST
         blocks.check_block_access_list(bal, case["gasLimit"])
 
 

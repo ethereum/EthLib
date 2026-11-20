@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 MEMBERS = "fixtures/transaction_tests"
 
 _REPO = Path(__file__).resolve().parents[4]

@@ -1,8 +1,8 @@
 # Transaction test vectors
 
-The files here are the transaction tests of `ethereum/execution-specs`, from the release `tests@v21.0.2`.
-The release targets commit `e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e`, and its fixtures are under CC0-1.0.
-Its archive `fixtures.tar.gz` has sha256 `e2fa7ea2ea516459f9ab92284b2927892f318f4e1f78ca802cb05a6c3b479ed9`.
+The files here are the transaction tests of `ethereum/execution-specs`, from the release `tests@v21.0.3`.
+The release targets commit `391d8a05d5cb182542ac7e7330c858b6ee03f990`, and its fixtures are under CC0-1.0.
+Its archive `fixtures.tar.gz` has sha256 `46bd48fb71a23da084218fe856fe442ab0c8d00c85c1c1aead0d2a965804fd24`.
 
 Each file is a copy, without change, of a file under `fixtures/transaction_tests/` in that archive, at the same path.
 A test holds the bytes of one transaction and, for each fork, the outcome that a client must reach.

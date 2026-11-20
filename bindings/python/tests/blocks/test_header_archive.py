@@ -11,7 +11,7 @@ from raising import raises
 from .expected_errors import expected_message
 from .test_blocks import FORK_OF_NETWORK, _first_item
 
-ARCHIVE = "execution-specs/tests@v21.0.2/fixtures"
+ARCHIVE = "execution-specs/tests@v21.0.3/fixtures"
 
 # The directories of the release that fill a network from Frontier to Paris.
 DIRECTORIES = [

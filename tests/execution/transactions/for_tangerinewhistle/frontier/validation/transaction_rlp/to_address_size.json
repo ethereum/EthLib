@@ -13,7 +13,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode the to field with a truncated 19-byte address or a 21-byte\naddress made of a zero byte prefixing a valid address.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L309"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L309"
         }
     },
     "tests/frontier/validation/test_transaction_rlp.py::test_to_address_size[fork_TangerineWhistle-transaction_test-size_21-error_TransactionException.ADDRESS_TOO_LONG]": {
@@ -30,7 +30,7 @@
             "comment": "`execution-specs` generated test",
             "filling-transition-tool": "2.19.0",
             "description": "Encode the to field with a truncated 19-byte address or a 21-byte\naddress made of a zero byte prefixing a valid address.",
-            "url": "https://github.com/ethereum/execution-specs/blob/e27f097ec7b3e6e8ee9c2c1873c183e8f7da7a6e/tests/frontier/validation/test_transaction_rlp.py#L309"
+            "url": "https://github.com/ethereum/execution-specs/blob/391d8a05d5cb182542ac7e7330c858b6ee03f990/tests/frontier/validation/test_transaction_rlp.py#L309"
         }
     }
 }
