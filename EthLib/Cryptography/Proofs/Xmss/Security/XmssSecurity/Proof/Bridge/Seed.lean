@@ -51,6 +51,19 @@ theorem mem_support_progCache {seed : MasterSeed} {d : Derivations}
   rw [run_progCache, support_map]
   exact ⟨p, hp, rfl⟩
 
+/-- An output whose cache is an overlay is an output whose cache has the type of the run.
+
+The overlay's cache type is the oracle type of inputs to outputs, and the run's is its name.
+
+So the two outputs differ only in type.
+
+It holds for any computation, so the kernel never runs one to compare them. -/
+private theorem mem_support_overlay_retype {α : Type} (c : OracleComp HashSpec α)
+    (E : QueryCache HashSpec) {p : α × QueryCache HashSpec}
+    (h : (p.1, overlay E p.2) ∈ support ((simulateQ randomOracle c).run E)) :
+    ((p.1, (overlay E p.2 : QueryCache HashSpec)) : α × QueryCache HashSpec) ∈
+      support ((simulateQ randomOracle c).run E) := h
+
 /-- The real budget, after key generation, from the clean cache. -/
 theorem cleanBudget (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     (hbound : SeededBudget adversary q) (d : Derivations)
@@ -59,11 +72,20 @@ theorem cleanBudget (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     keygenQueries ≤ q ∧
       HashQueryBound (Seeded.gameRest (tableScheme d.rnd) (toModelAdversary adversary) (modelPublicKey d p.1)
         (modelSecretKey d p.1)) p.2 (q - keygenQueries) := by
-  refine ⟨(afterKeygen_budget adversary q hbound 0 d p.1 _ (mem_support_progCache hp)).1, ?_⟩
-  exact hashQueryBound_of_seed_caches guessBound_seedHit _ (q - keygenQueries) []
-    (fun seed => overlay (progCache seed d) p.2) p.2 (by simp only [List.length_nil]; omega)
-    (fun seed _ => agreeOutside_overlay_progCache seed d p.2)
-    (fun seed _ => (afterKeygen_budget adversary q hbound seed d p.1 _ (mem_support_progCache hp)).2)
+  -- Take some seed as a variable: the kernel would run key generation to match two literals.
+  obtain ⟨seed, -⟩ : ∃ _ : MasterSeed, True := ⟨0, trivial⟩
+  refine ⟨(afterKeygen_budget adversary q hbound seed d p.1 _
+    (mem_support_overlay_retype _ _ (mem_support_progCache hp))).1, ?_⟩
+  -- Transfer the bound for any game: the kernel would run the game to match the two caches.
+  have transfer : ∀ {α : Type} (game : OracleComp OracleWorld α),
+      (∀ seed, HashQueryBound game (overlay (progCache seed d) p.2) (q - keygenQueries)) →
+        HashQueryBound game p.2 (q - keygenQueries) := fun game bounded =>
+    hashQueryBound_of_seed_caches guessBound_seedHit game (q - keygenQueries) []
+      (fun seed => overlay (progCache seed d) p.2) p.2 (by simp only [List.length_nil]; omega)
+      (fun seed _ => agreeOutside_overlay_progCache seed d p.2) (fun seed _ => bounded seed)
+  exact transfer _ fun seed =>
+    (afterKeygen_budget adversary q hbound seed d p.1 _
+    (mem_support_overlay_retype _ _ (mem_support_progCache hp))).2
 
 /-- Dropping the programmed entries costs a seed guess per hash call after key generation. -/
 theorem tableGame_le_clean (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
