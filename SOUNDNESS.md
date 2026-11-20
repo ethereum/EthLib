@@ -5133,15 +5133,15 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
-A block without transactions has an empty list of call results either way (`callsJson_nil`, `Proofs/Rpc/SimulateCalls.lean`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`, `Proofs/Rpc/SimulateCalls.lean`).
+A block without transactions has an empty list of call results either way (`callsJson_nil`).
 So it is the same with the flag or without (`json_trace_of_nil`).
 Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
 So when each block of a simulation is from Glamsterdam or has no transactions, the answer is the same either way (`simulate_traceTransfers_of_glamsterdam_le_or_nil`, `Proofs/Rpc/SimulateCalls.lean`).
 That covers a simulation whose blocks are all from Glamsterdam (`simulate_traceTransfers`).
 A block simulated without calls has no transactions (`simulateBlock_transactions`, `Proofs/Rpc/SimulateBlocks.lean`).
 A property holds for each block of a simulation when two kinds of blocks have it (`simulateBlocks_forall`).
-They are the blocks simulated from an empty request, as gap blocks are, and the blocks of the plan.
+They are the blocks simulated from the base block with an empty request, as gap blocks are, and the blocks of the plan.
 Suppose that each block of the plan is from Glamsterdam or has no calls.
 Then each block of the simulation, gap blocks included, is from Glamsterdam or has no transactions (`simulateBlocks_glamsterdam_le_or_nil`).
 So the answer is the same either way (`simulate_traceTransfers_of_plan`, `Proofs/Rpc/SimulateCalls.lean`).
