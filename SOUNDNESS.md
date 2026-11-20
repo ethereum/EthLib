@@ -5673,7 +5673,16 @@ The file `apis/beacon/light_client/bootstrap.yaml` of release `v5.0.0-beta.0` li
 `bootstrapResponse_of_error` shows that the JSON answer passes each refusal on unchanged.
 `bootstrapFor_of_missing` shows that a root whose block or post state the store lacks gets that error.
 `bootstrapFor_of_lt_altair` shows that error for a root whose post state is before the Altair fork epoch, for a store of any fork and under any schedule.
-No theorem states whether a served bootstrap can get code 500, when it is written in JSON or in SSZ.
+`bootstrapResponse_eq_error_iff` shows that the JSON answer refuses exactly when the bootstrap does, with the same error.
+So in JSON a served bootstrap never gets code 500.
+It applies `versioned_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) with `toApiJson_total` (`Consensus/Proofs/BeaconApi/Encoding.lean`), by which the JSON writer never fails on a value of a lawful type.
+`bootstrapResponse_error` combines it with `bootstrapFor_error`: each refusal of the JSON answer is the error with code 404 that names the root.
+Both assume a preset with a nonempty logs bloom and sync committee, as the laws of SSZ for the light client containers do.
+In SSZ, `SszType.serialize_ok_or_overflow` (`Serialization/Proofs/Ssz/Typed/Class.lean`) shows that writing a value of a lawful type fails only when a composite part reaches 2^32 bytes.
+The keys of a sync committee reach that size when it holds more than 2^32 / 48 keys.
+The writer checks that size for each composite part.
+So under such a preset the SSZ answer of a served bootstrap gets code 500.
+No theorem states that, nor that a bootstrap of the mainnet or the minimal preset stays below that size.
 
 `bootstrapFor_error_iff_of_reachable` (`Consensus/Proofs/BeaconApi/LightClientBootstrapReachable.lean`) is about a store that the handlers reach from an anchor that the fork choice accepts.
 It covers each root whose block and post state such a store holds, with that state from the Altair fork epoch on.
@@ -5710,7 +5719,9 @@ The decoder also refuses a chunk whose digest is not the digest of the epoch of 
 `encodeUpdateChunks_decode` shows the converse under the same assumptions: bytes that decode are the chunks of the updates they give.
 `finalityUpdateResponse_notFound_iff` and `optimisticUpdateResponse_notFound_iff` show that each latest update answer refuses with code 404 exactly when the node knows no update of its kind.
 The files `finality_update.yaml` and `optimistic_update.yaml` of that release list that code when "No `LightClientFinalityUpdate` is available" and "No `LightClientOptimisticUpdate` is available".
-No theorem states whether a known update can get code 500 when it is written in JSON.
+`finalityUpdateResponse_eq_error_iff` and `optimisticUpdateResponse_eq_error_iff` show that each latest update answer refuses exactly when the node knows no update of its kind.
+Its error is then the one with code 404, so a known update never gets code 500.
+Both apply `versioned_eq_error_iff` (`Consensus/Proofs/BeaconApi/Responses.lean`) with `toApiJson_total` (`Consensus/Proofs/BeaconApi/Encoding.lean`), and assume a preset with a nonempty logs bloom and sync committee.
 The Python suite (`bindings/python/tests/consensus/test_beacon_api_light_client.py`) reads the pinned data collection cases of the light client.
 It checks that the chunks of the best updates of each case carry the digests and the bytes that the case serves, and decode back to them.
 It checks the start, the count and the limit of 128 of a range, the versions of the JSON answer, and the refusal of an update of another fork than its epoch.

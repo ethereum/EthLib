@@ -10,6 +10,8 @@ Writing the value of an answer as JSON fails only with code 500.
 So a versioned answer refuses with any other code exactly when its value does.
 
 A versioned answer passes each refusal of its value on unchanged.
+
+A versioned answer refuses exactly as its value does, when the JSON writer succeeds on that value.
 -/
 
 @[expose] public section
@@ -61,5 +63,18 @@ theorem versioned_of_error {α : Type} [SszType α] [ApiSpelling α] {fork : For
     versioned fork field = .error error := by
   rw [versioned, refused]
   rfl
+
+/-- A versioned answer refuses exactly when its value does, with the same error.
+
+It needs the JSON writer to succeed on that value, when there is one. -/
+theorem versioned_eq_error_iff {α : Type} [SszType α] [ApiSpelling α] {fork : Fork}
+    {field : Except ErrorMessage α} {error : ErrorMessage}
+    (written : ∀ value, field = .ok value → ∃ document, toApiJson value = .ok document) :
+    versioned fork field = .error error ↔ field = .error error := by
+  cases field with
+  | error fault => simp [versioned, bind, Except.bind]
+  | ok value =>
+    obtain ⟨document, wrote⟩ := written value rfl
+    simp [versioned, apiJsonOr500, wrote, Except.mapError, bind, Except.bind, pure, Except.pure]
 
 end EthLib.Consensus.BeaconApi
