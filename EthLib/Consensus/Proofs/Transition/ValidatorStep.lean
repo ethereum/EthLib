@@ -4932,6 +4932,7 @@ private theorem CapStep.step {s t : ForkedBeaconState preset}
     obtain ⟨last, assigned, _⟩ := CapStep.upgrades activation compounding upgrades
     exact ⟨first.trans last, fun c => assigned early c ∘ partials c⟩
 
+/-- A validator's withdrawal cap is at least the maximum effective balance before Electra. -/
 theorem minimum_cap
     (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
     (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)

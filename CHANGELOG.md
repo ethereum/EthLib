@@ -638,6 +638,30 @@ Not yet released.
 
 - `justifiedPinned_of_setting.minimal` is `justifiedPinned_of_setting` on the minimal preset, with the preset premises proved.
 
+- `DirectSafety.Apriori.Internal.applyPendingDeposit_absent_balances` says that a pending deposit to a key that no validator has raises no balance inside the registry.
+  It changes nothing, or appends one validator with its balance.
+  The pin's deposit bound reads it.
+
+- `DirectSafety.Apriori.Internal.except_dite_bind` moves a fork-conditional replay before its common continuation.
+  The pin's credit bound reads it.
+
+- `DirectSafety.Apriori.Internal.keys_debits_le` says that the debits of one event over a set of keys are at most its debits over the registry.
+  The pin's debit bounds read it.
+
+- `DirectSafety.Apriori.Internal.slashing_credits_le` says that uniform per-index bounds over the step inputs of a run pay all its slashing credits only once.
+  The pin's whistleblower terms read it.
+
+- `Internal.minimum_cap` says that the withdrawal cap of a validator is at least the maximum effective balance before Electra.
+  It needs the activation balance and the compounding cap in order.
+  The pin's floors for keys that upgrade read it.
+
+- `balanceDrift_epoch` says that an epoch keeps every existing effective balance until its effective-balance update.
+  Registry updates and pending deposits before it keep existing effective balances, and the stages after it keep the validators and the balances.
+  The pin's floor of a key's effective balance reads it.
+
+- `rounded_mono` says that a balance rounded down to an increment grows with the balance.
+  The pin's effective-balance bounds read it.
+
 ### Changes that break callers
 
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
