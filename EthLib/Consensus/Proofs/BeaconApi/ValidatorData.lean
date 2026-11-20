@@ -268,7 +268,9 @@ The step of the empty slots takes the head state up to the requested slot.
 
 That step needs a requested slot after the slot of the head state.
 
-The last step takes the root of the target, and needs a requested slot not before the head state.
+The last step takes the root of the target.
+
+It needs a requested slot not before the slot of the head state.
 
 Computing the index of the data never fails, since from Gloas the head is never a pending node. -/
 theorem produceAttestationData_internal_iff {config : Config} {store : Store preset fork}

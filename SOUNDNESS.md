@@ -5652,12 +5652,14 @@ Else, for a slot not after the current slot, it refuses so exactly when the empt
 `stateAtSlot_internal_iff` gives that case: the slot is after the slot of the head state, and `processSlots` fails.
 Else it refuses so exactly when the root of the target of the data (`getEpochBoundaryBlockRoot`) fails.
 The index never fails, since from Gloas the head is never a pending node (`getHead_ne_pending`, `Consensus/Proofs/ForkChoice/Head.lean`).
-A private lemma of the same file shows that building the data never fails for an index out of range.
+A private lemma of `Consensus/Proofs/BeaconApi/ValidatorData.lean` shows that building the data never fails for an index out of range.
 So the last step never gives code 400.
 `producePayloadAttestationData_internal_iff` states that the payload attestation data answer refuses with code 500 exactly when the fork is from Gloas and `getHead` fails.
-No theorem states when `getHead`, `getCurrentSlot`, `processSlots` or `getEpochBoundaryBlockRoot` fail.
-So no theorem states which stores make the two answers refuse with code 500.
-No theorem states it for the aggregate and contribution responses either, which also refuse so when writing the value as JSON fails.
+`getEpochBoundaryBlockRoot_eq_ok_iff` states exactly when the root of the target has a value.
+`getHead_exists`, `getHead_exists_of_gloas`, `ForwardReachable.exists_getCurrentSlot` and `processSlots_exists_ok` give conditions under which the other steps succeed.
+No theorem states exactly when `getHead`, `getCurrentSlot` or `processSlots` fail.
+So no theorem states exactly which stores make the two answers refuse with code 500.
+No theorem states when the aggregate and contribution responses refuse with code 500, which they also do when writing the value as JSON fails.
 `toApiJson_total` excludes that failure for a lawful type.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
