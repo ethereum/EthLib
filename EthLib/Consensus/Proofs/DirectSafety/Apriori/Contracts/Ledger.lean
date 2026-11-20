@@ -495,11 +495,21 @@ private theorem exit_trace_le_paid (x : ForkedBeaconState preset) (high : Nat)
     omega
   · rw [ite_eq_right inside] at bound
     exact bound.trans (Nat.zero_le _)
-theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
+/-- Before Gloas, the exit churn limit is the activation exit cap or the rounded share, if less.
+
+The share is the larger of the least churn limit and the total over the churn quotient.
+
+It rounds down to a whole number of increments. -/
+theorem exit_rate_toNat {fork : Fork} {s : BeaconState preset fork}
     (early : fork < .glamsterdam) {total rate : Gwei}
     (read : getTotalActiveBalance s = .ok total)
     (computed : exitChurnLimit config s = .ok rate) :
-    rate.toNat ≤ activationExitChurn preset config total.toNat := by
+    rate.toNat = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
+      (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
+          (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat) -
+        max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
+          (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat) %
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   have value : rate = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
       (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
@@ -507,6 +517,13 @@ theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
     simpa [exitChurnLimit, notGloas, getActivationExitChurnLimit,
       getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure] using computed.symm
   rw [value, Uint64.toNat_min, toNat_roundToIncrement, Uint64.toNat_max, UInt64.toNat_div]
+
+theorem exit_rate_le_churn {fork : Fork} {s : BeaconState preset fork}
+    (early : fork < .glamsterdam) {total rate : Gwei}
+    (read : getTotalActiveBalance s = .ok total)
+    (computed : exitChurnLimit config s = .ok rate) :
+    rate.toNat ≤ activationExitChurn preset config total.toNat := by
+  rw [exit_rate_toNat early read computed]
   have share := Nat.div_add_mod (total.toNat / config.CHURN_LIMIT_QUOTIENT.toNat)
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   have rounded :

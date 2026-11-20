@@ -12085,12 +12085,7 @@ private theorem exitRate_le {fork' : Fork} {s : BeaconState preset fork'}
         bind, Except.bind] at computed
     | ok t => exact ⟨t, rfl⟩
   have le := band total read
-  have value : rate = min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT
-      (roundToIncrement preset (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA
-        (total / config.CHURN_LIMIT_QUOTIENT))) := by
-    simpa [exitChurnLimit, notGloas, getActivationExitChurnLimit,
-      getBalanceChurnLimit, read, bind, Except.bind, pure, Except.pure] using computed.symm
-  rw [value, Uint64.toNat_min, toNat_roundToIncrement, Uint64.toNat_max, UInt64.toNat_div]
+  rw [DirectSafety.Apriori.Internal.exit_rate_toNat early read computed]
   exact min_le_min_left _ (rounded_mono _ (max_le_max_left _
     (Nat.div_le_div_right le)))
 

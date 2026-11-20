@@ -9,6 +9,9 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.Apriori.Internal.exit_rate_toNat` says that, before Gloas, the exit churn limit of a state is the activation exit cap or the rounded-down churn share of its total, if that is less.
+  `exit_rate_le_churn` reads it, and the pin's bound on the exit churn limit of a state with a bounded total reads it in `PinDriftBound`.
+
 - `Step.eq_slot_of_crossing` says that a step of a run that crosses an epoch is a slot step, and gives the step as that slot.
   `DirectSafety.Apriori.Internal.slot_of_crossing` now follows from it, and its statement is unchanged.
   The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
