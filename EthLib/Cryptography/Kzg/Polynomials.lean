@@ -47,7 +47,7 @@ abbrev Bytes48 := Vector UInt8 48
 
 It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
-  match Fr.fromBytesBE ⟨b.toArray⟩ with
+  match Fr.fromBytesBE b with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 

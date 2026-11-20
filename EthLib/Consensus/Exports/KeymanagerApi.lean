@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Base.Exports.PyValue
+public import EthLib.Consensus.Exports.Ssz
 public import EthLib.Consensus.KeymanagerApi.Server
 
 /-!
@@ -81,23 +82,43 @@ def keyStateJson (state : KeyState) : Json :=
     ("local_keys", .arr (state.localKeys.map fun key =>
       Interchange.bytesJson key.pubkey).toArray)]
 
+/-- The view of the chain from the names of its preset, configuration and fork, and a state. -/
+def chainViewOf (chain : String × String × String × ByteArray) : Result ChainView := do
+  let (name, configName, fork, data) := chain
+  let preset ← presetOf name
+  let config ← configOf configName
+  let fork ← forkOf fork.toUTF8
+  let state ← Serialization.Ssz.Exports.runSsz "state rejected"
+    (Serialization.Ssz.SszType.deserialize (BeaconState preset fork) data)
+  return { preset, fork, config, state }
+
 /-- The responses of calls made one after another on a client, then its state. -/
-def keymanagerRunOf (args : Nat × Nat × String × List (String × String × PyValue)) :
+def keymanagerRunOf (args : Nat × Nat × ExecutionAddress × UInt64 × String × String ×
+    Option (String × String × String × ByteArray) × List (String × String × PyValue)) :
     Result (List (Nat × PyValue) × PyValue) := do
-  let (memory, work, protection, calls) := args
-  let config : ClientConfig := { limits := { memory, work } }
+  let (memory, work, feeRecipient, gasLimit, graffiti, protection, chain, calls) := args
+  let chain ← match chain with
+    | some chain => some <$> chainViewOf chain
+    | none => pure none
+  let config : ClientConfig :=
+    { limits := { memory, work }, defaultFeeRecipient := feeRecipient,
+      defaultGasLimit := gasLimit, defaultGraffiti := graffiti }
   let record ← runKeymanager
     (readSlashingProtection toolchainJsonText "" (.str protection))
   let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
   let (responses, state) := calls.foldl (init := ([], start)) fun (responses, state) call =>
     let (method, path, body) := call
-    let (response, state) := handle toolchainJsonText config state method path body.toJson
+    let (response, state) := handle toolchainJsonText config chain state method path body.toJson
     ((response.status, PyValue.ofJson response.body) :: responses, state)
   return (responses.reverse, PyValue.ofJson (keyStateJson state))
 
 /-- The responses of calls made one after another on a validator client, then its state.
 
-The arguments are the memory and work bounds of key derivation, and the record as JSON text.
+The arguments are the memory and work bounds of key derivation, then the defaults of the client.
+
+The defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.
+
+A view of the chain may follow: the names of its preset, configuration and fork, and a state.
 
 The calls follow, each its method, its path and its body.
 

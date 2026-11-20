@@ -12,6 +12,7 @@ from ruamel.yaml import YAML
 from ethlib import consensus
 from ethlib.consensus import SlashingProtectionError
 from ethlib.cryptography import aes, keystore
+from ethlib.networking import snappy
 from raising import raises
 
 # The OpenAPI document and the types of the Keymanager API, pinned in tests/sources.toml.
@@ -257,6 +258,11 @@ MEMORY, WORK = 2**20, 2**20
 GENESIS = json.loads(_load("types/slashing_protection.yaml")["example"])["metadata"][
     "genesis_validators_root"
 ]
+# The defaults of the client: the examples of the address, the integer and the graffiti.
+DEFAULT_FEE_RECIPIENT = _load("types/eth_address.yaml")["example"].lower()
+DEFAULT_GAS_LIMIT = int(_load("types/uint.yaml")["Uint64"]["example"])
+DEFAULT_GRAFFITI = _load("types/graffiti.yaml")["example"]
+DEFAULTS = (bytes.fromhex(DEFAULT_FEE_RECIPIENT[2:]), DEFAULT_GAS_LIMIT, DEFAULT_GRAFFITI)
 # Secret keys of the tests, each a nonzero scalar below the order of the group.
 SECRETS = [bytes(31) + bytes([n]) for n in (1, 2, 3)]
 
@@ -304,7 +310,9 @@ def _run(
     calls: list[tuple[str, str, Any]], memory: int = MEMORY, work: int = WORK
 ) -> tuple[list[tuple[int, Any]], bytes, list[bytes]]:
     """The responses of calls on a client with no key, the record and the keys afterwards."""
-    responses, state = consensus.keymanager_run(memory, work, _interchange([]), calls)
+    responses, state = consensus.keymanager_run(
+        memory, work, *DEFAULTS, _interchange([]), None, calls
+    )
     keys = [bytes.fromhex(key[2:]) for key in state["local_keys"]]
     return responses, state["slashing_protection"].encode(), keys
 
@@ -453,12 +461,12 @@ def test_unknown_call():
 def test_bad_starting_record():
     """A starting record that does not read is refused with the code of EIP-3076 data."""
     with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
-        consensus.keymanager_run(MEMORY, WORK, '{"metadata": {}}', [])
+        consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, '{"metadata": {}}', None, [])
 
 
 def _calls(*calls: tuple[str, str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """The responses of calls on a client with no key, and its state afterwards."""
-    return consensus.keymanager_run(MEMORY, WORK, _interchange([]), list(calls))
+    return consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, _interchange([]), None, list(calls))
 
 
 def test_list_keys():
@@ -588,3 +596,160 @@ def test_move_a_key():
         with raises(SlashingProtectionError, "slashing protection failed with code 5"):
             consensus.check_attestation_signing(record, key, 8, 11, root)
     consensus.check_block_signing(new_record, key, 101, root)
+
+
+def test_fee_recipient_example():
+    """The example of issue #2140: get the default, set, get, delete, get, then an unknown key."""
+    k = _pubkeys()[0]
+    path = f"/eth/v1/validator/{k}/feerecipient"
+    other = "0x6fdfab408c56b6105a76eff5c0435d09fc6ed7a9"
+    unknown = f"/eth/v1/validator/{REMOTE_C}/feerecipient"
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("GET", path, {}),
+        ("POST", path, {"ethaddress": other}),
+        ("GET", path, {}),
+        ("DELETE", path, {}),
+        ("GET", path, {}),
+        ("DELETE", unknown, {}),
+    )
+    default = (200, {"data": {"pubkey": k, "ethaddress": DEFAULT_FEE_RECIPIENT}})
+    assert responses[1:] == [
+        default,
+        (202, None),
+        (200, {"data": {"pubkey": k, "ethaddress": other}}),
+        (204, None),
+        default,
+        (404, {"message": "The key was not found on the server"}),
+    ]
+
+
+def test_fee_recipient_zero():
+    """A fee recipient of zero is refused, and the default stays."""
+    k = _pubkeys()[0]
+    path = f"/eth/v1/validator/{k}/feerecipient"
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("POST", path, {"ethaddress": "0x" + "00" * 20}),
+        ("GET", path, {}),
+    )
+    message = "Cannot specify the 0x00 fee recipient address through the API"
+    assert responses[1:] == [
+        (400, {"message": message}),
+        (200, {"data": {"pubkey": k, "ethaddress": DEFAULT_FEE_RECIPIENT}}),
+    ]
+
+
+def test_gas_limit_and_graffiti():
+    """A gas limit and a graffiti set for one key leave the defaults of another key."""
+    k, other = _pubkeys()[:2]
+    keystores = [_keystore(secret, "pass") for secret in SECRETS[:2]]
+    responses, _ = _calls(
+        _import(keystores, ["pass", "pass"]),
+        ("POST", f"/eth/v1/validator/{k}/gas_limit", {"gas_limit": "36000000"}),
+        ("POST", f"/eth/v1/validator/{k}/graffiti", {"graffiti": "moved"}),
+        ("GET", f"/eth/v1/validator/{k}/gas_limit", {}),
+        ("GET", f"/eth/v1/validator/{other}/gas_limit", {}),
+        ("GET", f"/eth/v1/validator/{k}/graffiti", {}),
+        ("GET", f"/eth/v1/validator/{other}/graffiti", {}),
+    )
+    assert responses[1:] == [
+        (202, None),
+        (202, None),
+        (200, {"data": {"pubkey": k, "gas_limit": "36000000"}}),
+        (200, {"data": {"pubkey": other, "gas_limit": str(DEFAULT_GAS_LIMIT)}}),
+        (200, {"data": {"pubkey": k, "graffiti": "moved"}}),
+        (200, {"data": {"pubkey": other, "graffiti": DEFAULT_GRAFFITI}}),
+    ]
+
+
+def test_setting_bad_path_and_body():
+    """A path whose key does not read, or a body that does not read, gets HTTP 400."""
+    k = _pubkeys()[0]
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("GET", "/eth/v1/validator/0x12/gas_limit", {}),
+        ("POST", f"/eth/v1/validator/{k}/gas_limit", {"gas_limit": 1}),
+    )
+    assert responses[1:] == [
+        (400, {"message": "the public key of the path does not read"}),
+        (400, {"message": "the request does not read"}),
+    ]
+
+
+def test_setting_of_unmanaged_key():
+    """Every call on a setting of a key that the client does not manage gets HTTP 404."""
+    path = f"/eth/v1/validator/{REMOTE_C}/graffiti"
+    responses, _ = _calls(
+        ("GET", path, {}), ("POST", path, {"graffiti": "x"}), ("DELETE", path, {})
+    )
+    assert responses == [(404, {"message": "The key was not found on the server"})] * 3
+
+
+# The minimal operations of consensus-specs, whose voluntary exit cases "basic" the tests sign.
+# They are pinned in tests/sources.toml; Capella signs with the domain of the state, Deneb not.
+EXIT_CASES = Path(__file__).resolve().parents[4] / "tests/consensus/operations/minimal"
+# The width of an integer in SSZ, and the place of the slot in the bytes of a state.
+UINT64 = 8
+SLOT = slice(40, 48)
+SLOTS_PER_EPOCH_MINIMAL = 8
+
+
+def _exit_case(name: str) -> tuple[bytes, int, int, bytes]:
+    """The state of the case at a fork, and the epoch, the index and the signature of its exit."""
+    case = EXIT_CASES / name / "operations/voluntary_exit/pyspec_tests/basic"
+    state = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
+    signed = snappy.decompress((case / "voluntary_exit.ssz_snappy").read_bytes())
+    epoch = int.from_bytes(signed[:UINT64], "little")
+    index = int.from_bytes(signed[UINT64 : 2 * UINT64], "little")
+    return state, epoch, index, signed[2 * UINT64 :]
+
+
+@pytest.mark.parametrize(("fork", "name"), [("dencun", "deneb"), ("shapella", "capella")])
+def test_voluntary_exit_matches_consensus_specs(fork: str, name: str):
+    """The exit that the client signs is the signed exit of the case, byte for byte."""
+    state, epoch, index, signature = _exit_case(name)
+    # The keys of the test states of consensus-specs are the integers from 1, by validator index.
+    keystore_v = _keystore((index + 1).to_bytes(32, "big"), "pass")
+    _, held = _calls(_import([keystore_v], ["pass"]))
+    pubkey = held["local_keys"][0]
+    chain = ("minimal", "minimal", fork, state)
+    path = f"/eth/v1/validator/{pubkey}/voluntary_exit"
+    responses, _ = consensus.keymanager_run(
+        MEMORY,
+        WORK,
+        *DEFAULTS,
+        _interchange([]),
+        chain,
+        [
+            _import([keystore_v], ["pass"]),
+            ("POST", f"{path}?epoch={epoch}", {}),
+            ("POST", path, {}),
+            ("POST", f"{path}?epoch=x", {}),
+            _remote(REMOTE_C),
+            ("POST", f"/eth/v1/validator/{REMOTE_C}/voluntary_exit", {}),
+        ],
+    )
+    message = {"epoch": str(epoch), "validator_index": str(index)}
+    assert responses[1] == (
+        200,
+        {"data": {"message": message, "signature": "0x" + signature.hex()}},
+    )
+    current = int.from_bytes(state[SLOT], "little") // SLOTS_PER_EPOCH_MINIMAL
+    assert responses[2][0] == 200
+    assert responses[2][1]["data"]["message"] == {
+        "epoch": str(current),
+        "validator_index": str(index),
+    }
+    assert responses[3] == (400, {"message": "the epoch of the query does not read"})
+    assert responses[5] == (404, {"message": "The key was not found on the server"})
+
+
+def test_voluntary_exit_without_chain():
+    """A client with no view of the chain cannot sign an exit."""
+    pubkey = _pubkeys()[0]
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("POST", f"/eth/v1/validator/{pubkey}/voluntary_exit", {}),
+    )
+    assert responses[1] == (500, {"message": "the client has no view of the chain"})

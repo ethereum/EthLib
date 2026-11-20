@@ -7833,6 +7833,42 @@
    "docstring":
    "A request of the Remote-signing API, read and written again as the signer reads it.\n\nThe arguments are the name of the preset and the JSON document of the request.\n\nThe result holds every field that the request reads, and no other field.\n\nAn unknown preset has code 0.\n\nA document that is not a request has the code of its error."},
   {"summary":
+   "The root that a remote signer signs for a request of the Remote-signing API.",
+   "signature": "(name: str, config: str, document: Any) -> bytes",
+   "operation": "EthLib.Consensus.Exports.signingRequestRootExport",
+   "method": "consensus_signing_request_root",
+   "errors":
+   [{"type": "EthLib.Consensus.RemoteSigningApi.RequestError",
+     "codes":
+     [{"constructor": "notAnObject", "code": 1},
+      {"constructor": "missingField", "code": 2},
+      {"constructor": "badField", "code": 3},
+      {"constructor": "unknownType", "code": 4},
+      {"constructor": "unknownVersion", "code": 5},
+      {"constructor": "emptyAuthData", "code": 6}]}],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The root that a remote signer signs for a request of the Remote-signing API.\n\nThe arguments are the name of the preset, the name of the configuration and the document.\n\nThe configuration gives the genesis fork version of a registration and of a Builder API request.\n\nAn unknown preset or configuration has code 0.\n\nA document that is not a request has the code of its error."},
+  {"summary":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.",
+   "signature":
+   "(name: str, config: str, keys: list[bytes], protection: bytes, identifier: str, document: Any) -> tuple[int, bytes | None, bytes]",
+   "operation": "EthLib.Consensus.Exports.remoteSignerSignExport",
+   "method": "consensus_remote_signer_sign",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the sign endpoint of a remote signer, with the rule of EIP-3076.\n\nThe arguments are the preset, the configuration, the secret keys and the record.\n\nThen come the path and the request.\n\nThe result is the status, the signature when the status is 200, and the record after the call.\n\nAn unknown preset or configuration has code 0.\n\nSo do a secret key that is not one and a record that does not read."},
+  {"summary":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.",
+   "signature": "(keys: list[bytes]) -> Any",
+   "operation": "EthLib.Consensus.Exports.remoteSignerPublicKeysExport",
+   "method": "consensus_remote_signer_public_keys",
+   "errors": [],
+   "error_class": "RemoteSigningError",
+   "docstring":
+   "The answer of the public keys endpoint of a remote signer: its public keys as hex.\n\nThe argument is the list of its secret keys, each 32 big-endian bytes.\n\nA key that is not one has code 0."},
+  {"summary":
    "Whether a key may sign a block of a slot with a signing root, given a record.",
    "signature":
    "(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool",
@@ -7921,7 +7957,7 @@
   {"summary":
    "The responses of calls made one after another on a validator client, then its state.",
    "signature":
-   "(memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
+   "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, chain: tuple[str, str, str, bytes] | None, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
    "operation": "EthLib.Consensus.Exports.keymanagerRunExport",
    "method": "consensus_keymanager_run",
    "errors":
@@ -7932,7 +7968,7 @@
       {"constructor": "slashingProtection", "code": 3}]}],
    "error_class": "KeymanagerError",
    "docstring":
-   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, and the record as JSON text.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
+   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, then the defaults of the client.\n\nThe defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.\n\nA view of the chain may follow: the names of its preset, configuration and fork, and a state.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
   {"summary":
    "From Bellatrix: whether a block carries a payload other than the empty one.",
    "signature": "(name: str, fork: str, block: bytes) -> bool",

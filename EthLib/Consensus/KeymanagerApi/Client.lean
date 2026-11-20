@@ -42,6 +42,12 @@ structure KeyState where
   remoteKeys : List SignerDefinition
   /-- The record of what the keys signed, by EIP-3076. -/
   protection : Interchange
+  /-- The fee recipient set for each key, latest first. -/
+  feeRecipients : List (BLSPubkey × ExecutionAddress) := []
+  /-- The gas limit set for each key, latest first. -/
+  gasLimits : List (BLSPubkey × UInt64) := []
+  /-- The graffiti set for each key, latest first. -/
+  graffiti : List (BLSPubkey × String) := []
 
 /-- Whether a key is active: the client holds it. -/
 def KeyState.isActive (state : KeyState) (pubkey : BLSPubkey) : Bool :=
@@ -55,5 +61,11 @@ def KeyState.isReadonly (state : KeyState) (pubkey : BLSPubkey) : Bool :=
 structure ClientConfig where
   /-- The bounds on the key derivation of a keystore, which the source does not set. -/
   limits : Keystore.KdfLimits
+  /-- The fee recipient of a key with none set. -/
+  defaultFeeRecipient : ExecutionAddress
+  /-- The gas limit of a key with none set. -/
+  defaultGasLimit : UInt64
+  /-- The graffiti of a key with none set. -/
+  defaultGraffiti : String
 
 end EthLib.Consensus.KeymanagerApi

@@ -544,6 +544,11 @@ generator = "EELS 2.19.0"
 cases = ["**"]
 generator = "execution-specs filler, no transition tool"
 
+[[directories."bindings/python/tests/eth/portal_block_data"]]
+cases = ["block-data-19426587.yaml"]
+generator = "not established"
+checked = "the file holds the header, body and receipts of mainnet block 19426587, and portal-spec-tests 45e46aa names no exporting tool"
+
 [[directories."tests/execution/genesis"]]
 cases = ["**"]
 generator = "go-ethereum default genesis"

@@ -298,6 +298,8 @@ It checks the example of issue #2136 and the cases of the use case "Add a key" i
 It also lists the keys of a client, and runs the use case "Delete a key" of the source, with the request `a, a, b, c` and its statuses.
 It runs the calls on remote keys with the example of issue #2139: an import of `a, b, b` onto `a`, then a delete of `b, c`.
 It moves a key from one client to another with a delete and an import, as the use case "Move a key" of the source says.
+It runs the example of issue #2140 on the fee recipient, and sets the gas limit and the graffiti of a key, with the examples of the types as the defaults of the client.
+It signs the voluntary exit of the case `basic` of the voluntary exits of `operations/minimal/`, at Capella and at Deneb, with the key of its validator, and checks the signature of the case byte for byte.
 
 The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
 The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.
@@ -308,5 +310,9 @@ The test checks that the bindings refuse them, and that the first one reads once
 The examples name no preset, and five of them fix the size of a bitfield.
 The Altair block and the sync committee contribution have the sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 The test reads each example under every preset whose sizes it has, and checks the refusal under the other one.
-The test also reads the examples of the five kinds that Gloas adds.
+The test also computes the root that the signer signs for each example of a kind before Gloas that carries a root and reads, and compares it with the example's `signingRoot`, under the minimal configuration, whose genesis fork version is that of the examples.
+The Electra and Fulu aggregates carry a root that neither preset gives, so the test computes their root under the mainnet preset with its own merkleization, and compares it with that of the bindings.
+The test also reads the examples of the five kinds that Gloas adds, which carry no signing root.
+It computes the roots of the payload attestation, the preferences and the authentication with its own merkleization, and records those of the bid and the envelope, which are progressive containers.
+Finally, it runs the sign endpoint on each example that reads, with a fixed secret key, and checks each signature with `py_ecc`; the Electra and Fulu aggregates are refused, since their roots differ from the signer's.
 The envelope example has a logs bloom of 262 bytes, where the bloom has 256, so the test checks that the bindings refuse it, and that it reads once the bloom has 256 bytes.

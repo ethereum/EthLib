@@ -59,9 +59,12 @@ abbrev SecretKey := { sk : Fr // sk ≠ 0 }
 
 It rejects a wrong length, an integer `>= r` and zero. -/
 def SecretKey.fromBytes (bytes : ByteArray) : Except BlsError SecretKey :=
-  match Fr.fromBytesBE bytes with
-  | .error _ => .error .invalidSecretKey
-  | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
+  match exactBytes? 32 bytes with
+  | none => .error .invalidSecretKey
+  | some b =>
+    match Fr.fromBytesBE b with
+    | .error _ => .error .invalidSecretKey
+    | .ok sk => if h : sk = 0 then .error .invalidSecretKey else .ok ⟨sk, h⟩
 
 /-- The public key of a point, in the minimal-pubkey-size variant (§2.2). -/
 def pointToPubkey (p : G1) : BLSPubkey := G1.compress p
