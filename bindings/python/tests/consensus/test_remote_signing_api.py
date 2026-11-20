@@ -1,6 +1,7 @@
 """The requests of the Remote-signing API against the examples of its sign endpoint."""
 
 import copy
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -332,3 +333,125 @@ def test_aggregate_takes_the_shape_of_its_version():
     )
     with raises(ERROR, message):
         consensus.read_signing_request(PRESET, example)
+
+
+# The Electra and Fulu aggregates carry a signing root that neither preset gives.
+# Their data is the data of the Gloas aggregate, whose root the bindings match.
+WRONG_ROOT = {"AGGREGATE_AND_PROOF_V2 (ELECTRA)", "AGGREGATE_AND_PROOF_V2 (FULU)"}
+# The configuration whose genesis fork version, 0x00000001, the examples use.
+CONFIG = "minimal"
+
+
+def _well_spelled(name: str) -> dict[str, Any]:
+    """An example, with the fork info of `AGGREGATION_SLOT` in the spelling of the schema."""
+    example = copy.deepcopy(EXAMPLES[name])
+    if name == "AGGREGATION_SLOT":
+        fork = example["fork_info"]["fork"]
+        fork["previous_version"] = fork.pop("previousVersion")
+        fork["current_version"] = fork.pop("currentVersion")
+    return example
+
+
+ROOTED = sorted(
+    name
+    for name, value in EXAMPLES.items()
+    if "signingRoot" in value and name != "BLOCK (DEPRECATED)" and name not in WRONG_ROOT
+)
+
+
+def test_examples_of_kinds_before_gloas_carry_roots():
+    assert len(ROOTED) == 24
+    assert all(EXAMPLES[name]["type"] in KINDS for name in ROOTED)
+
+
+@pytest.mark.parametrize("name", ROOTED)
+def test_example_root(name: str):
+    example = _well_spelled(name)
+    for preset in _presets(name):
+        root = consensus.signing_request_root(preset, CONFIG, example)
+        assert "0x" + root.hex() == example["signingRoot"]
+
+
+def test_registration_root_takes_the_genesis_fork_version():
+    example = EXAMPLES["VALIDATOR_REGISTRATION"]
+    # The mainnet configuration has the genesis fork version 0x00000000.
+    root = consensus.signing_request_root(PRESET, "mainnet", example)
+    assert "0x" + root.hex() != example["signingRoot"]
+
+
+def _sha(left: bytes, right: bytes) -> bytes:
+    return hashlib.sha256(left + right).digest()
+
+
+def _merkleize(chunks: list[bytes], limit: int) -> bytes:
+    """The root of chunks padded with zero chunks to a power of two at least the limit."""
+    zero = b"\0" * 32
+    layer = list(chunks) or [zero]
+    for _ in range(max(limit - 1, 0).bit_length()):
+        if len(layer) % 2:
+            layer.append(zero)
+        layer = [_sha(layer[i], layer[i + 1]) for i in range(0, len(layer), 2)]
+        zero = _sha(zero, zero)
+    return layer[0]
+
+
+def _chunks(data: bytes) -> list[bytes]:
+    data += b"\0" * (-len(data) % 32)
+    return [data[i : i + 32] for i in range(0, len(data), 32)]
+
+
+def _uint(n: int) -> bytes:
+    return n.to_bytes(32, "little")
+
+
+def _hex(text: str) -> bytes:
+    return bytes.fromhex(text[2:])
+
+
+def _aggregate_signing_root(example: dict[str, Any]) -> bytes:
+    """The signing root of an Electra aggregate under the mainnet preset, computed here."""
+    data = example["aggregate_and_proof"]["data"]
+    aggregate = data["aggregate"]
+    vote = aggregate["data"]
+
+    def checkpoint(c: dict[str, str]) -> bytes:
+        return _merkleize([_uint(int(c["epoch"])), _hex(c["root"])], 2)
+
+    vote_root = _merkleize(
+        [
+            _uint(int(vote["slot"])),
+            _uint(int(vote["index"])),
+            _hex(vote["beacon_block_root"]),
+            checkpoint(vote["source"]),
+            checkpoint(vote["target"]),
+        ],
+        5,
+    )
+    # A bitlist drops its delimiter bit, and its length mixes into its root.
+    raw = bytearray(_hex(aggregate["aggregation_bits"]))
+    length = (len(raw) - 1) * 8 + raw[-1].bit_length() - 1
+    raw[-1] &= ~(1 << (raw[-1].bit_length() - 1))
+    bits = bytes(raw[: (length + 7) // 8])
+    # The mainnet limit is 2048 members times 64 committees, so 512 chunks.
+    bits_root = _sha(_merkleize(_chunks(bits), 2048 * 64 // 256), _uint(length))
+    signature = _hex(aggregate["signature"])
+    committee_bits = _merkleize(_chunks(_hex(aggregate["committee_bits"])), 1)
+    aggregate_root = _merkleize(
+        [bits_root, vote_root, _merkleize(_chunks(signature), 3), committee_bits], 4
+    )
+    proof = _merkleize(_chunks(_hex(data["selection_proof"])), 3)
+    message = _merkleize([_uint(int(data["aggregator_index"])), aggregate_root, proof], 3)
+    # The slot is in epoch 0, before the fork epoch 1, so the previous version applies.
+    info = example["fork_info"]
+    version = _hex(info["fork"]["previous_version"]) + b"\0" * 28
+    fork_data = _merkleize([version, _hex(info["genesis_validators_root"])], 2)
+    domain = bytes([6, 0, 0, 0]) + fork_data[:28]
+    return _merkleize([message, domain], 2)
+
+
+@pytest.mark.parametrize("name", sorted(WRONG_ROOT))
+def test_electra_aggregate_root(name: str):
+    example = EXAMPLES[name]
+    root = consensus.signing_request_root("mainnet", CONFIG, example)
+    assert root == _aggregate_signing_root(example)
+    assert "0x" + root.hex() != example["signingRoot"]

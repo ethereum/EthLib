@@ -107,6 +107,7 @@ public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.RelayApi
 public import EthLib.Consensus.RemoteSigningApi.Request
 public import EthLib.Consensus.RemoteSigningApi.Response
+public import EthLib.Consensus.RemoteSigningApi.SigningRoot
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds

@@ -1948,6 +1948,11 @@ def read_signing_request(name: str, document: Any) -> Any:
     return _native.consensus_read_signing_request(name, document)
 
 
+def signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    return _native.consensus_signing_request_root(name, config, document)
+
+
 def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
     """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
     _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
@@ -2362,6 +2367,7 @@ __all__ = [
     "keymanager_run",
     "RemoteSigningError",
     "read_signing_request",
+    "signing_request_root",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",

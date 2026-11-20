@@ -1034,6 +1034,8 @@ static PyMethodDef methods[] = {
    METH_VARARGS, DOC_consensus_import_slashing_interchange},
   {"consensus_read_signing_request", py_consensus_read_signing_request, METH_VARARGS,
    DOC_consensus_read_signing_request},
+  {"consensus_signing_request_root", py_consensus_signing_request_root, METH_VARARGS,
+   DOC_consensus_signing_request_root},
   {"consensus_check_block_signing", py_consensus_check_block_signing, METH_VARARGS,
    DOC_consensus_check_block_signing},
   {"consensus_check_attestation_signing", py_consensus_check_attestation_signing, METH_VARARGS,

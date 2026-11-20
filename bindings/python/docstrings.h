@@ -773,6 +773,9 @@
 #define DOC_consensus_read_signing_request \
   "A request of the Remote-signing API, read and written again as the signer reads it."
 
+#define DOC_consensus_signing_request_root \
+  "The root that a remote signer signs for a request of the Remote-signing API."
+
 #define DOC_consensus_check_block_signing \
   "Whether a key may sign a block of a slot with a signing root, given a record."
 
