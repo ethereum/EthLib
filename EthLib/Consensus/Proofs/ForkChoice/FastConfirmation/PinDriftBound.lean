@@ -5981,6 +5981,29 @@ private theorem slot_syncDebit_zero {x y : ForkedBeaconState preset} (electra : 
       obtain ⟨e, inside, rfl⟩ := List.mem_map.mp member
       simp [syncCredit, slot_noSync electra ok early replayed e inside]⟩
 
+/-- From Electra, a block step records no credit from the deposits source.
+
+In Electra, deposits are credited in the epoch processing, so in slot steps.
+
+A block step only queues deposit requests.
+
+So the deposit events of the step raise no balance, by `blockReplay_unconditional`. -/
+private theorem block_deposit_zero {f : Fork} {u w : BeaconState preset f}
+    {engine : ExecutionEngine preset f} {signed : SignedBeaconBlock preset f}
+    {due : upgradeDue config ⟨f, u⟩ = false}
+    {ok : applySignedBlock config checks engine u signed true = .ok w}
+    {es : List (BalanceEvent preset)} (electra : .pectra ≤ f) (early : f < .glamsterdam)
+    (replayed : (Step.block engine signed due ok : Step config checks ⟨f, u⟩ ⟨f, w⟩).balanceEvents =
+      .ok es) (i : ℕ) :
+    ((es.filter fun e => decide (e.source = .deposits)).map (PinSplit.keyCredit i)).sum = 0 := by
+  refine List.sum_eq_zero fun c member => ?_
+  obtain ⟨e, inFilter, rfl⟩ := List.mem_map.mp member
+  obtain ⟨inList, isDeposit⟩ := List.mem_filter.mp inFilter
+  have unconditional := PinSplit.blockReplay_unconditional electra early engine u signed.message
+    (Step.balanceEvents_block early replayed) e inList (of_decide_eq_true isDeposit) i
+  unfold PinSplit.keyCredit
+  omega
+
 /-- A block step is apart from keys if the proposer at its end is not among them.
 
 A slot step is apart from every set of keys. -/
