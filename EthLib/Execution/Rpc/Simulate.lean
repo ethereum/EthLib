@@ -231,7 +231,12 @@ end GenericTransaction
 
 /-- The choices that the source leaves to the node, for a simulation. -/
 structure SimulateChoices where
-  /-- The seconds from a block to the next one, when the request gives no time. -/
+  /-- The seconds from a block to the next one, when the request gives no time.
+
+  The [schema of the time][time] takes the block time of the network, 12 seconds on Mainnet.
+
+  [time]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/execute.yaml#L116-L119
+  -/
   blockTime : Nat := 12
   /-- The block time is positive, so the gap blocks have increasing times. -/
   blockTime_pos : 0 < blockTime := by decide
@@ -279,8 +284,7 @@ def PlannedBlock.count (bs : List PlannedBlock) : Nat :=
 def blockNumberOrder : ErrorCode := ⟨-38020, "Block number in sequence did not increase"⟩
 
 /-- The code of block times that do not increase. -/
-def blockTimeOrder : ErrorCode :=
-  ⟨-38021, "Block timestamp in sequence did not increase or stay the same"⟩
+def blockTimeOrder : ErrorCode := ⟨-38021, "Block timestamp in sequence did not increase"⟩
 
 /-- The code of a precompile moved to its own address. -/
 def movePrecompileToItself : ErrorCode :=

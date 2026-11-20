@@ -150,6 +150,18 @@ def test_base_block_is_latest_by_default() -> None:
     assert _answer_codes(requests) == [-38020, -38020, RESULT]
 
 
+def test_equal_times_message() -> None:
+    """Two blocks with the time 612 get -38021 with the message that the source lists."""
+    blocks = [{"blockOverrides": {"time": hex(612)}}, {"blockOverrides": {"time": hex(612)}}]
+    (text,) = replay_chain().serve([_request({"blockStateCalls": blocks})])
+    assert text is not None
+    assert json.loads(text)["error"] == {
+        "code": -38021,
+        "message": "Block timestamp in sequence did not increase",
+        "data": "612 <= 612",
+    }
+
+
 def test_gap_block_times() -> None:
     """A gap block comes a block time after the block before, and the next block comes after it."""
     base = hex(HEAD_NUMBER - 1)
