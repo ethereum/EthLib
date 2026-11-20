@@ -129,6 +129,13 @@ private theorem prefix_facts (start steps : Nat) (h : start + steps ≤ n)
       obtain ⟨w, _, hw⟩ := hz
       exact next_cell S e j w.2 hw
 
+/-- Every supported walk caches its returned digest at the destination position. -/
+theorem chain_records_result (start steps : Nat) (h : start + steps ≤ n)
+    (d : D) (st : RelabelState pub X K R) (initial : st.2 (S.cell start) = some (e d)) {z}
+    (run : z ∈ support ((simulateQ G.eagerImpl (chain step start steps h d)).run st)) :
+    z.2.2 (S.cell (start + steps)) = some (e z.1) :=
+  (prefix_facts S e step hstep start steps h d st initial).2 z run
+
 /-- Walk a positive number of steps from a cached input digest.
 
 Each earlier step touches both output cells.

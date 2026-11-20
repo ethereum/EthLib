@@ -147,7 +147,7 @@ theorem otsLeafHash_after_endpoints (pp : PublicParam) (layer : Layer) (epoch : 
     CanonicalGraph.simulateQ_eagerImpl_touchCell, bind_map_left] at eqn ⊢
   exact eqn
 
-private theorem pack_pair (ds : Vector Digest 2) :
+theorem pack_pair (ds : Vector Digest 2) :
     packDigests ds = packBytes ds[0] ++ packBytes ds[1] := by
   have pair : ds = #v[ds[0]].push ds[1] := by
     apply Vector.ext
