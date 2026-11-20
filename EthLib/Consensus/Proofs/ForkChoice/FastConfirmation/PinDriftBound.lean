@@ -5049,7 +5049,7 @@ private theorem Run.charge_deposit_credit_zero {g a b y : ForkedBeaconState pres
   simp only [List.filter_append, List.map_append, List.sum_append]
   omega
 
-/-- A2'' (rev 2.5.1).
+/-- The consolidation credits of a run from X fit a sum of caps.
 
 Take a run from X whose last epoch is within the withdrawal delay of X's.
 
@@ -5089,7 +5089,7 @@ private theorem Run.consolidation_credits_le_X {g x y : ForkedBeaconState preset
   conv_rhs => rw [← split, List.map_append, List.sum_append]
   exact Nat.le_add_right _ _
 
-/-- A2'' for a set of targets.
+/-- The same bound holds for a set of targets.
 
 The consolidation credits to the keys in `T` along the run of `Run.consolidation_credits_le_X`.
 
@@ -8395,7 +8395,7 @@ private def PinTerms.total (t : PinTerms preset) : ℕ :=
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain +
     t.creditUnits + t.syncLeak + 3 * t.unitGain * t.consolidationsXCount)
 
-/-- A verbatim copy of `pinReserve`'s lets (spec rev 2.5.3), returning the named terms. -/
+/-- A verbatim copy of `pinReserve`'s lets, returning the named terms. -/
 private def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     PinTerms preset :=
   let epoch := getCurrentEpoch state
@@ -17817,7 +17817,7 @@ private theorem low_arith (inc band ρn ρd K depth X s R pd sync L1 L2 E0 cap :
     generalize ((ρd - ρn * K) * (X + band) - ρn * s) / ρd = W at cancel hF
     omega
 
-/-- The low bound of an existing key, against the rev 2.5.4 form of `lowEB` and `drop`.
+/-- The low bound of an existing key, against the `lowEB` and `drop` of the reserve.
 
 The key is activated at the finalized state, charged on the run from the split, and exits by C.
 
