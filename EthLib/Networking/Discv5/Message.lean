@@ -6,7 +6,7 @@ public import EthLib.Serialization.Rlp.Codec
 # `Networking.Discv5.Message`
 
 The messages of discv5, from "Protocol Messages" of `discv5-wire.md` in `ethereum/devp2p`:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-wire.md>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md>
 
 A message is its type byte, then the RLP list of its fields.
 

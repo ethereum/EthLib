@@ -12166,7 +12166,9 @@
       {"constructor": "tooManyOmmers", "code": 607},
       {"constructor": "wrongOmmersHash", "code": 608},
       {"constructor": "ommerAfterBlock", "code": 609},
-      {"constructor": "untypedTransaction", "code": 610}]}],
+      {"constructor": "untypedTransaction", "code": 610},
+      {"constructor": "invalidTransaction", "code": 611},
+      {"constructor": "gasLimitAboveBlock", "code": 612}]}],
    "error_class": "EthWireError",
    "docstring":
    "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.\n\nThe header and the body are RLP.\n\nIt returns true on acceptance, and raises the code of the refusal otherwise."},

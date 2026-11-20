@@ -8,7 +8,7 @@ public import EthLib.Base.BigEndian
 The distance between two node IDs of the Node Discovery Protocol v5 (discv5).
 
 The source is "Nodes, Records and Distances" of `discv5-theory.md` in `ethereum/devp2p`:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md>
 
 The distance is the XOR of the two IDs, read as big-endian numbers.
 

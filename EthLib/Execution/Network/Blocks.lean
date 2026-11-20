@@ -9,7 +9,7 @@ public import EthLib.Serialization.Rlp.Codec
 
 The block exchange of the eth capability, from "Protocol Messages" of [`caps/eth.md`][eth].
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#protocol-messages
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#protocol-messages
 
 - GetBlockHeaders (0x03) asks for headers from a start block, with a fixed gap between them.
 - BlockHeaders (0x04) answers with the headers it has, at most as many as asked.

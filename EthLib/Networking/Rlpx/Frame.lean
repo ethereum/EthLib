@@ -7,7 +7,7 @@ public import EthLib.Networking.Rlpx.Handshake
 
 The frames of RLPx and their MAC, from the sections "Framing" and "MAC" of [`rlpx.md`][rlpx].
 
-[rlpx]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#framing
+[rlpx]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#framing
 
 A frame is the header ciphertext and its MAC, then the frame ciphertext and its MAC.
 

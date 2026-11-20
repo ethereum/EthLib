@@ -10,7 +10,7 @@ When an AccountRange or StorageRanges answer of a snap peer is valid.
 
 The source is [`caps/snap.md`][snap] of the devp2p specifications.
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 Each range must pass the range check of the trie against its proof.
 

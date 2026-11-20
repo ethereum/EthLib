@@ -7,7 +7,7 @@ from raising import raises
 #
 # File: discv5/discv5-wire-test-vectors.md
 # Repository: ethereum/devp2p
-# Commit: 88f1c80800d622cc3a542a2125bbe33cc18c9f9c
+# Commit: 277ceb399c15df86efb17d51eb58200c26879784
 
 H = bytes.fromhex
 

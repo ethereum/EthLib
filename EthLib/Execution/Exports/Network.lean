@@ -201,6 +201,9 @@ def bodyMessage : BodyError → String
   | .untypedTransaction none => "a transaction is an empty byte string"
   | .untypedTransaction (some first) =>
     s!"a transaction is a byte string that starts with {Base.hexString [first]}, not a type"
+  | .invalidTransaction i e => s!"transaction {i} is not a transaction of the fork: {reprStr e}"
+  | .gasLimitAboveBlock i gas limit =>
+    s!"transaction {i} has gas limit {gas}, above the gas limit {limit} of the block"
 
 /-- Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.
 

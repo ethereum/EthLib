@@ -8,7 +8,7 @@ public import EthLib.Networking.Enr.Record
 
 The "eth" entry of a node record, from [`enr-entries/eth.md`][eth].
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/enr-entries/eth.md
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/enr-entries/eth.md
 
 A node of the eth capability announces its fork identifier in its record.
 

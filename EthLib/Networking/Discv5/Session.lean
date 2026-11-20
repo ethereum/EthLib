@@ -10,10 +10,10 @@ The WHOAREYOU challenge and the ordinary message packet of discv5.
 The sources are three sections of `discv5-wire.md` in `ethereum/devp2p`.
 
 They are "WHOAREYOU Packet", "Ordinary Message Packet" and "Protocol Header":
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-wire.md#packet-encoding>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md#packet-encoding>
 
 Steps 1 and 2 of "Handshake Steps" in `discv5-theory.md` use them:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-theory.md#handshake-steps>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-theory.md#handshake-steps>
 
 Node B answers a message it cannot decrypt with a WHOAREYOU packet.
 

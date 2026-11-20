@@ -266,4 +266,28 @@ theorem decodeBodyTransaction_bytes {fork : Fork} (hFork : .glamsterdam ≤ fork
   · simp [h0, hFork, hFF h0]
   · simp [h0, decodeTransaction]
 
+/-- The item of a transaction in a body holds that transaction, at each fork that has its kind. -/
+theorem decodeBodyTransaction_bodyItem {fork : Fork} {t : Transaction} {item : Item}
+    (h : bodyItem t = .ok item) (hFork : t.fork ≤ fork) :
+    decodeBodyTransaction fork item = .ok t := by
+  cases t with
+  | legacy tx =>
+    simp only [bodyItem, Except.ok.injEq] at h
+    subst h
+    -- A legacy transaction is a list item, which the codec reads back.
+    obtain ⟨l, hl⟩ : ∃ l, Codec.toItem tx = Item.list l := ⟨_, rfl⟩
+    rw [hl]
+    simp only [decodeBodyTransaction]
+    rw [← hl, LawfulCodec.ofItem_toItem]
+    rfl
+  | accessList tx | feeMarket tx | blob tx | setCode tx =>
+    -- A typed transaction is the byte string of its bytes, whose first byte is its type.
+    obtain ⟨b, hb, rfl⟩ := map_ok_iff.mp h
+    obtain ⟨h0, -, htype⟩ := encodeTransaction_head hb
+    have hlow : b[0] < (0xc0 : UInt8) := by
+      rw [htype (by simp [Transaction.type])]
+      simp [Transaction.type]
+    rw [decodeBodyTransaction_typed fork h0 hlow]
+    exact decodeTransaction_encodeTransaction hb hFork
+
 end EthLib.Execution.Transactions
