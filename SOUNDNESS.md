@@ -3473,7 +3473,8 @@ The Byzantine bound and the two conditions on the anchor are assumptions on the 
 Its conclusion allows a collision of two honest stores.
 It assumes the nonzero roots of the held block states and the absent parent of the anchor.
 It assumes the bounded honest store epochs, the stake floors and the unslashed counted voters.
-It also assumes the finality of honest stores and the guard `PinGuarded` at each call's finalized state.
+It also assumes the finality of honest stores and the a priori guard at the finalized state for each head selected by an honest store (`PinGuarded`).
+When the pulled-up epoch plus two exceeds the finalized state's epoch by more than the withdrawal delay, the reserve alone covers three times the voters' stake, so the call cannot meet the strict stake threshold.
 The fork is from Fusaka and before Gloas, and the next fork is past the horizon.
 It derives the agreement of honest blocks, the held states before the next fork and the justified chain of each store itself.
 The endpoint above still assumes `JustifiedPinned`.

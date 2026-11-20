@@ -11,6 +11,7 @@ public import EthLib.Consensus.Proofs.Transition.EpochUpdates
 public import EthLib.Consensus.Proofs.Transition.Committees
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.HistoricalSigners
 import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDrift
+import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.QuorumDriftBound
 import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 import EthLib.Consensus.Proofs.Transition.FfgJustification
 
@@ -105,31 +106,58 @@ private theorem pin_finRead {A B : Store preset fork}
   rw [Store.getCheckpointBlock_trans justifiedRead ancLe]
   exact received
 
-/-- The a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
+/-- The a priori guard holds at the finalized state for the head selected by each honest store.
 
-They are the two conditions that the pin's `Setting` assumes of the call's finalized state.
+The guard uses the epoch of the pulled-up head state.
 
-The call's pulled-up state, target state and finalized state are those of an honest store.
-
-The guard is `aprioriGuardAt` at the finalized state, for the call's epoch.
-
-The lag is the call's epoch, plus two, less the finalized state's epoch. -/
+Until the target state's finality advances past the anchor, its finalized state is the anchor. -/
 def PinGuarded (last : ℕ) : Prop :=
-  ∀ u ∈ J, ∀ n (head : Root) (pulled anc fin : BeaconState preset fork) (target : Checkpoint),
+  ∀ u ∈ J, ∀ n (node : ForkChoiceNode) (pulled anc fin : BeaconState preset fork)
+    (target : Checkpoint),
     (e.world n).time ≤ last →
-    ((e.world n).state u).getPulledUpHeadState config head = .ok pulled →
-    ((e.world n).state u).getCurrentTarget config head = .ok target →
+    ((e.world n).state u).getHead config = .ok node →
+    ((e.world n).state u).getPulledUpHeadState config node.root = .ok pulled →
+    ((e.world n).state u).getCurrentTarget config node.root = .ok target →
     ((e.world n).state u).blockStates[target.root]? = some anc →
     (getCurrentEpoch anchorState < anc.finalizedCheckpoint.epoch →
       ((e.world n).state u).blockStates[anc.finalizedCheckpoint.root]? = some fin) →
     (anc.finalizedCheckpoint.epoch ≤ getCurrentEpoch anchorState → fin = anchorState) →
-    DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat ∧
-    (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
-      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
+    DirectSafety.Apriori.aprioriGuardAt config ⟨fork, fin⟩ (getCurrentEpoch pulled).toNat
+
+/-- Past the withdrawal delay the reserve covers three times the stake of any active voters. -/
+private theorem voterStake_le_deepReserve {pulled anc fin : BeaconState preset fork}
+    {voters : Finset ValidatorIndex} (early : fork < .glamsterdam)
+    (active : voters ⊆ activeVoters pulled)
+    (deep : ¬ (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat) :
+    3 * stake (fun v => balanceAt pulled v.toNat) voters ≤ pinReserve config pulled anc fin := by
+  let t := pinTerms config pulled anc fin
+  have fall (i : ℕ) : t.fall i = balanceAt pulled i := by
+    change (if _ then balanceAt pulled i - t.floorC i else balanceAt pulled i) = _
+    exact ite_eq_right deep
+  have sumLe := voters_sum_le (voters := voters) (positions := t.positions.filter
+    fun i => t.current i = true) (balanceAt pulled) fun v hv => by
+      obtain ⟨w, found, enabled⟩ :=
+        (mem_getActiveValidatorIndices (pulled.validators.bound early)).mp
+          (List.mem_toFinset.mp (active hv))
+      exact Finset.mem_filter.mpr ⟨Finset.mem_range.mpr (Array.getElem?_eq_some_iff.mp found).1,
+        isActiveAt_eq_true_iff.mpr ⟨w, found, enabled⟩⟩
+  have charge (s : PinTerms preset) :
+      3 * (∑ i ∈ s.positions with s.current i = true, s.fall i) ≤ s.total := by
+    unfold PinTerms.total
+    omega
+  have bound := charge t
+  simp only [fall] at bound
+  change 3 * (∑ v ∈ voters, balanceAt pulled v.toNat) ≤ t.total
+  omega
 
 /-- The voters of a call pin the justified checkpoints of the call's epoch.
 
 Take honest voters whose stake exceeds a third of the sum of the total, margin and pin reserve.
+
+From Fusaka until Gloas, assume the a priori guard for the selected head.
+
+The receiver's justified chain must read the caller's finalized checkpoint if it reaches that epoch.
 
 A justified checkpoint of the call's epoch then has a signer among them.
 
@@ -185,6 +213,12 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
   · exact .inr collision
   left
   obtain ⟨node, nodeOk, rfl⟩ := headRead
+  by_cases lag : (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat ≤
+      config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
+  swap
+  · have bound := voterStake_le_deepReserve (anc := anc) preGloas
+      (fun {_} hv => (votersOk _ hv).2) lag
+    omega
   obtain ⟨anchorRoot, -, -, -, anchorJustified, -⟩ := getForkchoiceStore_anchor anchored
   have anchorEpochEq : getCurrentEpoch anchorState = anchorEpoch := by
     rw [← anchorEpochOk, anchorJustified]
@@ -244,12 +278,12 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
       rw [pulledEpoch, targetEpoch]
       rw [justifiedEpoch] at near
       exact near
-    have guard := guarded u caller n node.root pulled anc fin target callTime pulledOk targetOk
+    have guard := guarded u caller n node pulled anc fin target callTime nodeOk pulledOk targetOk
       ancOk finHeld finAnchor
     have setting : Setting config .bls g split fin pulled anc state voters :=
       ⟨genesis, ⟨toFin⟩, ⟨fromFin⟩, ⟨toPulled⟩, ⟨toCounted⟩, preGloas, fusaka, bands, caps,
-        exitWindow, parameters, maxAligned, twoSlots, guard.2, ⟨total, totalOk⟩,
-        facts, guard.1, finalizedS, laterS, nearPulled,
+        exitWindow, parameters, maxAligned, twoSlots, lag, ⟨total, totalOk⟩,
+        facts, guard, finalizedS, laterS, nearPulled,
         fun v member => ⟨(votersOk v member).2,
           unslashed w receiver k state high counts v (votersOk v member).1⟩⟩
     have pin := PinDrift.le_pinReserve setting totalOkC totalOk
@@ -294,7 +328,9 @@ variable [DecidablePred (· ∈ J)] {anchor : Store preset fork} {g : ForkedBeac
 include bls anchored start anchorSlot anchorEpochOk anchorHeader anchorZero slots genesis pre roots
   absent bounded enough terminal unslashed finality guarded preGloas fusaka forkWindow
 
-/-- On the mainnet preset, the voters of a call pin the justified checkpoints of its epoch. -/
+/-- On the mainnet preset, the voters of a call pin the justified checkpoints of its epoch.
+
+From Fusaka until Gloas this assumes cross-store finality and the guard for the selected head. -/
 theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
     JustifiedPinned (e := e) anchorEpoch margin first last := by
   subst mainnet
@@ -305,7 +341,9 @@ theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
     Preset.seedLookaheadAtLeastThree_mainnet maxEffectiveBalancesAligned_mainnet (by decide)
       PinPresetFacts.mainnet
 
-/-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch. -/
+/-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch.
+
+From Fusaka until Gloas this assumes cross-store finality and the guard for the selected head. -/
 theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
     JustifiedPinned (e := e) anchorEpoch margin first last := by
   subst minimal

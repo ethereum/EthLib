@@ -701,10 +701,10 @@ Not yet released.
 - `PinDrift.le_pinReserve` is public: under a `PinDrift.Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
   It takes the setting and the two total active balances.
 
-- `PinGuarded` is public: the a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
+- `PinGuarded` requires the a priori guard at a call's finalized state only for the head the honest store selects.
 
 - `justifiedPinned_of_setting` is public: the voters of a call pin the justified checkpoints of the call's epoch.
-  It reads the pin through `PinDrift.le_pinReserve`.
+  It assumes no bound on finality lag: past the withdrawal delay the reserve already covers three times the voters' stake.
 
 - `justifiedPinned_of_setting.mainnet` is `justifiedPinned_of_setting` on the mainnet preset, with the preset premises proved.
 
