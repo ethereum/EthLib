@@ -40,6 +40,10 @@ instance : SszType ForkVersions :=
     (fun f => (f.previousVersion, f.currentVersion, f.epoch))
     (fun (previousVersion, currentVersion, epoch) => ⟨previousVersion, currentVersion, epoch⟩)
 
+/-- The fork version of an epoch: the previous version before the fork, the current one after. -/
+def ForkVersions.versionAt (versions : ForkVersions) (epoch : Epoch) : Version :=
+  if epoch < versions.epoch then versions.previousVersion else versions.currentVersion
+
 /-- A checkpoint: a block root at the start of an epoch, as Casper FFG votes for it. -/
 structure Checkpoint where
   /-- The epoch of the checkpoint. -/
