@@ -847,7 +847,7 @@ namespace EthLib.Consensus.Models.Network
 
 section
 
-/-! ## PinSlashing -/
+/-! ## The credits of one key along a run -/
 
 namespace PinKeys
 
@@ -1135,7 +1135,7 @@ private theorem slashing_credits_le_limits (events : List (BalanceEvent preset))
 
 end PinKeys
 
-/-! ## PinEffectiveFloor -/
+/-! ## A floor and a ceiling on one key's effective balance -/
 
 namespace PinKeyFloor
 
@@ -2131,7 +2131,7 @@ private theorem Run.effective_floor_rounded {x y : ForkedBeaconState preset}
   (Run.effective_floor_pair tail early fulu i inside floor capLow 0 0 0 0).1 balanceFloor
     capFloor
 
-/-- H4. A balance floor and a cap floor along a run give an effective-balance floor.
+/-- A balance floor and a cap floor along a run give an effective-balance floor.
 
 Suppose a key's balance stays at least `floor` at every state of a run.
 
@@ -2199,7 +2199,7 @@ end
 
 section
 
-/-! ## PinPenaltyRate -/
+/-! ## The penalty rate of one key in a rewards pass -/
 
 namespace PinKeyFloor
 
@@ -2536,9 +2536,11 @@ private structure Grew {f : Fork} (p q : BalanceReplay preset f) : Prop where
   size : q.1.validators.data.size = p.1.validators.data.size
   events : ∀ e ∈ q.2, e ∈ p.2 ∨ e.source ≠ .deposits
 
+/-- A replay step that does nothing grows the replay. -/
 private theorem Grew.refl {f : Fork} (p : BalanceReplay preset f) : Grew p p :=
   ⟨Kept.of_data rfl, rfl, rfl, fun _ member => .inl member⟩
 
+/-- Two growing replay steps in a row grow the replay. -/
 private theorem Grew.trans {f : Fork} {p q r : BalanceReplay preset f} (one : Grew p q)
     (two : Grew q r) : Grew p r where
   kept := one.kept.trans two.kept
@@ -2837,7 +2839,7 @@ end
 
 section
 
-/-! ## PinExitCredits -/
+/-! ## Credits to exiting keys along a run -/
 
 namespace PinKeys
 
@@ -2862,9 +2864,11 @@ private def Quiet (events : List (BalanceEvent preset)) : Prop :=
 private def Unconditional (e : BalanceEvent preset) : Prop :=
   ∀ i, actualBalanceAt e.after i ≤ actualBalanceAt e.before i
 
+/-- The empty list of events is quiet. -/
 private theorem quiet_nil : Quiet ([] : List (BalanceEvent preset)) := fun _ mem => by
   simp at mem
 
+/-- A pass that records no event keeps the events quiet. -/
 private theorem quiet_carry {f : Fork}
     {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
     {pre post : BalanceReplay preset f} (initial : Quiet pre.2)
@@ -2872,6 +2876,7 @@ private theorem quiet_carry {f : Fork}
   rw [(PinEventsKept.carryBalance_cases ok).2]
   exact initial
 
+/-- A recorded pass keeps the events quiet when its deposit action keeps exiting balances. -/
 private theorem quiet_record {f : Fork} {source : BalanceSource}
     {limits : BeaconState preset f → Except TransitionError (Nat × Nat)}
     {action : BeaconState preset f → Except TransitionError (BeaconState preset f)}
@@ -3291,6 +3296,7 @@ private theorem pass_credits_le_targets {f : Fork} (next : Epoch) (T : Finset �
 
 /-! ## The queue of a run from X, and the stake a pass can move -/
 
+/-- From Electra on, the funding sources are the pending consolidations. -/
 private theorem fundingSources_eq {f : Fork} (electra : .pectra ≤ f) (s : BeaconState preset f) :
     fundingSources s = (s.pendingConsolidations electra).data.toList := by
   simp [fundingSources, electra]
@@ -3537,6 +3543,7 @@ private theorem upgrade_shape {L : List PendingConsolidation} {e0 : Epoch} {n : 
   · obtain ⟨_, _, rfl⟩ := ok
     exact False.elim (Nat.not_le_of_lt early (show Fork.glamsterdam ≤ .hegota from by decide))
 
+/-- All the upgrades of a step keep the shape of the queue, as each one does. -/
 private theorem upgrades_shape {L : List PendingConsolidation} {e0 : Epoch} {n : ℕ}
     {advanced last : ForkedBeaconState preset} (electra : .pectra ≤ advanced.fork)
     (early : last.fork < .glamsterdam) (shape : Shape L e0 n advanced.state)
@@ -4056,13 +4063,14 @@ private theorem Run.consolidation_credits_le_X_targets {g x y : ForkedBeaconStat
   have split := List.take_append_drop n (x.state.pendingConsolidations electra).data.toList
   conv_rhs => rw [← split, List.filter_append, List.map_append, List.sum_append]
   exact Nat.le_add_right _ _
+
 end PinKeys
 
 end
 
 section
 
-/-! ## PinExitQueue -/
+/-! ## A validator created in a step has no exit assigned -/
 
 namespace PinKeys
 
@@ -4070,14 +4078,11 @@ open Base Uint64 Models DirectSafety
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
-/-! ## Exit counts, gain rate and new keys -/
-
-/-! ## A validator created in a step has no exit assigned -/
-
 /-- Every validator from position `n` on has no exit epoch assigned. -/
 private def ExitFarFrom (n : ℕ) {f : Fork} (s : BeaconState preset f) : Prop :=
   ∀ i v, n ≤ i → s.validators.data[i]? = some v → v.exitEpoch = FAR_FUTURE_EPOCH
 
+/-- A state with the same registry has no exit assigned from position `n` either. -/
 private theorem ExitFarFrom.of_data {n : ℕ} {f g : Fork} {s : BeaconState preset f}
     {t : BeaconState preset g} (same : t.validators.data = s.validators.data)
     (holds : ExitFarFrom n s) : ExitFarFrom n t := by
@@ -4124,6 +4129,7 @@ private theorem ExitFarFrom.of_apply {n : ℕ} {f : Fork} {s t : BeaconState pre
       rfl
     · exact holds i v large found
 
+/-- Applying the pending deposits assigns no exit from position `n` on. -/
 private theorem ExitFarFrom.of_deposits {n : ℕ} {f : Fork} {s t : BeaconState preset f}
     {electra : .pectra ≤ f} (ok : Consensus.processPendingDeposits config checks s electra = .ok t)
     (holds : ExitFarFrom n s) : ExitFarFrom n t := by
@@ -4347,6 +4353,7 @@ private theorem keys_credits_le (S : Finset ℕ) (e : BalanceEvent preset) :
 private def NoSync {fork : Fork} (pre : BalanceReplay preset fork) : Prop :=
   ∀ e ∈ pre.2, e.source ≠ .sync
 
+/-- A pass that records no event keeps the replay free of sync events. -/
 private theorem NoSync.carry {fork : Fork}
     {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
     {p q : BalanceReplay preset fork} (held : NoSync p) (ok : carryBalance action p = .ok q) :
@@ -4355,6 +4362,7 @@ private theorem NoSync.carry {fork : Fork}
   rw [(PinEventsKept.carryBalance_cases ok).2] at member
   exact held e member
 
+/-- A recorded pass that is not the sync pass keeps the replay free of sync events. -/
 private theorem NoSync.record {fork : Fork} {source : BalanceSource}
     {limits : BeaconState preset fork → Except TransitionError (Nat × Nat)}
     {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
@@ -4610,6 +4618,7 @@ private theorem block_syncDebits_le {fork : Fork} {a t : BeaconState preset fork
       Nat.add_zero]
     exact moves'.trans (Nat.mul_le_mul_left _ envelope)
 
+/-- The rewards passes keep the replay free of sync events. -/
 private theorem replayRewards_noSync {fork : Fork} {p q : BalanceReplay preset fork}
     (held : NoSync p) (ok : replayRewards (config := config) p = .ok q) : NoSync q :=
   replayRewards_induction NoSync (fun prior ok => prior.record ok (by decide))
@@ -4920,6 +4929,7 @@ private theorem Run.syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
       simp [empty e]),
     fun debited moving apartSets apart =>
       (bounds.2.2 debited moving apartSets apart).trans (Run.blockCount_mul_le tail _ empty)⟩
+
 end PinSeatDebits
 
 end
@@ -5185,13 +5195,14 @@ private theorem epochFloor {g m n : ForkedBeaconState preset} (shared : Run conf
         w.slashed = true := ⟨unslashed, w, final, slashed⟩
     simp only [cond, and_self, ↓reduceIte]
     omega
+
 end PinSlashFloor
 
 end
 
 section
 
-/-! ## PinExitQueue: the effective balance of a new key -/
+/-! ## The floor path of a new key's effective balance -/
 
 namespace PinKeys
 
@@ -5615,6 +5626,7 @@ private theorem pass_second (bias IPQ IPD EB score S' φ w : ℕ) (hIPD : 0 < IP
       _ ≤ EB * ((R + 1) * IPD) := Nat.mul_le_mul_left _ h2.le
       _ = EB * (R + 1) * IPD := by ring
   exact Nat.le_of_mul_le_mul_right key hIPD
+
 /-- The floor path falls by the penalty of its epoch. -/
 private theorem floor_succ (x : ForkedBeaconState preset) (high t : ℕ) :
     stakeFloorAt config x high (t + 1) = stakeFloorAt config x high t -
@@ -5784,6 +5796,7 @@ private theorem Ctx.ratio {g x : ForkedBeaconState preset} {high : ℕ}
 private def keyDebits (i : ℕ) (events : List (BalanceEvent preset)) : ℕ :=
   (events.map (syncDebit i)).sum + (events.map (floorPartialDebit i.toUInt64)).sum
 
+/-- The debits of a key add up over two lists of events. -/
 private theorem keyDebits_append (i : ℕ) (a b : List (BalanceEvent preset)) :
     keyDebits i (a ++ b) = keyDebits i a + keyDebits i b := by
   simp only [keyDebits, List.map_append, List.sum_append]
@@ -6532,6 +6545,7 @@ private theorem Run.mem_balancePath_split {z w : ForkedBeaconState preset}
         · exact .inr ⟨_, last, pre, ok, .nil, adv, rfl, advOk, rfl, upgrades⟩
         · exact .inl ⟨pre.snoc (.slot ok), .nil, rfl⟩
 
+/-- A prefix of a list of events debits a key at most as much as the list. -/
 private theorem keyDebits_le_of_prefix (i : ℕ) {a b : List (BalanceEvent preset)} (h : a <+: b) :
     keyDebits i a ≤ keyDebits i b := by
   obtain ⟨t, rfl⟩ := h
@@ -6791,21 +6805,7 @@ The key's sync debits and its partial payments are added back.
 
 The key is scheduled at the split.
 
-It is not active by the epoch after the split, and it is active at the end.
-
-The proof follows the key from two epochs before its activation.
-
-There it holds the maximum effective balance.
-
-It follows the key to the first state of the last epoch.
-
-Its potential is the least of its balance and the maximum, plus the band.
-
-The potential keeps the fraction of the floor path that the floor path keeps.
-
-It loses a rounding error, which the room covers.
-
-The effective balance follows from the balance by hysteresis. -/
+It is not active by the epoch after the split, and it is active at the end. -/
 private theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
@@ -6828,6 +6828,7 @@ private theorem Run.new_key_effective_floor {g x y : ForkedBeaconState preset}
         preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
       effectiveAt y i + (events.map (syncDebit i)).sum +
         (events.map (floorPartialDebit i.toUInt64)).sum := by
+  -- The potential, the least of balance and maximum plus the band, follows the floor path.
   classical
   obtain ⟨wa, foundA, activeA⟩ := isActiveAt_eq_true_iff.mp active
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeA
