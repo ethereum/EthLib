@@ -16816,6 +16816,264 @@ private def createdCeil (t : PinTerms preset) {x y : ForkedBeaconState preset}
       WEIGHT_DENOMINATOR.toNat) + t.depth * (rate / WEIGHT_DENOMINATOR.toNat + 2) +
         preset.downwardBand
 
+/-- The gain of a created key's credits and base stake is at most the gain of its flows and a unit.
+
+The key's base stake is credits, so it sits in the flows `Z`.
+
+The flow of `Cr` and the slack `S - e0` compound at eleven tenths.
+
+The floor holds the base gain `D * q` and `D`.
+
+A key whose rate is low has `11 * D * q ≤ e0`, so its base gain is within a tenth of its stake.
+
+The floors then lose one increment against the floor of the flows, which the unit pays. -/
+private theorem created_gain_arith (I WD F P D e0 S Cr Z β : ℕ)
+    (key : 11 * D * (P * F) < WD * I) (start : e0 ≤ S + β) (flows : Cr + S ≤ Z)
+    (small : 11 * (β + D) < 10 * I) :
+    D * (11 * (Cr + (S - e0) + D * (e0 / I * P * F / WD) + D) / (10 * I) * P * F / WD) +
+        (D * (e0 / I * P * F / WD) + D) ≤
+      D * (11 * Z / (10 * I) * P * F / WD) + D * (P * F / WD + 2) := by
+  have hWD : 0 < WD := Nat.pos_of_ne_zero fun zero => by
+    rw [zero] at key
+    omega
+  simp only [Nat.mul_assoc]
+  obtain ⟨a, ha⟩ : ∃ a, a = P * F := ⟨_, rfl⟩
+  rw [← ha] at key ⊢
+  obtain ⟨N2, hN2⟩ : ∃ N2, N2 = e0 / I := ⟨_, rfl⟩
+  rw [← hN2]
+  obtain ⟨q, hq⟩ : ∃ q, q = N2 * a / WD := ⟨_, rfl⟩
+  rw [← hq]
+  -- the base gain is at most a eleventh of the stake
+  have baseGain : 11 * (D * q) ≤ e0 := by
+    have floor : q * WD ≤ N2 * a := by rw [hq]; exact Nat.div_mul_le_self _ _
+    have step : 11 * D * q * WD ≤ WD * I * N2 := by
+      calc 11 * D * q * WD = 11 * D * (q * WD) := by ring
+        _ ≤ 11 * D * (N2 * a) := Nat.mul_le_mul_left _ floor
+        _ = N2 * (11 * D * a) := by ring
+        _ ≤ N2 * (WD * I) := Nat.mul_le_mul_left _ key.le
+        _ = WD * I * N2 := by ring
+    have cancel : 11 * D * q ≤ I * N2 := by
+      refine Nat.le_of_mul_le_mul_right (c := WD) ?_ hWD
+      calc 11 * D * q * WD ≤ WD * I * N2 := step
+        _ = I * N2 * WD := by ring
+    have rounded : I * N2 ≤ e0 := by rw [hN2]; exact Nat.mul_div_le _ _
+    calc 11 * (D * q) = 11 * D * q := by ring
+      _ ≤ e0 := Nat.le_trans cancel rounded
+  obtain ⟨X, hX⟩ : ∃ X, X = Cr + (S - e0) + D * q + D := ⟨_, rfl⟩
+  rw [← hX]
+  have total : 11 * X + 10 * e0 ≤ 11 * Z + 11 * (β + D) := by omega
+  -- the floors of the stake and of the credits add to one floor
+  obtain ⟨N1, hN1⟩ : ∃ N1, N1 = 11 * X / (10 * I) := ⟨_, rfl⟩
+  obtain ⟨N3, hN3⟩ : ∃ N3, N3 = 11 * Z / (10 * I) := ⟨_, rfl⟩
+  rw [← hN1, ← hN3]
+  have joint : N1 + N2 ≤ N3 + 1 := by
+    have n2 : N2 = 10 * e0 / (10 * I) := by
+      rw [hN2, Nat.mul_div_mul_left _ _ (by norm_num : 0 < 10)]
+    have add := Nat.div_add_div_le_add_div (x := 11 * X) (y := 10 * e0) (z := 10 * I)
+    have mono := Nat.div_le_div_right (c := 10 * I) total
+    have more := Nat.add_div_le_div_add_div_add_one (11 * Z) (11 * (β + D)) (10 * I)
+    have none : 11 * (β + D) / (10 * I) = 0 := Nat.div_eq_of_lt small
+    omega
+  have gains : N1 * a / WD + N2 * a / WD ≤ N3 * a / WD + a / WD + 1 := by
+    have add := Nat.div_add_div_le_add_div (x := N1 * a) (y := N2 * a) (z := WD)
+    have mono : (N1 + N2) * a / WD ≤ (N3 + 1) * a / WD :=
+      Nat.div_le_div_right (Nat.mul_le_mul_right _ joint)
+    have more := Nat.add_div_le_div_add_div_add_one (N3 * a) a WD
+    rw [Nat.add_mul] at mono
+    rw [Nat.add_mul, Nat.one_mul] at mono
+    omega
+  have scaled := Nat.mul_le_mul_left D gains
+  rw [Nat.mul_add, Nat.mul_add, Nat.mul_add, Nat.mul_one] at scaled
+  rw [← hq] at scaled
+  rw [Nat.mul_add D (a / WD) 2]
+  omega
+
+/-- The deposits and consolidations that a run credits to a key are among its non-reward credits. -/
+private theorem scan_deposits_consolidations_le (v high : ℕ) {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) :
+    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high run).1 +
+      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v high run).1 ≤
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v high run).1 := by
+  have named := creditScan_or (fun _ => false) (fun s => decide (s ≠ .rewards))
+    (fun _ => false) (fun _ => false)
+    (fun s => decide (s = .deposits ∨ s = .consolidations))
+    (fun s => decide (s ≠ .rewards ∧ s ≠ .deposits ∧ s ≠ .consolidations))
+    (fun _ => rfl) (fun s => by cases s <;> decide) (fun _ => by simp)
+    (fun s => by cases s <;> decide) v high run
+  have pair := creditScan_or (fun _ => false)
+    (fun s => decide (s = .deposits ∨ s = .consolidations)) (fun _ => false) (fun _ => false)
+    (fun s => decide (s = .deposits)) (fun s => decide (s = .consolidations))
+    (fun _ => rfl) (fun s => by cases s <;> decide) (fun _ => by simp)
+    (fun s => by cases s <;> decide) v high run
+  omega
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The effective balance of a key created on C's branch is at most its credits and their gains.
+
+The run from the split reaches a state `z` where the key holds the activation reserve, and then C.
+
+The ceiling at the largest cap closes from `z`, at the depth of the call.
+
+The bound holds at every state of C's run after `z`, and at C.
+
+The key's base stake is credits, so one floor of the flows pays its gain.
+
+The unit pays the step of the joint floor.
+
+The rate premise is that of the low regime: `key` reads it at the depth of the call.
+
+The depth is small against an increment, from `key` and a rate of at least four. -/
+private theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
+      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
+    (absent : split.validators.data.size ≤ v.toNat) (P : ℕ)
+    (hP : P = ((getBaseRewardPerIncrement preset
+      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
+          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
+        (getTotalActiveBalance pulled).toOption.getD 0 / 4
+      else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
+    (key : 11 * (min (pinTerms config pulled anc fin).depth
+      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+      (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
+        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
+    {Z : ℕ} (flows : grossScan v.toNat highC tailC +
+      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z) :
+    ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
+      (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
+      (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
+        w.activationEpoch ≠ FAR_FUTURE_EPOCH →
+        (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat) ∧
+      ∀ p ∈ post.balancePath, effectiveAt p v.toNat ≤ Z +
+        (min (pinTerms config pulled anc fin).depth
+          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          (11 * Z / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
+            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
+        (min (pinTerms config pulled anc fin).depth
+          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
+          (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) +
+        preset.downwardBand := by
+  classical
+  obtain ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, inside, funded, hysteresis, reserve,
+    walk, -, ahead⟩ := created_start h tailC highC endEpochC
+      activated absent
+  obtain ⟨toFin⟩ := h.toFin
+  obtain ⟨fromFin⟩ := h.fromFin
+  have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
+  have incPos := h.bands.1
+  have alignedMax := (cap_values_aligned h.aligned).2
+  have fuluZ : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)
+  have electraZ : .pectra ≤ z.fork := Nat.le_trans (by decide) fuluZ
+  obtain ⟨P', hP', rate⟩ := key_rate_pre h tailC h.near
+  obtain rfl : P = P' := hP.trans hP'.symm
+  have inRun : ∀ p ∈ post.balancePath, p ∈ tailC.balancePath := fun p member => by
+    obtain ⟨front, last⟩ := Run.balancePath_last pre
+    obtain ⟨rest, head⟩ := Run.balancePath_head post
+    rw [head] at member
+    rw [splitEq, Run.balancePath_append, last, head]
+    rcases List.mem_cons.mp member with rfl | later <;> simp [*]
+  have backZ : (⟨fork, counted⟩ : ForkedBeaconState preset).fork ≤ z.fork := by
+    have := fork_le_of_chainSteps pre.chainSteps
+    exact this
+  have capCeil : ∀ p ∈ post.balancePath, PinSplit2.capAt p v.toNat ≤
+      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := fun p member => by
+    obtain ⟨r1, -, -⟩ := balancePath_endpoint post
+      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
+    exact capAt_le_capMax h.caps (Nat.le_trans electraZ (fork_le_of_chainSteps r1.chainSteps))
+      v.toNat
+  have splitZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
+  have near := h.near
+  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
+  have depthEq : (pinTerms config pulled anc fin).depth =
+      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
+  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
+    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
+  obtain ⟨D, hD⟩ : ∃ D, D = min (pinTerms config pulled anc fin).depth
+    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := ⟨_, rfl⟩
+  rw [← hD] at key ⊢
+  obtain ⟨e0, he0⟩ : ∃ e0, e0 = effectiveAt z v.toNat := ⟨_, rfl⟩
+  obtain ⟨S, hS⟩ : ∃ S, S = actualBalanceAt z v.toNat := ⟨_, rfl⟩
+  obtain ⟨Cr, hCr⟩ : ∃ Cr, Cr = netScan v.toNat highC post +
+    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post).1 :=
+    ⟨_, rfl⟩
+  obtain ⟨W, hW⟩ : ∃ W, W = S - e0 := ⟨_, rfl⟩
+  obtain ⟨q, hq⟩ : ∃ q, q = e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
+      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := ⟨_, rfl⟩
+  obtain ⟨C, hC⟩ : ∃ C, C = preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+      (11 * (Cr + W + D * q + D) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
+    ⟨_, rfl⟩
+  have alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
+    rw [he0]
+    exact FloorTrace.effective_aligned (shared.append pre) h.genesis h.aligned v.toNat
+  have core := c_ceiling_abstract post h.early fuluZ v.toNat inside highC P
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat alignedMax
+    (PinSplit5.effectiveAt_le_capMax (shared.append pre) h.genesis h.caps zEarly v.toNat)
+    capCeil
+    (fun p member total perIncrement totalOk perOk =>
+      rate p (inRun p member) total perIncrement totalOk perOk)
+    endEpochC incPos D Cr Cr e0 C S W (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q rfl hq
+    alignedE0 hC (by simp only at splitZ ⊢; omega) (by rw [hS]; exact Nat.min_le_left _ _)
+    (by omega) (le_of_eq hCr.symm) key (by omega)
+  obtain ⟨gc, rfl, -, bound, -⟩ := core
+  -- the credits, the base stake and the gains of the key
+  have beforeZ : S ≤ grossScan v.toNat highC pre +
+      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
+      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
+        pre).1 := by
+    rw [hS]
+    exact walk
+  have splitScans := scan_deposits_consolidations_le v.toNat highC pre
+  subst splitEq
+  rw [grossScan_append, creditScan_append (fun _ => false) (fun s => decide (s ≠ .rewards))
+    v.toNat highC pre post] at flows
+  obtain ⟨e2, ok2⟩ := post.balanceEvents_ok h.early highC
+  have netLe := (credits_le_sources (shared.append pre) h.genesis post h.early electraZ v.toNat
+    highC ok2).2.1
+  have credited : Cr + S ≤ Z := by omega
+  -- the key's rate is low against an increment, so the depth is small
+  have weights : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum = 54 := by decide
+  have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
+  have quarter := h.facts.quarterBand
+  have four : 4 ≤ P := by
+    rw [hP]
+    exact four_le_perIncrement h
+  have small : 11 * (preset.downwardBand + D) < 10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
+    rw [weights, denominator] at key
+    have scaled := Nat.mul_le_mul_left D (show 4 * 54 ≤ P * 54 by omega)
+    have regroup : 11 * D * (P * 54) = 11 * (D * (P * 54)) := by ring
+    omega
+  have arith := created_gain_arith preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P D e0 S Cr Z
+    preset.downwardBand key (by rw [he0, hS]; exact hysteresis) credited small
+  rw [← hq, ← hW] at arith
+  refine ⟨z, pre, post, rfl, ?_, ahead, fun p member => ?_⟩
+  · have := maxEffectiveBalance_pos h
+    omega
+  obtain ⟨r1, r2, cut⟩ := balancePath_endpoint post
+    (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
+  have prefixPath : ∀ z' ∈ r1.balancePath, z' ∈ post.balancePath := fun z' mem => by
+    have joined : post.balancePath = r1.balancePath ++ r2.balancePath.tail := by
+      rw [← Run.balancePath_append]
+      exact congrArg Run.balancePath cut.symm
+    rw [joined]
+    exact List.mem_append_left _ mem
+  have pEarly : p.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
+  have ceiling := PinSplit2.Run.effective_ceiling_of_balance_ceiling r1 pEarly fuluZ v.toNat inside
+    (S + Cr + (D * (11 * (Cr + W + D * q + D) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
+      P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
+        (D * q + D)))
+    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat alignedMax
+    (PinSplit5.effectiveAt_le_capMax (shared.append pre) h.genesis h.caps zEarly v.toNat)
+    (fun z' mem => bound z' (prefixPath z' mem)) (fun z' mem => capCeil z' (prefixPath z' mem))
+  obtain ⟨-, same, third, ordered⟩ := ceiling
+  by_cases crossed : (getCurrentEpoch z.state).toNat < (getCurrentEpoch p.state).toNat
+  · have := third crossed
+    omega
+  · have stays := same (by omega)
+    omega
+
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
 Its credits since its creation are credits of C's branch, which P's `created_ceiling` reads.
@@ -21054,264 +21312,6 @@ private theorem key_core_headroom (h : Setting config checks g split fin pulled 
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := capped
   unfold keyCeiling
   omega
-
-/-- The gain of a created key's credits and base stake is at most the gain of its flows and a unit.
-
-The key's base stake is credits, so it sits in the flows `Z`.
-
-The flow of `Cr` and the slack `S - e0` compound at eleven tenths.
-
-The floor holds the base gain `D * q` and `D`.
-
-A key whose rate is low has `11 * D * q ≤ e0`, so its base gain is within a tenth of its stake.
-
-The floors then lose one increment against the floor of the flows, which the unit pays. -/
-private theorem created_gain_arith (I WD F P D e0 S Cr Z β : ℕ)
-    (key : 11 * D * (P * F) < WD * I) (start : e0 ≤ S + β) (flows : Cr + S ≤ Z)
-    (small : 11 * (β + D) < 10 * I) :
-    D * (11 * (Cr + (S - e0) + D * (e0 / I * P * F / WD) + D) / (10 * I) * P * F / WD) +
-        (D * (e0 / I * P * F / WD) + D) ≤
-      D * (11 * Z / (10 * I) * P * F / WD) + D * (P * F / WD + 2) := by
-  have hWD : 0 < WD := Nat.pos_of_ne_zero fun zero => by
-    rw [zero] at key
-    omega
-  simp only [Nat.mul_assoc]
-  obtain ⟨a, ha⟩ : ∃ a, a = P * F := ⟨_, rfl⟩
-  rw [← ha] at key ⊢
-  obtain ⟨N2, hN2⟩ : ∃ N2, N2 = e0 / I := ⟨_, rfl⟩
-  rw [← hN2]
-  obtain ⟨q, hq⟩ : ∃ q, q = N2 * a / WD := ⟨_, rfl⟩
-  rw [← hq]
-  -- the base gain is at most a eleventh of the stake
-  have baseGain : 11 * (D * q) ≤ e0 := by
-    have floor : q * WD ≤ N2 * a := by rw [hq]; exact Nat.div_mul_le_self _ _
-    have step : 11 * D * q * WD ≤ WD * I * N2 := by
-      calc 11 * D * q * WD = 11 * D * (q * WD) := by ring
-        _ ≤ 11 * D * (N2 * a) := Nat.mul_le_mul_left _ floor
-        _ = N2 * (11 * D * a) := by ring
-        _ ≤ N2 * (WD * I) := Nat.mul_le_mul_left _ key.le
-        _ = WD * I * N2 := by ring
-    have cancel : 11 * D * q ≤ I * N2 := by
-      refine Nat.le_of_mul_le_mul_right (c := WD) ?_ hWD
-      calc 11 * D * q * WD ≤ WD * I * N2 := step
-        _ = I * N2 * WD := by ring
-    have rounded : I * N2 ≤ e0 := by rw [hN2]; exact Nat.mul_div_le _ _
-    calc 11 * (D * q) = 11 * D * q := by ring
-      _ ≤ e0 := Nat.le_trans cancel rounded
-  obtain ⟨X, hX⟩ : ∃ X, X = Cr + (S - e0) + D * q + D := ⟨_, rfl⟩
-  rw [← hX]
-  have total : 11 * X + 10 * e0 ≤ 11 * Z + 11 * (β + D) := by omega
-  -- the floors of the stake and of the credits add to one floor
-  obtain ⟨N1, hN1⟩ : ∃ N1, N1 = 11 * X / (10 * I) := ⟨_, rfl⟩
-  obtain ⟨N3, hN3⟩ : ∃ N3, N3 = 11 * Z / (10 * I) := ⟨_, rfl⟩
-  rw [← hN1, ← hN3]
-  have joint : N1 + N2 ≤ N3 + 1 := by
-    have n2 : N2 = 10 * e0 / (10 * I) := by
-      rw [hN2, Nat.mul_div_mul_left _ _ (by norm_num : 0 < 10)]
-    have add := Nat.div_add_div_le_add_div (x := 11 * X) (y := 10 * e0) (z := 10 * I)
-    have mono := Nat.div_le_div_right (c := 10 * I) total
-    have more := Nat.add_div_le_div_add_div_add_one (11 * Z) (11 * (β + D)) (10 * I)
-    have none : 11 * (β + D) / (10 * I) = 0 := Nat.div_eq_of_lt small
-    omega
-  have gains : N1 * a / WD + N2 * a / WD ≤ N3 * a / WD + a / WD + 1 := by
-    have add := Nat.div_add_div_le_add_div (x := N1 * a) (y := N2 * a) (z := WD)
-    have mono : (N1 + N2) * a / WD ≤ (N3 + 1) * a / WD :=
-      Nat.div_le_div_right (Nat.mul_le_mul_right _ joint)
-    have more := Nat.add_div_le_div_add_div_add_one (N3 * a) a WD
-    rw [Nat.add_mul] at mono
-    rw [Nat.add_mul, Nat.one_mul] at mono
-    omega
-  have scaled := Nat.mul_le_mul_left D gains
-  rw [Nat.mul_add, Nat.mul_add, Nat.mul_add, Nat.mul_one] at scaled
-  rw [← hq] at scaled
-  rw [Nat.mul_add D (a / WD) 2]
-  omega
-
-/-- The deposits and consolidations that a run credits to a key are among its non-reward credits. -/
-private theorem scan_deposits_consolidations_le (v high : ℕ) {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) :
-    (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v high run).1 +
-      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v high run).1 ≤
-        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v high run).1 := by
-  have named := creditScan_or (fun _ => false) (fun s => decide (s ≠ .rewards))
-    (fun _ => false) (fun _ => false)
-    (fun s => decide (s = .deposits ∨ s = .consolidations))
-    (fun s => decide (s ≠ .rewards ∧ s ≠ .deposits ∧ s ≠ .consolidations))
-    (fun _ => rfl) (fun s => by cases s <;> decide) (fun _ => by simp)
-    (fun s => by cases s <;> decide) v high run
-  have pair := creditScan_or (fun _ => false)
-    (fun s => decide (s = .deposits ∨ s = .consolidations)) (fun _ => false) (fun _ => false)
-    (fun s => decide (s = .deposits)) (fun s => decide (s = .consolidations))
-    (fun _ => rfl) (fun s => by cases s <;> decide) (fun _ => by simp)
-    (fun s => by cases s <;> decide) v high run
-  omega
-
-open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The effective balance of a key created on C's branch is at most its credits and their gains.
-
-The run from the split reaches a state `z` where the key holds the activation reserve, and then C.
-
-The ceiling at the largest cap closes from `z`, at the depth of the call.
-
-The bound holds at every state of C's run after `z`, and at C.
-
-The key's base stake is credits, so one floor of the flows pays its gain.
-
-The unit pays the step of the joint floor.
-
-The rate premise is that of the low regime: `key` reads it at the depth of the call.
-
-The depth is small against an increment, from `key` and a rate of at least four. -/
-private theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {v : ValidatorIndex} (activated : ∃ w, counted.validators.data[v.toNat]? = some w ∧
-      w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch counted)
-    (absent : split.validators.data.size ≤ v.toNat) (P : ℕ)
-    (hP : P = ((getBaseRewardPerIncrement preset
-      (if 18 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
-          ((getTotalActiveBalance pulled).toOption.getD 0).toNat then
-        (getTotalActiveBalance pulled).toOption.getD 0 / 4
-      else preset.EFFECTIVE_BALANCE_INCREMENT / 5)).toOption.getD 0).toNat)
-    (key : 11 * (min (pinTerms config pulled anc fin).depth
-      ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
-      (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum) <
-        WEIGHT_DENOMINATOR.toNat * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
-    {Z : ℕ} (flows : grossScan v.toNat highC tailC +
-      (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC tailC).1 ≤ Z) :
-    ∃ (z : ForkedBeaconState preset) (pre : Run config checks ⟨fork, split⟩ z)
-      (post : Run config checks z ⟨fork, counted⟩), tailC = pre.append post ∧ 0 < Z ∧
-      (∀ p ∈ pre.balancePath, ∀ w : Validator, p.state.validators.data[v.toNat]? = some w →
-        w.activationEpoch ≠ FAR_FUTURE_EPOCH →
-        (getCurrentEpoch p.state).toNat + 1 < w.activationEpoch.toNat) ∧
-      ∀ p ∈ post.balancePath, effectiveAt p v.toNat ≤ Z +
-        (min (pinTerms config pulled anc fin).depth
-          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
-          (11 * Z / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) * P *
-            (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
-        (min (pinTerms config pulled anc fin).depth
-          ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat)) *
-          (P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat + 2) +
-        preset.downwardBand := by
-  classical
-  obtain ⟨z, pre, post, splitEq, zEarly, zFork, zCounted, inside, funded, hysteresis, reserve,
-    walk, -, ahead⟩ := created_start h tailC highC endEpochC
-      activated absent
-  obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  have shared : Run config checks g ⟨fork, split⟩ := toFin.append fromFin
-  have incPos := h.bands.1
-  have alignedMax := (cap_values_aligned h.aligned).2
-  have fuluZ : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre.chainSteps)
-  have electraZ : .pectra ≤ z.fork := Nat.le_trans (by decide) fuluZ
-  obtain ⟨P', hP', rate⟩ := key_rate_pre h tailC h.near
-  obtain rfl : P = P' := hP.trans hP'.symm
-  have inRun : ∀ p ∈ post.balancePath, p ∈ tailC.balancePath := fun p member => by
-    obtain ⟨front, last⟩ := Run.balancePath_last pre
-    obtain ⟨rest, head⟩ := Run.balancePath_head post
-    rw [head] at member
-    rw [splitEq, Run.balancePath_append, last, head]
-    rcases List.mem_cons.mp member with rfl | later <;> simp [*]
-  have backZ : (⟨fork, counted⟩ : ForkedBeaconState preset).fork ≤ z.fork := by
-    have := fork_le_of_chainSteps pre.chainSteps
-    exact this
-  have capCeil : ∀ p ∈ post.balancePath, PinSplit2.capAt p v.toNat ≤
-      preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := fun p member => by
-    obtain ⟨r1, -, -⟩ := balancePath_endpoint post
-      (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
-    exact capAt_le_capMax h.caps (Nat.le_trans electraZ (fork_le_of_chainSteps r1.chainSteps))
-      v.toNat
-  have splitZ := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-  have near := h.near
-  have finalized := UInt64.le_iff_toNat_le.mp h.finalized
-  have depthEq : (pinTerms config pulled anc fin).depth =
-      (getCurrentEpoch pulled).toNat + 2 - anc.finalizedCheckpoint.epoch.toNat := rfl
-  have finSplit : (getCurrentEpoch fin).toNat ≤ (getCurrentEpoch split).toNat :=
-    epoch_le_of_slot_le fin.slot split.slot (Run.slot_le fromFin)
-  obtain ⟨D, hD⟩ : ∃ D, D = min (pinTerms config pulled anc fin).depth
-    ((getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat) := ⟨_, rfl⟩
-  rw [← hD] at key ⊢
-  obtain ⟨e0, he0⟩ : ∃ e0, e0 = effectiveAt z v.toNat := ⟨_, rfl⟩
-  obtain ⟨S, hS⟩ : ∃ S, S = actualBalanceAt z v.toNat := ⟨_, rfl⟩
-  obtain ⟨Cr, hCr⟩ : ∃ Cr, Cr = netScan v.toNat highC post +
-    (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) v.toNat highC post).1 :=
-    ⟨_, rfl⟩
-  obtain ⟨W, hW⟩ : ∃ W, W = S - e0 := ⟨_, rfl⟩
-  obtain ⟨q, hq⟩ : ∃ q, q = e0 / preset.EFFECTIVE_BALANCE_INCREMENT.toNat * P *
-      (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat := ⟨_, rfl⟩
-  obtain ⟨C, hC⟩ : ∃ C, C = preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-      (11 * (Cr + W + D * q + D) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) :=
-    ⟨_, rfl⟩
-  have alignedE0 : e0 % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-    rw [he0]
-    exact FloorTrace.effective_aligned (shared.append pre) h.genesis h.aligned v.toNat
-  have core := c_ceiling_abstract post h.early fuluZ v.toNat inside highC P
-    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat alignedMax
-    (PinSplit5.effectiveAt_le_capMax (shared.append pre) h.genesis h.caps zEarly v.toNat)
-    capCeil
-    (fun p member total perIncrement totalOk perOk =>
-      rate p (inRun p member) total perIncrement totalOk perOk)
-    endEpochC incPos D Cr Cr e0 C S W (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum q rfl hq
-    alignedE0 hC (by simp only at splitZ ⊢; omega) (by rw [hS]; exact Nat.min_le_left _ _)
-    (by omega) (le_of_eq hCr.symm) key (by omega)
-  obtain ⟨gc, rfl, -, bound, -⟩ := core
-  -- the credits, the base stake and the gains of the key
-  have beforeZ : S ≤ grossScan v.toNat highC pre +
-      (creditScan (fun _ => false) (fun s => decide (s = .deposits)) v.toNat highC pre).1 +
-      (creditScan (fun _ => false) (fun s => decide (s = .consolidations)) v.toNat highC
-        pre).1 := by
-    rw [hS]
-    exact walk
-  have splitScans := scan_deposits_consolidations_le v.toNat highC pre
-  subst splitEq
-  rw [grossScan_append, creditScan_append (fun _ => false) (fun s => decide (s ≠ .rewards))
-    v.toNat highC pre post] at flows
-  obtain ⟨e2, ok2⟩ := post.balanceEvents_ok h.early highC
-  have netLe := (credits_le_sources (shared.append pre) h.genesis post h.early electraZ v.toNat
-    highC ok2).2.1
-  have credited : Cr + S ≤ Z := by omega
-  -- the key's rate is low against an increment, so the depth is small
-  have weights : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum = 54 := by decide
-  have denominator : WEIGHT_DENOMINATOR.toNat = 64 := by decide
-  have quarter := h.facts.quarterBand
-  have four : 4 ≤ P := by
-    rw [hP]
-    exact four_le_perIncrement h
-  have small : 11 * (preset.downwardBand + D) < 10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    rw [weights, denominator] at key
-    have scaled := Nat.mul_le_mul_left D (show 4 * 54 ≤ P * 54 by omega)
-    have regroup : 11 * D * (P * 54) = 11 * (D * (P * 54)) := by ring
-    omega
-  have arith := created_gain_arith preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    WEIGHT_DENOMINATOR.toNat (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum P D e0 S Cr Z
-    preset.downwardBand key (by rw [he0, hS]; exact hysteresis) credited small
-  rw [← hq, ← hW] at arith
-  refine ⟨z, pre, post, rfl, ?_, ahead, fun p member => ?_⟩
-  · have := maxEffectiveBalance_pos h
-    omega
-  obtain ⟨r1, r2, cut⟩ := balancePath_endpoint post
-    (Run.nil : Run config checks ⟨fork, counted⟩ ⟨fork, counted⟩) backZ member
-  have prefixPath : ∀ z' ∈ r1.balancePath, z' ∈ post.balancePath := fun z' mem => by
-    have joined : post.balancePath = r1.balancePath ++ r2.balancePath.tail := by
-      rw [← Run.balancePath_append]
-      exact congrArg Run.balancePath cut.symm
-    rw [joined]
-    exact List.mem_append_left _ mem
-  have pEarly : p.fork < .glamsterdam :=
-    Nat.lt_of_le_of_lt (fork_le_of_chainSteps r2.chainSteps) h.early
-  have ceiling := PinSplit2.Run.effective_ceiling_of_balance_ceiling r1 pEarly fuluZ v.toNat inside
-    (S + Cr + (D * (11 * (Cr + W + D * q + D) / (10 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat) *
-      P * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat) +
-        (D * q + D)))
-    preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat alignedMax
-    (PinSplit5.effectiveAt_le_capMax (shared.append pre) h.genesis h.caps zEarly v.toNat)
-    (fun z' mem => bound z' (prefixPath z' mem)) (fun z' mem => capCeil z' (prefixPath z' mem))
-  obtain ⟨-, same, third, ordered⟩ := ceiling
-  by_cases crossed : (getCurrentEpoch z.state).toNat < (getCurrentEpoch p.state).toNat
-  · have := third crossed
-    omega
-  · have stays := same (by omega)
-    omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch holds beyond the split pays an upward band.
