@@ -22289,11 +22289,7 @@ Otherwise R's tail takes its penalties and sync debits, and the leak that `rise`
 
 The cut-key part of `bud_branchR`'s body reads the quotient of this bound.
 
-It reads it for each key of `cut_whistle`'s set, and pays the rounding with the debits.
-
-That part of the body is not written yet.
-
-This lemma has no reader until then. -/
+It reads it for each key of `cut_whistle`'s set, and pays the rounding with the debits. -/
 private theorem cut_balance_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

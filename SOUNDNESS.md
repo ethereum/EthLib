@@ -3476,7 +3476,8 @@ It assumes the bounded honest store epochs, the stake floors, the unslashed coun
 It also assumes the finality of honest stores and the guard `PinGuarded` at each call's finalized state.
 The fork is from Fusaka and before Gloas, and the next fork is past the horizon.
 It derives the agreement of honest blocks, the held states before the next fork and the justified chain of each store itself.
-The endpoint above still assumes `JustifiedPinned`; no theorem calls `justifiedPinned_of_setting` yet.
+The endpoint above still assumes `JustifiedPinned`.
+Only the two preset theorems `justifiedPinned_of_setting.mainnet` and `.minimal` call `justifiedPinned_of_setting`, and no endpoint calls any of them.
 
 `Consensus/Proofs/ForkChoice/FastConfirmation/ConfirmedRoot.lean` states where the confirmed block of a slot comes from.
 `Store.onFastConfirmation_confirmedRoot` shows that the rule starts from the block stored before, the finalized block or the observed justified block.
