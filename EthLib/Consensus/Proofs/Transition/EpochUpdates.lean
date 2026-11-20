@@ -50,7 +50,7 @@ The update of the effective balances changes only the registry.
 
 Before Heze, the reset of the deposit votes changes only those votes.
 
-The update of the inactivity scores changes only those scores.
+From Altair, the update of the inactivity scores changes only those scores.
 
 A root joins the historical roots exactly when their list has room, and it joins at the end.
 
@@ -1336,7 +1336,7 @@ theorem processParticipationRecordUpdates_eq (before : fork < .altair) :
   simp only [processParticipationRecordUpdates, notAltair, ↓reduceIte]
   try rfl
 
-/-! ## Fields kept by three steps -/
+/-! ## Fields kept by four steps -/
 
 /-- The slashing penalties change only the balances. -/
 theorem processSlashings_frame {after : BeaconState preset fork}
@@ -1433,7 +1433,7 @@ theorem processEth1DataReset_frame {hegota : fork < .hegota}
     subst computed
     rfl
 
-/-- The inactivity scores update changes only the inactivity scores. -/
+/-- From Altair, the update of the inactivity scores changes only those scores. -/
 theorem processInactivityUpdates_frame {config : Config} {altair : .altair ≤ fork}
     (computed : processInactivityUpdates config state altair = .ok after) :
     after = { state with inactivityScores := after.inactivityScores } := by

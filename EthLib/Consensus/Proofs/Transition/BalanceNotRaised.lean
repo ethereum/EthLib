@@ -828,15 +828,7 @@ private theorem processEpochAltair_walk {altair : .altair ≤ fork}
     · obtain ⟨_, _, _, rest⟩ := weighJustificationAndFinalization_checkpoints weighed
       exact ⟨by rw [← rest], by rw [← rest], by rw [← rest], by rw [← rest]⟩
   -- The scores and the rewards keep the registry and both queues.
-  have scoredFrame : scored = { justified with inactivityScores := scored.inactivityScores } := by
-    unfold processInactivityUpdates at scoredEq
-    split at scoredEq
-    · simp only [pure, Except.pure, Except.ok.injEq] at scoredEq
-      subst scoredEq
-      rfl
-    · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at scoredEq
-      obtain ⟨_, _, _, _, rfl⟩ := scoredEq
-      rfl
+  have scoredFrame := processInactivityUpdates_frame scoredEq
   have rewardedFrame := processRewardsAndPenalties_frame rewardedEq
   have rewardedValidators : rewarded.validators = state.validators :=
     (congrArg BeaconState.validators rewardedFrame).trans
