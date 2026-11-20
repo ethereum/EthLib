@@ -8031,6 +8031,22 @@ private theorem block_credit_split {g : ForkedBeaconState preset} {fork : Fork}
     (fun s => decide (s = .rewards ∨ s = .consolidations)) (fun s => decide (s = .slashings))
     (fun e m _ => by simpa using each e m)
 
+/-- The slot credits of a step to a key, other than rewards, fit consolidations, deposits, sync. -/
+private theorem slot_credit_split {g m n : ForkedBeaconState preset}
+    {ok : advanceSlotAcross config checks m = .ok n}
+    (shared : Run config checks g m) (genesis : Genesis config checks g)
+    (early : n.fork < .glamsterdam) (i : ℕ) {events : List (BalanceEvent preset)}
+    (replayed : (Step.slot ok).balanceEvents = .ok events)
+    (bounded : ∀ e ∈ events, e.credits ≤ e.creditLimit) :
+    ((events.filter fun x => decide (x.source ≠ .rewards)).map (keyCredit i)).sum ≤
+      ((events.filter fun x => decide (x.source = .consolidations ∨ x.source = .deposits)).map
+        (keyCredit i)).sum +
+      ((events.filter fun _ => false).map (keyCredit i)).sum + (events.map (syncCredit i)).sum := by
+  have each := slot_event_credit shared genesis early i replayed bounded
+  exact sum_credits_split events (keyCredit i) (syncCredit i)
+    (fun s => decide (s ≠ .rewards)) (fun s => decide (s = .consolidations ∨ s = .deposits))
+    (fun _ => false) (fun e m notRewards => by simpa using each e m (by simpa using notRewards))
+
 /-- The events of a step are within their credit limits. -/
 private theorem step_events_bounded {g m n : ForkedBeaconState preset}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
@@ -8138,10 +8154,7 @@ private theorem step_credit_le_sources {g m n : ForkedBeaconState preset}
       sum_filter_none, List.filter_true] at base split ⊢
     omega
   | slot ok =>
-    have each := slot_event_credit shared genesis early i replayed bounded
-    have split := sum_credits_split events (keyCredit i) (syncCredit i)
-      (fun s => decide (s ≠ .rewards)) (fun s => decide (s = .consolidations ∨ s = .deposits))
-      (fun _ => false) (fun e m notRewards => by simpa using each e m (by simpa using notRewards))
+    have split := slot_credit_split shared genesis early i replayed bounded
     simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
       sum_filter_none] at split ⊢
     omega
@@ -8182,10 +8195,7 @@ private theorem step_gross_le_sources {g m n : ForkedBeaconState preset}
       sum_filter_none] at gross part split ⊢
     omega
   | slot ok =>
-    have each := slot_event_credit shared genesis early i replayed bounded
-    have split := sum_credits_split events (keyCredit i) (syncCredit i)
-      (fun s => decide (s ≠ .rewards)) (fun s => decide (s = .consolidations ∨ s = .deposits))
-      (fun _ => false) (fun e m notRewards => by simpa using each e m (by simpa using notRewards))
+    have split := slot_credit_split shared genesis early i replayed bounded
     have zero := (PinSeatDebits.slot_syncDebit_zero electra ok early replayed i).2
     simp only [stepNet, stepCredit, replayed, Except.toOption, Option.getD_some,
       sum_filter_none] at split ⊢
@@ -15422,13 +15432,9 @@ private theorem riseQ_le (h : Setting config checks g split fin pulled anc count
     (fun {m n} step member inside => by
       obtain ⟨pre, post, _, mEarly, mEpoch⟩ :=
         DirectSafety.Apriori.Internal.Run.contains_step_facts member h.early
-      have above : fork ≤ m.fork := Nat.le_trans (by exact le_refl _)
-        (fork_le_of_chainSteps pre.chainSteps)
-      have below : m.fork ≤ fork := Nat.le_trans step.chainStep.fork_le
-        (fork_le_of_chainSteps post.chainSteps)
+      have same := fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)
       obtain ⟨mf, ms⟩ := m
-      have same : mf = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
-      subst same
+      obtain rfl : mf = fork := same
       have nEarly : n.fork < .glamsterdam :=
         Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
       exact PinKeyFloor.epochRewards_le step altair nEarly v (Or.inl inside)
@@ -15644,10 +15650,7 @@ private theorem pass_of_leak (h : Setting config checks g split fin pulled anc c
   obtain ⟨val, initial⟩ := initial
   have altair : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
   intro m n pre step post cut evs ok
-  have above : fork ≤ m.fork :=
-    Nat.le_trans (le_refl _) (fork_le_of_chainSteps pre.chainSteps)
-  have below : m.fork ≤ fork :=
-    Nat.le_trans step.chainStep.fork_le (fork_le_of_chainSteps post.chainSteps)
+  have same := fork_eq_of_run pre ((Run.nil.snoc step).append post) (Nat.le_refl _)
   have startE : (getCurrentEpoch m.state).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by
     have := UInt64.le_iff_toNat_le.mp
       (currentEpoch_le_of_chainSteps ((Run.nil.snoc step).append post).chainSteps)
@@ -15661,8 +15664,7 @@ private theorem pass_of_leak (h : Setting config checks g split fin pulled anc c
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
   have mSize := registryGrows_of_chainSteps pre.chainSteps
   obtain ⟨mf, ms⟩ := m
-  have same : mf = fork := Fork.ctorIdx_injective (Nat.le_antisymm below above)
-  subst same
+  obtain rfl : mf = fork := same
   have inside : i.toNat < ms.validators.data.size :=
     Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp initial).1 mSize
   refine step_passDebit_le step nEarly altair (getCurrentEpoch pulled).toNat endE startE inside
@@ -15752,11 +15754,9 @@ private theorem exitQ_at (h : Setting config checks g split fin pulled anc count
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) ≤
       effectiveAt sd v.toNat := by
   have nearC := h.near
+  have same := fork_eq_of_run pre post (Nat.le_refl _)
   obtain ⟨sf, se⟩ := sd
-  have above : fork ≤ sf := Nat.le_trans (le_refl _) (fork_le_of_chainSteps pre.chainSteps)
-  have below : sf ≤ fork := Nat.le_trans (le_refl _) (fork_le_of_chainSteps post.chainSteps)
-  have same : fork = sf := (Fork.ctorIdx_injective (Nat.le_antisymm below above)).symm
-  subst same
+  obtain rfl : fork = sf := same.symm
   have toCounted := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps post.chainSteps)
   simp only at toCounted
   have near : (getCurrentEpoch se).toNat ≤ (getCurrentEpoch pulled).toNat + 1 := by omega
@@ -16579,16 +16579,12 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
   refine (PinKeyFloor.Run.effective_floor_pair rp (forkEnd rest) h.fulu i.toNat inside 0 0 0 0 0
     0).2.1 alignedFin ?_ ?_
   · intro m n before step after cut' below
+    have nSame := fork_eq_of_run (before.snoc step) (after.append rest) (Nat.le_refl _)
+    have mSame := fork_eq_of_run before ((Run.nil.snoc step).append (after.append rest))
+      (Nat.le_refl _)
     obtain ⟨mF, mS⟩ := m
     obtain ⟨nF, nS⟩ := n
-    have afterRest := Nat.le_trans (fork_le_of_chainSteps after.chainSteps)
-      (fork_le_of_chainSteps rest.chainSteps)
-    have nSame : nF = fork := Fork.ctorIdx_injective (Nat.le_antisymm afterRest
-      (Nat.le_trans (fork_le_of_chainSteps before.chainSteps) step.chainStep.fork_le))
     obtain rfl : fork = nF := nSame.symm
-    have mSame : mF = fork := Fork.ctorIdx_injective (Nat.le_antisymm
-      (Nat.le_trans step.chainStep.fork_le afterRest)
-      (fork_le_of_chainSteps before.chainSteps))
     obtain rfl : fork = mF := mSame.symm
     have eqn : (before.snoc step).append (after.append rest) = fromFin.append tailC := by
       rw [Run.append_assoc, cut', cut]
@@ -16602,9 +16598,8 @@ private theorem floorC_stay (h : Setting config checks g split fin pulled anc co
       (by rw [Run.append_assoc]; exact eqn)
     rcases origin with same | ⟨w, pre, post, hpre, hm, hle, -⟩
     · omega
+    have wSame := fork_eq_of_run pre post (Nat.le_refl _)
     obtain ⟨wF, wS⟩ := w
-    have wSame : wF = fork := Fork.ctorIdx_injective (Nat.le_antisymm
-      (fork_le_of_chainSteps post.chainSteps) (fork_le_of_chainSteps pre.chainSteps))
     obtain rfl : fork = wF := wSame.symm
     obtain ⟨valW, initialW, -⟩ := pre.registryLifecycle.validators i.toNat val initial
     have hwhole : (pre.append (post.snoc step)).append (after.append rest) =
@@ -17762,8 +17757,7 @@ private theorem propN_epoch_le (h : Setting config checks g split fin pulled anc
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have uFork : u.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm
-    (fork_le_of_chainSteps rest.chainSteps) (fork_le_of_chainSteps inner.chainSteps))
+  have uFork : u.fork = fork := fork_eq_of_run inner rest (Nat.le_refl _)
   have uEarly : u.fork < .glamsterdam := by rw [uFork]; exact h.early
   have within : (getCurrentEpoch m).toNat ≤ (getCurrentEpoch pulled).toNat + 1 :=
     Nat.le_trans (UInt64.le_iff_toNat_le.mp
@@ -17826,8 +17820,7 @@ private theorem propN_segment_le (h : Setting config checks g split fin pulled a
       324 * ((pinTerms config pulled anc fin).perIncrement *
         (T.toNat / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)) +
         216 * (pinTerms config pulled anc fin).perIncrement := by
-  have mFork : m.fork = fork := Fork.ctorIdx_injective (Nat.le_antisymm
-    (fork_le_of_chainSteps (mid.append rest).chainSteps) (fork_le_of_chainSteps head.chainSteps))
+  have mFork : m.fork = fork := fork_eq_of_run head (mid.append rest) (Nat.le_refl _)
   obtain ⟨mf, ms⟩ := m
   obtain rfl : mf = fork := mFork
   rcases DirectSafety.Apriori.Internal.segment_slot_cases mid starts with same |
