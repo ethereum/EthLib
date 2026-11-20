@@ -3704,6 +3704,19 @@ Before Electra, `getAttestingIndices_constructAttestation_getAttestationData` co
 `mem_getAttestingIndices_constructAggregate` shows that the attesters of an aggregate are the attesters of its attestations with the same data.
 From Electra, `mem_getAttestingIndices_constructAggregateOfSingleAttestations` shows that the attesters of an aggregate are the attesters of its single attestations with the same data and committee.
 `getCommitteeIndices_constructAggregateOfSingleAttestations` shows that the committee bits of that aggregate name its one committee.
+Neither construction checks the committee index against the count of committees of a slot, and neither does the guide.
+An honest aggregator takes that index from its committee assignment, which `getCommitteeAssignment_sound` puts below the count.
+`index_lt_of_constructAggregate_getCommitteeAssignment` (`Consensus/Proofs/HonestAggregateIndex.lean`) carries that bound to the aggregate before Electra.
+Before Electra, the data is built at the slot and with the index of the assignment.
+The index of the aggregate is then below the count of its target epoch.
+`lt_of_mem_getCommitteeIndices_constructAggregateOfSingleAttestations` does the same from Electra, for each committee that the committee bits name.
+`target_epoch_eq_of_getCommitteeAssignment` shows that the target epoch of that data is the epoch of the assignment.
+The count is read in the state of the assignment, while block processing reads it in its own state.
+No theorem shows that the two states give the same count.
+An argument without a theorem says that they agree on one chain.
+An activation or an exit set in an epoch takes effect at least `MAX_SEED_LOOKAHEAD + 1` epochs later.
+So the active validators of an epoch are fixed `MAX_SEED_LOOKAHEAD` epochs before it.
+The state of a duty is at most one epoch before the target, and block processing at most one after it.
 `constructSyncCommitteeContribution_spec` states the bits of a contribution.
 The bit of a seat is set when its key is the key of the validator of a message on the slot and the root.
 `fastAggregateVerify_getAggregateSignature` shows that honest signatures of attestations on one message aggregate to a signature that the fast aggregate verification accepts.
@@ -5717,7 +5730,10 @@ By `List.mem_of_find?_eq_some` the first match is in the list, and by `List.find
 No theorem states it, but in the aggregate answer the construction therefore never joins an empty list of signatures.
 `getBeaconCommittee_exists` (`Consensus/Proofs/Accessors.lean`) gives the committee a value for an index below the count of its slot, when the bounds fit.
 The converse fails: the lookup does not check the index against that count, so an index at or above it can still give a committee.
-Neither construction checks that count, so either can build an aggregate that the rules of a block reject.
+The source defines the lookup the same way, and leaves that check to its callers: block processing and the gossip rules check it.
+Neither construction checks that count, so either can build an aggregate that the rules of a block reject, for an index that the caller chooses.
+An honest aggregator takes the index from its committee assignment.
+Its aggregate then meets the bound in the state of the assignment, as [Honest aggregation](#honest-aggregation) states.
 No theorem states either that the aggregate of signatures that are not an empty list fails only on a signature that does not decode.
 `aggregateAttestation_internal_iff_of_lt_electra` with `exists_constructAggregate_eq_error_iff` gives code 500 exactly when the block of the first match is verified and a fault occurs.
 `aggregateAttestation_internal_iff_of_electra` with `exists_constructAggregateOfSingleAttestations_eq_error_iff` gives the same from Electra, for an index below `MAX_COMMITTEES_PER_SLOT`.
