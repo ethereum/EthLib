@@ -54,7 +54,7 @@ def doubleFast (n : Nat) : Nat := 2 * n
   simp only [double, doubleFast]
   omega
 
-/-- `while` compiles to `Loop.forIn`, which Lean core defines with `partial`. -/
+/-- `while` compiles to `Loop.forIn`, which reaches `repeatM.impl`, a `partial` definition. -/
 def countdown (n : Nat) : Nat := Id.run do
   let mut i := n
   while i > 0 do

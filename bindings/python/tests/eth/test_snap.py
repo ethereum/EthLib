@@ -56,12 +56,13 @@ def _p(n: int) -> bytes:
 
 
 H = [bytes([i]) * 32 for i in range(1, 4)]
-ACCOUNT = rlp.encode([_p(1), _p(10), b"", b""])
+SLIM = [_p(1), _p(10), b"", b""]
+ACCOUNT = rlp.encode(SLIM)
 PROOF = [b"\xc0", b"\xc1\x80"]
 
 COMMON = [
     (GET_ACCOUNT_RANGE, rlp.encode([_p(7), H[0], H[1], H[2], _p(500_000)])),
-    (ACCOUNT_RANGE, rlp.encode([_p(7), [[H[0], ACCOUNT], [H[1], ACCOUNT]], PROOF])),
+    (ACCOUNT_RANGE, rlp.encode([_p(7), [[H[0], SLIM], [H[1], SLIM]], PROOF])),
     (GET_STORAGE_RANGES, rlp.encode([_p(7), H[0], [H[1], H[2]], b"", b"", _p(500_000)])),
     (STORAGE_RANGES, rlp.encode([_p(7), [[[H[0], b"\x01"]], []], PROOF])),
     (GET_BYTE_CODES, rlp.encode([_p(7), H, _p(500_000)])),
@@ -102,6 +103,24 @@ def test_full_account() -> None:
     assert full_account(ACCOUNT) == rlp.encode([_p(1), _p(10), EMPTY_ROOT, EMPTY_CODE])
     full = rlp.encode([_p(1), _p(10), H[0], H[1]])
     assert full_account(full) == full
+
+
+# AccountRange 1 with one account: nonce 1, balance 2, no storage and no code, no proof.
+# On the network its slim form is a list nested in the entry, while caps/snap.md types it `B`.
+NESTED = bytes.fromhex("ea01e7e6a0" + "11" * 32 + "c401028080" + "c0")
+# The same account as a byte string that holds the list, `accBody: B` read literally.
+WRAPPED = bytes.fromhex("eb01e8e7a0" + "11" * 32 + "85c401028080" + "c0")
+
+
+def test_account_range_nested_body() -> None:
+    assert rlp.encode([_p(1), [[b"\x11" * 32, [_p(1), _p(2), b"", b""]]], []]) == NESTED
+    assert decode_message(1, ACCOUNT_RANGE, NESTED) == NESTED
+
+
+def test_account_range_wrapped_body() -> None:
+    # The message has the shape of an AccountRange, so it reads.
+    # Its body is no account: test_snap_range.py checks that the range check refuses it.
+    assert decode_message(1, ACCOUNT_RANGE, WRAPPED) == WRAPPED
 
 
 CODES = [b"\x60\x00", b"\x60\x01", b"\x60\x02"]

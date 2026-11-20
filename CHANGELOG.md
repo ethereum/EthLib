@@ -442,6 +442,14 @@ Not yet released.
   The new `Kzg.TrustedSetup.g2MonomialOfHex_eq` states, for every position, that a point decoded alone is that point of the decoded setup, when the setup decodes.
   A proof about the `[tau]_2` of the precompile uses `TrustedSetup.g2MonomialOfHex_eq h 1 (by decide)` in its place.
 
+- The snap AccountRange message reads and writes each account body as the slim account list nested in its entry, the encoding used on the network ([#3491](https://github.com/ethereum/EthLib/issues/3491)).
+  `caps/snap.md` types the body `B`, and a byte string that holds the list is now no account body.
+  In Lean, `RangeEntry` takes the type of its data: an account entry is `RangeEntry Item`, and a slot entry `RangeEntry ByteArray`.
+  `fullAccount` takes the item of the body, and `fullAccount_slimAccount` replaces `fullAccount_encode_slimAccount`.
+  `AccountRangeWitness` loses its `slim` and `encode_slim` fields, since the entry carries the slim form itself.
+  In Python, `decode_message` reads the nested form, and still reads a message whose body is a byte string.
+  `full_account` and `verify_account_range` still take the RLP encoding of each body, and refuse a byte string as before.
+
 - In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
   The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
   `creditBudget` reads it in place of `initialExcess`.

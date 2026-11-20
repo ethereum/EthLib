@@ -126,8 +126,7 @@ The specification and the exports import nothing beyond the Lean toolchain.
 - Do not use `panic!` or the `!` accessors, such as `xs[i]!`, `get!` and `set!`.
   Each one hides a failure: it returns a default value, or it changes nothing.
   Index with `Fin` or a `Vector`, walk arrays of equal length together with `zip`, or return a typed error.
-  Older modules still use these accessors, and pull requests remove them module by module.
-  `lake exe check-accessors` keeps their exact list.
+  No module of the specification uses them, and `lake exe check-accessors` fails on a new one.
 - Remove such an accessor even when no input that the source accepts reaches its default.
   A caller of a public function can still reach it, with arguments that break a precondition the type does not state.
   Change the definition in place, and keep no copy of the old one beside it.
@@ -426,8 +425,7 @@ lake exe check-accessors
 ```
 
 It lists each use of a `!` accessor, such as `xs[i]!`, `get!` or `set!`, or of `panic`, in the elaborated declarations of the specification, with its count.
-`scripts/check_accessors_baseline.txt` lists the sites that exist today, and the goal is to remove each one.
-A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
+`scripts/check_accessors_baseline.txt` is the exact list of sites, and it is empty.
 A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.

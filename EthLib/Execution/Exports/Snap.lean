@@ -91,10 +91,11 @@ def trieNodesAnswerExport (request response : ByteArray) : Result Bool := do
     return SnapMessage.answers req resp && trieNodesAnswer (← run (readGroups paths)) nodes
   | _, _ => return false
 
-/-- The full RLP form of an account in slim form. -/
+/-- The full RLP form of an account, from the RLP encoding of its slim form. -/
 @[export eth_snap_full_account]
 def fullAccountExport (slim : ByteArray) : Result ByteArray := do
-  let some bytes := fullAccount slim | throw (0, "account is not in slim form")
+  let some bytes := (Serialization.Rlp.decode slim).toOption.bind fullAccount
+    | throw (0, "account is not in slim form")
   return bytes
 
 /-- An answer as a Python value: `None` for the empty reply, else whether keys remain. -/
@@ -108,8 +109,16 @@ def runRange (act : Except SnapRangeError RangeAnswer) : Result (Option Bool) :=
   answerToOption <$> act.mapError fun e =>
     (e.code, s!"range answer does not verify: {(repr e).pretty 1000000}")
 
-/-- An entry of a range from a pair of a key hash and its data. -/
-def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry := ⟨pair.1, pair.2⟩
+/-- A slot of a range from a pair of a key hash and its data. -/
+def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry ByteArray := ⟨pair.1, pair.2⟩
+
+/-- An account of a range from a pair of a key hash and the RLP encoding of its body.
+
+Bytes that are not RLP stay a byte string, which is never the body of an account.
+
+So the check reports the first account whose body is not the slim form, in order. -/
+def toAccountEntry (pair : Base.Hash32 × ByteArray) : RangeEntry Serialization.Rlp.Item :=
+  ⟨pair.1, (Serialization.Rlp.decode pair.2).toOption.getD (.bytes pair.2)⟩
 
 /-- Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.
 
@@ -120,13 +129,13 @@ def verifyAccountRangeOf
     (args : Base.Hash32 × Base.Hash32 × List (Base.Hash32 × ByteArray) × List ByteArray) :
     Result (Option Bool) := do
   let (root, start, accounts, proof) := args
-  runRange (verifyAccountRange root start (accounts.map toRangeEntry) proof)
+  runRange (verifyAccountRange root start (accounts.map toAccountEntry) proof)
 
 /-- Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.
 
 The arguments are the state root, the start, the accounts and the encodings of the proof nodes.
 
-Each account is a pair of the hash of its address and its body in slim form.
+Each account is a pair of the hash of its address and the RLP encoding of its slim form.
 
 `None` means the empty reply of a peer without the state.
 

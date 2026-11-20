@@ -14,14 +14,22 @@ from raising import raises
 GENESIS_TIME = 1_742_212_800
 
 # The first timestamp of each later fork, with the fork before it.
-# The "Activation" tables of EIP-7600, EIP-7607 (with BPO1 and BPO2) and EIP-7773 give them.
+# The "Activation" tables of EIP-7600 and EIP-7607 (with BPO1 and BPO2) give them.
 TIMES = [
     (1_742_999_832, "dencun", "pectra"),
     (1_761_677_592, "pectra", "fusaka"),
     (1_762_365_720, "fusaka", "bpo1"),
     (1_762_955_544, "bpo1", "bpo2"),
-    (1_793_036_568, "bpo2", "glamsterdam"),
 ]
+
+# The start of epoch 132352, the Glamsterdam time of Hoodi in EIP-7773 until its row was cleared.
+# The genesis file and EIP-7773 give Hoodi no Glamsterdam time now.
+#
+# File: EIPS/eip-7773.md
+# Repository: ethereum/EIPs
+# Commit: f3de103bc6eb82d2780e051e50d47a92aac45b40 (with the time)
+# Commit: b055feec322fbc37e9d77a393a50b3ff56b31c92 (without it)
+UNSCHEDULED_GLAMSTERDAM = 1_793_036_568
 
 
 def test_genesis_is_dencun() -> None:
@@ -33,6 +41,13 @@ def test_genesis_is_dencun() -> None:
 def test_time_boundary(timestamp: int, before: str, fork: str) -> None:
     assert hoodi_active_fork(1, timestamp - 1) == before
     assert hoodi_active_fork(1, timestamp) == fork
+
+
+def test_bpo2_is_last() -> None:
+    """No fork follows BPO2, at the old Glamsterdam time or after."""
+    assert hoodi_active_fork(1, UNSCHEDULED_GLAMSTERDAM - 1) == "bpo2"
+    assert hoodi_active_fork(1, UNSCHEDULED_GLAMSTERDAM) == "bpo2"
+    assert hoodi_active_fork(1, 2**64 - 1) == "bpo2"
 
 
 def test_timestamp_out_of_range() -> None:
