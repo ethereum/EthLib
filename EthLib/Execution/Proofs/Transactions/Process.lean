@@ -57,6 +57,8 @@ At every fork, the block counts the blob gas of the transaction.
 
 Up to BPO5, the block counts at most the gas limit, when that limit covers the least gas.
 
+At every fork, a transaction uses at most the execution gas plus the state gas it adds to its block.
+
 [e3529]: https://eips.ethereum.org/EIPS/eip-3529#specification
 [e7623]: https://eips.ethereum.org/EIPS/eip-7623#specification
 [e7778]: https://eips.ethereum.org/EIPS/eip-7778#specification
@@ -835,6 +837,26 @@ theorem processTransaction_blockGas_state_of_lt {env : BlockEnvironment fork}
     out.blockGas.state = 0 := by
   obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, -, -⟩ := processTransaction_eq_ok_of_lt hlt h
   rw [hBlock, transactionBlockGas_of_lt hlt]
+
+/-- A transaction that runs uses at most the execution gas plus the state gas it adds to its block.
+
+It holds at every fork. -/
+theorem processTransaction_gasUsed_le_add {env : BlockEnvironment fork}
+    {block : State.BlockState} {included : Included} {out : TransactionOutput}
+    (h : processTransaction env block included tx = .ok out) :
+    out.gasUsed ≤ out.blockGas.execution + out.blockGas.state := by
+  by_cases hGlam : .glamsterdam ≤ fork
+  · obtain ⟨_, _, _, output, _, -, -, -, -, hBlock, hSettle, -⟩ := runTransaction_eq_ok
+      (by rwa [processTransaction_of_glamsterdam hGlam (processTransaction_lt_hegota h)] at h)
+    have hSub := gasUsed_sub_le_transactionBlockGas hGlam included.sender tx
+      (output.gasLeft + output.reservoir) output.refund output.stateGasUsed
+    have hState := transactionBlockGas_state hGlam included.sender tx
+      (output.gasLeft + output.reservoir) output.refund output.stateGasUsed
+    rw [hBlock, settleGas_gasUsed hSettle]
+    omega
+  · have hExecution := processTransaction_blockGas_execution_of_lt (Nat.lt_of_not_le hGlam) h
+    have hState := processTransaction_blockGas_state_of_lt (Nat.lt_of_not_le hGlam) h
+    omega
 
 /-- A refund never raises the gas used: the gas used is at most the gas used with no refund. -/
 theorem gasUsed_le_gasUsed_zero (fork : Fork) (sender : Address) (tx : Transaction)

@@ -78,35 +78,44 @@ No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
 
+The secret key keeps the top tree and the bottom trees it signed in last, and signing returns the updated key.
+`SecretKey.Reachable.sign_fst` (`Proofs/Xmss/Sign.lean`) proves that every key that `keyGen`, then any sequence of `sign` calls, gives signs as the note's stateless signer, byte for byte.
+That signer rebuilds every tree from the seed; it is written only in the proofs (`Proofs/Xmss/Reference.lean`) and is never exported.
+
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`).
-If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
+Take a key that `keyGen seed`, then any sequence of `sign` calls, gives.
+If `sign` returns a signature with it for a message at a leaf index, then `verify` accepts that signature under the public key of `keyGen seed`.
 It says nothing about unforgeability.
 
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
-Key generation makes at most `13434881` calls and signing at most `8616804556`.
+Key generation makes at most `13434881` calls.
+Signing makes at most `8603369879` calls with any key, and at most `4294967500` in a bottom tree the key keeps; it never computes the top tree.
 Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
+It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error.
 It proves that the signer's own calls before each search add none.
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
-So no theorem bounds the failure of a later signature, or of signing inside the game.
+So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
-Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
-In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
-Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
+Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/KeyedSigner.lean`).
+In the random oracle model, an adversary with a budget of `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
+Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle, and the signer keeps its key across requests.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
-The budget `q` counts the calls of key generation, the signer and the final verification too.
+The budget `q` bounds the calls of the same game with the stateless signer, key generation and the final verification included.
+Both games give the adversary the same answers, so it forges in each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
+No theorem bounds the forgery by the calls of the game with the kept key.
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
-The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+The constants are proved upper bounds on the calls of key generation, of one stateless signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-The library proves no smaller bound on the calls of a request.
+The library proves no smaller bound on the calls of a stateless signing request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -2276,9 +2285,18 @@ So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `app
 The bound on the parent is a hypothesis.
 The rule lets each block raise the gas limit by less than a 1024th, with no cap.
 So no theorem bounds the gas limit along a chain from its genesis.
+
 From Glamsterdam a receipt counts the gas after the refund, state gas included.
-The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
-Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+`processTransaction_gasUsed_le_add` (`Execution/Proofs/Transactions/Process.lean`) proves that a transaction uses at most the execution gas plus the state gas it adds to its block.
+Before Glamsterdam the block counts the gas used as execution gas, and no state gas (`processTransaction_blockGas_execution_of_lt`, `processTransaction_blockGas_state_of_lt`).
+From Glamsterdam it counts as execution gas at least the gas that the sender pays, minus the state gas (`gasUsed_sub_le_transactionBlockGas`).
+So each receipt records at most the execution gas plus the state gas of the body (`applyTransactions_cumulativeGasUsed_le_add`).
+The gas limit bounds each of the two (`applyTransactions_gas_le`), so a receipt records at most twice the gas limit.
+`stateTransition_gas_lt` derives both bounds for a block that passes its transition, at every fork that the transition runs.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^62`.
+The rule then keeps the gas limit of the block below `2^63` (`stateTransition_gasLimit_mul_lt`), so twice that limit stays below `2^64`.
+For a parent from `2^62` up to `2^63`, no theorem keeps the receipts from Glamsterdam below `2^64`.
+`processTransaction_logsWeight` and `encode_makeReceipt_processTransaction` hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
 
@@ -4494,7 +4512,7 @@ The terms doubled in the first line are stake that can leave the support of `x`.
 They are departures, partial withdrawals, scheduled exits, slack below the effective balance, penalties and rounding.
 `gainBudget` is stake that can join or grow: `activationBudget`, `creditBudget` and `pendingSourceExcess`.
 From Electra it also includes `roundingBudget` and `dueConsolidationCarry`.
-`creditBudget` is the excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
+`creditBudget` is the capped excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
 The remaining terms cover the edges of the window.
 They are two adjacent exit epochs, the stake active only at the previous epoch, and the growth room of an exit cohort.
 
@@ -5142,13 +5160,20 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`, `Proofs/Rpc/SimulateCalls.lean`).
+A block without transactions has an empty list of call results either way (`callsJson_nil`).
+So it is the same with the flag or without (`json_trace_of_nil`).
 Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
-So when every block of a simulation is from Glamsterdam, the whole answer is the same with the flag or without (`simulate_traceTransfers`).
+So when each block of a simulation is from Glamsterdam or has no transactions, the answer is the same either way (`simulate_traceTransfers_of_glamsterdam_le_or_nil`, `Proofs/Rpc/SimulateCalls.lean`).
+That covers a simulation whose blocks are all from Glamsterdam (`simulate_traceTransfers`).
+A block simulated without calls has no transactions (`simulateBlock_transactions`, `Proofs/Rpc/SimulateBlocks.lean`).
+A property holds for each block of a simulation when two kinds of blocks have it (`simulateBlocks_forall`).
+They are the blocks simulated from the base block with an empty request, as gap blocks are, and the blocks of the plan.
+Suppose that each block of the plan is from Glamsterdam or has no calls.
+Then each block of the simulation, gap blocks included, is from Glamsterdam or has no transactions (`simulateBlocks_glamsterdam_le_or_nil`).
+So the answer is the same either way (`simulate_traceTransfers_of_plan`, `Proofs/Rpc/SimulateCalls.lean`).
 A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
-Two cases have no theorem yet:
-- a block before Glamsterdam without calls, such as a gap block, is the same either way, but no theorem states this.
-- no theorem derives the hypothesis on the blocks from the configuration and the base block.
+No theorem yet derives the hypothesis on the blocks of the plan from the configuration, the base block and the request.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -7031,7 +7056,7 @@ The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
+12095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
