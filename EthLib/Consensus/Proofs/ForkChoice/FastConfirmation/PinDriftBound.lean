@@ -738,18 +738,6 @@ structure PinPresetFacts (preset : Preset) : Prop where
   slashBand : preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
       preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat + preset.downwardBand ≤
     preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-  /-- (preset fact) Twice the largest slashing penalty is at most an increment.
-
-  It rules out a penalty above half an increment.
-
-  So one extra step per key suffices for the sync debits that follow a slashing.
-
-  It holds with equality on both presets.
-
-  A preset that raises the largest effective balance, or lowers the slashing quotient, breaks it. -/
-  slashHalf : 2 * (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
-      preset.MIN_SLASHING_PENALTY_QUOTIENT_ELECTRA.toNat) ≤
-    preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) At every fork the floor of a new key is at least an increment. -/
   newKey : ∀ fork : Fork, preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤
     2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
@@ -769,15 +757,6 @@ structure PinPresetFacts (preset : Preset) : Prop where
   quarterBand : 4 * preset.downwardBand ≤ preset.EFFECTIVE_BALANCE_INCREMENT.toNat
   /-- (preset fact) The proposer lookahead ends before activity stops being fixed. -/
   covers : preset.MIN_SEED_LOOKAHEAD.toNat + 1 ≤ preset.MAX_SEED_LOOKAHEAD.toNat
-  /-- (preset fact) A new key's floor pays three whistleblower rewards at the largest balance.
-
-  It rules out a key created on another branch whose slashing reward its own balance cannot pay. -/
-  whistleNewKey : 3 * (preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat /
-      (EthLib.Consensus.parameters preset .fusaka).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
-    2 * (2 * preset.MAX_EFFECTIVE_BALANCE.toNat / 3 -
-      preset.MAX_EFFECTIVE_BALANCE.toNat /
-        (EthLib.Consensus.parameters preset .fusaka).MIN_SLASHING_PENALTY_QUOTIENT.toNat -
-      preset.downwardBand - preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
   /-- (preset fact) The increment times the base reward factor does not overflow a `Gwei`. -/
   fits : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64
   /-- (preset fact) An increment is at most four downward bands, which rules out a tiny band. -/
@@ -797,17 +776,17 @@ structure PinPresetFacts (preset : Preset) : Prop where
 /-- The mainnet preset has the preset facts of the pin. -/
 theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
-    by decide, by decide, by decide, by decide, by decide, by decide,
+    by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.mainnet⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide,
-    by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
+    by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
-    by decide, by decide, by decide, by decide, by decide, by decide,
+    by decide, by decide, by decide, by decide, by decide,
     ActivationWithinMaxEffective.minimal⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
