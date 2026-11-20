@@ -36,7 +36,7 @@ open EthLib.Cryptography.Sphincs
 open EthLib.Cryptography.Sphincs.Constants
 open HashSig (HashSpec OracleWorld)
 
-/-- A forging probability over a counted run is an expectation over the plain random oracle. -/
+/-- The chance of a true result of a counted run is an expectation over the plain random oracle. -/
 theorem prEvent_eq_wp_of_eq_withAddCost (oa : OracleComp OracleWorld Bool)
     (X : ProbComp (Bool × Nat))
     (hX : X = (simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅) :
@@ -47,7 +47,9 @@ theorem prEvent_eq_wp_of_eq_withAddCost (oa : OracleComp OracleWorld Bool)
   rw [prEvent_eq_wp_propInd, StateT.run'_eq, wp_map]
   rfl
 
-/-- A counted run within `n` hash calls leaves a failed search with chance `<= n (1 - p)^T`.
+/-- If a counted run makes at most `n` hash calls, the plain run leaves a failed search rarely.
+
+The chance is at most `n (1 - p)^T`, in the final cache of the run against the plain oracle.
 
 A failed search is one whose first `T` trials all failed, with `1 <= T <= 2^32`.
 

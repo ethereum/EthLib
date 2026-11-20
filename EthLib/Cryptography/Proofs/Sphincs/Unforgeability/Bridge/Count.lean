@@ -119,7 +119,7 @@ theorem experiment_eq (adversary : Adversary) :
 theorem modelCountedOracle_eq :
     SphincsSecurity.Security.countedOracle = HashSpec.romImpl.withAddCost hashCost := rfl
 
-/-- The model's experiment runs its game against the plain random oracle, charging 1 per call. -/
+/-- The model's experiment runs its game against the plain random oracle, at 1 per hash call. -/
 theorem modelExperiment_eq (adversary : SphincsSecurity.Security.Adversary) :
     SphincsSecurity.Security.experiment adversary =
       (simulateQ (HashSpec.romImpl.withAddCost hashCost)

@@ -312,7 +312,7 @@ theorem capSearches_main (T : Nat) (adversary : Adversary) (pk : PublicKey) :
   rfl
 
 omit f in
-/-- The game with the adversary's counter, with the adversary's run in the shape above. -/
+/-- The game with the adversary's counter, its run counted and logged as one step. -/
 theorem adversaryGameCore_eq_runOf (adversary : Adversary) :
     adversaryGameCore adversary = (do
       let seed ← liftM sampleSeed
@@ -323,7 +323,7 @@ theorem adversaryGameCore_eq_runOf (adversary : Adversary) :
   adversaryGameCore_eq adversary
 
 omit f in
-/-- The game of the wrapped adversary, with the wrapped run in the shape above. -/
+/-- The game of the wrapped adversary, its run counted and logged as one step. -/
 theorem adversaryGameCore_capSearches_eq (T : Nat) (adversary : Adversary) :
     adversaryGameCore (capSearches T adversary) = (do
       let seed ← liftM sampleSeed
