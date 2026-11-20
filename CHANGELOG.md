@@ -373,6 +373,8 @@ Not yet released.
 - `processWithdrawals_of` carries a relation across the withdrawal step.
   It holds when the relation holds of the state to itself and across the expected withdrawals.
 
+- `effectiveKept_parentPayload` states that the payload of the parent keeps the size of the registry and each effective balance in it.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
