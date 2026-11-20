@@ -395,6 +395,15 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
+  It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.
+  `Kzg.bytesToBlsField` and the point evaluation precompile pass their `Bytes32` directly.
+  `Signatures.SecretKey.fromBytes` keeps its `ByteArray`, and reads 32 bytes of it with `exactBytes?`.
+  `Bls.Fr.fromBytesBE_toBytesBE` decodes the vector `⟨a.toBytesBE.data, Fr.size_data_toBytesBE a⟩`, where the new `Bls.Fr.size_data_toBytesBE` states that `a.toBytesBE` has 32 bytes.
+  `Bls.Fr.fromBytesBE_ok` takes the vector, and concludes only the value and its bound, since the length is in the type.
+  `Signatures.SecretKey.fromBytes_eq_ok_iff` is replaced by `Signatures.SecretKey.fromBytes_packBytes_eq_ok_iff`, about the packed bytes of a vector.
+  The new `Signatures.SecretKey.fromBytes_of_size_ne` states that the decoder rejects an input that is not 32 bytes long.
+
 - In Lean, the module `EthLib.Cryptography.Proofs.IdLoops` is removed, with its seven lemmas in the namespace `Cryptography.IdLoops`.
   They are `id_pure`, `id_bind`, `forIn_list_yield`, `forIn_range_yield`, `forIn_range_yield_ite`, `forIn_range_yield_ite₂` and `foldl_range'_getElem!`.
   They turned `for` loops of `Id.run do` blocks into folds.
