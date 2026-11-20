@@ -7938,7 +7938,7 @@
   {"summary":
    "The responses of calls made one after another on a validator client, then its state.",
    "signature":
-   "(memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
+   "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]",
    "operation": "EthLib.Consensus.Exports.keymanagerRunExport",
    "method": "consensus_keymanager_run",
    "errors":
@@ -7949,7 +7949,7 @@
       {"constructor": "slashingProtection", "code": 3}]}],
    "error_class": "KeymanagerError",
    "docstring":
-   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, and the record as JSON text.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
+   "The responses of calls made one after another on a validator client, then its state.\n\nThe arguments are the memory and work bounds of key derivation, then the defaults of the client.\n\nThe defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.\n\nThe calls follow, each its method, its path and its body.\n\nThe client starts with no key, and each call sees the state that the one before it left.\n\nThe result gives the status code and body of each response, then the record and the keys held."},
   {"summary":
    "From Bellatrix: whether a block carries a payload other than the empty one.",
    "signature": "(name: str, fork: str, block: bytes) -> bool",

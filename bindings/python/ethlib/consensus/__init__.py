@@ -245,10 +245,18 @@ def keymanager_json(schema: str, document: Any) -> Any:
 
 
 def keymanager_run(
-    memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]
+    memory: int,
+    work: int,
+    fee_recipient: bytes,
+    gas_limit: int,
+    graffiti: str,
+    protection: str,
+    calls: list[tuple[str, str, Any]],
 ) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
-    return _native.consensus_keymanager_run(memory, work, protection, calls)
+    return _native.consensus_keymanager_run(
+        memory, work, fee_recipient, gas_limit, graffiti, protection, calls
+    )
 
 
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:

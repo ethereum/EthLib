@@ -1044,7 +1044,8 @@ def bindings : List Binding := [
     "(schema: str, document: Any) -> Any",
     [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_keymanager_run", `EthLib.Consensus.Exports.keymanagerRunExport,
-    "(memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]) -> " ++
+    "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, " ++
+      "protection: str, calls: list[tuple[str, str, Any]]) -> " ++
       "tuple[list[tuple[int, Any]], dict[str, Any]]",
     [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_is_execution_block", `EthLib.Consensus.Exports.isExecutionBlockExport,

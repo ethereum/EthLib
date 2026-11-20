@@ -257,6 +257,11 @@ MEMORY, WORK = 2**20, 2**20
 GENESIS = json.loads(_load("types/slashing_protection.yaml")["example"])["metadata"][
     "genesis_validators_root"
 ]
+# The defaults of the client: the examples of the address, the integer and the graffiti.
+DEFAULT_FEE_RECIPIENT = _load("types/eth_address.yaml")["example"].lower()
+DEFAULT_GAS_LIMIT = int(_load("types/uint.yaml")["Uint64"]["example"])
+DEFAULT_GRAFFITI = _load("types/graffiti.yaml")["example"]
+DEFAULTS = (bytes.fromhex(DEFAULT_FEE_RECIPIENT[2:]), DEFAULT_GAS_LIMIT, DEFAULT_GRAFFITI)
 # Secret keys of the tests, each a nonzero scalar below the order of the group.
 SECRETS = [bytes(31) + bytes([n]) for n in (1, 2, 3)]
 
@@ -304,7 +309,7 @@ def _run(
     calls: list[tuple[str, str, Any]], memory: int = MEMORY, work: int = WORK
 ) -> tuple[list[tuple[int, Any]], bytes, list[bytes]]:
     """The responses of calls on a client with no key, the record and the keys afterwards."""
-    responses, state = consensus.keymanager_run(memory, work, _interchange([]), calls)
+    responses, state = consensus.keymanager_run(memory, work, *DEFAULTS, _interchange([]), calls)
     keys = [bytes.fromhex(key[2:]) for key in state["local_keys"]]
     return responses, state["slashing_protection"].encode(), keys
 
@@ -453,12 +458,12 @@ def test_unknown_call():
 def test_bad_starting_record():
     """A starting record that does not read is refused with the code of EIP-3076 data."""
     with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
-        consensus.keymanager_run(MEMORY, WORK, '{"metadata": {}}', [])
+        consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, '{"metadata": {}}', [])
 
 
 def _calls(*calls: tuple[str, str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """The responses of calls on a client with no key, and its state afterwards."""
-    return consensus.keymanager_run(MEMORY, WORK, _interchange([]), list(calls))
+    return consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, _interchange([]), list(calls))
 
 
 def test_list_keys():
@@ -588,3 +593,91 @@ def test_move_a_key():
         with raises(SlashingProtectionError, "slashing protection failed with code 5"):
             consensus.check_attestation_signing(record, key, 8, 11, root)
     consensus.check_block_signing(new_record, key, 101, root)
+
+
+def test_fee_recipient_example():
+    """The example of issue #2140: get the default, set, get, delete, get, then an unknown key."""
+    k = _pubkeys()[0]
+    path = f"/eth/v1/validator/{k}/feerecipient"
+    other = "0x6fdfab408c56b6105a76eff5c0435d09fc6ed7a9"
+    unknown = f"/eth/v1/validator/{REMOTE_C}/feerecipient"
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("GET", path, {}),
+        ("POST", path, {"ethaddress": other}),
+        ("GET", path, {}),
+        ("DELETE", path, {}),
+        ("GET", path, {}),
+        ("DELETE", unknown, {}),
+    )
+    default = (200, {"data": {"pubkey": k, "ethaddress": DEFAULT_FEE_RECIPIENT}})
+    assert responses[1:] == [
+        default,
+        (202, None),
+        (200, {"data": {"pubkey": k, "ethaddress": other}}),
+        (204, None),
+        default,
+        (404, {"message": "The key was not found on the server"}),
+    ]
+
+
+def test_fee_recipient_zero():
+    """A fee recipient of zero is refused, and the default stays."""
+    k = _pubkeys()[0]
+    path = f"/eth/v1/validator/{k}/feerecipient"
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("POST", path, {"ethaddress": "0x" + "00" * 20}),
+        ("GET", path, {}),
+    )
+    message = "Cannot specify the 0x00 fee recipient address through the API"
+    assert responses[1:] == [
+        (400, {"message": message}),
+        (200, {"data": {"pubkey": k, "ethaddress": DEFAULT_FEE_RECIPIENT}}),
+    ]
+
+
+def test_gas_limit_and_graffiti():
+    """A gas limit and a graffiti set for one key leave the defaults of another key."""
+    k, other = _pubkeys()[:2]
+    keystores = [_keystore(secret, "pass") for secret in SECRETS[:2]]
+    responses, _ = _calls(
+        _import(keystores, ["pass", "pass"]),
+        ("POST", f"/eth/v1/validator/{k}/gas_limit", {"gas_limit": "36000000"}),
+        ("POST", f"/eth/v1/validator/{k}/graffiti", {"graffiti": "moved"}),
+        ("GET", f"/eth/v1/validator/{k}/gas_limit", {}),
+        ("GET", f"/eth/v1/validator/{other}/gas_limit", {}),
+        ("GET", f"/eth/v1/validator/{k}/graffiti", {}),
+        ("GET", f"/eth/v1/validator/{other}/graffiti", {}),
+    )
+    assert responses[1:] == [
+        (202, None),
+        (202, None),
+        (200, {"data": {"pubkey": k, "gas_limit": "36000000"}}),
+        (200, {"data": {"pubkey": other, "gas_limit": str(DEFAULT_GAS_LIMIT)}}),
+        (200, {"data": {"pubkey": k, "graffiti": "moved"}}),
+        (200, {"data": {"pubkey": other, "graffiti": DEFAULT_GRAFFITI}}),
+    ]
+
+
+def test_setting_bad_path_and_body():
+    """A path whose key does not read, or a body that does not read, gets HTTP 400."""
+    k = _pubkeys()[0]
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("GET", "/eth/v1/validator/0x12/gas_limit", {}),
+        ("POST", f"/eth/v1/validator/{k}/gas_limit", {"gas_limit": 1}),
+    )
+    assert responses[1:] == [
+        (400, {"message": "the public key of the path does not read"}),
+        (400, {"message": "the request does not read"}),
+    ]
+
+
+def test_setting_of_unmanaged_key():
+    """Every call on a setting of a key that the client does not manage gets HTTP 404."""
+    path = f"/eth/v1/validator/{REMOTE_C}/graffiti"
+    responses, _ = _calls(
+        ("GET", path, {}), ("POST", path, {"graffiti": "x"}), ("DELETE", path, {})
+    )
+    assert responses == [(404, {"message": "The key was not found on the server"})] * 3

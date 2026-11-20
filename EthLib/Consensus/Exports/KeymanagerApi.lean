@@ -82,10 +82,12 @@ def keyStateJson (state : KeyState) : Json :=
       Interchange.bytesJson key.pubkey).toArray)]
 
 /-- The responses of calls made one after another on a client, then its state. -/
-def keymanagerRunOf (args : Nat × Nat × String × List (String × String × PyValue)) :
-    Result (List (Nat × PyValue) × PyValue) := do
-  let (memory, work, protection, calls) := args
-  let config : ClientConfig := { limits := { memory, work } }
+def keymanagerRunOf (args : Nat × Nat × ExecutionAddress × UInt64 × String × String ×
+    List (String × String × PyValue)) : Result (List (Nat × PyValue) × PyValue) := do
+  let (memory, work, feeRecipient, gasLimit, graffiti, protection, calls) := args
+  let config : ClientConfig :=
+    { limits := { memory, work }, defaultFeeRecipient := feeRecipient,
+      defaultGasLimit := gasLimit, defaultGraffiti := graffiti }
   let record ← runKeymanager
     (readSlashingProtection toolchainJsonText "" (.str protection))
   let start : KeyState := { localKeys := [], remoteKeys := [], protection := record }
@@ -97,7 +99,9 @@ def keymanagerRunOf (args : Nat × Nat × String × List (String × String × Py
 
 /-- The responses of calls made one after another on a validator client, then its state.
 
-The arguments are the memory and work bounds of key derivation, and the record as JSON text.
+The arguments are the memory and work bounds of key derivation, then the defaults of the client.
+
+The defaults are the fee recipient, the gas limit and the graffiti; the record as JSON text follows.
 
 The calls follow, each its method, its path and its body.
 

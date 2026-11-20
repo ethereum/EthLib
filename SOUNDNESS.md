@@ -6314,6 +6314,28 @@ The source leaves two points about the delete open, and EthLib takes these readi
 - The flow sets every status to `error` when the export of the data fails.
   EthLib's record is a pure value whose export cannot fail, so it has no such case; that failure is taken to be one of storage.
 
+The calls on `/eth/v1/validator/{pubkey}/` with `feerecipient`, `gas_limit` and `graffiti` get, set and delete a setting of each key (`Consensus/KeymanagerApi/Settings.lean`).
+Each setting maps keys to values, and a key without a mapping gets the default that the client fixes at its start.
+For each of the three settings, a set then a get of the key gives the value set (`Setting.get_set`, `Consensus/Proofs/KeymanagerApi/Settings.lean`), and a delete then a get gives the default (`Setting.get_of_delete`).
+A set or a delete on one key leaves the value of every other key unchanged (`Setting.get_set_of_ne`, `Setting.get_of_delete_of_ne`).
+Each call on a key that the client does not manage gets HTTP 404 and changes nothing (`handle_of_isManaged_eq_false`), and a delete on a key that it manages removes its mapping (`Setting.delete_of_isManaged`).
+A set through the API that gets HTTP 202, then a get, gives the value set (`handle_get_of_handle_set`).
+A set of the zero fee recipient gets HTTP 400 and changes nothing (`handle_feeRecipient_zero`).
+The three settings meet the law that these statements take (`feeRecipientSetting_lawful`, `gasLimitSetting_lawful`, `graffitiSetting_lawful`).
+The Python suite runs the example of issue #2140 on the fee recipient, and sets a gas limit and a graffiti.
+
+The source leaves seven points about the settings open, and EthLib takes these readings:
+
+- The get and the set list HTTP 404 only as "Path not found", unlike the delete.
+  EthLib answers HTTP 404 to each call on a key that the client does not manage, so that a set on an unmanaged key leaves no mapping that a delete could not remove.
+  A key deleted through the API keeps its mappings, which apply again if it is imported again.
+- The set of a gas limit does not mark its body as required, unlike the other two; EthLib requires it.
+- The source forbids the zero fee recipient and names no code; EthLib answers HTTP 400.
+- The graffiti is a JSON string, and the block field is 32 bytes; EthLib keeps the string as it is, with no length check.
+- A delete may get HTTP 403 when the setting lives in configuration files; that depends on storage and is not modelled.
+- The gas limit calls "may return a 400 status code if no external builder is configured"; that is a choice of the client and is not modelled.
+- The fee recipient and the gas limit "are not used on Phase0 or Altair networks"; the calls take no fork, so they behave the same at every fork.
+
 A key moved between two clients keeps its slashing protection, by the use case "Move a key" of the source (`Consensus/Proofs/KeymanagerApi/Move.lean`).
 The old client holds the key, and every key that it holds under that public key can be deleted.
 With a read-only copy, the delete refuses the key and returns no data for it, so the statement needs this.
