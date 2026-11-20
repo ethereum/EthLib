@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Execution.Evm.Gas.CallGas
 public import EthLib.Execution.Evm.Instructions.SelfDestruct
 public import EthLib.Execution.Proofs.Evm.Instructions.AccountData
 public import EthLib.Execution.Proofs.State.Tracker
@@ -20,6 +21,10 @@ From Glamsterdam, SELFDESTRUCT burns no ether, by EIP-8246.
 It moves the balance to another beneficiary and keeps the sum of the two balances.
 
 An account that names itself keeps its balance.
+
+Before Glamsterdam, a new beneficiary costs what a CALL of the balance pays for a new account.
+
+It costs nothing at a fork where SELFDESTRUCT has no base price.
 
 From Glamsterdam, a new beneficiary costs 9000 execution gas and 183600 state gas.
 
@@ -150,6 +155,29 @@ theorem selfdestructStateGas_eq_zero (h : fork < .glamsterdam ∨ createsAccount
   · have : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt h
     simp [this]
   · simp [h]
+
+/-- Before Glamsterdam, a beneficiary that gets an account costs what a CALL pays for it.
+
+That CALL sends the balance of the current account to the beneficiary.
+
+EIP-150 adds the price of the account with the base price, similar to CALLs.
+
+EIP-161 then gives CALL and SELFDESTRUCT one rule: ether must move to a dead account.
+
+A fork with no base price charges nothing for the account. -/
+theorem selfdestructCost_selfdestructCreatesAccount (hlt : fork < .glamsterdam) (cold : Bool)
+    (state : TransactionState) (originator beneficiary : Address) :
+    selfdestructCost fork cold (selfdestructCreatesAccount fork state originator beneficiary) =
+      selfdestructCost fork cold false +
+        if (gasSchedule fork).OPCODE_SELFDESTRUCT_BASE = 0 then 0
+        else callNewAccountCost fork state beneficiary (state.getAccount originator).balance := by
+  have hg : ¬fork ≥ .glamsterdam := Nat.not_le_of_lt hlt
+  unfold selfdestructCost selfdestructCreatesAccount callNewAccountCost
+  -- Split on the forks of EIP-150 and EIP-161, and on the facts that both prices read.
+  by_cases ht : fork ≥ .tangerineWhistle <;> by_cases hs : fork ≥ .spuriousDragon <;>
+    by_cases hb : (state.getAccount originator).balance = 0 <;>
+    cases state.isAccountAlive beneficiary <;> cases state.accountExists beneficiary <;>
+    simp [gasSchedule, hg, ht, hs, hb, GasCosts.NEW_ACCOUNT]
 
 omit [GasMeter Meter] in
 /-- The end of SELFDESTRUCT keeps memory. -/

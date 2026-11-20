@@ -1659,6 +1659,9 @@ That state keeps every other slot, the original words and the accounts.
 `Logic.mem_insert_getD_self` proves that a slot whose access is recorded is warm.
 `Logic.mem_insert_getD_of_ne` proves that the record leaves every other slot as cold or warm as it was.
 `Logic.le_sloadCost` proves that from Berlin, SLOAD costs at least 100.
+`selfdestructCost_selfdestructCreatesAccount` (`Proofs/Evm/Instructions/SelfDestruct.lean`) covers SELFDESTRUCT before Glamsterdam.
+A beneficiary that gets an account costs what a CALL of the balance to it pays for the account.
+At a fork where SELFDESTRUCT has no base price, it pays nothing for the account, since EIP-150 adds both prices together.
 `Logic.gas_rule` is the rule for GAS, which pushes the gas left after its own price of 2.
 `Logic.extcodesize` is the rule for EXTCODESIZE from Berlin to before Glamsterdam.
 It charges the prices of EIP-2929, and needs the state to hold the code of the account.
