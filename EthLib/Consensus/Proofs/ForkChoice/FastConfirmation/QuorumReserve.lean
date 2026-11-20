@@ -392,8 +392,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let depositCarry := if electra : .pectra ≤ fork then
       (finalizedState.depositBalanceToConsume electra).toNat else 0
   let queueDep := 3 * (depthFin * depositChurn + depositCarry)
-  let queueExit := if tight then 0 else
-    3 * (depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry)
+  -- The exit and consolidation churn of the window, and the two carries.
+  let queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry
+  let queueExit := if tight then 0 else 3 * queueWindow
   let queues := queueDep + queueExit
   -- A sync seat's reward is bounded by its envelope at three halves of the call's total.
   --
@@ -554,23 +555,21 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- An exited key cannot switch to compounding.
   --
   -- Deeper, the charge is moot: `fall` charges every key's whole effective balance at this depth.
+  let consolidationSourcesX (electra : .pectra ≤ fork) :=
+    ((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
+      finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
+        !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)
   let consolidationsX := if depthFin ≤ partialDelay then
       (if electra : .pectra ≤ fork then
-        ((((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
-          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
-            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).map fun v =>
-              (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
+        ((consolidationSourcesX electra).map fun v =>
+          (withdrawalMaxEffectiveBalance preset fork v).toNat).sum
       else 0)
     else 0
   -- Each entry of `consolidationsX` can raise its target by one more increment.
   --
   -- That increment earns `unitGain`, three times.
   let consolidationsXCount := if depthFin ≤ partialDelay then
-      (if electra : .pectra ≤ fork then
-        (((finalizedState.pendingConsolidations electra).data.toList.filterMap fun c =>
-          finalizedState.validators.data[c.sourceIndex.toNat]?).filter fun v =>
-            !v.slashed && decide (v.withdrawableEpoch.toNat ≤ epoch.toNat + 1)).length
-      else 0)
+      (if electra : .pectra ≤ fork then (consolidationSourcesX electra).length else 0)
     else 0
   -- Each sync seat of the window debits at most its envelope on each branch.
   --
@@ -781,7 +780,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let newKeySeats := depthFin * slots * preset.SYNC_COMMITTEE_SIZE.toNat * syncEnvelope /
     max 1 newKeySlack
   -- A carry is a balance that can let several keys exit, so it counts by `exitFloor` too.
-  let queueWindow := depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry
   let queueKeys := queueWindow / exitFloor + 2 + lowKeys + newKeySeats
   -- An exiting key weighs three times, so each credited one needs two more upward bands.
   --
@@ -806,8 +804,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let exitedSlashable := ∑ i ∈ positions with PinTerms.exitedSlashable ancestor state i = true,
     max (effective i + rise i) (max (bF i) (finEB i))
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
-      depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
-        queueKeys * (preset.upwardBand + depth * gainRateMax))) /
+      queueWindow + queueKeys * (preset.upwardBand + depth * gainRateMax))) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
   -- A key active there is meant to pay for its reward unless its effective balance can be low.
   --
