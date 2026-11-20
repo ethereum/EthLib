@@ -9,6 +9,10 @@ Not yet released.
 
 ### Proof additions
 
+- A signing root in one domain type is never one in another, unless SHA-256 collides on the signing data ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
+  `computeSigningRoot_ne_or_collision_of_domain_ne` states it for two different domains, and `computeSigningRoot_ne_or_collision_of_domainType_ne` for two domain types at any fork versions and chains.
+  `signingDataMessages` names the inputs of the node hash in the signing data of an object root and a domain.
+
 - In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
 
 - A double or surround vote of signed direct safety, with a signature by the key alone on each data, gives an attester slashing that a state accepts exactly when it can slash the validator, when the state reads the fork versions of the signatures and the validator is slashable there ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
