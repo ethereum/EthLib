@@ -12,7 +12,6 @@ public import EthLib.Consensus.Proofs.Transition.ParentPayload
 public import EthLib.Consensus.Proofs.Transition.Payload
 public import EthLib.Consensus.Proofs.Transition.Requests
 public import EthLib.Consensus.Proofs.Transition.StateTransition
-import EthLib.Consensus.Proofs.Transition.EpochParticipation
 
 /-!
 # Proofs: invariants of the state transition
