@@ -444,13 +444,6 @@ private theorem red_spec (mulHi : UInt64 → UInt64 → UInt64)
 /-- The low and high words of an unsigned product. -/
 @[inline] def wordProduct (a b : UInt64) : Pair := ⟨a * b, mulHigh a b⟩
 
-private theorem wordProduct_comm (a b : UInt64) : wordProduct a b = wordProduct b a := by
-  have h : mulHigh a b = mulHigh b a := by
-    apply UInt64.toNat_inj.mp
-    rw [mulHigh_spec, mulHigh_spec, Nat.mul_comm a.toNat b.toNat]
-  unfold wordProduct
-  rw [UInt64.mul_comm a b, h]
-
 private theorem reduction_from_add {lo top out carry p c : Nat}
     (hpc : p + c = 2^256) (hout : out < 2^256)
     (he : out + 2^256*carry = lo + c)
@@ -1919,11 +1912,6 @@ instance : Sub Montgomery := ⟨sub⟩
 /-- The integer of all five words. -/
 abbrev Words64.val (x : Words64) : Nat := value x
 
-private theorem radix_split (s : UInt64) (hs : s.toNat ≤ 3) :
-    wordRadix = 2^(64-s.toNat) * 2^s.toNat := by
-  change 2^64 = _
-  rw [← Nat.pow_add, Nat.sub_add_cancel (show s.toNat ≤ 64 by omega)]
-
 /-- One word of a value shifted right by one bit.
 
 It holds the high bits of `a`, with the low bit of `b` on top. -/
@@ -2069,36 +2057,6 @@ private theorem halveRaw_val (x : Raw) :
   let hi := p.hi + yes (sum < p.lo)
   ⟨w - sum, hi + yes (w < sum)⟩
 
-@[inline] private def productBorrow (a b w cin : UInt64) : Pair :=
-  subtractWordProduct (wordProduct a b) w cin
-
-private theorem productBorrow_spec (a b w cin : UInt64) :
-    (productBorrow a b w cin).lo.toNat + a.toNat*b.toNat + cin.toNat =
-      w.toNat + wordRadix * (productBorrow a b w cin).hi.toNat := by
-  let lo := a*b
-  let sum := lo + cin
-  let hi := mulHigh a b
-  let ca := yes (sum < lo)
-  let cb := yes (w < sum)
-  have hp : lo.toNat + 2^64 * hi.toNat = a.toNat*b.toNat := by
-    dsimp only [lo, hi]
-    rw [UInt64.toNat_mul, mulHigh_spec, Nat.mod_add_div]
-  have ha := add_with_carry lo cin
-  have hb := sub_split w sum
-  change sum.toNat + 2^64 * ca.toNat = _ at ha
-  change (w-sum).toNat + sum.toNat = w.toNat + 2^64 * cb.toNat at hb
-  have hlim : a.toNat*b.toNat ≤ (2^64-1)*(2^64-1) := Nat.mul_le_mul
-    (by have := a.toNat_lt; omega) (by have := b.toNat_lt; omega)
-  have hc := cin.toNat_lt
-  have hw := w.toNat_lt
-  have hl := (w-sum).toNat_lt
-  have hs : hi.toNat + ca.toNat + cb.toNat < 2^64 := by omega
-  change (w-sum).toNat + a.toNat*b.toNat + cin.toNat =
-    w.toNat + 2^64 * (hi+ca+cb).toNat
-  have he := add_exact (a := hi) (b := ca) (by omega)
-  rw [add_exact (by rw [he]; exact hs), he]
-  omega
-
 /-- Add the radix to the signed accumulator so its bounds use natural numbers. -/
 def bias (w : Words64) : Words64 := { w with top := w.top + 1 }
 
@@ -2112,58 +2070,6 @@ private theorem biasTop_choices (t : UInt64) (ht : (t+1).toNat < 3) :
   · exact .inl (UInt64.toNat_inj.mp h)
   · exact .inr (.inl (UInt64.toNat_inj.mp h))
   · exact .inr (.inr (UInt64.toNat_inj.mp h))
-
-private theorem add_swap64 (a b c : UInt64) : a+b+c = a+c+b := by
-  rw [UInt64.add_assoc, UInt64.add_assoc, UInt64.add_comm b c]
-
-private theorem addBiased_val (x t : UInt64) (ht : (t+1).toNat < 3) :
-    let s := x+t
-    let carry := yes (s < x)
-    let h := (0 : UInt64) - (t >>> 63) + carry
-    s.toNat + wordRadix*(h+1).toNat = x.toNat + (t+1).toNat + (wordRadix-1) ∧
-      (h+1).toNat ≤ 2 := by
-  let s := x+t
-  let carry := yes (s < x)
-  have hc : carry.toNat ≤ 1 := yes_le_one (s < x)
-  have hs := add_with_carry x t
-  change s.toNat + 2^64*carry.toNat = x.toNat + t.toNat at hs
-  have ec : (carry+1).toNat = carry.toNat + 1 := by
-    rw [add_exact (by rw [UInt64.toNat_one]; omega), UInt64.toNat_one]
-  rcases biasTop_choices t ht with rfl | rfl | rfl
-  · let k : UInt64 := 0xffffffffffffffff
-    change s.toNat + wordRadix*((0 : UInt64) - (k >>> 63) + carry + 1).toNat =
-      x.toNat + (k+1).toNat + (wordRadix-1) ∧ _
-    have e : (0 : UInt64) - (k >>> 63) + carry + 1 = carry := by
-      rw [show k >>> 63 = 1 by decide, add_swap64, UInt64.sub_add_cancel, UInt64.zero_add]
-    rw [e, show (k+1).toNat = 0 by decide]
-    change s.toNat + 2^64*carry.toNat = x.toNat + 0 + (2^64-1) ∧ carry.toNat ≤ 2
-    rw [show (0xffffffffffffffff : UInt64).toNat = 2^64-1 by decide] at hs
-    omega
-  · change s.toNat + wordRadix*((0 : UInt64) - ((0 : UInt64) >>> 63) + carry + 1).toNat =
-      x.toNat + ((0 : UInt64)+1).toNat + (wordRadix-1) ∧ _
-    have e : (0 : UInt64) - ((0 : UInt64) >>> 63) + carry + 1 = carry + 1 := by
-      rw [show (0 : UInt64) - ((0 : UInt64) >>> 63) = 0 by decide, UInt64.zero_add]
-    rw [e, ec]
-    change s.toNat + 2^64*(carry.toNat+1) = x.toNat + 1 + (2^64-1) ∧ carry.toNat+1 ≤ 2
-    simp only [UInt64.toNat_zero, Nat.add_zero] at hs
-    omega
-  · change s.toNat + wordRadix*((0 : UInt64) - ((1 : UInt64) >>> 63) + carry + 1).toNat =
-      x.toNat + ((1 : UInt64)+1).toNat + (wordRadix-1) ∧ _
-    have e : (0 : UInt64) - ((1 : UInt64) >>> 63) + carry + 1 = carry + 1 := by
-      rw [show (0 : UInt64) - ((1 : UInt64) >>> 63) = 0 by decide, UInt64.zero_add]
-    rw [e, ec]
-    change s.toNat + 2^64*(carry.toNat+1) = x.toNat + 2 + (2^64-1) ∧ carry.toNat+1 ≤ 2
-    rw [UInt64.toNat_one] at hs
-    omega
-
-private theorem red_bias (mulHi : UInt64 → UInt64 → UInt64) (s0 s1 s2 s3 s4 s5 : UInt64) :
-    bias (red mulHi s0 s1 s2 s3 s4 s5) = red mulHi s0 s1 s2 s3 s4 (s5+1) := by
-  have swap (a b : UInt64) : a - b + 1 = a + 1 - b := by
-    apply UInt64.eq_sub_iff_add_eq.mpr
-    rw [add_swap64, UInt64.sub_add_cancel]
-  unfold red bias
-  dsimp only
-  split <;> simp only [add_swap64 (c := 1), swap]
 
 private theorem biasTop_bound (t : Words64) (hhi : value (bias t) < 2*Fp.modulus+2^256) :
     (t.top+1).toNat < 3 := by
