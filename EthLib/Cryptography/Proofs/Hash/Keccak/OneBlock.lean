@@ -55,7 +55,7 @@ def oneBlockState (msg : ByteArray) : State :=
 theorem spongeAbsorb_of_size_lt (f : State → State) {msg : ByteArray} (h : msg.size < RATE_256) :
     spongeAbsorb f RATE_256 msg = f (oneBlockState msg) := by
   have hn : blockCount RATE_256 msg.size = 1 := by simp [blockCount, Nat.div_eq_of_lt h]
-  simp only [spongeAbsorb, hn, Internal.absorbBlocks, oneBlockState]
+  simp only [spongeAbsorb_eq, hn, Internal.absorbBlocks, oneBlockState]
 
 /-- Below 136 bytes, Keccak-256 is the first 256 bits of one call to Keccak-f[1600]. -/
 theorem keccak256_of_size_lt {msg : ByteArray} (h : msg.size < RATE_256) :

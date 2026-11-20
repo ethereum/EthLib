@@ -188,70 +188,6 @@ theorem padded_blockCount_eq {rate : Nat} (hr : 0 < rate) (msg : ByteArray) :
 
 /-! ## Absorbing -/
 
-/-- A byte widened to a lane keeps its eight bits, and is zero above them. -/
-private theorem byteExtend (b : UInt8) (i : Nat) (hi : i < 64) :
-    b.toUInt64.toBitVec.getLsbD i = (decide (i < 8) && b.toNat.testBit i) := by
-  rw [UInt8.toBitVec_toUInt64, BitVec.getLsbD_setWidth]
-  simp only [hi, decide_true, Bool.true_and]
-  by_cases h : i < 8
-  · simp only [h, decide_true, Bool.true_and]
-    rw [← BitVec.testBit_toNat, UInt8.toNat_toBitVec]
-  · simp only [h, decide_false, Bool.false_and]
-    exact BitVec.getLsbD_of_ge b.toBitVec i (by omega)
-
-/-- A byte shifted to byte `m` of a lane holds, at bit `i`, bit `i % 8` of the byte in byte `m`. -/
-private theorem shiftedByte (b : UInt8) (m i : Nat) (hm : m < 8) (hi : i < 64) :
-    (b.toUInt64 <<< UInt64.ofNat (8 * m)).toBitVec.getLsbD i =
-      (decide (i / 8 = m) && b.toNat.testBit (i % 8)) := by
-  have amount : (UInt64.ofNat (8 * m)).toBitVec.toNat % 64 = 8 * m := by
-    simp
-    omega
-  simp only [UInt64.toBitVec_shiftLeft, BitVec.shiftLeft_eq', BitVec.toNat_umod,
-    show (64 : BitVec 64).toNat = 64 by decide, amount, BitVec.getLsbD_shiftLeft, hi,
-    decide_true, Bool.true_and]
-  by_cases h : i / 8 = m
-  · rw [byteExtend _ _ (by omega)]
-    simp only [h, decide_true, Bool.true_and, show ¬ i < 8 * m by omega, decide_false,
-      Bool.not_false, show i - 8 * m = i % 8 by omega, show i % 8 < 8 by omega]
-  · by_cases low : i < 8 * m
-    · simp [h, low]
-    · rw [byteExtend _ _ (by omega)]
-      simp [h, low, show ¬ i - 8 * m < 8 by omega]
-
-/-- A lane read from a byte string is its eight bytes from the start, each shifted to its place. -/
-private theorem laneAt_eq (bytes : ByteArray) (s : Nat) :
-    Keccak.Internal.laneAt bytes s =
-      (EthLib.Base.byteAt bytes s).toUInt64 |||
-      (EthLib.Base.byteAt bytes (s + 1)).toUInt64 <<< UInt64.ofNat (8 * 1) |||
-      (EthLib.Base.byteAt bytes (s + 2)).toUInt64 <<< UInt64.ofNat (8 * 2) |||
-      (EthLib.Base.byteAt bytes (s + 3)).toUInt64 <<< UInt64.ofNat (8 * 3) |||
-      (EthLib.Base.byteAt bytes (s + 4)).toUInt64 <<< UInt64.ofNat (8 * 4) |||
-      (EthLib.Base.byteAt bytes (s + 5)).toUInt64 <<< UInt64.ofNat (8 * 5) |||
-      (EthLib.Base.byteAt bytes (s + 6)).toUInt64 <<< UInt64.ofNat (8 * 6) |||
-      (EthLib.Base.byteAt bytes (s + 7)).toUInt64 <<< UInt64.ofNat (8 * 7) :=
-  rfl
-
-/-- Bit `i` of the lane at byte `s` is bit `i % 8` of byte `s + i / 8`, as in FIPS 202 §3.1.2. -/
-theorem _root_.EthLib.Cryptography.Hash.Keccak.Internal.laneAt_testBit (bytes : ByteArray)
-    (s i : Nat) (hi : i < 64) :
-    (Keccak.Internal.laneAt bytes s).toBitVec.getLsbD i =
-      (EthLib.Base.byteAt bytes (s + i / 8)).toNat.testBit (i % 8) := by
-  rw [laneAt_eq]
-  simp only [UInt64.toBitVec_or, BitVec.getLsbD_or, byteExtend _ _ hi,
-    shiftedByte _ 1 _ (by decide) hi, shiftedByte _ 2 _ (by decide) hi,
-    shiftedByte _ 3 _ (by decide) hi, shiftedByte _ 4 _ (by decide) hi,
-    shiftedByte _ 5 _ (by decide) hi, shiftedByte _ 6 _ (by decide) hi,
-    shiftedByte _ 7 _ (by decide) hi]
-  -- Exactly one of the eight bytes holds bit `i`: byte `i / 8`.
-  have hq : i / 8 < 8 := by omega
-  have low : (i < 8) ↔ (i / 8 = 0) := by omega
-  have bit : i % 8 = i ∨ i / 8 ≠ 0 := by omega
-  simp only [low]
-  generalize hm : i / 8 = q at hq bit ⊢
-  interval_cases q <;> simp_all
-  -- Byte 0 holds bit `i` itself, since `i < 8`.
-  rw [Nat.mod_eq_of_lt low]
-
 /-- The bits of the block of `rate` bytes from byte `start`, as an `8 * rate`-bit block. -/
 def blockBits (rate : Nat) (bytes : ByteArray) (start : Nat) : Block (8 * rate) :=
   Vector.ofFn fun i => (EthLib.Base.byteAt bytes (start + i.val / 8)).toNat.testBit (i.val % 8)
@@ -354,7 +290,7 @@ theorem absorbAll_eq {rate : Nat} (hr : 0 < rate) (hlanes : 8 ∣ rate) (msg : B
     apply List.ext_getElem (by simp)
     intro j _ _
     simp
-  rw [Keccak.spongeAbsorb, absorbBlocks_ofLanes hlanes, zero, absorbAll, ← values,
+  rw [Keccak.spongeAbsorb_eq, absorbBlocks_ofLanes hlanes, zero, absorbAll, ← values,
     List.foldl_map]
   simp only [Nat.zero_add, paddedBlock_eq hr]
 

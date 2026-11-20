@@ -127,6 +127,9 @@ This turns the code of `verify` into a statement a reader can check against the 
 To sign, WOTS+C tries randomizers one after another until the digest of the message is a codeword, a step called grinding.
 Grinding returns the least trial whose digest is a codeword (`findFirst_spec`), and signing with a reachable key fails only when a one-time key finds no codeword (`sign_error`, `Sign.lean`).
 leanSPHINCS shares that search and the hash chains, in [`Wots.lean`](../Wots.lean).
+With Keccak-256, the randomizer of a trial fills two lanes of the last block of the hash input.
+So `sign` builds the state before the last permutation once per search, and each trial XORs its randomizer into it and permutes once.
+Those trials give the codeword that hashing each trial gives (`keccakTrials_eq`, `Trials.lean`), so `sign` is the signer over Keccak-256 (`sign_eq`, `Sign.lean`).
 
 **The code.**
 A codeword is a vector of digits whose sum is a fixed target, and the proofs establish the properties the security argument needs (`Encoding.lean`, `CodeSize.lean`).
