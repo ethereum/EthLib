@@ -962,20 +962,26 @@ private structure PinPresetFacts (preset : Preset) : Prop where
   It rules out a slashings vector longer than `3 * increment / 44` epochs. -/
   vectorSmall : 44 * preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤
     3 * preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+  /-- (preset fact) The activation balance is at most the largest effective balance before Electra.
+
+  With the cap order, the two are equal, as the upgrade to Electra needs. -/
+  activation : ActivationWithinMaxEffective preset
 
 /-- The mainnet preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.mainnet : PinPresetFacts Preset.mainnet :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_mainnet,
-    by decide, by decide, by decide, by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide, by decide, by decide,
+    ActivationWithinMaxEffective.mainnet⟩
 
 /-- The minimal preset has the preset facts of the pin. -/
 private theorem PinPresetFacts.minimal : PinPresetFacts Preset.minimal :=
   ⟨by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide,
     by decide, by decide, by decide, by decide, fun fork => by cases fork <;> decide,
     fun fork => by cases fork <;> decide, by decide, by decide, Preset.divisorsPositive_minimal,
-    by decide, by decide, by decide, by decide, by decide, by decide⟩
+    by decide, by decide, by decide, by decide, by decide, by decide,
+    ActivationWithinMaxEffective.minimal⟩
 
 /-- From Electra and before Gloas, the floor of the window at its start leaves room for the window.
 

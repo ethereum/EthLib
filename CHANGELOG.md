@@ -53,6 +53,8 @@ Not yet released.
 - `DirectSafety.Apriori.Internal.perIncrement_exists` is public: the base reward per increment exists at a positive total when the scaled factor fits.
   The pin reads it to show that its base reward per increment is at least four.
   The pin's preset facts gain `fits`, that the scaled base reward factor fits in a `Gwei`, which both presets meet.
+  They also gain `activation`, that the activation balance is at most the largest effective balance before Electra, which both presets meet.
+  The pin reads it for the bands of hysteresis through a chain of upgrades.
 
 - `DirectSafety.Apriori.Internal.run_cuts_of_additive` sums a bound over the one-epoch segments of a branch, for any quantity that adds over `Run.append`.
   `run_cuts_le` is its instance for the cost of the replayed events.

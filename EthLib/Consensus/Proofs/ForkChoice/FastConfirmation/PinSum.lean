@@ -20908,6 +20908,74 @@ private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
       omega
     · simp [quiet u w ok es contained replayedEs] at inStep
 
+/-- A key charged at a step is in the registry at any state of the epoch that it started.
+
+The state `n` has the bands of hysteresis.
+
+A run leads from `n` to the step's start `a`, inside one epoch.
+
+There the key's balance is within the upward band of its effective balance.
+
+The effective balance stays to the charge.
+
+Over the rest of that epoch the balance rises at most by the key's block credits.
+
+The key is active at the charge step, so it is in the registry at `n`. -/
+private theorem charge_start_at (h : Setting config checks g split fin pulled anc counted V)
+    (highC : ℕ) {n a b : ForkedBeaconState preset} (rest : Run config checks n a)
+    (step : Step config checks a b) (i : ℕ) (inside : i < a.state.validators.data.size)
+    (unset : ∀ w, a.state.validators.data[i]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH)
+    (aFulu : .fusaka ≤ a.fork) (aEarly : a.fork < .glamsterdam)
+    (same : getCurrentEpoch n.state = getCurrentEpoch a.state) (hyst : Hysteresis n.state)
+    (endEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1)
+    (charged : step.departureCharges.any (·.index == i) = true) :
+    i < n.state.validators.data.size ∧ effectiveAt n i = effectiveAt a i ∧
+      min (actualBalanceAt n i) (PinSplit2.capAt n i) ≤ effectiveAt n i + preset.upwardBand ∧
+      (effectiveAt n i < PinSplit2.capAt n i →
+        actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand) ∧
+      actualBalanceAt a i ≤ actualBalanceAt n i + netScan i highC rest +
+        (creditScan (fun _ => false) (fun s => decide (s ≠ .rewards)) i highC rest).1 := by
+  -- the key is active at the charge, so it is in the registry at the start of the epoch
+  obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
+  obtain ⟨w, later, assigned, -⟩ := (Run.nil.snoc step).departure_charge_exit charge
+    (by simpa [Run.departureCharges] using member)
+  rw [beq_iff_eq.mp index] at later
+  obtain ⟨v, found⟩ : ∃ v, a.state.validators.data[i]? = some v :=
+    ⟨_, Array.getElem?_eq_getElem inside⟩
+  have far := unset v found
+  have activated := step.chainStep.exit_assigned_activated (Nat.le_trans (by decide) aFulu)
+    found later far assigned
+  have activeA : isActiveAt a.state (getCurrentEpoch a.state) i = true := by
+    refine isActiveAt_eq_true_iff.mpr ⟨v, found, ?_⟩
+    have below : getCurrentEpoch a.state < FAR_FUTURE_EPOCH := by
+      rw [UInt64.lt_iff_toNat_lt, getCurrentEpoch_toNat]
+      have := a.state.slot.toNat_lt
+      have := Nat.div_le_div_left (a := a.state.slot.toNat) h.twoSlots (by decide : 0 < 2)
+      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+      omega
+    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
+    exact ⟨activated, below⟩
+  have activeN : isActiveAt n.state (getCurrentEpoch a.state) i = true := by
+    rw [← activeKept_of_chainSteps rest.chainSteps _
+      (same ▸ getCurrentEpoch_le_activityFixedEpoch n.state)]
+    exact activeA
+  obtain ⟨vn, foundN, -⟩ := isActiveAt_eq_true_iff.mp activeN
+  have insideN : i < n.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundN).1
+  have up : effectiveAt n i < PinSplit2.capAt n i →
+      actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand := by
+    intro lt
+    cases bal : n.state.balances.data[i]? with
+    | none => simp [actualBalanceAt, bal]
+    | some balance =>
+      simp only [effectiveAt, PinSplit2.capAt, foundN, Option.map_some, Option.getD_some] at lt
+      simpa [actualBalanceAt, effectiveAt, bal, foundN] using
+        hyst.up i vn balance foundN bal (UInt64.lt_iff_toNat_lt.mpr lt)
+  refine ⟨insideN, (DirectSafety.run_same_epoch_effective rest aEarly same.symm i insideN).symm,
+    ?_, up, same_epoch_balance_le i highC rest aEarly same.symm endEpoch⟩
+  by_cases lt : effectiveAt n i < PinSplit2.capAt n i
+  · exact (Nat.min_le_left _ _).trans (up lt)
+  · exact (Nat.min_le_right _ _).trans (by omega)
+
 /-- The start-of-epoch half of the charge arm, for a charge after the split's epoch.
 
 The run to the charge crosses an epoch boundary, at the state `c`.
@@ -20952,50 +21020,12 @@ private theorem charge_epoch_start (h : Setting config checks g split fin pulled
   have zFulu : .fusaka ≤ z.fork := Nat.le_trans h.fulu (fork_le_of_chainSteps pre0.chainSteps)
   have nEarly : n.fork < .glamsterdam :=
     Nat.lt_of_le_of_lt (fork_le_of_chainSteps rest.chainSteps) aEarly
-  -- the key is active at the charge, so it is in the registry at the start of the epoch
-  obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
-  obtain ⟨w, later, assigned, -⟩ := (Run.nil.snoc step).departure_charge_exit charge
-    (by simpa [Run.departureCharges] using member)
-  rw [beq_iff_eq.mp index] at later
-  obtain ⟨v, found⟩ : ∃ v, a.state.validators.data[i]? = some v :=
-    ⟨_, Array.getElem?_eq_getElem inside⟩
-  have far := unset v found
-  have activated := step.chainStep.exit_assigned_activated (Nat.le_trans (by decide) aFulu)
-    found later far assigned
-  have activeA : isActiveAt a.state (getCurrentEpoch a.state) i = true := by
-    refine isActiveAt_eq_true_iff.mpr ⟨v, found, ?_⟩
-    have below : getCurrentEpoch a.state < FAR_FUTURE_EPOCH := by
-      rw [UInt64.lt_iff_toNat_lt, getCurrentEpoch_toNat]
-      have := a.state.slot.toNat_lt
-      have := Nat.div_le_div_left (a := a.state.slot.toNat) h.twoSlots (by decide : 0 < 2)
-      have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-      omega
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq, far]
-    exact ⟨activated, below⟩
-  have activeN : isActiveAt n.state (getCurrentEpoch a.state) i = true := by
-    rw [← activeKept_of_chainSteps rest.chainSteps _
-      (same ▸ getCurrentEpoch_le_activityFixedEpoch n.state)]
-    exact activeA
-  obtain ⟨vn, foundN, -⟩ := isActiveAt_eq_true_iff.mp activeN
-  have insideN : i < n.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundN).1
   -- the bands of hysteresis at the start of the epoch
   have hyst := DirectSafety.Apriori.Internal.hysteresis_of_crossing_slot ok h.bands zFulu nEarly
     (by omega)
-  have up : effectiveAt n i < PinSplit2.capAt n i →
-      actualBalanceAt n i ≤ effectiveAt n i + preset.upwardBand := by
-    intro lt
-    cases bal : n.state.balances.data[i]? with
-    | none => simp [actualBalanceAt, bal]
-    | some balance =>
-      simp only [effectiveAt, PinSplit2.capAt, foundN, Option.map_some, Option.getD_some] at lt
-      simpa [actualBalanceAt, effectiveAt, bal, foundN] using
-        hyst.up i vn balance foundN bal (UInt64.lt_iff_toNat_lt.mpr lt)
-  refine ⟨n, pre0.snoc (Step.slot ok), rest, cut.symm, insideN, same,
-    (DirectSafety.run_same_epoch_effective rest aEarly same.symm i insideN).symm, ?_, up,
-    same_epoch_balance_le i highC rest aEarly same.symm (by omega)⟩
-  by_cases lt : effectiveAt n i < PinSplit2.capAt n i
-  · exact (Nat.min_le_left _ _).trans (up lt)
-  · exact (Nat.min_le_right _ _).trans (by omega)
+  obtain ⟨insideN, effEq, floor, up, rise⟩ := charge_start_at h highC rest step i inside unset
+    aFulu aEarly same hyst (by omega) charged
+  exact ⟨n, pre0.snoc (Step.slot ok), rest, cut.symm, insideN, same, effEq, floor, up, rise⟩
 
 /-- The switch case of the start of the epoch.
 
@@ -21651,6 +21681,51 @@ private theorem K5_charged_held (h : Setting config checks g split fin pulled an
   have := h.delay
   omega
 
+/-- A key with no charge on a run has not started its rise on it. -/
+private theorem riseScan_of_none (v high : ℕ) {x y : ForkedBeaconState preset}
+    (run : Run config checks x y) (none : ∀ c ∈ run.departureCharges, c.index ≠ v) :
+    riseScan v high run = (false, 0) := by
+  induction run with
+  | nil => rfl
+  | snoc pre step ih =>
+    have before := ih fun c member => none c (by simp [Run.departureCharges, member])
+    have notCharged : step.departureCharges.any (·.index == v) = false := by
+      refine Bool.eq_false_iff.mpr fun any => ?_
+      obtain ⟨c, member, index⟩ := List.any_eq_true.mp any
+      exact none c (by simp [Run.departureCharges, member]) (beq_iff_eq.mp index)
+    simp [riseScan, before, notCharged]
+
+/-- A run after a run with no charge of the key reads the same rise as it does alone. -/
+private theorem riseScan_append_of_none (v high : ℕ) {x m y : ForkedBeaconState preset}
+    (pre : Run config checks x m) (post : Run config checks m y)
+    (none : ∀ c ∈ pre.departureCharges, c.index ≠ v) :
+    riseScan v high (pre.append post) = riseScan v high post := by
+  induction post with
+  | nil => exact riseScan_of_none v high pre none
+  | snoc post step ih => simp only [Run.append, riseScan, ih]
+
+/-- The credits and the rise of the shared run `pre` add to those of the run `rest` after it.
+
+The run `pre` is inside one epoch, so it holds no consolidation or deposit credit.
+
+The key has no charge on `pre`. -/
+private theorem prefix_append_credits (v : ValidatorIndex) (highC : ℕ)
+    {t : BeaconState preset fork} (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
+    {m : ForkedBeaconState preset} (rest : Run config checks ⟨fork, split⟩ m)
+    (electra : .pectra ≤ fork) (early : fork < .glamsterdam)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
+    (noneBefore : ∀ c ∈ pre.departureCharges, c.index ≠ v.toNat) :
+    propC (pre.append rest) highC v.toNat = propN pre highC v.toNat + propC rest highC v.toNat ∧
+      whistC (pre.append rest) highC v.toNat =
+        whistC pre highC v.toNat + whistC rest highC v.toNat ∧
+      riseScan v.toNat highC (pre.append rest) = riseScan v.toNat highC rest := by
+  have noCons := (same_epoch_no_epoch_credits v highC pre electra early sameEpoch).1
+  have propPre := propC_split pre highC v.toNat
+  have propSplit : propC (pre.append rest) highC v.toNat =
+      propC pre highC v.toNat + propC rest highC v.toNat := creditScan_append _ _ _ _ pre rest
+  exact ⟨by omega, creditScan_append _ _ _ _ pre rest,
+    riseScan_append_of_none v.toNat highC pre rest noneBefore⟩
+
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
 The epoch's start `b` is on the shared run, before the split.
@@ -21690,7 +21765,94 @@ private theorem K5_charged_split_epoch
         whistC tailC highC v.toNat +
         (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
-        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat) := sorry
+        bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat) := by
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  subst site
+  have aFork : a.fork = fork :=
+    fork_eq_of_run front ((Run.nil.snoc step).append post) (Nat.le_refl _)
+  have aEarly : a.fork < .glamsterdam := by rw [aFork]; exact h.early
+  have aFulu : .fusaka ≤ a.fork := by rw [aFork]; exact h.fulu
+  obtain ⟨u0, w0, foundA0, foundB0, unset0, set0⟩ := charge_exits step charged
+  have hin : v.toNat < a.state.validators.data.size := (Array.getElem?_eq_some_iff.mp foundA0).1
+  have unset : ∀ w, a.state.validators.data[v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH :=
+    fun w foundA => by
+      obtain rfl := Option.some.inj (foundA0.symm.trans foundA)
+      exact unset0
+  have charges : ∃ c ∈ ((front.snoc step).append post).departureCharges, c.index = v.toNat := by
+    obtain ⟨charge, member, index⟩ := List.any_eq_true.mp charged
+    exact ⟨charge, by simp [Run.departureCharges_append, Run.departureCharges, member],
+      beq_iff_eq.mp index⟩
+  -- the key's epoch is the split's epoch, which is the epoch of `b`
+  have aEpoch : (getCurrentEpoch a.state).toNat ≤ highC + 1 :=
+    Nat.le_trans (UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps
+      ((Run.nil.snoc step).append post).chainSteps)) endEpochC
+  have splitLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps front.chainSteps)
+  have sameNat := congrArg UInt64.toNat sameEpoch
+  have sameB : getCurrentEpoch (⟨fork, b⟩ : ForkedBeaconState preset).state =
+      getCurrentEpoch a.state := UInt64.toNat_inj.mp (by simp only at splitLe sameNat ⊢; omega)
+  -- the bands of hysteresis at `b`: the first state of its epoch, right after a crossing slot step
+  have hystB : Hysteresis b := by
+    have crossed : ∀ {x : ForkedBeaconState preset} (run : Run config checks g x),
+        x = ⟨fork, b⟩ → (∀ {u w : ForkedBeaconState preset} (st : Step config checks u w),
+          run.Contains st → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) →
+        Hysteresis b := by
+      intro x run hx before
+      cases run with
+      | nil =>
+        have fulu : .fusaka ≤ g.fork := by rw [hx]; exact h.fulu
+        obtain ⟨_, _, _, initialized⟩ := h.genesis
+        obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
+        exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
+      | @snoc middle last pre' st =>
+        subst hx
+        have crossing := before st (.last pre' st)
+        have ok := DirectSafety.Apriori.Internal.slot_of_crossing st crossing
+        have first : b.slot % preset.SLOTS_PER_EPOCH = 0 := by
+          have next : b.slot.toNat = middle.state.slot.toNat + 1 :=
+            (advanceSlotAcross_cases ok).1
+          by_contra inside
+          have notDvd : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
+            rw [Nat.dvd_iff_mod_eq_zero, ← next]
+            intro zero
+            exact inside (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
+          simp only [getCurrentEpoch_toNat, next, Nat.succ_div, notDvd, ↓reduceIte,
+            Nat.add_zero, Nat.lt_irrefl] at crossing
+        exact hysteresis_of_run_slot h.genesis h.bands h.caps h.facts.activation pre' ok h.early first
+    exact crossed toB rfl earlier
+  obtain ⟨insideB, effEq, floor, up, rise⟩ := charge_start_at h highC (pre.append front) step
+    v.toNat hin unset aFulu aEarly sameB hystB aEpoch charged
+  -- the whole run from `b`: the shared part `pre`, then C's run from the split
+  have whole := charge_effective_bound_of h toB (y := ⟨fork, counted⟩) rfl
+    (pre.append ((front.snoc step).append post)) highC endEpochC
+    (DirectSafety.Apriori.Internal.balanceEvents_append pre _ highC replayedP replayedC)
+    (pre.append front) step post (Run.append_assoc pre (front.snoc step) post).symm charged
+    ⟨⟨fork, b⟩, Run.nil, pre.append front, run_nil_append _, insideB, sameB, effEq, floor, up, rise⟩
+    (K5_charged_held h member front step post charged)
+  -- the credits of `pre` are its proposer, whistleblower and sync credits
+  have noneBefore : ∀ c ∈ pre.departureCharges, c.index ≠ v.toNat := by
+    intro c member index
+    obtain ⟨w, foundS, assigned, -⟩ := pre.departure_charge_exit c member
+    obtain ⟨later, foundLater, life⟩ := front.registryLifecycle.validators c.index w foundS
+    obtain rfl : later = u0 := by
+      rw [index] at foundLater
+      exact Option.some.inj (foundLater.symm.trans foundA0)
+    exact assigned (by rw [← life.exitEpoch assigned]; exact unset0)
+  obtain ⟨propSplit, whistSplit, riseSame⟩ := prefix_append_credits v highC pre
+    ((front.snoc step).append post) electra h.early sameEpoch noneBefore
+  have rise : riseQ ((front.snoc step).append post) highC v.toNat =
+      preset.upwardBand + (riseScan v.toNat highC ((front.snoc step).append post)).2 := by
+    simp only [riseQ, (riseScan_fst _ _ _).mpr charges, ↓reduceIte]
+  have syncLe : syncCr eventsC v.toNat ≤ syncF eventsC v.toNat := by
+    have := syncF_eq eventsC v.toNat
+    unfold syncCr
+    omega
+  have syncSplit : syncCr (eventsP ++ eventsC) v.toNat =
+      syncCr eventsP v.toNat + syncCr eventsC v.toNat := by
+    simp only [syncCr, List.map_append, List.sum_append]
+  have eCeq : eC counted v = effectiveAt (⟨fork, counted⟩ : ForkedBeaconState preset) v.toNat :=
+    rfl
+  rw [riseSame] at whole
+  omega
 
 /-- A key of `K5` whose exit R reads: no charge on C's run.
 
