@@ -1056,6 +1056,10 @@ def consensus_keymanager_json(schema: str, document: Any) -> Any:
     """A value of a schema of the Keymanager API, read from its JSON and written back."""
     ...
 
+def consensus_keymanager_run(memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """The responses of calls made one after another on a validator client, then its state."""
+    ...
+
 def consensus_is_execution_block(name: str, fork: str, block: bytes) -> bool:
     """From Bellatrix: whether a block carries a payload other than the empty one."""
     ...

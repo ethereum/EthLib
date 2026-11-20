@@ -52,6 +52,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.DirectSafety.SourceSafety
+public import EthLib.Consensus.Proofs.KeymanagerApi.LocalKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.Types
 public import EthLib.Consensus.Proofs.Mutators
 public import EthLib.Consensus.Proofs.Participation

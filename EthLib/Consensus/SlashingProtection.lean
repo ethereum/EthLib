@@ -274,6 +274,10 @@ def attestationsOf (interchange : Interchange) (pubkey : BLSPubkey) :
     List SignedAttestationRecord :=
   (interchange.data.filter (·.pubkey = pubkey)).flatMap (·.signedAttestations)
 
+/-- The entries of a file that name a key of a list, in order, with the chain of the file. -/
+def entriesOf (interchange : Interchange) (keys : List BLSPubkey) : Interchange :=
+  { interchange with data := interchange.data.filter (·.pubkey ∈ keys) }
+
 /-- The record after a key signs a block, as one more entry of that key. -/
 def recordBlock (interchange : Interchange) (pubkey : BLSPubkey) (slot : Slot)
     (signingRoot : Root) : Interchange :=

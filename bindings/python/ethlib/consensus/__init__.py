@@ -243,6 +243,13 @@ def keymanager_json(schema: str, document: Any) -> Any:
     return _native.consensus_keymanager_json(schema, document)
 
 
+def keymanager_run(
+    memory: int, work: int, protection: str, calls: list[tuple[str, str, Any]]
+) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
+    return _native.consensus_keymanager_run(memory, work, protection, calls)
+
+
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
     """A delivered payload of the relay data API, checked and written back as canonical JSON."""
     return _native.consensus_relay_delivered_payload(document)
@@ -2346,6 +2353,7 @@ __all__ = [
     "record_attestation_signing",
     "KeymanagerError",
     "keymanager_json",
+    "keymanager_run",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
