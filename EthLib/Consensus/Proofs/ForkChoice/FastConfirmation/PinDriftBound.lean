@@ -25508,6 +25508,20 @@ private theorem path_le_of_start
       exact Nat.zero_le _
   · exact after z (List.mem_of_mem_tail later)
 
+/-- A replay of a run that ends by R's epoch, read at R's epoch.
+
+The horizon of the replay does not change the events of such a run. -/
+private theorem replay_at_pulled (pulled : BeaconState preset fork)
+    {u w : ForkedBeaconState preset} (run : Run config checks u w) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    (ending : getCurrentEpoch w.state ≤ getCurrentEpoch pulled)
+    {events : List (BalanceEvent preset)} (replayed : run.balanceEvents high = .ok events) :
+    run.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+  have endingNat := UInt64.le_iff_toNat_le.mp ending
+  rw [DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le run (localHigh := high)
+    (by omega) (by omega)]
+  exact replayed
+
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch holds beyond the split pays an upward band.
 
@@ -25534,10 +25548,7 @@ private theorem created_band (h : Setting config checks g split fin pulled anc c
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have laterNat := UInt64.le_iff_toNat_le.mp h.later
   have nearC := h.near
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
+  have replayedF' := replay_at_pulled pulled fromFin high endEpoch h.called replayedF
   by_cases consolidated : 0 < consAmt eventsC v.toNat
   · have due : 1 ≤ dueAt fin highC {v} := by
       by_contra none
@@ -25717,15 +25728,9 @@ private theorem replays_at_pulled (h : Setting config checks g split fin pulled 
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF) :
     fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF ∧
-      tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-  have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  refine ⟨?_, ?_⟩
-  · rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  · rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
+      tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events :=
+  ⟨replay_at_pulled pulled fromFin high endEpoch h.called replayedF,
+    replay_at_pulled pulled tail high endEpoch (UInt64.le_refl _) replayed⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry, unslashed there, induces a leak on R's run only with a debit.
@@ -25963,10 +25968,7 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
   unfold BeaconState.RegistryWithinLimit at limit
   have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have small : i < 2 ^ 64 := by omega
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
+  have replayedF' := replay_at_pulled pulled fromFin high endEpoch h.called replayedF
   -- the credits that the slack reads, and the bands that they bring
   obtain ⟨grossP, grossW, grossS, hbC, consBand⟩ :=
     credit_band_bounds h fromFin replayedF' tailC highC endEpochC replayedC small
@@ -29348,11 +29350,7 @@ private theorem registry_exited
         (BeaconState.registryWithinLimit_of_lt h.early pulled)
         (Array.getElem?_eq_some_iff.mp foundPulled).1
       have splitPulled := UInt64.le_iff_toNat_le.mp h.called
-      have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-        rw [← balanceEvents_eq_of_endpoint_le fromFin (high := high)
-          (localHigh := (getCurrentEpoch pulled).toNat)
-          (by simp only at splitPulled ⊢; omega) (by simp only at splitPulled ⊢; omega)]
-        exact replayedF
+      have replayedF' := replay_at_pulled pulled fromFin high endEpoch h.called replayedF
       have due : 0 < dueAt fin highC {i.toUInt64} := by
         refine Nat.pos_of_ne_zero fun none => ?_
         have zero := consAmt_zero h fromFin replayedF' tailC highC endEpochC h.near replayedC
@@ -33921,7 +33919,6 @@ The charge's step activates the key, and the activation is at most C's epoch.
 `created_deposit` reads the deposit of a created key activated by C. -/
 private theorem whist_created (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
-    (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
@@ -33981,11 +33978,7 @@ private theorem whist_created (h : Setting config checks g split fin pulled anc 
       preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have same : (UInt64.ofNat i).toNat = i :=
     UInt64.toNat_ofNat_of_lt' (Nat.lt_trans insideC within)
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [← replayedF]
-    exact (DirectSafety.Apriori.Internal.balanceEvents_eq_of_endpoint_le fromFin
-      (high := high) (localHigh := (getCurrentEpoch pulled).toNat)
-      (by simp only; omega) (by simp only; omega)).symm
+  have replayedF' := replay_at_pulled pulled fromFin high endEpoch h.called replayedF
   have actLe : counted.validators.data[i].activationEpoch ≤ getCurrentEpoch counted := by
     rw [actEq]
     exact UInt64.le_iff_toNat_le.mpr (Nat.le_trans (UInt64.le_iff_toNat_le.mp activated) epochLe)
@@ -34263,7 +34256,7 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
       ∀ keys : Finset ValidatorIndex, ∑ v ∈ keys, whistC tailC highC v.toNat ≤ WB := by
   classical
   have count := whist_count h tailC highC endEpochC replayedC
-    (whist_created h fromFin high highLeR endEpoch replayedF tailC highC endEpochC replayedC)
+    (whist_created h fromFin high endEpoch replayedF tailC highC endEpochC replayedC)
   set t := pinTerms config pulled anc fin with ht
   have hdf : t.depthFin = (getCurrentEpoch pulled).toNat + 2 - (getCurrentEpoch fin).toNat := rfl
   have inc_pos := h.bands.1
