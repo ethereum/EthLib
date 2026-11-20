@@ -766,10 +766,13 @@ theorem lowKeys_eq (config : Config) (state ancestor finalizedState : BeaconStat
       ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
         (pinTerms config state ancestor finalizedState).lowB i = true).card := rfl
 
-/-! ## D-1's setting -/
+/-! ## The setting of the pin -/
 
-/-- D-1's setting, as D-2 supplies it (the call's own-epoch runs are left out: they feed
-`quorumReserve`, which this check uses only for `joining`). -/
+/-- The setting of the pin's drift bound for one call.
+
+The call's own-epoch runs are left out.
+
+They feed `quorumReserve`, which this check uses only for `joining`. -/
 structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset)
     (split fin pulled anc counted : BeaconState preset fork) (V : Finset ValidatorIndex) : Prop where
   genesis : Genesis config checks g
@@ -812,9 +815,9 @@ It is the quantity that `Run.consolidation_credits_le_X_targets` bounds, summed 
 def consAmt (events : List (BalanceEvent preset)) (v : ℕ) : ℕ :=
   ((events.filter (·.source = .consolidations)).map (keyCredit v)).sum
 
-/-! ### The C-side credits of a key, read from the run (prover D)
+/-! ### The C-side credits of a key, read from the run
 
-They are read from the run itself, as E's `riseQ` is.
+They are read from the run itself, as `riseQ` is.
 
 A block step's `.rewards` events are its proposer's credits.
 
@@ -3329,7 +3332,7 @@ private theorem cV_split (h : Setting config checks g split fin pulled anc count
     simp only [Finset.mem_filter]
     exact ⟨fun ⟨_, a, b⟩ => ⟨a, b⟩, fun ⟨a, b⟩ => ⟨sub a, a, b⟩⟩
 
-/-- D-5/D-6 (fall, V) from its per-key facts.
+/-- The fall of the V keys, from their per-key facts.
 
 The first fact is for a V key that is active in C: its fall and what C's floor leaves out.
 
@@ -5774,7 +5777,7 @@ private theorem K5_exiting_of_not_charged
   by_contra flag
   exact none (K5_charged h tailC member (by simpa using flag))
 
-/-- D-4: the keys whose exit R reads.
+/-- The stake of the keys whose exit R reads, against `exiting`.
 
 The keys of `K5` are those without a departure charge on C's run. -/
 theorem bud_exiting (h : Setting config checks g split fin pulled anc counted V)
@@ -6077,7 +6080,9 @@ private theorem card_big_charges_le (h : Setting config checks g split fin pulle
   have window := charges_le_queueWindow h tailC
   simp only [smul_eq_mul] at each
   omega
-/-- D-8 (queues): exits and consolidations initiated on C's branch (none in the tight window). -/
+/-- The exits and consolidations initiated on C's branch, against `queueExit`.
+
+There are none in the tight window. -/
 theorem bud_queues (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) :
     3 * ((∑ v ∈ (VN counted V), exitQ tailC v.toNat) +
@@ -6210,7 +6215,7 @@ private theorem deposit_events_le (h : Setting config checks g split fin pulled 
   rw [queueDep_eq]
   omega
 
-/-- D-8 (deposit queue) from the per-event bound of V's deposit credits.
+/-- The deposit queue bound, from the per-event bound of V's deposit credits.
 
 The credits that a deposit event gives to V keys are at most its deposit credit.
 
@@ -6450,7 +6455,7 @@ private theorem deposits_active_le (h : Setting config checks g split fin pulled
     exact slashed_deposit_held h tailC ok contained replayedEs inStep dep ordered
       (life.trans life') (slashedC v inP) found clean
 
-/-- D-8 (deposit queue): deposits applied on R's branch to V keys, weight 3. -/
+/-- The deposits applied on R's branch to V keys, at weight 3, against `queueDep`. -/
 theorem bud_deposits (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -10624,7 +10629,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     simp only [late, ↓reduceIte]
     omega
 
-/-- D-5/D-6 (fall, V): the fall of V keys, and the stake of V keys that left C's active set. -/
+/-- The fall of the V keys, and the stake of the V keys that left C's active set. -/
 theorem stub_V (h : Setting config checks g split fin pulled anc counted V) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1) (events : List (BalanceEvent preset))
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -12242,7 +12247,7 @@ private theorem deposits_union_le (h : Setting config checks g split fin pulled 
       · exact (Finset.mem_filter.mp m).2.2
     simpa [slashedFlagAt, Option.map_eq_some_iff] using flag
 
-/-- D-7 (credits) from the proposer rewards, the deposits and the credited keys of its classes.
+/-- The credits bound, from the proposer rewards, the deposits and the credited keys of its classes.
 
 The consolidation amounts are charged by `bud_consolidations`, and the sync part by `bud_sync`.
 
@@ -12347,7 +12352,7 @@ private theorem bud_credits_of (h : Setting config checks g split fin pulled anc
     exact Nat.mul_le_mul_right _ (cards.trans slots)
   omega
 
-/-- D-7 (credits): C's non-attestation credits to keys counted once.
+/-- C's non-attestation credits to keys counted once.
 
 The consolidation amounts are not here either: `bud_consolidations` charges them.
 
@@ -13286,7 +13291,7 @@ theorem bud_consolidations (h : Setting config checks g split fin pulled anc cou
   exact (bud_consolidations_base h fromFin tail high endEpoch replayed replayedF highLeR tailC highC
     endEpochC replayedC highLe band).1
 
-/-- L10: the keys whose exit started on R's branch after the split, in `K6`. -/
+/-- The keys of `K6` whose exit started on R's branch after the split. -/
 theorem bud_exitedR :
     (∑ v ∈ (K6 pulled counted) with (pinTerms config pulled anc fin).exitedRB v.toNat = true,
       (eR pulled v + (pinTerms config pulled anc fin).rise v.toNat)) ≤
@@ -17381,7 +17386,7 @@ private theorem key_of_lowGain (h : Setting config checks g split fin pulled anc
 
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
-Its credits since its creation are credits of C's branch, which P's `created_ceiling` reads.
+Its credits since its creation are credits of C's branch, which `created_ceiling` reads.
 
 That lemma bounds its effective balance at every state after its creation.
 
@@ -21569,7 +21574,7 @@ private theorem sum_unitK (t : PinTerms preset) {x y : ForkedBeaconState preset}
 
 A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes a seat unit.
 
-A key credited only by a consolidation of X takes row H's unit.
+A key credited only by a consolidation of X takes its unit from `consolidationsXCount`.
 
 A key slashed only on R's branch takes its unit in `branchR`.
 
@@ -23987,7 +23992,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
         v voter (Nat.le_of_not_lt inFin) kept
   · exact key_core_headroom h tail fromFin tailC highC v kept
 
-/-- D-7 (rise): other keys active in both. -/
+/-- The rise of the other keys, which are active in both. -/
 theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -25246,7 +25251,7 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
   simp only [eC, eR]
   omega
 
-/-- D-4 (+ D-8 exits): other keys previous-epoch-only in C.
+/-- The other keys that are previous-epoch-only in C, and their exits.
 
 A key with a departure charge on C's run is at its charge plus its rise after that.
 
@@ -26298,9 +26303,11 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
     rw [ite_eq_left highGain]
     exact Nat.le_trans total (Nat.le_add_left _ _)
 
-/-- D-8 (activations): keys counted in C and not active at R.
+/-- The keys counted in C and not active at R.
 
-A key whose exit started on R's branch after the split is inactive at R and active in C (L10).
+A key whose exit started on R's branch after the split is inactive at R and active in C.
+
+`bud_exitedR` charges it.
 
 Its stake in C is at most its stake at R and its rise.
 
