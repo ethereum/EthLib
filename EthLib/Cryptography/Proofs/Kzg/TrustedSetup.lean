@@ -207,6 +207,37 @@ theorem TrustedSetup.ofBytes_g2Monomial
     · cases h
   · cases h
 
+/-- A `G2` point of the embedded setup, decoded alone, is that point of the decoded setup.
+
+It assumes that the embedded setup decodes, as the other theorems about that setup do. -/
+theorem TrustedSetup.g2MonomialOfHex_eq {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s)
+    (i : Nat) (hi : i < KZG_SETUP_G2_LENGTH) :
+    TrustedSetup.g2MonomialOfHex i = .ok (s.g2Monomial[i]'hi) := by
+  unfold TrustedSetup.ofHex at h
+  -- The three lists stay abstract, so no step evaluates the decoding of the 8257 hex strings.
+  generalize TrustedSetup.hexListToBytes TrustedSetupData.g1LagrangeHex = a at h
+  generalize TrustedSetup.hexListToBytes TrustedSetupData.g1MonomialHex = b at h
+  generalize hc : TrustedSetup.hexListToBytes TrustedSetupData.g2MonomialHex = c at h
+  cases a with
+  | error => cases h
+  | ok a =>
+  cases b with
+  | error => cases h
+  | ok b =>
+  cases c with
+  | error => cases h
+  | ok c =>
+  simp only [bind, Except.bind] at h
+  obtain ⟨hb, hu⟩ := TrustedSetup.ofBytes_g2Monomial h i hi
+  obtain ⟨hsize, hget⟩ := TrustedSetup.hexListToBytes_getElem hc
+  have hx : i < TrustedSetupData.g2MonomialHex.size := hsize ▸ hb
+  -- The string at position `i` decodes to the bytes at position `i`, which decode to the point.
+  unfold TrustedSetup.g2MonomialOfHex
+  rw [Array.getElem?_eq_getElem hx]
+  dsimp only
+  rw [hget i hx, getElem!_pos c i hb]
+  exact hu
+
 /-- The embedded setup, when it decodes, is valid. -/
 theorem TrustedSetup.ofHex_valid {s : TrustedSetup} (h : TrustedSetup.ofHex = .ok s) :
     s.Valid := by

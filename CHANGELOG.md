@@ -434,6 +434,14 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the point evaluation precompile reads `[tau]_2` and the blob size from the KZG module, and keeps no copy of either.
+  `Evm.Precompiles.PointEvaluation.KZG_SETUP_G2_MONOMIAL_1`, the 96 bytes of `[tau]_2`, is removed.
+  The precompile decodes `G2` point 1 of the embedded setup with the new `Kzg.TrustedSetup.g2MonomialOfHex`, and fails with `invalidTrustedSetup` as before.
+  `Evm.Precompiles.PointEvaluation.FIELD_ELEMENTS_PER_BLOB` is removed, and `Kzg.Constants.FIELD_ELEMENTS_PER_BLOB` has the same value, 4096.
+  `Evm.Precompiles.PointEvaluation.uncompress_KZG_SETUP_G2_MONOMIAL_1` is removed.
+  The new `Kzg.TrustedSetup.g2MonomialOfHex_eq` states, for every position, that a point decoded alone is that point of the decoded setup, when the setup decodes.
+  A proof about the `[tau]_2` of the precompile uses `TrustedSetup.g2MonomialOfHex_eq h 1 (by decide)` in its place.
+
 - In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
   The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
   `creditBudget` reads it in place of `initialExcess`.

@@ -1394,7 +1394,8 @@ They take two hypotheses on the setup.
 `computeCellsAndKzgProofs_blob_spec_ofHex` and `recoverCellsAndKzgProofs_spec_ofHex` state the two theorems for the embedded setup, with neither hypothesis.
 Of the setup, they assume only that it decodes.
 
-`uncompress_KZG_SETUP_G2_MONOMIAL_1` (`Execution/Proofs/Evm/Precompiles/PointEvaluation.lean`) states that the point evaluation precompile uses `G2` point 1 of the embedded setup as `[tau]_2`.
+The point evaluation precompile decodes `G2` point 1 of the embedded setup alone, with `TrustedSetup.g2MonomialOfHex`, and uses it as `[tau]_2`.
+`TrustedSetup.g2MonomialOfHex_eq` (`Proofs/Kzg/TrustedSetup.lean`) states that a point decoded alone is that point of the decoded setup.
 It also assumes only that the setup decodes.
 
 For a well-formed setup, `blobToKzgCommitment_represents` (`Proofs/Kzg/Commitment.lean`) proves that a blob's commitment holds its polynomial at the secret.
