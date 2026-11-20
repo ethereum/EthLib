@@ -11815,6 +11815,31 @@ private theorem finalized_le_current {g : ForkedBeaconState preset}
   exact UInt64.le_trans valid.ordered.1 (UInt64.le_trans valid.ordered.2
     (UInt64.le_trans valid.settled (getPreviousEpoch_le pulled)))
 
+/-- The epochs of the setting, as natural numbers, in the order of its runs.
+
+The finalized epoch of the ancestor is at most the split's, which is at most R's.
+
+C's epoch is R's or the next, and the epoch after R's is below the far future. -/
+private theorem setting_epochs {g : ForkedBeaconState preset}
+    {split fin pulled anc counted : BeaconState preset fork} {V : Finset ValidatorIndex}
+    (h : Setting config checks g split fin pulled anc counted V) :
+    anc.finalizedCheckpoint.epoch.toNat ≤ (getCurrentEpoch split).toNat ∧
+      (getCurrentEpoch split).toNat ≤ (getCurrentEpoch pulled).toNat ∧
+      (getCurrentEpoch pulled).toNat ≤ (getCurrentEpoch counted).toNat ∧
+      (getCurrentEpoch counted).toNat ≤ (getCurrentEpoch pulled).toNat + 1 ∧
+      (getCurrentEpoch pulled).toNat + 1 < FAR_FUTURE_EPOCH.toNat ∧
+      FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 ∧
+      (getCurrentEpoch pulled + 1).toNat = (getCurrentEpoch pulled).toNat + 1 ∧
+      pulled.finalizedCheckpoint.epoch.toNat ≤ (getCurrentEpoch pulled).toNat := by
+  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
+  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
+  refine ⟨UInt64.le_iff_toNat_le.mp h.finalized, UInt64.le_iff_toNat_le.mp h.called,
+    UInt64.le_iff_toNat_le.mp h.later, h.near, below, farNat, ?_,
+    UInt64.le_iff_toNat_le.mp (finalized_le_current h)⟩
+  have one : (1 : UInt64).toNat = 1 := rfl
+  rw [UInt64.toNat_add, one]
+  exact Nat.mod_eq_of_lt (by omega)
+
 /-- A key of `K6` in R's registry has no exit, or an exit after the split's lookahead.
 
 An exit at or before the split's epoch plus the seed lookahead is on the shared prefix of the runs.
@@ -11954,17 +11979,7 @@ private theorem K6_class {g : ForkedBeaconState preset}
   obtain ⟨rc⟩ := h.toCounted
   have chain := (rf.append rs).append rp
   -- Epochs, as natural numbers.
-  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have later := UInt64.le_iff_toNat_le.mp h.later
-  have near := h.near
-  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
-  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have succNat : (getCurrentEpoch pulled + 1).toNat = (getCurrentEpoch pulled).toNat + 1 := by
-    have one : (1 : UInt64).toNat = 1 := rfl
-    rw [UInt64.toNat_add, one]
-    exact Nat.mod_eq_of_lt (by omega)
-  have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+  obtain ⟨finSplit, called, later, near, below, farNat, succNat, finCur⟩ := setting_epochs h
   -- The records of the key at R and at C, and the activity they give.
   obtain ⟨u, foundU, activeU⟩ := active_of_activeVoters h.early memberAC
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeU
@@ -21734,17 +21749,7 @@ private theorem sc3a_class (h : Setting config checks g split fin pulled anc cou
   obtain ⟨w, found⟩ : ∃ w, pulled.validators.data[v.toNat]? = some w :=
     ⟨_, Array.getElem?_eq_getElem (Nat.lt_of_lt_of_le (Array.getElem?_eq_some_iff.mp foundS).1
       (registryGrows_of_chainSteps rp.chainSteps))⟩
-  have finSplit := UInt64.le_iff_toNat_le.mp h.finalized
-  have called := UInt64.le_iff_toNat_le.mp h.called
-  have later := UInt64.le_iff_toNat_le.mp h.later
-  have near := h.near
-  have below := getCurrentEpoch_succ_lt_farFuture h.twoSlots pulled
-  have farNat : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-  have succNat : (getCurrentEpoch pulled + 1).toNat = (getCurrentEpoch pulled).toNat + 1 := by
-    have one : (1 : UInt64).toNat = 1 := rfl
-    rw [UInt64.toNat_add, one]
-    exact Nat.mod_eq_of_lt (by omega)
-  have finCur := UInt64.le_iff_toNat_le.mp (finalized_le_current h)
+  obtain ⟨finSplit, called, later, near, below, farNat, succNat, finCur⟩ := setting_epochs h
   have rActive : ∀ e : Epoch, isActiveAt pulled e v.toNat = true ↔
       (w.activationEpoch.toNat ≤ e.toNat ∧ e.toNat < w.exitEpoch.toNat) := by
     intro e
