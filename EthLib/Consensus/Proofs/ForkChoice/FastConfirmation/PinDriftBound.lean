@@ -25707,6 +25707,27 @@ private theorem envelope_of_clean_fin (h : Setting config checks g split fin pul
     · exact envC z (List.mem_of_mem_tail onFrom)
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
+/-- The replays of the branch from `fin` to the split and of R's run, read at R's epoch.
+
+Both runs end by R's epoch, so the horizon of the replay does not change their events. -/
+private theorem replays_at_pulled (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF) :
+    fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF ∧
+      tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
+  have calledNat := UInt64.le_iff_toNat_le.mp h.called
+  refine ⟨?_, ?_⟩
+  · rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayedF
+  · rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
+      (by simp only; omega)]
+    exact replayed
+
+open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry, unslashed there, induces a leak on R's run only with a debit.
 
 Its envelope on R's run is `ebUp` with its debits and its penalty in whole increments.
@@ -25725,14 +25746,8 @@ private theorem induced_debited (h : Setting config checks g split fin pulled an
     (positive : 0 < inducedR (pinTerms config pulled anc fin) (fromFin.append tail) i) :
     0 < syncD eventsF i + syncD events i := by
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
+  obtain ⟨replayedF', replayed'⟩ :=
+    replays_at_pulled h tail high endEpoch replayed fromFin replayedF
   by_contra none
   have zero : syncD eventsF i + syncD events i = 0 := by omega
   by_cases late : ∀ w, pulled.validators.data[i]? = some w →
@@ -31171,14 +31186,8 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   have near := h.near
   -- the replays are read at R's epoch
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
+  obtain ⟨replayedF', replayed'⟩ :=
+    replays_at_pulled h tail high endEpoch replayed fromFin replayedF
   obtain ⟨eventsPre, replayedPre⟩ := pre.balanceEvents_ok aEarly highC
   subst cut
   -- the key as a validator index
@@ -31582,14 +31591,8 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
   obtain ⟨tailC⟩ := h.toCounted
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   -- the replays are read at R's epoch
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
+  obtain ⟨replayedF', replayed'⟩ :=
+    replays_at_pulled h tail high endEpoch replayed fromFin replayedF
   have perPos : 1 ≤ (pinTerms config pulled anc fin).perIncrement := by
     have := four_le_perIncrement h
     omega
@@ -31744,14 +31747,8 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
   classical
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
   -- the replays are read at R's epoch
-  have replayedF' : fromFin.balanceEvents (getCurrentEpoch pulled).toNat = .ok eventsF := by
-    rw [balanceEvents_eq_of_endpoint_le fromFin (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayedF
-  have replayed' : tail.balanceEvents (getCurrentEpoch pulled).toNat = .ok events := by
-    rw [balanceEvents_eq_of_endpoint_le tail (localHigh := high) (by simp only; omega)
-      (by simp only; omega)]
-    exact replayed
+  obtain ⟨replayedF', replayed'⟩ :=
+    replays_at_pulled h tail high endEpoch replayed fromFin replayedF
   -- the key as a validator index
   have limit := BeaconState.registryWithinLimit_of_lt h.early pulled
   unfold BeaconState.RegistryWithinLimit at limit
