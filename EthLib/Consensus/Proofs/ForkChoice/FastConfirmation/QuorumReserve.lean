@@ -574,8 +574,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Its effective balance can exceed what it is here by its rise, or by sync debits it had here.
   --
   -- It can also be its balance at the finalized state, after in-epoch debits before that state.
-  --
-  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let whistleblowerR := ((∑ i ∈ positions with slashed i = true ∧ recentSlashing i = true,
       max (effective i + rise i) (finEB i)) + seatExcess * inc) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
@@ -586,8 +584,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A late key is charged three times its effective balance here, and its rise once.
   --
   -- A key active by the finalized state can have a larger balance there, and its reward is charged.
-  --
-  -- The margin check prices that term at zero on every row (f1f20b0f8, section 33).
   let late := if tight then 0 else
     ∑ i ∈ positions with (validator i).any (fun v =>
       decide (v.activationEligibilityEpoch.toNat ≤ epoch.toNat) &&
@@ -749,8 +745,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A key's balance at the finalized state can exceed its balance and rise here.
   --
   -- Its debits between the start of that epoch and the finalized state are in neither.
-  --
-  -- The margin check prices that term at zero on every row (5f2e34c5f, section 33).
   let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
       ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
       (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
@@ -869,8 +863,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Its effective balance here and its rise are charged once; the top-up is the other branch's.
   --
   -- A key active by the finalized state can have a larger balance there, and its reward is charged.
-  --
-  -- The margin check prices that term at zero on every row (64739ed98, section 33).
   let pendingRB (i : ℕ) := (validator i).any (fun v =>
     decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
       v.activationEpoch == FAR_FUTURE_EPOCH)
