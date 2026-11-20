@@ -35,7 +35,7 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The paired cache theorem preserves full hash replies in the leanXMSS proof.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "ad3eadeb0c4fd68bb3e97955756829883ac6fda4"
+  "60cffa71b74e15ec3fb411b872c473110e9dc081"
 
 @[default_target]
 lean_lib «EthLib» where
