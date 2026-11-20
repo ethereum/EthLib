@@ -35,6 +35,10 @@ Not yet released.
 
 ### Proof additions
 
+- `ConsolidationQueueRise.Appends` says that the queue of pending consolidations only grows at its end inside a block, and `ConsolidationQueueRise.appendStep_processBlock` proves it for a block from Altair and before Gloas, with the frame and the registry lifecycle.
+  `riseStep_processBlock` now follows from it, and its statement is unchanged.
+  The pin's `block_step` reads it.
+
 - `Execution.justifiedSigned_at` generalizes `Execution.justifiedHonestlySigned` to one receiver and any set of signers.
   A store's justified checkpoint after an epoch has a signer in a set `p`.
   This holds when the quorum voters outside `p` hold less than two thirds of the total in each state that the store counts in.

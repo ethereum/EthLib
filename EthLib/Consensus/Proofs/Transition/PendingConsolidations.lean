@@ -1920,164 +1920,192 @@ def Grows {f : Fork} (s t : BeaconState preset f) : Prop :=
         ∃ w, t.validators.data[c.sourceIndex.toNat]? = some w ∧
           getCurrentEpoch s < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
 
-/-- A step that keeps the queue grows it by nothing. -/
-private theorem Grows.of_same {f : Fork} {s t : BeaconState preset f}
-    (queue : .pectra ≤ f → SamePendingQueue s t) : Grows s t := by
-  intro electra
-  rw [show t.pendingConsolidations electra = s.pendingConsolidations electra from
-    congrFun (queue electra) electra]
-  exact ⟨fun _ h => h, fun _ h => .inl h⟩
+/-- The queue only grows at its end inside a block.
 
-/-- Growths compose: the registry lifecycle keeps each exit that is assigned. -/
-private theorem Grows.trans {f : Fork} {s u t : BeaconState preset f}
-    (one : Grows s u) (two : Grows u t) (life : RegistryLifecycle u t)
-    (slot : u.slot = s.slot) : Grows s t := by
+The entries before keep their order.
+
+Each new entry at the end has a source whose exit is assigned after the current epoch.
+
+This is `Grows` with the order of the queue kept. -/
+def Appends {f : Fork} (s t : BeaconState preset f) : Prop :=
+  ∀ electra : .pectra ≤ f, ∃ added : List PendingConsolidation,
+    (t.pendingConsolidations electra).data.toList =
+      (s.pendingConsolidations electra).data.toList ++ added ∧
+    ∀ c ∈ added, ∃ w, t.validators.data[c.sourceIndex.toNat]? = some w ∧
+      getCurrentEpoch s < w.exitEpoch ∧ w.exitEpoch ≠ FAR_FUTURE_EPOCH
+
+/-- An append grows the queue. -/
+private theorem Appends.grows {f : Fork} {s t : BeaconState preset f} (appends : Appends s t) :
+    Grows s t := by
   intro electra
-  obtain ⟨old, new⟩ := one electra
-  obtain ⟨old', new'⟩ := two electra
+  obtain ⟨added, queue, new⟩ := appends electra
+  rw [queue]
+  refine ⟨fun c member => List.mem_append_left _ member, fun c member => ?_⟩
+  rcases List.mem_append.mp member with old | fresh
+  · exact .inl old
+  · exact .inr (new c fresh)
+
+/-- A step that keeps the queue appends nothing. -/
+private theorem Appends.of_same {f : Fork} {s t : BeaconState preset f}
+    (queue : .pectra ≤ f → SamePendingQueue s t) : Appends s t := by
+  intro electra
+  refine ⟨[], ?_, fun _ member => by simp at member⟩
+  rw [show t.pendingConsolidations electra = s.pendingConsolidations electra from
+    congrFun (queue electra) electra, List.append_nil]
+
+/-- Appends compose: the registry lifecycle keeps each exit that is assigned. -/
+private theorem Appends.trans {f : Fork} {s u t : BeaconState preset f}
+    (one : Appends s u) (two : Appends u t) (life : RegistryLifecycle u t)
+    (slot : u.slot = s.slot) : Appends s t := by
+  intro electra
+  obtain ⟨added, queue, new⟩ := one electra
+  obtain ⟨added', queue', new'⟩ := two electra
   have epoch : getCurrentEpoch u = getCurrentEpoch s := by simp only [getCurrentEpoch, slot]
-  refine ⟨fun c member => old' c (old c member), fun c member => ?_⟩
-  rcases new' c member with middle | ⟨w, read, later, assigned⟩
-  · rcases new c middle with first | ⟨w, read, later, assigned⟩
-    · exact .inl first
-    · obtain ⟨w', read', kept⟩ := life.validators _ w read
-      have exit := kept.exitEpoch assigned
-      exact .inr ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
-  · exact .inr ⟨w, read, epoch ▸ later, assigned⟩
+  refine ⟨added ++ added', by rw [queue', queue, List.append_assoc], fun c member => ?_⟩
+  rcases List.mem_append.mp member with old | fresh
+  · obtain ⟨w, read, later, assigned⟩ := new c old
+    obtain ⟨w', read', kept⟩ := life.validators _ w read
+    have exit := kept.exitEpoch assigned
+    exact ⟨w', read', by rw [exit]; exact later, by rw [exit]; exact assigned⟩
+  · obtain ⟨w, read, later, assigned⟩ := new' c fresh
+    exact ⟨w, read, epoch ▸ later, assigned⟩
 
 /-- A block step: the frame, the registry lifecycle and the growth of the queue. -/
 def RiseStep {f : Fork} (s t : BeaconState preset f) : Prop :=
   Frame s t ∧ RegistryLifecycle s t ∧ Grows s t
 
+/-- A block step that appends to the queue. -/
+private def AppendStep {f : Fork} (s t : BeaconState preset f) : Prop :=
+  Frame s t ∧ RegistryLifecycle s t ∧ Appends s t
+
 /-- A step that keeps the queue. -/
-private theorem RiseStep.of_same {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
+private theorem AppendStep.of_same {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
     (life : RegistryLifecycle s t) (queue : .pectra ≤ f → SamePendingQueue s t) :
-    RiseStep s t :=
-  ⟨frame, life, Grows.of_same queue⟩
+    AppendStep s t :=
+  ⟨frame, life, Appends.of_same queue⟩
 
 /-- A step that keeps the registry and the queue. -/
-private theorem RiseStep.of_data {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
+private theorem AppendStep.of_data {f : Fork} {s t : BeaconState preset f} (frame : Frame s t)
     (same : t.validators.data = s.validators.data)
-    (queue : .pectra ≤ f → SamePendingQueue s t) : RiseStep s t :=
-  RiseStep.of_same frame (RegistryLifecycle.of_data same) queue
+    (queue : .pectra ≤ f → SamePendingQueue s t) : AppendStep s t :=
+  AppendStep.of_same frame (RegistryLifecycle.of_data same) queue
 
 /-- Every state is a step to itself. -/
-private theorem RiseStep.refl {f : Fork} (s : BeaconState preset f) : RiseStep s s :=
-  RiseStep.of_data (Frame.refl s) rfl fun _ => rfl
+private theorem AppendStep.refl {f : Fork} (s : BeaconState preset f) : AppendStep s s :=
+  AppendStep.of_data (Frame.refl s) rfl fun _ => rfl
 
 /-- Steps compose. -/
-private theorem RiseStep.trans {f : Fork} {s u t : BeaconState preset f} (one : RiseStep s u)
-    (two : RiseStep u t) : RiseStep s t :=
+private theorem AppendStep.trans {f : Fork} {s u t : BeaconState preset f}
+    (one : AppendStep s u) (two : AppendStep u t) : AppendStep s t :=
   ⟨one.1.trans two.1, one.2.1.trans two.2.1, one.2.2.trans two.2.2 two.2.1 one.1.slot⟩
 
 /-- A fold of steps is a step. -/
-private theorem RiseStep.fold {f : Fork} {s t : BeaconState preset f} {α ε : Type}
+private theorem AppendStep.fold {f : Fork} {s t : BeaconState preset f} {α ε : Type}
     {step : BeaconState preset f → α → Except ε (BeaconState preset f)} {xs : List α}
-    (kept : ∀ a item b, step a item = .ok b → RiseStep a b)
-    (ok : xs.foldlM step s = .ok t) : RiseStep s t :=
-  foldlM_ok_invariant (RiseStep s)
-    (fun _ _ _ prior computed => prior.trans (kept _ _ _ computed)) (RiseStep.refl s) ok
+    (kept : ∀ a item b, step a item = .ok b → AppendStep a b)
+    (ok : xs.foldlM step s = .ok t) : AppendStep s t :=
+  foldlM_ok_invariant (AppendStep s)
+    (fun _ _ _ prior computed => prior.trans (kept _ _ _ computed)) (AppendStep.refl s) ok
 
 /-! ### The steps of a block that grow the queue
 
 Each step has a frame and a lifecycle, and only a consolidation request grows the queue. -/
 
-section RiseSteps
+section AppendSteps
 
 variable {f : Fork} {s t : BeaconState preset f}
 
-private theorem riseStep_processProposerSlashing {slashing : ProposerSlashing}
-    (ok : processProposerSlashing config checks s slashing = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processProposerSlashing ok).toFrame
+private theorem appendStep_processProposerSlashing {slashing : ProposerSlashing}
+    (ok : processProposerSlashing config checks s slashing = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processProposerSlashing ok).toFrame
     (registryLifecycle_processProposerSlashing ok) (fun _ => SamePendingQueue.proposer ok)
 
-private theorem riseStep_processAttesterSlashing {slashing : AttesterSlashing preset f}
-    (ok : processAttesterSlashing config checks s slashing = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processAttesterSlashing ok).toFrame
+private theorem appendStep_processAttesterSlashing {slashing : AttesterSlashing preset f}
+    (ok : processAttesterSlashing config checks s slashing = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processAttesterSlashing ok).toFrame
     (registryLifecycle_processAttesterSlashing ok) (fun _ => SamePendingQueue.attester ok)
 
-private theorem riseStep_processAttestation {attestation : Attestation preset f} {parent : Slot}
-    (ok : processAttestation config checks s parent attestation = .ok t) : RiseStep s t :=
-  RiseStep.of_data (frame_processAttestation ok)
+private theorem appendStep_processAttestation {attestation : Attestation preset f} {parent : Slot}
+    (ok : processAttestation config checks s parent attestation = .ok t) : AppendStep s t :=
+  AppendStep.of_data (frame_processAttestation ok)
     (congrArg (·.data) (processAttestation_registry ok).1)
     (fun electra => SamePendingQueue.attestation electra ok)
 
-private theorem riseStep_processDeposit {before : f < .hegota} {deposit : Deposit}
-    (ok : processDeposit config checks before s deposit = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processDeposit ok).toFrame (registryLifecycle_processDeposit ok)
+private theorem appendStep_processDeposit {before : f < .hegota} {deposit : Deposit}
+    (ok : processDeposit config checks before s deposit = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processDeposit ok).toFrame (registryLifecycle_processDeposit ok)
     (fun electra => SamePendingQueue.deposit electra ok)
 
-private theorem riseStep_processVoluntaryExit {signed : SignedVoluntaryExit}
-    (ok : processVoluntaryExit config checks s signed = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processVoluntaryExit ok).toFrame
+private theorem appendStep_processVoluntaryExit {signed : SignedVoluntaryExit}
+    (ok : processVoluntaryExit config checks s signed = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processVoluntaryExit ok).toFrame
     (registryLifecycle_processVoluntaryExit ok) (fun _ => SamePendingQueue.voluntary ok)
 
-private theorem riseStep_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
-    (ok : processBlsToExecutionChange config checks s signed = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processBlsToExecutionChange ok).toFrame
+private theorem appendStep_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
+    (ok : processBlsToExecutionChange config checks s signed = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processBlsToExecutionChange ok).toFrame
     (registryLifecycle_processBlsToExecutionChange ok) (fun _ => SamePendingQueue.bls ok)
 
-private theorem riseStep_processDepositRequest {electra : .pectra ≤ f} {request : DepositRequest}
-    (ok : processDepositRequest s electra request = .ok t) : RiseStep s t :=
-  RiseStep.of_data (frame_processDepositRequest ok).toFrame
+private theorem appendStep_processDepositRequest {electra : .pectra ≤ f} {request : DepositRequest}
+    (ok : processDepositRequest s electra request = .ok t) : AppendStep s t :=
+  AppendStep.of_data (frame_processDepositRequest ok).toFrame
     (congrArg (·.data) (processDepositRequest_ok ok).2.1)
     (fun _ => SamePendingQueue.depositRequest ok)
 
-private theorem riseStep_processWithdrawalRequest {electra : .pectra ≤ f}
+private theorem appendStep_processWithdrawalRequest {electra : .pectra ≤ f}
     {request : WithdrawalRequest}
-    (ok : processWithdrawalRequest config s electra request = .ok t) : RiseStep s t :=
-  RiseStep.of_same (frame_processWithdrawalRequest ok).toFrame
+    (ok : processWithdrawalRequest config s electra request = .ok t) : AppendStep s t :=
+  AppendStep.of_same (frame_processWithdrawalRequest ok).toFrame
     (registryLifecycle_processWithdrawalRequest ok)
     (fun _ => SamePendingQueue.withdrawalRequest ok)
 
-end RiseSteps
+end AppendSteps
 
 section RiseQueue
 
 variable {f : Fork} {s t : BeaconState preset f}
 
-/-- A queued consolidation assigns its source an exit after the current epoch. -/
-private theorem queueStep_queueConsolidation {electra : .pectra ≤ f}
+/-- A queued consolidation appends one entry.
+
+It assigns its source an exit after the current epoch. -/
+private theorem appends_queueConsolidation {electra : .pectra ≤ f}
     {sourceIndex targetIndex : ValidatorIndex} {source : Validator}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : queueConsolidation config s electra sourceIndex source targetIndex = .ok t) :
-    Grows s t := by
+    Appends s t := by
   obtain ⟨churned, written, epoch, withdrawal, -, assigned, later, -, set, validators, pushed⟩ :=
     queueConsolidation_queued delay ok
   intro electra'
-  rw [pushed, validators]
-  refine ⟨fun c member => List.mem_append_left _ member, fun c member => ?_⟩
-  rcases List.mem_append.mp member with member | member
-  · exact .inl member
-  · rw [List.mem_singleton] at member
-    subst member
-    exact .inr ⟨_, getValidator_eq_ok_iff.mp (getValidator_setValidator_self set), later,
-      assigned⟩
+  refine ⟨[⟨sourceIndex, targetIndex⟩], pushed, fun c member => ?_⟩
+  rw [List.mem_singleton] at member
+  subst member
+  rw [validators]
+  exact ⟨_, getValidator_eq_ok_iff.mp (getValidator_setValidator_self set), later, assigned⟩
 
 /-- A consolidation request switches credentials or queues a consolidation. -/
-private theorem riseStep_processConsolidationRequest {electra : .pectra ≤ f}
+private theorem appendStep_processConsolidationRequest {electra : .pectra ≤ f}
     {request : ConsolidationRequest}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processConsolidationRequest config s electra request = .ok t) : RiseStep s t := by
+    (ok : processConsolidationRequest config s electra request = .ok t) : AppendStep s t := by
   have frame := (frame_processConsolidationRequest ok).toFrame
   have life := registryLifecycle_processConsolidationRequest ok
-  suffices new : Grows s t from ⟨frame, life, new⟩
+  suffices new : Appends s t from ⟨frame, life, new⟩
   clear frame life
   rcases consolidationRequest_cases ok with rfl | ⟨_, _, -, switched⟩ | ⟨_, _, _, _, -, queued⟩
-  · exact Grows.of_same fun _ => rfl
-  · exact Grows.of_same fun _ => SamePendingQueue.compounding switched
-  · exact queueStep_queueConsolidation delay queued
+  · exact Appends.of_same fun _ => rfl
+  · exact Appends.of_same fun _ => SamePendingQueue.compounding switched
+  · exact appends_queueConsolidation delay queued
 
 /-- The requests of the execution layer keep the frame, the lifecycle and the queue. -/
-private theorem riseStep_processExecutionRequests {body : BeaconBlockBody preset f}
+private theorem appendStep_processExecutionRequests {body : BeaconBlockBody preset f}
     {electra : .pectra ≤ f ∧ f < .glamsterdam}
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processExecutionRequests config s body electra = .ok t) : RiseStep s t := by
+    (ok : processExecutionRequests config s body electra = .ok t) : AppendStep s t := by
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
-  exact (RiseStep.fold (fun _ _ _ ok => riseStep_processDepositRequest ok) deposits).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processWithdrawalRequest ok) withdrawals).trans
-      (RiseStep.fold (fun _ _ _ ok => riseStep_processConsolidationRequest delay ok)
+  exact (AppendStep.fold (fun _ _ _ ok => appendStep_processDepositRequest ok) deposits).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processWithdrawalRequest ok) withdrawals).trans
+      (AppendStep.fold (fun _ _ _ ok => appendStep_processConsolidationRequest delay ok)
         consolidations)
 
 end RiseQueue
@@ -2087,37 +2115,40 @@ section RiseBlock
 variable {f : Fork} {s t : BeaconState preset f}
 
 /-- The operations of a block keep the frame, the lifecycle and the queue. -/
-private theorem riseStep_processOperations {body : BeaconBlockBody preset f} {parent : Slot}
+private theorem appendStep_processOperations {body : BeaconBlockBody preset f} {parent : Slot}
     (early : f < .glamsterdam) (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (ok : processOperations config checks s body parent = .ok t) :
-    RiseStep s t := by
+    AppendStep s t := by
   unfold processOperations at ok
   rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at ok
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at ok
   obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attested, _, deposits, exited,
     exits, changed, changes, requests⟩ := ok
-  have c : RiseStep exited changed := by
+  have c : AppendStep exited changed := by
     unfold processBlsToExecutionChanges at changes
     split at changes
     · rw [← Array.foldlM_toList] at changes
-      exact RiseStep.fold (fun _ _ _ ok => riseStep_processBlsToExecutionChange ok) changes
-    · cases changes; exact RiseStep.refl _
-  have r : RiseStep changed t := by
+      exact AppendStep.fold (fun _ _ _ ok => appendStep_processBlsToExecutionChange ok) changes
+    · cases changes; exact AppendStep.refl _
+  have r : AppendStep changed t := by
     split at requests
-    · exact riseStep_processExecutionRequests delay requests
-    · cases requests; exact RiseStep.refl _
-  exact (RiseStep.fold (fun _ _ _ ok => riseStep_processProposerSlashing ok) proposers).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processAttesterSlashing ok) attesters).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processAttestation ok) attested).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processDeposit ok) deposits).trans <|
-    (RiseStep.fold (fun _ _ _ ok => riseStep_processVoluntaryExit ok) exits).trans <|
+    · exact appendStep_processExecutionRequests delay requests
+    · cases requests; exact AppendStep.refl _
+  exact (AppendStep.fold (fun _ _ _ ok => appendStep_processProposerSlashing ok) proposers).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttesterSlashing ok) attesters).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processAttestation ok) attested).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processDeposit ok) deposits).trans <|
+    (AppendStep.fold (fun _ _ _ ok => appendStep_processVoluntaryExit ok) exits).trans <|
     c.trans r
 
-/-- A block from Altair and before Gloas keeps the frame, the lifecycle and the queue. -/
-theorem riseStep_processBlock {engine : ExecutionEngine preset f}
+/-- A block from Altair and before Gloas keeps the frame and the lifecycle.
+
+It appends to the queue of pending consolidations. -/
+theorem appendStep_processBlock {engine : ExecutionEngine preset f}
     {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
     (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
-    (ok : processBlock config checks engine s block = .ok t) : RiseStep s t := by
+    (ok : processBlock config checks engine s block = .ok t) :
+    Frame s t ∧ RegistryLifecycle s t ∧ Appends s t := by
   unfold processBlock at ok
   simp only [altair, ↓reduceDIte] at ok
   unfold processBlockAltair at ok
@@ -2126,30 +2157,38 @@ theorem riseStep_processBlock {engine : ExecutionEngine preset f}
     votedOk, operated, operatedOk, synced⟩ := ok
   rw [dite_eq_right (show ¬ .glamsterdam ≤ f from Nat.not_le_of_lt early)] at paidOk
   cases paidOk
-  have header : RiseStep s headed := by
+  have header : AppendStep s headed := by
     obtain ⟨_, _, rfl⟩ := processBlockHeader_eq headedOk
-    exact RiseStep.of_data (frame_processBlockHeader headedOk).toFrame rfl fun _ => rfl
-  have e : RiseStep headed executed := by
+    exact AppendStep.of_data (frame_processBlockHeader headedOk).toFrame rfl fun _ => rfl
+  have e : AppendStep headed executed := by
     split at executedOk
-    · exact RiseStep.of_data (frame_processBlockExecution executedOk).toFrame
+    · exact AppendStep.of_data (frame_processBlockExecution executedOk).toFrame
         (congrArg (·.data) (processBlockExecution_validators executedOk))
         (fun _ => SamePendingQueue.blockExecution early executedOk)
-    · cases executedOk; exact RiseStep.refl _
-  have randao : RiseStep executed revealed := by
+    · cases executedOk; exact AppendStep.refl _
+  have randao : AppendStep executed revealed := by
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq revealedOk
-    exact RiseStep.of_data (frame_processRandao revealedOk).toFrame rfl fun _ => rfl
-  have v : RiseStep revealed voted := by
+    exact AppendStep.of_data (frame_processRandao revealedOk).toFrame rfl fun _ => rfl
+  have v : AppendStep revealed voted := by
     split at votedOk
     · obtain ⟨_, _, rest⟩ := processEth1Data_eq votedOk
-      exact RiseStep.of_data (frame_processEth1Data votedOk).toFrame (by rw [← rest])
+      exact AppendStep.of_data (frame_processEth1Data votedOk).toFrame (by rw [← rest])
         (fun _ => by unfold SamePendingQueue; rw [← rest])
-    · cases votedOk; exact RiseStep.refl _
-  have sync : RiseStep operated t := by
+    · cases votedOk; exact AppendStep.refl _
+  have sync : AppendStep operated t := by
     have frame := (frame_processSyncAggregate synced).toFrame
     obtain ⟨balances, rfl⟩ := processSyncAggregate_eq synced
-    exact RiseStep.of_data frame rfl fun _ => rfl
+    exact AppendStep.of_data frame rfl fun _ => rfl
   exact header.trans <| e.trans <| randao.trans <| v.trans <|
-    (riseStep_processOperations early delay operatedOk).trans sync
+    (appendStep_processOperations early delay operatedOk).trans sync
+
+/-- A block from Altair and before Gloas keeps the frame, the lifecycle and the queue. -/
+theorem riseStep_processBlock {engine : ExecutionEngine preset f}
+    {block : BeaconBlock preset f} (altair : .altair ≤ f) (early : f < .glamsterdam)
+    (delay : 1 ≤ config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (ok : processBlock config checks engine s block = .ok t) : RiseStep s t :=
+  let ⟨frame, life, appends⟩ := appendStep_processBlock altair early delay ok
+  ⟨frame, life, appends.grows⟩
 
 end RiseBlock
 
