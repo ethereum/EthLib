@@ -132,7 +132,7 @@ def fits : Authdata → Bool
 
 /-- A vector of the first `n` bytes of a list that has exactly `n` bytes. -/
 def vectorOf (n : Nat) (bytes : List UInt8) : Option (Vector UInt8 n) :=
-  if h : bytes.length = n then some ⟨bytes.toArray, by simpa using h⟩ else none
+  Base.exactArray? n bytes.toArray
 
 /-- The authdata of a flag, from its bytes. -/
 def decode (flag : UInt8) (bytes : List UInt8) : Except PacketError Authdata :=

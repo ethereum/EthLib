@@ -41,20 +41,13 @@ abbrev Blob := Vector UInt8 BYTES_PER_BLOB
 /-- 48 bytes, the size of a compressed `G1` point. -/
 abbrev Bytes48 := Vector UInt8 48
 
-/-- Read untyped bytes as a byte vector of length `n`.
-
-Bytes of any other length are rejected with the error that `err` builds from that length. -/
-def parseBytes (n : Nat) (err : Nat → KzgError) (b : ByteArray) :
-    Except KzgError (Vector UInt8 n) :=
-  Base.exactBytes n b err
-
 /-! ## Bytes <-> field element helpers -/
 
 /-- Convert untrusted bytes to an element of the BLS scalar field.
 
 It rejects an integer of at least the modulus. -/
 def bytesToBlsField (b : Bytes32) : Except KzgError Fr :=
-  match Fr.fromBytesBE ⟨b.toArray⟩ with
+  match Fr.fromBytesBE b with
   | .ok f    => .ok f
   | .error _ => .error (.invalidFieldElement none)
 

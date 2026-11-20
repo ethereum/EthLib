@@ -260,7 +260,7 @@ theorem checkChunks_map {tree : Nat → Bytes} {indices : List Nat}
   induction indices with
   | nil => rfl
   | cons index rest ih =>
-    simp_all [checkChunks, checkChunk, Bind.bind, Except.bind]
+    simp_all [checkChunks, checkChunk_eq, Bind.bind, Except.bind]
 
 /-- A multiproof read from a finite tree of 32-byte nodes is accepted by the public verifier. -/
 theorem multiproof_verifies {tree : Nat → Bytes} {indices helpers : List Nat}

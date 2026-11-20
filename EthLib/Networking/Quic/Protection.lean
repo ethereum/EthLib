@@ -103,11 +103,10 @@ def decryptPayload (suite : CipherSuite) (keys : PacketKeys suite) (number : Pac
   | .aes128GcmSha256 =>
     (Aes.Gcm.decrypt (Aes.ciph .aes128 keys.key) 16 (packBytes (nonce keys.iv number))
       ciphertext header tag).mapError .aes
-  | .chacha20Poly1305Sha256 =>
-    if h : tag.size = 16 then
-      (ChaCha20Poly1305.decrypt keys.key (nonce keys.iv number) header ciphertext
-        (readBytes tag 0 16 (by omega))).mapError .chacha
-    else .error (.tagLength tag.size)
+  | .chacha20Poly1305Sha256 => do
+    let tag ← exactBytes 16 tag .tagLength
+    (ChaCha20Poly1305.decrypt keys.key (nonce keys.iv number) header ciphertext tag).mapError
+      .chacha
 
 /-- One byte's mask, with four low first-byte bits for long headers and five for short ones.
 

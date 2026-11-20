@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.Fr
 public import EthLib.Cryptography.Proofs.Montgomery
+public import EthLib.Base.Proofs.Bytes
 
 /-!
 # Proofs: `Fr`
@@ -189,40 +190,41 @@ theorem powNat_eq_powNatModel (a : Fr) (e : Nat) :
 theorem powNat_succ (a : Fr) (e : Nat) : powNat a (e + 1) = a * powNat a e := by
   rw [powNat_eq_powNatModel, powNat_eq_powNatModel, powNatModel]
 
+/-- An element encodes as 32 bytes. -/
+theorem size_data_toBytesBE (a : Fr) : a.toBytesBE.data.size = 32 :=
+  Montgomery.toBytesBE_size a
+
 /-- Decoding the 32 bytes of an element gives it back. -/
-theorem fromBytesBE_toBytesBE (a : Fr) : fromBytesBE a.toBytesBE = .ok a := by
+theorem fromBytesBE_toBytesBE (a : Fr) :
+    fromBytesBE ⟨a.toBytesBE.data, size_data_toBytesBE a⟩ = .ok a := by
   unfold fromBytesBE
-  have hs : a.toBytesBE.size = 32 := Montgomery.toBytesBE_size a
-  rw [hs]
-  simp only [ne_eq, not_true_eq_false, ↓reduceIte]
-  rw [show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]
+  simp only [Base.size_packBytes, ne_eq, not_true_eq_false, ↓reduceIte]
+  rw [Base.packBytes_mk_data a.toBytesBE (size_data_toBytesBE a),
+    show a.toBytesBE = Montgomery.toBytesBE a from rfl, Montgomery.ofBytesBE_toBytesBE]
 
-/-- A successful `fromBytesBE` implies three facts.
+/-- A successful decoding of 32 bytes implies two facts.
 
-The input was 32 bytes, the value is the big-endian decoding, and the value is canonical. -/
-theorem fromBytesBE_ok {b : ByteArray} {f : Fr}
+The value is the big-endian decoding, and the value is canonical. -/
+theorem fromBytesBE_ok {b : Vector UInt8 32} {f : Fr}
     (h : fromBytesBE b = .ok f) :
-    b.size = 32 ∧ f.val = Base.bytesToNat b.data.toList ∧
-      f.val < modulus := by
-  rw [fromBytesBE] at h
-  split at h
-  · cases h
-  · rename_i hsz
-    have hs : b.size = 32 := by omega
-    have hl : (List.ofFn (n := 32) fun k => b[0 + k.val]!) = b.data.toList := by
-      apply List.ext_getElem (by simp [hs])
-      intro i h1 h2
-      simp only [List.getElem_ofFn, Nat.zero_add, Array.getElem_toList]
-      rw [getElem!_pos b i (by simp at h1; omega)]
-      rfl
-    rw [Montgomery.ofBytesBE_eq, hl] at h
-    by_cases hlt : Base.bytesToNat b.data.toList < params.p
-    · simp only [hlt, ↓reduceIte] at h
-      cases h
-      refine ⟨hs, ?_, val_lt _⟩
-      rw [show Montgomery.ofNat _ = ofNat _ from rfl, val_ofNat_of_lt hlt]
-    · simp only [hlt, ↓reduceIte] at h
-      cases h
+    f.val = Base.bytesToNat b.toList ∧ f.val < modulus := by
+  unfold fromBytesBE at h
+  simp only [Base.size_packBytes, ne_eq, not_true_eq_false, ↓reduceIte] at h
+  -- The 32 bytes that the limbs read, one by one, are the bytes of the vector.
+  have hl : (List.ofFn (n := 32) fun k => (Base.packBytes b)[0 + k.val]!) = b.toList := by
+    apply List.ext_getElem (by simp)
+    intro i h1 h2
+    simp only [List.getElem_ofFn, Nat.zero_add]
+    rw [getElem!_pos (Base.packBytes b) i (by rw [Base.size_packBytes]; simpa using h1)]
+    rfl
+  rw [Montgomery.ofBytesBE_eq, hl] at h
+  by_cases hlt : Base.bytesToNat b.toList < params.p
+  · simp only [hlt, ↓reduceIte] at h
+    cases h
+    refine ⟨?_, val_lt _⟩
+    rw [show Montgomery.ofNat _ = ofNat _ from rfl, val_ofNat_of_lt hlt]
+  · simp only [hlt, ↓reduceIte] at h
+    cases h
 
 /-- `powNat` always produces a canonical value. -/
 protected theorem powNat_val_lt (a : Fr) (e : Nat) :

@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.Proofs.LightClient.Containers
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.LightClient.Sync
+public import EthLib.Consensus.Proofs.SignatureChecks
 
 /-!
 # Proofs: what an accepted light client update authenticates
@@ -495,32 +496,6 @@ theorem initializeLightClientStore_currentSyncCommittee {config : Config}
   exact ⟨leaf, node, leafRooted, nodeRooted,
     isValidNormalizedMerkleBranch_value (currentSyncCommitteeGindexAtSlot_named layout) valid state
       rooted (BeaconState.nodeRoot_currentSyncCommittee altair state nodeRooted)⟩
-
-/-- The assumption on an aggregate signature check: it accepts only messages that all keys signed.
-
-The relation says which messages the holder of each key signed.
-
-BLS with proofs of possession is meant to give this, except with small probability.
-
-A separate module bounds how often one honest member's bit is forged, with random oracles.
-
-It needs a proof of possession for every signer, and it is not a proof of this assumption.
-
-Ethereum's keys carry deposit signatures instead.
-
-The theorems below reason about one accepted update, so they take the assumption instead. -/
-def SignatureChecks.AggregateSound (checks : SignatureChecks)
-    (signed : Cryptography.Bls.BLSPubkey → ByteArray → Prop) : Prop :=
-  ∀ keys message signature, checks.fastAggregateVerify keys message signature = true →
-    ∀ key ∈ keys, signed key message
-
-/-- The assumption has content: the checks that accept every signature do not meet it.
-
-Here no key signed any message, and the checks still accept a signature by one key. -/
-theorem SignatureChecks.not_aggregateSound_acceptAll :
-    ¬SignatureChecks.acceptAll.AggregateSound fun _ _ => False :=
-  fun sound =>
-    sound #[Vector.replicate _ 0] .empty (Vector.replicate _ 0) rfl (Vector.replicate _ 0) (by simp)
 
 /-- Keys whose bit is set number as many as the set bits, when there is a key for each bit. -/
 theorem length_filterMap_zip_bits {β : Type} :

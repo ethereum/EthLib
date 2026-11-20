@@ -91,6 +91,14 @@ public import EthLib.Consensus.HonestAggregation
 public import EthLib.Consensus.HonestValidator
 public import EthLib.Consensus.HonestProposer
 public import EthLib.Consensus.InclusionListCommittee
+public import EthLib.Consensus.KeymanagerApi.Client
+public import EthLib.Consensus.KeymanagerApi.DeleteKeys
+public import EthLib.Consensus.KeymanagerApi.LocalKeys
+public import EthLib.Consensus.KeymanagerApi.RemoteKeys
+public import EthLib.Consensus.KeymanagerApi.Server
+public import EthLib.Consensus.KeymanagerApi.Settings
+public import EthLib.Consensus.KeymanagerApi.Types
+public import EthLib.Consensus.KeymanagerApi.VoluntaryExit
 public import EthLib.Consensus.LightClient.Containers
 public import EthLib.Consensus.LightClient.Branch
 public import EthLib.Consensus.LightClient.FullNode
@@ -99,6 +107,10 @@ public import EthLib.Consensus.LightClient.Upgrade
 public import EthLib.Consensus.Preset
 public import EthLib.Consensus.Proposers
 public import EthLib.Consensus.RelayApi
+public import EthLib.Consensus.RemoteSigningApi.Request
+public import EthLib.Consensus.RemoteSigningApi.Response
+public import EthLib.Consensus.RemoteSigningApi.Endpoints
+public import EthLib.Consensus.RemoteSigningApi.SigningRoot
 public import EthLib.Consensus.ReqResp.Bounds
 public import EthLib.Consensus.ReqResp.Messages
 public import EthLib.Consensus.ReqResp.ResponseBounds

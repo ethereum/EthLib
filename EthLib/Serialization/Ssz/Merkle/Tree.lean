@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Bytes
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Serialization.Ssz.Packing
 public import EthLib.Serialization.Ssz.Merkle.Merkleize
@@ -106,15 +107,14 @@ def subtreeAtM {m : Type → Type} [Monad m] (hasher : Hasher m) (chunks : Array
 def subtreeAt (chunks : Array Bytes) (depth start : Nat) : Bytes :=
   (subtreeAtM sha256Hasher chunks depth start).run
 
+/-- A node as a 32-byte vector, refused if it has another width. -/
+def toChunk (node : Bytes) : Except Err (Vector UInt8 bytesPerChunk) :=
+  Base.exactArray bytesPerChunk node (.count bytesPerChunk)
+
 /-- Refuse a hash operand that is not one complete 32-byte SSZ node. -/
 def checkChunk (node : Bytes) : Except Err Unit :=
   -- Fixed-width children make the boundary between the two hash operands unambiguous.
-  if node.size = bytesPerChunk then .ok () else .error (.count bytesPerChunk node.size)
-
-/-- A node as a 32-byte vector, refused if it has another width. -/
-def toChunk (node : Bytes) : Except Err (Vector UInt8 bytesPerChunk) :=
-  if width : node.size = bytesPerChunk then .ok ⟨node, width⟩
-  else .error (.count bytesPerChunk node.size)
+  (toChunk node).map fun _ => ()
 
 /-- Refuse a node sequence containing a node of the wrong width. -/
 def checkChunks : List Bytes → Except Err Unit

@@ -10,8 +10,10 @@ from ethlib.errors import (
     ConsensusError,
     DepositTreeError,
     ForkChoiceError,
+    KeymanagerError,
     LightClientError,
     ProposerError,
+    RemoteSigningError,
     SlashingProtectionError,
     TransitionError,
     ValidatorDutyError,
@@ -235,6 +237,27 @@ def relay_validators(
 ) -> list[dict[str, Any]]:
     """At Fulu only: the JSON entries of the validators that a relay lists, from SSZ bytes."""
     return _native.consensus_relay_validators(name, fork, state, registry)
+
+
+def keymanager_json(schema: str, document: Any) -> Any:
+    """A value of a Keymanager API schema, checked and written back as canonical JSON."""
+    return _native.consensus_keymanager_json(schema, document)
+
+
+def keymanager_run(
+    memory: int,
+    work: int,
+    fee_recipient: bytes,
+    gas_limit: int,
+    graffiti: str,
+    protection: str,
+    chain: tuple[str, str, str, bytes] | None,
+    calls: list[tuple[str, str, Any]],
+) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
+    """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
+    return _native.consensus_keymanager_run(
+        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls
+    )
 
 
 def relay_delivered_payload(document: dict[str, Any]) -> dict[str, Any]:
@@ -1929,6 +1952,35 @@ def import_slashing_interchange(held: bytes, file: bytes) -> bytes:
     return _native.consensus_import_slashing_interchange(held, file)
 
 
+def read_signing_request(name: str, document: Any) -> Any:
+    """A request of the Remote-signing API, read and written again as the signer reads it."""
+    return _native.consensus_read_signing_request(name, document)
+
+
+def signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    return _native.consensus_signing_request_root(name, config, document)
+
+
+def remote_signer_sign(
+    name: str,
+    config: str,
+    keys: list[bytes],
+    protection: bytes,
+    identifier: str,
+    document: Any,
+) -> tuple[int, bytes | None, bytes]:
+    """The status, signature and slashing protection record of a remote signer's sign endpoint."""
+    return _native.consensus_remote_signer_sign(
+        name, config, keys, protection, identifier, document
+    )
+
+
+def remote_signer_public_keys(keys: list[bytes]) -> Any:
+    """The public keys of a remote signer that holds secret keys, as its endpoint lists them."""
+    return _native.consensus_remote_signer_public_keys(keys)
+
+
 def check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> None:
     """Return if a key may sign a block, or raise the SlashingProtectionError of its condition."""
     _native.consensus_check_block_signing(interchange, pubkey, slot, signing_root)
@@ -2338,6 +2390,14 @@ __all__ = [
     "check_attestation_signing",
     "record_block_signing",
     "record_attestation_signing",
+    "KeymanagerError",
+    "keymanager_json",
+    "keymanager_run",
+    "RemoteSigningError",
+    "read_signing_request",
+    "signing_request_root",
+    "remote_signer_sign",
+    "remote_signer_public_keys",
     "process_operation",
     "LightClientError",
     "ForkChoiceError",
