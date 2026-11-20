@@ -16,6 +16,11 @@ Each join, publish and heartbeat of the run uses a lawful choice.
 - So in each state that a run reaches, the peers that announced each topic appear once each.
 - From a router with no mesh, no fanout and no topics of peers, every run keeps all three.
 - So a join with a lawful choice after such a run keeps every mesh free of a repeated peer.
+- Say no explicit peer is in a mesh at the start of a run.
+  Then the run keeps the explicit peers, and none of them is in a mesh along the run.
+- Say a run starts from a router with no mesh, no fanout and no topics of peers.
+  Then an RPC after the run forwards each message at most once to each peer.
+  That result needs a positive lifetime of the seen cache, and each explicit peer listed once.
 -/
 
 @[expose] public section
@@ -153,5 +158,64 @@ theorem steps_join_mesh_nodup (steps : List (RouterState → RouterState))
       exact RouterStep.join p sel standing now topic hsel
   refine (steps_nodup_of_empty (s := (join p sel standing now topic s).1) _ hj hm hf hk ?_).1 t
   rw [List.foldl_append, ← hs] <;> rfl
+
+/-- One step keeps the explicit peers.
+
+If no explicit peer is in a mesh before the step, none is after it. -/
+private theorem step_explicit {f : RouterState → RouterState} (hf : RouterStep f)
+    {r : RouterState} (h : ∀ t, ∀ q ∈ peersOf r.mesh t, q ∉ r.explicit) :
+    (f r).explicit = r.explicit ∧ ∀ t, ∀ q ∈ peersOf (f r).mesh t, q ∉ (f r).explicit := by
+  cases hf with
+  | receive p b pb st mi v now src rpc =>
+    exact ⟨Router.receiveRpc_explicit_eq p b pb st mi v now src rpc r,
+      Router.receiveRpc_explicit p b pb st mi v now src rpc r h⟩
+  | join p sel st now topic hsel =>
+    exact ⟨Membership.join_explicit_eq p sel st now topic r,
+      Membership.join_explicit p sel st now topic r hsel h⟩
+  | leave c now topic =>
+    exact ⟨Membership.leave_explicit_eq c now topic r, Membership.leave_explicit c now topic r h⟩
+  | publish p c sel st mi now m hsel =>
+    dsimp only
+    rw [Membership.publish_mesh, Membership.publish_explicit_eq]
+    exact ⟨rfl, h⟩
+  | heartbeat p c sel rank st now hsel =>
+    exact ⟨Heartbeat.heartbeat_explicit_eq p c sel rank st now r,
+      Heartbeat.heartbeat_explicit p c sel rank st now r hsel h⟩
+
+/-- Along a run, the explicit peers stay those of the start, and none of them is in a mesh.
+
+Each step of the run must be a step of the router.
+
+The run needs a start where no explicit peer is in a mesh. -/
+theorem steps_explicit (steps : List (RouterState → RouterState))
+    (hsteps : ∀ f ∈ steps, RouterStep f) {s0 s : RouterState}
+    (hd : ∀ t, ∀ q ∈ peersOf s0.mesh t, q ∉ s0.explicit)
+    (hs : s = steps.foldl (fun r f => f r) s0) :
+    s.explicit = s0.explicit ∧ ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit := by
+  rw [hs]
+  refine Router.foldl_inv steps (fun r : RouterState => r.explicit = s0.explicit ∧
+    ∀ t, ∀ q ∈ peersOf r.mesh t, q ∉ r.explicit) (fun r f => f r) (fun r f hf' hr => ?_)
+    ⟨rfl, hd⟩
+  obtain ⟨e, h⟩ := step_explicit (hsteps f hf') hr.2
+  exact ⟨e.trans hr.1, h⟩
+
+/-- An RPC after a run sends each message that it forwards at most once to each peer.
+
+The run must start from a router with no mesh, no fanout and no topics of peers.
+
+Each step of the run must be a step of the router.
+
+It needs a positive lifetime of the seen cache, and each explicit peer listed once at the start. -/
+theorem steps_receiveRpc_forward_nodup (steps : List (RouterState → RouterState))
+    (hsteps : ∀ f ∈ steps, RouterStep f) {s0 s : RouterState} (hm : s0.mesh = [])
+    (hf : s0.fanout = []) (hk : s0.peerTopics = []) (hx : s0.explicit.Nodup)
+    (hs : s = steps.foldl (fun r f => f r) s0) (p : GossipsubParameters) (hp : 0 < p.seen_ttl)
+    (backoffMs pruneBackoffMs : Nat) (standing : PeerId → Standing) (msgId : Message → MessageId)
+    (validate : Message → ValidationResult) (now : Nat) (src : PeerId) (rpc : Rpc) :
+    (receiveRpc p backoffMs pruneBackoffMs standing msgId validate now src rpc s).2.forward.Nodup
+    := by
+  obtain ⟨e, hd⟩ := steps_explicit steps hsteps (fun t q hq => by simp [peersOf, hm] at hq) hs
+  exact Router.receiveRpc_forward_nodup p backoffMs pruneBackoffMs standing msgId validate now src
+    rpc s hp (steps_nodup_of_empty steps hsteps hm hf hk hs).1 (e ▸ hx) hd
 
 end EthLib.Networking.Proofs.Gossip.Steps
