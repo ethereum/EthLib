@@ -30,6 +30,7 @@ public import EthLib.Networking.Proofs.Gossip.MessageId
 public import EthLib.Networking.Proofs.Gossip.Payload
 public import EthLib.Networking.Proofs.Gossip.Router
 public import EthLib.Networking.Proofs.Gossip.Rpc
+public import EthLib.Networking.Proofs.Gossip.Steps
 public import EthLib.Networking.Proofs.Gossip.Subnet
 public import EthLib.Networking.Proofs.Gossip.Topic
 public import EthLib.Networking.Proofs.Gossip.Validation

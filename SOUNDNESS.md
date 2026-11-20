@@ -2692,11 +2692,27 @@ If no mesh holds a peer twice before a leave, none does after it (`leave_mesh_no
 `join_mesh_nodup` proves the same for a join with a lawful choice.
 It also needs the fanout of the topic, and the peers that announced it, to list each peer once.
 With `receiveRpc_mesh_nodup` and `heartbeat_mesh_nodup`, every step of the router thus keeps the meshes free of a repeated peer, under the needs of each theorem.
-No theorem states that those two lists of a join repeat no peer in the states that the router reaches.
 A published message goes only to explicit peers and to peers not below the publish threshold.
 With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
 It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
+
+The fanout of a topic and the peers that announced it repeat no peer in the states that the router reaches.
+A subscription change replaces every entry of its sender, so it keeps each peer listed at most once among the topics of the peers (`applySubscription_nodup`).
+`receiveRpc_peerTopics_nodup` carries this over an RPC, the only step that changes those topics.
+Then the peers that announced each topic appear once each (`topicPeers_nodup`).
+`join_fanout_nodup`, `publish_fanout_nodup` and `heartbeat_fanout_nodup` keep each fanout free of a repeated peer, and an RPC keeps the fanout (`receiveRpc_fanout`).
+A publish that fills an empty fanout takes peers that announced the topic.
+So it also needs a lawful choice, and those peers to appear once each.
+`steps_nodup` (`Networking/Proofs/Gossip/Steps.lean`) carries these properties along a run of RPCs, joins, leaves, publishes and heartbeats.
+Each step of the run is a `RouterStep`, so each join, publish and heartbeat uses a lawful choice.
+In each state that the run reaches, no mesh and no fanout holds a peer twice, and the peers that announced each topic appear once.
+The topics of the peers also list each peer at most once, so a second run can start from that state.
+`steps_nodup_of_empty` states this for a run from a router with no mesh, no fanout and no topics of peers.
+`steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
+That join keeps every mesh free of a repeated peer, with no hypothesis on the state it joins from.
+`receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
+No step changes the explicit peers or adds one to a mesh, but no theorem states along a run that they stay outside every mesh.
 
 The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
 `Select.first_lawful` proves that this choice is lawful.
