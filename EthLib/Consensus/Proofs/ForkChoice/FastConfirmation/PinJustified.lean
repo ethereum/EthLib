@@ -132,17 +132,11 @@ def PinGuarded (last : ℕ) : Prop :=
 
 /-- The voters of a call pin the justified checkpoints of the call's epoch.
 
-Take honest voters whose stake exceeds a third of the total plus the margin and the pin reserve.
+Take honest voters whose stake exceeds a third of the sum of the total, margin and pin reserve.
 
-A justified checkpoint of the call's epoch then has a signer among them, or two stores collide.
+A justified checkpoint of the call's epoch then has a signer among them.
 
-The pin bounds the drift of the quorum.
-
-So the quorum voters outside the set hold less than two thirds of the total.
-
-Honest stores agree on their blocks unless two of them collide.
-
-A store's justified chain reads its own finalized block, by `finality`. -/
+Otherwise two honest stores collide. -/
 theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store preset fork}
     {g : ForkedBeaconState preset} {horizon anchorEpoch : Epoch} {margin first last : ℕ}
     (bls : checks = .bls)

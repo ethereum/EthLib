@@ -90,25 +90,13 @@ private theorem counted_stake_large {anchor : Store preset fork} {g : ForkedBeac
 
 /-- A store's justified checkpoint after an epoch has a signer from a set that the count can't miss.
 
-The checkpoint was set by one count of votes, in a state the store holds or on the way from one.
-
 The count passed, so a validator among the quorum voters of that set voted for the checkpoint.
 
 The set misses the count when the quorum voters outside it hold less than two thirds of the total.
 
 That bound is the premise `fewCounted`, for each state that the store counts in.
 
-It gets the counting data of the state.
-
-That is the held block, the slots toward its child, and the read of the justified block.
-
-It also gets the epoch of the state.
-
-That epoch is after `epoch`, within one of the store's justified epoch, and not after the horizon.
-
-The vote was cast in a block the store holds, below the counting state.
-
-The store reads that block's attestation with a valid signature, and the block was sent.
+The vote was cast in a block that the store holds, below the counting state, and the block was sent.
 
 The anchor's latest header must be the anchor block's, with a zero state root. -/
 theorem Execution.justifiedSigned_at [DecidablePred (· ∈ J)] {anchor : Store preset fork}

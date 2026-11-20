@@ -673,6 +673,7 @@ Not yet released.
   It holds the runs from genesis to the finalized state, the split state, the pulled-up state and the counting state, with the fork bounds.
 
 - `PinDrift.le_pinReserve` is public: under a `PinDrift.Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
+  It takes the setting and the two total active balances.
 
 - `PinGuarded` is public: the a priori guard at a call's finalized state, and a finality lag within the withdrawal delay.
 

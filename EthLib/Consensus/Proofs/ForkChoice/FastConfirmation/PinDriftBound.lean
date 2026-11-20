@@ -675,7 +675,9 @@ Their totals are within three halves of each other.
 
 Both lie between the window's last floor and ceiling.
 
-The guard asks that twice that ceiling be at most three times that floor. -/
+The guard asks that twice that ceiling be at most three times that floor.
+
+So the band follows from the guard, and nothing assumes it. -/
 private theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high : ℕ}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
     (parameters : DirectSafety.Parameters preset) (caps : CapOrder preset)
@@ -701,7 +703,7 @@ private theorem total_band_of_guard {g x y z : ForkedBeaconState preset} {high :
   simp only [stakeCeilingAt, stakeFloorAt, zero] at yLow zHigh ⊢
   omega
 
-/-- The preset facts that the producer of the pin needs.
+/-- The preset facts that the pin's drift bound needs.
 
 Each field is a fact about the preset alone, and a deployed preset has it. -/
 structure PinPresetFacts (preset : Preset) : Prop where
@@ -7341,9 +7343,7 @@ private theorem lowKeys_eq (config : Config)
 
 /-- The setting of the pin's drift bound for one call.
 
-The call's own-epoch runs are left out.
-
-They feed `quorumReserve`, which this check uses only for `joining`. -/
+The call's own-epoch runs are left out. -/
 structure Setting (config : Config) (checks : SignatureChecks) (g : ForkedBeaconState preset)
     (split fin pulled anc counted : BeaconState preset fork) (V : Finset ValidatorIndex) :
     Prop where
@@ -13522,7 +13522,9 @@ private theorem rate_per_increment (I WD F P e0 D : ℕ) (hI : 0 < I) (hWD : 0 <
 
 /-- The base reward per increment is at least four.
 
-The root of a quarter total is below `2 ^ 31`, and `rewardScale` makes the factor at least `2 ^ 35`.
+The root of a quarter total is below `2 ^ 31`.
+
+And `rewardScale` makes the scaled factor at least `2 ^ 35`.
 
 Below the small total the root is at most a fifth of an increment, which the factor covers.
 
@@ -22660,7 +22662,9 @@ The surplus of the slash charge pays `flow_split_of`'s slashed term.
 
 The slash charge is at least an increment and `2 * depthFin * flagRate`.
 
-The flag rate is at most the rate of an increment, and the slash charge has four per epoch.
+The flag rate is at most the rate of an increment.
+
+The slash charge has four of the flag rate for each epoch.
 
 The `syncProposer` part of `proposerCredit` is not used by R's credits.
 
@@ -33570,7 +33574,9 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
 
 /-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
 
-They also take the slash charge's surplus over R's slashed keys and a tenth of the keys' credits.
+They also take the surplus of the slash charge over R's slashed keys.
+
+They take a tenth of the keys' credits too.
 
 The bound is scaled by ten, so the tenth is exact.
 
@@ -34169,13 +34175,15 @@ private theorem stake_le_total {state : BeaconState preset fork} {total : Gwei}
   rw [value]
   exact le_max_right _ _
 
-/-- The top-level step, closed from the bounds of the terms.
+/-- The quorum drifts from a call's pulled-up state to a counting state by at most the pin reserve.
 
 The quorum at the counting state and `V` at the pulled-up state weigh three each.
 
 Their sum is at most twice the counting total, the pulled-up total and `pinReserve`.
 
-It also adds three times the counting stake of the quorum voters that are in `V`. -/
+It also adds three times the counting stake of the quorum voters that are in `V`.
+
+The theorem takes the setting and the two total active balances. -/
 theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted V)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :

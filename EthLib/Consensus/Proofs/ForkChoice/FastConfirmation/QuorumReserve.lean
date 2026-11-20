@@ -21,7 +21,9 @@ A theorem proves the bound of the first, before Gloas from Fulu.
 
 The drift premise of the checked-call headlines follows from it.
 
-`PinDrift.le_pinReserve` bounds the second, from the pulled-up state to a counting state.
+`PinDrift.le_pinReserve` proves the bound of the second.
+
+It bounds the drift from the pulled-up state to a counting state.
 -/
 
 @[expose] public section
@@ -367,7 +369,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   --
   -- `wide` is a natural-number bound on another branch's total, not a copy of a read.
   --
-  -- It holds within the band of totals that the producer of the pin premise assumes.
+  -- It holds within the band of totals that the guard at the finalized state gives.
+  --
+  -- The pin derives that band from the guard, and does not assume it.
   let wide := PinTerms.wide state
   let round (amount : ℕ) := amount - amount % inc
   let activationExitChurn := PinTerms.activationExitChurn preset config wide
