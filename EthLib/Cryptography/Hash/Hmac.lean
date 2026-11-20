@@ -15,7 +15,7 @@ The key is secret, and EthLib makes no constant-time claim (SOUNDNESS.md A3).
 namespace EthLib.Cryptography.Hash.Hmac
 
 /-- The block size `B` of SHA-256, in bytes. -/
-def BLOCK_SIZE : Nat := 64
+def BLOCK_SIZE : Nat := Sha256.BLOCK_SIZE
 
 /-- The inner pad byte `ipad`. -/
 def IPAD : UInt8 := 0x36
