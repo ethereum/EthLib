@@ -113,10 +113,7 @@ theorem depositTargetStatus_applyPendingDeposit {deposit : PendingDeposit}
   funext nextEpoch pubkey
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      rfl
-    simp only [bind_ok_iff] at computed
+  · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · have pushed := addValidatorToRegistry_validators_eq_push computed

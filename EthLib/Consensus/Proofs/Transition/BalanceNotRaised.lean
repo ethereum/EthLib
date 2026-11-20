@@ -502,10 +502,7 @@ private theorem credited_applyPendingDeposit {config : Config} {checks : Signatu
   have inside := (Array.getElem?_eq_some_iff.mp found).1
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      exact Credited.refl index _
-    simp only [bind_ok_iff] at computed
+  · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · exact credited_addValidatorToRegistry altair computed inside

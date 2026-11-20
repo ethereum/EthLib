@@ -166,7 +166,7 @@ inductive Fork where
 
   It schedules EIP-7805 and EIP-8141.
 
-  Heze also holds EIP-8015 and EIP-8365, which EIP-8081 only considers or proposes.
+  Heze also holds EIP-8015, which EIP-8081 only considers, until EthLib decides on it.
 
   On 2026-11-03 all of these EIPs are Drafts, and so is EIP-8081.
 

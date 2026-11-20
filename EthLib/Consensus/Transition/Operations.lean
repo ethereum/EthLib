@@ -435,25 +435,16 @@ A key that a validator has adds the amount to the balance of the first such vali
 A known key at a position of `2^64` or more has no validator index, an overflow.
 
 Before Electra a deposit is credited at once; from Electra it waits in the pending deposits.
-
-From Heze a deposit to a new key with BLS withdrawal credentials changes nothing.
-
-It is not refunded, as [EIP-8365] specifies.
-
-[EIP-8365]: https://eips.ethereum.org/EIPS/eip-8365#deposit-processing
 -/
 def applyPendingDeposit (config : Config) (checks : SignatureChecks)
     (state : BeaconState preset fork) (deposit : PendingDeposit) :
     Except TransitionError (BeaconState preset fork) :=
   match state.validators.data.findIdx? (·.pubkey == deposit.pubkey) with
-  | none =>
-    if .hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0] then
-      pure state
-    else do
-      if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
-          deposit.amount deposit.signature then
-        addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
-      else return state
+  | none => do
+    if ← isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+        deposit.amount deposit.signature then
+      addValidatorToRegistry state deposit.pubkey deposit.withdrawalCredentials deposit.amount
+    else return state
   | some position => liftAccessor do
     increaseBalance state (← liftArith (ofNatChecked position)) deposit.amount
 

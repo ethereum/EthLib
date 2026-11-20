@@ -2,7 +2,7 @@
 
 A Merkle tree commits to many values with one short value, its root.
 A short proof, the path, then shows that one value is among them.
-Hash-based signatures, SSZ and the VRF tree all build such trees.
+Hash-based signatures and SSZ build such trees.
 This module defines the tree once, so that every primitive shares one definition and one set of proofs.
 
 ## The tree
@@ -18,7 +18,7 @@ The children of node `(level + 1, j)` are `(level, 2j)` and `(level, 2j + 1)`, a
 
 The node hash receives the position of the node it computes.
 A hash-based signature reads it, to hash every node under its own address.
-SSZ and the VRF tree ignore it, and hash every node alike.
+SSZ ignores it, and hashes every node alike.
 So one definition serves both kinds of tree, and the completeness and binding theorems hold for both.
 
 The tree never hashes on its own.
@@ -28,8 +28,6 @@ leanXMSS hashes a node with `Th`, under its public parameter and the address `A_
 That address names the layer, the level and the index of the node.
 The hypertree and the FORS trees of leanSPHINCS do the same, with addresses that also name the tree.
 
-The VRF tree prefixes every node input with the 11 bytes `PQ_VRF_NODE`.
-Its proofs show that no node input is also a leaf, secret or output input.
 SSZ hashes the 64 bytes of the two children with SHA-256 and no prefix, as the SSZ specification fixes every root.
 A new primitive chooses its own separation in its node hash.
 The completeness and binding theorems hold whatever it chooses.
@@ -91,7 +89,7 @@ The binding theorems run them in the identity monad, and `RandomOracle/Basic.lea
 
 The files in `RandomOracle/` prove query budgets and probability bounds for both searches when an oracle answers their hash calls.
 The oracle assigns independent uniform answers to distinct `(level, position, left, right)` tuples and remembers repeated inputs.
-The bounds exclude position-ignoring hashes, including those of SSZ and the VRF tree.
+The bounds exclude position-ignoring hashes, including that of SSZ.
 They make no security claim about a concrete hash or quantum queries.
 
 With an empty initial cache and `N` possible answers, `prEvent_collision_le` bounds the probability of a collision among queried inputs by `q^2 / N` for at most `q` classical hash calls.

@@ -35,7 +35,6 @@ public import EthLib.Cryptography.Proofs.ProgrammedPermutation
 public import EthLib.Cryptography.Proofs.DerivationTable
 public import EthLib.Cryptography.Proofs.Xmss
 public import EthLib.Cryptography.Proofs.Sphincs
-public import EthLib.Cryptography.Proofs.Vrf
 public import EthLib.Cryptography.Proofs.Secp256k1
 public import EthLib.Cryptography.Proofs.AltBn128
 public import EthLib.Cryptography.Proofs.Secp256r1

@@ -33,7 +33,6 @@ Each part names the EIPs that define it where they exist, and a later fork adds 
 - Merkle trees: the binary trees of SSZ and of hash-based signatures, with their proofs.
 - Ethash: the proof of work of the execution layer before Paris.
 - Post-quantum signatures: hash-based schemes such as XMSS and SPHINCS, proposed to replace BLS signatures.
-- Verifiable random functions: a hash-based VRF built on a Merkle tree.
 
 ### Serialization
 
@@ -140,7 +139,6 @@ A refinement theorem is a property.
 A **refinement module** is a property module that states a refinement theorem, or uses one in a proof.
 A refinement that holds by definition is still stated as a theorem, so that a reader can find it.
 Its proof unfolds the definitions, often with `rfl`.
-`rootWith_hash` in `EthLib/Cryptography/Proofs/Vrf/Unpredictability.lean` is one.
 
 A module is a model because of what it says, not because of what it imports.
 A module that imports VCVio is a property when its theorems are about the specification.

@@ -228,22 +228,6 @@ def trie_verify_account_proof(root: bytes, answer: dict) -> list[bool] | None:
     """Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."""
     ...
 
-def vrf_verify(root: bytes, index: int, opening: bytes) -> bytes | None:
-    """The output of an opening at an index under a root, or no bytes when verification rejects."""
-    ...
-
-def vrf_secret(seed: bytes, index: int) -> bytes:
-    """`s_i`: the secret of leaf `i`."""
-    ...
-
-def vrf_evaluate(seed: bytes, index: int) -> bytes:
-    """The output at index `i` of the tree of a seed."""
-    ...
-
-def vrf_mix(output: bytes, randomness: bytes) -> bytes:
-    """An output mixed with randomness: the value a selection compares with its threshold."""
-    ...
-
 def crc32(data: bytes) -> bytes:
     """The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."""
     ...

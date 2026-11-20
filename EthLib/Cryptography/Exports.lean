@@ -19,7 +19,6 @@ public import EthLib.Cryptography.Exports.Xmss
 public import EthLib.Cryptography.Exports.Sphincs
 public import EthLib.Cryptography.Exports.Secp256k1
 public import EthLib.Cryptography.Exports.Secp256r1
-public import EthLib.Cryptography.Exports.Vrf
 
 /-!
 # `EthLib.Cryptography.Exports`

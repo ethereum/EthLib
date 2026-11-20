@@ -102,13 +102,6 @@ ETHLIB_SLOW_VECTORS=1 uv run --no-sync pytest bindings/python/tests/sphincs
 `tests/sources.toml` pins its commit.
 The other cases come from the code under test.
 
-## VRF tree
-
-The `vrf/` cases are pinned too.
-Every pytest run rewrites them, and `SHA256SUMS` pins the tree.
-The two valid openings, the secrets and outputs of one seed, and the mixed value come from an independent implementation of the specification.
-The rejections come from the code under test.
-
 ## SHA-256
 
 The `sha256/` cases are pinned too.

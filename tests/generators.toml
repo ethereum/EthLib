@@ -509,15 +509,6 @@ checked = "EthLib/Cryptography/Xmss/README.md names no implementation, and neith
 cases = ["key_gen/key_gen_*_seed/**", "sign/sign_*_leaf/**", "sign/sign_second_tree/**", "sign/sign_short_*/**", "verify/**", "signature_index/**"]
 generator = "ethlib"
 
-[[directories."tests/cryptography/vrf"]]
-cases = ["verify/verify_valid_*/**", "secret/**", "evaluate/**", "mix/**"]
-generator = "not established"
-checked = "the README and format.md files say only 'an independent implementation', and #1652 recomputed the outputs with an unnamed Keccak-256"
-
-[[directories."tests/cryptography/vrf"]]
-cases = ["verify/verify_wrong_*/**", "verify/verify_other_index_*/**", "verify/verify_index_out_of_range/**", "verify/verify_short_*/**"]
-generator = "ethlib"
-
 # The execution layer.
 
 [[directories."tests/engine"]]

@@ -118,7 +118,6 @@ PyObject* SNAP_ERROR;
 PyObject* ERA1_ERROR;
 PyObject* ERA_ERROR;
 PyObject* TRANSACTION_ERROR;
-PyObject* VRF_ERROR;
 PyObject* TRIE_ERROR;
 PyObject* EVM_ERROR;
 PyObject* FEES_ERROR;
@@ -669,10 +668,6 @@ static PyMethodDef methods[] = {
   {"trie_hex_prefix", py_trie_hex_prefix, METH_VARARGS, DOC_trie_hex_prefix},
   {"trie_verify_range", py_trie_verify_range, METH_VARARGS, DOC_trie_verify_range},
   {"trie_verify_account_proof", py_trie_verify_account_proof, METH_VARARGS, DOC_trie_verify_account_proof},
-  {"vrf_verify", py_vrf_verify, METH_VARARGS, DOC_vrf_verify},
-  {"vrf_secret", py_vrf_secret, METH_VARARGS, DOC_vrf_secret},
-  {"vrf_evaluate", py_vrf_evaluate, METH_VARARGS, DOC_vrf_evaluate},
-  {"vrf_mix", py_vrf_mix, METH_VARARGS, DOC_vrf_mix},
   {"crc32", py_crc32, METH_VARARGS, DOC_crc32},
   {"crc32_number", py_crc32_number, METH_VARARGS, DOC_crc32_number},
   {"crc32c", py_crc32c, METH_VARARGS, DOC_crc32c},
@@ -1438,7 +1433,6 @@ PyInit__native(void) {
     ERA1_ERROR = PyObject_GetAttrString(errors, "Era1Error");
     ERA_ERROR = PyObject_GetAttrString(errors, "EraError");
     TRANSACTION_ERROR = PyObject_GetAttrString(errors, "TransactionError");
-    VRF_ERROR = PyObject_GetAttrString(errors, "VrfError");
     TRIE_ERROR = PyObject_GetAttrString(errors, "TrieError");
     EVM_ERROR = PyObject_GetAttrString(errors, "EvmError");
     FEES_ERROR = PyObject_GetAttrString(errors, "FeesError");

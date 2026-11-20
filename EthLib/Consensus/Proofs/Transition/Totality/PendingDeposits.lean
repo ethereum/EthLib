@@ -111,9 +111,7 @@ private theorem applyPendingDeposit_exists_ok (config : Config) (checks : Signat
     Nat.lt_trans room preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   unfold applyPendingDeposit
   split
-  · split
-    · exact ⟨_, rfl⟩
-    obtain ⟨valid, validOk⟩ := isValidDepositSignature_exists_ok config checks deposit.pubkey
+  · obtain ⟨valid, validOk⟩ := isValidDepositSignature_exists_ok config checks deposit.pubkey
       deposit.withdrawalCredentials deposit.amount deposit.signature
     simp only [validOk, bind, Except.bind]
     cases valid

@@ -184,7 +184,6 @@ extern PyObject* SNAP_ERROR;
 extern PyObject* ERA1_ERROR;
 extern PyObject* ERA_ERROR;
 extern PyObject* TRANSACTION_ERROR;
-extern PyObject* VRF_ERROR;
 extern PyObject* TRIE_ERROR;
 extern PyObject* EVM_ERROR;
 extern PyObject* FEES_ERROR;
@@ -304,10 +303,6 @@ PyObject* py_trie_verify_proof                            (PyObject* self, PyObj
 PyObject* py_trie_hex_prefix                              (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_range                            (PyObject* self, PyObject* args);
 PyObject* py_trie_verify_account_proof                    (PyObject* self, PyObject* args);
-PyObject* py_vrf_verify                                   (PyObject* self, PyObject* args);
-PyObject* py_vrf_secret                                   (PyObject* self, PyObject* args);
-PyObject* py_vrf_evaluate                                 (PyObject* self, PyObject* args);
-PyObject* py_vrf_mix                                      (PyObject* self, PyObject* args);
 PyObject* py_crc32                                       (PyObject* self, PyObject* args);
 PyObject* py_crc32_number                                (PyObject* self, PyObject* args);
 PyObject* py_crc32c                                      (PyObject* self, PyObject* args);

@@ -474,7 +474,15 @@ Not yet released.
 - The post-quantum key registration of EIP-8450 is removed, because it is not planned for mainnet.
   Its containers, its gossip checks, its proof of possession and their proofs are gone from Lean.
   The exports `eth_pq_keys_ssz`, `eth_pq_keys_possession_signing_root` and `eth_pq_keys_is_valid_possession_proof` are gone, with the Python functions `pq_keys_ssz`, `pq_keys_possession_signing_root` and `pq_keys_is_valid_possession_proof`.
-  The leanXMSS and VRF specifications are unchanged.
+  The leanXMSS specification is unchanged.
+
+- The hash-based VRF tree is removed, because no scheduled upgrade uses it ([#2011](https://github.com/ethereum/EthLib/issues/2011)).
+  Its specification, its proofs and its known answers are gone, with the Python module `ethlib.cryptography.vrf`, the functions `vrf_verify`, `vrf_secret`, `vrf_evaluate` and `vrf_mix`, and `VrfError`.
+
+- From Heze, a pending deposit to a new key with BLS withdrawal credentials is credited again, as before Heze ([#2011](https://github.com/ethereum/EthLib/issues/2011)).
+  EIP-8365, which drops such a deposit, is only proposed for Hegota in EIP-8081, so EthLib leaves it out.
+  EIP-8015, which EIP-8081 only considers, stays at Heze until the maintainer decides on it.
+  `applyPendingDeposit_of_blsCredentials` and `applyPendingDeposit_blsValidator` are gone, `DepositDroppable` asks only for an invalid signature, and `applyPendingDeposit_new_valid` drops its `notBls` hypothesis.
 
 - In Lean, the exit and partial-withdrawal cases of `withdrawalRequest_cases` record the validator in `WithdrawalAccepted` ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The index is the first with the key of the request.

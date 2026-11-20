@@ -175,7 +175,6 @@ def _make_extension() -> Extension:
             "bindings/python/sha256.c",
             "bindings/python/keccak.c",
             "bindings/python/ethash.c",
-            "bindings/python/vrf.c",
             "bindings/python/crc32.c",
             "bindings/python/crc32c.c",
             "bindings/python/aes.c",

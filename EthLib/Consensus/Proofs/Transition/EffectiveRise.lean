@@ -214,10 +214,7 @@ private theorem appliedDeposits_balances {f : Fork} {s : BeaconState preset f} :
       | none =>
         unfold applyPendingDeposit at step
         split at step
-        · split at step
-          · cases step
-            exact ⟨⟨grows, same⟩, Nat.le_add_right _ _⟩
-          simp only [bind_ok_iff] at step
+        · simp only [bind_ok_iff] at step
           obtain ⟨_, _, step⟩ := step
           split at step
           · obtain ⟨validators, balances⟩ := addValidatorToRegistry_push step matched

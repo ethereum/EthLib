@@ -130,7 +130,7 @@ The statement is written with VCVio's oracle computations and probabilities, so 
 
 ### Merkle trees
 
-leanXMSS, leanSPHINCS, the VRF tree and SSZ build their trees on one definition.
+leanXMSS, leanSPHINCS and SSZ build their trees on one definition.
 Two theorems in `Proofs/Merkle/Binding/` describe what a path binds, for every node hash.
 The first is `climb_binding`, about two climbs from one position that reach one node.
 They are equal, or `findCollision` returns a collision of the node hash at an ancestor of that position.
@@ -183,7 +183,7 @@ The honest ancestors depend on oracle answers, so this search uses the birthday 
 The covered-event theorems also allow adaptive surrounding clients, provided their total budget includes the witness queries and honest-tree construction.
 These statements do not bound attacks on a concrete hash or quantum queries.
 
-The VRF's `verify_unique`, SSZ's `verifyMerkleProof_binding` and the leanXMSS unforgeability proof use `climb_binding`.
+SSZ's `verifyMerkleProof_binding` and the leanXMSS unforgeability proof use `climb_binding`.
 leanXMSS also states `fold_binding` with `climb_binding_node`, which its unforgeability proof does not use.
 
 ### SSZ
@@ -458,50 +458,6 @@ At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
 The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
-
-### VRF tree
-
-A VRF tree commits to secret outputs under one root, and later opens them one index at a time.
-Two theorems in `Proofs/Vrf/Verify.lean` describe it.
-`verify_unique` says that two openings that verify at one index under one root give one output, or `findHashCollision` returns a collision of Keccak-256.
-That search reads only the index and the two openings.
-The theorem holds for every root, including one built to cheat.
-`verify_opening` says that the opening of an honest tree verifies, with the output of its secret.
-
-Uniqueness is reduced to a collision, and no theorem bounds the cost of finding one.
-In the random oracle model, `prEvent_guess_le` (`Proofs/Vrf/Unpredictability.lean`) bounds the chance of guessing an unopened output.
-The secret at the guessed index is uniform, and the adversary sees the root, the hash and the openings at other indices.
-It guesses right with probability at most `(1 + 2 Q) / 2^256`, where `Q = q_H + (q_O + 1) 2^33` counts its hash queries and requests.
-The theorem fixes the index in advance, and does not cover a secret derived from a seed.
-`prEvent_adaptiveGame_le` (`Proofs/Vrf/AdaptiveIndex.lean`) lets the adversary choose the index, with all secrets uniform.
-Its bound is `2^32 (1 + 2 Q) / 2^256`, because the proof splits a win by the index named.
-`prEvent_seedGame_le` (`Proofs/Vrf/SeedSecrets.lean`) does the same for secrets derived from a uniform seed, as key generation derives them.
-One hidden-seed step adds `Q / 2^256` to its bound.
-Verification accepts any tree, so a holder that chooses its secrets can bias every output.
-
-The output hashes its index with its secret: `keccak256(PQ_VRF_OUTPUT | LE32(i) | s)`.
-`outputHash_binding` (`Proofs/Vrf/Verify.lean`) says that two equal outputs come from one index and one secret, or their two output inputs, which differ, are a Keccak-256 collision.
-`verify_index_binding` applies it to two openings that verify at two different indices, under any roots.
-So one secret gives different outputs at different indices, unless Keccak-256 collides.
-That two such outputs behave as independent values is a random-oracle heuristic, which no theorem states.
-A holder can still grind index by index, at about `2^k` hashes per index for a threshold of one in `2^k`.
-
-A selection therefore compares `mixOutput`, the hash of the output with randomness revealed after the root is registered.
-`prEvent_selected_le` (`Proofs/Vrf/Selection.lean`) covers a holder that chooses every secret of its tree.
-The mix is a random oracle, and the tree hash is Keccak-256 itself.
-The holder makes at most `q` mix queries before the randomness is drawn, then opens any index of a set `I` fixed in advance.
-The mixed value of its output lands in a target set `S` with probability at most `|I| |S| / 2^256 + q / 2^256`, plus the chance that `findHashCollision` returns a collision with the honest opening at that index.
-No theorem bounds that last chance, as for uniqueness.
-The theorem says nothing about a holder that registers a root without knowing a tree under it.
-That case would need the tree hash as a random oracle too, and an extractor of the tree from the queries.
-It says nothing either about randomness that the holder knows at registration, or can bias: the game draws it uniformly and independently of the holder.
-The game is EthLib's own.
-`selected_iff_mixOutput` shows that, with `mixOutput` in place of the oracle, its event is exactly the protocol's check.
-
-[EIP-8450](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#cryptographic-helpers) specifies the interface `vrf.Verify` and the property of unique outputs, not the construction.
-The index in the output keeps that interface, and changes every output of the construction that EthLib specified before.
-The EIP's rationale ([Two keys per validator](https://github.com/ethereum/EIPs/blob/46976b2a9bf99f727fb87dc8c809e3a3cdc6b445/EIPS/eip-8450.md#two-keys-per-validator)) says that the root fixes one output per index before the validator knows its inputs.
-That does not stop a holder from choosing its outputs, so the fork that uses the root must select with the mix.
 
 ### BLS12-381
 
@@ -1324,7 +1280,7 @@ Their Theorem 2 rests on the exact term of their Lemma 5, `spongeExact`.
 Their equation (6) approximates that term by the closed form, for `N` well below `2^512`.
 `spongeExact_le_spongeBound` (`Proofs/Indifferentiability.lean`) proves that the closed form bounds the exact term, at every rate, capacity and cost.
 So `keccak256Indifferentiable_of_spongeExact` derives the hypothesis from the same statement with the exact term.
-EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS, VRF or trie proofs uses it yet.
+EthLib proves the hypothesis in neither form, and no theorem of the XMSS, SPHINCS or trie proofs uses it yet.
 The source writes its proof for the padding of its §3.3, while Keccak-256 pads with pad10*1.
 Its §3.3 asks only for an injective padding whose last block is not zero, which pad10*1 meets.
 The distinguisher here asks only for 256-bit outputs of byte strings.
@@ -6790,15 +6746,6 @@ The codeword searches of each scheme share the bullet of that scheme:
   Each new input receives 32 independent uniform bytes, repeated inputs receive the same answer, and the initial cache is empty.
   Only classical queries are counted, and the adversary's private sampling is not.
   The bound says nothing about an attack that uses the structure of Keccak.
-- VRF unpredictability: Keccak-256 is a random oracle on byte strings, as for leanXMSS.
-  The bound says nothing about an attack that uses the structure of Keccak.
-  It counts classical queries only, so it says nothing about a quantum adversary.
-- VRF mixed selection: Keccak-256 on the 74-byte inputs that start with `PQ_VRF_MIX` is a uniformly random function of the output and the randomness, independent of the tree hash.
-  That is the random-oracle assumption for the domain of the mix, and the tree hash stays Keccak-256 itself.
-  The holder can still compute Keccak-256 on mix inputs, and the model ignores those values.
-  No other input of the VRF has 74 bytes, so the mix shares no input with the tree; that is necessary for the assumption, not a proof of it.
-  The randomness is uniform, drawn after the holder registers its tree, and independent of the holder.
-  The bound counts classical mix queries only, and says nothing about an attack that uses the structure of Keccak.
 - BLS: the hash to G2 under the message tag is a random oracle onto the multiples of `g2`, and the hash under the key tag of the proof-of-possession scheme is an independent random oracle onto the same group.
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
@@ -6898,12 +6845,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 530 operations and 51 size constants.
-The Python extension calls 530 of the operations and 51 of the constants.
+Lean exports 526 operations and 51 size constants.
+The Python extension calls 526 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
+11726 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1595), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `wrappers.h` (825), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -7067,7 +7014,6 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/Sphincs/`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`
-- `EthLib/Cryptography/Proofs/Vrf/`
 - `EthLib/Cryptography/Proofs/Wots/`
 - `EthLib/Cryptography/Proofs/Xmss/`
 - `EthLib/Execution/Proofs/Trie/`

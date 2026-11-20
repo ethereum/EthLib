@@ -129,10 +129,7 @@ private theorem stepKeeps_applyPendingDeposit {deposit : PendingDeposit}
     StepKeeps state after := by
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      exact StepKeeps.refl _
-    simp only [bind_ok_iff] at computed
+  · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · exact stepKeeps_addValidatorToRegistry computed

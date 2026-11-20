@@ -149,6 +149,18 @@ HANDLERS = {
 # A mainnet sync committee period is 256 epochs, so the release has no mainnet case of its update.
 MINIMAL_ONLY = {"sync_committee_updates"}
 
+# The release holds EIP-8365 at Heze, which drops a deposit to a new key with BLS credentials.
+# The Hegota meta EIP only proposes EIP-8365, and EthLib leaves it out, so these cases disagree.
+# tests/parity/disagreements.toml lists them in both presets.
+LEFT_OUT = {
+    f"heze/epoch_processing/pending_deposits/pyspec_tests/{name}"
+    for name in (
+        "new_bls_withdrawal_credentials_valid_signature",
+        "bls_withdrawal_credentials_followed_by_eth1_deposit",
+        "bls_withdrawal_credentials_queued_before_heze",
+    )
+}
+
 # The release archives that hold the cases.
 ARCHIVES = {
     "minimal": "consensus-specs/v1.7.0-beta.4/minimal",
@@ -214,6 +226,8 @@ def _archive_cases() -> list:
             for pre in sorted((base / path.split("/", 2)[2]).rglob("pre.ssz_snappy")):
                 case = pre.parent
                 fork, _, handler = case.relative_to(base).parts[:3]
+                if case.relative_to(base).as_posix() in LEFT_OUT:
+                    continue
                 cases.append(
                     pytest.param(
                         preset,

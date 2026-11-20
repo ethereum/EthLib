@@ -18,8 +18,6 @@ That validator goes at the end of the registry, with that key.
 
 A deposit with an invalid signature adds none.
 
-From Heze, a pending deposit to a new key with BLS withdrawal credentials adds none.
-
 Before Electra a block credits a deposit at once.
 
 From Electra a block registers a new key with no balance and queues the deposit.

@@ -22,7 +22,6 @@
           - 'bindings/python/tests/secp256k1/**'
           - 'bindings/python/tests/secp256r1/**'
           - 'bindings/python/tests/sphincs/**'
-          - 'bindings/python/tests/vrf/**'
           - 'bindings/python/tests/xmss/**'
 
 "crypto: aes":
@@ -135,17 +134,6 @@
           - 'EthLib/Cryptography/Exports/Sphincs.lean'
           - 'tests/cryptography/sphincs/**'
           - 'bindings/python/tests/sphincs/**'
-
-"crypto: vrf":
-  - changed-files:
-      - any-glob-to-any-file:
-          - 'EthLib/Cryptography/Vrf.lean'
-          - 'EthLib/Cryptography/Vrf/**'
-          - 'EthLib/Cryptography/Proofs/Vrf.lean'
-          - 'EthLib/Cryptography/Proofs/Vrf/**'
-          - 'EthLib/Cryptography/Exports/Vrf.lean'
-          - 'tests/cryptography/vrf/**'
-          - 'bindings/python/tests/vrf/**'
 
 "crypto: xmss":
   - changed-files:

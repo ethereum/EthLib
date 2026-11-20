@@ -450,3 +450,57 @@ source = "arXiv 2405.00549v4, equation (6) and Definition 4: the safety threshol
 class = "sources-disagree"
 reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/fast_confirmation/is_one_confirmed/pyspec_tests/is_one_confirmed_passes_with_empty_slot_and_attester_in_two_consecutive_slots_2]"'
 upstream = "As of 2026-11-11, consensus-specs #5670 (cc68498a, merged 2026-10-28) fixes it, and no release contains it: the latest release, v1.7.0-beta.4, predates it"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/new_bls_withdrawal_credentials_valid_signature"
+reason = "The release holds EIP-8365 at Heze and drops the deposit, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/new_bls_withdrawal_credentials_valid_signature]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/new_bls_withdrawal_credentials_valid_signature"
+reason = "The release holds EIP-8365 at Heze and drops a deposit to a new key with BLS credentials, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/new_bls_withdrawal_credentials_valid_signature]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_followed_by_eth1_deposit"
+reason = "The release holds EIP-8365 at Heze and drops a deposit to a new key with BLS credentials, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_followed_by_eth1_deposit]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_followed_by_eth1_deposit"
+reason = "The release holds EIP-8365 at Heze and drops a deposit to a new key with BLS credentials, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_followed_by_eth1_deposit]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_queued_before_heze"
+reason = "The release holds EIP-8365 at Heze and drops a deposit to a new key with BLS credentials, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/minimal/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_queued_before_heze]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"
+
+[[disagreement]]
+suite = "consensus-spec-tests"
+case = "tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_queued_before_heze"
+reason = "The release holds EIP-8365 at Heze and drops a deposit to a new key with BLS credentials, while EthLib leaves EIP-8365 out of Hegota and credits it"
+source = "EIP-8081 at EIPs b055feec322fbc37e9d77a393a50b3ff56b31c92 lists EIP-8365 under Proposed for Inclusion, not Scheduled for Inclusion, and #2011 removes it"
+class = "sources-disagree"
+reproduce = 'pytest -m archive "bindings/python/tests/parity/test_consensus.py::test_case[tests/mainnet/heze/epoch_processing/pending_deposits/pyspec_tests/bls_withdrawal_credentials_queued_before_heze]"'
+upstream = "As of 2026-11-20, none: EIP-8081 is a Draft and EIP-8365 is not scheduled"

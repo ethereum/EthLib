@@ -57,10 +57,7 @@ private theorem applyPendingDeposit_slashings {state after : BeaconState preset 
     after.slashings = state.slashings := by
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      rfl
-    simp only [bind_ok_iff] at computed
+  · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · unfold addValidatorToRegistry at computed

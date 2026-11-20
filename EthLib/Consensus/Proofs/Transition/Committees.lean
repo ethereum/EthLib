@@ -805,10 +805,7 @@ theorem pendingFrame_processDeposit (before : fork < .altair) {deposit : Deposit
   have parts : Keeps middle after := by
     unfold applyPendingDeposit at applied
     split at applied
-    · split at applied
-      · cases applied
-        exact Keeps.refl _
-      simp only [bind_ok_iff] at applied
+    · simp only [bind_ok_iff] at applied
       obtain ⟨_, _, applied⟩ := applied
       split at applied
       · exact keeps_addValidatorToRegistry before applied

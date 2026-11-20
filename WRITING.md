@@ -294,7 +294,7 @@ Keep the established term and its spelling, and introduce a long or unfamiliar t
 | Hashes | hash function, digest, Keccak-256, SHA-256, RIPEMD-160, BLAKE2b compression function, CRC-32C |
 | Signatures | BLS signature, BLS12-381, G1 point, G2 point, pairing, aggregate signature, secp256k1, ECDSA, public key recovery, secret key, public key |
 | Commitments | KZG commitment, KZG proof, cell proof, trusted setup, root of unity, evaluation domain |
-| Hash-based signatures | XMSS, leanXMSS, one-time signature, chain, Merkle path, randomizer, epoch, VRF |
+| Hash-based signatures | XMSS, leanXMSS, one-time signature, chain, Merkle path, randomizer, epoch |
 | Test evidence | test vector, known answer, pinned vector, digest manifest, fixture |
 | Native bindings | C export, C extension, Python package, wrapper, object size |
 | Soundness | trust gap, generated fact, axiom, standard axioms, kernel, compiler trust, declaration check, baseline |

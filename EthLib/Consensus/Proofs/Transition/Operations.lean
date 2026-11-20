@@ -936,10 +936,8 @@ theorem applyDeposit_new_valid {pubkey : BLSPubkey} {withdrawalCredentials : Byt
   have notElectra : ¬Fork.pectra ≤ fork := fun le =>
     Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
   have notAltair : ¬Fork.altair ≤ fork := fun le => Nat.lt_irrefl _ (Nat.lt_of_lt_of_le before le)
-  have notHeze : ¬Fork.hegota ≤ fork := fun le =>
-    Nat.lt_irrefl _ (Nat.lt_of_lt_of_le (Nat.lt_trans before (by decide)) le)
   simp only [applyDeposit, notElectra, ↓reduceDIte, applyPendingDeposit, new, valid, bind,
-    Except.bind, ↓reduceIte, addValidatorToRegistry, notAltair, notHeze, false_and] at computed
+    Except.bind, ↓reduceIte, addValidatorToRegistry, notAltair] at computed
   split at computed
   · cases computed
     exact ⟨rfl, rfl⟩
@@ -963,10 +961,7 @@ theorem applyPendingDeposit_kept {deposit : PendingDeposit}
       after.eth1DepositIndex = state.eth1DepositIndex ∧ after.eth1Data = state.eth1Data := by
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      exact ⟨id, rfl, rfl⟩
-    simp only [bind, Except.bind] at computed
+  · simp only [bind, Except.bind] at computed
     split at computed
     · cases computed
     split at computed
@@ -1007,53 +1002,14 @@ theorem addValidatorToRegistry_validator {pubkey : BLSPubkey} {withdrawalCredent
       · exact .inl found
     · cases computed
 
-/-- From Heze, a deposit to a new key with BLS withdrawal credentials changes nothing. -/
-theorem applyPendingDeposit_of_blsCredentials {deposit : PendingDeposit} (heze : .hegota ≤ fork)
-    (new : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
-    (bls : deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]) :
-    applyPendingDeposit config checks state deposit = .ok state := by
-  simp only [applyPendingDeposit, new, heze, bls, and_self, ↓reduceIte, pure, Except.pure]
+/-- A pending deposit is droppable at a state when no validator has its key.
 
-/-- From Heze, a credited deposit creates no validator with BLS withdrawal credentials.
-
-Each validator after with BLS credentials is the validator at the same index before. -/
-theorem applyPendingDeposit_blsValidator {deposit : PendingDeposit} (heze : .hegota ≤ fork)
-    (computed : applyPendingDeposit config checks state deposit = .ok after) {i : Nat}
-    {validator : Validator} (found : after.validators.data[i]? = some validator)
-    (bls : validator.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]) :
-    state.validators.data[i]? = some validator := by
-  unfold applyPendingDeposit at computed
-  split at computed
-  · split at computed
-    · cases computed
-      exact found
-    rename_i notBls
-    simp only [bind, Except.bind] at computed
-    split at computed
-    · cases computed
-    split at computed
-    · refine (addValidatorToRegistry_validator computed found).resolve_right fun added => ?_
-      subst added
-      exact notBls ⟨heze, bls⟩
-    · cases computed
-      exact found
-  · simp only [liftAccessor_ok, bind_ok_iff] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    obtain ⟨_, set⟩ := increaseBalance_ok computed
-    obtain ⟨_, rfl⟩ := setBalance_ok set
-    exact found
-
-/-- A pending deposit is droppable at a state under two conditions.
-
-No validator has its key.
-
-Its signature is invalid or, from Heze, it has BLS withdrawal credentials. -/
+Its signature must also be invalid. -/
 def DepositDroppable (config : Config) (checks : SignatureChecks) (state : BeaconState preset fork)
     (deposit : PendingDeposit) : Prop :=
   state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none ∧
-    (isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
-        deposit.amount deposit.signature = .ok false ∨
-      .hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0])
+    isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
+      deposit.amount deposit.signature = .ok false
 
 /-- A deposit droppable at a state is droppable at an earlier one whose validators all stay. -/
 private theorem DepositDroppable.of_kept {earlier : BeaconState preset fork}
@@ -1069,9 +1025,8 @@ private theorem DepositDroppable.of_kept {earlier : BeaconState preset fork}
 theorem applyPendingDeposit_of_droppable {deposit : PendingDeposit}
     (droppable : DepositDroppable config checks state deposit) :
     applyPendingDeposit config checks state deposit = .ok state := by
-  obtain ⟨new, invalid | ⟨heze, bls⟩⟩ := droppable
-  · simp [applyPendingDeposit, new, invalid, bind, Except.bind, pure, Except.pure]
-  · exact applyPendingDeposit_of_blsCredentials heze new bls
+  obtain ⟨new, invalid⟩ := droppable
+  simp [applyPendingDeposit, new, invalid, bind, Except.bind, pure, Except.pure]
 
 /-- A deposit adds its amount to the sum of the balances, or it is droppable and changes nothing.
 
@@ -1084,10 +1039,6 @@ theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
   unfold applyPendingDeposit at computed
   split at computed
   · rename_i unknown
-    split at computed
-    · rename_i bls
-      cases computed
-      exact .inr ⟨rfl, unknown, .inr bls⟩
     simp only [bind_ok_iff] at computed
     obtain ⟨valid, checked, computed⟩ := computed
     split at computed
@@ -1097,7 +1048,7 @@ theorem balanceSum_applyPendingDeposit {deposit : PendingDeposit}
       simp only [pure, Except.pure, Except.ok.injEq] at computed
       simp only [Bool.not_eq_true] at invalid
       subst invalid
-      exact .inr ⟨computed.symm, unknown, .inl checked⟩
+      exact .inr ⟨computed.symm, unknown, checked⟩
   · simp only [liftAccessor_ok, bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     exact .inl (balanceSum_increaseBalance computed)
@@ -1108,10 +1059,7 @@ theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
     balanceSum after ≤ balanceSum state + deposit.amount.toNat := by
   unfold applyPendingDeposit at computed
   split at computed
-  · split at computed
-    · cases computed
-      exact Nat.le_add_right _ _
-    simp only [bind_ok_iff] at computed
+  · simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed
     · exact balanceSum_addValidatorToRegistry_le computed
@@ -1124,12 +1072,9 @@ theorem balanceSum_applyPendingDeposit_le {deposit : PendingDeposit}
 
 /-- A valid deposit to a new key adds its validator and its amount at the ends of their lists.
 
-From Heze that needs withdrawal credentials other than BLS.
-
-It also needs one balance for each validator. -/
+That needs one balance for each validator. -/
 theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
     (new : state.validators.data.findIdx? (·.pubkey == deposit.pubkey) = none)
-    (notBls : ¬(.hegota ≤ fork ∧ deposit.withdrawalCredentials[0] = BLS_WITHDRAWAL_PREFIX[0]))
     (valid : isValidDepositSignature config checks deposit.pubkey deposit.withdrawalCredentials
       deposit.amount deposit.signature = .ok true)
     (computed : applyPendingDeposit config checks state deposit = .ok after)
@@ -1137,14 +1082,12 @@ theorem applyPendingDeposit_new_valid {deposit : PendingDeposit}
     after.validators.data = state.validators.data.push (getValidatorFromDeposit preset fork
         deposit.pubkey deposit.withdrawalCredentials deposit.amount) ∧
       after.balances.data = state.balances.data.push deposit.amount := by
-  simp only [applyPendingDeposit, new, notBls, ↓reduceIte, bind, Except.bind, valid] at computed
+  simp only [applyPendingDeposit, new, bind, Except.bind, valid] at computed
   exact addValidatorToRegistry_push computed holds
 
 /-- A pending deposit changes nothing, raises a balance, or adds a fresh key.
 
 The first case covers a deposit to a new key with an invalid signature.
-
-From Heze it also covers a new key with BLS withdrawal credentials.
 
 The second case is a deposit to a known key.
 
@@ -1159,9 +1102,6 @@ theorem applyPendingDeposit_cases {deposit : PendingDeposit}
   unfold applyPendingDeposit at computed
   split at computed
   · rename_i absent
-    split at computed
-    · cases computed
-      exact .inl rfl
     simp only [bind_ok_iff] at computed
     obtain ⟨_, _, computed⟩ := computed
     split at computed

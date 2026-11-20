@@ -143,7 +143,6 @@ jobs:
               secp256k1: crypto('secp256k1'),
               secp256r1: crypto('secp256r1'),
               sphincs: crypto('sphincs'),
-              vrf: crypto('vrf'),
               xmss: crypto('xmss'),
               consensus: ['consensus'],
               containers: consensus('containers'),

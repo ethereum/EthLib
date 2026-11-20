@@ -315,10 +315,6 @@ class TransactionError(EthLibError, ValueError):
     """A transaction or its network form was rejected, or a fork name is unknown."""
 
 
-class VrfError(EthLibError, ValueError):
-    """A VRF seed was not 32 bytes, with code 0."""
-
-
 class EvmError(EthLibError, ValueError):
     """An EVM export rejected an argument, an opcode, an immediate byte or a CREATE preimage."""
 
@@ -436,7 +432,6 @@ __all__ = [
     "Era1Error",
     "EraError",
     "TransactionError",
-    "VrfError",
     "TrieError",
     "EvmError",
     "FeesError",

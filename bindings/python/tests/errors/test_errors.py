@@ -274,7 +274,6 @@ def test_unknown_names_have_code_zero() -> None:
         (errors.Discv5Error, (ValueError,)),
         (errors.RlpxError, (ValueError,)),
         (errors.TransactionError, (ValueError,)),
-        (errors.VrfError, (ValueError,)),
         (errors.TrieError, (ValueError,)),
     ],
 )

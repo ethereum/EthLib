@@ -1605,9 +1605,6 @@ private theorem applyPendingDeposit_absent_balances {fork : Fork}
     (inside : i < u.validators.data.size) :
     v.balances.data[i]? = u.balances.data[i]? := by
   simp only [applyPendingDeposit, absent] at ok
-  split at ok
-  · cases ok
-    rfl
   simp only [bind_ok_iff] at ok
   obtain ⟨_, _, ok⟩ := ok
   split at ok

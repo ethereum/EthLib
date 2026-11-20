@@ -14,7 +14,6 @@ __all__ = [
     "secp256r1",
     "sha256",
     "sphincs",
-    "vrf",
     "x25519",
     "xmss",
 ]

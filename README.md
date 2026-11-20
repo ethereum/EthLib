@@ -25,10 +25,9 @@ A module imports only from its own layer or from those below it, and the executi
 | Cryptography | [`Ethash`](EthLib/Cryptography/Ethash/) | the proof of work before Paris: its sizes, seed, cache, dataset items and loop |
 | Cryptography | [`Bls`](EthLib/Cryptography/Bls/) | BLS12-381, BLS signatures and validator key derivation |
 | Cryptography | [`Kzg`](EthLib/Cryptography/Kzg/) | KZG commitments to blobs and cells |
-| Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS, SSZ and the VRF share |
+| Cryptography | [`Merkle`](EthLib/Cryptography/Merkle/) | the perfect binary Merkle tree that leanXMSS, leanSPHINCS and SSZ share |
 | Cryptography | [`Xmss`](EthLib/Cryptography/Xmss/) | leanXMSS, a hash-based signature for a post-quantum consensus layer |
 | Cryptography | [`Sphincs`](EthLib/Cryptography/Sphincs/) | leanSPHINCS, a stateless hash-based signature with FORS for `2^30` signatures |
-| Cryptography | [`Vrf`](EthLib/Cryptography/Vrf/) | the VRF tree, one verifiable random output per index |
 | Serialization | [`Rlp`](EthLib/Serialization/Rlp/) | Recursive Length Prefix, the encoding of the execution layer |
 | Serialization | [`Ssz`](EthLib/Serialization/Ssz/) | Simple Serialize and its merkleization, the encoding of the consensus layer |
 | Networking | [`Encoding`](EthLib/Networking/Encoding/) | the protobuf varint of req/resp messages |

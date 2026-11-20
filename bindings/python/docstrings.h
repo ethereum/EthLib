@@ -164,18 +164,6 @@
 #define DOC_trie_verify_account_proof \
   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256."
 
-#define DOC_vrf_verify \
-  "The output of an opening at an index under a root, or no bytes when verification rejects."
-
-#define DOC_vrf_secret \
-  "`s_i`: the secret of leaf `i`."
-
-#define DOC_vrf_evaluate \
-  "The output at index `i` of the tree of a seed."
-
-#define DOC_vrf_mix \
-  "An output mixed with randomness: the value a selection compares with its threshold."
-
 #define DOC_crc32 \
   "The four digest bytes of CRC-32: the highest power of each byte at its least significant bit."
 
