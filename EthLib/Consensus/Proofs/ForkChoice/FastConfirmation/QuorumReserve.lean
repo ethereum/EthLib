@@ -854,12 +854,14 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         depth * syncProposer)
   let otherGain := otherCredits / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  let creditGain :=
+  let creditLow :=
     (33 * depth * consolidationGain + 11 * depth * otherGain +
       30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10 +
-      (if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
-        else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax)
+        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10
+  let lowRate := 11 * depth * (gainRateMax + 1) ≤ capMax
+  let creditCap := if lowRate then 0
+    else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
+  let creditGain := creditLow + creditCap
   -- A key here that is not yet eligible can be topped up on the other branch alone.
   --
   -- It can then become eligible there and activate deep in the window, while inactive here.
@@ -869,10 +871,11 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A key active by the finalized state can have a larger balance there, and its reward is charged.
   --
   -- The margin check prices that term at zero on every row (64739ed98, section 33).
+  let pendingRB (i : ℕ) := (validator i).any (fun v =>
+    decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
+      v.activationEpoch == FAR_FUTURE_EPOCH)
   let pendingR := if tight then 0 else
-    ∑ i ∈ positions with (validator i).any (fun v =>
-      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
-        v.activationEpoch == FAR_FUTURE_EPOCH),
+    ∑ i ∈ positions with pendingRB i = true,
       (effective i + rise i +
         3 * ((finEB i - effective i - rise i + (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
           p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat))
@@ -885,16 +888,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
     proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
     consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin,
-    otherGain, keptArm,
-    creditLow := (33 * depth * consolidationGain + 11 * depth * otherGain +
-      30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10,
-    creditCap := if 11 * depth * (gainRateMax + 1) ≤ capMax then 0
-      else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax,
-    gainHigh := !decide (11 * depth * (gainRateMax + 1) ≤ capMax),
-    pendingRB := fun i => (validator i).any (fun v =>
-      decide (epoch.toNat < v.activationEligibilityEpoch.toNat) &&
-        v.activationEpoch == FAR_FUTURE_EPOCH),
+    otherGain, keptArm, creditLow, creditCap, gainHigh := !decide lowRate, pendingRB,
     joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
     joinRise,
     exitingB := fun i => decide ((before i || current i) = true ∧
