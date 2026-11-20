@@ -489,6 +489,69 @@ theorem accountable_safety {g x a b : ForkedBeaconState preset}
     exact .inl (by omega)
   · exact .inr hashes
 
+/-- Two conflicting finalized checkpoints put the epoch of `x` at or before the earlier one.
+
+The first checkpoint has the earlier epoch. -/
+theorem epoch_le_of_conflict {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
+    (conflict : Conflict (shared.append left) (shared.append right)
+      a.state.finalizedCheckpoint b.state.finalizedCheckpoint) :
+    (getCurrentEpoch x.state).toNat ≤ a.state.finalizedCheckpoint.epoch.toNat := by
+  have start := conflict_starts shared left right _ _ ordered conflict
+  rw [getCurrentEpoch_toNat]
+  -- The slot of `x` is at most the first slot of the earlier epoch.
+  rcases Nat.eq_zero_or_pos preset.SLOTS_PER_EPOCH.toNat with zero | positive
+  · simp [zero]
+  · exact Nat.div_le_of_le_mul (by rw [Nat.mul_comm]; exact start)
+
+/-- Direct accountable safety in its one-third form, for a stable set of unslashed active keys.
+
+The hypotheses are those of direct accountable safety.
+
+Moreover, each state of either tail up to one epoch past the later finalized epoch keeps the keys.
+
+Each such state has as unslashed active keys those of `x` not slashed since, with their balances.
+
+Its recent keys are all active, and the same holds at `x`.
+
+Then the accountable keys hold at least a third of the unslashed active stake at `x`.
+
+Otherwise SHA-256 collides in the root of a header of the runs, or a header or state has root zero.
+-/
+theorem accountable_safety_third {g x a b : ForkedBeaconState preset}
+    (shared : Run config checks g x) (left : Run config checks x a) (right : Run config checks x b)
+    (parameters : Parameters preset) (genesis : Genesis config checks g)
+    (enoughA : EnoughStake (shared.append left) b.state.finalizedCheckpoint.epoch.toNat)
+    (enoughB : EnoughStake (shared.append right) b.state.finalizedCheckpoint.epoch.toNat)
+    (ordered : a.state.finalizedCheckpoint.epoch ≤ b.state.finalizedCheckpoint.epoch)
+    (conflict : Conflict (shared.append left) (shared.append right)
+      a.state.finalizedCheckpoint b.state.finalizedCheckpoint)
+    (stableA : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
+      (post : Run config checks u a), pre.append post = left →
+        (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
+          StableKeys x u)
+    (stableB : ∀ {u : ForkedBeaconState preset} (pre : Run config checks x u)
+      (post : Run config checks u b), pre.append post = right →
+        (getCurrentEpoch u.state).toNat ≤ b.state.finalizedCheckpoint.epoch.toNat + 1 →
+          StableKeys x u) :
+    Models.stake (effectiveWeight x.state) (unslashedKeys x.state) ≤
+        3 * Models.stake (effectiveWeight x.state) (accountableKeys shared left right) ∨
+      HashEvidence ((shared.append left).hashObjects ++ (shared.append right).hashObjects) := by
+  -- The epoch of `x` is at or before the earlier finalized epoch, so within the window.
+  have startEpoch : (getCurrentEpoch x.state).toNat ≤
+      b.state.finalizedCheckpoint.epoch.toNat + 1 := by
+    have earlier := epoch_le_of_conflict shared left right ordered conflict
+    have later := UInt64.le_iff_toNat_le.mp ordered
+    omega
+  have zeroA := derivedDrift_eq_zero_of_stableKeys _ left startEpoch stableA
+  have zeroB := derivedDrift_eq_zero_of_stableKeys _ right startEpoch stableB
+  rcases accountable_safety shared left right parameters genesis enoughA enoughB ordered
+    conflict with bound | hashes
+  · rw [zeroA, zeroB] at bound
+    exact .inl (by simpa using bound)
+  · exact .inr hashes
+
 /-- The drift at the state of a quorum of the view is at most the drift of the tail.
 
 The quorum targets an epoch from `low` to `high`, and `x` is no later than the first slot of `low`.

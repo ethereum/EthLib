@@ -9,6 +9,11 @@ Not yet released.
 
 ### Proof additions
 
+- Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
+  `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
+  `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
+  In both, the keys must stay stable up to one epoch past the later finalized epoch.
+
 - On a chain whose digests name their forks, the digest of each update or bootstrap of a valid light client response names the fork of its epoch ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
   `forkOfDigest_of_isValidLightClientUpdatesByRangeResponse` and `forkOfDigest_of_isValidLightClientBootstrapResponse` state it.
   `isValidLightClientUpdatesByRangeResponse_iff_without_count` shows that the updates check needs no bound of its length by the count.
