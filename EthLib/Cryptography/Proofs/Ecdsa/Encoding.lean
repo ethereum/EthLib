@@ -25,8 +25,9 @@ theorem read?_eq (b : ByteArray) :
     read? b = if b.size = SIGNATURE_LEN then
       some (Base.bytesToNat (b.data.toList.take 32), Base.bytesToNat (b.data.toList.drop 32))
     else none := by
-  by_cases h : b.size = SIGNATURE_LEN <;>
-    simp [read?, Base.exactBytes?, Base.exactArray?, toNats, h]
+  by_cases h : b.size = SIGNATURE_LEN
+  · simp [read?, Base.exactBytes?_of_size_eq h, toNats, h]
+  · simp [read?, Base.exactBytes?_of_size_ne h, h]
 
 /-- The bytes of `r` and `s` read back as `r` and `s`, each modulo `2^256`. -/
 @[simp] theorem toNats_toBytes (r s : Nat) :

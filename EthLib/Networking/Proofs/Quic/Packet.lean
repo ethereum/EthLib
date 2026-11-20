@@ -284,7 +284,7 @@ theorem decodeList_retry (d s t : ByteArray) (tag : Vector UInt8 16) (unused : F
     hf128, ↓reduceIte, uint_encode, Nat.one_mod, show (1 : Nat) ≠ 0 by decide,
     connectionId_encode _ _ 20 hd (by decide), connectionId_encode _ _ 20 hs (by decide),
     require, Base.ByteReader.require, hf64, hf16, remainder, hlength, hsplit, htake, hdrop,
-    htag, ↓reduceDIte, hm, Fin.eta, Vector.toArray_toList, Vector.mk_toArray,
+    StateT.lift, Vector.toArray_toList, Base.exactArray_toArray, hm, Fin.eta,
     Base.toByteArray_data_toList]
 
 /-- Reading four version bytes recovers a version and then reads the remaining versions. -/

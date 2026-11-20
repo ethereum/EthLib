@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.Proofs.ForkChoice.Store
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
@@ -81,7 +82,7 @@ private theorem parseUInt64_toHex (data : Bytes) : parseUInt64 (toHex data) = no
 /-- The hex text of bytes reads back as those bytes when the count fits. -/
 private theorem parseHexBytes_toHex {count : Nat} (data : Vector UInt8 count) :
     parseHexBytes count (toHex data.toArray) = some data := by
-  simp [parseHexBytes, Base.exactBytes?, Base.exactArray?, ofHex_toHex]
+  simp [parseHexBytes, Base.exactBytes?, Base.exactArray?_toArray, ofHex_toHex]
 
 /-- The hex text of bytes is none of the words, which start with a letter. -/
 private theorem toHex_ne_word (data : Bytes) {word : String} (c : Char)

@@ -245,9 +245,8 @@ def reqRespResponseValidOf
   | .inclusionListsByIndices =>
     let request ← decodeRequest (InclusionListsByIndicesRequest preset) request
     let seats := preset.INCLUSION_LIST_COMMITTEE_SIZE.toNat
-    let committee ← if h : committee.length = seats then
-        pure (committee.toArray.toVector.cast (by simpa using h))
-      else throw (0, s!"the committee has {committee.length} seats, not {seats}")
+    let committee ← exactArray seats committee.toArray fun count =>
+      (0, s!"the committee has {count} seats, not {seats}")
     let lists ← decodeItems (Slot × ValidatorIndex × Root)
       (fun (slot, validatorIndex, dependentRoot) =>
         InclusionList.mk slot validatorIndex dependentRoot ⟨#[]⟩) items

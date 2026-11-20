@@ -76,11 +76,8 @@ def codePoint : Reader CodePoint := do
   if h : n < 2 ^ 16 then return ⟨n, h⟩ else throw .length
 
 /-- Read a fixed-size byte vector. -/
-def vector (n : Nat) : Reader (Vector UInt8 n) := do
-  let data ← bytes n
-  if h : data.length = n then return ⟨data.toArray, by simpa using h⟩
-  -- Unreachable: the read above returns exactly `n` bytes.
-  else throw (.truncated n data.length)
+abbrev vector (n : Nat) : Reader (Vector UInt8 n) := fun input =>
+  Base.ByteReader.vector (.truncated n input.length) n input
 
 /-- Read a vector whose encoded byte length lies between the inclusive bounds (§3.4). -/
 def blob (width minimum maximum : Nat) : Reader (List UInt8) := do

@@ -28,16 +28,11 @@ open EthLib.Exports (Result)
 def readBlock (what : String) (bytes : ByteArray) : Result Block :=
   Base.exactBytes 16 bytes fun size => (0, s!"bad {what} size: {size}, expected 16")
 
-/-- The forward cipher of a 16-byte or 32-byte key, or an error for any other length. -/
-def readCiph (key : ByteArray) : Result (Block → Block) :=
-  if h : key.data.size = 16 then pure (ciph .aes128 ⟨key.data, h⟩)
-  else if h : key.data.size = 32 then pure (ciph .aes256 ⟨key.data, h⟩)
-  else throw (0, s!"bad key size: {key.size}, expected 16 or 32")
-
-/-- The inverse cipher of a 16-byte or 32-byte key, or an error for any other length. -/
-def readCiphInv (key : ByteArray) : Result (Block → Block) :=
-  if h : key.data.size = 16 then pure (ciphInv .aes128 ⟨key.data, h⟩)
-  else if h : key.data.size = 32 then pure (ciphInv .aes256 ⟨key.data, h⟩)
+/-- A cipher under a 16-byte or 32-byte key, or an error for any other length. -/
+def readCipher (cipher : (k : KeySize) → Key k → Block → Block) (key : ByteArray) :
+    Result (Block → Block) :=
+  if let some k := Base.exactBytes? 16 key then pure (cipher .aes128 k)
+  else if let some k := Base.exactBytes? 32 key then pure (cipher .aes256 k)
   else throw (0, s!"bad key size: {key.size}, expected 16 or 32")
 
 /-- A GCM result, with the code and the message of its error. -/
@@ -47,25 +42,25 @@ def runGcm {α : Type} (act : Except Gcm.Error α) : Result α :=
 /-- The forward cipher `CIPH_K` of FIPS 197 §5 on one block. -/
 @[export eth_aes_encrypt_block]
 def encryptBlock (key block : ByteArray) : Result ByteArray := do
-  let f ← readCiph key
+  let f ← readCipher ciph key
   return ⟨(f (← readBlock "block" block)).toArray⟩
 
 /-- The inverse cipher `CIPH_K^-1` of FIPS 197 §5 on one block. -/
 @[export eth_aes_decrypt_block]
 def decryptBlock (key block : ByteArray) : Result ByteArray := do
-  let f ← readCiphInv key
+  let f ← readCipher ciphInv key
   return ⟨(f (← readBlock "block" block)).toArray⟩
 
 /-- CTR encryption or decryption of SP 800-38A §6.5, with the increment over the whole block. -/
 @[export eth_aes_ctr]
 def ctrExport (key initialCounter data : ByteArray) : Result ByteArray := do
-  let f ← readCiph key
+  let f ← readCipher ciph key
   return ctr f 128 (← readBlock "counter" initialCounter) data
 
 /-- GCM-AE of SP 800-38D §7.1: the ciphertext, then the tag of `tagLength` bytes. -/
 @[export eth_aes_gcm_encrypt]
 def gcmEncrypt (key iv plaintext aad : ByteArray) (tagLength : UInt64) : Result ByteArray := do
-  let f ← readCiph key
+  let f ← readCipher ciph key
   let (c, t) ← runGcm (Gcm.encrypt f tagLength.toNat iv plaintext aad)
   return c ++ t
 
@@ -75,7 +70,7 @@ The tag length belongs to the key, so the caller gives it, and a tag of another 
 @[export eth_aes_gcm_decrypt]
 def gcmDecrypt (key iv ciphertext aad tag : ByteArray) (tagLength : UInt64) :
     Result ByteArray := do
-  let f ← readCiph key
+  let f ← readCipher ciph key
   runGcm (Gcm.decrypt f tagLength.toNat iv ciphertext aad tag)
 
 end EthLib.Cryptography.Aes.Exports

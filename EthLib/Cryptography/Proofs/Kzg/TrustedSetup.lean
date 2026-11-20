@@ -39,15 +39,15 @@ structure TrustedSetup.Valid (s : TrustedSetup) : Prop where
 /-- A setup string decodes to a `G1` point exactly when it is a compressed point of 48 bytes. -/
 theorem TrustedSetup.decodeG1_eq_ok {b : ByteArray} {p : G1} :
     TrustedSetup.decodeG1 b = .ok p ↔ ∃ v, packBytes v = b ∧ G1.uncompress v = .ok p := by
-  unfold TrustedSetup.decodeG1 exactBytes? Base.exactArray?
+  unfold TrustedSetup.decodeG1
   by_cases hsz : b.size = 48
-  · rw [dite_eq_left (by rwa [ByteArray.size_data])]
+  · rw [Base.exactBytes?_of_size_eq hsz]
     dsimp only
     rw [Base.mapError_ok_iff]
     refine ⟨fun h => ⟨_, rfl, h⟩, fun ⟨v, hv, h⟩ => ?_⟩
     -- The vector with the bytes of `b` is `v`, since their bytes agree.
     rwa [show (⟨b.data, hsz⟩ : Vector UInt8 48) = v from packBytes_injective hv.symm]
-  · rw [dite_eq_right (by rwa [ByteArray.size_data])]
+  · rw [Base.exactBytes?_of_size_ne hsz]
     dsimp only
     refine ⟨fun h => (by cases h), fun ⟨v, hv, _⟩ => absurd ?_ hsz⟩
     rw [← hv, size_packBytes]
@@ -61,15 +61,15 @@ private theorem valid_of_toG1 {b : ByteArray} {p : G1} (h : TrustedSetup.decodeG
 /-- A setup string decodes to a `G2` point exactly when it is a compressed point of 96 bytes. -/
 theorem TrustedSetup.decodeG2_eq_ok {b : ByteArray} {p : G2} :
     TrustedSetup.decodeG2 b = .ok p ↔ ∃ v, packBytes v = b ∧ G2.uncompress v = .ok p := by
-  unfold TrustedSetup.decodeG2 exactBytes? Base.exactArray?
+  unfold TrustedSetup.decodeG2
   by_cases hsz : b.size = 96
-  · rw [dite_eq_left (by rwa [ByteArray.size_data])]
+  · rw [Base.exactBytes?_of_size_eq hsz]
     dsimp only
     rw [Base.mapError_ok_iff]
     refine ⟨fun h => ⟨_, rfl, h⟩, fun ⟨v, hv, h⟩ => ?_⟩
     -- The vector with the bytes of `b` is `v`, since their bytes agree.
     rwa [show (⟨b.data, hsz⟩ : Vector UInt8 96) = v from packBytes_injective hv.symm]
-  · rw [dite_eq_right (by rwa [ByteArray.size_data])]
+  · rw [Base.exactBytes?_of_size_ne hsz]
     dsimp only
     refine ⟨fun h => (by cases h), fun ⟨v, hv, _⟩ => absurd ?_ hsz⟩
     rw [← hv, size_packBytes]

@@ -436,11 +436,8 @@ theorem blobAndProofV2OfJson_json (x : BlobAndProofV2) :
     (List.mem_cons_of_mem _ (List.mem_cons_self ..))
   unfold blobAndProofV2OfJson blobAndProofV2Json
   simp only [bind, Except.bind, hfs, hex, ite_true, r1, r2, Serialization.JsonRpc.fixed_dataJson,
-    Serialization.JsonRpc.array_fixed_listJson, pure, Except.pure]
-  have hl : x.proofs.toList.length = CELLS_PER_EXT_BLOB := by simp
-  simp only [hl, ↓reduceDIte]
-  rcases x with ⟨b, ⟨⟨l⟩, h⟩⟩
-  rfl
+    Serialization.JsonRpc.array_fixed_listJson, Vector.toArray_toList, exactArray_toArray,
+    pure, Except.pure]
 
 /-- A JSON value reads as a blob and its proof exactly when it is an object of the form below.
 
@@ -498,17 +495,18 @@ theorem blobAndProofV2OfJson_eq_ok_iff {j : Lean.Json} {x : BlobAndProofV2} :
       Serialization.JsonRpc.array_fixed_false_eq_ok_iff]
     obtain ⟨blob, proofs⟩ := x
     constructor
-    · rintro ⟨_, hb, blob, rfl, _, hp, l, rfl, h⟩
-      split at h
-      · cases h
-        exact ⟨hb, hp⟩
-      -- A count of proofs other than one per cell fails.
-      · cases h
+    · rintro ⟨_, hb, blob, rfl, _, hp, l, rfl, v, made, h⟩
+      simp only [pure, Except.pure, Except.ok.injEq, BlobAndProofV2.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      -- Only a count of one proof per cell reads, and it keeps the proofs.
+      have same : l = v.toArray.toList := by
+        simpa using congrArg Array.toList (exactArray_eq_ok_iff.mp made).symm
+      subst same
+      exact ⟨hb, hp⟩
     · rintro ⟨hb, hp⟩
-      refine ⟨_, hb, blob, rfl, _, hp, proofs.toList, rfl, ?_⟩
-      simp only [Vector.length_toList, ↓reduceDIte, pure, Except.pure]
-      rcases proofs with ⟨⟨l⟩, h⟩
-      rfl
+      refine ⟨_, hb, blob, rfl, _, hp, proofs.toList, rfl, proofs, ?_, rfl⟩
+      rw [Vector.toArray_toList]
+      exact exactArray_toArray proofs _
   -- Any other set of members fails, never with a blob.
   · simp [hex, bind, Except.bind, Serialization.JsonRpc.reject]
 

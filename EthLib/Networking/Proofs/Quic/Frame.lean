@@ -26,14 +26,6 @@ theorem optional_encode (value : Option Varint) (rest : List UInt8) :
       bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
       List.nil_append, varint_encode]
 
-/-- Reading an opaque fixed-size field preserves its bytes exactly. -/
-theorem vector_encode (n : Nat) (value : Vector UInt8 n) (rest : List UInt8) :
-    vector n (value.toList ++ rest) = .ok (value, rest) := by
-  have hl : value.toList.length = n := by simp
-  simp only [vector, bind, pure, StateT.bind, StateT.pure, Except.bind, Except.pure,
-    ← hl, bytes_append, ↓reduceDIte]
-  simp only [Vector.toArray_toList, Vector.mk_toArray]
-
 /-- The additional ACK ranges decode in the same order in which they were written. -/
 theorem ranges_encode (values : List AckRange) (rest : List UInt8) :
     ranges values.length (encodeRanges values ++ rest) = .ok (values, rest) := by
