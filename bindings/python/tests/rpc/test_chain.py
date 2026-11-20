@@ -752,17 +752,55 @@ def test_proof_at_each_block() -> None:
         # Slot 0 is set once it holds a word other than zero.
         assert trie.verify_account_proof(root, proof) == [int(word, 16) != 0, False]
         assert (proof["balance"], proof["nonce"]) == (balance, nonce)
-        assert [slot["key"] for slot in proof["storageProof"]] == ["0x0", "0x6"]
+        assert [slot["key"] for slot in proof["storageProof"]] == [KEY, "0x6"]
         # The storage query gives a word on 32 bytes, and the proof a quantity.
         assert [slot["value"] for slot in proof["storageProof"]] == [hex(int(word, 16)), "0x0"]
         assert trie.verify_account_proof(root, absent) is None
-        slot = absent["storageProof"][0]
-        assert (absent["balance"], absent["nonce"], slot["key"], slot["value"]) == (
+        # The text of the method gives an absent account zero hashes, and slots without nodes.
+        assert (absent["balance"], absent["nonce"], absent["codeHash"], absent["storageHash"]) == (
             "0x0",
             "0x0",
-            "0x1",
-            "0x0",
+            "0x" + "00" * 32,
+            "0x" + "00" * 32,
         )
+        assert absent["storageProof"] == [{"key": "0x1", "value": "0x0", "proof": []}]
+
+
+def test_proof_of_missing_account() -> None:
+    """The request of the fixture `get-account-proof-missing-account.io` of execution-apis."""
+    result = _call(
+        "eth_getProof", ["0x000000000000000000000000000000000000dead", ["0x0"], "latest"]
+    )
+    assert (result["codeHash"], result["storageHash"]) == ("0x" + "00" * 32, "0x" + "00" * 32)
+    assert result["storageProof"] == [{"key": "0x0", "value": "0x0", "proof": []}]
+
+
+# Each requested key of slot 1, and the key that the answer gives back for it.
+# A key of 63 or 64 hex digits comes back as 32 bytes, and any other key as a number.
+KEY_ECHOES: Final = [
+    ("0x1", "0x1"),
+    ("0x01", "0x1"),
+    ("0x" + "0" * 61 + "1", "0x1"),
+    ("0x" + "0" * 62 + "1", "0x" + "00" * 31 + "01"),
+    ("0x" + "0" * 63 + "1", "0x" + "00" * 31 + "01"),
+]
+
+
+def test_proof_key_echo() -> None:
+    """Each key comes back in its requested form, in order, with a duplicate kept."""
+    keys = [key for key, _ in KEY_ECHOES] + ["0x1"]
+    result = _call("eth_getProof", [CONTRACT, keys, "latest"])
+    echoed = [slot["key"] for slot in result["storageProof"]]
+    assert echoed == [echo for _, echo in KEY_ECHOES] + ["0x1"]
+    # Every form names slot 1, so every entry gives the same word and proof.
+    assert len({json.dumps(slot | {"key": None}) for slot in result["storageProof"]}) == 1
+
+
+def test_proof_empty_key() -> None:
+    """The empty key `0x` names slot 0, and comes back as `0x0`."""
+    empty, zero = _call("eth_getProof", [CONTRACT, ["0x", "0x0"], "latest"])["storageProof"]
+    assert empty == zero
+    assert empty["key"] == "0x0"
 
 
 def test_account_at_each_block() -> None:

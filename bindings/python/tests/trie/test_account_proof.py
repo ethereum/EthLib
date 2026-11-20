@@ -39,6 +39,31 @@ def test_answer_holds(path: Path) -> None:
     assert trie.verify_account_proof(STATE_ROOT, answer) == [True] * len(answer["storageProof"])
 
 
+@pytest.mark.parametrize("key", ["0x" + "00" * 32, "0x0"], ids=len)
+def test_key_forms(key: str) -> None:
+    """A key of 32 bytes and a quantity name the same slot 0."""
+    slot = dict(_WITH_STORAGE["storageProof"][0], key=key)
+    answer = dict(_WITH_STORAGE, storageProof=[slot])
+    assert trie.verify_account_proof(STATE_ROOT, answer) == [True]
+
+
+@pytest.mark.parametrize(
+    ("key", "message"),
+    [
+        ("0x00", "key: leading zero"),
+        ("0x" + "0" * 63, "key: leading zero"),
+        ("0x", "key: no digits"),
+    ],
+    ids=len,
+)
+def test_key_out_of_schema(key: str, message: str) -> None:
+    """An answer key is 32 bytes or a quantity, so other forms of a request key are refused."""
+    slot = dict(_WITH_STORAGE["storageProof"][0], key=key)
+    with raises(TrieError, message) as error:
+        trie.verify_account_proof(STATE_ROOT, dict(_WITH_STORAGE, storageProof=[slot]))
+    assert error.value.code == 0
+
+
 def test_wrong_balance() -> None:
     """A balance other than that of the proven account does not hold."""
     answer = dict(_WITH_STORAGE, balance="0x6c")
@@ -112,40 +137,45 @@ def test_slot_proof_fails() -> None:
 _EMPTY_ROOT = keccak256(rlp.encode(b""))
 
 # The answer for an address without an account, against the empty state.
-# Its hashes are those of an account with no code and no storage.
+# The method text of execution-apis gives such an address zero hashes.
+_ZERO = "0x" + "00" * 32
 _ABSENT = {
     "address": _WITH_STORAGE["address"],
     "nonce": "0x0",
     "balance": "0x0",
-    "codeHash": "0x" + keccak256(b"").hex(),
-    "storageHash": "0x" + _EMPTY_ROOT.hex(),
+    "codeHash": _ZERO,
+    "storageHash": _ZERO,
     "accountProof": ["0x80"],
     "storageProof": [],
 }
 
 
 def test_absent_account() -> None:
-    """An empty state shows the address absent, with the hashes of no code and no storage."""
+    """An empty state shows the address absent, with zero hashes."""
     assert trie.verify_account_proof(_EMPTY_ROOT, _ABSENT) is None
 
 
-@pytest.mark.parametrize(
-    "zero_fields",
-    [("codeHash", "storageHash"), ("codeHash",), ("storageHash",)],
-    ids="+".join,
-)
-def test_absent_account_zero_hashes(zero_fields: tuple[str, ...]) -> None:
-    """An absent account may give the zero hash for either hash, or both, judged apart."""
-    answer = dict(_ABSENT, **dict.fromkeys(zero_fields, "0x" + "00" * 32))
-    assert trie.verify_account_proof(_EMPTY_ROOT, answer) is None
-
-
-@pytest.mark.parametrize("proof", [[], ["0x80"], ["0x01"]], ids=repr)
-def test_absent_account_slot(proof: list[str]) -> None:
-    """A slot of an absent account that gives the word 0 holds, whatever its proof."""
-    slot = {"key": "0x1", "value": "0x0", "proof": proof}
+def test_absent_account_slot() -> None:
+    """A slot of an absent account that gives the word 0 and no proof node holds."""
+    slot = {"key": "0x1", "value": "0x0", "proof": []}
     answer = dict(_ABSENT, storageProof=[slot])
     assert trie.verify_account_proof(_EMPTY_ROOT, answer) is None
+
+
+@pytest.mark.parametrize("proof", [["0x80"], ["0x01"]], ids=repr)
+def test_absent_account_slot_with_proof(proof: list[str]) -> None:
+    """A slot of an absent account with a proof node does not hold, with its index."""
+    slots = [
+        {"key": "0x1", "value": "0x0", "proof": []},
+        {"key": "0x2", "value": "0x0", "proof": proof},
+    ]
+    with raises(
+        TrieError,
+        "answer does not hold: EthLib.Execution.State.AccountProofError.absentSlotProof "
+        "(index := 1)",
+    ) as error:
+        trie.verify_account_proof(_EMPTY_ROOT, dict(_ABSENT, storageProof=slots))
+    assert error.value.code == 507
 
 
 def test_absent_account_slot_nonzero() -> None:
@@ -170,13 +200,13 @@ def test_absent_account_slot_nonzero() -> None:
         ("balance", "0x1"),
         ("codeHash", "0x" + "11" * 32),
         ("storageHash", _WITH_STORAGE["storageHash"]),
-        # The empty value of one hash is not a reading of the other.
-        ("codeHash", "0x" + _EMPTY_ROOT.hex()),
-        ("storageHash", "0x" + keccak256(b"").hex()),
+        # The hashes of an account with no code and no storage are not zero.
+        ("codeHash", "0x" + keccak256(b"").hex()),
+        ("storageHash", "0x" + _EMPTY_ROOT.hex()),
     ],
 )
 def test_absent_account_field(field: str, value: str) -> None:
-    """An absent account with a field that fits no reading of an absent account does not hold."""
+    """An absent account with a number other than 0 or a hash other than zero does not hold."""
     with raises(
         TrieError, "answer does not hold: EthLib.Execution.State.AccountProofError.accountMismatch"
     ) as error:

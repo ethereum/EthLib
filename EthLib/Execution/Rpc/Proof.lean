@@ -20,15 +20,19 @@ The writer does not bound the nonce, so the reader takes back only a nonce below
 
 A code hash or a storage root is 32 bytes, and each node of a proof a byte string.
 
-A storage key has at most 64 hex digits, as the `bytesMax32` type of the schema allows.
+A storage key of a request has at most 64 hex digits, as the `bytesMax32` type allows.
 
-The reader takes a key as a number on 32 bytes.
+The reader takes it as a number on 32 bytes, and an empty key `0x` as `0`.
 
-The answer writes each key as a quantity, without leading zeros.
+The reader of an answer takes a key only as 32 bytes, or as a quantity without leading zeros.
 
-The fixture `get-account-proof-with-storage.io` asks for the key `0x00` and expects `0x0`.
+The answer has one slot for each key, in the order of the request, even for a key given twice.
 
-The schema allows both forms, and no text fixes the form of the echo.
+Each slot gives back its key in the form of the [method text][method].
+
+A key of 63 or 64 hex digits comes back as 32 bytes, and any other key as a number.
+
+The source asks a node to take at least 1024 keys; here a request may hold any number of keys.
 
 The answer writes the address in lower case, as the fixtures do.
 
@@ -36,10 +40,13 @@ A trie of the state that the node cannot encode gets `-32603`.
 
 The source does not bound how far back a node serves proofs.
 
-Here it serves them at every block that it holds.
+Here it serves them at every block that it holds, so it never gives the error `4444`.
 
-[state]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/state.yaml
-[schema]: https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/schemas/state.yaml
+That error is for a node that drops old state.
+
+[state]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml
+[method]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/eth/state.yaml#L161-L200
+[schema]: https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/state.yaml#L1-L62
 -/
 
 @[expose] public section
@@ -49,7 +56,29 @@ namespace EthLib.Execution.Rpc
 open Lean (Json)
 open EthLib.Base
 open EthLib.Serialization.JsonRpc
-open EthLib.Execution.State (AccountProof StorageProof)
+open EthLib.Execution.State (AccountProof StorageKey StorageProof)
+
+/-- A storage key of a request: at most 64 hex digits, read as a slot.
+
+A key of 63 or 64 digits comes back in the answer as 32 bytes, and any other key as a number. -/
+def storageKey (what : String) (j : Json) : Read StorageKey := do
+  let slot ← bytesMax32 what j
+  let digits ← hexDigits what j
+  return ⟨slot, 63 ≤ digits.size⟩
+
+/-- The key of a slot of an answer: 32 bytes, or a quantity, as the schema of the answer allows.
+
+A key of 64 hex digits is 32 bytes, and any other key must be a quantity without leading zeros. -/
+def answerKey (what : String) (j : Json) : Read StorageKey := do
+  let slot ← bytesMax32 what j
+  let digits ← hexDigits what j
+  if digits.size = 64 then return ⟨slot, true⟩
+  let _ ← quantity what 256 j
+  return ⟨slot, false⟩
+
+/-- The JSON of a storage key, in the form in which the request gave it. -/
+def storageKeyJson (key : StorageKey) : Json :=
+  if key.asBytes then dataJson key.slot.toList else quantityJson (bytesToNat key.slot.toList)
 
 /-- The nodes of a proof, each a byte string. -/
 def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=
@@ -58,7 +87,7 @@ def proofNodes (what : String) (j : Json) : Read (List ByteArray) :=
 /-- One slot of an answer: its key, its word and the nodes of its proof. -/
 def storageProofOfJson (j : Json) : Read StorageProof := do
   let fs ← fields "slot" j
-  return ⟨← bytesMax32 "key" (← field "slot" fs "key"),
+  return ⟨← answerKey "key" (← field "slot" fs "key"),
     BitVec.ofNat 256 (← quantity "value" 256 (← field "slot" fs "value")),
     ← proofNodes "proof" (← field "slot" fs "proof")⟩
 
@@ -79,9 +108,10 @@ def accountProofOfJson (j : Json) : Read AccountProof := do
 def proofNodesJson (nodes : List ByteArray) : Json :=
   listJson (dataJson ·.toList) nodes
 
-/-- The JSON of one slot of an answer: the key as a quantity, the word and the proof. -/
+/-- The JSON of one slot of an answer: the key in the form of the request, the word and the proof.
+-/
 def storageProofJson (s : StorageProof) : Json :=
-  Json.mkObj [("key", quantityJson (bytesToNat s.key.toList)),
+  Json.mkObj [("key", storageKeyJson s.key),
     ("value", quantityJson s.value.toNat), ("proof", proofNodesJson s.proof)]
 
 /-- The JSON of an answer of `eth_getProof`. -/
@@ -97,7 +127,7 @@ def accountProofJson (p : AccountProof) : Json :=
 namespace ChainView
 
 /-- The proof of an address and some of its slots after a block, as `eth_getProof` gives it. -/
-def accountProof (v : ChainView) (a : Address) (keys : List Bytes32) (p : BlockParam) :
+def accountProof (v : ChainView) (a : Address) (keys : List StorageKey) (p : BlockParam) :
     Except RpcError AccountProof :=
   v.ofBlock p fun r =>
     (AccountProof.ofState Cryptography.Hash.Keccak.keccak256 r.state a keys).mapError fun _ =>
