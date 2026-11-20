@@ -57,7 +57,7 @@ private theorem overflow_sequence {element : Desc} {values : List Value}
     OnlyOverflow (serializeSequence element values) := by
   -- Element failures propagate.
   -- Assembly adds only its own offset-range check.
-  rw [serializeSequence]
+  rw [serializeSequence_eq]
   exact overflow_bind (overflow_each values each) fun parts _ => overflow_assemble _ parts
 
 private theorem overflow_fields : ∀ fields values,
@@ -106,7 +106,8 @@ private theorem overflow_of_fits {shape : Desc} {value : Value} (fits : Fits sha
   -- A byte array can fail only the size bound it shares with every sequence.
   | byteVector sized | byteList sized =>
     intro fault failed
-    simp only [serialize, sized, bne_self_eq_false, Bool.false_eq_true, ite_false] at failed
+    simp only [serialize, ByteBuffer.size_array, sized, bne_self_eq_false,
+      Bool.false_eq_true, ite_false] at failed
     repeat' split at failed
     -- The count checks pass on an admissible value, leaving the size bound or success.
     all_goals first

@@ -68,6 +68,26 @@ def test_bad_hex_rejected() -> None:
         ssz.serialize({"byte_vector": 2}, {"bytes": "0xzz"})
 
 
+@pytest.mark.parametrize("sequence", [list, tuple])
+def test_equal_width_native_bytes(sequence) -> None:
+    rows = [bytes((i, i + 1, i + 2)) for i in range(64)]
+    value = {"seq": sequence({"bytes": row} for row in rows)}
+    concatenated = b"".join(rows)
+    assert ssz.serialize({"vector": [{"byte_vector": 3}, len(rows)]}, value) == concatenated
+
+    offsets = b"".join((4 * len(rows) + 3 * i).to_bytes(4, "little") for i in range(len(rows)))
+    assert ssz.serialize({"vector": [{"byte_list": 3}, len(rows)]}, value) == offsets + concatenated
+
+
+@pytest.mark.parametrize(
+    ("width", "count", "fault"), [(2, 64, "scope 2 3"), (3, 63, "scope 63 64")]
+)
+def test_equal_width_native_bytes_reject_wrong_shape(width: int, count: int, fault: str) -> None:
+    value = {"seq": [{"bytes": b"abc"} for _ in range(64)]}
+    with raises(SszError, "value rejected: EthLib.Serialization.Ssz.Err." + fault):
+        ssz.serialize({"vector": [{"byte_vector": width}, count]}, value)
+
+
 @pytest.mark.parametrize(
     ("ssz_type", "fault"),
     [
@@ -100,7 +120,73 @@ def _node(left: bytes, right: bytes) -> bytes:
     return hashlib.sha256(left + right).digest()
 
 
+def test_native_uint_sequence_root() -> None:
+    count = 63
+    values = {"seq": [{"uint": i} for i in range(count)]}
+    encoded = b"".join(i.to_bytes(2, "little") for i in range(count))
+    chunks = [encoded[i : i + 32].ljust(32, b"\x00") for i in range(0, len(encoded), 32)]
+    contents = _node(_node(chunks[0], chunks[1]), _node(chunks[2], chunks[3]))
+    expected = _node(contents, count.to_bytes(32, "little"))
+    assert ssz.hash_tree_root({"list": [UINT16, 64]}, values) == expected
+
+
+@pytest.mark.parametrize("operation", [ssz.serialize, ssz.hash_tree_root])
+def test_native_uint_sequence_rejects_invalid_element(operation) -> None:
+    kind = {"list": [UINT16, 64]}
+    value = {"seq": [{"uint": 1}] * 63 + [{"uint": 2**16}]}
+    with raises(SszError, "value rejected: EthLib.Serialization.Ssz.Err.typeMismatch"):
+        operation(kind, value)
+    with raises(SszError, "value rejected: EthLib.Serialization.Ssz.Err.overLimit 63 64"):
+        operation({"list": [UINT16, 63]}, value)
+
+    value["seq"][-1] = {"uint": -1}
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        operation(kind, value)
+
+
 ZERO = _chunk("")
+
+
+def test_native_byte_vector_root_pads_to_tree_width() -> None:
+    nodes = [bytes((i,)) * 32 for i in range(33)]
+    level = nodes + [ZERO] * 31
+    while len(level) > 1:
+        level = [_node(left, right) for left, right in zip(level[::2], level[1::2], strict=True)]
+    value = {"seq": [{"bytes": node} for node in nodes]}
+    assert ssz.hash_tree_root({"vector": [{"byte_vector": 32}, 33]}, value) == level[0]
+
+    with raises(SszError, "value rejected: EthLib.Serialization.Ssz.Err.scope 32 33"):
+        ssz.hash_tree_root({"vector": [{"byte_vector": 32}, 32]}, value)
+
+
+@pytest.mark.parametrize("operation", [ssz.serialize, ssz.hash_tree_root])
+def test_record_mutations_keep_conversion_error_order(operation) -> None:
+    integer = {"uint": 2}
+    kind = {"container": [("a", integer), ("b", {"byte_vector": 2}), ("c", UINT16)]}
+    fields = [{"uint": 0x0102}, {"bytes": b"ab"}, {"uint": 3}]
+    value = {"seq": fields}
+    if operation is ssz.serialize:
+        expected = bytes.fromhex("020161620300")
+    else:
+        expected = _node(_node(_chunk("0201"), _chunk("6162")), _node(_chunk("0300"), ZERO))
+    assert operation(kind, value) == expected
+
+    # Hex text uses the general converter and represents the same bytes.
+    fields[1] = {"bytes": "0x6162"}
+    assert operation(kind, value) == expected
+
+    # The type error precedes a semantic error in the value.
+    integer["uint"] = 3
+    for wrong_bytes in (b"a", "0xzz"):
+        fields[1] = {"bytes": wrong_bytes}
+        with raises(SszError, "type rejected: EthLib.Serialization.Ssz.Err.uintWidth 3"):
+            operation(kind, value)
+
+    # Conversion of both arguments precedes decoding the type.
+    fields[-1] = {"uint": -1}
+    with raises(ValueError, "cannot pass a negative int to Lean"):
+        operation(kind, value)
+
 
 # Each type, value and its root, built by hand from the Merkleization rules of SSZ.
 ROOTS = [

@@ -163,7 +163,8 @@ theorem canonical_bitVector {length : Nat} {data : Bytes} {value : Value}
   all_goals simp_all [Bind.bind, Except.bind, pure, Except.pure]
   all_goals
     subst value
-    simp only [serialize, unpackBits_size, beq_self_eq_true, ite_eq_left]
+    simp only [serialize, unpackBits_size, beq_self_eq_true, ite_eq_left,
+      ByteBuffer.ofArray_array]
     exact congrArg Except.ok (by simpa only [sized] using canonical)
 
 /-- A boolean has exactly one accepted byte for each of its two values. -/

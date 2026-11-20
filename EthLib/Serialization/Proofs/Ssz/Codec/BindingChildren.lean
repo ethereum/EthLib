@@ -71,6 +71,7 @@ theorem merkleLayout_child_sized {shape : Desc} {value : Value} {layout : Merkle
     · exact sequence_child_sized each laid nested member
   -- A bounded list retains its elements' nested count bounds after its own length check.
   case list element limit values count each =>
+    unfold listLayout at laid
     split at laid
     · cases laid
     · exact sequence_child_sized each laid nested member

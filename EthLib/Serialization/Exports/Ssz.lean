@@ -5,6 +5,7 @@ public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Serialization.Ssz.Codec.Proof
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Type.Valid
+import EthLib.Serialization.Ssz.Typed.Basic
 
 /-!
 # `Exports.Ssz`
@@ -40,7 +41,7 @@ def tagged : PyValue → Except String (String × PyValue)
   | .dict entries =>
     match entries.back? with
     | some (key, value) =>
-      if entries.all (·.1 == key) then return (key, value)
+      if entries.size == 1 || entries.all (·.1 == key) then return (key, value)
       else throw "expected an object with one key"
     | none => throw "expected an object with one key"
   | _ => throw "expected an object with one key"
@@ -122,27 +123,36 @@ def descOf : Nat → PyValue → Except String Desc
       return .compatibleUnion selectors options
     | _ => throw s!"unknown SSZ type {key}"
 
-/-- The value that a tagged value writes, reading at most `fuel` levels of nesting.
-
-Bytes given as `bytes` are taken as they are, and bytes given as text are read from hex. -/
-def valueOf : Nat → PyValue → Except String Value
+/-- Read a tagged value with the supplied byte representations, up to the given nesting depth. -/
+@[specialize] def valueOfWith {B : Type} (native : ByteArray → B) (hex : Array UInt8 → B) :
+    Nat → PyValue → Except String (ValueOf B)
   | 0, _ => throw "the value is nested too deeply"
   | fuel + 1, document => do
     let (key, body) ← tagged document
     match key, body with
     | "bool", body => return .bool (← boolOf body)
     | "uint", body => return .uint (← natOf body)
-    | "bytes", .bytes data => return .bytes data.data
+    | "bytes", .bytes data => return .bytes (native data)
     | "bytes", body => do
       match ofHex (← strOf body) with
-      | .ok data => return .bytes data
+      | .ok data => return .bytes (hex data)
       | .error _ => throw "bytes must be 0x and hex digits"
     | "bits", body => return .bits (← (← itemsOf body).mapM boolOf)
-    | "seq", body => return .seq (← (← itemsOf body).toList.mapM (valueOf fuel))
+    | "seq", body => do
+      let items ← itemsOf body
+      let values ← items.foldlM
+        (fun acc item => return (← valueOfWith native hex fuel item) :: acc) []
+      return .seq values.reverse
     | "union", body => do
       let (selector, data) ← pair body
-      return .union (← natOf selector) (← valueOf fuel data)
+      return .union (← natOf selector) (← valueOfWith native hex fuel data)
     | _, _ => throw s!"unknown SSZ value {key}"
+
+/-- The value that a tagged value writes, reading at most `fuel` levels of nesting.
+
+Bytes given as `bytes` are taken as they are, and bytes given as text are read from hex. -/
+def valueOf : Nat → PyValue → Except String Value :=
+  valueOfWith ByteArray.data id
 
 mutual
 
@@ -181,16 +191,96 @@ def readType (type : PyValue) : Result Desc := do
   runSsz "type rejected" shape.wellFormed
   return shape
 
+/-- Serialize a tagged value against a type that has already been read. -/
+def serializeValueOf (shape : Desc) (value : PyValue) : Result ByteArray := do
+  let value ← readValue "value" value (valueOfWith id ByteArray.mk MAX_NESTING)
+  runSsz "value rejected" (serialize shape value)
+
 /-- The SSZ bytes of a value of a type. -/
 def serializeOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
-  let shape ← readType type
-  let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← runSsz "value rejected" (serialize shape value)⟩
+  serializeValueOf (← readType type) value
 
 /-- The SSZ bytes of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_serialize]
 def serializeExport (args : PyValue) : Result PyValue := pyExport serializeOf args
+
+/-- A sequence of equally wide byte strings with the same item tag. -/
+structure BytesBatch where
+  /-- The tag of the sequence's dictionary. -/
+  outerKey : String
+  /-- The tag that each item dictionary holds. -/
+  itemKey : String
+  /-- The number of item dictionaries. -/
+  count : Nat
+  /-- The width in bytes of each item. -/
+  width : Nat
+  /-- The item bytes in sequence order. -/
+  data : ByteArray
+
+/-- Expand a batch to the tagged form. -/
+def BytesBatch.toPyValue (batch : BytesBatch) : PyValue :=
+  let items : Array PyValue := Array.ofFn (n := batch.count) fun i =>
+    let start := i.val * batch.width
+    .dict #[(batch.itemKey, .bytes (batch.data.extract start (start + batch.width)))]
+  .dict #[(batch.outerKey, .list items)]
+
+/-- Check whether the aggregate data is the encoding of the whole tagged sequence. -/
+def BytesBatch.matches (batch : BytesBatch) (shape : Desc) : Bool :=
+  match shape with
+  | .vector (.byteVector width) count =>
+    batch.outerKey == "seq" && batch.itemKey == "bytes" &&
+      batch.count == count && batch.width == width &&
+      batch.data.size == batch.count * batch.width && batch.data.size < offsetLimit
+  | _ => false
+
+/-- Serialize a batch with the same checks as its tagged sequence. -/
+def serializeBytesBatchOf (args : PyValue × BytesBatch) : Result ByteArray := do
+  let (type, batch) := args
+  let shape ← readType type
+  if batch.matches shape then
+    -- A fixed sequence of byte vectors has exactly the same bytes as their concatenation.
+    runSsz "value rejected" (serialize (.byteVector batch.data.size) (.bytes batch.data))
+  else
+    serializeValueOf shape batch.toPyValue
+
+/-- The internal binding from one batch and its type to their SSZ bytes. -/
+@[export eth_ssz_serialize_bytes_batch]
+def serializeBytesBatchExport (args : PyValue × BytesBatch) : Result PyValue :=
+  (serializeBytesBatchOf args).map toPy
+
+/-- A sequence of natural numbers with the same item tag. -/
+structure NatBatch where
+  /-- The tag of the sequence's dictionary. -/
+  outerKey : String
+  /-- The tag that each item dictionary holds. -/
+  itemKey : String
+  /-- The numbers in sequence order. -/
+  values : Array Nat
+
+/-- Expand a batch to the tagged form. -/
+def NatBatch.toPyValue (batch : NatBatch) : PyValue :=
+  .dict #[(batch.outerKey, .list (batch.values.map fun value =>
+    .dict #[(batch.itemKey, .int value)]))]
+
+/-- Read the tagged value that the batch stands for. -/
+def NatBatch.read {B : Type} (decode : PyValue → Except String (ValueOf B))
+    (batch : NatBatch) : Result (ValueOf B) :=
+  if batch.outerKey == "seq" && batch.itemKey == "uint" then
+    .ok (.seq (batch.values.toList.map ValueOf.uint))
+  else readValue "value" batch.toPyValue decode
+
+/-- Serialize the value of a batch of numbers against its type. -/
+def serializeNatBatchOf (args : PyValue × NatBatch) : Result ByteArray := do
+  let (type, batch) := args
+  let shape ← readType type
+  let value ← NatBatch.read (valueOfWith id ByteArray.mk MAX_NESTING) batch
+  runSsz "value rejected" (serialize shape value)
+
+/-- The internal binding from one batch of numbers and its type to their SSZ bytes. -/
+@[export eth_ssz_serialize_nat_batch]
+def serializeNatBatchExport (args : PyValue × NatBatch) : Result PyValue :=
+  (serializeNatBatchOf args).map toPy
 
 /-- The value that SSZ bytes hold for a type, in its tagged form. -/
 def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
@@ -203,16 +293,58 @@ def deserializeOf (args : PyValue × ByteArray) : Result PyValue := do
 @[export eth_ssz_deserialize]
 def deserializeExport (args : PyValue) : Result PyValue := pyExport deserializeOf args
 
+/-- Root a tagged value against a type that has already been read. -/
+@[inline] private def hashTreeRootValueOf (shape : Desc) (value : PyValue) : Result ByteArray := do
+  let value ← readValue "value" value (valueOf MAX_NESTING)
+  return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
+
 /-- The 32-byte hash tree root of a value of a type. -/
 def hashTreeRootOf (args : PyValue × PyValue) : Result ByteArray := do
   let (type, value) := args
-  let shape ← readType type
-  let value ← readValue "value" value (valueOf MAX_NESTING)
-  return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
+  hashTreeRootValueOf (← readType type) value
 
 /-- The 32-byte hash tree root of a value of a type, both given in their tagged form. -/
 @[export eth_ssz_hash_tree_root]
 def hashTreeRootExport (args : PyValue) : Result PyValue := pyExport hashTreeRootOf args
+
+/-- Root a batch whose byte vectors each fill one Merkle leaf. -/
+def hashTreeRootBytesBatchOf (args : PyValue × BytesBatch) : Result ByteArray := do
+  let (type, batch) := args
+  let shape ← readType type
+  if batch.width == bytesPerChunk && batch.matches shape then
+    let root ← runSsz "value rejected"
+      ((merkleizePackedBoundedUnchecked batch.data (some batch.count)).run)
+    return ⟨root⟩
+  hashTreeRootValueOf shape batch.toPyValue
+
+/-- The internal binding from one batch of bytes and its type to their SSZ root. -/
+@[export eth_ssz_hash_tree_root_bytes_batch]
+def hashTreeRootBytesBatchExport (args : PyValue × BytesBatch) : Result PyValue :=
+  (hashTreeRootBytesBatchOf args).map toPy
+
+/-- Root an unsigned integer list from its encoded bytes. -/
+private def hashTreeRootNatList (width limit : Nat) (values : Array Nat) : Except Err Bytes :=
+  listLayout limit values.size fun positions mixin => do
+    if !values.all (uintFits width) then throw .typeMismatch
+    let bytes := values.foldl (fun out n => SszType.pushUintBytes width n out)
+      (ByteArray.emptyWithCapacity (values.size * width))
+    let capacity := packedSequenceCapacity (.uint width) positions
+    (hashLayoutFromM sha256Hasher mixin (merkleizePackedBoundedUnchecked bytes capacity)).run
+
+/-- Root the value of a batch of numbers against its type. -/
+def hashTreeRootNatBatchOf (args : PyValue × NatBatch) : Result ByteArray := do
+  let (type, batch) := args
+  let shape ← readType type
+  if let .list (.uint width) limit := shape then
+    if batch.outerKey == "seq" && batch.itemKey == "uint" then
+      return ⟨← runSsz "value rejected" (hashTreeRootNatList width limit batch.values)⟩
+  let value ← NatBatch.read (valueOfWith ByteArray.data id MAX_NESTING) batch
+  return ⟨← runSsz "value rejected" (hashTreeRoot shape value)⟩
+
+/-- The internal binding from one batch of numbers and its type to their SSZ root. -/
+@[export eth_ssz_hash_tree_root_nat_batch]
+def hashTreeRootNatBatchExport (args : PyValue × NatBatch) : Result PyValue :=
+  (hashTreeRootNatBatchOf args).map toPy
 
 /-- The step that one part of a path names, read against the type the path has reached.
 

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Serialization.Exports.Rlp
 public import EthLib.Serialization.Exports.Ssz
+public import EthLib.Serialization.Exports.SszRecord
 
 /-!
 # `EthLib.Serialization.Exports`

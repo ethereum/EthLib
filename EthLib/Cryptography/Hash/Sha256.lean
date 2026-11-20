@@ -9,7 +9,7 @@ Each step of the standard is one definition, from the padding of §5.1.1 to the 
 
 The words of the state and of the schedule are record fields.
 
-The padded message is a byte array, and each block is read at its offset, with no copy.
+Each block is read at its offset in the byte array, with no copy.
 
 BLS hash-to-curve, the Fiat-Shamir challenges of KZG and SSZ merkleization use it.
 
@@ -87,13 +87,16 @@ def lengthBytes (size : Nat) : ByteArray :=
   ⟨Array.ofFn fun i : Fin 8 => (bits >>> (56 - 8 * UInt64.ofNat i.val)).toUInt8⟩
 
 /--
-The padded message, FIPS 180-4 §5.1.1: the message, a set bit, zeros, then its length in bits.
+The padding after a message of a given byte length, FIPS 180-4 §5.1.1.
 
-The message is whole bytes, so the set bit and the seven zero bits after it are the byte `0x80`.
+The first set bit and the seven zero bits after it are the byte `0x80`.
 -/
+def padSuffix (size : Nat) : ByteArray :=
+  ⟨#[0x80]⟩ ++ ⟨Array.replicate (paddingZeros size) 0⟩ ++ lengthBytes size
+
+/-- The padded message under FIPS 180-4 §5.1.1. -/
 def pad (message : ByteArray) : ByteArray :=
-  message ++ ⟨#[0x80]⟩ ++ ⟨Array.replicate (paddingZeros message.size) 0⟩ ++
-    lengthBytes message.size
+  message ++ padSuffix message.size
 
 /-! ## Words of four bytes -/
 
@@ -114,40 +117,104 @@ def initial : State := ⟨IV[0], IV[1], IV[2], IV[3], IV[4], IV[5], IV[6], IV[7]
 structure Window where
   (w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 : UInt32)
 
-/--
-The first sixteen words of the schedule are those of the block, FIPS 180-4 §6.2.2, step 1.
-
-The block is the 64 bytes from an offset, and word `j` is the four from `4j` on, big-endian.
--/
-def Window.ofBlock (bytes : ByteArray) (start : Nat) (whole : start + 64 ≤ bytes.size) :
-    Window :=
-  let word (j : Nat) (within : j < 16) : UInt32 :=
-    big32 (bytes[start + 4 * j]'(by omega)) (bytes[start + 4 * j + 1]'(by omega))
-      (bytes[start + 4 * j + 2]'(by omega)) (bytes[start + 4 * j + 3]'(by omega))
+/-- Build the first sixteen words of the schedule from their indices. -/
+@[inline] def Window.ofWords (word : (j : Nat) → j < 16 → UInt32) : Window :=
   ⟨word 0 (by decide), word 1 (by decide), word 2 (by decide), word 3 (by decide),
     word 4 (by decide), word 5 (by decide), word 6 (by decide), word 7 (by decide),
     word 8 (by decide), word 9 (by decide), word 10 (by decide), word 11 (by decide),
     word 12 (by decide), word 13 (by decide), word 14 (by decide), word 15 (by decide)⟩
 
 /--
+The first sixteen words of the schedule are those of the block, FIPS 180-4 §6.2.2, step 1.
+
+The block is the 64 bytes from an offset, and word `j` is the four from `4j` on, big-endian.
+-/
+def Window.ofBlock (bytes : ByteArray) (start : Nat)
+    (whole : start + 64 ≤ bytes.size) : Window :=
+  Window.ofWords fun j within =>
+    big32 (bytes[start + 4 * j]'(by omega)) (bytes[start + 4 * j + 1]'(by omega))
+      (bytes[start + 4 * j + 2]'(by omega)) (bytes[start + 4 * j + 3]'(by omega))
+
+/-- Read a word of a block through a byte accessor. -/
+@[inline] def blockWord (byte : (i : Nat) → i < 64 → UInt8) (j : Nat)
+    (within : j < 16) : UInt32 :=
+  big32 (byte (4 * j) (by omega)) (byte (4 * j + 1) (by omega))
+    (byte (4 * j + 2) (by omega)) (byte (4 * j + 3) (by omega))
+
+/-- Read the first block without adding an offset to each byte position. -/
+def Window.ofFirstBlock (bytes : ByteArray) (whole : 64 ≤ bytes.size) : Window :=
+  Window.ofWords (blockWord fun i within => bytes[i]'(Nat.lt_of_lt_of_le within whole))
+
+/--
 The schedule one word later, FIPS 180-4 §6.2.2, step 1.
 
 The new last word is `W_(t+16) = W_t + σ0(W_(t+1)) + W_(t+9) + σ1(W_(t+14))`.
 -/
-def Window.next (w : Window) : Window :=
+@[inline] def Window.next (w : Window) : Window :=
   ⟨w.w1, w.w2, w.w3, w.w4, w.w5, w.w6, w.w7, w.w8, w.w9, w.w10, w.w11, w.w12, w.w13, w.w14, w.w15,
     w.w0 + smallSigma0 w.w1 + w.w9 + smallSigma1 w.w14⟩
 
-/-- One round on the working variables a to h, FIPS 180-4 §6.2.2, step 3. -/
-@[inline] def round (s : State) (constant word : UInt32) : State :=
-  let t1 := s.h + bigSigma1 s.e + ch s.e s.f s.g + constant + word
+/-- One round when the round constant and the schedule word are already added. -/
+@[inline] def roundSum (s : State) (sum : UInt32) : State :=
+  let t1 := s.h + bigSigma1 s.e + ch s.e s.f s.g + sum
   let t2 := bigSigma0 s.a + maj s.a s.b s.c
   ⟨t1 + t2, s.a, s.b, s.c, s.d + t1, s.e, s.f, s.g⟩
 
-/-- One round per constant, each with the first word of the schedule, which then moves on. -/
-def rounds : List UInt32 → Window → State → State
-  | [], _, s => s
-  | constant :: rest, w, s => rounds rest w.next (round s constant w.w0)
+/-- One round on the working variables a to h, FIPS 180-4 §6.2.2, step 3. -/
+@[inline] def round (s : State) (constant word : UInt32) : State :=
+  roundSum s (constant + word)
+
+/-- The sum of each round constant and its schedule word. -/
+def prepareRounds : List UInt32 → Window → List UInt32
+  | [], _ => []
+  | constant :: constants, w => (constant + w.w0) :: prepareRounds constants w.next
+
+/-- The prepared inputs of the padding block after a 64-byte message. -/
+def paddingRounds : List UInt32 :=
+  prepareRounds K.toList (Window.ofBlock (padSuffix 64) 0 (by decide))
+
+/--
+One round per constant, each with the first word of the schedule, which then moves on.
+
+The loop carries the words directly so compiled code can avoid allocating records in each round.
+-/
+def rounds (constants : List UInt32) (w : Window) (s : State) : State :=
+  loop constants w.w0 w.w1 w.w2 w.w3 w.w4 w.w5 w.w6 w.w7
+    w.w8 w.w9 w.w10 w.w11 w.w12 w.w13 w.w14 w.w15 s.a s.b s.c s.d s.e s.f s.g s.h
+where
+  loop (constants : List UInt32)
+      (w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15 : UInt32)
+      (a b c d e f g h : UInt32) : State :=
+    match constants with
+    | [] => ⟨a, b, c, d, e, f, g, h⟩
+    | constant :: rest =>
+      let w := (Window.mk w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15).next
+      let s := round ⟨a, b, c, d, e, f, g, h⟩ constant w0
+      loop rest w.w0 w.w1 w.w2 w.w3 w.w4 w.w5 w.w6 w.w7
+        w.w8 w.w9 w.w10 w.w11 w.w12 w.w13 w.w14 w.w15 s.a s.b s.c s.d s.e s.f s.g s.h
+
+/-- Apply the rounds of a prepared schedule to the working variables. -/
+def preparedRounds (sums : List UInt32) (s : State) : State :=
+  loop sums s.a s.b s.c s.d s.e s.f s.g s.h
+where
+  loop (sums : List UInt32) (a b c d e f g h : UInt32) : State :=
+    match sums with
+    | [] => ⟨a, b, c, d, e, f, g, h⟩
+    | sum :: rest =>
+      let ⟨a, b, c, d, e, f, g, h⟩ := roundSum ⟨a, b, c, d, e, f, g, h⟩ sum
+      loop rest a b c d e f g h
+
+/-- Add the working variables to the previous hash value. -/
+@[inline] def finishBlock (s r : State) : State :=
+  ⟨s.a + r.a, s.b + r.b, s.c + r.c, s.d + r.d, s.e + r.e, s.f + r.f, s.g + r.g, s.h + r.h⟩
+
+/-- Absorb a block with a prepared schedule. -/
+def compressPrepared (s : State) (sums : List UInt32) : State :=
+  finishBlock s (preparedRounds sums s)
+
+/-- Absorb a block from the first sixteen words of its schedule. -/
+@[inline] def compressWindow (s : State) (window : Window) : State :=
+  finishBlock s (rounds K.toList window s)
 
 /--
 The hash value after one more block, FIPS 180-4 §6.2.2, steps 2 to 4.
@@ -158,8 +225,7 @@ The block is the 64 bytes from an offset.
 -/
 def compress (s : State) (bytes : ByteArray) (start : Nat) (whole : start + 64 ≤ bytes.size) :
     State :=
-  let r := rounds K.toList (Window.ofBlock bytes start whole) s
-  ⟨s.a + r.a, s.b + r.b, s.c + r.c, s.d + r.d, s.e + r.e, s.f + r.f, s.g + r.g, s.h + r.h⟩
+  compressWindow s (Window.ofBlock bytes start whole)
 
 /--
 The hash value after some blocks of 64 bytes from an offset, each absorbed by one step.
@@ -190,9 +256,16 @@ def digest (s : State) : ByteArray :=
 
 /-- SHA-256 of a message, FIPS 180-4 §6.2: every block of the padded message, in order. -/
 def hash (message : ByteArray) : ByteArray :=
-  let padded := pad message
-  digest (chain compress padded (padded.size / 64) 0
-    (by have := Nat.mul_div_le padded.size 64; omega) initial)
+  let state :=
+    if size : message.size = 64 then
+      -- A message that fills one block has a second block made entirely of padding.
+      let first := Window.ofFirstBlock message (by omega)
+      compressPrepared (compressWindow initial first) paddingRounds
+    else
+      let padded := pad message
+      chain compress padded (padded.size / 64) 0
+        (by have := Nat.mul_div_le padded.size 64; omega) initial
+  digest state
 
 /-- SHA-256 of a message, as its 32 bytes. -/
 def hash32 (message : ByteArray) : Vector UInt8 32 :=

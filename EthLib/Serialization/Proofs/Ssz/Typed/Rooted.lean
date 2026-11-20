@@ -311,7 +311,8 @@ theorem packElements_elementBytes (basic : (desc α).isBasic = true) (elements :
       omega
     rw [expand, Nat.mul_add_div wide, Nat.div_eq_of_lt (by omega), Nat.add_zero]
   · intro chunk _ _
-    simp only [packBytes, packedChunks, packedChunk, Array.getElem_ofFn, hk, bytesPerChunk]
+    simp only [packBytes_eq, packedChunks, packedChunk, packChunkWith, Array.getElem_ofFn, hk,
+      bytesPerChunk]
     -- Leaf `chunk` holds the bytes of elements `chunk * per` to `chunk * per + per`.
     have run : (concatParts (elements.toList.map elementBytes)).extract (chunk * 32)
           (chunk * 32 + 32)
@@ -343,7 +344,7 @@ theorem hashTreeRoot_vector_packed {length : Nat} (basic : (desc α).isBasic = t
         obtain ⟨a, -, rfl⟩ := List.mem_map.mp member
         exact (serialize_elementBytes basic a).2)]
     simp [chunksForBytes]
-  simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
+  simp [merkleLayout, sequenceLayout, packedSequenceLayout, basic, MerkleLayout.packing, leafChunks,
     serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, packed, fit]
 

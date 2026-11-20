@@ -149,7 +149,7 @@ private theorem sequence_complete (element : Desc) (values : List Value) (sizes 
   -- The structural bound now guarantees that the complete header and body can be assembled.
   obtain ⟨bytes, assembled, sized⟩ := assemble_complete
     (parts.map fun _ => element.isFixed) parts _ ((sequence_width element parts).trans measured) bounded
-  exact ⟨bytes, by simp [serializeSequence, encoded, assembled, Bind.bind, Except.bind], sized⟩
+  exact ⟨bytes, by simp [serializeSequence_eq, encoded, assembled, Bind.bind, Except.bind], sized⟩
 
 /-- Collecting field encodings preserves the sum of each field's size contribution. -/
 private theorem collect_fields (sizes : Desc → Value → Nat) :
@@ -233,9 +233,9 @@ private theorem sequence_representable (element : Desc) (values : List Value) (b
   have measure (value : Value) (part : Bytes) (encoded : serialize element value = .ok part) :
       part.size = sizes value := by simp [sizes, encoded]
   cases collected : serializeEach element values with
-  | error fault => simp [serializeSequence, collected, Bind.bind, Except.bind] at wrote
+  | error fault => simp [serializeSequence_eq, collected, Bind.bind, Except.bind] at wrote
   | ok parts =>
-    simp only [serializeSequence, collected, Bind.bind, Except.bind] at wrote
+    simp only [serializeSequence_eq, collected, Bind.bind, Except.bind] at wrote
     -- Recover structural witnesses for every collected child before accounting for assembly.
     obtain ⟨children, counted⟩ := each_representable element sizes measure reflect values parts collected
     have measured := (sequence_width element parts).trans counted
@@ -317,13 +317,14 @@ theorem Representable.serialize {shape : Desc} {value : Value} {size : Nat}
   | byteVector length data bounded =>
     intro (.byteVector sized)
     exact ⟨data, by
-      simp [Ssz.serialize, sized, bytesPerOffset, Bind.bind, Except.bind, pure, Except.pure]
+      simp [Ssz.serialize, sized, offsetLimit, bytesPerOffset, Bind.bind, Except.bind, pure,
+        Except.pure]
       omega, rfl⟩
   | byteList limit data bounded =>
     intro (.byteList within)
     exact ⟨data, by
-      simp [Ssz.serialize, Nat.not_lt.mpr within, Nat.not_le.mpr bounded, bytesPerOffset, pure,
-        Except.pure], rfl⟩
+      simp [Ssz.serialize, Nat.not_lt.mpr within, Nat.not_le.mpr bounded, offsetLimit,
+        bytesPerOffset, pure, Except.pure], rfl⟩
   | bitVector length data =>
     intro (.bitVector sized)
     exact ⟨packBits data ((length + 7) / 8), by simp [Ssz.serialize, sized], by simp [packBits, sized]⟩
@@ -397,7 +398,7 @@ theorem representable_of_serialize (shape : Desc) (value : Value) (bytes : Bytes
       Except.bind, pure, Except.pure] at wrote
     repeat' split at wrote
     all_goals cases wrote
-    all_goals constructor; simp only [bytesPerOffset] at *; omega
+    all_goals constructor; simp only [offsetLimit, bytesPerOffset] at *; omega
   | bitVector length =>
     cases value <;> simp [Ssz.serialize] at wrote
     split at wrote <;> cases wrote

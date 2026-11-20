@@ -26,8 +26,14 @@ A larger `n` keeps only `n % 256 ^ k`.
 
 For example, the two low bytes of `0x1234` are `[0x34, 0x12]`. -/
 def uintToBytes (k n : Nat) : Vector UInt8 k :=
-  -- Byte `i` holds bits `8i` to `8i + 7`.
-  Vector.ofFn fun i => UInt8.ofNat (n >>> (8 * i.val))
+  (loop k n (Array.emptyWithCapacity k)).cast (by simp)
+where
+  loop (k n : Nat) (out : Array UInt8) : Vector UInt8 (out.size + k) :=
+    match k with
+    | 0 => ⟨out, by simp⟩
+    | k + 1 =>
+      -- Write the low byte, then shift it out so the next byte is low.
+      (loop k (n >>> 8) (out.push (UInt8.ofNat n))).cast (by simp only [Array.size_push]; omega)
 
 /-- The number whose little-endian bytes these are.
 

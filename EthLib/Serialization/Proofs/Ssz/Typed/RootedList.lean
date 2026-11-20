@@ -66,7 +66,7 @@ theorem hashTreeRoot_list_leafRoots {limit : Nat} (composite : (desc α).isBasic
     simp [getElem?_leafRoots]
   have size : (leafRoots data).size = data.size := by simp [leafRoots]
   rw [hashTreeRoot_unfold]
-  simp [merkleLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,
+  simp [merkleLayout, listLayout, sequenceLayout, composite, MerkleLayout.nesting, leafChunks,
     slotRoot, List.mapM_map, Function.comp_def, rooted, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, within, leaves, size]
 
@@ -101,7 +101,8 @@ theorem hashTreeRoot_list_packed {limit : Nat} (basic : (desc α).isBasic = true
   have fit : ¬chunksForBytes (limit * (desc α).itemLength) < (packedChunks data).size :=
     Nat.not_lt.mpr (size_packedChunks_le basic data bound)
   rw [hashTreeRoot_unfold]
-  simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks,
+  simp [merkleLayout, listLayout, sequenceLayout, packedSequenceLayout, basic,
+    MerkleLayout.packing, leafChunks,
     serializeEach_elementBytes basic, finishLayout, merkleizeBoundedUnchecked_eq,
     bind, Except.bind, pure, Except.pure, packed, fit, within]
 
@@ -113,7 +114,8 @@ theorem hashTreeRoot_progressiveList_leaves (data : Array α) :
   rw [hashTreeRoot_unfold]
   by_cases basic : (desc α).isBasic
   · have packed := packElements_elementBytes basic data
-    simp [merkleLayout, sequenceLayout, basic, MerkleLayout.packing, leafChunks, boundCheck,
+    simp [merkleLayout, sequenceLayout, packedSequenceLayout, basic,
+      MerkleLayout.packing, leafChunks, boundCheck,
       serializeEach_elementBytes basic, finishLayout, bind, Except.bind, pure, Except.pure, packed,
       sequenceLeaves]
   · have rooted := mapM_hashTreeRoot_toValue data.toList

@@ -272,11 +272,9 @@ def perChunk (α : Type) [SszType α] : Nat :=
 
 /-- The leaf at an index of basic elements: the encodings of its elements, padded to a node. -/
 def packedChunk {α : Type} [SszType α] (elements : Array α) (index : Nat) : Bytes :=
-  let start := index * perChunk α
-  -- A loop over the few elements of the leaf, never over the whole sequence.
-  let piece := (elements.extract start (start + perChunk α)).foldl
-    (fun bytes a => bytes ++ elementBytes a) #[]
-  piece ++ Array.replicate (bytesPerChunk - piece.size) 0
+  packChunkWith (perChunk α) (fun start stop =>
+    -- Only the elements of this leaf contribute bytes.
+    (elements.extract start stop).foldl (fun bytes a => bytes ++ elementBytes a) #[]) index
 
 /-- The leaves of basic elements, each holding the elements that share it. -/
 def packedChunks {α : Type} [SszType α] (elements : Array α) : Array Bytes :=
@@ -347,7 +345,7 @@ theorem packedChunk_congr {α : Type} [SszType α] {elements other : Array α} {
           exact (Array.getElem?_eq_none (by omega)).symm
         · rw [ite_eq_right right]
     · rw [ite_eq_right (by omega), ite_eq_right (by omega)]
-  simp only [packedChunk, runs]
+  simp only [packedChunk, packChunkWith, runs]
 
 /-- The leaf of an element inside the sequence or just past it is inside the leaves or just past. -/
 theorem leafIndex_le {α : Type} [SszType α] {elements : Array α} {index : Nat}

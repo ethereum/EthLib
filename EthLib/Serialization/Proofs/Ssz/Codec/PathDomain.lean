@@ -142,7 +142,7 @@ theorem PathSelects.vector_basic (element : Desc) (count : Nat) (values : List V
       (layout := .packing (packElements parts) (some (chunksForBytes (count * element.itemLength))))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ chunkInside
       (resolveStep_vector element count ordinal inside)⟩
-    · simp [merkleLayout, sequenceLayout, counted, basic, wrote,
+    · simp [merkleLayout, sequenceLayout, packedSequenceLayout, counted, basic, wrote,
         Bind.bind, Except.bind, Pure.pure, Except.pure]
     · simp [packElements, packBytes_size, size, counted, chunksForBytes]
 
@@ -166,7 +166,8 @@ theorem PathSelects.list_basic (element : Desc) (limit : Nat) (values : List Val
       (layout := .packing (packElements parts) (some (chunksForBytes (limit * element.itemLength)))
         (lengthWord values.length))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ chunkInside ?_⟩
-    · simp [merkleLayout, sequenceLayout, Nat.not_lt.mpr within, basic, wrote,
+    · simp [merkleLayout, listLayout, sequenceLayout, packedSequenceLayout,
+        Nat.not_lt.mpr within, basic, wrote,
         Bind.bind, Except.bind, Pure.pure, Except.pure]
     -- An element-count bound also bounds the total bytes because every element has the same width.
     · have bytesWithin := Nat.mul_le_mul_right element.itemLength within
@@ -199,7 +200,8 @@ theorem PathSelects.progressiveList_basic (element : Desc) {limit : Option Nat}
     refine ⟨parts, wrote, PathSelects.packedProgressive (child := element)
       (layout := .packing (packElements parts) none (lengthWord values.length))
       ?_ (packing_materialized _ _ _ _) rfl rfl rfl ?_ (resolveStep_progressiveList element ordinal)⟩
-    · simp [merkleLayout, sequenceLayout, basic, wrote, boundCheck_of_withinBound limit _ within,
+    · simp [merkleLayout, sequenceLayout, packedSequenceLayout, basic, wrote,
+        boundCheck_of_withinBound limit _ within,
         Bind.bind, Except.bind, Pure.pure, Except.pure]
     · simpa [packElements, packBytes_size, size, chunksForBytes] using chunkInside
 

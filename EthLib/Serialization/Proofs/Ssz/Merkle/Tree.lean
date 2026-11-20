@@ -4,6 +4,7 @@ public import EthLib.Serialization.Ssz.Merkle.Tree
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Hasher
 public import EthLib.Serialization.Proofs.Ssz.Merkle.Merkleize
 import EthLib.Base.Proofs.Bytes
+import all EthLib.Serialization.Ssz.Merkle.Tree
 
 /-! Laws of the concrete SHA-256 trees: node widths, zero subtrees, and windowed roots. -/
 
@@ -91,7 +92,7 @@ theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunk
   induction depth with
   | zero =>
     intro start
-    rw [subtreeAtM.eq_def]
+    rw [subtreeAtM_unfold]
     -- Either the leaf lies past the data, or it is read from it.
     split
     · show (zeroRootM (m := Id) (combineM hash) zeroChunk 0).run = _
@@ -100,7 +101,7 @@ theorem subtreeAtM_ofHash_eq_subtreeRoot (hash : ByteArray → ByteArray) (chunk
     · simp [subtreeRoot_zero, padded]
   | succ depth ih =>
     intro start
-    rw [subtreeAtM.eq_def]
+    rw [subtreeAtM_unfold]
     split
     · -- A subtree wholly past the data is the empty tree of its depth.
       rename_i past
@@ -132,7 +133,7 @@ theorem subtreeAtM_ofHash_four {m : Type → Type} [Monad m] [LawfulMonad m]
       let right ← combineM hash (padded zeroChunk chunks 2) (padded zeroChunk chunks 3)
       combineM hash left right) := by
   rcases (show chunks.size = 3 ∨ chunks.size = 4 by omega) with count | count <;>
-    simp [subtreeAtM, count, Hasher.ofHash, zeroRootM, padded]
+    simp [subtreeAtM, subtreeFromM, count, Hasher.ofHash, zeroRootM, padded]
 
 /-- The progressive tree of any hash agrees with the hash-independent definition. -/
 theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray)
@@ -155,17 +156,114 @@ theorem merkleizeProgressiveUncheckedM_ofHash_eq (hash : ByteArray → ByteArray
         (chunks.drop (4 ^ level)) (level + 1)).run).run = _
     rw [subtreeAtM_ofHash_zero_eq, ih]
 
+/-- Packing agrees with slicing and padding each node. -/
+theorem packBytes_eq (data : Bytes) :
+    packBytes data =
+      Array.ofFn (n := (data.size + bytesPerChunk - 1) / bytesPerChunk) (fun position =>
+        let start := position.val * bytesPerChunk
+        let piece := data.extract start (start + bytesPerChunk)
+        piece ++ Array.replicate (bytesPerChunk - piece.size) 0) := by
+  unfold packBytes
+  split
+  · rename_i size
+    have one : (data.size + bytesPerChunk - 1) / bytesPerChunk = 1 := by
+      simp [size, bytesPerChunk]
+    apply Array.ext
+    · simp only [Array.size_singleton, Array.size_ofFn, one]
+    · intro i within _
+      have zero : i = 0 := by
+        simp only [Array.size_singleton] at within
+        omega
+      subst i
+      simp only [Array.getElem_singleton, Array.getElem_ofFn, Nat.zero_mul, Nat.zero_add]
+      -- The only slice is the whole input, and a complete chunk has no padding.
+      rw [Array.extract_eq_self_of_le (by omega : data.size ≤ bytesPerChunk), size, Nat.sub_self]
+      simp
+  · rfl
+
 /-- Packing uses the smallest number of whole nodes that can hold the bytes. -/
 @[simp] theorem packBytes_size (data : Bytes) :
     (packBytes data).size = (data.size + bytesPerChunk - 1) / bytesPerChunk := by
   -- One array position is allocated for each window, including a final partial window.
-  simp only [packBytes, Array.size_ofFn]
+  simp only [packBytes_eq, Array.size_ofFn]
+
+private theorem packedLeaf_eq (data : ByteArray) (index : Nat)
+    (within : index < (packBytes data.data).size) :
+    packedLeaf data index = (packBytes data.data)[index] := by
+  simp [packBytes_eq, packedLeaf, packChunkWith, ByteArray.data_extract]
+
+private theorem packedParent_eq (data : ByteArray) (index : Nat)
+    (within : index < (packBytes data.data).size) :
+    packedParent data (packBytes data.data).size index =
+      combine (packBytes data.data)[index]
+        (if next : index + 1 < (packBytes data.data).size then (packBytes data.data)[index + 1]
+         else zeroSubtree 0) := by
+  simp only [packedParent]
+  by_cases complete : index * bytesPerChunk + 2 * bytesPerChunk ≤ data.size
+  · rw [ite_eq_left complete]
+    have next : index + 1 < (packBytes data.data).size := by
+      simp only [packBytes_size, ByteArray.size_data, bytesPerChunk] at complete ⊢
+      omega
+    rw [dite_eq_left next, ← packedLeaf_eq data index within, ← packedLeaf_eq data (index + 1) next]
+    let first := index * bytesPerChunk
+    let middle := first + bytesPerChunk
+    let last := first + 2 * bytesPerChunk
+    have adjacent : (index + 1) * bytesPerChunk = middle := by simp [middle, first, Nat.add_mul]
+    have stops : middle + bytesPerChunk = last := by simp [middle, last, Nat.two_mul, Nat.add_assoc]
+    have lastBound : last ≤ data.size := complete
+    have middleBound : middle ≤ data.size := by
+      simp only [middle, last, Nat.two_mul] at *
+      omega
+    have leftWidth : (data.extract first middle).data.size = bytesPerChunk := by
+      rw [ByteArray.size_data, ByteArray.size_extract, Nat.min_eq_left middleBound]
+      exact Nat.add_sub_cancel_left _ _
+    have rightWidth : (data.extract middle last).data.size = bytesPerChunk := by
+      rw [ByteArray.size_data, ByteArray.size_extract, Nat.min_eq_left lastBound, ← stops,
+        Nat.add_sub_cancel_left]
+    simp only [packedLeaf, packChunkWith, adjacent, stops]
+    change (Cryptography.Hash.Sha256.hash (data.extract first last)).data =
+      combine ((data.extract first middle).data ++
+        Array.replicate (bytesPerChunk - (data.extract first middle).data.size) 0)
+        ((data.extract middle last).data ++
+          Array.replicate (bytesPerChunk - (data.extract middle last).data.size) 0)
+    simp only [leftWidth, rightWidth, Nat.sub_self, Array.replicate_zero, Array.append_empty,
+      combine_eq]
+    rw [ByteArray.extract_eq_extract_append_extract middle (by simp [middle]) (by omega)]
+    rw [show data.extract first middle ++ data.extract middle last =
+      ByteArray.mk ((data.extract first middle).data ++ (data.extract middle last).data) from
+        ByteArray.ext ByteArray.data_append]
+  · have zero : zeroSubtree 0 = zeroChunk := by rw [zeroSubtree_eq]; rfl
+    rw [ite_eq_right complete, ← packedLeaf_eq data index within, zero]
+    by_cases next : index + 1 < (packBytes data.data).size
+    · simp only [next, ↓reduceDIte, ↓reduceIte, packedLeaf_eq data _ next]
+    · simp only [next, ↓reduceDIte, ↓reduceIte]
+
+private theorem packedSubtree_eq (data : ByteArray) (depth : Nat) :
+    packedSubtree data (packBytes data.data).size depth =
+      subtreeAtM sha256Hasher (packBytes data.data) depth 0 := by
+  unfold packedSubtree subtreeAtM
+  congr 1
+  · funext index within
+    exact packedLeaf_eq data index within
+  · funext index within
+    exact packedParent_eq data index within
+
+/-- Reading packed bytes as leaves gives the same bounded root as packing them first. -/
+theorem merkleizePackedBoundedUnchecked_eq (data : ByteArray) (limit : Option Nat) :
+    merkleizePackedBoundedUnchecked data limit =
+      merkleizeBoundedUncheckedM sha256Hasher (packBytes data.data) limit := by
+  have size : chunksForBytes data.size = (packBytes data.data).size := by
+    simp [chunksForBytes, ByteArray.size_data]
+  simp only [merkleizePackedBoundedUnchecked, merkleizeBoundedUncheckedM, size]
+  congr 1
+  funext depth
+  exact packedSubtree_eq data depth
 
 /-- Every packed node has exactly the width of a hash operand. -/
 theorem packBytes_chunk_size (data : Bytes) (i : Nat) (within : i < (packBytes data).size) :
     ((packBytes data)[i]).size = bytesPerChunk := by
   -- An extracted window is at most one node wide, and zeros fill exactly its missing bytes.
-  simp only [packBytes, Array.getElem_ofFn, Array.size_append, Array.size_replicate,
+  simp only [packBytes_eq, Array.getElem_ofFn, Array.size_append, Array.size_replicate,
     Array.size_extract]
   omega
 
@@ -183,7 +281,7 @@ theorem packBytes_get (data : Bytes) (i j : Nat) (node : i < (packBytes data).si
     ((packBytes data)[i])[j]'(by rw [packBytes_chunk_size]; exact position) =
       data[i * bytesPerChunk + j] := by
   -- A position inside the original message lies in the extracted window, before its zero padding.
-  simp only [packBytes, Array.getElem_ofFn]
+  simp only [packBytes_eq, Array.getElem_ofFn]
   rw [Array.getElem_append_left (by simp only [Array.size_extract]; omega)]
   simp only [Array.getElem_extract]
 
@@ -192,7 +290,7 @@ theorem packBytes_padding (data : Bytes) (i j : Nat) (node : i < (packBytes data
     (position : j < bytesPerChunk) (padding : data.size ≤ i * bytesPerChunk + j) :
     ((packBytes data)[i])[j]'(by rw [packBytes_chunk_size]; exact position) = 0 := by
   -- After the extracted bytes, the remaining positions belong to the explicit zero suffix.
-  simp only [packBytes, Array.getElem_ofFn]
+  simp only [packBytes_eq, Array.getElem_ofFn]
   rw [Array.getElem_append_right (by simp only [Array.size_extract]; omega)]
   exact Array.getElem_replicate _
 

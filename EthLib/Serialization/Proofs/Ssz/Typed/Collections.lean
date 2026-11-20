@@ -148,7 +148,7 @@ theorem encodeFixedElements_eq {α : Type} [SszType α] [LawfulSszType α]
     (fixed : (desc α).isFixed) (items : Array α) :
     encodeFixedElements items =
       (do return ⟨← serializeSequence (desc α) (items.toList.map toValue)⟩) := by
-  simp only [encodeFixedElements, serializeSequence, fixed, assemble_inline_eq]
+  simp only [encodeFixedElements, serializeSequence_eq, fixed, assemble_inline_eq]
   rw [encodeElementsOnto_eq, List.drop_zero]
   cases serializeEach (desc α) (items.toList.map toValue) with
   | error fault => rfl

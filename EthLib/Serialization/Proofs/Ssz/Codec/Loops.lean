@@ -14,6 +14,19 @@ The theorems below give back the plain recursion on the first element, which the
 
 namespace EthLib.Serialization.Ssz
 
+/-- Reading the size of an ordinary array counts its elements. -/
+@[simp] theorem ByteBuffer.size_array (bytes : Bytes) :
+    ByteBuffer.size bytes = bytes.size := rfl
+
+/-- A buffer that uses ordinary arrays loads them directly. -/
+@[simp] theorem ByteBuffer.ofArray_array (bytes : Bytes) :
+    (ByteBuffer.ofArray bytes : Bytes) = bytes := rfl
+
+private theorem buffer_reserve_array (capacity : Nat) :
+    (ByteBuffer.reserve capacity : Bytes) = Array.emptyWithCapacity capacity := rfl
+
+private theorem buffer_empty_array : (∅ : Bytes) = #[] := rfl
+
 /-! ## Widths -/
 
 /-- The width loop from some width adds that width to the width from none. -/
@@ -34,6 +47,7 @@ theorem headWidth_cons (isInline : Bool) (part : Bytes) (rest : List (Bool × By
     headWidth ((isInline, part) :: rest) =
       (if isInline then part.size else bytesPerOffset) + headWidth rest := by
   rw [headWidth, headWidthFrom, headWidthFrom_eq]
+  simp only [ByteBuffer.size_array]
   omega
 
 /-- The body loop from some width adds that width to the width from none. -/
@@ -60,6 +74,7 @@ theorem bodyWidth_cons_inline (part : Bytes) (rest : List (Bool × Bytes)) :
 theorem bodyWidth_cons_variable (part : Bytes) (rest : List (Bool × Bytes)) :
     bodyWidth ((false, part) :: rest) = part.size + bodyWidth rest := by
   rw [bodyWidth, bodyWidthFrom, bodyWidthFrom_eq]
+  simp only [ByteBuffer.size_array]
   omega
 
 /-! ## Layout -/
@@ -68,11 +83,12 @@ theorem bodyWidth_cons_variable (part : Bytes) (rest : List (Bool × Bytes)) :
 theorem headOfFrom_eq (start : Nat) (parts : List (Bool × Bytes)) (out : Bytes) :
     headOfFrom start parts out = out ++ headOf start parts := by
   induction parts generalizing start out with
-  | nil => rw [headOf, headOfFrom, headOfFrom, Array.append_empty]
+  | nil => rw [headOf, headOfFrom, headOfFrom, buffer_empty_array, Array.append_empty]
   | cons p rest ih =>
     obtain ⟨isInline, part⟩ := p
     cases isInline <;>
-      rw [headOf, headOfFrom, headOfFrom, ih, ih, Array.empty_append, Array.append_assoc]
+      rw [headOf, headOfFrom, headOfFrom, ih, ih, buffer_empty_array,
+        Array.empty_append, Array.append_assoc]
 
 /-- No parts have no fixed part. -/
 theorem headOf_nil (start : Nat) : headOf start [] = #[] := rfl
@@ -80,24 +96,26 @@ theorem headOf_nil (start : Nat) : headOf start [] = #[] := rfl
 /-- An inline part sits in the fixed part in full. -/
 theorem headOf_cons_inline (start : Nat) (part : Bytes) (rest : List (Bool × Bytes)) :
     headOf start ((true, part) :: rest) = part ++ headOf start rest := by
-  rw [headOf, headOfFrom, headOfFrom_eq, Array.empty_append]
+  rw [headOf, headOfFrom, headOfFrom_eq, buffer_empty_array, Array.empty_append]
 
 /-- A part not in place leaves its offset, and the next body begins past its end. -/
 theorem headOf_cons_variable (start : Nat) (part : Bytes) (rest : List (Bool × Bytes)) :
     headOf start ((false, part) :: rest) =
       uintBytes bytesPerOffset start ++ headOf (start + part.size) rest := by
-  rw [headOf, headOfFrom, headOfFrom_eq, Array.empty_append]
+  rw [headOf, headOfFrom, headOfFrom_eq, buffer_empty_array, Array.empty_append]
+  rfl
 
 /-- The body loop from some bytes is the loop from none, after them. -/
 theorem bodiesOfFrom_eq (parts : List (Bool × Bytes)) (out : Bytes) :
     bodiesOfFrom parts out = out ++ bodiesOf parts := by
   induction parts generalizing out with
-  | nil => rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, Array.append_empty]
+  | nil => rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, buffer_empty_array, Array.append_empty]
   | cons p rest ih =>
     obtain ⟨isInline, part⟩ := p
     cases isInline
-    · rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, ih, ih, Array.empty_append, Array.append_assoc]
-    · rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, ih, ih, Array.empty_append]
+    · rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, ih, ih, buffer_empty_array,
+        Array.empty_append, Array.append_assoc]
+    · rw [bodiesOf, bodiesOfFrom, bodiesOfFrom, ih, ih, buffer_empty_array, Array.empty_append]
 
 /-- No parts have no bodies. -/
 theorem bodiesOf_nil : bodiesOf [] = #[] := rfl
@@ -109,7 +127,7 @@ theorem bodiesOf_cons_inline (part : Bytes) (rest : List (Bool × Bytes)) :
 /-- A part not in place puts its bytes first among the bodies that follow. -/
 theorem bodiesOf_cons_variable (part : Bytes) (rest : List (Bool × Bytes)) :
     bodiesOf ((false, part) :: rest) = part ++ bodiesOf rest := by
-  rw [bodiesOf, bodiesOfFrom, bodiesOfFrom_eq, Array.empty_append]
+  rw [bodiesOf, bodiesOfFrom, bodiesOfFrom_eq, buffer_empty_array, Array.empty_append]
 
 /-! ## Elements and fields -/
 
@@ -291,7 +309,46 @@ theorem assemble_eq (inline : List Bool) (parts : List Bytes) :
       let total := leading + bodyWidth slots
       if total ≥ 2 ^ (8 * bytesPerOffset) then throw (.offsetOverflow total)
       return headOf leading slots ++ bodiesOf slots) := by
-  rw [assemble, List.zip_eq_zipWith]
+  simp only [assemble, assembleSlots, List.zip_eq_zipWith, buffer_reserve_array,
+    Array.emptyWithCapacity_eq, bodiesOfFrom_eq, headOf, buffer_empty_array]
+
+private theorem fixed_layout (parts : List Bytes) (start width : Nat) (out : Bytes) :
+    headWidthFrom (parts.map fun part => (true, part)) width =
+      parts.foldl (fun width part => width + part.size) width ∧
+    bodyWidthFrom (parts.map fun part => (true, part)) width = width ∧
+    headOfFrom start (parts.map fun part => (true, part)) out = parts.foldl (· ++ ·) out ∧
+    bodiesOfFrom (parts.map fun part => (true, part)) out = out := by
+  induction parts generalizing width out with
+  | nil => simp [headWidthFrom, bodyWidthFrom, headOfFrom, bodiesOfFrom]
+  | cons part rest ih =>
+    simp [headWidthFrom, bodyWidthFrom, headOfFrom, bodiesOfFrom]
+    exact ⟨(ih (width + part.size) out).1, (ih width out).2.1,
+      (ih width (out ++ part)).2.2.1, (ih width out).2.2.2⟩
+
+private theorem assembleFixed_eq (parts : List Bytes) :
+    assembleFixed parts = assembleSlots (parts.map fun part => (true, part)) := by
+  have widths := fixed_layout parts 0 0 #[]
+  have head := fun start out => (fixed_layout parts start 0 out).2.2.1
+  have bodies := fun out => (fixed_layout parts 0 0 out).2.2.2
+  simp only [assembleFixed, assembleSlots, headWidth, bodyWidth, widths.1, widths.2.1,
+    Nat.add_zero, head, bodies, ByteBuffer.size_array]
+
+/-- Every part of a sequence uses the same inline flag. -/
+theorem serializeSequence_eq (element : Desc) (elements : List Value) :
+    serializeSequence element elements = (do
+      let parts ← serializeEach element elements
+      assemble (parts.map fun _ => element.isFixed) parts) := by
+  simp only [serializeSequence, assemble, ← List.zip_eq_zipWith]
+  cases serializeEach element elements with
+  | error => rfl
+  | ok parts =>
+    cases parts with
+    | nil => rfl
+    | cons part parts =>
+      simp only [Bind.bind, Except.bind, ← List.map_prod_right_eq_zip, List.isEmpty_cons,
+        Bool.false_eq_true, ite_false]
+      cases element.isFixed <;>
+        simp only [Bool.false_eq_true, ite_false, ite_true, assembleFixed_eq]
 
 /-- The slices of a fixed-count sequence, with offsets paired to spans by `zip`. -/
 theorem vectorSlices_eq (element : Desc) (length : Nat) (data : Bytes) :

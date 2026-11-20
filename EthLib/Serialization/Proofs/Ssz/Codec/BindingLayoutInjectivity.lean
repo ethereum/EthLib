@@ -212,7 +212,8 @@ private theorem layoutDetermines_list (element : Desc) (capacity : Nat) : Layout
       | list bound _ =>
         cases rightSized with
         | list otherBound _ =>
-          simp only [merkleLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit, ite_false] at first second
+          simp only [merkleLayout, listLayout, Nat.not_lt.mpr limit, Nat.not_lt.mpr otherLimit,
+            ite_false] at first second
           -- The well-formed enclosing type guarantees a well-formed element type for recovering each element.
           have childSound := wellFormed_list sound
           exact congrArg Value.seq (sequenceLayout_injective childSound

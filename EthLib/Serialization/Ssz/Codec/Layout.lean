@@ -16,10 +16,6 @@ def Desc.isBasic : Desc → Bool
   | .uint _ => true
   | _ => false
 
-/-- Number of nodes needed to hold a given number of bytes. -/
-def chunksForBytes (byteCount : Nat) : Nat :=
-  (byteCount + bytesPerChunk - 1) / bytesPerChunk
-
 /-- Number of nodes needed to hold a given number of bits. -/
 def chunksForBits (bitCount : Nat) : Nat :=
   (bitCount + 8 * bytesPerChunk - 1) / (8 * bytesPerChunk)
@@ -109,6 +105,15 @@ def fixedLeaf (shape : Desc) (value : Value) : Except Err MerkleLayout := do
   let chunks := packBytes (← serialize shape value)
   return .packing chunks (some chunks.size)
 
+/-- Convert a capacity in basic elements to a capacity in nodes. -/
+@[inline] abbrev packedSequenceCapacity (element : Desc) (positions : Option Nat) : Option Nat :=
+  positions.map fun count => chunksForBytes (count * element.itemLength)
+
+/-- The layout of already packed basic elements. -/
+@[inline] abbrev packedSequenceLayout (element : Desc) (chunks : Array Bytes)
+    (positions : Option Nat) (mixin : Option Bytes) : MerkleLayout :=
+  .packing chunks (packedSequenceCapacity element positions) mixin
+
 /--
 The subtree a sequence of elements takes.
 
@@ -121,10 +126,15 @@ The positions are the sequence's declared capacity, or none where a spine bounds
 def sequenceLayout (element : Desc) (elements : List Value) (positions : Option Nat)
     (mixin : Option Bytes := none) : Except Err MerkleLayout := do
   if element.isBasic then
-    -- Packed elements are counted in nodes, so a declared capacity is measured in bytes.
-    let capacity := positions.map fun count => chunksForBytes (count * element.itemLength)
-    return .packing (packElements (← serializeEach element elements)) capacity mixin
+    return packedSequenceLayout element (packElements (← serializeEach element elements))
+      positions mixin
   return .nesting (elements.map fun value => some (element, value)) positions mixin
+
+/-- Check a list's count before laying out its contents and the count it mixes in. -/
+@[inline] abbrev listLayout {α : Type} (limit count : Nat)
+    (contents : Option Nat → Option Bytes → Except Err α) : Except Err α := do
+  if count > limit then throw (.overLimit limit count)
+  contents (some limit) (lengthWord count)
 
 /-- How one value merkleizes: its leaves, their tree shape, and the word mixed in. -/
 def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
@@ -155,9 +165,9 @@ def merkleLayout (shape : Desc) (value : Value) : Except Err MerkleLayout :=
     if elements.length != length then throw (.scope length elements.length)
     -- A fixed element count is recovered from the type, so nothing is mixed in.
     sequenceLayout element elements (some length)
-  | .list element limit, .seq elements => do
-    if elements.length > limit then throw (.overLimit limit elements.length)
-    sequenceLayout element elements (some limit) (lengthWord elements.length)
+  | .list element limit, .seq elements =>
+    listLayout limit elements.length fun positions mixin =>
+      sequenceLayout element elements positions mixin
   | .progressiveList element limit, .seq elements => do
     boundCheck limit elements.length
     -- The count mixed in is the element count, never the number of nodes they packed into.

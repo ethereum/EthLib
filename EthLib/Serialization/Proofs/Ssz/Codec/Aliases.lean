@@ -45,7 +45,8 @@ theorem serializeSequence_bytes (data : Bytes) :
       if data.size ≥ 2 ^ (8 * bytesPerOffset) then .error (.offsetOverflow data.size)
       else .ok data := by
   -- Treat each original byte as one fixed-width integer payload.
-  unfold serializeSequence byteValues
+  rw [serializeSequence_eq]
+  unfold byteValues
   rw [serializeEach_bytes]
   simp only [Bind.bind, Except.bind, Desc.isFixed, Desc.fixedSize, Option.isSome_some]
   -- The sequence contains exactly one inline slot for each byte.
@@ -163,7 +164,8 @@ theorem merkleLayout_byteVector_alias (data : Bytes) (length : Nat) :
       merkleLayout (.vector (.uint 1) length) (.seq (byteValues data)) := by
   -- The byte count determines the same rounded-up node capacity on both paths.
   by_cases counted : data.size = length <;>
-    simp [merkleLayout, counted, sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues,
+    simp [merkleLayout, counted, sequenceLayout, packedSequenceLayout, Desc.isBasic,
+      Desc.itemLength, byteValues,
       serializeEach_bytes, packElements_bytes, chunksForBytes, packBytes_size, Bind.bind,
       Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 
@@ -172,7 +174,8 @@ theorem merkleLayout_byteList_alias (data : Bytes) (limit : Nat) :
     merkleLayout (.byteList limit) (.bytes data) =
       merkleLayout (.list (.uint 1) limit) (.seq (byteValues data)) := by
   -- Both the element count and the capacity count bytes, so even limit failures coincide.
-  simp [merkleLayout, sequenceLayout, Desc.isBasic, Desc.itemLength,
+  simp [merkleLayout, listLayout, sequenceLayout, packedSequenceLayout, Desc.isBasic,
+    Desc.itemLength,
     byteValues, serializeEach_bytes, packElements_bytes, Bind.bind, Except.bind, pure, Except.pure]
 
 /-- Fixed byte arrays and byte vectors have identical Merkle roots, or refuse alike. -/
@@ -182,7 +185,8 @@ theorem hashTreeRoot_byteVector_alias (data : Bytes) (length : Nat) :
   -- Packed leaves consume no recursive rooting budget, so the two type depths are immaterial.
   by_cases counted : data.size = length <;>
     simp [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout, counted,
-      sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes,
+      sequenceLayout, packedSequenceLayout, Desc.isBasic, Desc.itemLength, byteValues,
+        serializeEach_bytes,
       packElements_bytes, chunksForBytes, packBytes_size, layoutChunksAt_eq, MerkleLayout.packing,
       Leaves.count, Bind.bind, Except.bind, pure, Except.pure, throw, throwThe,
       MonadExceptOf.throw]
@@ -193,8 +197,10 @@ theorem hashTreeRoot_byteList_alias (data : Bytes) (limit : Nat) :
       hashTreeRoot (.list (.uint 1) limit) (.seq (byteValues data)) := by
   -- Both paths pack the same bytes and mix in the same element count.
   by_cases over : limit < data.size <;>
-    simp [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout, over,
-      sequenceLayout, Desc.isBasic, Desc.itemLength, byteValues, serializeEach_bytes,
+    simp [hashTreeRoot_eq_nesting, Desc.nesting, hashTreeRootAt_succ, merkleLayout,
+      listLayout, over,
+      sequenceLayout, packedSequenceLayout, Desc.isBasic, Desc.itemLength, byteValues,
+        serializeEach_bytes,
       packElements_bytes, layoutChunksAt_eq, MerkleLayout.packing, Leaves.count, Bind.bind,
       Except.bind, pure, Except.pure, throw, throwThe, MonadExceptOf.throw]
 

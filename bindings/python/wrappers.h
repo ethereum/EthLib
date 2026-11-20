@@ -797,6 +797,18 @@ call_pyvalue_export(
   PyObject* error_class
 );
 
+/* Call a two-argument export with an optional byte or natural number batch.
+ * Byte strings above max_byte_width use the general converter. */
+PyObject*
+call_pyvalue_export_batch(
+  lean_object* (*export)(lean_object*),
+  lean_object* (*bytes_batch_export)(lean_object*),
+  lean_object* (*nat_batch_export)(lean_object*),
+  size_t max_byte_width,
+  PyObject* args,
+  PyObject* error_class
+);
+
 PyObject* py_pyvalue_echo                                 (PyObject* self, PyObject* args);
 
 PyObject* py_quic_header_encode(PyObject* self, PyObject* args);

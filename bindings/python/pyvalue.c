@@ -56,10 +56,12 @@ extern lean_object* eth_pyvalue_echo(lean_object* args);
  * The same `bytes` passed twice counts twice, since Lean holds two copies. */
 #define PV_MAX_BYTES ((size_t) 1 << 29)
 
-/* The state of one conversion from Python: the parts and the bytes it may still convert. */
+/* The budgets and last converted dictionary key for one call. */
 typedef struct {
   size_t parts_left;
   size_t bytes_left;
+  PyObject* last_key;
+  lean_object* last_key_text;
 } pv_budget;
 
 /* Take a number of bytes from the budget, or set `ValueError` and return 0. */
@@ -78,6 +80,16 @@ take_bytes(
 }
 
 static lean_object* of_py(PyObject* obj, int depth, pv_budget* budget);
+
+/* CPython has already supplied valid UTF-8 and knows the character count. */
+static lean_object*
+unicode_to_lean(
+  PyObject* text,
+  const char* utf8,
+  Py_ssize_t len
+) {
+  return lean_mk_string_unchecked(utf8, (size_t) len, (size_t) PyUnicode_GET_LENGTH(text));
+}
 
 /* A boxed constructor with one object field. */
 static lean_object*
@@ -139,16 +151,67 @@ items_of_py(
   pv_budget* budget
 ) {
   Py_ssize_t n = PyTuple_GET_SIZE(tuple);
-  lean_object* out = lean_alloc_array(0, (size_t) n);
+  lean_object* out = lean_alloc_array((size_t) n, (size_t) n);
   for (Py_ssize_t i = 0; i < n; i++) {
     lean_object* item = of_py(PyTuple_GET_ITEM(tuple, i), depth + 1, budget);
     if (!item) {
+      /* Release only the slots filled so far. */
+      lean_array_set_size(out, (size_t) i);
       lean_dec(out);
       return NULL;
     }
-    out = lean_array_push(out, item);
+    lean_array_set_core(out, (size_t) i, item);
   }
   return out;
+}
+
+/* One key and value from the snapshot of a dict. */
+static lean_object*
+entry_of_py(
+  PyObject* key,
+  PyObject* value,
+  int depth,
+  pv_budget* budget
+) {
+  if (!PyUnicode_Check(key)) {
+    PyErr_Format(PyExc_TypeError, "cannot pass a dict key of type %s to Lean",
+      Py_TYPE(key)->tp_name);
+    return NULL;
+  }
+  Py_ssize_t len;
+  const char* utf8 = PyUnicode_AsUTF8AndSize(key, &len);
+  if (!utf8 || !take_bytes(budget, (size_t) len)) return NULL;
+  lean_object* item = of_py(value, depth + 1, budget);
+  if (!item) return NULL;
+  lean_object* text;
+  if (key == budget->last_key) {
+    text = budget->last_key_text;
+    lean_inc(text);
+  } else {
+    text = unicode_to_lean(key, utf8, len);
+    /* Only exact strings can be released without running user code. */
+    if (PyUnicode_CheckExact(key)) {
+      if (budget->last_key_text) lean_dec(budget->last_key_text);
+      Py_XSETREF(budget->last_key, Py_NewRef(key));
+      budget->last_key_text = text;
+      lean_inc(text);
+    }
+  }
+  lean_object* entry = lean_alloc_ctor(0, 2, 0);
+  lean_ctor_set(entry, 0, text);
+  lean_ctor_set(entry, 1, item);
+  return entry;
+}
+
+/* Borrow the one entry of a dict while the caller holds its lock. */
+static int
+single_entry(
+  PyObject* dict,
+  PyObject** key,
+  PyObject** value
+) {
+  Py_ssize_t pos = 0;
+  return PyDict_GET_SIZE(dict) == 1 && PyDict_Next(dict, &pos, key, value);
 }
 
 /* The Lean array of the entries of a dict, or NULL with an exception set. */
@@ -158,6 +221,29 @@ entries_of_py(
   int depth,
   pv_budget* budget
 ) {
+  /* A one-entry dict needs only two owned references for its snapshot. */
+  PyObject* key = NULL;
+  PyObject* value = NULL;
+#ifdef Py_GIL_DISABLED
+  Py_BEGIN_CRITICAL_SECTION(dict);
+#endif
+  if (single_entry(dict, &key, &value)) {
+    Py_INCREF(key);
+    Py_INCREF(value);
+  }
+#ifdef Py_GIL_DISABLED
+  Py_END_CRITICAL_SECTION();
+#endif
+  if (key) {
+    lean_object* entry = entry_of_py(key, value, depth, budget);
+    Py_DECREF(value);
+    Py_DECREF(key);
+    if (!entry) return NULL;
+    lean_object* out = lean_alloc_array(1, 1);
+    lean_array_set_core(out, 0, entry);
+    return out;
+  }
+
   /* The pairs come from the storage of the dict, never from methods that a subclass overrides.
    *
    * The list keeps them fixed if the conversion of a value runs Python code. */
@@ -167,20 +253,9 @@ entries_of_py(
   lean_object* out = lean_alloc_array(0, (size_t) n);
   for (Py_ssize_t i = 0; i < n; i++) {
     PyObject* pair = PyList_GET_ITEM(pairs, i);
-    PyObject* key = PyTuple_GET_ITEM(pair, 0);
-    if (!PyUnicode_Check(key)) {
-      PyErr_Format(PyExc_TypeError, "cannot pass a dict key of type %s to Lean",
-        Py_TYPE(key)->tp_name);
-      goto fail;
-    }
-    Py_ssize_t len;
-    const char* utf8 = PyUnicode_AsUTF8AndSize(key, &len);
-    if (!utf8 || !take_bytes(budget, (size_t) len)) goto fail;
-    lean_object* item = of_py(PyTuple_GET_ITEM(pair, 1), depth + 1, budget);
-    if (!item) goto fail;
-    lean_object* entry = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(entry, 0, lean_mk_string_from_bytes(utf8, (size_t) len));
-    lean_ctor_set(entry, 1, item);
+    lean_object* entry = entry_of_py(PyTuple_GET_ITEM(pair, 0), PyTuple_GET_ITEM(pair, 1),
+      depth, budget);
+    if (!entry) goto fail;
     out = lean_array_push(out, entry);
   }
   Py_DECREF(pairs);
@@ -225,7 +300,7 @@ of_py(
     Py_ssize_t len;
     const char* utf8 = PyUnicode_AsUTF8AndSize(obj, &len);
     if (!utf8 || !take_bytes(budget, (size_t) len)) return NULL;
-    return pv_ctor(PV_STR, lean_mk_string_from_bytes(utf8, (size_t) len));
+    return pv_ctor(PV_STR, unicode_to_lean(obj, utf8, len));
   }
   if (PyTuple_Check(obj)) {
     lean_object* items = items_of_py(obj, depth, budget);
@@ -247,12 +322,30 @@ of_py(
   return NULL;
 }
 
+static void
+release_budget(
+  pv_budget* budget
+) {
+  Py_XDECREF(budget->last_key);
+  if (budget->last_key_text) lean_dec(budget->last_key_text);
+}
+
+static lean_object*
+of_py_bounded(
+  PyObject* obj,
+  int depth
+) {
+  pv_budget budget = {.parts_left = PV_MAX_PARTS, .bytes_left = PV_MAX_BYTES};
+  lean_object* value = of_py(obj, depth, &budget);
+  release_budget(&budget);
+  return value;
+}
+
 lean_object*
 pyvalue_of_py(
   PyObject* obj
 ) {
-  pv_budget budget = {PV_MAX_PARTS, PV_MAX_BYTES};
-  return of_py(obj, 0, &budget);
+  return of_py_bounded(obj, 0);
 }
 
 static PyObject* to_py(b_lean_obj_arg value, PyObject* error_class);
@@ -406,10 +499,269 @@ call_pyvalue_export(
     return NULL;
   }
   /* The tuple of the arguments is not a level of nesting, so each argument starts at depth 0. */
-  pv_budget budget = {PV_MAX_PARTS, PV_MAX_BYTES};
-  lean_object* value = of_py(args, -1, &budget);
+  lean_object* value = of_py_bounded(args, -1);
   if (!value) return NULL;
   return except_into_pyvalue(export(value), error_class);
+}
+
+/* A short sequence does not amortize a separate snapshot and packed allocation. */
+#define PV_MIN_BATCH 32
+
+/* A fallback can hold the packed data alongside the expanded entries. */
+#define PV_MAX_BATCH_BYTES ((size_t) 8 << 20)
+
+/* The outer entry can be probed without keeping a reference to either borrowed object. */
+static int
+batch_sequence(
+  PyObject* dict,
+  PyObject** owned_key,
+  PyObject** owned_items
+) {
+  if (!PyDict_CheckExact(dict)) return 0;
+  int match = 0;
+  PyObject* key;
+  PyObject* items;
+#ifdef Py_GIL_DISABLED
+  Py_BEGIN_CRITICAL_SECTION(dict);
+#endif
+  if (single_entry(dict, &key, &items) && PyUnicode_CheckExact(key) &&
+      PyUnicode_IS_ASCII(key)) {
+    Py_ssize_t count = 0;
+    if (PyList_CheckExact(items)) count = PyList_Size(items);
+    if (PyTuple_CheckExact(items)) count = PyTuple_GET_SIZE(items);
+    if (count >= PV_MIN_BATCH) {
+      match = 1;
+      if (owned_key) {
+        *owned_key = Py_NewRef(key);
+        *owned_items = Py_NewRef(items);
+      }
+    }
+  }
+#ifdef Py_GIL_DISABLED
+  Py_END_CRITICAL_SECTION();
+#endif
+  return match;
+}
+
+/* Read a cell with an exact ASCII key and an immutable payload.
+ * A free-threaded build retains the payload before it releases the lock.
+ * Under the GIL, the packing loops borrow it and run no Python callbacks. */
+static PyObject*
+batch_cell(
+  PyObject* dict,
+  PyObject** common_key,
+  int allow_bytes,
+  int allow_nats
+) {
+  if (!PyDict_CheckExact(dict)) return NULL;
+  PyObject* key;
+  PyObject* value;
+  PyObject* data = NULL;
+#ifdef Py_GIL_DISABLED
+  Py_BEGIN_CRITICAL_SECTION(dict);
+#endif
+  if (single_entry(dict, &key, &value) &&
+      ((allow_bytes && PyBytes_CheckExact(value)) || (allow_nats && PyLong_CheckExact(value))) &&
+      (*common_key ? key == *common_key : PyUnicode_CheckExact(key) && PyUnicode_IS_ASCII(key))) {
+    if (!*common_key) *common_key = Py_NewRef(key);
+#ifdef Py_GIL_DISABLED
+    data = Py_NewRef(value);
+#else
+    data = value;
+#endif
+  }
+#ifdef Py_GIL_DISABLED
+  Py_END_CRITICAL_SECTION();
+#endif
+  return data;
+}
+
+static void
+release_batch_cell(
+  PyObject* value
+) {
+#ifdef Py_GIL_DISABLED
+  Py_XDECREF(value);
+#else
+  (void) value;
+#endif
+}
+
+/* Pack bytes after reading each immutable payload. */
+static lean_object*
+pack_byte_cells(
+  PyObject* items,
+  PyObject* first,
+  PyObject** item_key,
+  size_t count,
+  size_t width
+) {
+  lean_object* result = NULL;
+  PyObject** cells = PyMem_New(PyObject*, count);
+  if (!cells) return NULL;
+  cells[0] = first;
+  size_t filled = 1;
+  while (filled < count) {
+    PyObject* data = batch_cell(PyTuple_GET_ITEM(items, (Py_ssize_t) filled), item_key, 1, 0);
+    if (!data) goto end;
+    cells[filled++] = data;
+    if ((size_t) PyBytes_GET_SIZE(data) != width) goto end;
+  }
+  size_t len = count * width;
+  result = lean_alloc_sarray(1, len, len);
+  uint8_t* dest = lean_sarray_cptr(result);
+  for (size_t i = 0; i < count; i++)
+    memcpy(dest + i * width, PyBytes_AS_STRING(cells[i]), width);
+end:
+  for (size_t i = 1; i < filled; i++) release_batch_cell(cells[i]);
+  PyMem_Free(cells);
+  return result;
+}
+
+/* Use the int conversion that takes no bytes from the ordinary budget. */
+static int
+small_nat(
+  PyObject* value,
+  uint64_t* out
+) {
+  int overflow;
+  long long small = PyLong_AsLongLongAndOverflow(value, &overflow);
+  if (overflow || small < 0) return 0;
+  *out = (uint64_t) small;
+  return 1;
+}
+
+static lean_object*
+pack_nat_cells(
+  PyObject* items,
+  PyObject* first,
+  PyObject** item_key,
+  size_t count
+) {
+  uint64_t small;
+  if (count > PV_MAX_BATCH_BYTES / sizeof(lean_object*) || !small_nat(first, &small))
+    return NULL;
+  lean_object* result = lean_alloc_array(count, count);
+  lean_array_set_core(result, 0, lean_uint64_to_nat(small));
+  size_t filled = 1;
+  while (filled < count) {
+    PyObject* data = batch_cell(PyTuple_GET_ITEM(items, (Py_ssize_t) filled), item_key, 0, 1);
+    if (!data) break;
+    int fits = small_nat(data, &small);
+    release_batch_cell(data);
+    if (!fits) break;
+    lean_array_set_core(result, filled++, lean_uint64_to_nat(small));
+  }
+  if (filled == count) return result;
+  /* The slots past the converted prefix hold no references. */
+  lean_array_set_size(result, filled);
+  lean_dec(result);
+  return NULL;
+}
+
+/* Speculatively pack entries with a shared key inside the ordinary conversion budget. */
+static lean_object*
+try_batch(
+  PyObject* obj,
+  const pv_budget* budget,
+  int allow_bytes,
+  int allow_nats,
+  size_t max_byte_width,
+  int* packed_nats
+) {
+  PyObject* outer_key;
+  PyObject* sequence;
+  if (!batch_sequence(obj, &outer_key, &sequence)) return NULL;
+  PyObject* items = NULL;
+  PyObject* item_key = NULL;
+  PyObject* first = NULL;
+  lean_object* result = NULL;
+  size_t outer_len = (size_t) PyUnicode_GET_LENGTH(outer_key);
+  if (outer_len > budget->bytes_left || PV_MAX_DEPTH < 3 || budget->parts_left < 2) goto end;
+  items = PyTuple_CheckExact(sequence) ? Py_NewRef(sequence) : PyList_AsTuple(sequence);
+  if (!items) goto end;
+  size_t count = (size_t) PyTuple_GET_SIZE(items);
+  /* The outer dict and sequence take two parts, as do each inner dict and its payload. */
+  if (count < PV_MIN_BATCH || count > (budget->parts_left - 2) / 2) goto end;
+  first = batch_cell(PyTuple_GET_ITEM(items, 0), &item_key, allow_bytes, allow_nats);
+  if (!first) goto end;
+  *packed_nats = PyLong_CheckExact(first);
+  size_t width = *packed_nats ? 0 : (size_t) PyBytes_GET_SIZE(first);
+  if (width > max_byte_width) goto end;
+  size_t item_len = (size_t) PyUnicode_GET_LENGTH(item_key);
+  /* Each occurrence of the key and its bytes counts against the byte budget. */
+  size_t per_cell = (budget->bytes_left - outer_len) / count;
+  if (item_len > per_cell || width > per_cell - item_len ||
+      width > PV_MAX_BATCH_BYTES / count) goto end;
+  const char* outer_utf8 = PyUnicode_AsUTF8(outer_key);
+  const char* item_utf8 = PyUnicode_AsUTF8(item_key);
+  if (!outer_utf8 || !item_utf8) goto end;
+  lean_object* data = *packed_nats ? pack_nat_cells(items, first, &item_key, count) :
+    pack_byte_cells(items, first, &item_key, count, width);
+  if (!data) goto end;
+  result = lean_alloc_ctor(0, *packed_nats ? 3 : 5, 0);
+  lean_ctor_set(result, 0, unicode_to_lean(outer_key, outer_utf8, (Py_ssize_t) outer_len));
+  lean_ctor_set(result, 1, unicode_to_lean(item_key, item_utf8, (Py_ssize_t) item_len));
+  if (*packed_nats) {
+    lean_ctor_set(result, 2, data);
+  } else {
+    lean_ctor_set(result, 2, lean_usize_to_nat(count));
+    lean_ctor_set(result, 3, lean_usize_to_nat(width));
+    lean_ctor_set(result, 4, data);
+  }
+end:
+  release_batch_cell(first);
+  Py_XDECREF(item_key);
+  Py_XDECREF(items);
+  Py_DECREF(sequence);
+  Py_DECREF(outer_key);
+  /* The uncompressed conversion gives the original error in conversion order. */
+  if (!result && PyErr_Occurred()) PyErr_Clear();
+  return result;
+}
+
+PyObject*
+call_pyvalue_export_batch(
+  lean_object* (*export)(lean_object*),
+  lean_object* (*bytes_batch_export)(lean_object*),
+  lean_object* (*nat_batch_export)(lean_object*),
+  size_t max_byte_width,
+  PyObject* args,
+  PyObject* error_class
+) {
+  if (PyTuple_GET_SIZE(args) != 2) return call_pyvalue_export(export, args, 2, error_class);
+  PyObject* value = PyTuple_GET_ITEM(args, 1);
+  if (!batch_sequence(value, NULL, NULL)) return call_pyvalue_export(export, args, 2, error_class);
+
+  /* The argument tuple takes one part and each argument starts at depth zero. */
+  pv_budget budget = {.parts_left = PV_MAX_PARTS - 1, .bytes_left = PV_MAX_BYTES};
+  lean_object* type = of_py(PyTuple_GET_ITEM(args, 0), 0, &budget);
+  if (!type) {
+    release_budget(&budget);
+    return NULL;
+  }
+  int packed_nats;
+  lean_object* batch = try_batch(value, &budget, bytes_batch_export != NULL,
+    nat_batch_export != NULL, max_byte_width, &packed_nats);
+  if (batch) {
+    release_budget(&budget);
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, type);
+    lean_ctor_set(pair, 1, batch);
+    lean_object* result = packed_nats ? nat_batch_export(pair) : bytes_batch_export(pair);
+    return except_into_pyvalue(result, error_class);
+  }
+
+  lean_object* item = of_py(value, 0, &budget);
+  release_budget(&budget);
+  if (!item) {
+    lean_dec(type);
+    return NULL;
+  }
+  lean_object* tuple = lean_alloc_array(2, 2);
+  lean_array_set_core(tuple, 0, type);
+  lean_array_set_core(tuple, 1, item);
+  return except_into_pyvalue(export(pv_ctor(PV_TUPLE, tuple)), error_class);
 }
 
 PyObject*

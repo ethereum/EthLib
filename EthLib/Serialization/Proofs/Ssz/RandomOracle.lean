@@ -123,7 +123,7 @@ theorem evalWithAnswerFn_queryHash (f : QueryImpl HashOracle Id) (x : ByteArray)
 theorem evalWithAnswerFn_combineM (f : QueryImpl HashOracle Id) (left right : Bytes) :
     evalWithAnswerFn f (combineM queryHash left right) =
       (combineM (m := Id) (tableHash f) left right).run := by
-  simp [combineM, evalWithAnswerFn_queryHash]
+  simp [combineM_eq, evalWithAnswerFn_queryHash]
   rfl
 
 /-- A zero root, run against a full answer table, is the zero root with that table. -/
@@ -143,12 +143,14 @@ theorem evalWithAnswerFn_subtreeAtM (f : QueryImpl HashOracle Id) (chunks : Arra
       (subtreeAtM (Hasher.ofHash (m := Id) (tableHash f)) chunks depth start).run := by
   induction depth generalizing start with
   | zero =>
-    unfold subtreeAtM
+    rw [subtreeAtM_unfold oracleHasher,
+      subtreeAtM_unfold (Hasher.ofHash (m := Id) (tableHash f))]
     split
     · exact evalWithAnswerFn_zeroRootM f 0
     · rfl
   | succ depth ih =>
-    unfold subtreeAtM
+    rw [subtreeAtM_unfold oracleHasher,
+      subtreeAtM_unfold (Hasher.ofHash (m := Id) (tableHash f))]
     split
     · exact evalWithAnswerFn_zeroRootM f _
     · simp only [oracleHasher, Hasher.ofHash] at ih
@@ -187,11 +189,11 @@ theorem evalWithAnswerFn_merkleizeBoundedUncheckedM (f : QueryImpl HashOracle Id
       (merkleizeBoundedUncheckedM (Hasher.ofHash (m := Id) (tableHash f)) chunks limit).run := by
   cases limit with
   | none =>
-    simp only [merkleizeBoundedUncheckedM, evalWithAnswerFn_exceptT_lift,
+    simp only [merkleizeBoundedUncheckedM, merkleizeBoundedFromM, evalWithAnswerFn_exceptT_lift,
       evalWithAnswerFn_subtreeAtM]
     rfl
   | some capacity =>
-    simp only [merkleizeBoundedUncheckedM]
+    simp only [merkleizeBoundedUncheckedM, merkleizeBoundedFromM]
     split
     · rfl
     · simp only [evalWithAnswerFn_exceptT_lift, evalWithAnswerFn_subtreeAtM]
@@ -208,7 +210,7 @@ theorem evalWithAnswerFn_layoutChunksAtM (f : QueryImpl HashOracle Id) (budget :
     evalWithAnswerFn f (layoutChunksAtM oracleHasher budget layout start stop).run =
       (layoutChunksAtM (Hasher.ofHash (m := Id) (tableHash f)) budget layout start stop).run := by
   rw [layoutChunksAtM_id_eq]
-  simp only [layoutChunksAtM]
+  simp only [layoutChunksAtM_eq]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>
@@ -233,7 +235,8 @@ theorem evalWithAnswerFn_hashTreeRootAtM (f : QueryImpl HashOracle Id) (budget :
     exact evalWithAnswerFn_exceptT_throw f _
   | succ budget ih =>
     rw [hashTreeRootAtM_id_succ]
-    simp only [hashTreeRootAtM, evalWithAnswerFn_exceptT_bind, evalWithAnswerFn_exceptT_liftExcept,
+    simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM, evalWithAnswerFn_exceptT_bind,
+      evalWithAnswerFn_exceptT_liftExcept,
       evalWithAnswerFn_layoutChunksAtM f budget ih]
     show Except.bind _ _ = Except.bind _ _
     congr 1
@@ -242,8 +245,8 @@ theorem evalWithAnswerFn_hashTreeRootAtM (f : QueryImpl HashOracle Id) (budget :
     congr 1
     funext chunks
     cases layout.limit <;> cases layout.mixin <;>
-      simp only [evalWithAnswerFn_exceptT_bind, evalWithAnswerFn_exceptT_lift,
-        evalWithAnswerFn_exceptT_pure, evalWithAnswerFn_merkleizeProgressiveUncheckedM,
+      simp only [evalWithAnswerFn_exceptT_lift, evalWithAnswerFn_exceptT_pure,
+        evalWithAnswerFn_merkleizeProgressiveUncheckedM,
         evalWithAnswerFn_merkleizeBoundedUncheckedM] <;>
       simp only [mixInM, oracleHasher, Hasher.ofHash, evalWithAnswerFn_combineM] <;>
       rfl
@@ -303,7 +306,7 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
     cases hrun
     intro x hx
     rcases List.mem_cons.mp hx with rfl | hx
-    · simp only [combineM, simulateQ_bind] at hparent
+    · simp only [combineM_eq, simulateQ_bind] at hparent
       obtain ⟨inner, hinner, -⟩ := Option.bind_eq_some_iff.mp hparent
       exact cached_of_queryHash hinner
     · rcases List.mem_append.mp hx with hx | hx
@@ -313,7 +316,7 @@ theorem cached_of_rehash {cache : HashOracle.QueryCache} {tree : CommitmentTree}
 /-- A fold of two nodes makes one oracle call. -/
 theorem combineM_queryBound (left right : Bytes) :
     IsQueryBoundP (combineM queryHash left right) (fun _ => True) 1 := by
-  simp [combineM, queryHash]
+  simp [combineM_eq, queryHash]
 
 /-- The root of an all-zero subtree makes one oracle call per level. -/
 theorem zeroRootM_queryBound (depth : Nat) :
@@ -330,14 +333,14 @@ theorem subtreeAtM_queryBound (chunks : Array Bytes) (depth start : Nat) :
       (2 ^ depth - 1) := by
   induction depth generalizing start with
   | zero =>
-    unfold subtreeAtM
+    rw [subtreeAtM_unfold]
     split
     · exact zeroRootM_queryBound 0
     · trivial
   | succ depth ih =>
     have below : depth + 1 < 2 ^ (depth + 1) := Nat.lt_two_pow_self
     have half : 1 ≤ 2 ^ depth := Nat.one_le_two_pow
-    unfold subtreeAtM
+    rw [subtreeAtM_unfold]
     split
     · exact (zeroRootM_queryBound (depth + 1)).mono (by omega)
     · refine (isQueryBoundP_bind (ih start) fun _ _ =>
@@ -365,7 +368,7 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
         simulateQ cache.toPartialImpl (subtreeAtM oracleHasher chunks depth (start + 2 ^ depth)) =
           some right ∧
         simulateQ cache.toPartialImpl (combineM queryHash left right) = some root := by
-      unfold subtreeAtM at hrun
+      rw [subtreeAtM_unfold] at hrun
       split at hrun
       · rename_i past
         -- Past the data, both halves are the all-zero subtree one level below.
@@ -373,7 +376,7 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
             subtreeAtM oracleHasher chunks depth position
               = zeroRootM (combineM queryHash) zeroChunk depth := by
           intro position beyond
-          unfold subtreeAtM
+          rw [subtreeAtM_unfold]
           rw [ite_eq_left_of_eq_true _ _ (eq_true beyond)]
           rfl
         simp only [oracleHasher, Hasher.ofHash, zeroRootM, simulateQ_bind] at hrun
@@ -398,7 +401,7 @@ theorem cached_of_subtreeAtM {cache : HashOracle.QueryCache} {f : QueryImpl Hash
       show ∀ i, start + (i + 2 ^ depth) = start + 2 ^ depth + i from fun i => by omega] at hx
     rcases hx with rfl | hx | hx
     · rw [rooted hleft, rooted hright]
-      simp only [combineM, simulateQ_bind] at hparent
+      simp only [combineM_eq, simulateQ_bind] at hparent
       obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
       obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
       rw [hdigest, hf hdigest]

@@ -81,7 +81,8 @@ private theorem sequence_fits {element : Desc} {values : List Value}
     obtain ⟨parts, wrote, sized⟩ := serializeEach_basic_size basic values each
     refine ⟨.packing (packElements parts)
       (positions.map fun count => chunksForBytes (count * element.itemLength)) mixin,
-      by simp [sequenceLayout, basic, wrote, Bind.bind, Except.bind, pure, Except.pure], ?_⟩
+      by simp [sequenceLayout, packedSequenceLayout, basic, wrote, Bind.bind,
+        Except.bind, pure, Except.pure], ?_⟩
     apply packed_fits
     intro capacity named
     obtain ⟨count, rfl, rfl⟩ := Option.map_eq_some_iff.mp named
@@ -187,7 +188,7 @@ theorem layout_exists {shape : Desc} {value : Value}
     simpa [merkleLayout, count] using
       sequence_fits (wellFormed_vector sound) each (some length) none (by simp [count])
   | @list element limit elements within each =>
-    simpa [merkleLayout, Nat.not_lt.mpr within] using
+    simpa [merkleLayout, listLayout, Nat.not_lt.mpr within] using
       sequence_fits (wellFormed_list sound) each (some limit) (lengthWord elements.length)
         (by intro capacity named; cases named; exact within)
   | @progressiveList element limit elements within each =>

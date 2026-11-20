@@ -15,20 +15,85 @@ A value is read against a type rather than being one.
 
 A decoder can then hand back what it read and have the result checked afterwards.
 -/
-inductive Value where
+inductive ValueOf (ByteData : Type) where
   /-- A boolean. -/
   | bool (b : Bool)
   /-- An unsigned integer, whose width comes from the type it is read against. -/
   | uint (n : Nat)
   /-- Opaque bytes, for the two byte-array shapes. -/
-  | bytes (data : Array UInt8)
+  | bytes (data : ByteData)
   /-- Bits, for the three bitfield shapes. -/
   | bits (data : Array Bool)
   /-- Elements in order, for the sequences and for the structs. -/
-  | seq (elements : List Value)
+  | seq (elements : List (ValueOf ByteData))
   /-- One option of a union, under the selector it was chosen by. -/
-  | union (selector : Nat) (data : Value)
+  | union (selector : Nat) (data : ValueOf ByteData)
   deriving Inhabited
+
+/-- An SSZ value whose byte leaves are ordinary arrays. -/
+abbrev Value : Type := ValueOf (Array UInt8)
+
+namespace Value
+
+@[inherit_doc ValueOf.bool, match_pattern]
+abbrev bool : Bool → Value := ValueOf.bool
+
+@[inherit_doc ValueOf.uint, match_pattern]
+abbrev uint : Nat → Value := ValueOf.uint
+
+@[inherit_doc ValueOf.bytes, match_pattern]
+abbrev bytes : Array UInt8 → Value := ValueOf.bytes
+
+@[inherit_doc ValueOf.bits, match_pattern]
+abbrev bits : Array Bool → Value := ValueOf.bits
+
+@[inherit_doc ValueOf.seq, match_pattern]
+abbrev seq : List Value → Value := ValueOf.seq
+
+@[inherit_doc ValueOf.union, match_pattern]
+abbrev union : Nat → Value → Value := ValueOf.union
+
+-- These eliminators keep the byte representation implicit in their existing uses.
+noncomputable abbrev rec := @ValueOf.rec (Array UInt8)
+noncomputable abbrev recOn := @ValueOf.recOn (Array UInt8)
+noncomputable abbrev casesOn := @ValueOf.casesOn (Array UInt8)
+noncomputable abbrev brecOn := @ValueOf.brecOn (Array UInt8)
+noncomputable abbrev rec_1 := @ValueOf.rec_1 (Array UInt8)
+noncomputable abbrev brecOn_1 := @ValueOf.brecOn_1 (Array UInt8)
+noncomputable abbrev noConfusion := @ValueOf.noConfusion (Array UInt8)
+noncomputable abbrev noConfusionType := @ValueOf.noConfusionType (Array UInt8)
+
+namespace bool
+abbrev inj := @ValueOf.bool.inj (Array UInt8)
+abbrev injEq := @ValueOf.bool.injEq (Array UInt8)
+end bool
+
+namespace uint
+abbrev inj := @ValueOf.uint.inj (Array UInt8)
+abbrev injEq := @ValueOf.uint.injEq (Array UInt8)
+end uint
+
+namespace bytes
+abbrev inj := @ValueOf.bytes.inj (Array UInt8)
+abbrev injEq := @ValueOf.bytes.injEq (Array UInt8)
+end bytes
+
+namespace bits
+abbrev inj := @ValueOf.bits.inj (Array UInt8)
+abbrev injEq := @ValueOf.bits.injEq (Array UInt8)
+end bits
+
+namespace seq
+abbrev inj := @ValueOf.seq.inj (Array UInt8)
+abbrev injEq := @ValueOf.seq.injEq (Array UInt8)
+end seq
+
+namespace union
+abbrev inj := @ValueOf.union.inj (Array UInt8)
+abbrev injEq := @ValueOf.union.injEq (Array UInt8)
+end union
+
+end Value
 
 mutual
 

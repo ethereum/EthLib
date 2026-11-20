@@ -266,7 +266,7 @@ private theorem byteBodiesOfFrom_map (slots : List (Bool × Bytes)) (out : Bytes
 /-- Parts joined as byte arrays are the parts joined by the untyped codec. -/
 theorem assembleBytes_eq (inline : List Bool) (parts : List Bytes) :
     assembleBytes inline (parts.map ByteArray.mk) = ByteArray.mk <$> assemble inline parts := by
-  unfold assembleBytes assemble
+  unfold assembleBytes assemble assembleSlots
   simp only [zipWith_map, headWidthFrom_map, bodyWidthFrom_map, headWidth, bodyWidth]
   by_cases h : headWidthFrom (List.zipWith Prod.mk inline parts) 0 +
       bodyWidthFrom (List.zipWith Prod.mk inline parts) 0 ≥ 2 ^ (8 * bytesPerOffset)
@@ -276,7 +276,10 @@ theorem assembleBytes_eq (inline : List Bool) (parts : List Bytes) :
     have e : ByteArray.emptyWithCapacity
         (headWidthFrom (List.zipWith Prod.mk inline parts) 0 +
           bodyWidthFrom (List.zipWith Prod.mk inline parts) 0) = ⟨#[]⟩ := rfl
-    rw [e, byteHeadOfFrom_map, byteBodiesOfFrom_map, bodiesOfFrom_eq (out := _)]
+    have reserve (capacity : Nat) : (ByteBuffer.reserve capacity : Bytes) = #[] := by
+      change Array.emptyWithCapacity capacity = #[]
+      exact Array.emptyWithCapacity_eq
+    rw [e, byteHeadOfFrom_map, byteBodiesOfFrom_map, reserve]
     rfl
 
 end EthLib.Serialization.Ssz

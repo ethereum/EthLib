@@ -19,6 +19,7 @@ namespace EthLib.Serialization.Ssz
 /-- Every parent digest is a complete SSZ node, regardless of the child inputs. -/
 @[simp] theorem combine_size (left right : Bytes) : (combine left right).size = bytesPerChunk := by
   -- SHA-256 produces thirty-two bytes independently of the message contents.
+  rw [combine_eq]
   exact Cryptography.Hash.Sha256.hash_size (ByteArray.mk (left ++ right))
 
 /-- The climb with SHA-256 in the identity monad is the climb of the specification. -/
@@ -88,7 +89,7 @@ theorem findBranchCollision_valid_of_width (hash : ByteArray → ByteArray)
   obtain ⟨⟨different, joined⟩, -⟩ := Cryptography.Merkle.findCollision_valid _ _ _ _ _ _ c hc
   -- Every node the two climbs hash has 32 bytes, since a parent is a digest of the hash.
   obtain ⟨x1, x2, y1, y2⟩ := Cryptography.Merkle.findCollision_children _
-    (fun node => node.size = bytesPerChunk) (fun _ x y => width (ByteArray.mk (x ++ y)))
+    (fun node => node.size = bytesPerChunk) (fun _ _ _ => width _)
     leftWidth rightWidth leftWidths rightWidths hc
   refine ⟨by simp [x1, x2, Nat.two_mul], by simp [y1, y2, Nat.two_mul],
     fun equal => different ?_, ?_⟩
@@ -96,6 +97,7 @@ theorem findBranchCollision_valid_of_width (hash : ByteArray → ByteArray)
     obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
     exact Prod.ext h1 h2
   · -- The two pairs hash to one parent, which is the digest of their messages.
+    simp only [combineM_eq] at joined
     exact ByteArray.ext joined
 
 /-- Between branches of complete nodes, the search returns two different 64-byte messages.

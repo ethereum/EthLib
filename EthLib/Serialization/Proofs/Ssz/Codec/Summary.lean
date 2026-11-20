@@ -424,13 +424,15 @@ theorem hashTreeRoot_list_summary {element : Desc} {limit : Nat} {values : List 
   obtain ⟨same, counted⟩ := summary_slots rooted
   by_cases fits : values.length ≤ limit
   · exact hashTreeRoot_slots (limit := some limit) (mixin := some (lengthWord values.length))
-      (by simp [merkleLayout, sequenceLayout, counted, fits, Desc.isBasic, MerkleLayout.nesting,
+      (by simp [merkleLayout, listLayout, sequenceLayout, counted, fits, Desc.isBasic,
+        MerkleLayout.nesting,
         Bind.bind, Except.bind, pure, Except.pure])
-      (by simp [merkleLayout, sequenceLayout, composite, fits, MerkleLayout.nesting,
+      (by simp [merkleLayout, listLayout, sequenceLayout, composite, fits, MerkleLayout.nesting,
         Bind.bind, Except.bind, pure, Except.pure]) same
   · rw [hashTreeRoot_refused (fault := .overLimit limit values.length),
       hashTreeRoot_refused (fault := .overLimit limit values.length)]
-    all_goals simp [merkleLayout, counted, Nat.lt_of_not_le fits, Bind.bind, Except.bind, throw,
+    all_goals simp [merkleLayout, listLayout, counted, Nat.lt_of_not_le fits, Bind.bind,
+      Except.bind, throw,
       throwThe, MonadExceptOf.throw]
 
 /-- A progressive list of composite elements has the root of the progressive list of their roots. -/

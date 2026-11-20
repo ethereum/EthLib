@@ -128,15 +128,17 @@ theorem hashTreeRootM_depositData {m : Type → Type} [Monad m] [LawfulMonad m]
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
-    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksAtM, Leaves.count,
+    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksAtM_eq, Leaves.count,
     Option.getD_none, List.drop_zero, Nat.sub_zero, List.take_succ_cons, List.take_zero,
     List.mapM_cons, List.mapM_nil]
-  simp only [ExceptT.run_bind, ExceptT.run_pure, bind_assoc, pubkey, credentials, amount,
+  simp only [ExceptT.run_bind, bind_assoc, pubkey, credentials, amount,
     signature, pure_bind]
-  simp only [merkleizeBoundedUncheckedM, List.size_toArray, List.length_cons, List.length_nil,
-    Nat.zero_add, Nat.reduceAdd, Nat.lt_irrefl, ↓reduceIte, ExceptT.run_lift,
+  simp only [hashLayoutChunksM, hashLayoutFromM, merkleizeBoundedUncheckedM,
+    merkleizeBoundedFromM, List.size_toArray, List.length_cons,
+    List.length_nil, Nat.zero_add, Nat.reduceAdd, Nat.lt_irrefl, ↓reduceIte, bind_pure,
+    ExceptT.run_lift,
     show depthFor 4 = 2 from depthFor_pow 2]
-  simp [subtreeAtM_ofHash_four hash, combineM, padded]
+  simp [subtreeAtM_ofHash_four hash, combineM_eq, padded]
 
 /-- Two replayed equal roots of deposit data come from equal data, or the cache has a collision.
 

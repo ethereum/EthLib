@@ -16,6 +16,22 @@ section
 
 variable {m : Type → Type} [Monad m] (hasher : Hasher m)
 
+/-- Mix a layout's word into the root of its contents, where it has one. -/
+@[inline] def hashLayoutFromM (mixin : Option Bytes) (contents : ExceptT Err m Bytes) :
+    ExceptT Err m Bytes := do
+  let root ← contents
+  -- A shape mixing a word in puts its contents on the left and the word on the right.
+  match mixin with
+  | none => return root
+  | some word => ExceptT.lift (mixInM hasher root word)
+
+/-- Hash the leaves of a layout and mix in its word, where it has one. -/
+@[inline] def hashLayoutChunksM (layout : MerkleLayout) (chunks : Array Bytes) :
+    ExceptT Err m Bytes :=
+  hashLayoutFromM hasher layout.mixin (match layout.limit with
+    | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
+    | some capacity => merkleizeBoundedUncheckedM hasher chunks (some capacity))
+
 mutual
 
 /--
@@ -32,14 +48,7 @@ def hashTreeRootAtM : Nat → Desc → Value → ExceptT Err m Bytes
   | 0, _, _ => throw .proofIncomplete
   | budget + 1, shape, value => do
     let layout ← merkleLayout shape value
-    let chunks ← layoutChunksAtM budget layout
-    let root ← match layout.limit with
-      | none => ExceptT.lift (merkleizeProgressiveUncheckedM hasher chunks.toList)
-      | some capacity => merkleizeBoundedUncheckedM hasher chunks (some capacity)
-    -- A shape mixing a word in puts its contents on the left and the word on the right.
-    match layout.mixin with
-    | none => return root
-    | some word => ExceptT.lift (mixInM hasher root word)
+    hashLayoutChunksM hasher layout (← layoutChunksAtM budget layout)
 
 /--
 The leaves in a half-open range, as nodes, each nested value rooted here.
@@ -50,12 +59,15 @@ Building that proof then does not hash the whole value.
 -/
 def layoutChunksAtM (budget : Nat) (layout : MerkleLayout)
     (start : Nat := 0) (stop : Option Nat := none) : ExceptT Err m (Array Bytes) := do
-  -- An absent end means every leaf the shape produced.
-  let last := stop.getD layout.leaves.count
   match layout.leaves with
-  | .packed chunks => return chunks.extract start last
+  | .packed chunks =>
+    if start == 0 && stop.isNone then return chunks
+    return chunks.extract start (stop.getD chunks.size)
   | .nested values =>
-    let slots := (values.drop start).take (last - start)
+    let slots := match start, stop with
+      | 0, none => values
+      | _, none => values.drop start
+      | _, some last => (values.drop start).take (last - start)
     let chunks ← slots.mapM fun slot =>
       match slot with
       -- A position carrying no value merkleizes as a zero leaf.

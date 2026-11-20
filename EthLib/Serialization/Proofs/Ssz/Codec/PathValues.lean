@@ -92,7 +92,7 @@ theorem PathSelects.listElement {element : Desc} {limit : Nat} {values : List Va
     let layout := MerkleLayout.nesting (values.map fun value => some (element, value))
       (some limit) (lengthWord values.length)
     have laid : merkleLayout (.list element limit) (.seq values) = .ok layout := by
-      simp [merkleLayout, Nat.not_lt.mpr within, sequenceLayout, composite, layout,
+      simp [merkleLayout, listLayout, Nat.not_lt.mpr within, sequenceLayout, composite, layout,
         Pure.pure, Except.pure]
     apply PathSelects.nestedMixed (ordinal := ordinal) laid rfl rfl inside rfl _ _ suffix
     · simp [List.getElem?_map, selected]

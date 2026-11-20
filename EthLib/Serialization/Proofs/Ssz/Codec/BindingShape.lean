@@ -47,7 +47,8 @@ theorem sequenceLayout_shapes {element : Desc} {left right : List Value}
         pure, Except.pure, Except.ok.injEq, reduceCtorEq] at laid otherLaid
     subst first second
     -- Equal element counts and byte widths produce equal packed-node counts and capacities.
-    simp only [MerkleLayout.packing, Leaves.shapes, packElements, packBytes_size,
+    simp only [packedSequenceLayout, MerkleLayout.packing, Leaves.shapes,
+      packElements, packBytes_size,
       each_basic_bytes basic leftFits a, each_basic_bytes basic rightFits b, lengths,
       and_self]
 
@@ -92,7 +93,7 @@ private theorem merkleLayout_mixed {shape : Desc} {value : Value} {layout : Merk
   -- Fixed-size leaves, vectors, and ordinary containers omit metadata mixing.
   -- Variable-size collections, progressive containers, and unions always include a word.
   cases shape <;> cases value <;>
-    simp only [merkleLayout, fixedLeaf, sequenceLayout, Bind.bind, Except.bind,
+    simp only [merkleLayout, listLayout, fixedLeaf, sequenceLayout, Bind.bind, Except.bind,
       Pure.pure, Except.pure] at laid
   all_goals repeat first | split at laid | contradiction
   all_goals cases laid; rfl
@@ -208,7 +209,8 @@ theorem merkleLayout_shapes {shape : Desc} {left right : Value} {first second : 
   | list element limit =>
     match leftFits, rightFits, leftSized, rightSized with
     | .list within each, .list otherWithin otherEach, .list count _, .list otherCount _ =>
-      simp only [merkleLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin, ite_false] at laid other
+      simp only [merkleLayout, listLayout, Nat.not_lt.mpr within, Nat.not_lt.mpr otherWithin,
+        ite_false] at laid other
       -- The sequence layout keeps the supplied length word unchanged in its metadata.
       have words : lengthWord _ = lengthWord _ := Option.some.inj
         ((sequenceLayout_mixin laid).symm.trans (mixed.trans (sequenceLayout_mixin other)))

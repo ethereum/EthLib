@@ -192,7 +192,8 @@ theorem fork_binding {hash : ByteArray → ByteArray}
   by_cases inputs : left.root hash ++ right.root hash = otherLeft.root hash ++ otherRight.root hash
   · exact .inl (Array.append_inj inputs ((root_size _ complete.1 hash width).trans
       (root_size _ otherComplete.1 hash width).symm))
-  · exact .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, ByteArray.ext same⟩
+  · simp only [root, combineM_eq] at same
+    exact .inr ⟨_, List.mem_cons_self, _, List.mem_cons_self, inputs, ByteArray.ext same⟩
 
 /-- A collision in the left subcomputations remains a collision in the full trees. -/
 theorem Collision.left {hash : ByteArray → ByteArray} {left otherLeft : CommitmentTree}

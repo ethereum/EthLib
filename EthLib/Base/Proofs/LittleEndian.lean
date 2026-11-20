@@ -16,10 +16,26 @@ A vector of `k` bytes survives the trip through its value.
 
 namespace EthLib.Base
 
+private theorem uintToBytes_loop_toList (k n : Nat) (out : Array UInt8) :
+    (uintToBytes.loop k n out).toList =
+      out.toList ++ List.ofFn (n := k) (fun i => UInt8.ofNat (n >>> (8 * i.val))) := by
+  induction k generalizing n out with
+  | zero => simp [uintToBytes.loop, Vector.toList]
+  | succ k ih =>
+    rw [uintToBytes.loop, Vector.toList_cast, ih, Array.toList_push, List.append_assoc,
+      List.ofFn_succ]
+    simp only [Fin.val_zero, Nat.mul_zero, Nat.shiftRight_zero, List.singleton_append,
+      List.append_cancel_left_eq, List.cons.injEq, true_and]
+    congr 1
+    funext i
+    rw [Fin.val_succ, Nat.mul_succ, Nat.add_comm _ 8, Nat.shiftRight_add]
+
 /-- Byte `i` of a number is its quotient by `256 ^ i`, truncated to a byte. -/
 theorem uintToBytes_eq_div (k n : Nat) :
     uintToBytes k n = Vector.ofFn fun i => UInt8.ofNat (n / 256 ^ i.val) := by
-  simp only [uintToBytes, Nat.shiftRight_eq_div_pow, Nat.pow_mul]
+  apply Vector.toList_inj.mp
+  simp only [uintToBytes, Vector.toList_cast, uintToBytes_loop_toList, Array.emptyWithCapacity_eq,
+    List.nil_append, Vector.toList_ofFn, Nat.shiftRight_eq_div_pow, Nat.pow_mul]
 
 /-- The first byte is the low byte, and the rest encode the quotient by 256. -/
 theorem uintToBytes_toList_succ (k n : Nat) :

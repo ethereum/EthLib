@@ -52,6 +52,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.LengthBinding
 public import EthLib.Serialization.Proofs.Ssz.Codec.Loops
 public import EthLib.Serialization.Proofs.Ssz.Codec.MultiproofConstruction
 public import EthLib.Serialization.Proofs.Ssz.Codec.NestedProof
+public import EthLib.Serialization.Proofs.Ssz.Codec.Packed
 public import EthLib.Serialization.Proofs.Ssz.Codec.NodeWidths
 public import EthLib.Serialization.Proofs.Ssz.Codec.PathDescent
 public import EthLib.Serialization.Proofs.Ssz.Codec.PathDomain

@@ -34,13 +34,37 @@ theorem hashTreeRootAt_succ (budget : Nat) (shape : Desc) (value : Value) :
       return match layout.mixin with
         | none => root
         | some word => mixIn root word : Except Err Bytes) := by
-  simp only [hashTreeRootAt, hashTreeRootAtM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift,
+  simp only [hashTreeRootAt, hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM, ExceptT.run,
+    exceptT_id_bind, exceptT_id_monadLift,
     exceptT_id_lift, exceptT_id_pure, except_bind_eq]
   cases merkleLayout shape value with
   | error => rfl
   | ok layout =>
     simp only [Except.bind]
     cases layout.limit <;> cases layout.mixin <;> rfl
+
+/-- The requested range is sliced before its nested values are rooted. -/
+theorem layoutChunksAtM_eq {m : Type → Type} [Monad m] (hasher : Hasher m)
+    (budget : Nat) (layout : MerkleLayout) (start : Nat) (stop : Option Nat) :
+    layoutChunksAtM hasher budget layout start stop = (do
+      let last := stop.getD layout.leaves.count
+      match layout.leaves with
+      | .packed chunks => return chunks.extract start last
+      | .nested values =>
+        let slots := (values.drop start).take (last - start)
+        let chunks ← slots.mapM fun slot =>
+          match slot with
+          | none => pure zeroChunk
+          | some (shape, value) => hashTreeRootAtM hasher budget shape value
+        return chunks.toArray : ExceptT Err m (Array Bytes)) := by
+  cases leaves : layout.leaves with
+  | packed chunks =>
+    cases start <;> cases stop <;> simp [layoutChunksAtM, leaves, Leaves.count, Array.extract_size]
+  | nested values =>
+    have wholeSuffix : (values.drop start).take (values.length - start) = values.drop start := by
+      rw [← List.length_drop, List.take_length]
+    cases start <;> cases stop <;>
+      simp [layoutChunksAtM, leaves, Leaves.count, wholeSuffix] <;> rfl
 
 /-- The leaves in a range, each nested value rooted with SHA-256. -/
 theorem layoutChunksAt_eq (budget : Nat) (layout : MerkleLayout) (start : Nat)
@@ -56,7 +80,7 @@ theorem layoutChunksAt_eq (budget : Nat) (layout : MerkleLayout) (start : Nat)
           | none => pure zeroChunk
           | some (shape, value) => hashTreeRootAt budget shape value
         return chunks.toArray : Except Err (Array Bytes)) := by
-  simp only [layoutChunksAt, layoutChunksAtM, ExceptT.run]
+  simp only [layoutChunksAt, layoutChunksAtM_eq, ExceptT.run]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>
@@ -82,7 +106,8 @@ theorem hashTreeRootAtM_id_succ (hasher : Hasher Id) (budget : Nat) (shape : Des
       return match layout.mixin with
         | none => root
         | some word => (mixInM hasher root word).run : Except Err Bytes) := by
-  simp only [hashTreeRootAtM, ExceptT.run, exceptT_id_bind, exceptT_id_monadLift,
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM,
+    ExceptT.run, exceptT_id_bind, exceptT_id_monadLift,
     exceptT_id_lift, exceptT_id_pure, except_bind_eq]
   cases merkleLayout shape value with
   | error => rfl
@@ -104,7 +129,7 @@ theorem layoutChunksAtM_id_eq (hasher : Hasher Id) (budget : Nat) (layout : Merk
           | none => pure zeroChunk
           | some (shape, value) => (hashTreeRootAtM hasher budget shape value).run
         return chunks.toArray : Except Err (Array Bytes)) := by
-  simp only [layoutChunksAtM, ExceptT.run]
+  simp only [layoutChunksAtM_eq, ExceptT.run]
   cases layout.leaves with
   | packed chunks => rfl
   | nested values =>

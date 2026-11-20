@@ -201,6 +201,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     simp at wrote
   | case4 _ _ bad | case6 _ _ bad =>
     intro _ ⟨_, wrote⟩
+    simp only [ByteBuffer.size_array] at bad
     simp [serialize, bad, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind] at wrote
   | case12 limit data =>
     intro _ ⟨_, wrote⟩
@@ -308,7 +309,7 @@ theorem fits_of_serialize : ∀ (shape : Desc) (value : Value),
     rename_i sound made held member
     obtain ⟨_, wrote⟩ := made
     -- A sequence writes its elements before it lays them out, so the elements were written.
-    rw [serializeSequence] at wrote
+    rw [serializeSequence_eq] at wrote
     obtain ⟨parts, encoded, -⟩ := checksPassed wrote
     exact ih sound ⟨parts, encoded⟩ held member
   | case30 => simp_all

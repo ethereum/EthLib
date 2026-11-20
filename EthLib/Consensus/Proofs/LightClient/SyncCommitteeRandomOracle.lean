@@ -135,17 +135,19 @@ theorem hashTreeRootM_syncCommittee {m : Type → Type} [Monad m] [LawfulMonad m
   unfold hashTreeRootAtM
   simp only [merkleLayout, List.length_cons, List.length_nil, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, liftM_pure, pure_bind, List.zip_cons_cons, List.zip_nil_left,
-    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksAtM, Leaves.count,
+    List.map_cons, List.map_nil, MerkleLayout.nesting, layoutChunksAtM_eq, Leaves.count,
     Option.getD_none, List.drop_zero, Nat.sub_zero, List.take_succ_cons, List.take_zero,
     List.mapM_cons, List.mapM_nil]
-  simp only [ExceptT.run_bind, ExceptT.run_pure, bind_assoc, aggregate, pure_bind]
+  simp only [ExceptT.run_bind, bind_assoc, aggregate, pure_bind]
   refine bind_congr fun keys => ?_
   cases keys
   · simp
-  · simp only [merkleizeBoundedUncheckedM, List.size_toArray, List.length_cons, List.length_nil,
-      Nat.zero_add, Nat.reduceAdd, Nat.lt_irrefl, ↓reduceIte, ExceptT.run_lift,
+  · simp only [hashLayoutChunksM, hashLayoutFromM, merkleizeBoundedUncheckedM,
+      merkleizeBoundedFromM, List.size_toArray, List.length_cons,
+      List.length_nil, Nat.zero_add, Nat.reduceAdd, Nat.lt_irrefl, ↓reduceIte, bind_pure,
+      ExceptT.run_lift,
       show depthFor 2 = 1 from depthFor_pow 1]
-    simp [subtreeAtM, combineM, padded, Hasher.ofHash]
+    simp [subtreeAtM_unfold, combineM_eq, padded, Hasher.ofHash]
     rfl
 
 /-- Two equal replayed roots of sync committees come from equal committees, or the cache collides.

@@ -4,6 +4,11 @@ public import EthLib.Base.Proofs.Hex
 public import Lean.Data.Json
 public import EthLib.Serialization.Ssz.Codec.Json
 public import EthLib.Serialization.Exports.Ssz
+public import EthLib.Serialization.Proofs.Ssz.Codec.Packed
+import EthLib.Base.Proofs.ExceptT
+import EthLib.Serialization.Proofs.Ssz.Typed.Basic
+import EthLib.Serialization.Proofs.Ssz.Codec.BindingPacking
+import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 import EthLib.Base.Proofs.Toolchain.JsonBasic
 import all EthLib.Serialization.Exports.Ssz
 import all EthLib.Base.Exports.PyValueCore
@@ -345,7 +350,7 @@ private theorem jsonTagged_toJson (value : PyValue) :
       · have all : (⟨init ++ [(key, value)]⟩ : Array (String × PyValue)).all
             (fun entry => entry.1 == key) = true := by
           simpa using same
-        simp only [all, ↓reduceIte]
+        simp only [all, Bool.or_true, ↓reduceIte]
         cases init with
         | nil => exact jsonTagged_mkObj_same key _ [] (by simp)
         | cons first init =>
@@ -365,7 +370,9 @@ private theorem jsonTagged_toJson (value : PyValue) :
             (fun entry => entry.1 == key) = true := by
           simp
           exact ⟨entry.1, ⟨entry.2, mem⟩, other⟩
-        simp only [notAll]
+        have sizeNotOne : (⟨init ++ [(key, value)]⟩ : Array (String × PyValue)).size ≠ 1 := by
+          simpa using (List.ne_nil_of_mem mem)
+        simp only [beq_eq_false_iff_ne.mpr sizeNotOne, notAll, Bool.false_or]
         rw [jsonTagged_mkObj_two _ entry.1 key ?_ ?_ other]
         · rfl
         · simp
@@ -539,13 +546,28 @@ theorem descOf_eq_json (fuel : Nat) (type : PyValue) :
                 | ok entries =>
                   simp only [List.mapM_map, Function.comp_def, getStr?_toJson, ← ih]
 
+private theorem reverse_foldlM_cons (f : α → Except String β) (items : List α)
+    (acc : List β) :
+    List.reverse <$> items.foldlM (fun out item => return (← f item) :: out) acc =
+      List.mapM.loop f items acc := by
+  induction items generalizing acc with
+  | nil => rfl
+  | cons item items ih =>
+    rw [List.foldlM_cons, List.mapM.loop]
+    cases e : f item with
+    | error => rfl
+    | ok value => exact ih (value :: acc)
+
+private theorem valueOfWith_array (fuel : Nat) (value : PyValue) :
+    valueOfWith ByteArray.data id fuel value = valueOf fuel value := rfl
+
 /-- Reading a value gives what reading its JSON gave, the same value or the same error. -/
 theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
     valueOf fuel value = jsonValueOf fuel value.toJson := by
   induction fuel generalizing value with
   | zero => rfl
   | succ fuel ih =>
-    rw [valueOf, jsonValueOf, jsonTagged_toJson]
+    rw [valueOf, valueOfWith, jsonValueOf, jsonTagged_toJson]
     cases tagged value with
     | error e => rfl
     | ok entry =>
@@ -553,7 +575,7 @@ theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
       simp only [Functor.map, Except.map, bind, Except.bind]
       split
       all_goals simp only [getBool?_toJson, getNat?_toJson, getStr?_toJson, getArr?_toJson,
-        jsonPair_toJson]
+        jsonPair_toJson, valueOfWith_array]
       case h_3 => simp only [strOf, pure, Except.pure, byteArray_toList, ofHex_hexString]
       case h_4 => rfl
       case h_5 =>
@@ -567,12 +589,398 @@ theorem valueOf_eq_json (fuel : Nat) (value : PyValue) :
         | error e => rfl
         | ok items =>
           simp only [Functor.map, Except.map, Array.toList_map, List.mapM_map, Function.comp_def,
-            ← ih]
+            ← ih, ← Array.foldlM_toList]
+          let step := fun (acc : List Value) item => (do return (← valueOf fuel item) :: acc :
+            Except String (List Value))
+          change (Value.seq ∘ List.reverse) <$> items.toList.foldlM step [] =
+            Value.seq <$> items.toList.mapM (valueOf fuel)
+          rw [comp_map, reverse_foldlM_cons]
+          rfl
       case h_7 =>
         cases pair body with
         | error e => rfl
         | ok items =>
           simp only [Functor.map, Except.map, getNat?_toJson, ← ih]
+
+private theorem unpack_foldlM
+    (readPacked : PyValue → Except String (ValueOf ByteArray))
+    (readArrays : PyValue → Except String Value)
+    (same : ∀ item, (readPacked item).map ValueOf.toArrayValue = readArrays item) :
+    ∀ (items : List PyValue) (acc : List (ValueOf ByteArray)),
+      (items.foldlM (fun values item => return (← readPacked item) :: values) acc).map
+        ValueOf.toArrayValues =
+        items.foldlM (fun values item => return (← readArrays item) :: values)
+          (ValueOf.toArrayValues acc) := by
+  intro items
+  induction items with
+  | nil => intro acc; rfl
+  | cons item rest ih =>
+    intro acc
+    simp only [List.foldlM_cons, ← same item, Bind.bind, Except.bind, Except.map]
+    cases readPacked item with
+    | error => rfl
+    | ok value => exact ih (value :: acc)
+
+/-- Keeping packed byte leaves reads exactly the same value and error. -/
+theorem valueOfWith_packed_eq (fuel : Nat) (value : PyValue) :
+    (valueOfWith id ByteArray.mk fuel value).map ValueOf.toArrayValue = valueOf fuel value := by
+  induction fuel generalizing value with
+  | zero => rfl
+  | succ fuel ih =>
+    rw [valueOf, valueOfWith, valueOfWith]
+    cases read : tagged value with
+    | error => rfl
+    | ok entry =>
+      obtain ⟨key, body⟩ := entry
+      simp only [Bind.bind, Except.bind]
+      split
+      case h_1 => cases boolOf body <;> rfl
+      case h_2 => cases natOf body <;> rfl
+      case h_3 => rfl
+      case h_4 =>
+        cases strOf body with
+        | error => rfl
+        | ok text =>
+          simp only []
+          cases ofHex text <;> rfl
+      case h_5 =>
+        cases itemsOf body with
+        | error => rfl
+        | ok items =>
+          simp only []
+          cases items.mapM boolOf <;> rfl
+      case h_6 =>
+        cases itemsOf body with
+        | error => rfl
+        | ok items =>
+          simp only [← Array.foldlM_toList]
+          let readPacked := valueOfWith id ByteArray.mk fuel
+          let readArrays := valueOf fuel
+          let stepPacked := fun (values : List (ValueOf ByteArray)) item =>
+            (do return (← readPacked item) :: values : Except String (List (ValueOf ByteArray)))
+          let stepArrays := fun (values : List Value) item =>
+            (do return (← readArrays item) :: values : Except String (List Value))
+          have folded : (items.toList.foldlM stepPacked []).map ValueOf.toArrayValues =
+              items.toList.foldlM stepArrays [] := unpack_foldlM readPacked readArrays ih _ _
+          change Except.map ValueOf.toArrayValue
+              (do return .seq (← items.toList.foldlM stepPacked []).reverse) =
+            (do return .seq (← items.toList.foldlM stepArrays []).reverse)
+          rw [← folded]
+          cases items.toList.foldlM stepPacked [] <;>
+            simp [Except.map, Bind.bind, Except.bind, pure, Except.pure, ValueOf.toArrayValue,
+              ValueOf.toArrayValues_eq, List.map_reverse]
+      case h_7 =>
+        cases pair body with
+        | error => rfl
+        | ok parts =>
+          simp only []
+          cases natOf parts.1 with
+          | error => rfl
+          | ok selector =>
+            change Except.map ValueOf.toArrayValue
+              (do return .union selector (← valueOfWith id ByteArray.mk fuel parts.2)) =
+              (do return .union selector (← valueOf fuel parts.2))
+            rw [← ih parts.2]
+            cases valueOfWith id ByteArray.mk fuel parts.2 <;> rfl
+      case h_8 => rfl
+
+/-- The packed encoder agrees with first unpacking the value and encoding ordinary arrays. -/
+theorem serializeValueOf_eq_array (shape : Desc) (value : PyValue) :
+    serializeValueOf shape value = (do
+      let unpacked ← readValue "value" value (valueOf MAX_NESTING)
+      return ⟨← runSsz "value rejected" (serialize shape unpacked)⟩) := by
+  unfold serializeValueOf readValue
+  rw [← valueOfWith_packed_eq MAX_NESTING value]
+  cases valueOfWith id ByteArray.mk MAX_NESTING value with
+  | error => rfl
+  | ok packed =>
+    have written := serialize_data_eq shape packed
+    simp only [Except.map, Except.mapError, Bind.bind, Except.bind]
+    rw [← written]
+    cases serialize shape packed <;> rfl
+
+private theorem expandedBatch_reads (batch : BytesBatch)
+    (outer : batch.outerKey = "seq") (inner : batch.itemKey = "bytes") (fuel : Nat) :
+    valueOf (fuel + 2) batch.toPyValue = .ok (.seq ((List.range batch.count).map fun i =>
+      .bytes (batch.data.data.extract (i * batch.width) ((i + 1) * batch.width)))) := by
+  let item (i : Fin batch.count) : PyValue :=
+    .dict #[(batch.itemKey, .bytes (batch.data.extract (i.val * batch.width)
+      (i.val * batch.width + batch.width)))]
+  let decoded (i : Fin batch.count) : Value :=
+    .bytes (batch.data.data.extract (i.val * batch.width) ((i.val + 1) * batch.width))
+  have readItem (i : Fin batch.count) : valueOf (fuel + 1) (item i) = .ok (decoded i) := by
+    unfold item valueOf
+    rw [inner, valueOfWith]
+    simp [tagged, decoded, ByteArray.data_extract, Nat.succ_mul, Bind.bind, Except.bind,
+      pure, Except.pure]
+  have readItems : (List.ofFn item).mapM (valueOf (fuel + 1)) = .ok (List.ofFn decoded) := by
+    let positions := List.finRange batch.count
+    have indexItem : List.ofFn item = positions.map item := by
+      simp [positions, List.finRange, Function.comp_def]
+    have indexDecoded : List.ofFn decoded = positions.map decoded := by
+      simp [positions, List.finRange, Function.comp_def]
+    rw [indexItem, indexDecoded, List.mapM_map]
+    have reads : valueOf (fuel + 1) ∘ item = pure ∘ decoded := funext readItem
+    rw [reads]
+    exact List.mapM_pure
+  have ordered : List.ofFn decoded = (List.range batch.count).map (fun i => .bytes
+      (batch.data.data.extract (i * batch.width) ((i + 1) * batch.width))) := by
+    apply List.ext_getElem?
+    intro i
+    by_cases inside : i < batch.count <;>
+      simp [inside, decoded]
+  unfold BytesBatch.toPyValue valueOf
+  rw [outer, valueOfWith]
+  let step := fun (acc : List Value) py =>
+    (do return (← valueOf (fuel + 1) py) :: acc : Except String (List Value))
+  change (Value.seq ∘ List.reverse) <$> (Array.ofFn item).foldlM step [] = _
+  rw [← Array.foldlM_toList, comp_map, reverse_foldlM_cons, Array.toList_ofFn]
+  change Value.seq <$> (List.ofFn item).mapM (valueOf (fuel + 1)) = _
+  rw [readItems, ordered]
+  rfl
+
+/-- The batched export returns the same bytes or error as its expanded tagged value. -/
+theorem serializeBytesBatchOf_eq (type : PyValue) (batch : BytesBatch) :
+    serializeBytesBatchOf (type, batch) = serializeOf (type, batch.toPyValue) := by
+  simp only [serializeBytesBatchOf, serializeOf, Bind.bind, Except.bind]
+  cases readType type with
+  | error => rfl
+  | ok shape =>
+    by_cases compact : batch.matches shape = true
+    · simp only [compact, ↓reduceIte]
+      rw [serializeValueOf_eq_array]
+      cases shape <;> try simp [BytesBatch.matches] at compact
+      case vector element count =>
+        cases element <;> try simp at compact
+        case byteVector width =>
+          simp only [and_assoc] at compact
+          obtain ⟨outer, inner, counted, wide, sized, bounded⟩ := compact
+          subst count
+          subst width
+          have read := expandedBatch_reads batch outer inner (MAX_NESTING - 2)
+          change valueOf MAX_NESTING batch.toPyValue = _ at read
+          have written := serialize_byteVectorSlices batch.data.data batch.width batch.count
+            sized bounded
+          have packedSize : ByteBuffer.size batch.data = batch.data.size := rfl
+          simp [readValue, read, written, serialize, packedSize, Nat.not_le_of_lt bounded,
+            runSsz, Bind.bind, Except.bind, Except.mapError, pure, Except.pure]
+    · simp [compact]
+
+/-- A vector of complete nodes supplies those nodes to the bounded tree. -/
+private theorem hashTreeRoot_vector_nodes (chunks : Array Bytes)
+    (whole : ∀ i (inside : i < chunks.size), chunks[i].size = bytesPerChunk) :
+    hashTreeRoot (.vector (.byteVector bytesPerChunk) chunks.size)
+        (.seq (chunks.toList.map ValueOf.bytes)) =
+      merkleizeBoundedUnchecked chunks (some chunks.size) := by
+  let slots := chunks.toList.map fun node =>
+    some (Desc.byteVector bytesPerChunk, ValueOf.bytes node)
+  have layout :
+      merkleLayout (.vector (.byteVector bytesPerChunk) chunks.size)
+          (.seq (chunks.toList.map ValueOf.bytes)) =
+        .ok (.nesting slots (some chunks.size) none) := by
+    simp [slots, merkleLayout, sequenceLayout, Desc.isBasic, Function.comp_def, pure, Except.pure]
+  have rooted : layoutChunksAt 1 (.nesting slots (some chunks.size) none) = .ok chunks := by
+    rw [layoutChunksAt_eq]
+    simp only [MerkleLayout.nesting, Leaves.count, Option.getD_none, Nat.sub_zero,
+      List.drop_zero, List.take_length, slots, List.mapM_map]
+    have each (node : Bytes) (mem : node ∈ chunks.toList) :
+        hashTreeRootAt 1 (.byteVector bytesPerChunk) (.bytes node) = .ok node := by
+      obtain ⟨i, hi, rfl⟩ := Array.mem_iff_getElem.mp (by simpa using mem)
+      exact hashTreeRoot_chunk (whole i hi)
+    have mapped (nodes : List Bytes) (member : ∀ node ∈ nodes, node ∈ chunks.toList) :
+        nodes.mapM (fun node => hashTreeRootAt 1 (.byteVector bytesPerChunk) (.bytes node)) =
+          .ok nodes := by
+      induction nodes with
+      | nil => rfl
+      | cons node rest ih =>
+        have head := each node (member node List.mem_cons_self)
+        have tail := ih fun other mem => member other (List.mem_cons_of_mem _ mem)
+        simp [List.mapM_cons, head, tail, Bind.bind, Except.bind, pure, Except.pure]
+    change (do
+      let leaves ← chunks.toList.mapM (fun node => hashTreeRootAt 1 (.byteVector bytesPerChunk)
+        (.bytes node))
+      return leaves.toArray : Except Err (Array Bytes)) = _
+    rw [mapped _ fun _ mem => mem]
+    simp [Bind.bind, Except.bind, pure, Except.pure]
+  rw [hashTreeRoot_eq_nesting]
+  change hashTreeRootAt (1 + 1) _ _ = _
+  simp only [hashTreeRootAt_succ, layout, Bind.bind, Except.bind, rooted]
+  simp only [MerkleLayout.nesting]
+  cases merkleizeBoundedUnchecked chunks (some chunks.size) <;> rfl
+
+private theorem packBytes_vector_slices (data : ByteArray) (count : Nat)
+    (sized : data.size = count * bytesPerChunk) :
+    (packBytes data.data).toList = (List.range count).map fun i =>
+      data.data.extract (i * bytesPerChunk) ((i + 1) * bytesPerChunk) := by
+  have size : (packBytes data.data).size = count := by
+    rw [packBytes_size, ByteArray.size_data, sized]
+    simp only [bytesPerChunk]
+    omega
+  apply List.ext_getElem?
+  intro i
+  by_cases inside : i < count
+  · have bound : (i + 1) * bytesPerChunk ≤ data.data.size := by
+      rw [ByteArray.size_data, sized]
+      exact Nat.mul_le_mul_right _ (by omega)
+    have full : (data.data.extract (i * bytesPerChunk) ((i + 1) * bytesPerChunk)).size =
+        bytesPerChunk := by
+      rw [Array.size_extract, Nat.min_eq_left bound, Nat.succ_mul, Nat.add_sub_cancel_left]
+    have node : (packBytes data.data)[i]'(by rw [size]; exact inside) =
+        data.data.extract (i * bytesPerChunk) ((i + 1) * bytesPerChunk) := by
+      simp only [packBytes_eq, Array.getElem_ofFn]
+      rw [show i * bytesPerChunk + bytesPerChunk = (i + 1) * bytesPerChunk by
+        rw [Nat.succ_mul]]
+      simp [full]
+    simp [inside, size, node]
+  · simp [inside, size]
+
+/-- The byte batch has the root of its expanded tagged value. -/
+theorem hashTreeRootBytesBatchOf_eq (type : PyValue) (batch : BytesBatch) :
+    hashTreeRootBytesBatchOf (type, batch) = hashTreeRootOf (type, batch.toPyValue) := by
+  simp only [hashTreeRootBytesBatchOf, hashTreeRootOf, Bind.bind, Except.bind]
+  cases readType type with
+  | error => rfl
+  | ok shape =>
+    by_cases fast : (batch.width == bytesPerChunk && batch.matches shape) = true
+    · simp only [fast, ↓reduceIte]
+      simp only [Bool.and_eq_true, beq_iff_eq] at fast
+      obtain ⟨atWidth, compact⟩ := fast
+      cases shape <;> try simp [BytesBatch.matches] at compact
+      case vector element count =>
+        cases element <;> try simp at compact
+        case byteVector width =>
+          simp only [and_assoc] at compact
+          obtain ⟨outer, inner, counted, wide, sized, _⟩ := compact
+          subst count width
+          rw [atWidth] at sized
+          have read := expandedBatch_reads batch outer inner (MAX_NESTING - 2)
+          change valueOf MAX_NESTING batch.toPyValue = _ at read
+          rw [atWidth] at read
+          rw [show (fun i => ValueOf.bytes (batch.data.data.extract (i * bytesPerChunk)
+              ((i + 1) * bytesPerChunk))) = ValueOf.bytes ∘
+                (fun i => batch.data.data.extract (i * bytesPerChunk)
+                  ((i + 1) * bytesPerChunk)) from rfl, ← List.map_map,
+            ← packBytes_vector_slices batch.data batch.count sized] at read
+          let chunks := packBytes batch.data.data
+          have count : chunks.size = batch.count := by
+            rw [show chunks = packBytes batch.data.data by rfl, packBytes_size,
+              ByteArray.size_data, sized]
+            simp only [bytesPerChunk]
+            omega
+          have rooted := hashTreeRoot_vector_nodes chunks (packBytes_chunk_size batch.data.data)
+          rw [count] at rooted
+          have packed :
+              (merkleizePackedBoundedUnchecked batch.data (some batch.count)).run =
+                merkleizeBoundedUnchecked chunks (some batch.count) := by
+            rw [merkleizePackedBoundedUnchecked_eq]
+            rfl
+          dsimp [chunks] at rooted packed
+          simp [hashTreeRootValueOf, readValue, read, atWidth, rooted, packed, Except.mapError,
+            Bind.bind, Except.bind]
+    · simp [fast]
+
+private theorem expandedNatBatch_reads {B : Type} (native : ByteArray → B)
+    (hex : Array UInt8 → B) (batch : NatBatch)
+    (outer : batch.outerKey = "seq") (inner : batch.itemKey = "uint") (fuel : Nat) :
+    valueOfWith native hex (fuel + 2) batch.toPyValue =
+      .ok (.seq (batch.values.toList.map ValueOf.uint)) := by
+  let item := fun n : Nat => PyValue.dict #[(batch.itemKey, .int n)]
+  let read := valueOfWith native hex (fuel + 1)
+  have readItem (n : Nat) : read (item n) = .ok (ValueOf.uint n) := by
+    unfold read item
+    rw [inner, valueOfWith]
+    simp [tagged, natOf, Bind.bind, Except.bind, pure, Except.pure]
+  unfold NatBatch.toPyValue
+  rw [outer, valueOfWith]
+  let step := fun (acc : List (ValueOf B)) py =>
+    (do return (← read py) :: acc : Except String (List (ValueOf B)))
+  change (ValueOf.seq ∘ List.reverse) <$> (batch.values.map item).foldlM step [] = _
+  rw [← Array.foldlM_toList, comp_map, reverse_foldlM_cons, Array.toList_map]
+  change ValueOf.seq <$> (batch.values.toList.map item).mapM read = _
+  rw [List.mapM_map, show read ∘ item = pure ∘ ValueOf.uint from funext readItem]
+  simp [Function.comp_def]
+  rfl
+
+private theorem natBatch_read_eq {B : Type} (native : ByteArray → B) (hex : Array UInt8 → B)
+    (batch : NatBatch) :
+    NatBatch.read (valueOfWith native hex MAX_NESTING) batch =
+      readValue "value" batch.toPyValue (valueOfWith native hex MAX_NESTING) := by
+  unfold NatBatch.read
+  split
+  · rename_i tags
+    obtain ⟨outer, inner⟩ : batch.outerKey = "seq" ∧ batch.itemKey = "uint" := by
+      simpa using tags
+    have expanded := expandedNatBatch_reads native hex batch outer inner (MAX_NESTING - 2)
+    change valueOfWith native hex MAX_NESTING batch.toPyValue = _ at expanded
+    rw [readValue, expanded]
+    rfl
+  · rfl
+
+/-- The number batch serializes as its expanded tagged value. -/
+theorem serializeNatBatchOf_eq (type : PyValue) (batch : NatBatch) :
+    serializeNatBatchOf (type, batch) = serializeOf (type, batch.toPyValue) := by
+  simp [serializeNatBatchOf, serializeOf, serializeValueOf, natBatch_read_eq]
+
+private theorem serializeEach_uints (width : Nat) (values : List Nat) :
+    serializeEach (.uint width) (values.map ValueOf.uint) =
+      if values.all (uintFits width) then .ok (values.map (uintBytes width))
+      else .error .typeMismatch := by
+  induction values with
+  | nil => simp [serializeEach]
+  | cons n rest ih =>
+    simp only [List.map_cons, serializeEach_cons, serialize, List.all_cons, ih]
+    cases uintFits width n <;> cases rest.all (uintFits width) <;>
+      simp [Bind.bind, Except.bind, pure, Except.pure, ByteBuffer.ofArray]
+
+private theorem data_foldl_uintBytes (width : Nat) (values : List Nat) (out : ByteArray) :
+    (values.foldl (fun acc n => SszType.pushUintBytes width n acc) out).data =
+      (values.map (uintBytes width)).foldl (· ++ ·) out.data := by
+  induction values generalizing out with
+  | nil => rfl
+  | cons n rest ih =>
+    rw [List.foldl_cons, ih, SszType.data_pushUintBytes, List.map_cons, List.foldl_cons]
+
+private theorem hashTreeRootNatList_eq (width limit : Nat) (values : Array Nat) :
+    hashTreeRootNatList width limit values =
+      hashTreeRoot (.list (.uint width) limit) (.seq (values.toList.map ValueOf.uint)) := by
+  let initial := ByteArray.emptyWithCapacity (values.size * width)
+  let data := values.foldl (fun out n => SszType.pushUintBytes width n out) initial
+  have written : data.data = concatParts (values.toList.map (uintBytes width)) := by
+    rw [show data = values.foldl (fun out n => SszType.pushUintBytes width n out) initial from rfl,
+      ← Array.foldl_toList, data_foldl_uintBytes, fold_parts_eq_concat,
+      show initial.data = #[] from rfl, Array.empty_append]
+  simp only [hashTreeRootNatList, hashTreeRoot, hashTreeRootM, Desc.nesting, hashTreeRootAtM,
+    listLayout, merkleLayout, List.length_map, Array.length_toList, sequenceLayout, Desc.isBasic,
+    ite_true, serializeEach_uints, Array.all_toList, ExceptT.run, EthLib.Base.exceptT_id_bind,
+    EthLib.Base.exceptT_id_monadLift]
+  by_cases over : limit < values.size
+  · simp [over, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
+  · cases values.all (uintFits width) with
+    | false => simp [over, throw, throwThe, MonadExceptOf.throw, Bind.bind, Except.bind]
+    | true =>
+      simp [over, pure, Except.pure, Bind.bind, Except.bind, packedSequenceLayout]
+      change (hashLayoutFromM sha256Hasher (lengthWord values.size)
+        (merkleizePackedBoundedUnchecked data _)).run = _
+      simp [merkleizePackedBoundedUnchecked_eq, written, packElements, fold_parts_eq_concat,
+        layoutChunksAtM, MerkleLayout.packing, hashLayoutChunksM, pure]
+      rfl
+
+/-- The number batch has the root of its expanded tagged value. -/
+theorem hashTreeRootNatBatchOf_eq (type : PyValue) (batch : NatBatch) :
+    hashTreeRootNatBatchOf (type, batch) = hashTreeRootOf (type, batch.toPyValue) := by
+  simp only [hashTreeRootNatBatchOf, hashTreeRootOf, hashTreeRootValueOf, valueOf, Bind.bind,
+    Except.bind]
+  rw [← natBatch_read_eq]
+  cases readType type with
+  | error => rfl
+  | ok shape =>
+    cases shape <;> try rfl
+    case list element limit =>
+      cases element <;> try rfl
+      case uint width =>
+        by_cases tags : (batch.outerKey == "seq" && batch.itemKey == "uint") = true
+        · simp [NatBatch.read, tags, hashTreeRootNatList_eq]
+        · simp [tags]
 
 /-- Writing a value gives the Python value that its JSON gave. -/
 theorem pyOfValue_eq_json (value : Value) :

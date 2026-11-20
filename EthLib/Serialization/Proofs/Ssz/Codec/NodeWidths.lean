@@ -81,6 +81,7 @@ theorem merkleLayout_width (shape : Desc) (value : Value) (layout : MerkleLayout
     split at success <;> try simp [Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at success
     exact sequenceLayout_width element elements (some length) none layout (by simp) success
   case list.seq element limit elements =>
+    unfold listLayout at success
     split at success <;> try simp [Bind.bind, Except.bind, throw, throwThe, MonadExceptOf.throw] at success
     exact sequenceLayout_width element elements (some limit) (some (lengthWord elements.length)) layout
       (by intro word same; have eq := Option.some.inj same; rw [← eq]; simp) success

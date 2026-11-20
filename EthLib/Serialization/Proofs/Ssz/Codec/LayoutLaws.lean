@@ -21,7 +21,7 @@ private theorem sequenceLayout_depth (element : Desc) (values : List Value)
   split at success
   · cases h : serializeEach element values <;>
       simp [h, Bind.bind, Except.bind, pure, Except.pure] at success
-    simp [← success, MerkleLayout.packing] at nested
+    simp [← success, packedSequenceLayout, MerkleLayout.packing] at nested
   · simp_all [pure, Except.pure, MerkleLayout.nesting]
     grind
 
@@ -33,7 +33,7 @@ theorem merkleLayout_child_nesting (shape : Desc) (value : Value) (layout : Merk
     child.nesting < shape.nesting := by
   -- Each layout constructor either packs bytes or selects declared child types.
   cases shape <;> cases value <;>
-    simp [merkleLayout, fixedLeaf, Bind.bind, Except.bind, Pure.pure, Except.pure,
+    simp [merkleLayout, listLayout, fixedLeaf, Bind.bind, Except.bind, Pure.pure, Except.pure,
         throw, throwThe, MonadExceptOf.throw] at success
   all_goals try solve
     | split at success <;> simp only [Except.ok.injEq, reduceCtorEq] at success

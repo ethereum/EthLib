@@ -194,6 +194,7 @@ private theorem collision_of_found {leftLeaves leftProof rightLeaves rightProof 
     obtain ⟨h1, h2⟩ := Array.append_inj equal (x1.trans y1.symm)
     exact Prod.ext h1 h2
   · -- The two pairs hash to one parent, which is the digest of their messages.
+    simp only [sszNodeHash, combineM_eq] at joined
     exact ByteArray.ext joined
 
 /-- Between accepted multiproofs, the search returns hashed messages that collide under SHA-256. -/

@@ -135,7 +135,7 @@ theorem cached_of_climbBranchM {cache : HashOracle.QueryCache} {f : QueryImpl Ha
       simp only [Cryptography.Merkle.climbPairs, List.mem_cons] at hx
       rcases hx with rfl | hx
       · -- This level queried its pair, so the cache holds the answer of the table.
-        simp only [combineM, simulateQ_bind] at hparent
+        simp only [combineM_eq, simulateQ_bind] at hparent
         obtain ⟨_, hquery, -⟩ := Option.bind_eq_some_iff.mp hparent
         obtain ⟨digest, hdigest⟩ := cached_of_queryHash hquery
         rw [hdigest, hf hdigest]
@@ -307,7 +307,7 @@ private theorem packBytes_bytes48 (bytes : Vector UInt8 48) :
         padded zeroChunk (Serialization.Ssz.packBytes bytes.toArray) 1 =
       bytes.toArray ++ Array.replicate 16 0 := by
   have size : bytes.toArray.size = 48 := bytes.size_toArray
-  simp [padded, Serialization.Ssz.packBytes, size, bytesPerChunk, ← Array.append_assoc,
+  simp [padded, packBytes_eq, size, bytesPerChunk, ← Array.append_assoc,
     Array.extract_append_extract, Array.extract_eq_self_of_le]
 
 /-- A perfect tree of depth 1 over two nodes is one hash of the two nodes, with any hasher. -/
@@ -315,8 +315,8 @@ private theorem subtreeAtM_two {m : Type → Type} [Monad m] [LawfulMonad m] (ha
     {chunks : Array Bytes} (count : chunks.size = 2) :
     subtreeAtM hasher chunks 1 0 =
       combineM hasher.hash (padded zeroChunk chunks 0) (padded zeroChunk chunks 1) := by
-  simp only [subtreeAtM, count]
-  simp
+  simp only [subtreeAtM, subtreeFromM, count]
+  simp [padded, count]
 
 /-- The root of 48 bytes, with any budget above zero, is one hash of those bytes and 16 zero bytes.
 
@@ -330,12 +330,15 @@ theorem hashTreeRootAtM_bytes48 {m : Type → Type} [Monad m] [LawfulMonad m]
   have size : bytes.toArray.size = 48 := bytes.size_toArray
   have count : (Serialization.Ssz.packBytes bytes.toArray).size = 2 := by
     simp [size, bytesPerChunk]
-  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM,
+    merkleLayout, size, bne_self_eq_false,
+    Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
-    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
+  simp only [layoutChunksAtM_eq, MerkleLayout.packing, Option.getD_none, Leaves.count,
+    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, merkleizeBoundedFromM,
+    Nat.lt_irrefl,
     ↓reduceIte, ExceptT.run_lift]
-  rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM,
+  rw [count, show depthFor 2 = 1 from depthFor_pow 1, subtreeAtM_two hasher count, combineM_eq,
     packBytes_bytes48]
   simp only [map_bind, map_pure]
 
@@ -410,7 +413,8 @@ theorem hashTreeRootM_bytes48List {m : Type → Type} [Monad m] [LawfulMonad m]
   have lift : ∀ {α : Type} (x : Except Err α),
       (liftM x : ExceptT Err m α) = ExceptT.mk (pure x) := fun _ => rfl
   by_cases over : limit < vectors.length
-  · simp only [hashTreeRootAtM, merkleLayout, List.length_map, gt_iff_lt, over, ↓reduceIte]
+  · simp only [hashTreeRootAtM, merkleLayout, listLayout, List.length_map, gt_iff_lt,
+      over, ↓reduceIte]
     rw [lift]
     simp only [ExceptT.run_bind, ExceptT.run_mk, pure_bind]
     rfl
@@ -418,11 +422,13 @@ theorem hashTreeRootM_bytes48List {m : Type → Type} [Monad m] [LawfulMonad m]
         (some (lengthWord vectors.length)) =
       .ok (.nesting ((vectors.map SszType.toValue).map fun value => some (.byteVector 48, value))
         (some limit) (some (lengthWord vectors.length))) := rfl
-    simp only [hashTreeRootAtM, merkleLayout, List.length_map, gt_iff_lt, over, ↓reduceIte, layout]
+    simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM, merkleLayout, listLayout,
+      List.length_map, gt_iff_lt, over, ↓reduceIte, layout]
     rw [lift]
     simp only [ExceptT.run_bind, ExceptT.run_mk, pure_bind]
-    simp only [layoutChunksAtM, MerkleLayout.nesting, Option.getD_none, Leaves.count,
-      List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
+    simp only [layoutChunksAtM_eq, MerkleLayout.nesting, Option.getD_none, Leaves.count,
+      List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM,
+      merkleizeBoundedFromM]
     rw [List.take_of_length_le (by simp)]
     simp only [List.mapM_map, Function.comp_def, ExceptT.run_bind, mapM_hashTreeRootAtM_bytes48,
       bind_map_left, bind_assoc, pure_bind, ExceptT.run_pure]
@@ -456,12 +462,14 @@ theorem hashTreeRootM_bytes48Vector {m : Type → Type} [Monad m] [LawfulMonad m
   have layout : sequenceLayout (.byteVector 48) (vectors.map SszType.toValue)
       (some vectors.length) = .ok (.nesting ((vectors.map SszType.toValue).map fun value =>
         some (.byteVector 48, value)) (some vectors.length)) := rfl
-  simp only [hashTreeRootAtM, merkleLayout, List.length_map, bne_self_eq_false,
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM,
+    merkleLayout, List.length_map, bne_self_eq_false,
     Bool.false_eq_true, ↓reduceIte, layout]
   rw [lift]
   simp only [ExceptT.run_bind, ExceptT.run_mk, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.nesting, Option.getD_none, Leaves.count,
-    List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM]
+  simp only [layoutChunksAtM_eq, MerkleLayout.nesting, Option.getD_none, Leaves.count,
+    List.length_map, List.drop_zero, Nat.sub_zero, merkleizeBoundedUncheckedM,
+    merkleizeBoundedFromM]
   rw [List.take_of_length_le (by simp)]
   simp only [List.mapM_map, Function.comp_def, ExceptT.run_bind, mapM_hashTreeRootAtM_bytes48,
     bind_map_left, bind_assoc, pure_bind, ExceptT.run_pure]
@@ -649,7 +657,7 @@ theorem collision_of_hashTreeRootM_bytes48List {cache : HashOracle.QueryCache} {
   obtain ⟨secondRoots, hsecondRoots, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨secondNode, hsecondNode, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
   obtain ⟨secondMixed, hsecondMixed, hsecond⟩ := Option.bind_eq_some_iff.mp hsecond
-  simp only [mixInM, Hasher.ofHash, combineM, simulateQ_bind,
+  simp only [mixInM, Hasher.ofHash, combineM_eq, simulateQ_bind,
     simulateQ_pure] at hfirstMixed hsecondMixed
   obtain ⟨firstDigest, hfirstDigest, hfirstMixed⟩ := Option.bind_eq_some_iff.mp hfirstMixed
   obtain ⟨secondDigest, hsecondDigest, hsecondMixed⟩ := Option.bind_eq_some_iff.mp hsecondMixed
@@ -709,14 +717,17 @@ theorem hashTreeRootM_bytes96 {m : Type → Type} [Monad m] [LawfulMonad m]
   have count : (Serialization.Ssz.packBytes bytes.toArray).size = 3 := by
     simp [size, bytesPerChunk]
   show (hashTreeRootAtM (Hasher.ofHash hash) 1 (.byteVector 96) (.bytes bytes.toArray)).run = _
-  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM,
+    merkleLayout, size, bne_self_eq_false,
+    Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count,
-    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, Nat.lt_irrefl,
+  simp only [layoutChunksAtM_eq, MerkleLayout.packing, Option.getD_none, Leaves.count,
+    Array.extract_size, pure_bind, bind_pure, merkleizeBoundedUncheckedM, merkleizeBoundedFromM,
+    Nat.lt_irrefl,
     ↓reduceIte, ExceptT.run_lift]
   rw [count, show depthFor 3 = 2 by simp [depthFor],
     subtreeAtM_ofHash_four hash (by omega) (by omega)]
-  simp [combineM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk, zeroChunk,
+  simp [combineM_eq, padded, packBytes_eq, size, bytesPerChunk, zeroChunk,
     Array.extract_append_extract]
 
 /-- The root of 32 bytes is those bytes, with no hash.
@@ -730,12 +741,14 @@ theorem hashTreeRootM_bytes32 {m : Type → Type} [Monad m] [LawfulMonad m]
   have count : (Serialization.Ssz.packBytes bytes.toArray).size = 1 := by
     simp [size, bytesPerChunk]
   show (hashTreeRootAtM hasher 1 (.byteVector 32) (.bytes bytes.toArray)).run = _
-  simp only [hashTreeRootAtM, merkleLayout, size, bne_self_eq_false, Bool.false_eq_true,
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM,
+    merkleLayout, size, bne_self_eq_false,
+    Bool.false_eq_true,
     ↓reduceIte, liftM_pure, pure_bind]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
-    merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
-  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
-    Array.extract_eq_self_of_le]
+  simp only [layoutChunksAtM_eq, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+    merkleizeBoundedUncheckedM, merkleizeBoundedFromM, count,
+    show depthFor 1 = 0 from depthFor_pow 0]
+  simp [subtreeAtM, subtreeFromM, packBytes_eq, size, bytesPerChunk, Array.extract_eq_self_of_le]
 
 /-- The root of a 64-bit integer is its 8 bytes and 24 zero bytes, with no hash.
 
@@ -752,10 +765,11 @@ theorem hashTreeRootM_uint64 {m : Type → Type} [Monad m] [LawfulMonad m]
     simp only [serialize, fits, ↓reduceIte]
     rfl
   show (hashTreeRootAtM hasher 1 (.uint 8) (.uint value.toNat)).run = _
-  simp only [hashTreeRootAtM, merkleLayout, fixedLeaf, encoded, pure_bind, liftM_pure]
-  simp only [layoutChunksAtM, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
-    merkleizeBoundedUncheckedM, count, show depthFor 1 = 0 from depthFor_pow 0]
-  simp [subtreeAtM, padded, Serialization.Ssz.packBytes, size, bytesPerChunk,
-    Array.extract_eq_self_of_le]
+  simp only [hashTreeRootAtM, hashLayoutChunksM, hashLayoutFromM, merkleLayout, fixedLeaf, encoded,
+    pure_bind, liftM_pure]
+  simp only [layoutChunksAtM_eq, MerkleLayout.packing, Option.getD_none, Leaves.count, pure_bind,
+    merkleizeBoundedUncheckedM, merkleizeBoundedFromM, count,
+    show depthFor 1 = 0 from depthFor_pow 0]
+  simp [subtreeAtM, subtreeFromM, packBytes_eq, size, bytesPerChunk, Array.extract_eq_self_of_le]
 
 end EthLib.Serialization.Ssz.RandomOracle
