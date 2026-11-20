@@ -1455,14 +1455,13 @@ private theorem slashValidator_credits_le {state after : BeaconState preset fork
 
 The exit epoch of the key is then not the far future, since the delay is positive. -/
 private theorem slashValidator_exit_churn {state after : BeaconState preset fork}
-    (electra : .pectra ≤ fork) {slashed : ValidatorIndex} {whistleblower : Option ValidatorIndex}
+    {slashed : ValidatorIndex} {whistleblower : Option ValidatorIndex}
     (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
     (computed : slashValidator config state slashed whistleblower = .ok after)
     (fresh :
       ((state.validators.data[slashed.toNat]?).map (·.exitEpoch)).getD 0 = FAR_FUTURE_EPOCH) :
     ∃ middle, initiateValidatorExit config state slashed = .ok middle ∧
       (middle.validators.data[slashed.toNat]?).any (·.exitEpoch ≠ FAR_FUTURE_EPOCH) := by
-  have _ := electra
   obtain ⟨exited, -, -, -, -, -, -, -, -, -, -, -, exitedOk, -⟩ := slashValidator_ok computed
   refine ⟨exited, exitedOk, ?_⟩
   obtain ⟨v, found, started | ⟨far, queued, exitEpoch, withdrawable, queue, summed, set⟩⟩ :=
@@ -3891,10 +3890,8 @@ private theorem creditedAt_trans {f : Fork} (T : Finset ℕ) {a b c : BeaconStat
   exact Finset.sum_le_sum fun j _ => by omega
 
 private theorem credited_trans {f : Fork} {a b c : BeaconState preset f}
-    (ab : b.balances.data.size = a.balances.data.size)
     (bc : c.balances.data.size = b.balances.data.size) :
     credited a c ≤ credited a b + credited b c := by
-  have _ := ab
   show creditedAt (Finset.range c.balances.data.size) a c ≤
     creditedAt (Finset.range b.balances.data.size) a b +
       creditedAt (Finset.range c.balances.data.size) b c
@@ -5389,7 +5386,7 @@ So their number times `bound` is at most the carry of both queues plus their chu
 The window bound is `departure_charges_le_window_electra_cap` (DepartureQueue). -/
 private theorem Run.exits_started_le {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam) (high bound churn : ℕ)
-    (consolidationChurn : ℕ) (positive : 0 < bound)
+    (consolidationChurn : ℕ)
     (churnOk : ∀ z ∈ tail.balancePath, ∀ c : Gwei,
       (if .pectra ≤ z.fork then exitChurnLimit config z.state else .ok 0) = .ok c →
         c.toNat ≤ churn)
@@ -5410,7 +5407,6 @@ private theorem Run.exits_started_le {x y : ForkedBeaconState preset} (tail : Ru
       (high + 2 - max (getCurrentEpoch x.state).toNat
         (x.state.earliestConsolidationEpoch electra).toNat) * consolidationChurn := by
   classical
-  have _ := positive
   refine Nat.le_trans ?_ (departure_charges_le_window_electra_cap tail electra early high
     consolidationChurn churn ?_ consolidationChurnOk)
   swap
