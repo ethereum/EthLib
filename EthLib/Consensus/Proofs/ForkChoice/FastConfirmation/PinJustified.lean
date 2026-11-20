@@ -267,13 +267,7 @@ theorem justifiedPinned_of_setting [DecidablePred (· ∈ J)] {anchor : Store pr
         facts, guard.1, finalizedS, laterS, nearPulled,
         fun v member => ⟨(votersOk v member).2,
           unslashed w receiver k state high counts v (votersOk v member).1⟩⟩
-    obtain ⟨events, replayed⟩ :=
-      toPulled.balanceEvents_ok preGloas (getCurrentEpoch pulled).toNat
-    obtain ⟨eventsC, replayedC⟩ :=
-      toCounted.balanceEvents_ok preGloas (getCurrentEpoch pulled).toNat
-    have pin := PinDrift.le_pinReserve setting toPulled (getCurrentEpoch pulled).toNat
-      (Nat.le_succ _) replayed toCounted (getCurrentEpoch pulled).toNat nearPulled replayedC
-      (Nat.le_refl _) (Nat.le_refl _) totalOkC totalOk
+    have pin := PinDrift.le_pinReserve setting totalOkC totalOk
     have splitStake := Finset.sum_filter_add_sum_filter_not (quorumVoters state) (· ∈ voters)
       (fun v => balanceAt state v.toNat)
     unfold Models.stake at pin quorum ⊢

@@ -34177,20 +34177,24 @@ Their sum is at most twice the counting total, the pulled-up total and `pinReser
 
 It also adds three times the counting stake of the quorum voters that are in `V`. -/
 theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
-    (highLe : highC ≤ (getCurrentEpoch pulled).toNat)
-    (highLeR : high ≤ (getCurrentEpoch pulled).toNat)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
     3 * stake (fun v => balanceAt counted v.toNat) (quorumVoters counted) +
         3 * stake (fun v => balanceAt pulled v.toNat) V ≤
       2 * total.toNat + pulledTotal.toNat + pinReserve config pulled anc fin +
         3 * stake (fun v => balanceAt counted v.toNat) {v ∈ quorumVoters counted | v ∈ V} := by
+  obtain ⟨tail⟩ := h.toPulled
+  obtain ⟨tailC⟩ := h.toCounted
+  -- Both replays read the events up to the call's epoch.
+  obtain ⟨high, hHigh⟩ : ∃ n, n = (getCurrentEpoch pulled).toNat := ⟨_, rfl⟩
+  obtain ⟨highC, hHighC⟩ : ∃ n, n = (getCurrentEpoch pulled).toNat := ⟨_, rfl⟩
+  have endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1 := by omega
+  have endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1 := by have := h.near; omega
+  have highLe : highC ≤ (getCurrentEpoch pulled).toNat := by omega
+  have highLeR : high ≤ (getCurrentEpoch pulled).toNat := by omega
+  clear hHigh hHighC
+  obtain ⟨events, replayed⟩ := tail.balanceEvents_ok h.early high
+  obtain ⟨eventsC, replayedC⟩ := tailC.balanceEvents_ok h.early highC
   have key := drift_le_costs h
   have tC := stake_le_total totalOk
   have tR := stake_le_total pulledOk
