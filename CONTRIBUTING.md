@@ -425,8 +425,7 @@ lake exe check-accessors
 ```
 
 It lists each use of a `!` accessor, such as `xs[i]!`, `get!` or `set!`, or of `panic`, in the elaborated declarations of the specification, with its count.
-`scripts/check_accessors_baseline.txt` lists the sites that exist today, and the goal is to remove each one.
-A pull request that removes a site lowers or removes its entry, or the check fails on the stale entry.
+`scripts/check_accessors_baseline.txt` is the exact list of sites, and it is empty.
 A new site is fixed, never added to the list.
 
 When you change the check, also run `scripts/test_check_accessors.sh`.

@@ -121,7 +121,8 @@ EthLib holds three kinds of Lean code, and they answer different questions.
 
 A **specification** says what the protocol computes.
 It is executable, pure and total, and it follows its source definition.
-Where speed needs another algorithm, such as Pippenger's for a sum of scalar multiples, a theorem states that it computes the formula of the source.
+Where speed needs another algorithm, such as Pippenger's for a sum of scalar multiples, the definition uses it.
+A theorem then states that the definition computes the formula of the source, under the source's preconditions.
 Clients and other Lean projects import it, and the bindings run it.
 
 A **property** says what a specification guarantees.

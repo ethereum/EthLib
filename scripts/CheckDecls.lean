@@ -21,8 +21,10 @@ A definition of the specification is also checked for reaching an opaque constan
 
 `IO` reaches the runtime's primitives.
 
-Such a definition cannot be unfolded either.
+A definition that reaches either one cannot be unfolded either.
+
 Proofs are exempt, because nothing unfolds them.
+
 The C exports are exempt, because IO belongs there.
 
 Lean v4.36.0 compiles the constructor index `T.ctorIdx` of a type through `T.ctorIdx._impl`.
