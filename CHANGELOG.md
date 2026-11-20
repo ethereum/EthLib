@@ -424,6 +424,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, a signature of signed direct safety names the version of a fork of the config ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the version of its domain, and `SignedConflict` asks for the version of a fork of the config, the same for both headers.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` name the version that the state before the block reads.
+  `Run.forkVersions_ofConfig` shows that every state of a run from a genesis of deposits holds versions of forks of the config.
+  `chainStep_forkVersions` and `chainSteps_forkVersions` move from the Beacon API proofs to `Consensus/Proofs/Transition/ForkVersions.lean`, where they are public.
+  `signedConflict_of_accountable`, `accountable_safety_signed` and their corollaries keep their hypotheses and conclude this stronger form.
+
 - The light client checks of req/resp responses compare fork digests, not forks ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
   From Fulu, a change of blob parameters changes the digest within one fork, and a fork no longer tells those epochs apart.
   In Python, `reqresp_is_valid_response` takes a new argument `genesis_validators_root`, which the light client protocols need.

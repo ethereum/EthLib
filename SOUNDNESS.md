@@ -4369,7 +4369,12 @@ An aggregate call of that set accepts only if every key of the call signed its m
 Then each accountable key signed the signing roots of two attestation data that `isSlashableAttestationData` flags, each in an attester domain.
 Otherwise it signed the signing roots of two different headers of one slot, each in a proposer domain.
 Their proposer index holds the key in the registry at `x`, since the registry keeps its keys and its keys are distinct.
-Each domain is that of the genesis validators root of the runs and of some fork version, which need not be one of the config.
+Each domain is that of the genesis validators root of the runs and of the version of a fork of the config; the two headers take one fork.
+`Run.forkVersions_ofConfig` shows that each state of a run from a genesis of deposits holds two versions of forks of the config (`forkVersions_ofConfig_of_genesis_chainSteps`, `Consensus/Proofs/Transition/ForkVersions.lean`), so it reads only such versions.
+The version need not be that of the fork of the object's epoch.
+A state reads its previous version at any epoch before its fork epoch, and its current one at any later epoch, a header of a later fork included.
+When two forks share an epoch, the previous version is one that no epoch uses.
+The definition accepts the version of any fork of the config, including one that neither run reaches.
 `Run.genesisValidatorsRoot` shows that a run keeps that root.
 If SHA-256 collides on the two signing roots, the two signatures may be one.
 `accountable_safety_signed` restates `accountable_safety` for the unslashed active keys at `x` that signed such a pair (`signedConflictKeys`).
