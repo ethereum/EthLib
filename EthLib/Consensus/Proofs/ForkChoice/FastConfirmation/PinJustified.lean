@@ -153,17 +153,13 @@ private theorem voterStake_le_deepReserve {pulled anc fin : BeaconState preset f
 
 The theorem covers only `fusaka ≤ fork < glamsterdam`.
 
-`PinGuarded` supplies the a priori guard at the selected head's finalized state.
+Assume the a priori guard at the selected head's finalized state.
 
-The cross-store `finality` premise links one store's finalized block to another's justified chain.
+Assume the receiver's justified chain agrees with the caller's finalized checkpoint at its epoch.
 
-The link is required when the other store's justified epoch is at least the finalized epoch.
+This agreement is required only if the receiver's justified epoch reaches that epoch.
 
 Take honest voters whose stake exceeds a third of the sum of the total, margin and pin reserve.
-
-From Fusaka until Gloas, assume the a priori guard for the selected head.
-
-The receiver's justified chain must read the caller's finalized checkpoint if it reaches that epoch.
 
 A justified checkpoint of the call's epoch then has a signer among them.
 

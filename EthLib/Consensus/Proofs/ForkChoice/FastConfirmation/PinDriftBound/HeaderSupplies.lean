@@ -116,7 +116,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_rise (h : S
       (show isActiveAt pulled (getCurrentEpoch pulled) v.toNat = true from current)
     exact Internal.mem_positions_filter config pulled anc fin found current
 
-/-- The rise of the upcoming-only keys of K6 and of `SC` fits `joinRise`.
+/-- The reserve bounds the rise of upcoming-only keys in K6 and `SC` together.
 
 The keys of `SC` whose rise counts toward whistleblower rewards are not in K6.
 
@@ -630,7 +630,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scSlashedReward (co
 
 Within the withdrawal delay, the kept arm fails only at the gain test, which `lowRate` repeats.
 
-So `capFor` reads the largest cap. -/
+So the rise bound uses the largest cap. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_of_notKept (h : Setting config
   checks g split fin pulled anc counted V) (i : ℕ)
     (notKept : ¬ (pinTerms config pulled anc fin).keptArm i = true) :
@@ -792,7 +792,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.high_eq (config
 
 /-- The leak at a key's largest effective balance on a run is the pin's leak and its induced leak.
 
-The key is not withdrawable at R's next epoch, so `inducedR` charges the difference. -/
+The key is not withdrawable by R's next epoch, so the extra leak counts in full. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.leakAt_foldl_le (config : Config)
   (pulled anc fin : BeaconState preset fork)
     {x y : ForkedBeaconState preset} (run : Run config checks x y) (i : ℕ)
@@ -823,7 +823,7 @@ With a sync debit the rounding of `H` adds a second increment.
 
 Without one nothing is induced, since the effective balance stays within `ebUp`.
 
-`pathEnv` holds that bound before the anchor.
+The same effective-balance ceiling holds before the anchor.
 
 `start` bounds the anchor by its balance when the anchor is no earlier than the split's epoch. -/
 private theorem cut_balance_core (h : Setting config checks g split fin pulled anc counted V)
@@ -1302,13 +1302,13 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- R1 from the count of its rounding bands.
 
-The slash charges of the classes fit the slashed keys of `branchR`, with the weights of the classes.
+The branch's slashed keys cover the slash charges, with each class counted at its own weight.
 
 The sync part of the proposer credit fits the proposer credit of each epoch.
 
 The bound `W` covers both the flag gain and the rounding unit of each slashed key.
 
-The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`.
+The hypothesis `bands` bounds the number of rounding bands drawn from the branch budget.
 
 The seat holders of `SC` weigh one in `bands`, and take seat slots that no class claims. -/
 private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc counted V)
@@ -1455,25 +1455,25 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
   rw [hW]
   omega
 
-/-- R1 (branchR): R's credits to V keys since the split, weight 3.
+/-- R's credits to voters since the split count at weight three.
 
 The slashing of a key on R's branch is charged here for the keys of `K4` and `K5`.
 
-So is a sync debit of R that `rise` omits.
+So is a sync debit on R's branch that the balance rise omits.
 
 The keys of `K4` weigh one, and those of `K5` weigh three.
 
 The surplus of the slash charge pays for the gains induced by the slashing.
 
-`branchR` also holds the unit of each key slashed on R's branch.
+The branch budget also holds a rounding unit for each key slashed on R's branch.
 
 The reserve accounts for sync committee events separately from R's other credits.
 
-The keys of `SC` that R slashes after the split also draw on `branchR`, at weight three.
+The keys of `SC` that R slashes after the split draw on the same budget at weight three.
 
 The reserve includes their whistleblower reward on C's branch.
 
-The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims.
+The seat holders of `SC` use unclaimed seat slots in that budget at weight one.
 
 A key of `K5` that receives a whistleblower credit on `pre` is read at the credits of `pre`. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_branchR (h : Setting config
@@ -1770,7 +1770,7 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
   dsimp only
   rw [sameEpoch]
 
-/-- `syncProposer` is the proposer share of the sync envelope at R's total.
+/-- The sync budget includes the proposer's share at R's total stake.
 
 It is paid for each seat in each slot of an epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncProposer_eq (config : Config)
@@ -2250,7 +2250,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_sync (h : S
 
 /-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
-The share is the proposer's, and the bound weighs both at the depth, as `syncSeats` does. -/
+Both the seat rewards and the proposer's share are counted for each epoch of the window. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncCredits_le (h : Setting config
   checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)

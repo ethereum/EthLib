@@ -291,7 +291,7 @@ private theorem exited_credit_ceiling
     simp only [List.map_append, List.sum_append, List.filter_append, and_self]
   refine ⟨_, by omega, fun positive => by omega, ceiling⟩
 
-/-- A key whose exit at R is by the finalized epoch is read by `exitBeforeFin`. -/
+/-- The early-exit test includes keys whose exit at R is due by the finalized epoch. -/
 private theorem exitBeforeFin_of_exit (config : Config) (pulled anc fin : BeaconState preset fork)
     (i : ℕ) {w : Validator} (foundPulled : pulled.validators.data[i]? = some w)
     (exited : w.exitEpoch.toNat ≤ (getCurrentEpoch fin).toNat) :
@@ -299,7 +299,7 @@ private theorem exitBeforeFin_of_exit (config : Config) (pulled anc fin : Beacon
   simp only [pinTerms]
   simp [foundPulled, exited]
 
-/-- `bF` of a key that `exitBeforeFin` reads is its finalized effective or rounded balance. -/
+/-- An early exit uses the effective or rounded balance at the finalized state. -/
 private theorem bF_of_exit (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ)
     (exit : (pinTerms config pulled anc fin).exitBeforeFin i = true) :
     (pinTerms config pulled anc fin).bF i =
@@ -464,11 +464,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_unitK (t : 
 
 /-- The reserve covers the rounding units of the counted keys at their respective weights.
 
-A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes a seat unit.
+A credited key uses one rounding unit, and a key with only seat activity uses a seat unit.
 
-A key credited only by a consolidation of X takes its unit from `consolidationsXCount`.
+A key credited only by consolidation uses a unit for an entry in X's consolidation queue.
 
-A key slashed only on R's branch takes its unit in `branchR`.
+A key slashed only on R's branch uses a unit from that branch's slashing budget.
 
 The keys of `SC` and `CS` hold the slots that the keys of `K4`, `K5` and `K6` leave.
 
@@ -843,7 +843,7 @@ They are one rounding step for a credit on C's branch.
 
 They are one rounding step for a sync debit on R's branch or on its shared segment with C's.
 
-The key's flows also compound, which `keyExtra` charges with its unit and its induced leak.
+The bound also includes compounding flows, one rounding unit and the induced leak.
 
 The starting balance floor accounts for rounding down to an increment. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keyCeiling (anc : BeaconState preset
@@ -1047,11 +1047,11 @@ They are the key's block credits from rewards and its consolidation and deposit 
 
 They are those up to the step.
 
-The proposer credits are within `propN` of the whole run.
+The proposer credits are at most those of the whole run.
 
-The deposits before the step are those of `depPre`, since the key is unslashed before it.
+The deposit bound counts only deposits made before the key was slashed.
 
-The consolidation credits are within `consAmt`. -/
+The consolidation credits are at most the total applied to the key. -/
 private theorem credC_prefix_le (h : Setting config checks g split fin pulled anc counted V)
     {a b : ForkedBeaconState preset} (pre : Run config checks ⟨fork, split⟩ a)
     (step : Step config checks a b) (post : Run config checks b ⟨fork, counted⟩) (highC : ℕ)
@@ -2632,9 +2632,9 @@ The slacks are one increment for a slashing on R's branch.
 
 They are one rounding step for a credit on C's branch or a sync debit on R's.
 
-The key's flows also compound, which `keyExtra` charges with its unit and its induced leak.
+The bound also includes compounding flows, one rounding unit and the induced leak.
 
-`keyExtra` also holds the key's sync debits on the shared segment. -/
+It includes the key's sync debits on the shared segment. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_core (h : Setting config checks
   g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

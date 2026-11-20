@@ -893,7 +893,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cfloor_origin (
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value.
 
-The balance of the key at every prefix end is above `floor`, as `endpointFloor` says.
+The key's balance stays above `floor` at every prefix end.
 
 That value is the least of its effective balance and its cap at the finalized block.
 
@@ -1045,7 +1045,7 @@ It is above that floor less the key's sync debits and their band.
 
 The floor starts from the smaller of the key's balance and its cap at the finalized block.
 
-It falls by what `fall` charges, in `X`: the leak and the gain over the depth, and the partials.
+The charge `X` covers leak and gain over the window and due partial withdrawals.
 
 The hypothesis `margin` fits the closed form of the potential floor to the floor of the fall.
 
@@ -2401,7 +2401,7 @@ private theorem sum_le_exiting (config : Config)
   obtain ⟨w, found⟩ := Internal.validator_of_flag (state := state) (Or.inr mark.2.2)
   exact Internal.mem_positions_filter config state ancestor finalizedState found (member v hv)
 
-/-- `exitingBands` is two bands for each key that `exitingB` marks and for each queue key. -/
+/-- The exit budget adds two bands for each scheduled exit and each key the queues can exit. -/
 private theorem exitingBands_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).exitingBands =
@@ -2627,7 +2627,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.K5_exiting_of_n
   by_contra flag
   exact none (Internal.K5_charged h tailC member (by simpa using flag))
 
-/-- The stake of the keys whose exit R reads, against `exiting`.
+/-- The scheduled-exit budget covers the stake of keys whose exits R can see.
 
 The keys of `K5` are those without a departure charge on C's run. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exiting (h : Setting config
@@ -2680,7 +2680,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.late_eq (config
                 ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
                 (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)) := rfl
 
-/-- Before Gloas, `queueWindow` is the depth's exit and consolidation churn and the two carries. -/
+/-- Before Gloas, the queue budget covers the window's exit and consolidation churn and carries. -/
 private theorem queueWindow_unfold (early : fork < .glamsterdam) (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queueWindow =
@@ -2975,7 +2975,7 @@ private theorem credDepR_sum_le (V : Finset ValidatorIndex) (events : List (Bala
       simp only [List.map_cons, List.sum_cons]
       omega
 
-/-- `queueDep` is three times the deposit churn of each epoch of the window, and the carry. -/
+/-- The deposit budget counts the window's deposit churn and carry at weight three. -/
 private theorem queueDep_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queueDep =
@@ -3280,7 +3280,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.deposits_active
     exact slashed_deposit_held h tailC ok contained replayedEs inStep dep ordered
       (life.trans life') (slashedC v inP) found clean
 
-/-- The deposits applied on R's branch to V keys, at weight 3, against `queueDep`. -/
+/-- The deposit budget covers the deposits applied to voters on R's branch at weight three. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_deposits (h : Setting config
   checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -3486,7 +3486,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_charge 
 
 /-- The keys whose exit is charged within the run's epochs pay at most the window of the queues.
 
-For such a key `chargeAmt` is the `exitQ` of the run. -/
+For such a key the charge due by the end of the run is its full departure charge. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charge_amounts_le_queueWindow
     (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (S : Finset ValidatorIndex)
@@ -3559,7 +3559,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stop_of_charge 
   subst cEq
   exact ⟨stop, chosen⟩
 
-/-- A run has a charge at a position exactly when `riseScan` has seen one. -/
+/-- The rise scan records exactly those positions that the run charges. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.riseScan_fst {x : ForkedBeaconState
   preset} (v high : ℕ)
     {y : ForkedBeaconState preset} (tail : Run config checks x y) :

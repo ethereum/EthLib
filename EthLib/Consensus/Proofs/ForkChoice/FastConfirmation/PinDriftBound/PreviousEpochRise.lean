@@ -501,11 +501,11 @@ private theorem charge_flip (h : Setting config checks g split fin pulled anc co
 
 /-- The exact rise fold: from a run that has the key's charge, its balance rises by the steps after.
 
-Each step adds its epoch rewards, which `riseScan` sums once the charge is seen.
+The sum includes epoch rewards from the step that first charges the key onward.
 
 It also adds its net block credits and the credits of its slot steps other than the rewards.
 
-The rewards that `riseScan` sums do not fall along the run. -/
+The cumulative rewards do not decrease along the run. -/
 private theorem rise_fold (i high : ℕ) {x m : ForkedBeaconState preset}
     (pre : Run config checks x m) (seen : (Internal.riseScan i high pre).1 = true) :
     ∀ {y : ForkedBeaconState preset} (t : Run config checks m y), y.fork < .glamsterdam →
@@ -567,7 +567,7 @@ The step itself can switch the key to compounding: one payload can switch it, th
 
 So the cap is at most `capAt b` on the whole run, and on `post`.
 
-From `a` the balance rises by the epoch rewards that `riseScan` sums, and by the other credits.
+From `a` the balance can rise by the epoch rewards after the charge and by other credits.
 
 From `b` it rises by the same rewards and the credits of `post`. -/
 private theorem charge_rise_fold (h : Setting config checks g split fin pulled anc counted V)
@@ -691,7 +691,7 @@ private theorem charge_rise_fold (h : Setting config checks g split fin pulled a
 
 /-- The credits of a charged key from the epoch's start to a state `y`.
 
-They are at most those of `propC`, `whistC` and sync.
+Proposer, consolidation, whistleblower and sync credits bound them.
 
 The key is not yet withdrawable at `y` (`held`), so its deposits from the charge on are postponed.
 
@@ -1725,7 +1725,7 @@ Any other key has its exit assigned before the split, so it is at its balance at
 
 Both add C's proposer credits and sync seats.
 
-A key with a charge pays no deposit credit after it, so `propC` stands for its credits.
+The credit term counts proposer and consolidation credits because deposits are postponed.
 
 The run `pre` is the shared run from the start of the split's epoch.
 
@@ -1995,9 +1995,9 @@ private theorem created_slots_le (h : Setting config checks g split fin pulled a
 
 /-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.
 
-At a high gain rate each takes the largest cap, and `creditCap` is the cap of each deposit slot.
+At a high gain rate each deposit slot is charged at the largest cap.
 
-The keys of `K6` beyond R's registry take `capUse` of it, so the slots are counted once.
+The keys of `K6` outside R's registry share that budget without counting any slot twice.
 
 Each key created after R's registry came through a pending deposit of the window. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_capSlots (h : Setting config
@@ -2328,13 +2328,11 @@ private theorem whist_slack_arith (S Yp Y X0 Wc u SB SU slotsInc B F cu sl e1 e2
   have rise : (11 * Yp + 9) / 10 + X0 ≤ (11 * Y + 9) / 10 := by omega
   omega
 
-/-- The whistleblower credits of any keys on C's branch fit the base of `otherCredits`.
+/-- The reserve's whistleblower budget bounds the credits to any set of keys on C's branch.
 
 The base reads each key of R's registry at twice its bound.
 
 It reads each deposited or created key at the largest cap.
-
-`registry` and `registryCharge` are the bounds of the registry keys at their slashing.
 
 The reserve includes both the balance at the slashing and the slack in that bound. -/
 private theorem flow_whist (h : Setting config checks g split fin pulled anc counted V)
@@ -2452,7 +2450,7 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
     slack keys).trans
     (le_of_eq (by congr 2; omega))
 
-/-- The flow gains of the counted keys, at their weights, fit the low part of `creditGain`.
+/-- The low-rate credit budget covers the weighted gains from the counted keys' flows.
 
 They also take the surplus of the slash charge over R's slashed keys.
 
@@ -2676,13 +2674,13 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_split_of (
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
-In the high regime they are also paid by `capUse`, their share of `creditCap`.
+At a high rate these keys share the cap budget for new keys.
 
 They joined the registry on C's branch, so their stake is the credits that reach them.
 
-The credits compound, which `keyExtra`'s flow gain charges, when the gain rate is low.
+At a low gain rate the reserve charges for compounding credits.
 
-Otherwise `capUse` charges each key up to the cap. -/
+Otherwise it charges each key up to the cap. -/
 private theorem beyond_keys (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2737,7 +2735,7 @@ The reserve charges that exit on R's branch.
 
 Its stake in C is at most its stake at R and its rise.
 
-So is the stake of a key whose exit R reads, which `exiting` and `exitingRise` charge. -/
+The same bound applies to keys whose scheduled exits R can see. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cJ_le (h : Setting config checks g
   split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

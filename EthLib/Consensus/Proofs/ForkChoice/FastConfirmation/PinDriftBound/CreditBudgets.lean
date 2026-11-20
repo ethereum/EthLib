@@ -80,7 +80,7 @@ The charge is its effective balance at the exit call.
 
 The bound reads the floor of its balance from the finalized state.
 
-The penalties are covered by `drop` and the partials by `partialsDue`.
+The lower bound accounts separately for penalties and due partial withdrawals.
 
 The hysteresis is covered by the activation balance. -/
 private theorem existing_low_le_charge (h : Setting config checks g split fin pulled anc counted V)
@@ -428,7 +428,7 @@ Large charges count against the departure budget at `exitFloor` per key.
 
 Small charges can be counted without reading R's exit flag.
 
-They are at most the keys that `queueKeys` counts.
+The queue count bounds the number of charged keys.
 
 Those are the keys with a large charge, the low keys and the keys that lose seats. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charged_count_of (h : Setting
@@ -518,7 +518,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingBand
   Internal.two_bands_le_exitingBands config pulled anc fin counted V tailC highC
     (fun _ member flag _ => Internal.K5_charged h tailC member flag) (charged_count h tailC)
 
-/-- K5 (`queueRise`): the rise of keys after their exit starts on C's branch.
+/-- The queue budget covers the rise of K5 keys after their exits start on C's branch.
 
 The bound includes all keys of `K5` with a departure charge. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queueRise (h : Setting config
@@ -582,7 +582,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_queueRise (
         rw [Nat.mul_assoc]
         exact Nat.mul_le_mul_left _ (Nat.mul_le_mul_right _ count)
 
-/-- K5 (`exitingRise`): the keys whose exit R reads.
+/-- The scheduled-exit budget covers the rise of K5 keys whose exit R can see.
 
 The keys of `K5` are those without a departure charge on C's run. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingRise (h : Setting config
@@ -1034,7 +1034,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueList (X : Beacon
     X.validators.data[c.sourceIndex.toNat]?).filter fun v =>
       !v.slashed && decide (v.withdrawableEpoch.toNat ≤ high + 1)
 
-/-- `dueAt` counts `dueList`. -/
+/-- Counting the due entries gives the consolidation queue's contribution. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueAt_eq (X : BeaconState preset
   fork) (electra : .pectra ≤ fork) (high : ℕ)
     (T : Finset ValidatorIndex) : Internal.dueAt X high T = (Internal.dueList X electra high
@@ -1584,13 +1584,13 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credit_parts_le
   have p := Internal.propC_split tail high v.toNat
   exact ⟨by unfold Internal.consAmt; omega, by unfold Internal.consAmt; omega⟩
 
-/-- K5 (`exitingCredits` with `credits`): C's proposer credits to K5 keys, weight 3.
+/-- C's proposer credits to K5 keys count at weight three.
 
 The bound adds the amounts transferred by consolidation.
 
 The reserve accounts separately for the proposer's sync rewards.
 
-The bound is scaled by ten, to take the eleven tenths and the rounding of `exitingCredits`.
+The bound uses a factor of ten to account for compounding and rounding the extra exit charge.
 
 The compounding of the credits, an exact tenth of the keys' total, is in the bound.
 
@@ -1631,9 +1631,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_exitingCred
   rw [exiting]
   omega
 
-/-- `credits` holds the proposer credit, the deposit queue and the credited-key slots.
+/-- The credit budget includes proposer rewards, queued deposits and credited-key slots.
 
-`queueDep` is the same queue, three times. -/
+The separate deposit queue budget counts that queue at weight three. -/
 private theorem credits_budget (config : Config) (pulled anc fin : BeaconState preset fork) :
     ∃ carry churn wb ck : ℕ, (pinTerms config pulled anc fin).queueDep = 3 * (churn + carry) ∧
       (pinTerms config pulled anc fin).credits =
@@ -1815,11 +1815,11 @@ The reserve also charges consolidation transfers separately.
 
 The proposer's sync rewards belong to the sync budget instead.
 
-The bound is scaled by ten, to take the eleven tenths and the rounding of `credits`.
+The bound uses a factor of ten to account for compounding and rounding the credit charge.
 
 The compounding of the credits, an exact tenth of the keys' total, is in the bound.
 
-The rounding slacks of the credited keys of `K4` and `K5` are paid by `creditedKeys`.
+Each credited key of `K4` or `K5` uses one rounding slot.
 
 `K5` also reads the proposer credits of `pre`, the run to the split from the start of its epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_credits (h : Setting config
@@ -2411,7 +2411,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_eq_U {M : T
     ∑ v ∈ S, f v = ∑ v ∈ W, if v ∈ S then f v else 0 := by
   rw [Finset.sum_ite_mem, Finset.inter_eq_right.mpr sub]
 
-/-- The consolidation credits of C's branch, charged to `consolidationsX`.
+/-- The consolidation credits of C's branch fit the caps of due entries at the finalized state.
 
 The run from the finalized block's state X to C's state has the run from the split as its tail.
 
@@ -2425,7 +2425,7 @@ The run to R's state bounds the credits to V the same way.
 
 The sets `V`, `K4`, `K5` and `K6` are disjoint.
 
-So the sum over their union is at most the caps of X's queue: `consolidationsX`.
+So the sum over their union is at most the sum of the source caps for the due entries.
 
 This holds as `high ≤` the epoch of the call and X is within the withdrawal delay.
 
@@ -2455,7 +2455,7 @@ So three bands are at most three tenths of it.
 
 The reserve rounds the consolidation charge `3.3 · X` up to `(33 · X + 9) / 10`.
 
-Deeper than the withdrawal delay `consolidationsX` is 0, so the setting's `shallow` is used here. -/
+The consolidation charge is zero beyond the withdrawal delay, so this bound needs a shallow call. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_consolidations_base
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -3228,7 +3228,7 @@ A voter slashed at R uses the floor with an allowance for the slashing loss.
 
 The key is unslashed at `c`.
 
-A key slashed on R is withdrawable after the finalized epoch by a vector, by `slashedLate`.
+A key slashed on R is not withdrawable until at least a slashings vector past finality.
 
 The pin counts it, so `slashW` holds the slack.
 
@@ -4189,7 +4189,7 @@ private theorem floor_aux {A : Finset ValidatorIndex} {S : Finset ℕ} {P : ℕ 
       Finset.mem_filter.mpr (inside v (Finset.mem_filter.mp hv).1 (Finset.mem_filter.mp hv).2))
       (Nat.le_add_right _ _)))
 
-/-- `branchR` is a whistleblower charge and the slashed, proposer and rounding charges.
+/-- R's branch budget covers whistleblower rewards, slashings, proposer rewards and rounding.
 
 The slashed, proposer and rounding charges have weight three.
 

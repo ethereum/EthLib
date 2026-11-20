@@ -71,16 +71,14 @@ open DirectSafety.Apriori.Internal (recordBalance_single)
 
 variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureChecks}
 
-/-- `creditGain` is its part for compounding flows and its part for new keys past the cap. -/
+/-- The gain budget separates compounding flows from the cap charge for new keys. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditGain_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).creditGain =
       (pinTerms config state ancestor finalizedState).creditLow +
         (pinTerms config state ancestor finalizedState).creditCap := rfl
 
-/-- `exitedRB` is the filter of `exitedR`.
-
-It keeps the keys whose exit started on this branch after the split. -/
+/-- The branch exit charge sums the stake and rise of keys that start exiting after the split. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exitedR_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).exitedR =
@@ -88,23 +86,21 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exitedR_eq (con
         (pinTerms config state ancestor finalizedState).exitedRB i = true,
         (balanceAt state i + (pinTerms config state ancestor finalizedState).rise i) := rfl
 
-/-- `slashedRB` is the filter of `slashedR`.
-
-They are the keys slashed on this branch after the finalized epoch. -/
+/-- The branch slashing count includes keys slashed on this branch after the finalized epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashedR_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).slashedR =
       ((pinTerms config state ancestor finalizedState).positions.filter fun i =>
         (pinTerms config state ancestor finalizedState).slashedRB i = true).card := rfl
 
-/-- The copy splits `queues` into its deposit part and its exit and consolidation part. -/
+/-- The queue budget separates deposits from exits and consolidations. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.queues_split (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queues =
       (pinTerms config state ancestor finalizedState).queueDep +
         (pinTerms config state ancestor finalizedState).queueExit := rfl
 
-/-- `queueRise` charges each key the queues let exit, at a band and the largest gain rate. -/
+/-- Each queued exit is charged a rounding band and gains at the largest rate. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.queueRise_unfold (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queueRise =
@@ -113,7 +109,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.queueRise_unfol
           (preset.upwardBand + (pinTerms config state ancestor finalizedState).depth *
             (pinTerms config state ancestor finalizedState).gainRateMax) := rfl
 
-/-- `queueKeys` counts the window's churn by `exitFloor`, the ends, the low keys and new keys. -/
+/-- The exit count divides churn by the minimum charge and allows for ends, low and new keys. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.queueKeys_unfold (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).queueKeys =
@@ -122,7 +118,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.queueKeys_unfol
         (pinTerms config state ancestor finalizedState).lowKeys +
         (pinTerms config state ancestor finalizedState).newKeySeats := rfl
 
-/-- A key's fall is its effective balance less `floorC` within the delay, and all of it beyond. -/
+/-- A key's fall is its effective balance less its floor within the delay, and all of it beyond. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.fall_eq (config : Config) (state
   ancestor finalizedState : BeaconState preset fork)
     (i : ℕ) :
@@ -132,7 +128,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.fall_eq (config
         balanceAt state i - (pinTerms config state ancestor finalizedState).floorC i
       else balanceAt state i := rfl
 
-/-- `lowEB` takes the drops from the least of its starting balances, capped at activation. -/
+/-- The lower bound subtracts losses from the least starting balance, capped at activation. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.lowEB_unfold (config : Config)
     (state ancestor finalizedState : BeaconState preset fork)
     (i : ℕ) :
@@ -143,7 +139,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.lowEB_unfold (c
         preset.MIN_ACTIVATION_BALANCE.toNat -
         (pinTerms config state ancestor finalizedState).drop i := rfl
 
-/-- `base0` of a key that the finalized block's state holds: its balance there, within its cap. -/
+/-- A finalized key's starting balance is its actual balance at that state, capped. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.base0_of_found (config : Config)
   (pulled anc fin : BeaconState preset fork)
     {i : ℕ} {val : Validator} (initial : fin.validators.data[i]? = some val) :
@@ -153,7 +149,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.base0_of_found 
   simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
   rfl
 
-/-- `drop` of a key that the finalized block's state holds, with its carry and its leak read out. -/
+/-- The loss bound for a finalized key includes its starting shortfall and leak. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.drop_of_found (config : Config)
   (pulled anc fin : BeaconState preset fork)
     {i : ℕ} {val : Validator} (initial : fin.validators.data[i]? = some val) :
@@ -170,7 +166,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.drop_of_found (
   simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
   rfl
 
-/-- `lowB` is the filter of `lowKeys`. -/
+/-- The low-balance count includes every key marked below the new-key floor. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.lowKeys_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) :
     (pinTerms config state ancestor finalizedState).lowKeys =
@@ -248,7 +244,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consAmt (events : L
 
 /-! ### The C-side credits of a key, read from the run
 
-They are read from the run itself, as `riseQ` is.
+The run itself supplies the credits and the balance rise after an exit.
 
 A block step's `.rewards` events are its proposer's credits.
 
@@ -256,11 +252,11 @@ A slot step's `.rewards` events are the epoch's flag rewards.
 
 So a slot step counts only the sources named below.
 
-Sync events are in `syncF` with the seats. -/
+Sync rewards are accounted for with the committee seats. -/
 
 /-- Proposer and due-consolidation credits to the key on C's branch since the split.
 
-The rounding slack of a credited key is `bandC`, once for each key.
+The reserve counts one rounding band per credited key.
 
 The reserve counts consolidation bands separately. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.propC {x y : ForkedBeaconState preset}
@@ -275,7 +271,7 @@ A credited stake compounds by at most a tenth.
 
 The bounds of the terms charge an exact tenth of the keys' total, at ten times their terms.
 
-The consolidation credits are under `consolidationsX`, so their compounding is not charged here. -/
+Consolidation credits and their compounding draw on the consolidation budget instead. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.propN {x y : ForkedBeaconState preset}
   (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
@@ -283,7 +279,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.propN {x y : Forked
 
 /-- Proposer and deposit credits to the key on C's branch since the split.
 
-They are `credC` without its consolidation credits.
+Consolidation credits are excluded.
 
 A credited stake compounds by at most a tenth.
 
@@ -298,7 +294,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credN {x y : Forked
 
 A slashed key's whistleblower reward reads its effective balance at the slashing.
 
-Of `credN`'s credits, only these deposits and its proposer credits can raise that balance.
+Of the deposits and proposer credits, only those before slashing can raise that balance.
 
 This holds because a slashed key proposes no block. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.depPre (events : List (BalanceEvent
@@ -312,7 +308,7 @@ Whistleblower and sync credits are excluded.
 
 The credits are the proposer's, deposits applied and consolidations.
 
-The rounding slack of a credited key is `bandC`, once for each key. -/
+The reserve counts one rounding band per credited key. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credC {x y : ForkedBeaconState preset}
   (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
@@ -323,7 +319,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credC {x y : Forked
 
 A whistleblower credit lands in the block of the proposer's own slot.
 
-The rounding slack of a credited key is `bandC`, once for each key.
+The reserve counts one rounding band per credited key.
 
 A slot step records only debits for a slashing. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistC {x y : ForkedBeaconState preset}
@@ -364,9 +360,9 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.syncF (events : Lis
 
 /-- One increment for a key slashed on R's branch after the finalized epoch.
 
-The effective-balance drop of R's initial penalty is at most one increment, by `slashBand`.
+The effective-balance drop from R's initial slashing penalty is at most one increment.
 
-`branchR` charges each such key the slash charge, at least one increment. -/
+R's slashing budget allots at least one increment to each such key. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashR (t : PinTerms preset) (i : ℕ) :
   ℕ :=
   if t.slashedRB i = true then preset.EFFECTIVE_BALANCE_INCREMENT.toNat else 0
@@ -401,7 +397,7 @@ private theorem grossScan_slot_pos (i high : ℕ) {x m n : ForkedBeaconState pre
   · simpa [Internal.stepCredit] using pos
   · exact pos
 
-/-- The gross credits of a run add over `append`. -/
+/-- The gross credits add across consecutive runs. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.grossScan_append (v high : ℕ) {x m
   y : ForkedBeaconState preset}
     (pre : Run config checks x m) (post : Run config checks m y) :
@@ -418,7 +414,7 @@ A proposer reward, a whistleblower reward and a sync reward are block credits.
 
 Consolidation credits count separately, with a band for each queue entry.
 
-`credits` charges `upwardBand` for each credited key. -/
+The credit budget includes one upward rounding band per credited key. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bandC {x y : ForkedBeaconState preset}
   (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
@@ -485,7 +481,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credN_split {x 
     (fun s => by cases s <;> decide)
     (fun s h => by simp at h) (fun s h => by simp at h) v high tail
 
-/-- The credits of a key with the consolidations are its `credN` and its consolidation credits. -/
+/-- Adding consolidation credits completes the key's proposer and deposit credit total. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credC_split {x y :
   ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) :
@@ -499,7 +495,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credC_split {x 
     (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide))
     (fun s h => by simp at h; exact absurd (h.1.symm.trans h.2) (by decide)) v high tail
 
-/-- The proposer credits with the consolidations are `propN` and the consolidation credits. -/
+/-- The combined total adds consolidation credits to proposer credits. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.propC_split {x y :
   ForkedBeaconState preset} (tail : Run config checks x y)
     (high v : ℕ) :
@@ -534,7 +530,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.gainOn (preset : Pr
 
 It is one increment and the downward band less one.
 
-`branchR` charges that step for each of its keys. -/
+R's branch budget includes a rounding step for each such key. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bandR (events : List (BalanceEvent
   preset)) (v : ℕ) : ℕ :=
   if 0 < ((events.filter (·.source = .sync)).map (Internal.keyDebit v)).sum then
@@ -575,7 +571,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.slashW (t : PinTerm
 
 It is the leak at the largest effective balance on the run, less the leak at `ebUp`.
 
-`inducedR` is 0 when the key's withdrawable epoch at R is at most R's epoch plus one.
+The extra leak is zero if the key is withdrawable by R's next epoch.
 
 Such a key is swept by R, so the leak is not charged. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.inducedR (t : PinTerms preset) {x y :
@@ -608,9 +604,9 @@ They are its credits on C's branch and its sync debits on R's branch and on the 
 
 They also include the initial penalty of a slashing on R's branch.
 
-The credits `cred` default to `credC`, which counts the key's deposits.
+The credits `cred` count the key's deposits by default.
 
-A key of `K5` passes `propC`, which does not. -/
+For a key of `K5`, the caller excludes deposits. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flowCredit (t : PinTerms preset) {x y :
   ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
@@ -642,7 +638,7 @@ On the other arm the rise is the key's whole headroom, which holds its gains alr
 
 A key that R's registry does not hold is charged here only in the low regime.
 
-In the high regime `creditCap` charges it up to the cap. -/
+At a high rate the reserve charges it up to the cap. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flowK (t : PinTerms preset) {x y :
   ForkedBeaconState preset}
     (tailC : Run config checks x y) (high : ℕ)
@@ -821,7 +817,7 @@ private theorem slot_slashing_credit {m n : ForkedBeaconState preset}
         (fun k _ a b ok held => epochReplayAction_slashing_credit k held ok) e inside source
     · exact absurd inside notCrossing
 
-/-- An event of a block step credits a key only from the sources of `credC`, `whistC` and sync.
+/-- A block event credits a key only through proposer, whistleblower or sync rewards.
 
 A deposit event of a block credits nothing from Electra. -/
 private theorem block_event_credit {g : ForkedBeaconState preset} {fork : Fork}
@@ -862,7 +858,7 @@ private theorem block_event_credit {g : ForkedBeaconState preset} {fork : Fork}
   simp only [rc, sl, ↓reduceIte]
   omega
 
-/-- An event of a slot step, but for the epoch rewards, credits a key only from `credC` and sync. -/
+/-- Outside epoch rewards, a slot event credits only deposits, consolidations or sync rewards. -/
 private theorem slot_event_credit {g m n : ForkedBeaconState preset}
     {ok : advanceSlotAcross config checks m = .ok n}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
@@ -919,7 +915,7 @@ private theorem sum_filter_none (events : List (BalanceEvent preset))
   | nil => rfl
   | cons e rest ih => simp
 
-/-- The credits of a block step to a key are within those of `credC`, `whistC` and sync. -/
+/-- Proposer, whistleblower and sync rewards bound a key's block credits. -/
 private theorem block_credit_split {g : ForkedBeaconState preset} {fork : Fork}
     {s t : BeaconState preset fork} {engine : ExecutionEngine preset fork}
     {signed : SignedBeaconBlock preset fork} {due : upgradeDue config ⟨fork, s⟩ = false}
@@ -970,7 +966,7 @@ private theorem step_events_bounded {g m n : ForkedBeaconState preset}
   cases foundOk
   exact fun e member => (bounded e member).1
 
-/-- The credits of a block step to a key are at most those of `credC`, `whistC` and sync. -/
+/-- Proposer, whistleblower and sync rewards bound a key's block credits. -/
 private theorem block_credit_le_sources {g m n : ForkedBeaconState preset}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
     (step : Step config checks m n) (notSlot : ∀ ok, step ≠ Step.slot ok)
@@ -1051,7 +1047,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.block_balance_l
     List.filter_true] at credit ⊢
   omega
 
-/-- The credits of a step, net for a block step, are at most those of `credC`, `whistC` and sync. -/
+/-- The replay bounds credits by source, using net credits for a block step. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_credit_le_sources {g m n :
   ForkedBeaconState preset}
     (shared : Run config checks g m) (genesis : Genesis config checks g)
@@ -1080,7 +1076,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_credit_le_
 
 /-- The gross credits of a step, with its slot credits other than rewards, are within the sources.
 
-The sources are `credC`, `whistC` and sync.
+The sources include proposer and whistleblower rewards, deposits, consolidations and sync rewards.
 
 A block step's net rise is within its gross credits.
 
@@ -1122,7 +1118,7 @@ private theorem step_gross_le_sources {g m n : ForkedBeaconState preset}
       sum_filter_none] at split ⊢
     omega
 
-/-- The credits of a run, gross for its block steps, are at most those of `credC`, `whistC`, sync.
+/-- The replay bounds credits by source, using gross credits for block steps.
 
 A block step's net rise is within its gross credits, so the net credits of the run are too.
 
@@ -1267,7 +1263,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.riseQ {x y : Forked
 
 /-! ### The keys that a run credits -/
 
-/-- The net credits to a key in the block steps of a run add over `append`. -/
+/-- Net block credits to a key add across consecutive runs. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan_append (v high : ℕ) {x m y
   : ForkedBeaconState preset}
     (pre : Run config checks x m) (post : Run config checks m y) :

@@ -742,7 +742,7 @@ private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
   exact fixPost
 
 open DirectSafety.Apriori.Internal in
-/-- The cap that `rise` reads: the key's own cap when its gain is low, else the largest. -/
+/-- The rise bound uses the key's own cap when its gain is low and the largest cap otherwise. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.capFor_eq (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
     (pinTerms config state ancestor finalizedState).capFor i =
@@ -755,7 +755,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.capFor_eq (conf
         PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i
       else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := rfl
 
-/-- The cap that `rise` reads is at least the key's own cap. -/
+/-- The cap used for the rise bound is at least the key's own cap. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.capAt_le_capFor (config : Config)
     (state ancestor finalizedState : BeaconState preset fork) (i : ℕ)
     (capMax : PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i ≤
@@ -841,7 +841,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_close (con
 
 The top adds the leak at the cap, the net partials and a band to the balance at R.
 
-It reads the partials through `dueAmount`. -/
+It accounts for the queued partial withdrawals due by the cutoff. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.ebUp_eq (config : Config) (pulled
   anc fin : BeaconState preset fork)
     (electra : .pectra ≤ fork) (i t : ℕ)
@@ -1887,7 +1887,7 @@ At `c` the effective balance is within `ebUp` and the finalized one, or within i
 
 After `c` it is within `ebUp` and the whole increments of its sync debits and `W`.
 
-`floorAt` bounds the balance at each state by R's balance and debits, which gives the ceiling. -/
+R's balance and debits bound the balance at each state, which gives the ceiling. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.prefix_envelope (h : Setting config
   checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
