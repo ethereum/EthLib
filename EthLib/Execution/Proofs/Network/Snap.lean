@@ -22,6 +22,8 @@ The decoder reads no other ID or item, so it takes no field more or less than th
 
 snap/2 rejects the trie node messages of snap/1, and snap/1 the access list messages of snap/2.
 
+A version rejects every ID from its count of IDs on as unknown, but not the ID just below it.
+
 The codes and the access lists of a checked answer are the requested ones.
 
 A full trie node path reads as its 64 nibbles.
@@ -203,6 +205,28 @@ theorem ofItem_snap1_accessLists (item : Item) :
     ofItem .snap1 0x08 item = .error (.unknownId 0x08) ∧
       ofItem .snap1 0x09 item = .error (.unknownId 0x09) := by
   simp [ofItem, usesId, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+
+/-- A version rejects every ID from `n` on as unknown exactly when its count of IDs is at most `n`.
+
+So the count of IDs of a version is the first ID from which every ID is unknown to it. -/
+theorem messageCount_le_iff_unknownId {version : SnapVersion} {n : Nat} :
+    version.messageCount ≤ n ↔
+      ∀ id, n ≤ id → ∀ item, ofItem version id item = .error (.unknownId id) := by
+  constructor
+  · intro h id hid item
+    have hu : usesId version id = false := by
+      cases version <;> simp [usesId, SnapVersion.messageCount] at h ⊢ <;> omega
+    simp [ofItem, hu, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  · intro h
+    refine Nat.not_lt.mp fun hlt => ?_
+    have last (m : SnapMessage) (hm : usesId version m.id) (hid : m.id = version.messageCount - 1) :
+        False := by
+      have := h m.id (by omega) m.toItem
+      rw [ofItem_toItem hm] at this
+      cases this
+    cases version
+    · exact last (.trieNodes 0 []) (by decide) rfl
+    · exact last (.blockAccessLists 0 []) (by decide) rfl
 
 /-- A response that answers a request repeats its request ID. -/
 theorem requestId_of_answers {request response : SnapMessage}
