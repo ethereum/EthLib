@@ -35,6 +35,15 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
+/-- The effective balance of the keys inactive at a state's epoch and active at the next one.
+
+`quorumReserve` and `pinTerms` read it as the stake that joins the active set. -/
+def joiningStake (state : BeaconState preset fork) : ℕ :=
+  ∑ i ∈ Finset.range state.validators.data.size with
+      isActiveAt state (getCurrentEpoch state) i = false ∧
+        isActiveAt state (getCurrentEpoch state + 1) i = true,
+    balanceAt state i
+
 /-- The stake by which the quorum of a call can drift from its state to a later state of its chain.
 
 The state is the call's pulled-up head state, and the ancestor is the state of its target block.
@@ -135,7 +144,7 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
     (if proposerCredit = 0 ∧ seatReward = 0 ∧ positions.filter (slashed ·) = ∅ then 0 else nP) +
       blockDeposits
   let creditMax := positions.sup fun i => if upcoming i then credit i else 0
-  let joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i
+  let joining := joiningStake state
   let crossing := ∑ i ∈ positions with upcoming i,
     if effective i < cap i then
       (let top := actual i + slashBack i + syncP i + credit i
@@ -162,6 +171,58 @@ def quorumReserve (config : Config) (state ancestor : BeaconState preset fork) :
   let loss := (∑ i ∈ positions with current i, fall i) +
     creditedP * (inc + 2 * preset.downwardBand + syncPMax) + maskBudget
   2 * gain + 3 * loss
+
+/-- A key's cap at a state, `0` past the registry. -/
+def PinTerms.capAt (z : ForkedBeaconState preset) (i : ℕ) : ℕ :=
+  ((z.state.validators.data[i]?).map fun v =>
+    (withdrawalMaxEffectiveBalance preset z.fork v).toNat).getD 0
+
+/-- The amounts of the queued partial withdrawals of a key that are due by a cutoff epoch. -/
+def PinTerms.dueAmount (state : BeaconState preset fork) (electra : .pectra ≤ fork) (i : ℕ)
+    (cutoff : ℕ) : ℕ :=
+  (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
+    w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ cutoff).map (·.amount.toNat)).sum
+
+/-- The envelope of one sync seat's reward per slot, at a total.
+
+The reward is the base rewards of the total, times the sync weight, per slot and per member.
+
+The base rewards of a total are at most the base reward factor times its root plus 2. -/
+def PinTerms.syncEnvelope (preset : Preset) (total : ℕ) : ℕ :=
+  preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt (3 * total / 2) + 2) *
+    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / preset.SLOTS_PER_EPOCH.toNat /
+      preset.SYNC_COMMITTEE_SIZE.toNat
+
+/-- The pin's bound on another branch's total: three halves of the call's total. -/
+def PinTerms.wide (state : BeaconState preset fork) : ℕ :=
+  3 * ((getTotalActiveBalance state).toOption.getD 0).toNat / 2
+
+/-- The pin's balance churn at a total, rounded down to an increment. -/
+def PinTerms.balanceChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
+  max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (wide / config.CHURN_LIMIT_QUOTIENT.toNat) -
+    max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat (wide / config.CHURN_LIMIT_QUOTIENT.toNat) %
+      preset.EFFECTIVE_BALANCE_INCREMENT.toNat
+
+/-- The pin's activation and exit churn at a total, before Gloas. -/
+def PinTerms.activationExitChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
+  min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat
+    (PinTerms.balanceChurn preset config wide)
+
+/-- The pin's consolidation churn at a total, before Gloas. -/
+def PinTerms.consolidationChurn (preset : Preset) (config : Config) (wide : ℕ) : ℕ :=
+  PinTerms.balanceChurn preset config wide - PinTerms.activationExitChurn preset config wide
+
+/-- Whether a key of the call's state is unslashed and exits by the next epoch.
+
+It must also not be withdrawable by the finalized epoch of the call's ancestor.
+
+`pinTerms` charges these keys in `exitedSlashable`. -/
+def PinTerms.exitedSlashable (anc pulled : BeaconState preset fork) (i : ℕ) : Bool :=
+  decide ((pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
+    ((pulled.validators.data[i]?).map fun v =>
+      decide (v.exitEpoch.toNat ≤ (getCurrentEpoch pulled).toNat + 1)).getD false = true ∧
+    ((pulled.validators.data[i]?).any fun v =>
+      decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true)
 
 /-- The terms of `pinReserve`, by name.
 
@@ -200,6 +261,10 @@ structure PinTerms (preset : Preset) where
   depthFin : ℕ
   scoreMaxFin : ℕ
   otherGain : ℕ
+  flagRate : ℕ
+  slashLeak : ℕ
+  high : ℕ → ℕ
+  capFor : ℕ → ℕ
   keptArm : ℕ → Bool
   gainHigh : Bool
   pendingRB : ℕ → Bool
@@ -267,18 +332,20 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let before (i : ℕ) := isActiveAt state (getPreviousEpoch state) i
   let upcoming (i : ℕ) := isActiveAt state (epoch + 1) i
   let slashed (i : ℕ) := ((validator i).map (·.slashed)).getD false
-  let cap (i : ℕ) :=
-    ((validator i).map fun v => (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
+  let cap (i : ℕ) := PinTerms.capAt ⟨fork, state⟩ i
   let capMax := preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
   let finalized := ancestor.finalizedCheckpoint.epoch.toNat
   let depth := epoch.toNat + 2 - finalized
   let tight := decide (depth ≤ 1 + preset.MAX_SEED_LOOKAHEAD.toNat)
   let recentSlashing (i : ℕ) := (validator i).any fun v =>
     decide (finalized + preset.EPOCHS_PER_SLASHINGS_VECTOR.toNat ≤ v.withdrawableEpoch.toNat)
-  let exiting := ∑ i ∈ positions with (before i || current i) = true ∧
-      (slashed i = false ∨ recentSlashing i = true) ∧
-      ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true,
-    effective i
+  -- A key whose exit the call reads is active at the previous or the current epoch.
+  --
+  -- It is unslashed or recently slashed, and it exits by the next epoch.
+  let exitingB (i : ℕ) := decide ((before i || current i) = true ∧
+    (slashed i = false ∨ recentSlashing i = true) ∧
+    ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true)
+  let exiting := ∑ i ∈ positions with exitingB i = true, effective i
   let totalGwei := (getTotalActiveBalance state).toOption.getD 0
   let total := totalGwei.toNat
   -- The rates are read at a quarter of the call's total.
@@ -301,19 +368,16 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- `wide` is a natural-number bound on another branch's total, not a copy of a read.
   --
   -- It holds within the band of totals that the producer of the pin premise assumes.
-  let wide := 3 * total / 2
+  let wide := PinTerms.wide state
   let round (amount : ℕ) := amount - amount % inc
-  let balanceChurn := round (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
-    (wide / config.CHURN_LIMIT_QUOTIENT.toNat))
-  let activationExitChurn :=
-    min config.MAX_PER_EPOCH_ACTIVATION_EXIT_CHURN_LIMIT.toNat balanceChurn
+  let activationExitChurn := PinTerms.activationExitChurn preset config wide
   let exitChurn := if .glamsterdam ≤ fork then
       round (max config.MIN_PER_EPOCH_CHURN_LIMIT_ELECTRA.toNat
         (wide / config.CHURN_LIMIT_QUOTIENT_GLOAS.toNat))
     else activationExitChurn
   let consolidationChurn := if .glamsterdam ≤ fork then
       round (wide / config.CONSOLIDATION_CHURN_LIMIT_QUOTIENT.toNat)
-    else balanceChurn - activationExitChurn
+    else PinTerms.consolidationChurn preset config wide
   -- Another branch's consolidation carry was set from one epoch's churn, possibly before finality.
   --
   -- So it is charged at the larger of the finalized block's carry and the churn here.
@@ -336,8 +400,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- The integer reward is not monotone in the total, and the envelope is.
   --
   -- `div_mul_div_sqrt_le` bounds the reward of any total up to that much by it.
-  let syncEnvelope := preset.BASE_REWARD_FACTOR.toNat * (Nat.sqrt (3 * total / 2) + 2) *
-    SYNC_REWARD_WEIGHT.toNat / WEIGHT_DENOMINATOR.toNat / slots / preset.SYNC_COMMITTEE_SIZE.toNat
+  let syncEnvelope := PinTerms.syncEnvelope preset total
   -- The inactivity score is read at the finalized block's state, with depth from its epoch.
   --
   -- That state lies on every branch, and a score rises by at most the bias per epoch on any.
@@ -364,15 +427,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     2 * syncDebitMax * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
       (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   let partialsR (i : ℕ) := if electra : .pectra ≤ fork then
-      (((state.pendingPartialWithdrawals electra).data.toList.filter fun w =>
-        w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ epoch.toNat + 1).map
-          (·.amount.toNat)).sum
-    else 0
+      PinTerms.dueAmount state electra i (epoch.toNat + 1) else 0
   let partialsX (i : ℕ) := if electra : .pectra ≤ fork then
-      (((finalizedState.pendingPartialWithdrawals electra).data.toList.filter fun w =>
-        w.validatorIndex.toNat = i ∧ w.withdrawableEpoch.toNat ≤ epoch.toNat + 1).map
-          (·.amount.toNat)).sum
-    else 0
+      PinTerms.dueAmount finalizedState electra i (epoch.toNat + 1) else 0
   -- The rates are read at a computed envelope of the key's effective balance on any branch.
   --
   -- That is at least its effective balance here and at the finalized block's state.
@@ -386,6 +443,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       preset.downwardBand + inc - 1
     max (max (effective i) (finEB i)) (min (cap i) (top - top % inc))
   let leak (i : ℕ) := leakAt (ebUp i) i
+  -- The flag reward of one increment over one epoch, at the pin's rate.
+  let flagRate := perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+    WEIGHT_DENOMINATOR.toNat
   let gainRate (i : ℕ) := ebUp i / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- A partial due by the next epoch was queued at least `partialDelay` epochs before it.
@@ -412,8 +472,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     decide (v.exitEpoch.toNat ≤ (getCurrentEpoch finalizedState).toNat)
   let bF (i : ℕ) := if exitBeforeFin i then max (finEB i) (actualFin i - actualFin i % inc) else 0
   -- The floor starts at the finalized block's balance, at most the key's cap there.
-  let capFin (i : ℕ) := ((finalizedState.validators.data[i]?).map fun v =>
-    (withdrawalMaxEffectiveBalance preset fork v).toNat).getD 0
+  let capFin (i : ℕ) := PinTerms.capAt ⟨fork, finalizedState⟩ i
   let base0 (i : ℕ) := min (actualFin i) (capFin i)
   -- The first pass after the finalized block's state charges its stored effective balance.
   --
@@ -452,9 +511,12 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- Its rise is then its rounded balance; otherwise it is its whole headroom.
   let keptArm (i : ℕ) : Bool :=
     decide (depthFin ≤ partialDelay) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
+  -- The top of a key before the downward band.
+  --
+  -- It is its balance, the window's gain and leak, and its net partials.
+  let high (i : ℕ) := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
   -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
-    let high := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
     -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
     --
     -- So the rise is the key's whole headroom.
@@ -466,8 +528,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
       -- It is at most the balance at that update plus the downward band, rounded down.
       --
       -- It is also its effective balance at the finalized block's state or a rounded balance since.
-      let kept := high + preset.downwardBand
-      min (capFor i) (min (kept - kept % inc) (max (finEB i) (high - high % inc))) - effective i
+      let kept := high i + preset.downwardBand
+      min (capFor i) (min (kept - kept % inc) (max (finEB i) (high i - high i % inc))) -
+        effective i
     else capFor i - effective i
   let period := max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat
   let due := if electra : .pectra ≤ fork then
@@ -620,8 +683,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- That increment earns the flag rewards over the depth, plus two units per epoch for the floors.
   --
   -- Each credited key pays it once, and a key pays two more if the call reads its exit.
-  let unitGain := depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-    WEIGHT_DENOMINATOR.toNat + 2)
+  let unitGain := depth * (flagRate + 2)
   -- A key slashed on this branch can also take one more increment, which earns `unitGain`.
   --
   -- The rounding is weighted 3 exactly once, by the `3 *` of this branch term.
@@ -634,10 +696,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- That rise is its gains, the call's branch's penalties and the other branch's credits.
   --
   -- A credit raises an effective balance by at most itself plus the upward band.
-  let exitingRise := ∑ i ∈ positions with (before i || current i) = true ∧
-      (slashed i = false ∨ recentSlashing i = true) ∧
-      ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true,
-    rise i
+  let exitingRise := ∑ i ∈ positions with exitingB i = true, rise i
   -- An exiting key can still be credited as a proposer.
   --
   -- `credits` charges those credits once at eleven tenths and their bands once.
@@ -727,9 +786,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- An exiting key weighs three times, so each credited one needs two more upward bands.
   --
   -- Those are the keys whose exit the call reads and those the queues let exit there.
-  let exitingB (i : ℕ) := decide ((before i || current i) = true ∧
-    (slashed i = false ∨ recentSlashing i = true) ∧
-    ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true)
   let exitingCount := (positions.filter fun i => exitingB i = true).card
   let exitingBands := 2 * (exitingCount + queueKeys) * preset.upwardBand
   let queueRise := if tight then 0 else
@@ -747,9 +803,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- A key's balance at the finalized state can exceed its balance and rise here.
   --
   -- Its debits between the start of that epoch and the finalized state are in neither.
-  let exitedSlashable := ∑ i ∈ positions with slashed i = false ∧
-      ((validator i).map fun v => decide (v.exitEpoch.toNat ≤ epoch.toNat + 1)).getD false = true ∧
-      (validator i).any (fun v => decide (finalized < v.withdrawableEpoch.toNat)),
+  let exitedSlashable := ∑ i ∈ positions with PinTerms.exitedSlashable ancestor state i = true,
     max (effective i + rise i) (max (bF i) (finEB i))
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       depth * (exitChurn + consolidationChurn) + exitCarry + consolidationCarry +
@@ -820,6 +874,10 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- They are also those of the shared segment.
   let seatUnits := (depth / period + (depthFin / period + 2)) * preset.SYNC_COMMITTEE_SIZE.toNat
   let creditUnits := (creditedKeys + seatUnits + 2 * (exitingCount + queueKeys)) * unitGain
+  -- The leak of one increment over the window, at the largest score of the finalized state.
+  let slashLeak := depthFin * (2 * perIncrement +
+    inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+      (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
   let otherCredits := 3 * (2 * ((∑ i ∈ positions,
           max (max (ebUp i) (effective i + rise i)) (bF i)) +
         (11 * (depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax +
@@ -839,10 +897,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
         -- The units of the keys whose only flows are seat debits, and the leak that those induce.
         creditUnits + syncLeak +
         -- The units and the leak of the keys that only a consolidation or a slashing on R moves.
-        unitGain * (consolidationsXCount + 2 * slashedR) +
-        slashedR * (depthFin * (2 * perIncrement +
-          inc * (scoreMaxFin + depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
-            (config.INACTIVITY_SCORE_BIAS.toNat * p.INACTIVITY_PENALTY_QUOTIENT.toNat) + 1))) /
+        unitGain * (consolidationsXCount + 2 * slashedR) + slashedR * slashLeak) /
           -- The credits include the keys' own whistleblower credits, so two quotient steps go.
           (p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 2) +
       -- C's seat flows, and R's and the shared segment's seat debits.
@@ -852,8 +907,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   let creditLow :=
     (33 * depth * consolidationGain + 11 * depth * otherGain +
-      30 * depth * (perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
-        WEIGHT_DENOMINATOR.toNat + 1) + 9) / 10
+      30 * depth * (flagRate + 1) + 9) / 10
   let lowRate := 11 * depth * (gainRateMax + 1) ≤ capMax
   let creditCap := if lowRate then 0
     else depthFin * preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat * capMax
@@ -882,8 +936,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     queueRise, reserveW, flagged, seatShortfall, consolidationsX, exitedR, depth, syncProposer,
     proposerCredit, exitingBands, pendingR, creditGain, creditUnits, syncLeak, unitGain,
     consolidationsXCount, exitBeforeFin, bF, perIncrement, depthFin, scoreMaxFin,
-    otherGain, keptArm, creditLow, creditCap, gainHigh := !decide lowRate, pendingRB,
-    joining := ∑ i ∈ positions with current i = false ∧ upcoming i = true, effective i,
+    otherGain, flagRate, slashLeak, high, capFor, keptArm, creditLow, creditCap,
+    gainHigh := !decide lowRate, pendingRB,
+    joining := joiningStake state,
     joinRise,
     exitingB, lateB, exitedRB, slashedR, slashedRB,
     withdrawnRB := fun i => (validator i).any fun v =>

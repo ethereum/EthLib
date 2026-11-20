@@ -12094,7 +12094,7 @@ private theorem sum_le_exiting (config : Config)
   refine voters_sum_le (fun i => balanceAt state i) fun v hv => ?_
   have mark := of_decide_eq_true (member v hv)
   obtain ⟨w, found⟩ := validator_of_flag (state := state) (Or.inr mark.2.2)
-  exact mem_positions_filter config state ancestor finalizedState found mark
+  exact mem_positions_filter config state ancestor finalizedState found (member v hv)
 
 /-- `exitingBands` is two bands for each key that `exitingB` marks and for each queue key. -/
 private theorem exitingBands_eq (config : Config)
@@ -12391,7 +12391,8 @@ private theorem queueWindow_unfold (early : fork < .glamsterdam) (config : Confi
           (pinCons preset config (pinWide state)) := by
   have notGloas : ¬ .glamsterdam ≤ fork := Nat.not_le_of_lt early
   unfold pinTerms
-  simp only [notGloas, pinWide, pinCons, pinExit, pinBalance, ↓reduceIte]
+  simp only [notGloas, pinWide, pinCons, pinExit, pinBalance, PinTerms.wide,
+    PinTerms.consolidationChurn, PinTerms.activationExitChurn, PinTerms.balanceChurn, ↓reduceIte]
 
 /-- A state with a total of at most `wide` has an exit churn limit of at most the pin's. -/
 private theorem exitRate_le {fork' : Fork} {s : BeaconState preset fork'}
@@ -16454,7 +16455,7 @@ private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc 
   have base0Eq : (pinTerms config pulled anc fin).base0 i.toNat =
       min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat)
         (withdrawalMaxEffectiveBalance preset fork val).toNat := by
-    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
     rfl
   have dropEq : (pinTerms config pulled anc fin).drop i.toNat =
       ((pinTerms config pulled anc fin).leakAt
@@ -16466,7 +16467,7 @@ private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc 
             ((pinTerms config pulled anc fin).base0 i.toNat +
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) i.toNat + 1) +
         preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
     rfl
   obtain ⟨X, hX⟩ : ∃ X, X = ((pinTerms config pulled anc fin).leakAt
           (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) i.toNat -
@@ -16894,7 +16895,7 @@ private theorem V_floor (h : Setting config checks g split fin pulled anc counte
   have hbase0 : base0 = min (actualBalanceAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat)
       (withdrawalMaxEffectiveBalance preset fork val).toNat := by
     rw [hbase0def]
-    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
     rfl
   obtain ⟨X, hX⟩ : ∃ X, X = ((pinTerms config pulled anc fin).leakAt
         (effectiveAt (⟨fork, fin⟩ : ForkedBeaconState preset) v.toNat -
@@ -17173,7 +17174,7 @@ private theorem existing_low_or_floor (h : Setting config checks g split fin pul
               (withdrawalMaxEffectiveBalance preset fork val).toNat +
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) v.toNat + 1) +
         preset.downwardBand + preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
-    simp only [pinTerms, initial, Option.map_some, Option.getD_some]
+    simp only [pinTerms, PinTerms.capAt, initial, Option.map_some, Option.getD_some]
     rfl
   rw [lowEB_unfold, drop]
   exact bound

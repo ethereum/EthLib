@@ -24,6 +24,11 @@ Not yet released.
   `pinReserve` is now `(pinTerms config state ancestor finalizedState).total`, with the same value and statement.
   The pin's drift bound in `PinDriftBound` reads the terms one by one.
 
+- `PinTerms.capAt`, `PinTerms.dueAmount`, `PinTerms.syncEnvelope`, `PinTerms.wide`, `PinTerms.balanceChurn`, `PinTerms.activationExitChurn`, `PinTerms.consolidationChurn` and `PinTerms.exitedSlashable` are the reads of a state that `pinTerms` applies.
+  `joiningStake` is the stake joining the active set, which `quorumReserve` and `pinTerms` both read, with `quorumReserve`'s value and statement unchanged.
+  `PinTerms` gains the fields `flagRate`, `slashLeak`, `high` and `capFor`, and `pinReserve`'s value is unchanged.
+  The pin's drift bound in `PinDriftBound` reads them at other states and totals.
+
 - `ConsolidationQueueRise.Appends` says that the queue of pending consolidations only grows at its end inside a block, and `ConsolidationQueueRise.appendStep_processBlock` proves it for a block from Altair and before Gloas, with the frame and the registry lifecycle.
   `riseStep_processBlock` now follows from it, and its statement is unchanged.
   The pin's `block_step` reads it.
