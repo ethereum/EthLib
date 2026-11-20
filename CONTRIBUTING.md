@@ -58,6 +58,25 @@ A provenance note says where a rule is stated, not which text makes the rule nor
 Do not cite another implementation as the authority for a behaviour.
 A byte-for-byte match with a client is a useful test, not a justification.
 
+## Defects found upstream
+
+Formal work often finds defects in the documents that EthLib specifies.
+A proof that does not close, a vector that disagrees, or a definition that contradicts its source can show a bug in an EIP, a specification, an API or a test suite.
+Such a defect must never stay only in EthLib: report it to the repository that owns the document.
+
+- Confirm the defect first.
+  Reproduce it at the head of the target repository's default branch, and search its open and closed issues and pull requests.
+- If the fix is clear, open one small pull request in the target repository for each defect, in that repository's style.
+  A minor defect, such as a wrong example or a broken constant, gets a pull request too.
+- If the fix needs a design decision, open an issue there with a concrete example instead.
+- If the defect is a security vulnerability, do not disclose it in public.
+  Report it privately through the target repository's security policy, or through the [Ethereum bug bounty program](https://ethereum.org/bug-bounty/) for the protocol specifications.
+- Describe the defect from the documents alone: never name an implementation.
+- Link the upstream pull request or issue from the related EthLib issue, and record any divergence that remains in `SOUNDNESS.md`.
+
+Bugs come from EthLib's own work.
+Do not search the upstream repositories for bugs outside of it.
+
 ## Layout
 
 ```text
