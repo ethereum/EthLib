@@ -878,7 +878,7 @@ private theorem late_justified_not_in_call_epoch {anchor : Store preset fork} {�
     exact blockRead
   obtain ⟨-, block0, -, held0, -, -⟩ := Store.isAncestor_of_getCheckpointBlock read0
   obtain ⟨anc, ancStored, -⟩ := reachedU.blockStatesFromParents held0
-  obtain ⟨fin, finRead, finAnchor⟩ :=
+  obtain ⟨fin, finRead, finAnchor, -⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedU sound anchorSlot params nonzeroU ancStored
   -- The count with its pin reserve gives the pinned quorum.
   rcases quorum_of_no_conflicting_checkpoint (reservedN state0 anc fin target0 state0Ok target0Ok
@@ -1470,7 +1470,7 @@ private theorem late_current_receiver_source {anchor : Store preset fork} {Δ ti
   obtain ⟨-, targetBlock, -, targetHeld, -, -⟩ :=
     Store.isAncestor_of_getCheckpointBlock targetRead
   obtain ⟨anc, ancStored, -⟩ := reachedQ.blockStatesFromParents targetHeld
-  obtain ⟨fin, finRead, finAnchor⟩ :=
+  obtain ⟨fin, finRead, finAnchor, -⟩ :=
     Store.Reachable.finalizedState_of_blockState reachedQ sound anchorSlot params
       (roots u caller q qBound) ancStored
   have count := countQ pulled anc fin target pulledOk targetOk ancStored finRead finAnchor

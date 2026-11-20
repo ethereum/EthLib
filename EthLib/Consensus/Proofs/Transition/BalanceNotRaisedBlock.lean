@@ -362,71 +362,123 @@ private theorem BlockFixed.foldlM {α ε : Type}
     (computed : items.foldlM step state = .ok after) : BlockFixed state after :=
   (foldlM_ok_steps BlockFixed BlockFixed.refl BlockFixed.trans each computed).1
 
+/-- A step writes a score only as a zero: each score after it was there before, or is zero. -/
+private def ScoreZero (state after : BeaconState preset fork) : Prop :=
+  ∀ altair : .altair ≤ fork, ∀ (i : Nat) (v : UInt64),
+    (after.inactivityScores altair).data[i]? = some v →
+      (state.inactivityScores altair).data[i]? = some v ∨ v = 0
+
+/-- A state writes no score. -/
+private theorem ScoreZero.refl (state : BeaconState preset fork) : ScoreZero state state :=
+  fun _ _ _ found => .inl found
+
+/-- Two steps that write scores only as zeros write them only as zeros. -/
+private theorem ScoreZero.trans {first second third : BeaconState preset fork}
+    (one : ScoreZero first second) (two : ScoreZero second third) : ScoreZero first third :=
+  fun altair i v found =>
+    (two altair i v found).elim (one altair i v) .inr
+
+/-- A step that keeps the scores writes only zeros. -/
+private theorem ScoreZero.of_scores (same : after.inactivityScores = state.inactivityScores) :
+    ScoreZero state after := fun altair _ _ found => .inl (by rw [← same]; exact found)
+
+/-- A step keeps the fields, and writes a score only as a zero. -/
+private def FixedZ (state after : BeaconState preset fork) : Prop :=
+  BlockFixed state after ∧ ScoreZero state after
+
+/-- A step keeps the fields when it keeps each of them and the scores. -/
+private theorem FixedZ.of_eq (slot : after.slot = state.slot := by rfl)
+    (proposerLookahead : after.proposerLookahead = state.proposerLookahead := by rfl)
+    (currentSyncCommittee : after.currentSyncCommittee = state.currentSyncCommittee := by rfl)
+    (randaoMixes : after.randaoMixes = state.randaoMixes := by rfl)
+    (grows : state.validators.data.size ≤ after.validators.data.size := by
+      exact Nat.le_refl _)
+    (scores : after.inactivityScores = state.inactivityScores := by rfl) :
+    FixedZ state after :=
+  ⟨BlockFixed.of_eq slot proposerLookahead currentSyncCommittee randaoMixes grows scores,
+    ScoreZero.of_scores scores⟩
+
+/-- A state keeps its own fields. -/
+private theorem FixedZ.refl (state : BeaconState preset fork) : FixedZ state state :=
+  ⟨BlockFixed.refl state, ScoreZero.refl state⟩
+
+/-- Two steps that keep the fields keep them. -/
+private theorem FixedZ.trans {first second third : BeaconState preset fork}
+    (one : FixedZ first second) (two : FixedZ second third) : FixedZ first third :=
+  ⟨BlockFixed.trans one.1 two.1, one.2.trans two.2⟩
+
+/-- A fold of steps that keep the fields keeps them. -/
+private theorem FixedZ.foldlM {α ε : Type}
+    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (each : ∀ s x t, step s x = .ok t → FixedZ s t) {items : List α}
+    (computed : items.foldlM step state = .ok after) : FixedZ state after :=
+  (foldlM_ok_steps FixedZ FixedZ.refl FixedZ.trans each computed).1
+
 /-- A write to a validator keeps the fields. -/
 private theorem fixed_setValidator {index : ValidatorIndex} {validator : Validator}
-    (set : state.setValidator index validator = .ok after) : BlockFixed state after := by
+    (set : state.setValidator index validator = .ok after) : FixedZ state after := by
   obtain ⟨_, rfl⟩ := setValidator_ok set
-  exact BlockFixed.of_eq (grows := by simp [BeaconState.putValidator])
+  exact FixedZ.of_eq (grows := by simp [BeaconState.putValidator])
 
 /-- A write to a balance keeps the fields. -/
 private theorem fixed_setBalance {index : ValidatorIndex} {balance : Gwei}
-    (set : state.setBalance index balance = .ok after) : BlockFixed state after := by
+    (set : state.setBalance index balance = .ok after) : FixedZ state after := by
   obtain ⟨_, rfl⟩ := setBalance_ok set
-  exact BlockFixed.of_eq
+  exact FixedZ.of_eq
 
 /-- Raising a balance keeps the fields. -/
 private theorem fixed_increaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : increaseBalance state index delta = .ok after) : BlockFixed state after := by
+    (computed : increaseBalance state index delta = .ok after) : FixedZ state after := by
   obtain ⟨_, set⟩ := increaseBalance_ok computed
   exact fixed_setBalance set
 
 /-- Lowering a balance keeps the fields. -/
 private theorem fixed_decreaseBalance {index : ValidatorIndex} {delta : Gwei}
-    (computed : decreaseBalance state index delta = .ok after) : BlockFixed state after := by
+    (computed : decreaseBalance state index delta = .ok after) : FixedZ state after := by
   obtain ⟨_, set⟩ := decreaseBalance_ok computed
   exact fixed_setBalance set
 
 /-- An exit keeps the fields. -/
 private theorem fixed_initiateValidatorExit {index : ValidatorIndex}
-    (computed : initiateValidatorExit config state index = .ok after) : BlockFixed state after := by
+    (computed : initiateValidatorExit config state index = .ok after) : FixedZ state after := by
   obtain ⟨_, _, ⟨_, rfl⟩ | ⟨_, _, _, _, queue, _, set⟩⟩ := initiateValidatorExit_ok computed
-  · exact BlockFixed.refl _
+  · exact FixedZ.refl _
   · obtain ⟨_, _, rfl⟩ := exitQueue_eq queue
-    refine BlockFixed.trans ?_ (fixed_setValidator set)
-    exact BlockFixed.of_eq
+    refine FixedZ.trans ?_ (fixed_setValidator set)
+    exact FixedZ.of_eq
 
 /-- A slashing keeps the fields. -/
 private theorem fixed_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, last, exitedOk, -, -, markedOk, -, -, -, loweredOk, -, -,
     raisedOk, lastOk, done⟩ := slashValidator_ok computed
-  have cancelled : BlockFixed last after := by
+  have cancelled : FixedZ last after := by
     subst done
     split
-    · exact BlockFixed.of_eq
-    · exact BlockFixed.refl _
+    · exact FixedZ.of_eq
+    · exact FixedZ.refl _
   refine (fixed_initiateValidatorExit exitedOk).trans <|
     ((fixed_setValidator markedOk).trans ?_).trans <|
     (fixed_decreaseBalance loweredOk).trans <|
     (fixed_increaseBalance raisedOk).trans <|
     (fixed_increaseBalance lastOk).trans cancelled
-  exact BlockFixed.of_eq
+  exact FixedZ.of_eq
 
 /-- A deposit request keeps the fields. -/
 private theorem fixed_processDepositRequest {electra : .pectra ≤ fork} {request : DepositRequest}
     (computed : processDepositRequest state electra request = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   obtain ⟨-, -, -, start, pending, rfl⟩ := processDepositRequest_ok computed
-  exact BlockFixed.of_eq
+  exact FixedZ.of_eq
 
 /-- A partial withdrawal request keeps the fields. -/
 private theorem fixed_requestPartialWithdrawal {electra : .pectra ≤ fork}
     {index : ValidatorIndex} {validator : Validator} {amount owed : Gwei}
     (computed : requestPartialWithdrawal config state electra index validator amount owed =
       .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   simp only [requestPartialWithdrawal, bind_ok_iff, liftAccessor_ok, pure, Except.pure] at computed
   obtain ⟨_, _, _, _, computed⟩ := computed
   split at computed
@@ -436,17 +488,17 @@ private theorem fixed_requestPartialWithdrawal {electra : .pectra ≤ fork}
       Except.ok.injEq] at churned
     obtain ⟨_, _, _, _, _, _, churned⟩ := churned
     cases churned
-    exact BlockFixed.of_eq
+    exact FixedZ.of_eq
   · cases computed
-    exact BlockFixed.refl _
+    exact FixedZ.refl _
 
 /-- A withdrawal request keeps the fields. -/
 private theorem fixed_processWithdrawalRequest {electra : .pectra ≤ fork}
     {request : WithdrawalRequest}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   rcases withdrawalRequest_cases computed with rfl | ⟨_, _, _, exited⟩ | ⟨_, _, _, _, withdrawn⟩
-  · exact BlockFixed.refl _
+  · exact FixedZ.refl _
   · exact fixed_initiateValidatorExit exited
   · exact fixed_requestPartialWithdrawal withdrawn
 
@@ -454,7 +506,7 @@ private theorem fixed_processWithdrawalRequest {electra : .pectra ≤ fork}
 private theorem fixed_switchToCompoundingValidator {electra : .pectra ≤ fork}
     {index : ValidatorIndex}
     (computed : switchToCompoundingValidator state electra index = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   simp only [switchToCompoundingValidator, bind_ok_iff] at computed
   obtain ⟨_, _, _, set, queued⟩ := computed
   refine (fixed_setValidator set).trans ?_
@@ -463,34 +515,34 @@ private theorem fixed_switchToCompoundingValidator {electra : .pectra ≤ fork}
   split at queued
   · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at queued
     obtain ⟨_, _, _, _, _, set, rfl⟩ := queued
-    exact (fixed_setBalance set).trans BlockFixed.of_eq
+    exact (fixed_setBalance set).trans FixedZ.of_eq
   · cases queued
-    exact BlockFixed.refl _
+    exact FixedZ.refl _
 
 /-- A queued consolidation keeps the fields. -/
 private theorem fixed_queueConsolidation {electra : .pectra ≤ fork}
     {sourceIndex : ValidatorIndex} {source : Validator} {targetIndex : ValidatorIndex}
     (computed :
       queueConsolidation config state electra sourceIndex source targetIndex = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   obtain ⟨_, _, _, _, _, _, _, set, _, rfl⟩ := queueConsolidation_steps computed
-  refine (BlockFixed.trans ?_ (fixed_setValidator set)).trans ?_ <;> exact BlockFixed.of_eq
+  refine (FixedZ.trans ?_ (fixed_setValidator set)).trans ?_ <;> exact FixedZ.of_eq
 
 /-- A consolidation request keeps the fields. -/
 private theorem fixed_processConsolidationRequest {electra : .pectra ≤ fork}
     {request : ConsolidationRequest}
     (computed : processConsolidationRequest config state electra request = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   rcases consolidationRequest_cases computed with
     rfl | ⟨_, _, _, switched⟩ | ⟨_, _, _, _, _, queued⟩
-  · exact BlockFixed.refl _
+  · exact FixedZ.refl _
   · exact fixed_switchToCompoundingValidator switched
   · exact fixed_queueConsolidation queued
 
 /-- One step of an attester slashing keeps the fields. -/
 private theorem fixed_slashIfSlashable {step next : BeaconState preset fork × Bool}
     {index : ValidatorIndex} (computed : slashIfSlashable config step index = .ok next) :
-    BlockFixed step.1 next.1 := by
+    FixedZ step.1 next.1 := by
   obtain ⟨state, slashedAny⟩ := step
   simp only [slashIfSlashable, bind_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, computed⟩ := computed
@@ -499,30 +551,30 @@ private theorem fixed_slashIfSlashable {step next : BeaconState preset fork × B
     obtain ⟨_, slashed, rfl⟩ := computed
     exact fixed_slashValidator slashed
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
-    exact computed ▸ BlockFixed.refl _
+    exact computed ▸ FixedZ.refl _
 
 /-- An attestation keeps the fields. -/
 private theorem fixed_processAttestation {attestation : Attestation preset fork}
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   unfold processAttestation at computed
   split at computed
   · unfold processAttestationAltair at computed
     simp only [bind_ok_iff, liftAccessor_ok] at computed
     obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
       _, _, raised, raisedOk, final⟩ := computed
-    have last : BlockFixed raised after := by
+    have last : FixedZ raised after := by
       split at final
       · rw [recordPaymentWeight_eq final]
-        exact BlockFixed.of_eq
+        exact FixedZ.of_eq
       · cases final
-        exact BlockFixed.refl _
+        exact FixedZ.refl _
     have flags : ∀ (current : Bool) (participation : EpochParticipation preset fork),
-        BlockFixed state (setEpochParticipation state current participation) := by
+        FixedZ state (setEpochParticipation state current participation) := by
       intro current participation
       unfold setEpochParticipation
-      split <;> exact BlockFixed.of_eq
+      split <;> exact FixedZ.of_eq
     exact (flags _ _).trans ((fixed_increaseBalance raisedOk).trans last)
   simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, pure, Except.pure,
     Except.ok.injEq] at computed
@@ -532,7 +584,7 @@ private theorem fixed_processAttestation {attestation : Attestation preset fork}
   split at kept <;>
   · obtain ⟨_, rest⟩ := kept
     rw [← rest]
-    exact BlockFixed.of_eq
+    exact FixedZ.of_eq
 
 /-- A new validator keeps the fields.
 
@@ -540,22 +592,24 @@ It lands at the end of the registry, so each validator before it keeps its score
 private theorem fixed_addValidatorToRegistry {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei}
     (computed : addValidatorToRegistry state pubkey withdrawalCredentials amount = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   have grows : state.validators.data.size ≤ after.validators.data.size := by
     rw [addValidatorToRegistry_validators_eq_push computed, Array.size_push]
     exact Nat.le_succ _
+  have original := computed
   unfold addValidatorToRegistry at computed
   split at computed
   · simp only [addValidatorToRegistryAltair, liftAccessor_ok, bind_ok_iff, pure, Except.pure,
       Except.ok.injEq] at computed
     obtain ⟨_, indexOk, _, _, _, _, _, _, _, _, _, scoresOk, rfl⟩ := computed
     have atEnd := (getIndexForNewValidator_ok_iff.mp indexOk).2
-    refine ⟨rfl, rfl, rfl, rfl, grows, fun i below _ => ?_⟩
-    show _ = _
-    rw [setOrAppendList_getElem? scoresOk, ite_eq_right_of_eq_false _ _ (eq_false (by omega))]
+    refine ⟨⟨rfl, rfl, rfl, rfl, grows, fun i below _ => ?_⟩, fun later i v found => ?_⟩
+    · show _ = _
+      rw [setOrAppendList_getElem? scoresOk, ite_eq_right_of_eq_false _ _ (eq_false (by omega))]
+    · exact (addValidatorToRegistry_keeps later original).2.2.2 i v found
   · split at computed
     · cases computed
-      exact BlockFixed.of_eq (grows := grows)
+      exact FixedZ.of_eq (grows := grows)
     · cases computed
 
 /-- A deposit keeps the fields. -/
@@ -563,35 +617,35 @@ private theorem fixed_applyDeposit {pubkey : Cryptography.Bls.BLSPubkey}
     {withdrawalCredentials : Bytes32} {amount : Gwei} {signature : Cryptography.Bls.BLSSignature}
     (computed : applyDeposit config checks state pubkey withdrawalCredentials amount signature =
       .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   rcases applyDeposit_cases computed with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, computed⟩
-  · exact BlockFixed.refl _
-  · exact BlockFixed.of_eq
-  · exact (fixed_addValidatorToRegistry added).trans BlockFixed.of_eq
+  · exact FixedZ.refl _
+  · exact FixedZ.of_eq
+  · exact (fixed_addValidatorToRegistry added).trans FixedZ.of_eq
   · rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨_, added⟩
-    · exact BlockFixed.refl _
+    · exact FixedZ.refl _
     · exact fixed_increaseBalance raised
     · exact fixed_addValidatorToRegistry added
 
 /-- A deposit of a block keeps the fields. -/
 private theorem fixed_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  exact BlockFixed.trans (second := { state with eth1DepositIndex := fun _ => next })
-    BlockFixed.of_eq
+  exact FixedZ.trans (second := { state with eth1DepositIndex := fun _ => next })
+    FixedZ.of_eq
     (fixed_applyDeposit applied)
 
 /-- A voluntary exit keeps the fields. -/
 private theorem fixed_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks state signed = .ok after) :
-    BlockFixed state after :=
+    FixedZ state after :=
   fixed_initiateValidatorExit (processVoluntaryExit_initiates computed)
 
 /-- A change of credentials keeps the fields. -/
 private theorem fixed_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
     (computed : processBlsToExecutionChange config checks state signed = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
   exact fixed_setValidator set
 
@@ -702,7 +756,7 @@ private theorem steady_slashValidator {slashedIndex : ValidatorIndex}
     {whistleblowerIndex : Option ValidatorIndex}
     (computed : slashValidator config state slashedIndex whistleblowerIndex = .ok after) :
     Steady state after :=
-  Steady.of_parts (fixed_slashValidator computed) (activeStep_slashValidator computed)
+  Steady.of_parts (fixed_slashValidator computed).1 (activeStep_slashValidator computed)
     (effectiveKept_slash computed)
     (frame_slashValidator computed).registryGrows
 
@@ -784,7 +838,7 @@ private theorem kept_processAttestation {attestation : Attestation preset fork}
     (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
     (other : proposer.toNat ≠ index) : Kept index state after := by
   have registry := processAttestation_registry computed
-  refine ⟨?_, Steady.of_validators (fixed_processAttestation computed)
+  refine ⟨?_, Steady.of_validators (fixed_processAttestation computed).1
     (congrArg (·.data) registry.1), (frame_processAttestation computed).pubkeysPrefix⟩
   by_cases altair : Fork.altair ≤ fork
   · rw [processAttestation_of_altair altair] at computed
@@ -890,7 +944,7 @@ private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit
     (found : state.validators.data[index]? = some validator)
     (other : deposit.data.pubkey ≠ validator.pubkey) : Kept index state after :=
   ⟨down_processDeposit computed found other,
-    Steady.of_parts (fixed_processDeposit computed) (activeStep_processDeposit computed)
+    Steady.of_parts (fixed_processDeposit computed).1 (activeStep_processDeposit computed)
       (effectiveKept_processDeposit computed) (frame_processDeposit computed).registryGrows,
     (frame_processDeposit computed).pubkeysPrefix⟩
 
@@ -899,7 +953,8 @@ private theorem kept_processVoluntaryExit {signed : SignedVoluntaryExit} {index 
     (computed : processVoluntaryExit config checks state signed = .ok after) :
     Kept index state after :=
   ⟨down_initiateValidatorExit (processVoluntaryExit_initiates computed) index,
-    Steady.of_parts (fixed_processVoluntaryExit computed) (activeStep_processVoluntaryExit computed)
+    Steady.of_parts (fixed_processVoluntaryExit computed).1
+      (activeStep_processVoluntaryExit computed)
       (effectiveKept_voluntaryExit computed) (frame_processVoluntaryExit computed).registryGrows,
     (frame_processVoluntaryExit computed).pubkeysPrefix⟩
 
@@ -909,7 +964,7 @@ private theorem kept_processBlsToExecutionChange {signed : SignedBLSToExecutionC
     Kept index state after := by
   obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
   exact ⟨down_setValidator set index,
-    Steady.of_parts (fixed_processBlsToExecutionChange computed)
+    Steady.of_parts (fixed_processBlsToExecutionChange computed).1
       (activeStep_processBlsToExecutionChange computed) (effectiveKept_blsChange computed)
       (frame_processBlsToExecutionChange computed).registryGrows,
     (frame_processBlsToExecutionChange computed).pubkeysPrefix⟩
@@ -919,7 +974,7 @@ private theorem kept_processDepositRequest {electra : .pectra ≤ fork} {request
     {index : Nat} (computed : processDepositRequest state electra request = .ok after) :
     Kept index state after :=
   ⟨down_processDepositRequest computed index,
-    Steady.of_parts (fixed_processDepositRequest computed)
+    Steady.of_parts (fixed_processDepositRequest computed).1
       (activeStep_processDepositRequest computed)
       (effectiveKept_depositRequest computed) (frame_processDepositRequest computed).registryGrows,
     (frame_processDepositRequest computed).pubkeysPrefix⟩
@@ -930,7 +985,7 @@ private theorem kept_processWithdrawalRequest {electra : .pectra ≤ fork}
     (computed : processWithdrawalRequest config state electra request = .ok after) :
     Kept index state after :=
   ⟨down_processWithdrawalRequest computed index,
-    Steady.of_parts (fixed_processWithdrawalRequest computed)
+    Steady.of_parts (fixed_processWithdrawalRequest computed).1
       (activeStep_processWithdrawalRequest computed) (effectiveKept_withdrawalRequest computed)
       (frame_processWithdrawalRequest computed).registryGrows,
     (frame_processWithdrawalRequest computed).pubkeysPrefix⟩
@@ -941,7 +996,7 @@ private theorem kept_processConsolidationRequest {electra : .pectra ≤ fork}
     (computed : processConsolidationRequest config state electra request = .ok after) :
     Kept index state after :=
   ⟨down_processConsolidationRequest computed index,
-    Steady.of_parts (fixed_processConsolidationRequest computed)
+    Steady.of_parts (fixed_processConsolidationRequest computed).1
       (activeStep_processConsolidationRequest computed)
       (effectiveKept_consolidationRequest computed)
       (frame_processConsolidationRequest computed).registryGrows,
@@ -1056,53 +1111,64 @@ private theorem Kept.of_eq {index : Nat} (fixed : BlockFixed state after)
 private theorem fixed_applyExpectedWithdrawals {capella : .shapella ≤ fork}
     {expected : ExpectedWithdrawals}
     (computed : applyExpectedWithdrawals state capella expected = .ok after) :
-    BlockFixed state after := by
-  apply applyExpectedWithdrawals_of_setters BlockFixed BlockFixed.refl
+    FixedZ state after := by
+  apply applyExpectedWithdrawals_of_setters FixedZ FixedZ.refl
     (fun one two => one.trans two) (fun step => by
       rw [applyWithdrawal_eq step]
-      exact BlockFixed.of_eq) (computed := computed)
-  all_goals exact fun _ _ => BlockFixed.of_eq
+      exact FixedZ.of_eq) (computed := computed)
+  all_goals exact fun _ _ => FixedZ.of_eq
 
 /-- The withdrawal step keeps the fields. -/
 private theorem fixed_processWithdrawals {capella : .shapella ≤ fork}
     {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
-    (computed : processWithdrawals state capella payload = .ok after) : BlockFixed state after :=
-  processWithdrawals_of BlockFixed (BlockFixed.refl _) (fun _ => fixed_applyExpectedWithdrawals)
-    computed
+    (computed : processWithdrawals state capella payload = .ok after) : FixedZ state after :=
+  processWithdrawals_of FixedZ (FixedZ.refl _) (fun _ => fixed_applyExpectedWithdrawals) computed
 
-/-- The execution part of a block keeps a balance from rising, and keeps the fields. -/
-theorem down_processBlockExecution {body : BeaconBlockBody preset fork}
+/-- The execution part of a block keeps a balance from rising and keeps the fields.
+
+It also writes a score only as a zero. -/
+private theorem fixedZ_processBlockExecution {body : BeaconBlockBody preset fork}
     {bellatrix : .bellatrix ≤ fork} {index : Nat}
     (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
-    BalanceDown index state after ∧ BlockFixed state after := by
+    (BalanceDown index state after ∧ BlockFixed state after) ∧ ScoreZero state after := by
   have withdrawals {s t : BeaconState preset fork} {capella : .shapella ≤ fork}
       {payload : Until .glamsterdam fork (ExecutionPayload preset fork)}
       (ok : processWithdrawals s capella payload = .ok t) :
-      BalanceDown index s t ∧ BlockFixed s t :=
-    ⟨down_processWithdrawals ok index, fixed_processWithdrawals ok⟩
+      (BalanceDown index s t ∧ BlockFixed s t) ∧ ScoreZero s t :=
+    ⟨⟨down_processWithdrawals ok index, (fixed_processWithdrawals ok).1⟩,
+      (fixed_processWithdrawals ok).2⟩
   have payload {s t : BeaconState preset fork}
       {execution : .bellatrix ≤ fork ∧ fork < .glamsterdam}
       (ok : processExecutionPayload config engine s body execution = .ok t) :
-      BalanceDown index s t ∧ BlockFixed s t := by
+      (BalanceDown index s t ∧ BlockFixed s t) ∧ ScoreZero s t := by
     obtain ⟨_, _, _, rfl⟩ := processExecutionPayload_ok ok
-    exact ⟨BalanceDown.of_balances rfl, BlockFixed.of_eq⟩
+    exact ⟨⟨BalanceDown.of_balances rfl, BlockFixed.of_eq⟩, ScoreZero.of_scores rfl⟩
   unfold processBlockExecution at computed
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, withdrawnOk, bid⟩ := computed
     obtain ⟨_, rfl⟩ := processExecutionPayloadBid_eq bid
-    exact ⟨(withdrawals withdrawnOk).1.trans (BalanceDown.of_balances rfl),
-      (withdrawals withdrawnOk).2.trans BlockFixed.of_eq⟩
+    exact ⟨⟨(withdrawals withdrawnOk).1.1.trans (BalanceDown.of_balances rfl),
+      (withdrawals withdrawnOk).1.2.trans BlockFixed.of_eq⟩,
+      (withdrawals withdrawnOk).2.trans (ScoreZero.of_scores rfl)⟩
   split at computed
   · simp only [bind_ok_iff] at computed
     obtain ⟨_, withdrawnOk, paid⟩ := computed
-    exact ⟨(withdrawals withdrawnOk).1.trans (payload paid).1,
+    exact ⟨⟨(withdrawals withdrawnOk).1.1.trans (payload paid).1.1,
+      (withdrawals withdrawnOk).1.2.trans (payload paid).1.2⟩,
       (withdrawals withdrawnOk).2.trans (payload paid).2⟩
   · dsimp only at computed
     split at computed
     · exact payload computed
     · cases computed
-      exact ⟨BalanceDown.refl _ _, BlockFixed.refl _⟩
+      exact ⟨⟨BalanceDown.refl _ _, BlockFixed.refl _⟩, ScoreZero.refl _⟩
+
+/-- The execution part of a block keeps a balance from rising, and keeps the fields. -/
+theorem down_processBlockExecution {body : BeaconBlockBody preset fork}
+    {bellatrix : .bellatrix ≤ fork} {index : Nat}
+    (computed : processBlockExecution config checks engine state body bellatrix = .ok after) :
+    BalanceDown index state after ∧ BlockFixed state after :=
+  (fixedZ_processBlockExecution computed).1
 
 /-- The execution part of a block keeps a balance from rising. -/
 private theorem kept_processBlockExecution {body : BeaconBlockBody preset fork}
@@ -1115,15 +1181,17 @@ private theorem kept_processBlockExecution {body : BeaconBlockBody preset fork}
     simp only [validatorKeys, validators]
     exact List.prefix_refl _⟩
 
-/-- From Gloas, the payload of the parent keeps a balance from rising, and keeps the fields. -/
-theorem down_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
+/-- From Gloas, the payload of the parent keeps a balance from rising and keeps the fields.
+
+It also writes a score only as a zero. -/
+private theorem fixedZ_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
     {body : BeaconBlockBody preset fork} {index : Nat}
     (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
-    BalanceDown index state after ∧ BlockFixed state after := by
+    (BalanceDown index state after ∧ BlockFixed state after) ∧ ScoreZero state after := by
   rcases processParentExecutionPayload_ok computed with ⟨-, -, rfl⟩ |
     ⟨-, _, _, _, _, _, _, _, settledOk, depositsOk, withdrawalsOk, consolidationsOk, buildersOk,
       exitsOk, -, rfl⟩
-  · exact ⟨BalanceDown.refl _ _, BlockFixed.refl _⟩
+  · exact ⟨⟨BalanceDown.refl _ _, BlockFixed.refl _⟩, ScoreZero.refl _⟩
   have settled := settleParentPayment_eq settledOk
   have builders {s t : BeaconState preset fork} {request : BuilderDepositRequest}
       (ok : processBuilderDepositRequest config checks s gloas request = .ok t) :
@@ -1134,7 +1202,15 @@ theorem down_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
       (ok : processBuilderExitRequest config s gloas request = .ok t) : BalanceDown index s t := by
     obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
     exact BalanceDown.of_balances rfl
-  refine ⟨(BalanceDown.of_balances (by rw [settled])).trans <|
+  have fixed : FixedZ state _ :=
+    (show FixedZ state _ by rw [settled]; exact FixedZ.of_eq).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processDepositRequest ok) depositsOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processWithdrawalRequest ok) withdrawalsOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processConsolidationRequest ok)
+      consolidationsOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => ?_) buildersOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => ?_) exitsOk).trans FixedZ.of_eq
+  · exact ⟨⟨(BalanceDown.of_balances (by rw [settled])).trans <|
       (BalanceDown.foldlM (fun _ _ _ ok => down_processDepositRequest ok index) depositsOk).trans <|
       (BalanceDown.foldlM (fun _ _ _ ok => down_processWithdrawalRequest ok index)
         withdrawalsOk).trans <|
@@ -1142,21 +1218,21 @@ theorem down_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
         consolidationsOk).trans <|
       (BalanceDown.foldlM (fun _ _ _ ok => builders ok) buildersOk).trans <|
       (BalanceDown.foldlM (fun _ _ _ ok => exits ok) exitsOk).trans
-        (BalanceDown.of_balances rfl), ?_⟩
-  refine (show BlockFixed state _ by rw [settled]; exact BlockFixed.of_eq).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processDepositRequest ok) depositsOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processWithdrawalRequest ok) withdrawalsOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processConsolidationRequest ok)
-      consolidationsOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => ?_) buildersOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => ?_) exitsOk).trans BlockFixed.of_eq
+        (BalanceDown.of_balances rfl), fixed.1⟩, fixed.2⟩
   · obtain ⟨_, rfl⟩ := processBuilderDepositRequest_builders ok
-    exact BlockFixed.of_eq
+    exact FixedZ.of_eq
   · obtain ⟨_, rfl⟩ := processBuilderExitRequest_builders ok
-    exact BlockFixed.of_eq
+    exact FixedZ.of_eq
+
+/-- From Gloas, the payload of the parent keeps a balance from rising, and keeps the fields. -/
+theorem down_processParentExecutionPayload {gloas : .glamsterdam ≤ fork}
+    {body : BeaconBlockBody preset fork} {index : Nat}
+    (computed : processParentExecutionPayload config checks state gloas body = .ok after) :
+    BalanceDown index state after ∧ BlockFixed state after :=
+  (fixedZ_processParentExecutionPayload computed).1
 
 /-- The header step reads the proposer of the block. -/
-private theorem processBlockHeader_proposer {block : BeaconBlock preset fork}
+theorem processBlockHeader_proposer {block : BeaconBlock preset fork}
     (computed : processBlockHeader state block = .ok after) :
     getBeaconProposerIndex state = .ok block.proposerIndex := by
   unfold processBlockHeader at computed
@@ -1189,6 +1265,42 @@ private theorem kept_processEth1Data {before : fork < .hegota} {body : BeaconBlo
 
 /-! ## The sync aggregate -/
 
+/-- Sync rewards: no rise without a signer or paid proposer there, no fall without a non-signer. -/
+theorem syncRewards_bounds {reward proposerReward index : Nat} {chosen : ValidatorIndex} :
+    ∀ (members : List (ValidatorIndex × Bool)) (balance : Nat),
+      ((∀ member ∈ members, member.2 = true → member.1.toNat ≠ index ∧ chosen.toNat ≠ index) →
+        members.foldl (fun balance member =>
+          if member.2 then balance + (if member.1.toNat = index then reward else 0) +
+            (if chosen.toNat = index then proposerReward else 0)
+          else if member.1.toNat = index then balance - reward else balance) balance ≤ balance) ∧
+      ((∀ member ∈ members, member.2 = false → member.1.toNat ≠ index) →
+        balance ≤ members.foldl (fun balance member =>
+          if member.2 then balance + (if member.1.toNat = index then reward else 0) +
+            (if chosen.toNat = index then proposerReward else 0)
+          else if member.1.toNat = index then balance - reward else balance) balance)
+  | [], _ => ⟨fun _ => Nat.le_refl _, fun _ => Nat.le_refl _⟩
+  | member :: members, balance => by
+    rw [List.foldl_cons]
+    constructor
+    · intro apart
+      refine Nat.le_trans ((syncRewards_bounds members _).1
+        fun other inside => apart other (List.mem_cons_of_mem _ inside)) ?_
+      have head := apart member List.mem_cons_self
+      split
+      · rename_i signed
+        simp [(head signed).1, (head signed).2]
+      · split
+        · exact Nat.sub_le _ _
+        · exact Nat.le_refl _
+    · intro apart
+      refine Nat.le_trans ?_ ((syncRewards_bounds members _).2
+        fun other inside => apart other (List.mem_cons_of_mem _ inside))
+      have head := apart member List.mem_cons_self
+      split
+      · exact Nat.le_trans (Nat.le_add_right _ _) (Nat.le_add_right _ _)
+      · rename_i unset
+        simp [head (by simpa using unset)]
+
 /-- The sync rewards do not raise a balance when no signer and no paid proposer sit at it. -/
 private theorem syncRewards_le {reward proposerReward index : Nat} {chosen : ValidatorIndex} :
     ∀ (members : List (ValidatorIndex × Bool)) (balance : Nat),
@@ -1196,19 +1308,9 @@ private theorem syncRewards_le {reward proposerReward index : Nat} {chosen : Val
       members.foldl (fun balance member =>
         if member.2 then balance + (if member.1.toNat = index then reward else 0) +
           (if chosen.toNat = index then proposerReward else 0)
-        else if member.1.toNat = index then balance - reward else balance) balance ≤ balance
-  | [], _, _ => Nat.le_refl _
-  | member :: members, balance, apart => by
-    rw [List.foldl_cons]
-    refine Nat.le_trans (syncRewards_le members _
-      fun other inside => apart other (List.mem_cons_of_mem _ inside)) ?_
-    have head := apart member List.mem_cons_self
-    split
-    · rename_i signed
-      simp [(head signed).1, (head signed).2]
-    · split
-      · exact Nat.sub_le _ _
-      · exact Nat.le_refl _
+        else if member.1.toNat = index then balance - reward else balance) balance ≤ balance :=
+  fun members balance => (syncRewards_bounds (reward := reward)
+    (proposerReward := proposerReward) (index := index) (chosen := chosen) members balance).1
 
 /-- A member with a bit has another position, when no key with that bit is the key there. -/
 theorem signers_elsewhere {pubkeys : Array Cryptography.Bls.BLSPubkey}
@@ -1247,6 +1349,22 @@ theorem signers_elsewhere {pubkeys : Array Cryptography.Bls.BLSPubkey}
     rw [List.getElem_zip] at mem
     rwa [Array.toList_zip]
   · cases image
+
+/-- No member of a sync committee takes the position of a validator that the committee lacks. -/
+theorem signers_elsewhere_of_unseated {n : Nat}
+    {pubkeys : Vector Cryptography.Bls.BLSPubkey n} {bits : Array Bool}
+    {members : Array ValidatorIndex} {index : Nat} {validator : Validator}
+    (membersOk : pubkeys.toArray.mapM (validatorIndexOfPubkey state) = .ok members)
+    (found : state.validators.data[index]? = some validator)
+    (unseated : validator.pubkey ∉ pubkeys.toList) :
+    ∀ member ∈ (members.zip bits).toList, member.1.toNat ≠ index := by
+  intro member inside
+  refine signers_elsewhere (bit := member.2) membersOk found ?_ member inside rfl
+  intro keyed onCommittee _ same
+  apply unseated
+  rw [Array.toList_zip] at onCommittee
+  rw [← same, ← Vector.toList_toArray]
+  exact (List.of_mem_zip onCommittee).1
 
 /-- The sync aggregate raises no balance other than the proposer's, whose key never signs. -/
 private theorem down_processSyncAggregate {altair : .altair ≤ fork}
@@ -1395,7 +1513,7 @@ theorem balance_lt_size_processBlock
 /-- A proposer slashing keeps the fields. -/
 private theorem fixed_processProposerSlashing {slashing : ProposerSlashing}
     (computed : processProposerSlashing config checks state slashing = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   simp only [processProposerSlashing, bind_ok_iff, ensure_ok_iff, liftAccessor_ok] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, slashed⟩ := computed
   exact fixed_slashValidator slashed
@@ -1403,38 +1521,94 @@ private theorem fixed_processProposerSlashing {slashing : ProposerSlashing}
 /-- An attester slashing keeps the fields. -/
 private theorem fixed_processAttesterSlashing {slashing : AttesterSlashing preset fork}
     (computed : processAttesterSlashing config checks state slashing = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   simp only [processAttesterSlashing, bind_ok_iff, ensure_ok_iff, pure, Except.pure,
     Except.ok.injEq] at computed
   obtain ⟨_, _, _, _, _, _, _, _, _, _, _, folded, _, _, rfl⟩ := computed
-  exact foldlM_ok_invariant (fun step => BlockFixed state step.1)
+  exact foldlM_ok_invariant (fun step => FixedZ state step.1)
     (fun _ _ _ held ok => held.trans (fixed_slashIfSlashable ok))
-    (show BlockFixed state (state, false).1 from BlockFixed.refl state) folded
+    (show FixedZ state (state, false).1 from FixedZ.refl state) folded
 
 /-- The requests of the execution layer keep the fields. -/
 private theorem fixed_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
     (computed : processExecutionRequests config state body electra = .ok after) :
-    BlockFixed state after := by
+    FixedZ state after := by
   simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
-  exact (BlockFixed.foldlM (fun _ _ _ ok => fixed_processDepositRequest ok) depositsOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processWithdrawalRequest ok) withdrawalsOk).trans
-      (BlockFixed.foldlM (fun _ _ _ ok => fixed_processConsolidationRequest ok) consolidationsOk)
+  exact (FixedZ.foldlM (fun _ _ _ ok => fixed_processDepositRequest ok) depositsOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processWithdrawalRequest ok) withdrawalsOk).trans
+      (FixedZ.foldlM (fun _ _ _ ok => fixed_processConsolidationRequest ok) consolidationsOk)
+
+/-- The operations of a block keep the fields, and write a score only as a zero. -/
+private theorem fixedZ_processOperations {body : BeaconBlockBody preset fork}
+    {parentSlot : Slot}
+    (computed : processOperations config checks state body parentSlot = .ok after) :
+    FixedZ state after := by
+  obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=
+    processOperations_folds_of FixedZ FixedZ.refl FixedZ.trans fixed_processDeposit
+      fixed_processVoluntaryExit fixed_processBlsToExecutionChange
+      fixed_processExecutionRequests (fun ok => by
+        rw [processPayloadAttestation_eq ok]
+        exact FixedZ.refl _) computed
+  exact (FixedZ.foldlM (fun _ _ _ ok => fixed_processProposerSlashing ok) proposersOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processAttesterSlashing ok) attestersOk).trans <|
+    (FixedZ.foldlM (fun _ _ _ ok => fixed_processAttestation ok) attestedOk).trans rest
 
 /-- The operations of a block keep the fields. -/
 theorem fixed_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
-    BlockFixed state after := by
-  obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=
-    processOperations_folds_of BlockFixed BlockFixed.refl BlockFixed.trans fixed_processDeposit
-      fixed_processVoluntaryExit fixed_processBlsToExecutionChange
-      fixed_processExecutionRequests (fun ok => by
-        rw [processPayloadAttestation_eq ok]
-        exact BlockFixed.refl _) computed
-  exact (BlockFixed.foldlM (fun _ _ _ ok => fixed_processProposerSlashing ok) proposersOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processAttesterSlashing ok) attestersOk).trans <|
-    (BlockFixed.foldlM (fun _ _ _ ok => fixed_processAttestation ok) attestedOk).trans rest
+    BlockFixed state after :=
+  (fixedZ_processOperations computed).1
+
+/-- A block keeps the inactivity score at each position of the registry before it.
+
+This holds when the block succeeds; before Altair there are no scores.
+
+A new validator takes the position at the end of the registry, so it moves no earlier score.
+
+Each score after the block, at every position, was there before it, or is zero. -/
+theorem scoresKept_processBlock {block : BeaconBlock preset fork}
+    (computed : processBlock config checks engine state block = .ok after) :
+    (∀ index, index < state.validators.data.size → ScoreKept index state after) ∧
+      ∀ (altair : .altair ≤ fork) (i : Nat) (v : UInt64),
+        (after.inactivityScores altair).data[i]? = some v →
+          (state.inactivityScores altair).data[i]? = some v ∨ v = 0 := by
+  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
+  -- The steps before the operations write no score but a zero, and keep the registry or grow it.
+  have before : BlockScored state input ∧ ScoreZero state input :=
+    started.step_of (fun s t => BlockScored s t ∧ ScoreZero s t)
+      (fun s => ⟨BlockScored.refl s, ScoreZero.refl s⟩)
+      (fun one two => ⟨one.1.trans two.1, one.2.trans two.2⟩)
+      (fun _ ok => ⟨(fixedZ_processParentExecutionPayload (index := 0) ok).1.2.2.2.2.2,
+        (fixedZ_processParentExecutionPayload (index := 0) ok).2⟩)
+      (fun ok => by
+        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
+        exact ⟨BlockScored.of_eq rfl rfl, ScoreZero.of_scores rfl⟩)
+      (fun _ ok => ⟨(fixedZ_processBlockExecution (index := 0) ok).1.2.2.2.2.2,
+        (fixedZ_processBlockExecution (index := 0) ok).2⟩)
+      (fun ok => by
+        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
+        exact ⟨BlockScored.of_eq rfl rfl, ScoreZero.of_scores rfl⟩)
+      (fun _ ok => by
+        obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
+        rw [← rest]
+        exact ⟨BlockScored.of_eq rfl rfl, ScoreZero.of_scores rfl⟩)
+  refine ⟨fun index inside => ?_, fun later i v found => ?_⟩
+  · -- From Altair the sync aggregate changes only the balances.
+    have synced : BlockScored last after := by
+      split at synced
+      · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+        exact BlockScored.of_eq rfl rfl
+      · cases synced
+        exact BlockScored.refl _
+    exact ((before.1.trans (fixed_processOperations operated).2.2.2.2).trans synced).2 index inside
+  · -- A new validator takes the score zero, and no other step writes a score.
+    have synced : ScoreZero last after := by
+      simp only [later, ↓reduceDIte] at synced
+      obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+      exact ScoreZero.of_scores rfl
+    exact (before.2.trans ((fixedZ_processOperations operated).2.trans synced)) later i v found
 
 /-- A block keeps the inactivity score at each position of the registry before it.
 
@@ -1443,31 +1617,8 @@ This holds when the block succeeds; before Altair there are no scores.
 A new validator takes the position at the end of the registry, so it moves no earlier score. -/
 theorem scoreKept_processBlock {block : BeaconBlock preset fork}
     (computed : processBlock config checks engine state block = .ok after) {index : Nat}
-    (inside : index < state.validators.data.size) : ScoreKept index state after := by
-  obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput computed
-  -- The steps before the operations write no score, and keep the registry or grow it.
-  have before : BlockScored state input :=
-    started.step_of BlockScored BlockScored.refl BlockScored.trans
-      (fun _ ok => (down_processParentExecutionPayload (index := 0) ok).2.2.2.2.2)
-      (fun ok => by
-        obtain ⟨_, _, rfl⟩ := processBlockHeader_eq ok
-        exact BlockScored.of_eq rfl rfl)
-      (fun _ ok => (down_processBlockExecution (index := 0) ok).2.2.2.2.2)
-      (fun ok => by
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, rfl⟩ := processRandao_eq ok
-        exact BlockScored.of_eq rfl rfl)
-      (fun _ ok => by
-        obtain ⟨_, _, rest⟩ := processEth1Data_eq ok
-        rw [← rest]
-        exact BlockScored.of_eq rfl rfl)
-  -- From Altair the sync aggregate changes only the balances.
-  have synced : BlockScored last after := by
-    split at synced
-    · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
-      exact BlockScored.of_eq rfl rfl
-    · cases synced
-      exact BlockScored.refl _
-  exact ((before.trans (fixed_processOperations operated).2.2.2.2).trans synced).2 index inside
+    (inside : index < state.validators.data.size) : ScoreKept index state after :=
+  (scoresKept_processBlock computed).1 index inside
 
 /-! ## The proposer through the steps of a block -/
 
@@ -1503,14 +1654,14 @@ private theorem steady_processAttestation {attestation : Attestation preset fork
     {parentSlot : Slot}
     (computed : processAttestation config checks state parentSlot attestation = .ok after) :
     Steady state after :=
-  Steady.of_validators (fixed_processAttestation computed)
+  Steady.of_validators (fixed_processAttestation computed).1
     (congrArg (·.data) (processAttestation_registry computed).1)
 
 /-- A deposit of a block keeps what the proposer of the slot reads. -/
 private theorem steady_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (computed : processDeposit config checks before state deposit = .ok after) :
     Steady state after :=
-  Steady.of_parts (fixed_processDeposit computed) (activeStep_processDeposit computed)
+  Steady.of_parts (fixed_processDeposit computed).1 (activeStep_processDeposit computed)
     (effectiveKept_processDeposit computed) (frame_processDeposit computed).registryGrows
 
 /-- The operations of a block keep the proposer of the slot and the current sync committee.
@@ -1576,5 +1727,44 @@ theorem operationsInput_proposer
         exact Kept.refl _ _
   exact ⟨(Steady.proposer apart (before 0).2.1).trans read,
     (before 0).2.1.1.2.2.trans paid.2.2.2.1, fun index => (paid.1 index).trans (before index).1⟩
+
+/-- A proposer slashing raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processProposerSlashing_balanceDown {slashing : ProposerSlashing}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processProposerSlashing config checks state slashing = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processProposerSlashing apart computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
+
+/-- An attester slashing raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processAttesterSlashing_balanceDown {slashing : AttesterSlashing preset fork}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processAttesterSlashing config checks state slashing = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processAttesterSlashing apart computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
+
+/-- An attestation raises no balance other than the proposer's, and keeps the proposer.
+
+The mixes must span more than the seed lookahead plus two epochs. -/
+theorem processAttestation_balanceDown {attestation : Attestation preset fork} {parentSlot : Slot}
+    {proposer : ValidatorIndex}
+    (apart : preset.MIN_SEED_LOOKAHEAD.toNat + 2 < preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    (computed : processAttestation config checks state parentSlot attestation = .ok after)
+    (read : getBeaconProposerIndex state = .ok proposer) {index : Nat}
+    (other : proposer.toNat ≠ index) :
+    BalanceDown index state after ∧ getBeaconProposerIndex after = getBeaconProposerIndex state :=
+  have kept := kept_processAttestation computed read other
+  ⟨kept.1, Steady.proposer apart kept.2.1⟩
 
 end EthLib.Consensus

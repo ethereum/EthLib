@@ -29,6 +29,7 @@ import EthLib.Consensus.Proofs.Transition.ValidatorCaps
 import EthLib.Consensus.Proofs.Transition.BalanceNotRaisedBlock
 import EthLib.Consensus.Proofs.Transition.BranchLedger
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
+import EthLib.Base.Proofs.Nat
 
 /-!
 # The fall of an effective balance over the end of an epoch
@@ -61,15 +62,6 @@ variable {preset : Preset} {config : Config} {checks : SignatureChecks}
 /-- How far an effective balance can fall when the update reads a balance of at least `low`. -/
 private def fallGap (inc down effective low : ℕ) : ℕ :=
   if effective ≤ low + down then 0 else effective - (low - low % inc)
-
-/-- A balance rounded down to an increment grows with the balance. -/
-private theorem rounded_mono (inc : ℕ) {low high : ℕ} (le : low ≤ high) :
-    low - low % inc ≤ high - high % inc := by
-  have one := Nat.mod_add_div low inc
-  have two := Nat.mod_add_div high inc
-  have three := Nat.div_le_div_right (c := inc) le
-  have four := Nat.mul_le_mul_left inc three
-  omega
 
 /-- The allowed fall shrinks as the balance read grows. -/
 private theorem fallGap_anti (inc down effective : ℕ) {low high : ℕ} (le : low ≤ high) :
@@ -420,15 +412,7 @@ private theorem crossing_fall {z z' : ForkedBeaconState preset} (altair : .altai
     obtain ⟨old', read', isActive⟩ := isActiveAt_eq_true_iff.mp active
     rw [found, Option.some.injEq] at read'
     subst old'
-    intro far
-    simp only [isActiveValidator, far, FAR_FUTURE_EPOCH, Bool.and_eq_true, decide_eq_true_eq]
-      at isActive
-    have := UInt64.le_iff_toNat_le.mp isActive.1
-    have bound := (getCurrentEpoch z.state).toNat_lt
-    have exitBound := UInt64.lt_iff_toNat_lt.mp isActive.2
-    have exitLt := old.exitEpoch.toNat_lt
-    simp at this
-    omega
+    exact Internal.assigned_of_active isActive
   have upgradedSame := balanceDrift_upgrades_active upgraded early i a aRead
     (by rwa [life.activationEpoch activated])
   rw [upgradedSame, advancedEq]
@@ -1967,19 +1951,8 @@ theorem effectiveFall_le
         simp only [slots] at zero
         rw [zero, Nat.div_zero] at epochY epochR
         omega
-      have epochT := getCurrentEpoch_toNat T.state
-      have epochZ := getCurrentEpoch_toNat z.state
-      rw [zEpoch] at epochZ
-      have sameQuotient : z.state.slot.toNat / slots = T.state.slot.toNat / slots := by
-        simp only [slots]
-        omega
-      have bound := toZ.blocks_le_slots (a := T.state.slot.toNat / slots * slots)
-        (b := T.state.slot.toNat / slots * slots + slots - 1) (Nat.div_mul_le_self _ _) (by
-          have split := Nat.div_add_mod z.state.slot.toNat slots
-          have small := Nat.mod_lt z.state.slot.toNat slotsPos
-          rw [sameQuotient, Nat.mul_comm] at split
-          omega)
-      omega
+      simpa only [zEpoch, Nat.add_sub_cancel_left, Nat.one_mul] using
+        toZ.blockCount_le_epochs slotsPos
     -- The validator at the last state of the epoch on the branch of `y`.
     have zEpochR : getCurrentEpoch z.state = getCurrentEpoch R.state := zEpoch.trans boundaryEpoch
     obtain ⟨-, keptZ, growsZ, activeZs⟩ := readsAt (boundary.append toZ) Zearly zEpochR

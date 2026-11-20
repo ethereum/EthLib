@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Transition.Totality.EpochElectra
 public import EthLib.Consensus.Proofs.Transition.Totality.Rewards
+import EthLib.Base.Proofs.Nat
 import EthLib.Consensus.Proofs.Transition.RegistryLifecycle
 
 /-!
@@ -499,12 +500,8 @@ private theorem effective_atCap (before : fork < .pectra)
   have rounded : preset.MAX_EFFECTIVE_BALANCE ≤
       balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT := by
     rw [UInt64.le_iff_toNat_le, UInt64.toNat_sub_of_le _ _ below, UInt64.toNat_mod]
-    have split := Nat.mod_add_div balance.toNat preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    have cap := Nat.mod_add_div preset.MAX_EFFECTIVE_BALANCE.toNat
-      preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-    have more := Nat.mul_le_mul_left preset.EFFECTIVE_BALANCE_INCREMENT.toNat
-      (Nat.div_le_div_right (c := preset.EFFECTIVE_BALANCE_INCREMENT.toNat) high)
-    omega
+    simpa only [whole, Nat.sub_zero] using
+      Base.rounded_mono preset.EFFECTIVE_BALANCE_INCREMENT.toNat high
   have same : (if leaves = true then
       (balance - balance % preset.EFFECTIVE_BALANCE_INCREMENT) ⊓ preset.MAX_EFFECTIVE_BALANCE
       else validator.effectiveBalance) = validator.effectiveBalance := by

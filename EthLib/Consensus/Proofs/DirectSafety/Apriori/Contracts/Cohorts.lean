@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Consensus.Proofs.DirectSafety.Apriori.Contracts.Ledger
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 
 /-!
 # The new cohorts of a branch
@@ -317,15 +318,7 @@ private theorem NewCohortCuts.stopped_inputs
     have selected := inCohort.2.1
     simp only [before, Option.any_some, Bool.and_eq_true] at selected
     cases flag : v.slashed <;> simp_all
-  have assigned : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-    intro far
-    have lower := UInt64.le_iff_toNat_le.mp active.1
-    have upper := UInt64.lt_iff_toNat_lt.mp active.2
-    have largest := v.exitEpoch.toNat_lt
-    rw [far] at lower
-    change 2 ^ 64 - 1 ≤ _ at lower
-    omega
+  have assigned := Consensus.Internal.assigned_of_active active
   obtain ⟨c, chosen, amount⟩ := cohort.actualCharge i member
   obtain ⟨u, found, unmarked⟩ := (ledger.stops i).clean_read_of_endpoint v w before after clean
   exact ⟨numeric, c, v, w, u, chosen, amount, before, after, found, unslashed, clean,
@@ -838,16 +831,7 @@ private theorem Stop.source_firstUpdate_of_reference_regime
   simp only [initial, Option.any_some, Bool.and_eq_true, beq_iff_eq] at reference
   have unslashed : v.slashed = false := by
     cases flag : v.slashed <;> simp_all
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    have active := reference.1.1
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-    intro far
-    have lower := UInt64.le_iff_toNat_le.mp active.1
-    have upper := UInt64.lt_iff_toNat_lt.mp active.2
-    have largest := v.exitEpoch.toNat_lt
-    rw [far] at lower
-    change 2 ^ 64 - 1 ≤ _ at lower
-    omega
+  have activated := Consensus.Internal.assigned_of_active reference.1.1
   have cleanU : u.slashed =
       false := by simpa only [final, Option.map_some, Option.getD_some] using clean
   have early := Nat.lt_of_le_of_lt (fork_le_of_chainSteps tail.chainSteps) supported.2.2.2.2.1
@@ -1110,16 +1094,7 @@ private theorem LedgerCuts.firstUpdate_regime
       rw [cut]
       simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at activeW
       exact UInt64.lt_iff_toNat_lt.mp activeW.2
-    have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-      have active := reference.1.1
-      simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-      intro far
-      have lower := UInt64.le_iff_toNat_le.mp active.1
-      have upper := UInt64.lt_iff_toNat_lt.mp active.2
-      have largest := v.exitEpoch.toNat_lt
-      rw [far] at lower
-      change 2 ^ 64 - 1 ≤ _ at lower
-      omega
+    have activated := Consensus.Internal.assigned_of_active reference.1.1
     have localSupported : Supported shared (ledger.headRun i) high :=
       ⟨supported.1, supported.2.1, supported.2.2.1, supported.2.2.2.1,
         Nat.lt_of_le_of_lt (fork_le_of_chainSteps (ledger.suffix i).chainSteps) supported.2.2.2.2.1,
@@ -1348,16 +1323,7 @@ theorem NewCohortCuts.retained_debit_regime
   simp only [initial, Option.any_some, Bool.and_eq_true, decide_eq_true_eq] at active
   have unmarked : v.slashed = false := by
     cases flag : v.slashed <;> simp_all
-  have activated : v.activationEpoch ≠ FAR_FUTURE_EPOCH := by
-    have enabled := active.1.1
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at enabled
-    intro far
-    have lower := UInt64.le_iff_toNat_le.mp enabled.1
-    have upper := UInt64.lt_iff_toNat_lt.mp enabled.2
-    have largest := v.exitEpoch.toNat_lt
-    rw [far] at lower
-    change 2 ^ 64 - 1 ≤ _ at lower
-    omega
+  have activated := Consensus.Internal.assigned_of_active active.1.1
   have numeric := toNat_toUInt64_of_lt
     (x.state.validators.bound (Nat.lt_of_le_of_lt
       (fork_le_of_chainSteps tail.chainSteps) early)) inside

@@ -4,7 +4,9 @@ public import EthLib.Consensus.Proofs.Transition.ValidatorStep
 
 import EthLib.Consensus.Proofs.Churn
 import EthLib.Consensus.Proofs.Mutators
+import EthLib.Consensus.Proofs.Transition.ActiveKept
 import EthLib.Consensus.Proofs.Transition.Requests
+import EthLib.Consensus.Proofs.Transition.SlashedFlags
 import EthLib.Consensus.Proofs.Transition.Withdrawals
 
 /-!
@@ -15,6 +17,8 @@ A slashing assigns an exit epoch, so every slashed validator has one.
 Each step before Gloas keeps it, and a slashed validator stays slashed.
 
 Its withdrawable epoch never decreases.
+
+A slashed validator with an assigned exit keeps its withdrawable epoch.
 
 A newly slashed validator withdraws at least a slashings vector after the slashing.
 -/
@@ -247,7 +251,7 @@ theorem EpochTrace.slashed_withdrawableEpoch_mono
           obtain ⟨last, located, life⟩ :=
             (registryLifecycle_processRegistryUpdates ok).validators i v atRegistry
           obtain rfl : last = w := Option.some.inj (located.symm.trans after)
-          exact ⟨kept.1, life.exitEpoch assigned, kept.2.2⟩
+          exact ⟨kept.1, life.exitEpoch assigned, by rw [kept.2.2]; exact UInt64.le_refl _⟩
 
 /-- A slashed validator with an assigned exit stays slashed, with an assigned exit.
 
@@ -274,6 +278,108 @@ theorem Run.slashed_withdrawableEpoch_mono_epoch
     obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cached
     exact CapStep.data
   have span := (runStep.trans cacheStep).trans (CapStep.epochTrace trace)
-  exact (span.withdrawal i v w before after).1 slashed assigned
+  obtain ⟨flag, exit, same⟩ := (span.withdrawal i v w before after).1 slashed assigned
+  exact ⟨flag, exit, by rw [same]; exact UInt64.le_refl _⟩
+
+/-- A slashed validator with an assigned exit keeps its withdrawable epoch along a run.
+
+It stays slashed.
+
+A slashing sets the withdrawable epoch once, so a validator that is already slashed keeps it. -/
+theorem Run.slashed_withdrawable_eq {x y : ForkedBeaconState preset}
+    (run : Run config checks x y)
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (early : y.fork < .glamsterdam) (i : Nat) (v w : Validator)
+    (before : x.state.validators.data[i]? = some v)
+    (after : y.state.validators.data[i]? = some w)
+    (slashed : v.slashed = true) (assigned : v.exitEpoch ≠ FAR_FUTURE_EPOCH) :
+    w.slashed = true ∧ w.withdrawableEpoch = v.withdrawableEpoch := by
+  obtain ⟨flag, -, same⟩ := ((CapStep.run run activation compounding early).1.withdrawal i v w
+    before after).1 slashed assigned
+  exact ⟨flag, same⟩
+
+/-- A slot step keeps the slashed flag at each registry position. -/
+private theorem slot_slashedFlag {m n : ForkedBeaconState preset}
+    (ok : advanceSlotAcross config checks m = .ok n) (i : Nat) :
+    (slashedFlagAt n.state i).getD false = (slashedFlagAt m.state i).getD false := by
+  obtain ⟨advanced, advancedOk, upgraded⟩ := bind_ok_iff.mp ok
+  have same := processUpgrades_induction
+    (property := fun z => (slashedFlagAt z.state i).getD false =
+      (slashedFlagAt advanced i).getD false)
+    (fun {pre post} held stepOk => by
+      rw [(upgradeFrame_upgradeNext stepOk).slashed i]
+      exact held)
+    (forked := (⟨_, advanced⟩ : ForkedBeaconState preset)) rfl upgraded
+  exact same.trans (slashedFlagAt_advanceSlot advancedOk i)
+
+/-- From Electra, a key that a step newly slashes was activated by the epoch of its start.
+
+The key is unslashed at the start, or absent from the registry there.
+
+A step can assign an exit only to a key already activated by its starting epoch.
+
+A key that has begun to exit at the start is activated there, by `exited`.
+
+A block appends its new keys unassigned, so it does not append a slashed key.
+
+A slot step sets no flag. -/
+theorem Step.slashed_activated {a b : ForkedBeaconState preset} (step : Step config checks a b)
+    (electra : .pectra ≤ a.fork) (early : b.fork < .glamsterdam)
+    (activation : preset.MAX_EFFECTIVE_BALANCE ≤ preset.MIN_ACTIVATION_BALANCE)
+    (compounding : preset.MIN_ACTIVATION_BALANCE ≤ preset.MAX_EFFECTIVE_BALANCE_ELECTRA)
+    (delay : 0 < config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat)
+    (finite : getCurrentEpoch a.state < FAR_FUTURE_EPOCH) (i : Nat)
+    (exited : ∀ v, a.state.validators.data[i]? = some v → v.exitEpoch ≠ FAR_FUTURE_EPOCH →
+      v.activationEpoch ≤ getCurrentEpoch a.state)
+    (flip : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true) :
+    ∃ v, a.state.validators.data[i]? = some v ∧ v.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
+      v.activationEpoch.toNat ≤ (getCurrentEpoch a.state).toNat := by
+  have capped := (CapStep.run (Run.nil.snoc step) activation compounding early).1
+  have chain := step.chainStep
+  obtain ⟨before, after⟩ : (a.state.validators.data[i]?.map (·.slashed)).getD false = false ∧
+      (b.state.validators.data[i]?.map (·.slashed)).getD false = true := by
+    simpa only [Bool.and_eq_true, Bool.not_eq_true'] using flip
+  obtain ⟨w, later, slashed⟩ : ∃ w, b.state.validators.data[i]? = some w ∧ w.slashed = true := by
+    cases found : b.state.validators.data[i]? with
+    | none => simp [found] at after
+    | some w => exact ⟨w, rfl, by simpa [found] using after⟩
+  cases step with
+  | slot ok =>
+    have := slot_slashedFlag ok i
+    simp only [slashedFlagAt, before, after] at this
+    cases this
+  | @block fork s t engine signed due ok =>
+    cases found : s.validators.data[i]? with
+    | none =>
+      have outside := Array.getElem?_eq_none_iff.mp found
+      have assigned := capped.appended delay i w outside later slashed
+      obtain ⟨-, blockOk, -⟩ := applySignedBlock_ok ok
+      obtain ⟨input, last, started, operated, -, synced⟩ := processBlock_operationsInput blockOk
+      have same : last.validators.data = t.validators.data := by
+        split at synced
+        · obtain ⟨_, rfl⟩ := processSyncAggregate_eq synced
+          rfl
+        · cases synced
+          rfl
+      have size := congrArg (·.data.size) (OperationsInput.validators_eq early started)
+      exact absurd (processOperations_new_validator_epochs_unassigned operated i w
+        (by simp only at size outside ⊢; omega) (by rw [same]; exact later)).2 assigned
+    | some v =>
+      have unslashed : v.slashed = false := by simpa [found] using before
+      have set := ((capped.withdrawal i v w found later).2 delay unslashed slashed).1
+      have reached : v.activationEpoch ≤ getCurrentEpoch s := by
+        by_cases unset : v.exitEpoch = FAR_FUTURE_EPOCH
+        · exact chain.exit_assigned_activated electra found later unset set
+        · exact exited v found unset
+      have bound : (getCurrentEpoch s).toNat < FAR_FUTURE_EPOCH.toNat :=
+        UInt64.lt_iff_toNat_lt.mp finite
+      refine ⟨v, rfl, fun far => ?_, UInt64.le_iff_toNat_le.mp reached⟩
+      have := UInt64.le_iff_toNat_le.mp reached
+      rw [far] at this
+      change 18446744073709551615 ≤ _ at this
+      change _ < 18446744073709551615 at bound
+      omega
 
 end EthLib.Consensus
