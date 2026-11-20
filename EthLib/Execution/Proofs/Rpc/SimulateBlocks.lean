@@ -29,6 +29,12 @@ That holds whatever the base fee of the block before it.
 
 Each block of a simulation, gap blocks included, is a simulated block at its own fork.
 
+A gap block is simulated from an empty request.
+
+A block of the plan is simulated from its request, at its fork.
+
+A block simulated without calls has no transactions.
+
 With validation and no overrides, a simulated block from Paris on passes the checks of a block.
 
 Its calls must then be signed, and it agrees with the state transition.
@@ -123,6 +129,26 @@ theorem simulateBlock_environment_baseFee {chain chain' : BlockChain} {base : Re
     (blockEnvironment config hashes b.record.block.header blobGasPrice).baseFeePerGas hLondon =
       0 :=
   simulateBlock_baseFee h hNone hLondon
+
+/-- A block simulated without calls has no transactions. -/
+theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlock} {fork : Fork}
+    {number time budget budget' : Nat} {request : BlockStateCall} {validation : Bool}
+    {b : SimulatedBlock}
+    (h : simulateBlock chain base fork number time request validation budget =
+      .ok (chain', budget', b))
+    (hCalls : request.calls = []) : b.record.block.transactions = [] := by
+  simp only [simulateBlock] at h
+  split at h
+  · simp only [bind_ok_iff, mapError_ok_iff] at h
+    obtain ⟨_, -, _, -, _, -, _, -, filled, hFill, _, -, _, -, hEq⟩ := h
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at hEq
+    obtain ⟨-, -, rfl⟩ := hEq
+    simp only [fillCalls, bind, Except.bind, Option.isNone_iff_eq_none, ge_iff_le,
+      Nat.sub_le_iff_le_add, pure, Except.pure, hCalls, List.zipIdx_nil, List.foldlM_nil,
+      Except.ok.injEq] at hFill
+    subst hFill
+    rfl
+  · simp [throw, throwThe, MonadExceptOf.throw] at h
 
 /-- A plan holds the planned blocks of the request after its base block.
 
@@ -409,35 +435,29 @@ theorem simulateBlocks_links {v : ChainView}
         omega
   · simp [throw, throwThe, MonadExceptOf.throw] at h
 
-/-- With validation off, every block whose base fee is not overridden has a base fee of 0.
+/-- A property holds for each block of a simulation, gap blocks included.
 
-A block at the number of a planned block takes the overrides of its request.
+Each block simulated from the base block with an empty request, as a gap block is, must have it.
 
-For a gap block, the caller shows that no planned block has its number.
-
-That holds whatever the base fee of the block before it. -/
-theorem simulateBlocks_baseFee {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
-    {choices : SimulateChoices} {plan : SimulatePlan} {blocks : List SimulatedBlock}
-    (hPlan : v.planSimulate payload p choices = .ok plan)
-    (h : v.simulateBlocks payload p choices = .ok blocks) (hOff : payload.validation = false) :
-    ∀ b ∈ blocks,
-      (∀ x ∈ plan.blocks, x.1.number = b.record.block.header.number →
-        x.1.request.blockOverrides.baseFeePerGas = none) →
-      ∀ hLondon : .london ≤ b.record.fork, b.record.block.header.baseFeePerGas hLondon = 0 := by
+Each block of the plan, simulated from the base block at its fork with its request, must have it.
+-/
+theorem simulateBlocks_forall {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices} {blocks : List SimulatedBlock} (P : SimulatedBlock → Prop)
+    (h : v.simulateBlocks payload p choices = .ok blocks)
+    (gap : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∀ chain fork number time budget chain' budget' b, simulateBlock chain plan.base.recent fork
+        number time {} payload.validation budget = .ok (chain', budget', b) → P b)
+    (planned : ∀ plan, v.planSimulate payload p choices = .ok plan → ∀ x ∈ plan.blocks,
+      ∀ chain budget chain' budget' b, simulateBlock chain plan.base.recent x.2 x.1.number
+        x.1.time x.1.request payload.validation budget = .ok (chain', budget', b) → P b) :
+    ∀ b ∈ blocks, P b := by
   simp only [ChainView.simulateBlocks] at h
-  obtain ⟨plan', hPlan', h⟩ := bind_ok_iff.mp h
-  rw [hPlan, Except.ok.injEq] at hPlan'
-  subst hPlan'
+  obtain ⟨plan, hPlan, h⟩ := bind_ok_iff.mp h
   split at h
-  · rename_i i _
-    obtain ⟨s, hFold, h⟩ := bind_ok_iff.mp h
+  · obtain ⟨s, hFold, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
-    let Q : SimulateStep → Prop := fun s =>
-      ∀ b ∈ s.blocks,
-        (∀ x ∈ plan.blocks, x.1.number = b.record.block.header.number →
-          x.1.request.blockOverrides.baseFeePerGas = none) →
-        ∀ hLondon : .london ≤ b.record.fork, b.record.block.header.baseFeePerGas hLondon = 0
+    let Q : SimulateStep → Prop := fun s => ∀ b ∈ s.blocks, P b
     suffices ∀ (L : List (PlannedBlock × Fork)) (t t' : SimulateStep),
         (∀ x ∈ L, x ∈ plan.blocks) → Q t →
         L.foldlM (SimulateStep.next v.config plan.base.recent payload.validation
@@ -456,23 +476,45 @@ theorem simulateBlocks_baseFee {v : ChainView} {payload : SimulatePayload} {p : 
       refine ih mid t' (fun y hy => hx y (List.mem_cons_of_mem _ hy)) ?_ hRest
       obtain ⟨b, fork⟩ := x
       refine next_invariant Q ?_ ?_ ht hMid
-      · intro u fork n time chain budget blk hu _ hBlk c hc hNone hLondon
+      · intro u fork n time chain budget blk hu _ hBlk c hc
         rcases List.mem_append.mp hc with hc | hc
-        · exact hu c hc hNone hLondon
+        · exact hu c hc
         · rw [List.mem_singleton] at hc
           subst hc
-          rw [hOff] at hBlk
-          exact simulateBlock_baseFee hBlk rfl hLondon
-      · intro u chain budget blk hu _ hBlk c hc hNone hLondon
+          exact gap plan hPlan _ _ _ _ _ _ _ _ hBlk
+      · intro u chain budget blk hu _ hBlk c hc
         rcases List.mem_append.mp hc with hc | hc
-        · exact hu c hc hNone hLondon
+        · exact hu c hc
         · rw [List.mem_singleton] at hc
           subst hc
-          have hNum := (simulateBlock_links hBlk).2.1
-          rw [hOff] at hBlk
-          exact simulateBlock_baseFee hBlk
-            (hNone _ (hx _ List.mem_cons_self) hNum.symm) hLondon
+          exact planned plan hPlan _ (hx _ List.mem_cons_self) _ _ _ _ _ hBlk
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- With validation off, every block whose base fee is not overridden has a base fee of 0.
+
+A block at the number of a planned block takes the overrides of its request.
+
+For a gap block, the caller shows that no planned block has its number.
+
+That holds whatever the base fee of the block before it. -/
+theorem simulateBlocks_baseFee {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices} {plan : SimulatePlan} {blocks : List SimulatedBlock}
+    (hPlan : v.planSimulate payload p choices = .ok plan)
+    (h : v.simulateBlocks payload p choices = .ok blocks) (hOff : payload.validation = false) :
+    ∀ b ∈ blocks,
+      (∀ x ∈ plan.blocks, x.1.number = b.record.block.header.number →
+        x.1.request.blockOverrides.baseFeePerGas = none) →
+      ∀ hLondon : .london ≤ b.record.fork, b.record.block.header.baseFeePerGas hLondon = 0 := by
+  refine simulateBlocks_forall _ h ?_ ?_
+  · intro _ _ _ _ _ _ _ _ _ _ hBlk _ hLondon
+    rw [hOff] at hBlk
+    exact simulateBlock_baseFee hBlk rfl hLondon
+  · intro plan' hPlan' x hx _ _ _ _ _ hBlk hNone hLondon
+    rw [hPlan, Except.ok.injEq] at hPlan'
+    subst hPlan'
+    have hNum := (simulateBlock_links hBlk).2.1
+    rw [hOff] at hBlk
+    exact simulateBlock_baseFee hBlk (hNone x hx hNum.symm) hLondon
 
 /-- Each block of a simulation, gap blocks included, is a simulated block at its own fork.
 
@@ -483,46 +525,36 @@ theorem simulateBlocks_mem_exists {v : ChainView} {payload : SimulatePayload} {p
     ∀ b ∈ blocks, ∃ chain base number time request budget chain' budget',
       simulateBlock chain base b.record.fork number time request payload.validation budget =
         .ok (chain', budget', b) := by
-  simp only [ChainView.simulateBlocks] at h
-  obtain ⟨plan, -, h⟩ := bind_ok_iff.mp h
-  split at h
-  · obtain ⟨s, hFold, h⟩ := bind_ok_iff.mp h
-    simp only [pure, Except.pure, Except.ok.injEq] at h
-    subst h
-    let Q : SimulateStep → Prop := fun s =>
-      ∀ b ∈ s.blocks, ∃ chain base number time request budget chain' budget',
+  have step : ∀ chain base fork number time request budget chain' budget' b,
+      simulateBlock chain base fork number time request payload.validation budget =
+        .ok (chain', budget', b) →
+      ∃ chain base number time request budget chain' budget',
         simulateBlock chain base b.record.fork number time request payload.validation budget =
-          .ok (chain', budget', b)
-    have step : ∀ (u : SimulateStep) fork n time request chain budget blk, Q u →
-        simulateBlock u.chain plan.base.recent fork n time request payload.validation u.budget =
-          .ok (chain, budget, blk) →
-        Q ⟨chain, budget, n, time, u.blocks ++ [blk]⟩ := by
-      intro u fork n time request chain budget blk hu hBlk c hc
-      rcases List.mem_append.mp hc with hc | hc
-      · exact hu c hc
-      · rw [List.mem_singleton] at hc
-        subst hc
-        obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl, -⟩ := simulateBlock_spec hBlk
-        exact ⟨_, _, _, _, _, _, _, _, hBlk⟩
-    suffices ∀ (L : List (PlannedBlock × Fork)) (t t' : SimulateStep), Q t →
-        L.foldlM (SimulateStep.next v.config plan.base.recent payload.validation
-          choices.blockTime) t = .ok t' → Q t' from
-      this plan.blocks _ s (fun _ hb => absurd hb List.not_mem_nil) hFold
-    intro L
-    induction L with
-    | nil =>
-      intro t t' ht hL
-      simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at hL
-      exact hL ▸ ht
-    | cons x L ih =>
-      intro t t' ht hL
-      rw [List.foldlM_cons] at hL
-      obtain ⟨mid, hMid, hRest⟩ := bind_ok_iff.mp hL
-      obtain ⟨b, fork⟩ := x
-      refine ih mid t' (next_invariant Q ?_ ?_ ht hMid) hRest
-      · exact fun u fork n time chain budget blk hu _ hBlk => step u fork n time {} _ _ _ hu hBlk
-      · exact fun u chain budget blk hu _ hBlk => step u fork _ _ _ _ _ _ hu hBlk
-  · simp [throw, throwThe, MonadExceptOf.throw] at h
+          .ok (chain', budget', b) := by
+    intro _ _ _ _ _ _ _ _ _ _ hBlk
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl, -⟩ := simulateBlock_spec hBlk
+    exact ⟨_, _, _, _, _, _, _, _, hBlk⟩
+  exact simulateBlocks_forall _ h
+    (fun _ _ _ _ _ _ _ _ _ _ hBlk => step _ _ _ _ _ _ _ _ _ _ hBlk)
+    fun _ _ _ _ _ _ _ _ _ hBlk => step _ _ _ _ _ _ _ _ _ _ hBlk
+
+/-- Each block of a simulation, gap blocks included, is from Glamsterdam or has no transactions.
+
+It needs each block of the plan to be from Glamsterdam or to have no calls. -/
+theorem simulateBlocks_glamsterdam_le_or_nil {v : ChainView} {payload : SimulatePayload}
+    {p : BlockParam} {choices : SimulateChoices}
+    (hCalls : ∀ plan, v.planSimulate payload p choices = .ok plan →
+      ∀ x ∈ plan.blocks, .glamsterdam ≤ x.2 ∨ x.1.request.calls = []) :
+    ∀ blocks, v.simulateBlocks payload p choices = .ok blocks →
+      ∀ b ∈ blocks, .glamsterdam ≤ b.record.fork ∨ b.record.block.transactions = [] := by
+  intro blocks h
+  refine simulateBlocks_forall _ h (fun _ _ _ _ _ _ _ _ _ _ hBlk =>
+    .inr (simulateBlock_transactions hBlk rfl)) ?_
+  intro plan hPlan x hx _ _ _ _ _ hBlk
+  rcases hCalls plan hPlan x hx with hFork | hNil
+  · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl, -⟩ := simulateBlock_spec hBlk
+    exact .inl hFork
+  · exact .inr (simulateBlock_transactions hBlk hNil)
 
 /-! ## Agreement with the state transition -/
 
