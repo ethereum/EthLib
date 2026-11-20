@@ -4615,6 +4615,26 @@ private theorem round_add_le {inc x S U : ℕ} (incPos : 0 < inc)
     have := Nat.div_add_mod (x + S) inc
     omega
 
+/-- A floor start is within the rounded top of R's balance and the slack, from the balance ceiling.
+
+The start is aligned and within the floor of its balance and its cap, so it is within the ceiling.
+
+Rounding the ceiling `H + S` down adds at most the slack, and `H` is within `H` and the band. -/
+private theorem short_start_floor {inc e a cap H db S U : ℕ} (incPos : 0 < inc)
+    (aligned : e % inc = 0) (capped : e ≤ cap) (ceiling : min a cap ≤ H + S)
+    (floorA : e ≤ a - a % inc)
+    (slack : S = 0 ∨ inc ≤ U + 1 ∨ (S < inc ∧ inc ≤ S + U)) :
+    e ≤ (H + db) - (H + db) % inc + S + U := by
+  have within : e ≤ H + S := by
+    have : e ≤ a := Nat.le_trans floorA (Nat.sub_le _ _)
+    have := Nat.le_min.mpr ⟨this, capped⟩
+    omega
+  have rounded := rounded_mono inc within
+  rw [aligned] at rounded
+  have add := round_add_le (x := H) incPos slack
+  have band := rounded_mono inc (show H ≤ H + db by omega)
+  omega
+
 /-- The effective balance of a key that stays on its path is at most the rise of the main regime.
 
 Its `stay` has three cases: it equals R's, it ends at its start, or it is within the ceiling.
