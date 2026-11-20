@@ -27,11 +27,6 @@ Each part of the module follows the standard that defines it:
 The specification is written to be read first.
 Where it computes in another form for speed, theorems tie each step to the plain computation.
 Points are in affine coordinates, as SEC 1 prints them.
-The base field also has a Montgomery form on four 64-bit words, in which products need no division.
-Scalar multiplication works on Jacobian coordinates in that form, and converts back once.
-When one of the two points of `k P + l Q` is the generator, it splits the other scalar with the curve's endomorphism, and the four parts share one chain of doublings.
-The square root of the base field is a fixed chain of squarings and products in Montgomery form.
-The inverses mod `n` and mod `p` come from the divsteps of Bernstein and Yang, and the extended Euclidean algorithm replaces any result that fails its check.
 The files build on one another in this order:
 
 | File | Contents |
@@ -50,6 +45,14 @@ The files build on one another in this order:
 | `Address.lean` | the address of a public key |
 
 The proofs are in `EthLib/Cryptography/Proofs/Secp256k1/`, with one file for each of these.
+
+The base field also has a Montgomery form on four 64-bit words, in which products need no division.
+Scalar multiplication works on Jacobian coordinates in that form, and converts back once.
+In `k P + l Q`, when one point is the generator and the other lies on the curve, the other scalar is split with the curve's endomorphism.
+The generator's scalar is cut at bit 128, and the four half-length scalars share one chain of doublings.
+The square root of the base field is a fixed chain of squarings and products in Montgomery form.
+The inverses mod `n` and mod `p` come from the divsteps of Bernstein and Yang.
+The extended Euclidean algorithm replaces any result that fails its check.
 Besides those, `Order.lean` and `Malleability.lean` hold proofs.
 
 ## Operations
@@ -127,6 +130,7 @@ Three properties are outside the proofs.
   A bound is proved only in an idealised model, where the bijection inside the conversion is a uniform permutation.
 - Nothing is proved about timing, because the specification is not constant-time.
   So signing and the exchange can leak the private key through timing.
+  For example, signing inverts its nonce with divsteps whose table lookups and length depend on it.
 - No theorem bounds how often signing fails.
   Signing fails after 16 rejected nonces, or on a nonce point with `x >= n`.
 

@@ -17,8 +17,9 @@ Since the generator spans the group, the map's effect on the generator determine
 
 The signed digits preserve the four scalar products as they share the doubling chain.
 
-So on a point of the curve the joint chain computes `k P + l G`, and the shared chain gives the
-same point.
+So on a point of the curve, the joint chain computes `k P + l G`.
+
+The shared chain gives the same point.
 
 The double scalar multiplication then equals the shared chain on `Fp` for every input.
 -/
@@ -30,6 +31,24 @@ open EthLib.Cryptography EthLib.Cryptography.Secp256k1 WeierstrassCurve
 namespace EthLib.Cryptography.Secp256k1
 
 namespace MulAdd
+
+/-- The scalar by which the endomorphism acts on the generator.
+
+It is `3^((n - 1) / 3) mod n`, the root that pairs with `beta`. -/
+def lambda : Fn := 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72
+
+/-- The first coordinate of the first vector in the scalar lattice.
+
+It is the first remainder below `sqrt(n)` in Euclid's algorithm on `n` and `lambda`. -/
+def basisA : Int := 0x3086d221a7d46bcde86c90e49284eb15
+
+/-- The coefficient of `lambda` for that remainder.
+
+The first basis vector is `(basisA, -basisB)`. -/
+def basisB : Int := 0xe4437ed6010e88286f547fa90abfe4c3
+
+/-- Read the scalar represented by the two words. -/
+def WordPair.toNat (pair : WordPair) : Nat := pair.lo.toNat + pair.hi.toNat * 2^64
 
 /-- A canonical residue is zero exactly when all four words are zero. -/
 theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 := by
@@ -43,7 +62,7 @@ theorem zeroElement_eq_true (x : Montgomery) : zeroElement x = true ↔ x = 0 :=
 
 private abbrev F := ZMod Fp.modulus
 
-private def β : F := Fp.toZMod beta
+private noncomputable def β : F := Fp.toZMod beta
 
 private theorem beta_cube : β ^ 3 = 1 := by decide +kernel
 
@@ -68,7 +87,7 @@ private theorem scale_valid {x y : F} (h : curve.Nonsingular x y) :
   rw [show β * x * (β * x) * (β * x) = β ^ 3 * (x*x*x) by ring, beta_cube, one_mul]
   exact (equation_iff _ _).mp h.1
 
-private def scale : curve.Point → curve.Point
+private noncomputable def scale : curve.Point → curve.Point
   | .zero => .zero
   | .some x y h => .some (β*x) y (scale_valid h)
 
@@ -122,7 +141,7 @@ private theorem scale_add (P Q : curve.Point) : scale (P+Q) = scale P + scale Q 
         · rw [slope_scaled _ _ _ _ h, addX_scaled]
         · rw [slope_scaled _ _ _ _ h, addY_scaled]
 
-private def scaleHom : curve.Point →+ curve.Point where
+private noncomputable def scaleHom : curve.Point →+ curve.Point where
   toFun := scale
   map_zero' := rfl
   map_add' := scale_add
@@ -414,7 +433,7 @@ private theorem Represents.add {p q : Coordinates} {P Q : curve.Point}
     Represents (Coords.add 0 p q) (P + Q) :=
   ⟨(add_spec hp.1 hq.1).1, by rw [(add_spec hp.1 hq.1).2, hp.2, hq.2]⟩
 
-private def TableSpec {n : Nat} (t : Vector Coordinates n) (P : curve.Point) : Prop :=
+private noncomputable def TableSpec {n : Nat} (t : Vector Coordinates n) (P : curve.Point) : Prop :=
   ∀ i : Fin n, Represents t[i.val] ((2 * i.val + 1) • P)
 
 private theorem prepared_mul (a b : Montgomery) :
@@ -435,20 +454,20 @@ The proofs read the packed recoding through these unpacked forms.
 private abbrev Digit (n : Nat) := Fin n × Bool
 
 /-- Shift both words right by one bit. -/
-private def WordPair.half (w : WordPair) : WordPair :=
+private noncomputable def WordPair.half (w : WordPair) : WordPair :=
   ⟨(w.lo >>> 1) + (w.hi <<< 63), w.hi >>> 1⟩
 
 /-- Round down to a multiple of the pivot. -/
-private def WordPair.roundDown (w : WordPair) (pivot : UInt64) : WordPair :=
+private noncomputable def WordPair.roundDown (w : WordPair) (pivot : UInt64) : WordPair :=
   ⟨w.lo - w.lo % pivot, w.hi⟩
 
 /-- Add a word with carry. -/
-private def WordPair.addWord (w : WordPair) (increment : UInt64) : WordPair :=
+private noncomputable def WordPair.addWord (w : WordPair) (increment : UInt64) : WordPair :=
   let lo := w.lo + increment
   ⟨lo, w.hi + (if lo < increment then 1 else 0)⟩
 
 /-- Read one signed digit from the two-word scalar. -/
-private def recodeWords (window : Window) (w : WordPair) :
+private noncomputable def recodeWords (window : Window) (w : WordPair) :
     WordPair × Option (Digit window.entries) :=
   let low := (w.lo &&& window.mask).toNat
   let half := w.half
@@ -458,6 +477,10 @@ private def recodeWords (window : Window) (w : WordPair) :
       change (w.lo &&& window.mask).toNat < 4 * window.entries
       rw [UInt64.toNat_and]
       cases window with
+      | width5 =>
+        change w.lo.toNat &&& (2^5 - 1) < 2^5
+        rw [Nat.and_two_pow_sub_one_eq_mod]
+        exact Nat.mod_lt _ (by decide)
       | width14 =>
         change w.lo.toNat &&& (2^14 - 1) < 2^14
         rw [Nat.and_two_pow_sub_one_eq_mod]
@@ -468,7 +491,7 @@ private def recodeWords (window : Window) (w : WordPair) :
       (down.addWord window.pivot, some (⟨(4 * window.entries - low) / 2, by omega⟩, true))
 
 /-- Add or subtract the selected odd multiple. -/
-private def addDigit {n : Nat} (p : Coordinates) (table : Vector Coordinates n) :
+private noncomputable def addDigit {n : Nat} (p : Coordinates) (table : Vector Coordinates n) :
     Option (Digit n) → Coordinates
   | none => p
   | some (i, negative) =>
@@ -476,7 +499,7 @@ private def addDigit {n : Nat} (p : Coordinates) (table : Vector Coordinates n) 
     Coords.add 0 p (if negative then negate q else q)
 
 /-- Add a generator table entry using mixed addition when its Z coordinate is one. -/
-private def addGenerator (p : Coordinates) (q : @& Coordinates) (negative : Bool) :
+private noncomputable def addGenerator (p : Coordinates) (q : @& Coordinates) (negative : Bool) :
     Coordinates :=
   let y := if negative then (0 : Montgomery) - q.y else q.y
   if q.z = 1 then
@@ -495,7 +518,7 @@ private def addGenerator (p : Coordinates) (q : @& Coordinates) (negative : Bool
   else Coords.add 0 p ⟨q.x, y, q.z⟩
 
 /-- Add the selected generator multiple with the digit's sign. -/
-private def addPacked (p : Coordinates) (window : Window)
+private noncomputable def addPacked (p : Coordinates) (window : Window)
     (table : Vector Coordinates window.entries) (digit : UInt64) : Coordinates :=
   if digit == 0 then p else
     let i := packedIndex window digit
@@ -503,19 +526,201 @@ private def addPacked (p : Coordinates) (window : Window)
     addGenerator p q (digit >= window.pivot)
 
 
+/-- Add a point when the square and cube of the second denominator are available. -/
+private noncomputable def addCached (p q : Coordinates) (qz2 qz3 : Montgomery) :
+    Coordinates :=
+  if p.z = 0 then q
+  else if q.z = 0 then p
+  else
+    let zz := Montgomery.square p.z
+    let (u1, s1, z) := if q.z = 1 then (p.x, p.y, p.z) else
+      (p.x * qz2, p.y * qz3, p.z * q.z)
+    let h := q.x * zz - u1
+    let r := q.y * p.z * zz - s1
+    if h = 0 then
+      if r = 0 then Coords.double 0 p else Coords.infinity
+    else
+      let hh := Montgomery.square h
+      let hhh := h * hh
+      let v := u1 * hh
+      let x := Montgomery.square r - hhh - (v + v)
+      ⟨x, r * (v - x) - s1 * hhh, z * h⟩
+
+/-- Apply a fixed step to build eight consecutive odd multiples. -/
+private noncomputable def oddMultiplesBy (p : Coordinates) (next : Coordinates → Coordinates) :
+    Vector Coordinates 8 :=
+  let p3 := next p
+  let p5 := next p3
+  let p7 := next p5
+  let p9 := next p7
+  let p11 := next p9
+  let p13 := next p11
+  let p15 := next p13
+  #v[p, p3, p5, p7, p9, p11, p13, p15]
+
+/-- The odd multiples from `P` to `15 P`, indexed by `(multiple - 1) / 2`. -/
+private noncomputable def oddMultiples (p : Coordinates) : Vector Coordinates 8 :=
+  let d := Coords.double 0 p
+  let z2 := Montgomery.square d.z
+  let z3 := z2 * d.z
+  oddMultiplesBy p fun q => addCached q d z2 z3
+
+/-- One scalar and its odd-multiple table. -/
+private structure Stream (n : Nat) where
+  /-- The scalar bits still to read. -/
+  scalar : WordPair
+  /-- The odd multiples of the point for this scalar. -/
+  table : Vector Coordinates n
+
+/-- Run the doubling chain with the given recoder for the fixed generator. -/
+private noncomputable def chainWordsFor (window : Window)
+    (pt qt : Vector Coordinates 8) (rt st : Vector Coordinates window.entries) :
+    Nat → WordPair → WordPair → WordPair → WordPair → Coordinates
+  | 0, _, _, _, _ => Coords.infinity
+  | fuel + 1, p, q, r, s =>
+    let (a, da) := recodeWords .width5 p
+    let (b, db) := recodeWords .width5 q
+    let (c, dc) := recodeWords window r
+    let (d, dd) := recodeWords window s
+    let rest := chainWordsFor window pt qt rt st fuel a b c d
+    let acc := double rest
+    addDigit (addDigit (addDigit (addDigit acc pt da) qt db) rt dc) st dd
+
+/-- Run the chain with the selected window for the generator. -/
+private noncomputable def chainFor (window : Window) (fuel : Nat) (p q : Stream 8)
+    (r s : Stream window.entries) : Coordinates :=
+  chainWordsFor window p.table q.table r.table s.table
+    fuel p.scalar q.scalar r.scalar s.scalar
+
+/-- Negate the entries when a scalar from the lattice split is negative. -/
+private noncomputable def signedTable (scalar : Int) (table : Vector Coordinates 8) :
+    Vector Coordinates 8 :=
+  if scalar < 0 then table.map negate else table
+
+/-- One odd multiple and the data shared by its two scalar streams. -/
+private structure Prepared where
+  /-- The original X coordinate. -/
+  x : Montgomery
+  /-- The X coordinate after applying the endomorphism. -/
+  phiX : Montgomery
+  /-- The Y coordinate of both points. -/
+  y : Montgomery
+  /-- The projective denominator of both points. -/
+  z : Montgomery
+  /-- The square of the projective denominator. -/
+  z2 : Montgomery
+  /-- The cube of the projective denominator. -/
+  z3 : Montgomery
+
+/-- Compute the shared denominator powers once for each odd multiple. -/
+private noncomputable def prepare (p : Coordinates) : Prepared :=
+  let z2 := p.z * p.z
+  ⟨p.x, (endomorphism p).x, p.y, p.z, z2, z2 * p.z⟩
+
+/-- Add a signed odd multiple using its cached denominator powers.
+
+The field products use the same scaled coordinates as `Coords.add 0`.
+-/
+private noncomputable def addPrepared (p : Coordinates) (q : @& Prepared) (phi negative : Bool) :
+    Coordinates :=
+  let qx := if phi then q.phiX else q.x
+  let qy := if negative then (0 : Montgomery) - q.y else q.y
+  if p.z = 0 then ⟨qx, qy, q.z⟩
+  else if q.z = 0 then p
+  else
+    let z1z1 := p.z * p.z
+    let (u1, s1, z1z2) := if q.z = 1 then (p.x, p.y, p.z) else
+      (p.x * q.z2, p.y * q.z3, p.z * q.z)
+    let u2 := qx * z1z1
+    let s2 := qy * p.z * z1z1
+    let h := u2 - u1
+    let r := s2 - s1
+    if h = 0 then
+      if r = 0 then Coords.double 0 p else Coords.infinity
+    else
+      let hh := h * h
+      let hhh := h * hh
+      let v := u1 * hh
+      let x3 := r * r - hhh - (v + v)
+      ⟨x3, r * (v - x3) - s1 * hhh, z1z2 * h⟩
+
+/-- Combine the scalar sign and digit sign before selecting the odd multiple. -/
+private noncomputable def addPreparedDigit (p : Coordinates) (table : Vector Prepared 8)
+    (phi negative : Bool) : Option (Digit 8) → Coordinates
+  | none => p
+  | some (i, neg) => addPrepared p table[i.val] phi (negative != neg)
+
+/-- Read both variable digits from one table during the shared doubling chain. -/
+private noncomputable def preparedChain (window : Window) (table : Vector Prepared 8)
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
+    Nat → WordPair → WordPair → WordPair → WordPair → Coordinates
+  | 0, _, _, _, _ => Coords.infinity
+  | fuel + 1, p, q, r, s =>
+    let (a, da) := recodeWords .width5 p
+    let (b, db) := recodeWords .width5 q
+    let (c, dc) := recodeWords window r
+    let (d, dd) := recodeWords window s
+    let rest := preparedChain window table pn qn rt st fuel a b c d
+    let acc := double rest
+    let acc := addPreparedDigit acc table false pn da
+    let acc := addPreparedDigit acc table true qn db
+    addDigit (addDigit acc rt dc) st dd
+
+/-- Add the selected variable point after combining the scalar and digit signs. -/
+private noncomputable def addPackedPrepared (p : Coordinates) (table : Vector Prepared 8)
+    (phi negative : Bool) (digit : UInt64) : Coordinates :=
+  if digit == 0 then p else
+    let i := packedIndex .width5 digit
+    addPrepared p table[i.val] phi (negative != (digit >= Window.pivot .width5))
+
+/-- Combine adjacent doublings when the intervening digits are zero. -/
+private noncomputable def packedChain (window : Window) (table : Vector Prepared 8)
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
+    Nat → UInt64 → UInt64 → UInt64 → UInt64 →
+      UInt64 → UInt64 → UInt64 → UInt64 → Coordinates
+  | 0, _, _, _, _, _, _, _, _ => Coords.infinity
+  | fuel + 1, xa0, xa1, xb0, xb1, xc0, xc1, xd0, xd1 =>
+    let ⟨al,ah,da⟩ := recodeRaw .width5 xa0 xa1
+    let ⟨bl,bh,db⟩ := recodeRaw .width5 xb0 xb1
+    let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
+    let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
+    let acc :=
+      match fuel with
+      | 0 => double Coords.infinity
+      | next + 1 =>
+        if ((al ||| bl ||| cl ||| dl) &&& 1) == 0 then
+          let al' := (al >>> 1) + (ah <<< 63)
+          let bl' := (bl >>> 1) + (bh <<< 63)
+          let cl' := (cl >>> 1) + (ch <<< 63)
+          let dl' := (dl >>> 1) + (dh <<< 63)
+          doubleTwice (packedChain window table pn qn rt st next
+            al' (ah >>> 1) bl' (bh >>> 1) cl' (ch >>> 1) dl' (dh >>> 1))
+        else
+          double (packedChain window table pn qn rt st (next + 1) al ah bl bh cl ch dl dh)
+    let acc := addPackedPrepared acc table false pn da
+    let acc := addPackedPrepared acc table true qn db
+    addPacked (addPacked acc window rt dc) window st dd
+
+/-- Split each scalar into the two words used by `packedChain`. -/
+private noncomputable def preparedChainPacked (window : Window) (table : Vector Prepared 8)
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries) (fuel : Nat)
+    (p q r s : WordPair) : Coordinates :=
+  packedChain window table pn qn rt st fuel p.lo p.hi q.lo q.hi r.lo r.hi s.lo s.hi
+
+
 /-- The signed value of an odd-multiple index, or zero when no multiple is selected. -/
-private def digitValue {n : Nat} : Option (Digit n) → Int
+private noncomputable def digitValue {n : Nat} : Option (Digit n) → Int
   | none => 0
   | some (i, negative) =>
     let magnitude := 2 * (i.val : Int) + 1
     if negative then -magnitude else magnitude
 
 /-- The signed digit with natural-number quotient and remainder. -/
-private def recode (window : Window) (k : Nat) : Nat × Option (Digit window.entries) :=
+private noncomputable def recode (window : Window) (k : Nat) : Nat × Option (Digit window.entries) :=
   if he : k % 2 = 0 then (k / 2, none)
   else
     let r := k % (4 * window.entries)
-    have hpar : r % 2 = k % 2 := Nat.mod_mod_of_dvd k (by cases window; decide)
+    have hpar : r % 2 = k % 2 := Nat.mod_mod_of_dvd k (by cases window <;> decide)
     if hr : r < 2 * window.entries then ((k - r) / 2, some (⟨r / 2, by omega⟩, false))
     else ((k + (4 * window.entries - r)) / 2,
       some (⟨(4 * window.entries - r) / 2, by
@@ -524,7 +729,7 @@ private def recode (window : Window) (k : Nat) : Nat × Option (Digit window.ent
           have hr' : r = 2 * window.entries := by omega
           rw [hr'] at hpar
           omega
-        have hsize : 0 < window.entries := by cases window; decide
+        have hsize : 0 < window.entries := by cases window <;> decide
         omega⟩, true))
 
 private theorem WordPair.toNat_ofNat (k : Nat) (hk : k < 2^128) : (WordPair.ofNat k).toNat = k := by
@@ -554,7 +759,7 @@ private theorem word_half_lo (w : WordPair) :
 
 private theorem window_pivot (window : Window) :
     window.pivot.toNat = 2 * window.entries := by
-  cases window; decide
+  cases window <;> decide
 
 private theorem word_round_down (lo pivot : UInt64) :
     (lo - lo % pivot).toNat = lo.toNat - lo.toNat % pivot.toNat := by
@@ -571,6 +776,11 @@ private theorem word_low (window : Window) (w : WordPair) :
     (w.lo &&& window.mask).toNat = w.toNat % (4 * window.entries) := by
   have h := UInt64.toNat_and w.lo window.mask
   cases window with
+  | width5 =>
+    calc
+      _ = w.lo.toNat &&& (2^5 - 1) := h
+      _ = w.lo.toNat % 32 := Nat.and_two_pow_sub_one_eq_mod _ 5
+      _ = _ := (mul_mod_radix w.lo.toNat w.hi.toNat 32 (by decide)).symm
   | width14 =>
     calc
       _ = w.lo.toNat &&& (2^14 - 1) := h
@@ -593,7 +803,7 @@ private theorem WordPair.roundDown_toNat (window : Window) (w : WordPair) :
     (w.roundDown window.pivot).toNat = w.toNat - w.toNat % (2 * window.entries) := by
   change (w.lo - w.lo % window.pivot).toNat + w.hi.toNat * 2^64 =
     w.lo.toNat + w.hi.toNat * 2^64 - (w.lo.toNat + w.hi.toNat * 2^64) % (2 * window.entries)
-  rw [word_round_down, window_pivot, mul_mod_radix _ _ _ (by cases window; decide)]
+  rw [word_round_down, window_pivot, mul_mod_radix _ _ _ (by cases window <;> decide)]
   have := Nat.mod_le w.lo.toNat (2 * window.entries)
   omega
 
@@ -622,23 +832,19 @@ private theorem WordPair.addWord_toNat (w : WordPair) (a : UInt64)
 private theorem recodeWords_eq (window : Window) (w : WordPair) :
     Prod.map WordPair.toNat id (recodeWords window w) = recode window w.toNat := by
   unfold recodeWords recode
-  have hdiv : 2 ∣ 4 * window.entries := by cases window; decide
+  have hdiv : 2 ∣ 4 * window.entries := by cases window <;> decide
   simp only [word_low, Nat.mod_mod_of_dvd w.toNat hdiv]
   split
   · simp only [Prod.map, id, WordPair.half_toNat]
   · split
     · simp only [Prod.map, id, WordPair.roundDown_toNat, WordPair.half_toNat]
       congr 1
-      cases window
-      simp only [Window.entries] at *
-      omega
+      cases window <;> simp only [Window.entries] at * <;> omega
     · have hb : (w.half.roundDown window.pivot).hi.toNat + 1 < 2^64 := w.half_hi_bound
       simp only [Prod.map, id, WordPair.addWord_toNat _ _ hb, WordPair.roundDown_toNat,
         WordPair.half_toNat, window_pivot]
       congr 1
-      cases window
-      simp only [Window.entries] at *
-      omega
+      cases window <;> simp only [Window.entries] at * <;> omega
 
 private theorem recodeWords_scalar (window : Window) (w : WordPair) :
     (recodeWords window w).1.toNat = (recode window w.toNat).1 :=
@@ -652,15 +858,15 @@ private theorem recodeWords_digit (window : Window) (w : WordPair) :
 private theorem recode_eq (window : Window) (k : Nat) :
     (k : Int) = 2 * (recode window k).1 + digitValue (recode window k).2 := by
   have hmod : (k % (4 * window.entries)) % 2 = k % 2 :=
-    Nat.mod_mod_of_dvd k (by cases window; decide)
-  cases window
-  simp only [Window.entries] at hmod
-  unfold recode
-  split
-  · simp only [digitValue]
-    omega
-  · dsimp only
-    split <;> simp only [digitValue, Bool.false_eq_true, ↓reduceIte, Window.entries] <;> omega
+    Nat.mod_mod_of_dvd k (by cases window <;> decide)
+  cases window <;> simp only [Window.entries] at hmod
+  all_goals
+    unfold recode
+    split
+    · simp only [digitValue]
+      omega
+    · dsimp only
+      split <;> simp only [digitValue, Bool.false_eq_true, ↓reduceIte, Window.entries] <;> omega
 
 /-- Recoding reduces a bound by a power of two by one bit. -/
 private theorem recode_next_le (window : Window) (k m : Nat) (hk : k ≤ 2 ^ (m + 1)) :
@@ -677,20 +883,30 @@ private theorem recode_next_le (window : Window) (k m : Nat) (hk : k ≤ 2 ^ (m 
       omega
     · rename_i hr
       cases window
-      simp only [Window.entries] at hr ⊢
-      by_cases hm : 13 ≤ m
-      · have hpow : 2 ^ m = 8192 * 2 ^ (m - 13) := calc
-          _ = 2 ^ (13 + (m - 13)) := congrArg (2 ^ ·) (by omega)
-          _ = _ := Nat.pow_add 2 13 (m - 13)
-        rw [hpow] at hk ⊢
-        omega
-      · have hsmall : 2 ^ m ≤ 4096 := Nat.pow_le_pow_right (by decide) (show m ≤ 12 by omega)
-        omega
+      · simp only [Window.entries] at hr ⊢
+        by_cases hm : 4 ≤ m
+        · have hpow : 2 ^ m = 16 * 2 ^ (m - 4) := calc
+            _ = 2 ^ (4 + (m - 4)) := congrArg (2 ^ ·) (by omega)
+            _ = _ := Nat.pow_add 2 4 (m - 4)
+          rw [hpow] at hk ⊢
+          omega
+        · have hsmall : 2 ^ m ≤ 8 := Nat.pow_le_pow_right (by decide) (show m ≤ 3 by omega)
+          omega
+      · simp only [Window.entries] at hr ⊢
+        by_cases hm : 13 ≤ m
+        · have hpow : 2 ^ m = 8192 * 2 ^ (m - 13) := calc
+            _ = 2 ^ (13 + (m - 13)) := congrArg (2 ^ ·) (by omega)
+            _ = _ := Nat.pow_add 2 13 (m - 13)
+          rw [hpow] at hk ⊢
+          omega
+        · have hsmall : 2 ^ m ≤ 4096 := Nat.pow_le_pow_right (by decide) (show m ≤ 12 by omega)
+          omega
+
 /-- A scalar at most one has no bits left after its first digit. -/
 private theorem recode_next_eq_zero (window : Window) (k : Nat) (hk : k ≤ 1) :
     (recode window k).1 = 0 := by
   have h : k = 0 ∨ k = 1 := by omega
-  rcases h with rfl | rfl <;> (cases window; decide)
+  rcases h with rfl | rfl <;> cases window <;> decide
 
 private theorem digitMagnitude_cast {n : Nat} (i : Fin n) :
     (2 * (i.val : Int) + 1) = ((2 * i.val + 1 : Nat) : Int) := by omega
@@ -719,7 +935,7 @@ private theorem recode_smul (window : Window) (k : Nat) (P : curve.Point) :
   have h := congrArg (fun z : Int => z • P) (recode_eq window k)
   simpa only [add_zsmul, mul_zsmul, natCast_zsmul, two_zsmul] using h
 
-private def scalarBound : Nat → Nat
+private noncomputable def scalarBound : Nat → Nat
   | 0 => 0
   | n + 1 => 2 ^ n
 
@@ -736,7 +952,7 @@ private abbrev order : Int := Fn.modulus
 private theorem order_pos : 0 < order := by decide
 
 /-- Round `x / n` to the nearest integer. -/
-private def roundQuotient (x : Int) : Int := (x + (Fn.modulus : Int) / 2) / (Fn.modulus : Int)
+private noncomputable def roundQuotient (x : Int) : Int := (x + (Fn.modulus : Int) / 2) / (Fn.modulus : Int)
 
 /-- Split a scalar using the lattice with basis `(a, -b)` and `(a + b, a)`.
 
@@ -745,7 +961,7 @@ Both vectors give zero under `(u, v) -> u + lambda v` modulo `n`.
 The second vector comes from the preceding Euclidean remainder.
 
 Subtract the nearest basis multiples, as in Algorithm 3.74. -/
-private def splitScalar (k : Nat) : Int × Int :=
+private noncomputable def splitScalar (k : Nat) : Int × Int :=
   let u := roundQuotient (basisA * k)
   let v := roundQuotient (basisB * k)
   (k - u * basisA - v * (basisA + basisB), u * basisB - v * basisA)
@@ -893,7 +1109,7 @@ private abbrev splitLimit : Nat := 2^128
 private abbrev splitModulus : Nat := 2^129
 private abbrev SplitResidue := ZMod splitModulus
 
-private def splitLow192 (a : Raw) : Nat :=
+private noncomputable def splitLow192 (a : Raw) : Nat :=
   a.w0.toNat + splitRadix*a.w1.toNat + splitRadix^2*a.w2.toNat
 
 private theorem split_product_model (r x y a b c : Nat) :
@@ -1183,12 +1399,12 @@ section WeightProof
 open Montgomery
 
 
-private def upperProduct (k c : Raw) : Nat :=
+private noncomputable def upperProduct (k c : Raw) : Nat :=
   (k.w1.toNat*c.w2.toNat + k.w2.toNat*c.w1.toNat + k.w3.toNat*c.w0.toNat)*2^192 +
   (k.w2.toNat*c.w2.toNat + k.w3.toNat*c.w1.toNat)*2^256 +
     k.w3.toNat*c.w2.toNat*(2^64*2^256)
 
-private def lowerProduct (k c : Raw) : Nat :=
+private noncomputable def lowerProduct (k c : Raw) : Nat :=
   k.w0.toNat*c.w0.toNat +
   (k.w0.toNat*c.w1.toNat + k.w1.toNat*c.w0.toNat)*2^64 +
   (k.w0.toNat*c.w2.toNat + k.w1.toNat*c.w1.toNat + k.w2.toNat*c.w0.toNat)*2^128
@@ -1322,7 +1538,8 @@ private theorem approximateWeight_value (k c : Raw) (hc : c.w3 = 0)
     rw [weightWord, Nat.mod_eq_of_lt hc5.1]
   have hFlag := weightRound c4.lo
   change flag.toNat = _ at hFlag
-  have hquot : lo.toNat + 2^64*hi.toNat + flag.toNat = (upperProduct k c + (2^15*2^256)) / (2^16*2^256) := by
+  have hquot : lo.toNat + 2^64*hi.toNat + flag.toNat =
+      (upperProduct k c + (2^15*2^256)) / (2^16*2^256) := by
     rw [hLo,hHi,hFlag]
     omega
   change (⟨lo+flag, hi+yes (lo+flag < lo)⟩ : WordPair).toNat = _
@@ -1589,10 +1806,10 @@ private theorem ofMontgomeryCoords_eq_of_represents {r : Coordinates} {q : Point
   have hs := Point.ofJacobian_spec hr.1
   exact (Point.toPoint_inj hs.1 hq).mp (hs.2.trans hr.2)
 
-private def signedPoint (negative : Bool) (p : Coordinates) : Coordinates :=
+private noncomputable def signedPoint (negative : Bool) (p : Coordinates) : Coordinates :=
   if negative then negate p else p
 
-private def selectedPoint (phi : Bool) (p : Coordinates) : Coordinates :=
+private noncomputable def selectedPoint (phi : Bool) (p : Coordinates) : Coordinates :=
   if phi then endomorphism p else p
 
 private theorem negate_negate (p : Coordinates) : negate (negate p) = p := by
@@ -1609,11 +1826,11 @@ private theorem signedPoint_twice (a b : Bool) (p : Coordinates) :
     signedPoint a (signedPoint b p) = signedPoint (b != a) p := by
   cases a <;> cases b <;> simp [signedPoint, negate_negate]
 
-private def selectedTable (table : Vector Coordinates 8) (phi negative : Bool) :
+private noncomputable def selectedTable (table : Vector Coordinates 8) (phi negative : Bool) :
     Vector Coordinates 8 :=
   table.map (fun p => signedPoint negative (selectedPoint phi p))
 
-private def decodeDigit (window : Window) (digit : UInt64) : Option (Digit window.entries) :=
+private noncomputable def decodeDigit (window : Window) (digit : UInt64) : Option (Digit window.entries) :=
   if digit == 0 then none else some (packedIndex window digit, digit >= window.pivot)
 
 private theorem low_bit_eq (word : UInt64) : (word &&& 1 == 0) = decide (word.toNat % 2 = 0) := by
@@ -1624,7 +1841,7 @@ private theorem low_bit_eq (word : UInt64) : (word &&& 1 == 0) = decide (word.to
 
 private theorem window_mask_succ (window : Window) :
     (window.mask + 1).toNat = 4 * window.entries := by
-  cases window; decide
+  cases window <;> decide
 
 private theorem packedIndex_pos (window : Window) (digit : UInt64)
     (h : digit < window.pivot) : (packedIndex window digit).val = digit.toNat / 2 := by
@@ -1653,7 +1870,7 @@ private theorem recodeRaw_eq (window : Window) (w : WordPair) :
     let old := recodeWords window w
     raw.lo = old.1.lo ∧ raw.hi = old.1.hi ∧ decodeDigit window raw.digit = old.2 := by
   have hlt : (w.lo &&& window.mask).toNat < 4 * window.entries := by
-    rw [word_low window w]; exact Nat.mod_lt _ (by cases window; decide)
+    rw [word_low window w]; exact Nat.mod_lt _ (by cases window <;> decide)
   unfold recodeRaw recodeWords
   dsimp only
   have hp : (w.lo &&& window.mask) < window.pivot ↔
@@ -1708,7 +1925,7 @@ private theorem addPacked_eq (p : Coordinates) (window : Window)
 
 private theorem recodeRaw_even (window : Window) (lo hi : UInt64) (h : lo &&& 1 = 0) :
     recodeRaw window lo hi = ⟨(lo >>> 1) + (hi <<< 63), hi >>> 1, 0⟩ := by
-  have hm : window.mask &&& 1 = 1 := by cases window; decide
+  have hm : window.mask &&& 1 = 1 := by cases window <;> decide
   simp only [recodeRaw, UInt64.and_assoc, hm, h, beq_self_eq_true, ↓reduceIte]
 
 private theorem and_distrib (a b c : UInt64) : (a ||| b) &&& c = (a &&& c) ||| (b &&& c) := by
@@ -1880,7 +2097,7 @@ private theorem restore_doubleStd (z : Montgomery) (p : Coordinates) :
     simp only [zValue_add, zValue_mul]
     ring
 
-private def addWeighted (p : Coordinates) (x y d h r : Montgomery) : Coordinates :=
+private noncomputable def addWeighted (p : Coordinates) (x y d h r : Montgomery) : Coordinates :=
   if h = 0 then
     if r = 0 then Coords.double 0 p else Coords.infinity
   else addFromDifferences x y d h r
@@ -2490,7 +2707,7 @@ private theorem raw_fixed_words (l : Montgomery.Raw) :
     Montgomery.lowValue, Montgomery.wordRadix]
   omega
 
-private def signedValue (w : WordPair) : Int :=
+private noncomputable def signedValue (w : WordPair) : Int :=
   (w.lo.toNat : Int) + w.hi.toInt64.toInt * 2^64
 
 private theorem joint_word_shift_right (x : UInt64) : (x >>> 1).toNat = x.toNat / 2 := by
@@ -2612,19 +2829,19 @@ private theorem signedHalfAfter_eq (lo hi digit : UInt64)
       (hi+(digit>>>63)-(decide (lo-digit>lo)).toUInt64)) = _
   rw [signedHalf_eq, signedSub_eq lo hi digit bound]
 
-private def jointDigitIndex (a b : Int) : Fin 64 :=
+private noncomputable def jointDigitIndex (a b : Int) : Fin 64 :=
   ⟨(a % 8).toNat + 8 * (b % 8).toNat, by
     have ha := Int.emod_lt_of_pos a (by decide : (0 : Int) < 8)
     have hb := Int.emod_lt_of_pos b (by decide : (0 : Int) < 8)
     omega⟩
 
-private def jointDigit (a b : Int) : UInt64 := jointDigits[(jointDigitIndex a b).val].toUInt64
+private noncomputable def jointDigit (a b : Int) : UInt64 := jointDigits[(jointDigitIndex a b).val].toUInt64
 
-private def jointDecoded (digit : UInt64) : Int × Int :=
+private noncomputable def jointDecoded (digit : UInt64) : Int × Int :=
   if digit == 0 then (0, 0)
   else (((digit &&& 63) - 32).toInt64.toInt, (((digit >>> 6) &&& 63) - 32).toInt64.toInt)
 
-private def jointStep (s : Int × Int) : Int × Int :=
+private noncomputable def jointStep (s : Int × Int) : Int × Int :=
   let d := jointDecoded (jointDigit s.1 s.2)
   ((s.1 - d.1) / 2, (s.2 - d.2) / 2)
 
@@ -2698,7 +2915,7 @@ private theorem joint_and_distrib (a b c : UInt64) : (a ||| b) &&& c = (a &&& c)
   apply UInt64.toNat_inj.mp
   simp only [UInt64.toNat_and, UInt64.toNat_or, Nat.and_or_distrib_right]
 
-private def signedRange (a : Int) : Prop := -(2^127 : Int) + 8 ≤ a ∧ a < 2^127 - 8
+private noncomputable def signedRange (a : Int) : Prop := -(2^127 : Int) + 8 ≤ a ∧ a < 2^127 - 8
 
 private theorem recodeJoint_eq (a b : WordPair) (ha : signedRange (signedValue a))
     (hb : signedRange (signedValue b)) :
@@ -2750,7 +2967,7 @@ private theorem recodeJoint_eq (a b : WordPair) (ha : signedRange (signedValue a
       (signedValue b - (jointDecoded d).2) / 2)
     rw [hda, hdb, signedHalfAfter_eq _ _ _ ha', signedHalfAfter_eq _ _ _ hb']
 
-private def pairBound (m : Int) (s : Int × Int) : Prop :=
+private noncomputable def pairBound (m : Int) (s : Int × Int) : Prop :=
   -m ≤ s.1 ∧ s.1 ≤ m ∧ -m ≤ s.2 ∧ s.2 ≤ m
 
 private theorem jointStep_add (s : Int × Int) :
@@ -2777,7 +2994,7 @@ private theorem jointStep_range {s : Int × Int} (ha : signedRange s.1) (hb : si
   dsimp only at h
   exact ⟨⟨by omega, by omega⟩, ⟨by omega, by omega⟩⟩
 
-private def jointN : Nat → (Int × Int) → Int × Int
+private noncomputable def jointN : Nat → (Int × Int) → Int × Int
   | 0, s => s
   | n+1, s => jointN n (jointStep s)
 
@@ -2958,19 +3175,19 @@ private theorem jointN_129 (s : Int × Int) (ha : signedRange s.1) (hb : signedR
   rw [jointN_add]
   exact jointN_seven_of_thirty_seven _ h
 
-private def jointBasis (i : Fin 6) : Int × Int :=
+private noncomputable def jointBasis (i : Fin 6) : Int × Int :=
   (#v[(1,0),(2,1),(3,2),(3,1),(3,0),(3,-1)])[i.val]
 
-private def jointTurn (c : Int × Int) : Int × Int := (-c.2, c.1 - c.2)
+private noncomputable def jointTurn (c : Int × Int) : Int × Int := (-c.2, c.1 - c.2)
 
-private def jointNeg (c : Int × Int) : Int × Int := (-c.1, -c.2)
+private noncomputable def jointNeg (c : Int × Int) : Int × Int := (-c.1, -c.2)
 
-private def jointAdd (a b : Int × Int) : Int × Int := (a.1+b.1, a.2+b.2)
+private noncomputable def jointAdd (a b : Int × Int) : Int × Int := (a.1+b.1, a.2+b.2)
 
-private def jointAction (P : curve.Point) (c : Int × Int) : curve.Point :=
+private noncomputable def jointAction (P : curve.Point) (c : Int × Int) : curve.Point :=
   c.1 • P + c.2 • (lambda.val • P)
 
-private def jointOriented (rotation : UInt64) (negative : Bool) (c : Int × Int) : Int × Int :=
+private noncomputable def jointOriented (rotation : UInt64) (negative : Bool) (c : Int × Int) : Int × Int :=
   let d := if rotation == 0 then c else if rotation == 1 then jointTurn c
     else jointTurn (jointTurn c)
   if negative then jointNeg d else d
@@ -3090,12 +3307,12 @@ private theorem jointEntry_phi2X (p : Coordinates) :
   apply sub_eq_zero.mp
   linear_combination -zValue p.x * jointBeta_relation
 
-private def jointEntryCoords (q : JointEntry) (rotation : UInt64) (negative : Bool) : Coordinates :=
+private noncomputable def jointEntryCoords (q : JointEntry) (rotation : UInt64) (negative : Bool) : Coordinates :=
   let x := if rotation == 0 then q.x else if rotation == 1 then q.phiX else q.phi2X
   let y := if negative then (0 : Montgomery) - q.y else q.y
   ⟨x, y, 1⟩
 
-private def jointPower (p : Coordinates) (rotation : UInt64) : Coordinates :=
+private noncomputable def jointPower (p : Coordinates) (rotation : UInt64) : Coordinates :=
   if rotation == 0 then p else if rotation == 1 then endomorphism p else endomorphismSquared p
 
 private theorem jointEntryCoords_eq (p : Coordinates) (hp : p.z = 1)
@@ -3151,14 +3368,14 @@ private abbrev JointTableSpec (z : Montgomery) (table : Vector JointEntry 6)
     Represents (restoreZ z (jointEntryCoords table[i.val] r n))
       (jointAction P (jointOriented r n (jointBasis i)))
 
-private def jointDescriptorIndex (d : UInt64) : Fin 6 :=
+private noncomputable def jointDescriptorIndex (d : UInt64) : Fin 6 :=
   ⟨((d >>> 12) &&& 31).toNat % 6, Nat.mod_lt _ (by decide)⟩
 
-private def jointDigitRotation (d : UInt64) : UInt64 := (d >>> 17) &&& 3
+private noncomputable def jointDigitRotation (d : UInt64) : UInt64 := (d >>> 17) &&& 3
 
-private def jointDigitNegative (d : UInt64) : Bool := d &&& 524288 != 0
+private noncomputable def jointDigitNegative (d : UInt64) : Bool := d &&& 524288 != 0
 
-private def jointDigitCoefficients (d : UInt64) : Int × Int :=
+private noncomputable def jointDigitCoefficients (d : UInt64) : Int × Int :=
   if d == 0 then (0,0)
   else jointOriented (jointDigitRotation d) (jointDigitNegative d)
     (jointBasis (jointDescriptorIndex d))
@@ -3398,7 +3615,7 @@ private theorem commonJointTable_spec {p : Coordinates} {P : curve.Point}
 
 end
 
-private def jointChainSingle (window : Window) (z : Montgomery)
+private noncomputable def jointChainSingle (window : Window) (z : Montgomery)
     (table : Vector JointEntry 6) (rt st : Vector Coordinates window.entries) :
     Nat → WordPair → WordPair → WordPair → WordPair → Coordinates
   | 0, _, _, _, _ => Coords.infinity
@@ -3724,7 +3941,7 @@ private theorem unsignedNegWords_val (w : WordPair) :
     push_cast
     omega
 
-private def signedComponent (w : WordPair × Bool) : WordPair :=
+private noncomputable def signedComponent (w : WordPair × Bool) : WordPair :=
   if w.2 then w.1.neg else w.1
 
 private theorem signedComponent_spec (w : WordPair × Bool)
@@ -3784,6 +4001,677 @@ private theorem packedJointWords_represents {z : Montgomery}
     rw [jointAction, hav, hbv, hvar, add_assoc, hFixed]
   exact ⟨hAgree.1, hAgree.2.2.trans (hRep.2.trans hGroup)⟩
 
+private theorem addCached_eq (p q : Coordinates) :
+    addCached p q (Montgomery.square q.z) (Montgomery.square q.z * q.z) =
+      Coords.add 0 p q := by
+  simp only [addCached, Coords.add, Montgomery.square_eq_mul, prepared_mul]
+
+private theorem oddMultiples_eq (p : Coordinates) :
+    oddMultiples p = oddMultiplesBy p (fun q => Coords.add 0 q (Coords.double 0 p)) := by
+  unfold oddMultiples
+  exact congrArg (oddMultiplesBy p) (funext fun q => addCached_eq q (Coords.double 0 p))
+
+private theorem oddMultiplesBy_spec {p twice : Coordinates} {P : curve.Point}
+    (hp : Represents p P) (hd : Represents twice (P + P)) :
+    TableSpec (oddMultiplesBy p (fun q => Coords.add 0 q twice)) P := by
+  have h1 : Represents p ((1 : Nat) • P) := by simpa only [one_nsmul] using hp
+  have d : Represents twice ((2 : Nat) • P) := by simpa only [two_nsmul] using hd
+  have h3 := h1.add d
+  have h5 := h3.add d
+  have h7 := h5.add d
+  have h9 := h7.add d
+  have h11 := h9.add d
+  have h13 := h11.add d
+  have h15 := h13.add d
+  intro i
+  fin_cases i <;> simp only [oddMultiplesBy, Vector.getElem_mk, List.getElem_toArray,
+    List.getElem_cons_zero, List.getElem_cons_succ, Nat.reduceMul, Nat.reduceAdd]
+  · exact h1
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h3
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h5
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h7
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h9
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h11
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h13
+  · simpa only [← add_nsmul, Nat.reduceAdd] using h15
+
+private theorem oddMultiples_spec {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
+    TableSpec (oddMultiples p) P := by
+  rw [oddMultiples_eq]
+  exact oddMultiplesBy_spec hp hp.double
+
+private theorem signedTable_spec
+    {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (k : Int) :
+    TableSpec (signedTable k t) (if k < 0 then -P else P) := by
+  unfold signedTable
+  split
+  · intro i
+    rw [Vector.getElem_map]
+    have h := negate_spec (ht i).1
+    exact ⟨h.1, by rw [h.2, (ht i).2, neg_nsmul]⟩
+  · exact ht
+
+private theorem addPrepared_eq (p q : Coordinates) (phi negative : Bool) :
+    addPrepared p (prepare q) phi negative =
+      Coords.add 0 p (signedPoint negative (selectedPoint phi q)) := by
+  cases q
+  cases phi <;> cases negative <;> simp only [addPrepared, prepare, signedPoint, selectedPoint,
+    endomorphism, scaleX, negate, Bool.false_eq_true, ↓reduceIte, Coords.add, prepared_mul]
+
+private theorem addPreparedDigit_eq (p : Coordinates) (table : Vector Coordinates 8)
+    (phi negative : Bool) (digit : Option (Digit 8)) :
+    addPreparedDigit p (table.map prepare) phi negative digit =
+      addDigit p (selectedTable table phi negative) digit := by
+  cases digit with
+  | none => rfl
+  | some digit =>
+    obtain ⟨i, sign⟩ := digit
+    simp only [addPreparedDigit, addDigit, selectedTable, Vector.getElem_map, addPrepared_eq]
+    change _ = Coords.add 0 p (signedPoint sign (signedPoint negative (selectedPoint phi _)))
+    rw [signedPoint_twice]
+
+private theorem preparedChain_eq (window : Window) (table : Vector Coordinates 8)
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries)
+    (fuel : Nat) (a b c d : WordPair) :
+    preparedChain window (table.map prepare) pn qn rt st fuel a b c d =
+      chainWordsFor window (selectedTable table false pn) (selectedTable table true qn)
+        rt st fuel a b c d := by
+  induction fuel generalizing a b c d with
+  | zero => rfl
+  | succ fuel ih =>
+    simp only [preparedChain, chainWordsFor, ih]
+    erw [addPreparedDigit_eq _ table true qn, addPreparedDigit_eq _ table false pn]
+
+private theorem selectedTable_sgn (t : Vector Coordinates 8) (phi : Bool) (n : Int) :
+    selectedTable t phi (n < 0) = signedTable n (if phi then t.map endomorphism else t) := by
+  cases phi <;> by_cases h : n < 0 <;>
+    simp [selectedTable, selectedPoint, signedPoint, signedTable, h, Vector.map_map, Function.comp]
+
+private theorem addPackedPrepared_eq (p : Coordinates) (table : Vector Prepared 8)
+    (phi negative : Bool) (digit : UInt64) :
+    addPackedPrepared p table phi negative digit =
+      addPreparedDigit p table phi negative (decodeDigit .width5 digit) := by
+  unfold addPackedPrepared decodeDigit
+  split <;> rfl
+
+-- The single-step chain models each grouped doubling.
+
+private noncomputable def packedChainSingle (window : Window) (table : Vector Prepared 8)
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
+    Nat → UInt64 → UInt64 → UInt64 → UInt64 →
+      UInt64 → UInt64 → UInt64 → UInt64 → Coordinates
+  | 0, _, _, _, _, _, _, _, _ => Coords.infinity
+  | fuel + 1, xa0, xa1, xb0, xb1, xc0, xc1, xd0, xd1 =>
+    let ⟨al,ah,da⟩ := recodeRaw .width5 xa0 xa1
+    let ⟨bl,bh,db⟩ := recodeRaw .width5 xb0 xb1
+    let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
+    let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
+    let rest := packedChainSingle window table pn qn rt st fuel al ah bl bh cl ch dl dh
+    let acc := double rest
+    let acc := addPackedPrepared acc table false pn da
+    let acc := addPackedPrepared acc table true qn db
+    addPacked (addPacked acc window rt dc) window st dd
+
+private theorem packedChainSingle_eq (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
+    (rt st : Vector Coordinates window.entries) (fuel : Nat) (a b c d : WordPair) :
+    packedChainSingle window table pn qn rt st fuel a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
+      preparedChain window table pn qn rt st fuel a b c d := by
+  induction fuel generalizing a b c d with
+  | zero => rfl
+  | succ fuel ih =>
+    have ha := recodeRaw_eq .width5 a
+    have hb := recodeRaw_eq .width5 b
+    have hc := recodeRaw_eq window c
+    have hd := recodeRaw_eq window d
+    dsimp only at ha hb hc hd
+    simp only [packedChainSingle, preparedChain, addPacked_eq]
+    erw [addPackedPrepared_eq, addPackedPrepared_eq]
+    rw [ha.1, ha.2.1, hb.1, hb.2.1, hc.1, hc.2.1, hd.1, hd.2.1,
+      ha.2.2, hb.2.2, hc.2.2, hd.2.2]
+    erw [ih]
+
+private theorem packedChain_even (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
+    (rt st : Vector Coordinates window.entries) (n : Nat)
+    (a b c d : Recoded) (h : ((a.lo ||| b.lo ||| c.lo ||| d.lo) &&& 1) == 0) :
+    packedChainSingle window table pn qn rt st (n + 1) a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
+      double (packedChainSingle window table pn qn rt st n
+        ((a.lo >>> 1) + (a.hi <<< 63)) (a.hi >>> 1)
+        ((b.lo >>> 1) + (b.hi <<< 63)) (b.hi >>> 1)
+        ((c.lo >>> 1) + (c.hi <<< 63)) (c.hi >>> 1)
+        ((d.lo >>> 1) + (d.hi <<< 63)) (d.hi >>> 1)) := by
+  simp only [beq_iff_eq, and_distrib, UInt64.or_eq_zero_iff] at h
+  obtain ⟨⟨⟨ha, hb⟩, hc⟩, hd⟩ := h
+  rw [packedChainSingle]
+  simp only [recodeRaw_even .width5 _ _ ha, recodeRaw_even .width5 _ _ hb,
+    recodeRaw_even window _ _ hc, recodeRaw_even window _ _ hd, addPackedPrepared,
+    addPacked, beq_self_eq_true, ↓reduceIte]
+
+private theorem packedChain_eq_single (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
+    (rt st : Vector Coordinates window.entries) (fuel : Nat)
+    (a0 a1 b0 b1 c0 c1 d0 d1 : UInt64) :
+    packedChain window table pn qn rt st fuel a0 a1 b0 b1 c0 c1 d0 d1 =
+      packedChainSingle window table pn qn rt st fuel a0 a1 b0 b1 c0 c1 d0 d1 := by
+  induction fuel using Nat.twoStepInduction generalizing a0 a1 b0 b1 c0 c1 d0 d1 with
+  | zero => rfl
+  | one => rfl
+  | more n ih0 ih1 =>
+    rw [packedChain, packedChainSingle]
+    generalize recodeRaw .width5 a0 a1 = a
+    generalize recodeRaw .width5 b0 b1 = b
+    generalize recodeRaw window c0 c1 = c
+    generalize recodeRaw window d0 d1 = d
+    cases a with | mk al ah da =>
+      cases b with | mk bl bh db =>
+        cases c with | mk cl ch dc =>
+          cases d with | mk dl dh dd =>
+            dsimp only
+            split
+            · rename_i h
+              rw [ih0, packedChain_even window table pn qn rt st n
+                ⟨al, ah, da⟩ ⟨bl, bh, db⟩ ⟨cl, ch, dc⟩ ⟨dl, dh, dd⟩ h]
+              rfl
+            · rw [ih1]
+
+private theorem collectOdd_step (p q : Coordinates) (n : Nat) :
+    let step := coAdd p q
+    let rest := collectOdd step.1 step.2.1 n
+    let d := rest.2 * step.2.2
+    collectOdd p q (n + 1) =
+      (⟨scaleNumerators d p :: rest.1.val, congrArg Nat.succ rest.1.property⟩, d) := by
+  rw [collectOdd]
+
+private abbrev CollectOddValid (more : Nat) (Q : curve.Point) : Prop :=
+  ∀ {z : Montgomery} {p q : Coordinates} {P : curve.Point},
+    z ≠ 0 → p.z = 1 → q.z = 1 →
+    Represents (restoreZ z p) P → Represents (restoreZ z q) Q →
+    (collectOdd p q more).2 ≠ 0 → ∀ (i : Nat) (entry : Coordinates),
+      (collectOdd p q more).1.val[i]? = some entry →
+      entry.z = 1 ∧ Represents (restoreZ ((collectOdd p q more).2 * z) entry) (P + i • Q)
+
+private theorem collectOdd_zero_spec (Q : curve.Point) : CollectOddValid 0 Q := by
+  intro z p q P hz hpz hqz hp hq hf i entry hentry
+  cases i with
+  | zero =>
+    simp only [collectOdd, List.getElem?_cons_zero, Option.some.injEq] at hentry
+    subst entry
+    change p.z = 1 ∧ Represents (restoreZ ((1 : Montgomery) * z) p) (P + (0 : Nat) • Q)
+    rw [montgomery_one_mul, zero_nsmul, add_zero]
+    exact ⟨hpz, hp⟩
+  | succ i =>
+    simp only [collectOdd, List.getElem?_cons_succ, List.getElem?_nil] at hentry
+    cases hentry
+
+private theorem collectOdd_succ_spec
+    (more : Nat) (Q : curve.Point) (ih : CollectOddValid more Q) :
+    CollectOddValid (more + 1) Q := by
+  intro z p q P hz hpz hqz hp hq hf i entry hentry
+  generalize hstep : coAdd p q = step
+  rcases step with ⟨p', q', h⟩
+  generalize hrest : collectOdd p' q' more = rest
+  let d := rest.2 * h
+  have hout : collectOdd p q (more + 1) =
+      (⟨scaleNumerators d p :: rest.1.val, congrArg Nat.succ rest.1.property⟩, d) := by
+    have ho := collectOdd_step p q more
+    dsimp only at ho
+    rw [hstep] at ho
+    exact ho.trans (by rw [hrest])
+  have hden : (collectOdd p q (more + 1)).2 = d := congrArg Prod.snd hout
+  have hlook (j : Nat) :
+      (collectOdd p q (more+1)).1.val[j]? = (scaleNumerators d p :: rest.1.val)[j]? :=
+    congrArg (fun o => o.1.val[j]?) hout
+  have hd : d ≠ 0 := hden ▸ hf
+  rw [hden]
+  have hf' := @table_factors_ne_zero rest.2 h hd
+  cases i with
+  | zero =>
+    have hlookup : (scaleNumerators d p :: rest.1.val)[0]? = some (scaleNumerators d p) :=
+      List.getElem?_cons_zero
+    have he : scaleNumerators d p = entry := Option.some.inj
+      ((hlookup.symm.trans (hlook 0).symm).trans hentry)
+    rw [zero_nsmul, add_zero]
+    exact @collectOdd_prepend_spec d z p entry P hd hpz hp he
+  | succ i =>
+    have ha : (coAdd p q).2.2 ≠ 0 := by rw [hstep]; exact hf'.2
+    have hh := @coAdd_spec z p q P Q hz hpz hqz hp hq ha
+    rw [hstep] at hh
+    have hp1 : p'.z = 1 := by
+      have h := coAdd_unit_first p q
+      rw [hstep] at h
+      exact h
+    have hq1 : q'.z = 1 := by
+      have h := coAdd_unit_second p q
+      rw [hstep] at h
+      exact h
+    have hf0 : (collectOdd p' q' more).2 ≠ 0 := by rw [hrest]; exact hf'.1
+    have hentry' : (collectOdd p' q' more).1.val[i]? = some entry := by
+      rw [hrest]
+      exact List.getElem?_cons_succ.symm.trans ((hlook (i+1)).symm.trans hentry)
+    have hrec := @ih (h*z) p' q' (P+Q) (@table_mul_ne_zero h z hf'.2 hz)
+      hp1 hq1 hh.1 hh.2 hf0 i entry hentry'
+    rw [hrest] at hrec
+    rw [show d*z = rest.2*(h*z) from montgomery_mul_assoc _ _ _, succ_nsmul]
+    have hgroup : (P+Q)+i • Q = P+(i • Q+Q) := by
+      rw [add_assoc, add_comm Q (i • Q)]
+    rw [← hgroup]
+    exact hrec
+
+private theorem collectOdd_valid
+    (more : Nat) (Q : curve.Point) : CollectOddValid more Q := by
+  induction more with
+  | zero => exact collectOdd_zero_spec Q
+  | succ n ih => exact collectOdd_succ_spec n Q ih
+
+private theorem collectOdd_spec
+    (more : Nat) {z : Montgomery} {p q : Coordinates}
+    {P Q : curve.Point} (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
+    (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q)
+    (hf : (collectOdd p q more).2 ≠ 0)
+    (i : Nat) (hi : i < (collectOdd p q more).1.val.length) :
+    let out := collectOdd p q more
+    let entry := out.1.val[i]'hi
+    entry.z = 1 ∧ Represents (restoreZ (out.2 * z) entry) (P + i • Q) :=
+  @collectOdd_valid more Q z p q P hz hpz hqz hp hq hf i _
+    (List.getElem?_eq_getElem hi)
+
+private theorem commonTable_scale (p : Coordinates) :
+    let d := double p
+    let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
+    let q' : Coordinates := { d with z := 1 }
+    (commonTable p).2 = (collectOdd p' q' 7).2 * d.z :=
+  rfl
+
+private theorem commonTable_array (p : Coordinates) :
+    let d := double p
+    let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
+    let q' : Coordinates := { d with z := 1 }
+    (commonTable p).1.toArray = (collectOdd p' q' 7).1.val.toArray :=
+  rfl
+
+private theorem collectOdd_vector_spec
+    (more : Nat) {z : Montgomery} {p q : Coordinates}
+    {P Q : curve.Point} (hz : z ≠ 0) (hpz : p.z = 1) (hqz : q.z = 1)
+    (hp : Represents (restoreZ z p) P) (hq : Represents (restoreZ z q) Q)
+    (hf : (collectOdd p q more).2 ≠ 0)
+    (table : Vector Coordinates (more + 1)) (den : Montgomery)
+    (harray : table.toArray = (collectOdd p q more).1.val.toArray)
+    (hden : den = (collectOdd p q more).2*z)
+    (i : Fin (more + 1)) :
+    table[i.val].z = 1 ∧ Represents (restoreZ den table[i.val]) (P + i.val • Q) := by
+  have hi : i.val < (collectOdd p q more).1.val.length := by
+    rw [(collectOdd p q more).1.property]
+    exact i.isLt
+  have hentry : table[i.val] = (collectOdd p q more).1.val[i.val]'hi := by
+    have hb : i.val < table.toArray.size := table.size_toArray.symm ▸ i.isLt
+    calc
+      _ = table.toArray[i.val]'hb := (Vector.getElem_toArray hb).symm
+      _ = _ := by simp only [harray, List.getElem_toArray]
+  rw [hden, hentry]
+  exact @collectOdd_spec more z p q P Q hz hpz hqz hp hq hf i.val hi
+
+private theorem commonTable_spec_with_double
+    {p d : Coordinates} {P : curve.Point} (hpz : p.z = 1)
+    (hp : Represents p P) (hd : Represents d (P + P))
+    (table : Vector Coordinates 8) (den : Montgomery) (hz : den ≠ 0)
+    (hden :
+      den = (collectOdd { scaleNumerators d.z p with z := 1 } {d with z := 1} 7).2 * d.z)
+    (harray :
+      table.toArray =
+        (collectOdd { scaleNumerators d.z p with z := 1 } {d with z := 1} 7).1.val.toArray) :
+    ∀ i : Fin 8, table[i.val].z = 1 ∧
+      Represents (restoreZ den table[i.val]) ((2*i.val+1) • P) := by
+  let p' : Coordinates := { scaleNumerators d.z p with z := 1 }
+  let q' : Coordinates := { d with z := 1 }
+  let out := collectOdd p' q' 7
+  have hnonzero : out.2*d.z ≠ 0 :=
+    Eq.mp (congrArg (fun w : Montgomery => w ≠ 0) hden) hz
+  have hz' := @table_factors_ne_zero out.2 d.z hnonzero
+  have h1 : Represents (restoreZ d.z p') P :=
+    @commonTable_seed_first p P hpz hp d.z hz'.2
+  have h2 : Represents (restoreZ d.z q') (P + P) := @commonTable_seed_second d (P + P) hd
+  intro i
+  have hgroup : ((2*i.val+1) • P) = P + i.val • (P + P) := by
+    rw [Nat.mul_comm 2 i.val, add_nsmul, mul_nsmul, one_nsmul, two_nsmul, add_comm, nsmul_add]
+  have h := @collectOdd_vector_spec 7 d.z p' q' P (P+P)
+    hz'.2 rfl rfl h1 h2 hz'.1 table den harray hden i
+  exact ⟨h.1, Eq.mpr (congrArg (fun P' => Represents (restoreZ den table[i.val]) P')
+    hgroup) h.2⟩
+
+private theorem commonTable_spec
+    {p : Coordinates} {P : curve.Point} (hpz : p.z = 1)
+    (hp : Represents p P) (hz : (commonTable p).2 ≠ 0) :
+    ∀ i : Fin 8, (commonTable p).1[i.val].z = 1 ∧
+      Represents (restoreZ (commonTable p).2 (commonTable p).1[i.val]) ((2*i.val+1) • P) := by
+  have hd := @fastDouble_spec p hp.1
+  have hdRep : Represents (double p) (P+P) := ⟨hd.1, hd.2.trans (congrArg₂ (·+·) hp.2 hp.2)⟩
+  exact @commonTable_spec_with_double p (double p) P hpz hp hdRep
+    (commonTable p).1 (commonTable p).2 hz (commonTable_scale p) (commonTable_array p)
+
+private theorem addCommon_eq_selected (p t : Coordinates) (phi neg : Bool) :
+    addCommon p
+      (if phi then (prepareCommon t).phiX else (prepareCommon t).point.x)
+      (if neg then (0 : Montgomery) - (prepareCommon t).point.y
+        else (prepareCommon t).point.y) =
+    addCommon p (signedPoint neg (selectedPoint phi t)).x
+      (signedPoint neg (selectedPoint phi t)).y := by
+  cases t
+  cases phi <;> cases neg <;>
+    simp only [prepareCommon, signedPoint, selectedPoint, endomorphism, scaleX, negate,
+      Bool.false_eq_true, ↓reduceIte]
+
+private theorem addPackedCommon_agrees
+    {z : Montgomery} (hz : z ≠ 0) {t : Vector Coordinates 8}
+    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
+    {p q : Coordinates} (hp : PointAgreement (restoreZ z p) q)
+    (phi neg : Bool) (digit : UInt64) :
+    PointAgreement (restoreZ z (addPackedCommon p (t.map prepareCommon) phi neg digit))
+      (addPackedPrepared q ((t.map (restoreZ z)).map prepare) phi neg digit) := by
+  by_cases hd : digit = 0
+  · simpa only [addPackedCommon, addPackedPrepared, beq_iff_eq, hd, ↓reduceIte] using hp
+  · let i : Fin 8 := packedIndex .width5 digit
+    let flip : Bool := neg != (digit >= Window.pivot .width5)
+    let v := signedPoint flip (selectedPoint phi t[i.val])
+    have hvz : v.z = 1 := (selected_signed_z t[i.val] phi flip).trans (ht i).1
+    have hv : OnCurve (restoreZ z v) := by
+      change OnCurve (restoreZ z (signedPoint flip (selectedPoint phi t[i.val])))
+      rw [restoreZ_selected_signed]
+      exact selected_signed_onCurve (ht i).2 phi flip
+    have ho := @addCommon_spec p v (groupValue q) (groupValue (restoreZ z v)) z
+      hz hvz ⟨hp.1, hp.2.2⟩ ⟨hv, rfl⟩
+    have hr := @add_spec q (restoreZ z v) hp.2.1 hv
+    simp only [addPackedCommon, addPackedPrepared, beq_iff_eq, hd, ↓reduceIte, Vector.getElem_map]
+    rw [addCommon_eq_selected, addPrepared_eq, ← restoreZ_selected_signed]
+    exact PointAgreement.of_represents ho hr
+
+private theorem packedChain_even_step (window : Window) (table : Vector Prepared 8) (pn qn : Bool)
+    (rt st : Vector Coordinates window.entries) (n : Nat)
+    (a b c d : WordPair) (h : ((a.lo ||| b.lo ||| c.lo ||| d.lo) &&& 1) == 0) :
+    packedChain window table pn qn rt st (n + 1) a.lo a.hi b.lo b.hi c.lo c.hi d.lo d.hi =
+      double (packedChain window table pn qn rt st n
+        ((a.lo >>> 1) + (a.hi <<< 63)) (a.hi >>> 1)
+        ((b.lo >>> 1) + (b.hi <<< 63)) (b.hi >>> 1)
+        ((c.lo >>> 1) + (c.hi <<< 63)) (c.hi >>> 1)
+        ((d.lo >>> 1) + (d.hi <<< 63)) (d.hi >>> 1)) := by
+  simp only [packedChain_eq_single]
+  exact packedChain_even window table pn qn rt st n
+    ⟨a.lo, a.hi, 0⟩ ⟨b.lo, b.hi, 0⟩ ⟨c.lo, c.hi, 0⟩ ⟨d.lo, d.hi, 0⟩ h
+
+private theorem packedCommonChain_agrees
+    (window : Window) {z : Montgomery} (hz : z ≠ 0)
+    {t : Vector Coordinates 8}
+    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
+    (pn qn : Bool) (rt st : Vector Coordinates window.entries)
+    (hr : ∀ i : Fin window.entries, OnCurve rt[i.val])
+    (hs : ∀ i : Fin window.entries, OnCurve st[i.val])
+    (fuel : Nat) (a0 a1 b0 b1 c0 c1 d0 d1 : UInt64) :
+    PointAgreement
+      (restoreZ z (packedCommonChain window z (t.map prepareCommon) pn qn rt st fuel
+        a0 a1 b0 b1 c0 c1 d0 d1))
+      (packedChain window ((t.map (restoreZ z)).map prepare) pn qn rt st fuel
+        a0 a1 b0 b1 c0 c1 d0 d1) := by
+  have hinf : PointAgreement (Coords.infinity : Coordinates) Coords.infinity :=
+    ⟨infinity_spec.1, infinity_spec.1, rfl⟩
+  have hdouble {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
+      PointAgreement (restoreZ z (double p)) (double q) := by
+    rw [restore_double]
+    exact PointAgreement.double h
+  have double_z_zero {p : Coordinates} (hp : p.z = 0) : (double p).z = 0 := by
+    change p.y * p.z = 0
+    apply toFin_embedding.injective
+    rw [toFin_embedding.map_mul, hp, toFin_embedding.map_zero, mul_zero]
+  have hskip {p p' q : Coordinates} (h : PointAgreement (restoreZ z p') q)
+      (hz' : p.z = 0 → p'.z = 0) :
+      PointAgreement
+        (restoreZ z (if p.z.raw.w0 == 0 && decide (p.z = 0) then Coords.infinity else p')) q := by
+    split
+    · next htest =>
+      have htest' : (p.z.raw.w0 == 0) ∧ p.z = 0 := by
+        simpa only [Bool.and_eq_true, decide_eq_true_eq] using htest
+      have hp := htest'.2
+      have hzero := groupValue_of_z_zero ((restore_zero_iff p' hz).2 (hz' hp))
+      rw [restore_infinity]
+      exact ⟨infinity_spec.1, h.2.1, infinity_spec.2.trans (hzero.symm.trans h.2.2)⟩
+    · exact h
+  have hsingle {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
+      PointAgreement (restoreZ z (doubleUnlessInfinity double p)) (double q) :=
+    hskip (hdouble h) double_z_zero
+  have htwice {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
+      PointAgreement (restoreZ z (doubleUnlessInfinity doubleTwice p)) (double (double q)) :=
+    hskip (hdouble (hdouble h)) (fun hp => double_z_zero (double_z_zero hp))
+  have hthrice {p q : Coordinates} (h : PointAgreement (restoreZ z p) q) :
+      PointAgreement (restoreZ z (doubleUnlessInfinity doubleThrice p))
+        (double (double (double q))) :=
+    hskip (hdouble (hdouble (hdouble h)))
+      (fun hp => double_z_zero (double_z_zero (double_z_zero hp)))
+  have hstart : PointAgreement (restoreZ z Coords.infinity) (double Coords.infinity) := by
+    rw [restore_infinity]
+    obtain ⟨hc, hv⟩ := fastDouble_spec infinity_spec.1
+    exact ⟨infinity_spec.1, hc, by rw [hv, infinity_spec.2, add_zero]⟩
+  have hadd {p q : Coordinates} (h : PointAgreement (restoreZ z p) q)
+      (da db dc dd : UInt64) :
+      PointAgreement
+        (restoreZ z (addPackedFixed z
+          (addPackedFixed z (addPackedCommon (addPackedCommon p (t.map prepareCommon) false pn da)
+            (t.map prepareCommon) true qn db) window rt dc) window st dd))
+        (addPacked (addPacked (addPackedPrepared
+          (addPackedPrepared q ((t.map (restoreZ z)).map prepare) false pn da)
+          ((t.map (restoreZ z)).map prepare) true qn db) window rt dc) window st dd) :=
+    addPackedFixed_agrees hz window hs
+      (addPackedFixed_agrees hz window hr
+        (addPackedCommon_agrees hz ht
+          (addPackedCommon_agrees hz ht h false pn da) true qn db) dc) dd
+  induction fuel using Nat.strongRecOn generalizing a0 a1 b0 b1 c0 c1 d0 d1 with
+  | _ fuel ih =>
+    cases fuel with
+    | zero =>
+      simpa only [packedCommonChain, packedChain, restore_infinity] using hinf
+    | succ fuel =>
+      cases ha : recodeRaw .width5 a0 a1 with | mk al ah da =>
+        cases hb : recodeRaw .width5 b0 b1 with | mk bl bh db =>
+          cases hc : recodeRaw window c0 c1 with | mk cl ch dc =>
+            cases hd : recodeRaw window d0 d1 with | mk dl dh dd =>
+              rw [packedCommonChain, packedChain]
+              simp only [ha, hb, hc, hd]
+              apply hadd
+              cases fuel with
+              | zero => exact hstart
+              | succ next =>
+                by_cases ht : decide (0 < next) && (((al ||| bl ||| cl ||| dl) &&& 3) == 0)
+                · have ht' : 0 < next ∧ ((al ||| bl ||| cl ||| dl) &&& 3) == 0 := by
+                    simpa only [Bool.and_eq_true, decide_eq_true_eq] using ht
+                  obtain ⟨he, he'⟩ := packedLowTwoZero al ah bl bh cl ch dl dh ht'.2
+                  cases next with
+                  | zero => omega
+                  | succ n =>
+                    simp only [ite_eq_left ht, ite_eq_left he,
+                      doubleTwice_eq, Nat.succ_sub_one]
+                    have step := packedChain_even_step window ((t.map (restoreZ z)).map prepare)
+                      pn qn rt st n
+                      ⟨(al >>> 1) + (ah <<< 63), ah >>> 1⟩
+                      ⟨(bl >>> 1) + (bh <<< 63), bh >>> 1⟩
+                      ⟨(cl >>> 1) + (ch <<< 63), ch >>> 1⟩
+                      ⟨(dl >>> 1) + (dh <<< 63), dh >>> 1⟩ he'
+                    rw [step]
+                    simp only [shiftWords_two, shiftHigh_two]
+                    exact hthrice (ih n (by omega) _ _ _ _ _ _ _ _)
+                · by_cases he : ((al ||| bl ||| cl ||| dl) &&& 1) == 0
+                  · simp only [ite_eq_right ht, ite_eq_left he, doubleTwice_eq]
+                    exact htwice (ih next (by omega) _ _ _ _ _ _ _ _)
+                  · simp only [ite_eq_right ht, ite_eq_right he]
+                    exact hsingle (ih (next + 1) (by omega) _ _ _ _ _ _ _ _)
+
+private theorem chain_spec
+    (window : Window) (fuel : Nat) (p q : Stream 8) (r s : Stream window.entries)
+    (P Q R S : curve.Point) (hp : TableSpec p.table P) (hq : TableSpec q.table Q)
+    (hr : TableSpec r.table R) (hs : TableSpec s.table S)
+    (hpb : p.scalar.toNat ≤ scalarBound fuel) (hqb : q.scalar.toNat ≤ scalarBound fuel)
+    (hrb : r.scalar.toNat ≤ scalarBound fuel) (hsb : s.scalar.toNat ≤ scalarBound fuel) :
+    Represents (chainFor window fuel p q r s)
+      (p.scalar.toNat • P + q.scalar.toNat • Q + r.scalar.toNat • R + s.scalar.toNat • S) := by
+  induction fuel generalizing p q r s with
+  | zero =>
+    have hp0 : p.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hpb
+    have hq0 : q.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hqb
+    have hr0 : r.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hrb
+    have hs0 : s.scalar.toNat = 0 := Nat.eq_zero_of_le_zero hsb
+    simpa only [chainFor, chainWordsFor, hp0, hq0, hr0, hs0, zero_nsmul, add_zero]
+      using infinity_spec
+  | succ fuel ih =>
+    let a := recodeWords .width5 p.scalar
+    let b := recodeWords .width5 q.scalar
+    let c := recodeWords window r.scalar
+    let d := recodeWords window s.scalar
+    have h := ih ⟨a.1, p.table⟩ ⟨b.1, q.table⟩ ⟨c.1, r.table⟩ ⟨d.1, s.table⟩ hp hq hr hs
+      (by simpa only [Stream.scalar, a, recodeWords_scalar] using recode_bound .width5 _ _ hpb)
+      (by simpa only [Stream.scalar, b, recodeWords_scalar] using recode_bound .width5 _ _ hqb)
+      (by simpa only [Stream.scalar, c, recodeWords_scalar] using recode_bound window _ _ hrb)
+      (by simpa only [Stream.scalar, d, recodeWords_scalar] using recode_bound window _ _ hsb)
+    let V := a.1.toNat • P + b.1.toNat • Q + c.1.toNat • R + d.1.toNat • S
+    have hd := fastDouble_spec h.1
+    have hdbl : Represents (double _) (V + V) := ⟨hd.1, by rw [hd.2, h.2]⟩
+    have h1 := addDigit_spec hdbl hp a.2
+    have h2 := addDigit_spec h1 hq b.2
+    have h3 := addDigit_spec h2 hr c.2
+    have h4 := addDigit_spec h3 hs d.2
+    have he :
+        V + V + digitValue a.2 • P + digitValue b.2 • Q +
+            digitValue c.2 • R + digitValue d.2 • S =
+          p.scalar.toNat • P + q.scalar.toNat • Q + r.scalar.toNat • R + s.scalar.toNat • S := by
+      rw [recode_smul .width5 p.scalar.toNat P, recode_smul .width5 q.scalar.toNat Q,
+        recode_smul window r.scalar.toNat R, recode_smul window s.scalar.toNat S]
+      dsimp only [V, a, b, c, d]
+      simp only [recodeWords_scalar, recodeWords_digit]
+      abel
+    have : Represents (chainFor window (fuel + 1) p q r s) _ := h4
+    exact he ▸ this
+private theorem packedRecovery_represents {t : Vector Coordinates 8} {P : curve.Point}
+    (ht : TableSpec t P) (k l : Fn) :
+    let (a, b) := splitScalar k.val
+    let aw := WordPair.ofNat a.natAbs
+    let bw := WordPair.ofNat b.natAbs
+    let rw := WordPair.ofNat (l.val % 2^128)
+    let sw := WordPair.ofNat (l.val / 2^128)
+    Represents
+      (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
+        129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi)
+      (k.val • P + l.val • Point.toPoint .generator) := by
+  let a := (splitScalar k.val).1
+  let b := (splitScalar k.val).2
+  let aw := WordPair.ofNat a.natAbs
+  let bw := WordPair.ofNat b.natAbs
+  let rw := WordPair.ofNat (l.val % 2^128)
+  let sw := WordPair.ofNat (l.val / 2^128)
+  change Represents
+    (packedChain .width14 (t.map prepare) (a < 0) (b < 0) generatorTable14 generatorHighTable14
+      129 aw.lo aw.hi bw.lo bw.hi rw.lo rw.hi sw.lo sw.hi) _
+  have hb := splitScalar_bound k.val
+  have hm : l.val % 2^128 < 2^128 := Nat.mod_lt _ (by decide)
+  have hq : l.val / 2^128 < 2^128 :=
+    Nat.div_lt_of_lt_mul (Nat.lt_trans l.isLt (by decide))
+  have haNat : aw.toNat = a.natAbs := WordPair.toNat_ofNat _ hb.1
+  have hbNat : bw.toNat = b.natAbs := WordPair.toNat_ofNat _ hb.2
+  have hmNat : rw.toNat = l.val % 2^128 := WordPair.toNat_ofNat _ hm
+  have hqNat : sw.toNat = l.val / 2^128 := WordPair.toNat_ofNat _ hq
+  have h := chain_spec .width14 129
+    ⟨aw, signedTable a t⟩
+    ⟨bw, signedTable b (t.map endomorphism)⟩
+    ⟨rw, generatorTable14⟩
+    ⟨sw, generatorHighTable14⟩ _ _ _ _
+    (signedTable_spec ht a)
+    (signedTable_spec (endomorphismTable_spec ht) b)
+    generatorTable_spec generatorHighTable_spec
+    (by simp only [haNat]; exact hb.1.le)
+    (by simp only [hbNat]; exact hb.2.le)
+    (by simp only [hmNat]; exact hm.le)
+    (by simp only [hqNat]; exact hq.le)
+  dsimp only [Stream.scalar] at h
+  have hv := h.2
+  rw [haNat, hbNat, hmNat, hqNat, signed_smul, signed_smul, add_assoc (_ + _),
+    generator_split_smul] at hv
+  have he := splitScalar_smul k.val P
+  rw [natCast_zsmul, smul_eq_val_nsmul, ZMod.val_natCast_of_lt k.isLt] at he
+  rw [he] at hv
+  erw [packedChain_eq_single, packedChainSingle_eq, preparedChain_eq,
+    selectedTable_sgn, selectedTable_sgn]
+  exact ⟨h.1, hv⟩
+
+private theorem selectedTable_component_spec
+    {t : Vector Coordinates 8} {P : curve.Point} (ht : TableSpec t P) (phi neg : Bool) :
+    TableSpec (selectedTable t phi neg)
+      (if neg then -(if phi then lambda.val • P else P) else
+        (if phi then lambda.val • P else P)) := by
+  let r : Int := if neg then -1 else 0
+  have hsgn : decide (r < 0) = neg := by cases neg <;> rfl
+  have ht' : TableSpec (if phi then t.map endomorphism else t)
+      (if phi then lambda.val • P else P) := by
+    cases phi
+    · exact ht
+    · exact endomorphismTable_spec ht
+  have htable := selectedTable_sgn t phi r
+  rw [hsgn] at htable
+  rw [htable]
+  have h := signedTable_spec ht' r
+  cases neg <;> simpa [r] using h
+
+private theorem packedComponents_represents {t : Vector Coordinates 8} {P : curve.Point}
+    (ht : TableSpec t P) (a b : WordPair × Bool) (c d : WordPair) :
+    Represents
+      (packedChain .width14 (t.map prepare) a.2 b.2 generatorTable14 generatorHighTable14
+        129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi)
+      (componentValue a • P + componentValue b • (lambda.val • P) +
+        c.toNat • Point.toPoint .generator +
+          d.toNat • ((2^128 : Nat) • Point.toPoint .generator)) := by
+  have ha : TableSpec (selectedTable t false a.2) (if a.2 then -P else P) :=
+    selectedTable_component_spec ht false a.2
+  have hb : TableSpec (selectedTable t true b.2)
+      (if b.2 then -(lambda.val • P) else lambda.val • P) :=
+    selectedTable_component_spec ht true b.2
+  have h := chain_spec .width14 129 ⟨a.1, selectedTable t false a.2⟩
+    ⟨b.1, selectedTable t true b.2⟩ ⟨c, generatorTable14⟩ ⟨d, generatorHighTable14⟩
+    _ _ _ _ ha hb generatorTable_spec generatorHighTable_spec
+    (wordPair_bound a.1) (wordPair_bound b.1) (wordPair_bound c) (wordPair_bound d)
+  erw [packedChain_eq_single, packedChainSingle_eq, preparedChain_eq]
+  simpa only [chainFor, Stream.scalar, component_nsmul] using h
+
+private theorem packedCommonComponents_represents {t : Vector Coordinates 8}
+    {z : Montgomery} {P : curve.Point} (hz : z ≠ 0)
+    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
+    (hv : TableSpec (t.map (restoreZ z)) P) (a b : WordPair × Bool) (c d : WordPair) :
+    Represents
+      (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
+        generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi))
+      (componentValue a • P + componentValue b • (lambda.val • P) +
+        c.toNat • Point.toPoint .generator +
+          d.toNat • ((2^128 : Nat) • Point.toPoint .generator)) := by
+  have h := packedCommonChain_agrees .width14 hz ht a.2 b.2 generatorTable14 generatorHighTable14
+    (fun i => (generatorTable_spec i).1) (fun i => (generatorHighTable_spec i).1)
+    129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi
+  have hRef := packedComponents_represents hv a b c d
+  exact ⟨h.1, h.2.2.trans hRef.2⟩
+
+private theorem packedApproxRawComponents_represents
+    {t : Vector Coordinates 8} {z : Montgomery} {P : curve.Point} (hz : z ≠ 0)
+    (ht : ∀ i : Fin 8, t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]))
+    (hv : TableSpec (t.map (restoreZ z)) P) (k l : Montgomery.Raw) (a b : WordPair × Bool)
+    (hVar : componentValue a • P + componentValue b • (lambda.val • P) = k.val • P) :
+    Represents (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
+      generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
+      l.w0 l.w1 l.w2 l.w3)) (k.val • P + l.val • Point.toPoint .generator) := by
+  let c : WordPair := ⟨l.w0,l.w1⟩
+  let d : WordPair := ⟨l.w2,l.w3⟩
+  let G := Point.toPoint .generator
+  have hFixed : c.toNat • G + d.toNat • ((2^128 : Nat) • G) = l.val • G := by
+    have h := raw_fixed_words l
+    change c.toNat = l.val % 2^128 ∧ d.toNat = l.val / 2^128 at h
+    rw [h.1,h.2,generator_split_smul]
+  have hGroup : componentValue a • P + componentValue b • (lambda.val • P) +
+      c.toNat • G + d.toNat • ((2^128 : Nat) • G) = k.val • P + l.val • G := by
+    rw [hVar, add_assoc, hFixed]
+  change Represents (restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
+    generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi c.lo c.hi d.lo d.hi))
+      (k.val • P + l.val • G)
+  rw [← hGroup]
+  exact packedCommonComponents_represents hz ht hv a b c d
+
 private theorem splitScalarWords_smul_raw
     (k : Montgomery.Raw) (hk : k.val < Fn.modulus) (P : curve.Point) :
     componentValue (splitScalarWords k).1 • P +
@@ -3820,6 +4708,57 @@ private theorem rawOfNat_val_of_lt (k : Fn) : (Montgomery.rawOfNat k.val).val = 
   Montgomery.rawOfNat_val _ (Nat.lt_trans k.isLt (by decide))
 
 section
+attribute [local irreducible] splitScalarWords commonTable
+
+/-- On an affine form with a nonzero table denominator, the common chain runs. -/
+private theorem mulCommon_affine_eq
+    (k l : Fn) (p : Coordinates) {t : Vector Coordinates 8}
+    {z : Montgomery} (hp : p.z = 1) (ht : commonTable p = (t,z)) (hz : z ≠ 0) :
+    let a := (splitScalarWords (Montgomery.rawOfNat k.val)).1
+    let b := (splitScalarWords (Montgomery.rawOfNat k.val)).2
+    let lw := Montgomery.rawOfNat l.val
+    mulCommon k p l =
+      restoreZ z (packedCommonChain .width14 z (t.map prepareCommon) a.2 b.2
+        generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
+        lw.w0 lw.w1 lw.w2 lw.w3) := by
+  dsimp only
+  rw [mulCommon, ite_eq_left hp, ht]
+  simp only [ite_eq_right hz]
+
+/-- The common chain computes `k P + l G` on a form of a point `P`, on every branch. -/
+private theorem mulCommon_represents
+    (k l : Fn) {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
+    Represents (mulCommon k p l) (k.val • P + l.val • Point.toPoint .generator) := by
+  have hFallback := fallback_represents k l hp
+  have hk := rawOfNat_val_of_lt k
+  have hl := rawOfNat_val_of_lt l
+  by_cases hpz : p.z = 1
+  · cases hTable : commonTable p with
+    | mk t z =>
+      by_cases hz : z = 0
+      · simpa only [mulCommon, ite_eq_left hpz, hTable, ite_eq_left hz] using hFallback
+      · have hzn : (commonTable p).2 ≠ 0 := by rw [hTable]; exact hz
+        have ht := commonTable_spec hpz hp hzn
+        rw [hTable] at ht
+        have ht' (i : Fin 8) : t[i.val].z = 1 ∧ OnCurve (restoreZ z t[i.val]) :=
+          ⟨(ht i).1, (ht i).2.1⟩
+        have htable : TableSpec (t.map (restoreZ z)) P := by
+          intro i
+          rw [Vector.getElem_map]
+          exact (ht i).2
+        rw [mulCommon_affine_eq k l p hpz hTable hz]
+        have h := packedApproxRawComponents_represents hz ht' htable
+          (Montgomery.rawOfNat k.val) (Montgomery.rawOfNat l.val)
+          (splitScalarWords (Montgomery.rawOfNat k.val)).1
+          (splitScalarWords (Montgomery.rawOfNat k.val)).2
+          (splitScalarWords_smul_raw (Montgomery.rawOfNat k.val) (by rw [hk]; exact k.isLt) P)
+        rw [hk, hl] at h
+        exact h
+  · simpa only [mulCommon, ite_eq_right hpz] using hFallback
+
+end
+
+section
 attribute [local irreducible] splitScalarWords commonJointTable
 
 /-- On the joint branch, the multiplication is the joint chain with its denominator restored. -/
@@ -3846,7 +4785,7 @@ private theorem mulProjective_joint_eq
 private theorem mulProjective_represents
     (k l : Fn) {p : Coordinates} {P : curve.Point} (hp : Represents p P) :
     Represents (mulProjective k p l) (k.val • P + l.val • Point.toPoint .generator) := by
-  have hFallback := fallback_represents k l hp
+  have hFallback := mulCommon_represents k l hp
   have hk := rawOfNat_val_of_lt k
   have hl := rawOfNat_val_of_lt l
   by_cases hpz : p.z = 1
@@ -3880,32 +4819,33 @@ private theorem mulProjective_represents
 end
 
 /-- The joint chain computes `k P + l G`, for a point `P` on the curve. -/
-private theorem toPoint_mul {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
-    (mul k p l).isOnCurve = true ∧
-      Point.toPoint (mul k p l) = k.val • Point.toPoint p + l.val • Point.toPoint .generator := by
+private theorem toPoint_mulAddGenerator {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
+    (mulAddGenerator k p l).isOnCurve = true ∧
+      Point.toPoint (mulAddGenerator k p l) =
+        k.val • Point.toPoint p + l.val • Point.toPoint .generator := by
   have h := mulProjective_represents k l (p := Point.toMontgomeryCoords p)
     (P := Point.toPoint p) (point_spec hp)
-  rw [mul, ofMontgomeryCoords_eq_read]
+  rw [mulAddGenerator, ofMontgomeryCoords_eq_read]
   have hs := Point.ofJacobian_spec h.1
   exact ⟨hs.1, hs.2.trans h.2⟩
 
-theorem isOnCurve_mul {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
-    (mul k p l).isOnCurve = true :=
-  (toPoint_mul hp).1
+theorem isOnCurve_mulAddGenerator {k l : Fn} {p : Point} (hp : p.isOnCurve = true) :
+    (mulAddGenerator k p l).isOnCurve = true :=
+  (toPoint_mulAddGenerator hp).1
 
 end MulAdd
 
 namespace Point
 
 /-- The shared chain of doublings, as a point. -/
-private abbrev chain (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
+private abbrev sharedChain (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
   ofJacobian (Jacobian.mulAdd 0 256 k.val (toJacobian p) l.val (toJacobian q))
 
 /-- The shared chain on Montgomery form is the shared chain on `Fp`, for every input. -/
 private theorem general_eq (k : Fn) (p : Point) (l : Fn) (q : Point) :
     ofMontgomeryCoords
         (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q)) =
-      chain k p l q := by
+      sharedChain k p l q := by
   rw [ofMontgomeryCoords_eq]
   have h := Jacobian.Coords.map_mulAdd toFin_embedding 0 256 k.val (toMontgomeryCoords p) l.val
     (toMontgomeryCoords q)
@@ -3913,10 +4853,10 @@ private theorem general_eq (k : Fn) (p : Point) (l : Fn) (q : Point) :
   exact congrArg (fun c => ofJacobian (Jacobian.ofCoords c)) h
 
 /-- On points of the curve, the shared chain lies on the curve and computes `k P + l Q`. -/
-private theorem chain_spec (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
+private theorem sharedChain_spec (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     (hq : q.isOnCurve = true) :
-    (chain k p l q).isOnCurve = true ∧
-      toPoint (chain k p l q) = k.val • toPoint p + l.val • toPoint q := by
+    (sharedChain k p l q).isOnCurve = true ∧
+      toPoint (sharedChain k p l q) = k.val • toPoint p + l.val • toPoint q := by
   have hJp := toJacobian_spec hp
   have hJq := toJacobian_spec hq
   have hon := Jacobian.onCurve_mulAdd (Jacobian.toZ_zero (m := Fp.modulus)) MulAdd.two_ne_zero 256
@@ -3929,9 +4869,9 @@ private theorem chain_spec (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
 
 /-- The joint chain, which the generator selects, gives the point of the shared chain. -/
 private theorem mul_eq_chain (k l : Fn) {p : Point} (hp : p.isOnCurve = true) :
-    MulAdd.mul k p l = chain k p l generator := by
-  have h := MulAdd.toPoint_mul (k := k) (l := l) hp
-  have hc := chain_spec k l hp isOnCurve_generator
+    MulAdd.mulAddGenerator k p l = sharedChain k p l generator := by
+  have h := MulAdd.toPoint_mulAddGenerator (k := k) (l := l) hp
+  have hc := sharedChain_spec k l hp isOnCurve_generator
   exact (toPoint_inj h.1 hc.1).mp (h.2.trans hc.2.symm)
 
 /-- `k P + l Q` is the shared chain of doublings on `Fp`, for every input.
@@ -3949,8 +4889,8 @@ theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
     · rename_i h
       obtain ⟨rfl, hq⟩ := h
       -- `l Q + k G` and `k G + l Q` are one point, by commutativity in the group.
-      have h1 := MulAdd.toPoint_mul (k := l) (l := k) hq
-      have h2 := chain_spec k l isOnCurve_generator hq
+      have h1 := MulAdd.toPoint_mulAddGenerator (k := l) (l := k) hq
+      have h2 := sharedChain_spec k l isOnCurve_generator hq
       refine (toPoint_inj h1.1 h2.1).mp (h1.2.trans (h2.2.trans ?_).symm)
       exact add_comm _ _
     · exact general_eq k p l q
@@ -3958,14 +4898,14 @@ theorem mulAdd_eq_jacobian (k : Fn) (p : Point) (l : Fn) (q : Point) :
 theorem isOnCurve_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     (hq : q.isOnCurve = true) : (mulAdd k p l q).isOnCurve = true := by
   rw [mulAdd_eq_jacobian]
-  exact (chain_spec k l hp hq).1
+  exact (sharedChain_spec k l hp hq).1
 
 /-- The shared chain computes `k P + l Q`, with the values of `k` and `l` below `n`. -/
 theorem toPoint_mulAdd (k l : Fn) {p q : Point} (hp : p.isOnCurve = true)
     (hq : q.isOnCurve = true) :
     toPoint (mulAdd k p l q) = k.val • toPoint p + l.val • toPoint q := by
   rw [mulAdd_eq_jacobian]
-  exact (chain_spec k l hp hq).2
+  exact (sharedChain_spec k l hp hq).2
 
 /-- On points of the curve, the shared chain gives the sum of the two products. -/
 theorem mulAdd_eq (k l : Fn) {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :

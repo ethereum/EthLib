@@ -13,8 +13,9 @@ Each inverse is the Euclidean inverse, for every input.
 
 The divsteps only propose a candidate.
 
-The check accepts a candidate whose product with the input is one, and in a prime field that
-candidate is the inverse.
+The check accepts a candidate whose product with the input is one.
+
+In a prime field, that candidate is the inverse.
 
 Any other candidate gives way to the Euclidean inverse.
 -/
@@ -59,9 +60,9 @@ theorem toFin_checkMontgomery (c : Option Montgomery) (a : Montgomery) :
         rw [← toFin_mul, h, toFin_one]
       have hz : Fp.toZMod (toFin b) * Fp.toZMod (toFin a) = 1 := by
         simpa only [map_mul, map_one] using congrArg Fp.toZMod hprod
+      have : Fact (Nat.Prime Fp.modulus) := ⟨Fp.modulus_prime⟩
       apply Fp.toZMod.injective
-      change Fp.toZMod (toFin b) = Fp.toZMod (toFin a).inv
-      rw [Fp.toZMod_inv]
+      rw [Fin.inverse_map Fp.toZMod (fun x => (ZMod.natCast_zmod_val (Fp.toZMod x)).symm)]
       exact eq_inv_of_mul_eq_one_left hz
     · exact toFin_ofFin _
 
@@ -88,5 +89,19 @@ theorem toFin_inv (a : Montgomery) : toFin a.inv = Fin.inverse (toFin a) :=
   Inverse.toFin_checkMontgomery _ a
 
 end Montgomery
+
+namespace Fp
+
+/-- The inverse is the Euclidean inverse, for every input. -/
+theorem inv_eq_inverse (a : Fp) : a.inv = Fin.inverse a := by
+  rw [inv, Montgomery.toFin_inv, Montgomery.toFin_ofFin]
+
+/-- The inverse is the field inverse, and it sends `0` to `0`. -/
+@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ := by
+  have : Fact (Nat.Prime modulus) := ⟨modulus_prime⟩
+  rw [inv_eq_inverse]
+  exact Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
+
+end Fp
 
 end EthLib.Cryptography.Secp256k1

@@ -20,7 +20,7 @@ namespace Montgomery
 
 /-- Apply a step `n` times, with the four words of each value as separate arguments.
 
-The words stay in registers between steps, so no value is allocated on the way. -/
+Passing the four words unboxed avoids allocating a value at each step. -/
 @[noinline, specialize step] def repeatWords (step : Montgomery → Montgomery) :
     Nat → (w0 w1 w2 w3 : UInt64) → (Raw.mk w0 w1 w2 w3).val < Fp.modulus → Montgomery
   | 0, w0, w1, w2, w3, h => ⟨⟨w0, w1, w2, w3⟩, h⟩

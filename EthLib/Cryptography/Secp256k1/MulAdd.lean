@@ -13,20 +13,31 @@ Both take `Q = G`, the generator, and then a faster method applies.
 
 The endomorphism `(x, y) -> (beta x, y)` acts on this curve as multiplication by `lambda`.
 
-Splitting the variable scalar in this basis gives two signed scalars below `2^128` in magnitude.
+`lambda` is a cube root of unity mod `n`.
+
+The pairs `(u, v)` with `u + lambda v = 0 mod n` form a lattice.
+
+Splitting the variable scalar along a short basis of it gives two signed components.
+
+Each is below `2^128` in magnitude.
 
 The generator scalar splits at bit 128, using `G` and `2^128 G`.
 
-All four products share one chain with signed digits and at most 129 doublings.
+All four products share one chain of 129 signed digits and at most 128 doublings.
 
 The fixed generator uses fourteen-bit windows with tables of 4096 odd multiples.
 
 For an affine variable point, a six-entry table shares one denominator.
 
-The two signed components select a joint digit and can use one addition.
+At each step the low bits of both components select one joint digit, so one addition serves both.
 
-Any other input takes the shared chain of doublings in Jacobian coordinates, which the
-multiplication of two arbitrary points uses too.
+A component too large for two signed words takes five-bit windows instead.
+
+Then eight odd multiples share one denominator.
+
+Any other input takes the shared chain of doublings in Jacobian coordinates.
+
+The multiplication of two arbitrary points uses that chain too.
 
 The variable scalar uses the endomorphism method of Gallant, Lambert and Vanstone.
 
@@ -45,25 +56,10 @@ open Jacobian
 
 namespace MulAdd
 
-/-- The cube root `2^((p - 1) / 3) mod p` in the base field. -/
+/-- A primitive cube root of unity, `2^((p - 1) / 3) mod p`. -/
 def beta : Fp := 0x7ae96a2b657c07106e64479eac3434e99cf0497512f58995c1396c28719501ee
 
-/-- The scalar by which the endomorphism acts on the generator.
-
-It is `3^((n - 1) / 3) mod n`, the root that pairs with `beta`. -/
-def lambda : Fn := 0x5363ad4cc05c30e0a5261c028812645a122e22ea20816678df02967c1b23bd72
-
-/-- The first coordinate of the first vector in the scalar lattice.
-
-It is the first remainder below `sqrt(n)` in Euclid's algorithm on `n` and `lambda`. -/
-def basisA : Int := 0x3086d221a7d46bcde86c90e49284eb15
-
-/-- The coefficient of `lambda` for that remainder.
-
-The first basis vector is `(basisA, -basisB)`. -/
-def basisB : Int := 0xe4437ed6010e88286f547fa90abfe4c3
-
-/-- Projective coordinates in the base field of secp256k1. -/
+/-- Jacobian coordinates in the Montgomery form of the base field. -/
 abbrev Coordinates := Coords Montgomery
 
 /-- `2 P`, with `Z' = Y Z` and the slope numerator `3 X^2 / 2`.
@@ -158,19 +154,24 @@ def generatorHighTable14 : Vector Coordinates 4096 := generatedMultiples 4096 ge
 
 /-- The width of the signed digits that select entries of the generator tables. -/
 inductive Window where
-  /-- Fourteen bits, for tables of 4096 odd multiples. -/
+  /-- Five bits, for the eight odd multiples of the variable point. -/
+  | width5
+  /-- Fourteen bits, for tables of 4096 odd multiples of a generator point. -/
   | width14
 
 /-- The number of positive odd digits for the window. -/
 @[inline] def Window.entries : Window → Nat
+  | .width5 => 8
   | .width14 => 4096
 
 /-- The digit's sign changes at this residue. -/
 @[inline] def Window.pivot : Window → UInt64
+  | .width5 => 16
   | .width14 => 8192
 
 /-- A mask for the low bits of the scalar that choose the digit. -/
 @[inline] def Window.mask : Window → UInt64
+  | .width5 => 31
   | .width14 => 16383
 
 /-- A scalar in two 64-bit words, least significant word first. -/
@@ -182,9 +183,6 @@ structure WordPair where
 
 /-- The low 128 bits of a natural number. -/
 def WordPair.ofNat (n : Nat) : WordPair := ⟨n.toUInt64, (n >>> 64).toUInt64⟩
-
-/-- Read the scalar represented by the two words. -/
-def WordPair.toNat (pair : WordPair) : Nat := pair.lo.toNat + pair.hi.toNat * 2^64
 
 /-- The next scalar words and the current digit from one recoding step. -/
 structure Recoded where
@@ -211,7 +209,7 @@ structure Recoded where
 /-- Select the odd multiple for a nonzero digit. -/
 @[inline] def packedIndex (window : Window) (digit : UInt64) : Fin window.entries :=
   let magnitude := if digit < window.pivot then digit else window.mask + 1 - digit
-  ⟨(magnitude >>> 1).toNat % window.entries, Nat.mod_lt _ (by cases window; decide)⟩
+  ⟨(magnitude >>> 1).toNat % window.entries, Nat.mod_lt _ (by cases window <;> decide)⟩
 
 /-- Multiply the Jacobian denominator by the shared scale. -/
 @[inline] def restoreZ (z : Montgomery) (p : Coordinates) : Coordinates :=
@@ -280,6 +278,44 @@ structure Recoded where
   let yy := r * (vx - xx) - p.y * h3
   (⟨xx, yy, 1⟩, ⟨wx, q.y * h3, 1⟩, h)
 
+/-- List odd multiples with a shared omitted denominator. -/
+def collectOdd (p q : Coordinates) : (more : Nat) →
+    {out : List Coordinates // out.length = more + 1} × Montgomery
+  | 0 => (⟨[p], rfl⟩, 1)
+  | n + 1 =>
+    let (p', q', h) := coAdd p q
+    let (following, suffix) := collectOdd p' q' n
+    let z := suffix * h
+    (⟨scaleNumerators z p :: following.val, congrArg Nat.succ following.property⟩, z)
+
+/-- Pair the variable table with the denominator shared by its eight entries. -/
+def commonTable (p : Coordinates) : Vector Coordinates 8 × Montgomery :=
+  let d := double p
+  let p' : Coordinates := scaleNumerators d.z p
+  let out := collectOdd { p' with z := 1 } { d with z := 1 } 7
+  (⟨out.1.val.toArray, List.size_toArray.trans out.1.property⟩, out.2 * d.z)
+
+/-- Coordinates of a variable odd multiple and the image of its X coordinate. -/
+structure CommonEntry where
+  /-- The original point with its shared denominator omitted. -/
+  point : Coordinates
+  /-- The X coordinate with the endomorphism applied. -/
+  phiX : Montgomery
+
+/-- Cache the X coordinate of the endomorphism image. -/
+@[inline] def prepareCommon (q : Coordinates) : CommonEntry :=
+  ⟨q, (endomorphism q).x⟩
+
+/-- Add the selected multiple from the shared-denominator table. -/
+@[inline] def addPackedCommon (p : Coordinates) (table : Vector CommonEntry 8)
+    (phi negative : Bool) (digit : UInt64) : Coordinates :=
+  if digit == 0 then p else
+    let q := table[(packedIndex .width5 digit).val]
+    let x := if phi then q.phiX else q.point.x
+    let y := if negative != (digit >= Window.pivot .width5) then (0 : Montgomery) - q.point.y
+      else q.point.y
+    addCommon p x y
+
 /-- Add the selected fixed multiple in the original denominator. -/
 @[inline] def addPackedFixed (z : Montgomery) (p : Coordinates) (window : Window)
     (table : Vector Coordinates window.entries) (digit : UInt64) : Coordinates :=
@@ -294,14 +330,22 @@ structure Recoded where
 
 open Montgomery (Raw ProductColumn wordProduct plus minus yes subtractBorrow mulHigh)
 
+/-- The constants of the scalar split. -/
 structure SplitConstants where
+  /-- The first coordinate `a` of the short basis. -/
   a : WordPair
+  /-- Its coefficient `b`. -/
   b : WordPair
+  /-- `a + b`. -/
   sum : Raw
+  /-- `floor(2^272 a / n)`. -/
   aRecip : Raw
+  /-- `floor(2^272 b / n)`. -/
   bRecip : Raw
 
-/-- The lattice basis and its rounded-down reciprocals scaled by `2^272`. -/
+/-- The lattice basis `(a, -b)` and `(a + b, a)`.
+
+It also holds `floor(2^272 a / n)` and `floor(2^272 b / n)`. -/
 @[noinline] def splitConstants : SplitConstants :=
   ⟨⟨0xe86c90e49284eb15, 0x3086d221a7d46bcd⟩,
     ⟨0x6f547fa90abfe4c3, 0xe4437ed6010e8828⟩,
@@ -343,6 +387,9 @@ structure SplitConstants where
   if neg then (⟨0 - a.w0, 0 - a.w1 - yes (a.w0 != 0)⟩, true)
   else (⟨a.w0, a.w1⟩, false)
 
+/-- The two components of a scalar along the short basis, each as a magnitude and a sign.
+
+The rounded quotients come from products by the scaled constants, as in Algorithm 3.74. -/
 @[inline] def splitScalarWords (k : Raw) : (WordPair × Bool) × (WordPair × Bool) :=
   let c := splitConstants
   let u := approximateWeight k c.aRecip
@@ -364,6 +411,11 @@ structure JointEntry where
   phi2X : Montgomery
   y : Montgomery
 
+/-- The entry of a form with an omitted denominator.
+
+It holds `x`, the `x` of its two endomorphism images, and `y`.
+
+The third `x` is `-(x + beta x)`, since `1 + beta + beta^2 = 0`. -/
 @[inline] def JointEntry.ofCoords (p : Coordinates) : JointEntry :=
   let phiX := (endomorphism p).x
   ⟨p.x, phiX, 0 - (p.x + phiX), p.y⟩
@@ -424,13 +476,20 @@ def jointDigits : Vector Nat 64 :=
 @[inline] def signedHalf (lo hi : UInt64) : WordPair :=
   ⟨(lo >>> 1) + (hi <<< 63), (hi.toInt64 >>> 1).toUInt64⟩
 
+/-- The next words of both components, and the joint digit taken from them. -/
 structure JointRecoded where
+  /-- The low word of the next first component. -/
   a0 : UInt64
+  /-- Its high word. -/
   a1 : UInt64
+  /-- The low word of the next second component. -/
   b0 : UInt64
+  /-- Its high word. -/
   b1 : UInt64
+  /-- The joint digit, or zero when both components were even. -/
   digit : UInt64
 
+/-- Halve both components, taking a joint digit from the table when either is odd. -/
 @[inline] def recodeJoint (a0 a1 b0 b1 : UInt64) : JointRecoded :=
   if ((a0 ||| b0) &&& 1) == 0 then
     let a := signedHalf a0 a1
@@ -445,6 +504,9 @@ structure JointRecoded where
     let b := signedHalfAfter b0 b1 db
     ⟨a.lo, a.hi, b.lo, b.hi, digit⟩
 
+/-- Add the table entry, endomorphism power and sign that a joint digit selects.
+
+The digit zero adds nothing. -/
 @[inline] def addPackedJoint (p : Coordinates) (table : Vector JointEntry 6) (digit : UInt64) :
     Coordinates :=
   if digit == 0 then p else
@@ -493,15 +555,76 @@ structure JointRecoded where
 termination_by fuel => fuel
 decreasing_by all_goals omega
 
+/-- Combine up to three doublings when the intervening digits are zero. -/
+@[specialize window] def packedCommonChain (window : Window) (z : Montgomery)
+    (table : Vector CommonEntry 8) (pn qn : Bool) (rt st : Vector Coordinates window.entries) :
+    Nat → UInt64 → UInt64 → UInt64 → UInt64 →
+      UInt64 → UInt64 → UInt64 → UInt64 → Coordinates
+  | 0, _, _, _, _, _, _, _, _ => Coords.infinity
+  | fuel + 1, xa0, xa1, xb0, xb1, xc0, xc1, xd0, xd1 =>
+    let ⟨al,ah,da⟩ := recodeRaw .width5 xa0 xa1
+    let ⟨bl,bh,db⟩ := recodeRaw .width5 xb0 xb1
+    let ⟨cl,ch,dc⟩ := recodeRaw window xc0 xc1
+    let ⟨dl,dh,dd⟩ := recodeRaw window xd0 xd1
+    let acc :=
+      match fuel with
+      | 0 => Coords.infinity
+      | next + 1 =>
+        if decide (0 < next) && ((al ||| bl ||| cl ||| dl) &&& 3) == 0 then
+          let al' := (al >>> 2) + (ah <<< 62)
+          let bl' := (bl >>> 2) + (bh <<< 62)
+          let cl' := (cl >>> 2) + (ch <<< 62)
+          let dl' := (dl >>> 2) + (dh <<< 62)
+          doubleUnlessInfinity doubleThrice (packedCommonChain window z table pn qn rt st (next - 1)
+            al' (ah >>> 2) bl' (bh >>> 2) cl' (ch >>> 2) dl' (dh >>> 2))
+        else if ((al ||| bl ||| cl ||| dl) &&& 1) == 0 then
+          let al' := (al >>> 1) + (ah <<< 63)
+          let bl' := (bl >>> 1) + (bh <<< 63)
+          let cl' := (cl >>> 1) + (ch <<< 63)
+          let dl' := (dl >>> 1) + (dh <<< 63)
+          doubleUnlessInfinity doubleTwice (packedCommonChain window z table pn qn rt st next
+            al' (ah >>> 1) bl' (bh >>> 1) cl' (ch >>> 1) dl' (dh >>> 1))
+        else
+          doubleUnlessInfinity double
+            (packedCommonChain window z table pn qn rt st (next + 1) al ah bl bh cl ch dl dh)
+    let acc := addPackedCommon acc table false pn da
+    let acc := addPackedCommon acc table true qn db
+    addPackedFixed z (addPackedFixed z acc window rt dc) window st dd
+termination_by fuel => fuel
+decreasing_by all_goals omega
+
+/-- `k P + l G` in Jacobian form, with five-bit windows for both split components of `k`.
+
+The eight odd multiples of an affine `P` share one denominator.
+
+The endomorphism gives those of `lambda P`.
+
+Any other form takes the shared chain of doublings.
+
+So does the rare case where that denominator vanishes. -/
+@[no_expose] def mulCommon (k : Fn) (p : Coordinates) (l : Fn) : Coordinates :=
+  if p.z = 1 then
+    let (entries, z) := commonTable p
+    if z = 0 then Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator) else
+      let lw := Montgomery.rawOfNat l.val
+      let split := splitScalarWords (Montgomery.rawOfNat k.val)
+      let a := split.1
+      let b := split.2
+      restoreZ z (packedCommonChain .width14 z (entries.map prepareCommon) a.2 b.2
+        generatorTable14 generatorHighTable14 129 a.1.lo a.1.hi b.1.lo b.1.hi
+        lw.w0 lw.w1 lw.w2 lw.w3)
+  else Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator)
+
 /-- `k P + l G` in Jacobian form, for a form `P` of a point on the curve.
 
-An affine form takes the joint chain.
+An affine form takes the joint chain when both split components fit two words with a sign.
 
-Any other form, and the rare case where a table denominator vanishes, take the shared chain of
-doublings instead. -/
+That holds when both are below `2^127 - 2^64` in magnitude.
+
+A larger component, which a split of up to `2^128` allows, takes the common-denominator chain.
+
+So does any other form, and the rare case where a table denominator vanishes. -/
 @[no_expose] def mulProjective (k : Fn) (p : Coordinates) (l : Fn) : Coordinates :=
-  let fallback := fun () =>
-    Coords.mulAdd 0 256 k.val p l.val (Point.toMontgomeryCoords .generator)
   if p.z = 1 then
     let lw := Montgomery.rawOfNat l.val
     let split := splitScalarWords (Montgomery.rawOfNat k.val)
@@ -509,17 +632,17 @@ doublings instead. -/
     let b := split.2
     if a.1.hi < 0x7fffffffffffffff && b.1.hi < 0x7fffffffffffffff then
       let (table, z) := commonJointTable p
-      if z = 0 then fallback () else
+      if z = 0 then mulCommon k p l else
         let aw := if a.2 then a.1.neg else a.1
         let bw := if b.2 then b.1.neg else b.1
         let out := packedJointChain .width14 z table generatorTable14 generatorHighTable14 129
           aw.lo aw.hi bw.lo bw.hi lw.w0 lw.w1 lw.w2 lw.w3
         restoreZ z out
-    else fallback ()
-  else fallback ()
+    else mulCommon k p l
+  else mulCommon k p l
 
 /-- `k P + l G`, for a point `P` on the curve. -/
-@[no_expose] def mul (k : Fn) (p : Point) (l : Fn) : Point :=
+@[no_expose] def mulAddGenerator (k : Fn) (p : Point) (l : Fn) : Point :=
   Point.ofMontgomeryCoords (mulProjective k (Point.toMontgomeryCoords p) l)
 
 end MulAdd
@@ -528,15 +651,14 @@ namespace Point
 
 /-- `k P + l Q`, for scalars mod `n`.
 
-When one point is the generator and the other lies on the curve, the joint chain above computes
-it.
+When one point is the generator and the other lies on the curve, the generator method applies.
 
 Otherwise one chain of doublings serves both scalars, in Jacobian coordinates.
 
 On points of the curve it is the sum of the two products. -/
 def mulAdd (k : Fn) (p : Point) (l : Fn) (q : Point) : Point :=
-  if q = generator ∧ p.isOnCurve = true then MulAdd.mul k p l
-  else if p = generator ∧ q.isOnCurve = true then MulAdd.mul l q k
+  if q = generator ∧ p.isOnCurve = true then MulAdd.mulAddGenerator k p l
+  else if p = generator ∧ q.isOnCurve = true then MulAdd.mulAddGenerator l q k
   else
     ofMontgomeryCoords
       (Jacobian.Coords.mulAdd 0 256 k.val (toMontgomeryCoords p) l.val (toMontgomeryCoords q))

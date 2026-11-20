@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Inverse
 public import EthLib.Cryptography.Secp256k1.Montgomery
 
 /-!
@@ -15,14 +16,19 @@ The divstep transition comes from [Bernstein and Yang][safegcd] §8.1.
 
 The low-word matrix construction follows §12.1, with 60 divsteps per jump.
 
-Each jump uses a table of 6-step matrices generated from the scalar divstep recurrence.
+A table holds the matrices of 6 steps, generated from the divstep recurrence on low bits.
 
-A jump then applies that matrix to the full remainders and residues.
+A jump multiplies ten of them into one matrix of 60 steps.
+
+It then applies that matrix to the full remainders and residues.
+
+Thirteen jumps make 780 divsteps, and a loop that has not finished by then gives no candidate.
 
 The final check accepts only a canonical residue whose product with the input is one.
 
-Any other outcome gives way to the extended Euclidean algorithm, so the result never depends on
-the loop being right.
+Any other outcome gives way to the extended Euclidean algorithm.
+
+So the result never depends on the loop being right.
 
 [safegcd]: <https://gcd.cr.yp.to/safegcd-20190413.pdf>
 -/
@@ -251,7 +257,9 @@ The divsteps give a candidate, and the Euclidean inverse replaces one that fails
 
 /-- The inverse of `a`, which sends `0` to `0`.
 
-The divsteps run on the words of `a R`, whose inverse `a^(-1) R^(-1)` a product by `R^3` rescales.
+The divsteps invert the stored words `a R`, which gives `a^(-1) R^(-1)`.
+
+A Montgomery product by `R^3` turns that into `a^(-1) R`, the stored form of the inverse.
 
 The Euclidean inverse replaces a candidate that fails the check. -/
 @[no_expose] def Montgomery.inv (a : Montgomery) : Montgomery :=
@@ -261,5 +269,10 @@ The Euclidean inverse replaces a candidate that fails the check. -/
     Montgomery.inverseComplement 13 1 p ⟨w.w0, w.w1, w.w2, w.w3, 0⟩ ⟨0, 0, 0, 0, 0⟩
     ⟨1, 0, 0, 0, 0⟩
   Inverse.checkMontgomery c a
+
+/-- The inverse of `a`, which sends `0` to `0`.
+
+It is the inverse of the Montgomery form of `a`, read back. -/
+def Fp.inv (a : Fp) : Fp := (Montgomery.ofFin a).inv.toFin
 
 end EthLib.Cryptography.Secp256k1

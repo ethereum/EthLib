@@ -13,13 +13,19 @@ Multiplication and squaring sum word products by output column.
 
 Squaring doubles each off-diagonal product once.
 
-Montgomery reduction cancels the low half of a wide product.
-
-It normally cancels two words at a time using the inverse of the complement modulo `2^128`.
+Montgomery reduction, from [Montgomery (1985)][redc], cancels the low half of a wide product.
 
 The complement is `2^256 - p = 2^32 + 977`.
 
-`accum` uses the interleaved CIOS algorithm from [Koç, Acar and Kaliski][cios], Figure 4.
+A full product is reduced two words at a time, with the inverse of the complement mod `2^128`.
+
+A fused step is reduced one word at a time, with the inverse of the complement mod `2^64`.
+
+The fused operations interleave each word product with one reduction step.
+
+That is the CIOS method of [Koç, Acar and Kaliski][cios].
+
+[redc]: <https://doi.org/10.1090/S0025-5718-1985-0777282-X>
 
 [cios]: <https://www.microsoft.com/en-us/research/publication/analyzing-and-comparing-montgomery-multiplication-algorithms/>
 -/
@@ -30,17 +36,29 @@ namespace EthLib.Cryptography.Secp256k1
 
 namespace Montgomery
 
+/-- The radix of one word, `2^64`. -/
 abbrev wordRadix : Nat := 2^64
+/-- The complement of the modulus, `2^256 - p = 2^32 + 977`. -/
 def complement : UInt64 := 4294968273
+/-- The inverse of the complement mod `2^64`.
+
+It is also `-p^(-1) mod 2^64`, since `-p = 2^32 + 977 mod 2^64`. -/
 def inverseComplement : UInt64 := 0xd838091dd2253531
 
+/-- Four words and a carry word above them, least significant first. -/
 structure Words64 where
+  /-- Bits 0 through 63. -/
   w0 : UInt64
+  /-- Bits 64 through 127. -/
   w1 : UInt64
+  /-- Bits 128 through 191. -/
   w2 : UInt64
+  /-- Bits 192 through 255. -/
   w3 : UInt64
+  /-- The carry above bit 255. -/
   top : UInt64
 
+/-- The high word of the product of two words, from four 32-bit products. -/
 @[inline] def mulHigh (a b : UInt64) : UInt64 :=
   let alo := a &&& 0xffffffff
   let ahi := a >>> 32
@@ -167,6 +185,7 @@ private theorem mulHigh_spec (a b : UInt64) : (mulHigh a b).toNat = a.toNat*b.to
   conv => rhs; rw [ea, eb]
   exact (model_mulHigh a0.toNat a1.toNat b0.toNat b1.toNat).symm
 
+/-- One for `true` and zero for `false`. -/
 @[inline] def yes (b : Bool) : UInt64 := b.toUInt64
 
 /-- The addition and its overflow bit represent the full 65-bit sum. -/
@@ -186,10 +205,14 @@ private theorem add_with_carry (a b : UInt64) :
       UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero]
     omega
 
+/-- Two words, least significant first. -/
 structure Pair where
+  /-- The low word. -/
   lo : UInt64
+  /-- The high word, or the carry. -/
   hi : UInt64
 
+/-- `a b + w + cin`, the step of a column, as two words. -/
 @[inline] def mac (a b w cin : UInt64) : Pair :=
   let lo := a*b
   let hi := mulHigh a b
@@ -225,23 +248,26 @@ private theorem mac_spec (a b w cin : UInt64) :
   exact eh
 
 
-@[inline] def addComplement (r : Words64) : Words64 :=
+private def addComplement (r : Words64) : Words64 :=
   let v0 := r.w0 + complement
   let v1 := r.w1 + yes (v0 < r.w0)
   let v2 := r.w2 + yes (v1 < r.w1)
   let v3 := r.w3 + yes (v2 < r.w2)
   ⟨v0, v1, v2, v3, 0⟩
 
-@[inline] def shouldReduce (r : Words64) : Bool :=
+private def shouldReduce (r : Words64) : Bool :=
   r.top != 0 || (r.w3 == 0xffffffffffffffff && r.w2 == 0xffffffffffffffff &&
     r.w1 == 0xffffffffffffffff && r.w0 ≥ 0xfffffffefffffc2f)
 
-@[inline] def reduce (r : Words64) : Words64 :=
+/-- The reduction that the faster ones are proved against. -/
+private def reduce (r : Words64) : Words64 :=
   if shouldReduce r then addComplement r else r
 
+/-- The integer of the four low words. -/
 def lowValue (w : Words64) : Nat :=
   w.w0.toNat + wordRadix*w.w1.toNat + wordRadix^2*w.w2.toNat + wordRadix^3*w.w3.toNat
 
+/-- The integer of all five words. -/
 def value (w : Words64) : Nat := lowValue w + wordRadix^4*w.top.toNat
 
 private theorem lowValue_lt (w : Words64) : lowValue w < wordRadix^4 := by
@@ -313,6 +339,9 @@ The compiler can use a wide multiply when it reads the factors at runtime.
 private theorem mulHighComplement_spec (q : UInt64) :
     (mulHighComplement q).toNat = q.toNat * complement.toNat / wordRadix := mulHigh_spec q _
 
+/-- One step of reduction: add `q p`, with `q = -s0 p^(-1) mod 2^64`, then drop the low word.
+
+The sum clears the low word, so dropping it divides by `2^64`. -/
 @[inline] def red (highProd : UInt64 → UInt64 → UInt64) (s0 s1 s2 s3 s4 s5 : UInt64) : Words64 :=
   let q := s0 * cancellationConstants.inverse
   let d := highProd q complement
@@ -406,19 +435,6 @@ private theorem red_spec (mulHi : UInt64 → UInt64 → UInt64)
     omega
 
 
-@[inline] def stage (a : Words64) (b : UInt64) (r : Words64) : Words64 :=
-  let m0 := mac a.w0 b r.w0 0
-  let m1 := mac a.w1 b r.w1 m0.hi
-  let m2 := mac a.w2 b r.w2 m1.hi
-  let m3 := mac a.w3 b r.w3 m2.hi
-  let s4 := m3.hi + r.top
-  let s5 := yes (s4 < m3.hi)
-  red (fun q _ => mulHighComplement q) m0.lo m1.lo m2.lo m3.lo s4 s5
-
-@[inline] def accum (a b : Words64) : Words64 :=
-  stage a b.w3 (stage a b.w2 (stage a b.w1 (stage a b.w0 ⟨0,0,0,0,0⟩)))
-
-
 /-- The low and high words of an unsigned product. -/
 @[inline] def wordProduct (a b : UInt64) : Pair := ⟨a * b, mulHigh a b⟩
 
@@ -507,7 +523,7 @@ private theorem ite_predicate {α : Type} (P : α → Prop) (condition : Bool) (
   · exact hy rfl
 
 /-- Reduction reads as the remainder and leaves no word above the 256-bit result. -/
-theorem reduce_spec (r : Words64) (hbound : value r < 2*Fp.modulus) :
+private theorem reduce_spec (r : Words64) (hbound : value r < 2*Fp.modulus) :
     (reduce r).top = 0 ∧ value (reduce r) = value r % Fp.modulus :=
   ite_predicate (fun w : Words64 => w.top = 0 ∧ value w = value r % Fp.modulus)
     (shouldReduce r) (addComplement r) r
@@ -526,6 +542,7 @@ structure Raw where
   w3 : UInt64
 deriving DecidableEq
 
+/-- The four low words, without the carry word. -/
 @[inline] def Raw.fromWords (r : Words64) : Raw := ⟨r.w0, r.w1, r.w2, r.w3⟩
 
 /-- Extend the four words with a zero carry word. -/
@@ -618,7 +635,7 @@ private theorem shouldReduce_top_zero (r : Words64) (h : shouldReduce r = false)
     contradiction
 
 /-- Masked correction and conditional correction give identical words. -/
-theorem reduceMasked_eq_reduce (r : Words64) : reduceMasked r = reduce r := by
+private theorem reduceMasked_eq_reduce (r : Words64) : reduceMasked r = reduce r := by
   unfold reduceMasked
   simp only [lowFlag_eq, yes_and, yes_or, Bool.and_assoc]
   change _ =
@@ -686,19 +703,25 @@ theorem reduceFast_spec (r : Words64) (h : value r < 2*Fp.modulus) :
 
 /-- Three words hold the sum of the products in one column. -/
 structure ProductColumn where
+  /-- The word of the column itself. -/
   lo : UInt64
+  /-- The carry into the next column. -/
   mid : UInt64
+  /-- The carry into the column after it. -/
   hi : UInt64
 
+/-- The integer of the three words of a column. -/
 def ProductColumn.val (c : ProductColumn) : Nat :=
   c.lo.toNat + wordRadix * c.mid.toNat + wordRadix^2 * c.hi.toNat
 
+/-- Add a two-word product to a column, with its carries. -/
 @[inline] def ProductColumn.add (c : ProductColumn) (p : Pair) : ProductColumn :=
   let lo := c.lo + p.lo
   let mid := c.mid + p.hi
   let word := mid + yes (lo < c.lo)
   ⟨lo, word, c.hi + yes (mid < c.mid) + yes (word < mid)⟩
 
+/-- Move to the next column: the carries become its words. -/
 @[inline] def ProductColumn.next (c : ProductColumn) : ProductColumn := ⟨c.mid, c.hi, 0⟩
 
 private theorem wordProduct_value (a b : UInt64) :
@@ -1281,7 +1304,9 @@ theorem reduceWideInverse_spec (low high : Words64)
     exact assemblePairCancellation _ _ _ _ _ _ hb h01 h23
   · exact reduceWideProduct_spec low high h
 
-/-- Scan the wide product one column at a time. Sum the three middle columns independently. -/
+/-- Scan the wide product one column at a time.
+
+Sum the three middle columns independently. -/
 @[inline] def multiplyColumns (a b : Words64) : Words64 × Words64 :=
   let zero : ProductColumn := ⟨0, 0, 0⟩
   let p2 := (zero.add (wordProduct a.w0 b.w2)).add (wordProduct a.w1 b.w1)
@@ -1516,11 +1541,13 @@ def rawOne : Montgomery := ⟨⟨1, 0, 0, 0⟩, by decide⟩
   let x := a * rawOne
   ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
 
+/-- `a + b + carry`, and the carry out. -/
 @[inline] def plus (a b carry : UInt64) : Pair :=
   let s := a+b
   let t := s+carry
   ⟨t, yes (s < a) + yes (t < s)⟩
 
+/-- `a - b - borrow`, and the borrow out. -/
 @[inline] def minus (a b borrow : UInt64) : Pair :=
   let s := a-b
   ⟨s-borrow, yes (a < b) + yes (s < borrow)⟩
@@ -1553,6 +1580,7 @@ theorem minus_spec (a b borrow : UInt64) (hc : borrow.toNat ≤ 1) :
   simp only [minus, yes_sum, wordRadix] at h0 h1 ⊢
   omega
 
+/-- The sum of two values of four words, then the given reduction of the five-word result. -/
 @[inline] def add64 (reduce : Words64 → Words64) (a b : Words64) : Words64 :=
   let s0 := plus a.w0 b.w0 0
   let s1 := plus a.w1 b.w1 s0.hi
@@ -1619,7 +1647,7 @@ private theorem yes_lt_yes_zero (a b : UInt64) :
   · simp [h, yes, Bool.toUInt64]
 
 /-- Subtract the difference between the radix and p from a wrapped difference. -/
-@[inline] def correctBorrow (w0 w1 w2 w3 : UInt64) : Words64 :=
+private def correctBorrow (w0 w1 w2 w3 : UInt64) : Words64 :=
   let t0 := w0 - complement
   let borrow := yes (w0 < complement)
   if borrow = 0 then ⟨t0,w1,w2,w3,0⟩
@@ -1655,7 +1683,8 @@ private theorem correctBorrow_value (w0 w1 w2 w3 : UInt64)
       at hl hOut e0 e1 e2 e3 ⊢
     omega
 
-@[inline] def sub64 (a b : Words64) : Words64 :=
+/-- The subtraction that the masked one is proved against. -/
+private def sub64 (a b : Words64) : Words64 :=
   let d0 := minus a.w0 b.w0 0
   let d1 := minus a.w1 b.w1 d0.hi
   let d2 := minus a.w2 b.w2 d1.hi
@@ -1664,7 +1693,7 @@ private theorem correctBorrow_value (w0 w1 w2 w3 : UInt64)
   else correctBorrow d0.lo d1.lo d2.lo d3.lo
 
 /-- Subtraction of reduced words gives the difference mod p. -/
-theorem sub64_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
+private theorem sub64_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
     (hpa : value a < Fp.modulus) (hpb : value b < Fp.modulus) :
     (sub64 a b).top = 0 ∧ value (sub64 a b) = (value a + Fp.modulus - value b) % Fp.modulus := by
   let d0 := minus a.w0 b.w0 0
@@ -1818,7 +1847,7 @@ private theorem subtractBorrow_eq (a b borrow : UInt64) (h : borrow.toNat ≤ 1)
   correctFast s0 (s1 - c0) (s2 - c1) (s3 - c2) c3
 
 /-- Both subtraction implementations give the same words for all inputs. -/
-theorem subMasked_eq_sub64 (a b : Words64) : subMasked a b = sub64 a b := by
+private theorem subMasked_eq_sub64 (a b : Words64) : subMasked a b = sub64 a b := by
   let d0 := minus a.w0 b.w0 0
   let d1 := minus a.w1 b.w1 d0.hi
   let d2 := minus a.w2 b.w2 d1.hi
@@ -1881,7 +1910,9 @@ theorem subMasked_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
 instance : Add Montgomery := ⟨add⟩
 instance : Sub Montgomery := ⟨sub⟩
 
+/-- The four low words. -/
 @[inline] def Words64.rawWords (x : Words64) : Raw := Raw.fromWords x
+/-- The integer of all five words. -/
 abbrev Words64.val (x : Words64) : Nat := value x
 
 private theorem raw_val_add (x : Raw) :
@@ -1894,6 +1925,7 @@ private theorem word_value_for_scale (w : Words64) :
   change value w = w.rawWords.val + w.top.toNat*2^256
   have h : w.rawWords.val = lowValue w := rfl
   rw [h, value_as_nat, Nat.mul_comm w.top.toNat]
+/-- The four words shifted left by `s` bits, with the bits shifted out in the carry word. -/
 @[inline] def shift (s : UInt64) (w : Raw) : Words64 :=
   let d := 64 - s
   ⟨w.w0 <<< s,
@@ -1902,6 +1934,7 @@ private theorem word_value_for_scale (w : Words64) :
     (w.w3 <<< s) ||| (w.w2 >>> d),
     w.w3 >>> d⟩
 
+/-- One word added to four words, with the carry in the fifth. -/
 @[inline] def addLow (w : Raw) (f : UInt64) : Words64 :=
   let t0 := w.w0 + f
   let t1 := w.w1 + yes (t0 < w.w0)
@@ -1909,6 +1942,7 @@ private theorem word_value_for_scale (w : Words64) :
   let t3 := w.w3 + yes (t2 < w.w2)
   ⟨t0, t1, t2, t3, yes (t3 < w.w3)⟩
 
+/-- `2^s w`, with the carry word folded back by `2^256 = 2^32 + 977 mod p`. -/
 @[inline] def scaleInput (s : UInt64) (w : Raw) : Words64 :=
   let shifted := shift s w
   addLow shifted.rawWords (shifted.top * complement)
@@ -1993,11 +2027,18 @@ theorem scaleInput_lt (s : UInt64) (w : Raw) (hpos : 0 < s.toNat) (hs : s.toNat 
     rw [Raw.fromWords_val u hr.1, hr.2]
     exact Nat.mod_lt _ (by decide)⟩
 
+/-- One word of a value shifted right by one bit.
+
+It holds the high bits of `a`, with the low bit of `b` on top. -/
 @[inline] def halfLane (a b : UInt64) : UInt64 := (a >>> 1) + (b <<< 63)
 
+/-- Four words shifted right by one bit, with `t` as the bit above them. -/
 @[inline] def shiftHalf (a b c d t : UInt64) : Raw :=
   ⟨halfLane a b, halfLane b c, halfLane c d, halfLane d t⟩
 
+/-- Half of a residue mod `p`.
+
+An odd residue gets `p` added first, so that the sum is even. -/
 @[inline] def halveRaw (x : Raw) : Raw :=
   let bit := x.w0 &&& 1
   -- For an odd input, adding the modulus is a high bit minus the complement.
@@ -2181,6 +2222,7 @@ The top word of the accumulator uses two's complement.
   let n5 := s5 - yes (s4 < n3.hi)
   red (fun q _ => mulHighComplement q) n0.lo n1.lo n2.lo n3.lo n4 n5
 
+/-- One step of a fused difference: add `a b`, subtract `c d`, and reduce once. -/
 @[inline] def fusedStage (a c : Raw) (b d : UInt64) (t : Words64) : Words64 :=
   fusedStageProducts a b (wordProduct c.w0 d) (wordProduct c.w1 d)
     (wordProduct c.w2 d) (wordProduct c.w3 d) t
@@ -2353,7 +2395,9 @@ private theorem fusedStage_spec (a c : Raw) (b d : UInt64) (t : Words64)
     omega
   exact ⟨by simp only [wordRadix, Fp.modulus] at *; omega, q, hsum⟩
 
-/-- Accumulate the difference of two products through the four Montgomery steps. -/
+/-- Accumulate the difference of two products through the four Montgomery steps.
+
+It is the reference that the fused square is proved against. -/
 @[inline] def fusedAccum (a b c d : Raw) : Words64 :=
   fusedStage a c b.w3 d.w3 (fusedStage a c b.w2 d.w2
     (fusedStage a c b.w1 d.w1 (fusedStage a c b.w0 d.w0 ⟨0,0,0,0,0⟩)))

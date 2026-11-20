@@ -19,7 +19,6 @@ An element of `Fp` crosses over unchanged.
 
 - Both moduli are prime, by Pratt certificates that the kernel checks.
 - Square and multiply computes the power.
-- The Euclidean inverse is the field inverse.
 -/
 
 @[expose] public section
@@ -225,10 +224,6 @@ theorem pow_eq_powBits (a : Fp) (e : Nat) : a.pow e = Fin.powBits 256 a e := rfl
 theorem toZMod_pow (a : Fp) (e : Nat) (he : e < 2 ^ 256) : toZMod (a.pow e) = toZMod a ^ e := by
   rw [pow_eq_powBits]
   exact Fin.powBits_eq_pow 256 a e he
-
-/-- The Euclidean inverse is the field inverse, and both send `0` to `0`. -/
-@[simp] theorem toZMod_inv (a : Fp) : toZMod a.inv = (toZMod a)⁻¹ :=
-  Fin.inverse_map toZMod (fun x => (ZMod.natCast_zmod_val (toZMod x)).symm) a
 
 /-- `p = 3 mod 4`, which gives the square root its closed form. -/
 theorem modulus_mod_four : modulus % 4 = 3 := by decide

@@ -24,8 +24,7 @@ namespace EthLib.Cryptography.Secp256k1
 
 /-- The Montgomery constants of `p` on eight 32-bit limbs, with radix `R = 2^256`.
 
-The shared Montgomery field on these limbs is the reference that the four words are proved
-against. -/
+The four words are proved against the shared Montgomery field on these limbs. -/
 def Fp.params : Cryptography.Montgomery.Modulus 8 where
   p := Fp.modulus
   pLimbs := ⟨0xfffffc2f, 0xfffffffe, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -87,7 +86,8 @@ private theorem limbs8_value (a : Cryptography.Montgomery.Limbs8) :
     2^32*(a.l4.toNat + 2^32*(a.l5.toNat + 2^32*(a.l6.toNat + 2^32*(a.l7.toNat + 2^32*0))))))) = _
   omega
 
-private theorem value_wide (a : Cryptography.Montgomery.Limbs8) : value (wide a) = Limbs.val (n := 8) a := by
+private theorem value_wide (a : Cryptography.Montgomery.Limbs8) :
+    value (wide a) = Limbs.val (n := 8) a := by
   simp only [value, lowValue, wide, join_value, limbs8_value, UInt64.toNat_zero,
     Nat.mul_zero, Nat.add_zero, wordRadix]
   omega
@@ -145,75 +145,6 @@ private theorem product_sum (a : Words64) (b : UInt64) (r : Words64) (ha : a.top
   simp only [wordRadix] at *
   simp only [UInt64.toNat_zero, Nat.add_zero] at h0
   omega
-
-private theorem stage_spec (a : Words64) (b : UInt64) (r : Words64)
-    (ha : a.top = 0) (hap : value a < Fp.modulus) (hr : value r < 2 * Fp.modulus) :
-    value (stage a b r) < 2 * Fp.modulus ∧
-      ∃ q, wordRadix * value (stage a b r) = value r + value a * b.toNat + q * Fp.modulus := by
-  let m0 := mac a.w0 b r.w0 0
-  let m1 := mac a.w1 b r.w1 m0.hi
-  let m2 := mac a.w2 b r.w2 m1.hi
-  let m3 := mac a.w3 b r.w3 m2.hi
-  let s4 := m3.hi + r.top
-  let s5 := yes (s4 < m3.hi)
-  have hs5 : s5.toNat ≤ 1 := by
-    change (yes (decide _)).toNat ≤ 1
-    cases decide (s4 < m3.hi) <;> decide
-  have h := red_spec (fun q _ => mulHighComplement q) mulHighComplement_spec
-    m0.lo m1.lo m2.lo m3.lo s4 s5 (by omega)
-  have hs := product_sum a b r ha
-  change m0.lo.toNat + wordRadix * value ⟨m1.lo, m2.lo, m3.lo, s4, s5⟩ =
-    value r + value a * b.toNat at hs
-  rw [hs] at h
-  change wordRadix * value (stage a b r) = value r + value a * b.toNat + _ at h
-  refine ⟨?_, _, h⟩
-  have hb := b.toNat_lt
-  have hq := (m0.lo * inverseComplement).toNat_lt
-  have H1 : value a * b.toNat ≤ Fp.modulus * (wordRadix-1) :=
-    Nat.mul_le_mul (by omega) (by simp only [wordRadix]; omega)
-  have H2 : (m0.lo * inverseComplement).toNat * Fp.modulus ≤ (wordRadix-1) * Fp.modulus :=
-    Nat.mul_le_mul_right _ (by simp only [wordRadix]; omega)
-  rw [Nat.mul_comm Fp.modulus] at H1
-  simp only [wordRadix, Fp.modulus] at *
-  omega
-
-private theorem fold_mod (a t s f x q k : Nat)
-    (h : wordRadix * t = s + a*x + q*Fp.modulus)
-    (hprev : (f*s) % Fp.modulus = (a*k) % Fp.modulus) :
-    (wordRadix*f*t) % Fp.modulus = (a*(k+f*x)) % Fp.modulus := by
-  have hsum : f * (s + a*x + q*Fp.modulus) =
-      f*s + a*(f*x) + (f*q)*Fp.modulus := by grind
-  calc
-    _ = (f * (wordRadix*t)) % Fp.modulus := by rw [Nat.mul_assoc, Nat.mul_left_comm]
-    _ = _ := by
-      rw [h, hsum, Nat.add_mul_mod_self_right, Nat.mul_add a,
-        Nat.add_mod (f*s), Nat.add_mod (a*k), hprev]
-
-theorem accum_spec (a b : Words64) (ha : a.top = 0) (hb : b.top = 0)
-    (hap : value a < Fp.modulus) :
-    value (accum a b) < 2 * Fp.modulus ∧
-      (wordRadix^4 * value (accum a b)) % Fp.modulus = (value a * value b) % Fp.modulus := by
-  let zero : Words64 := ⟨0,0,0,0,0⟩
-  let s0 := stage a b.w0 zero
-  let s1 := stage a b.w1 s0
-  let s2 := stage a b.w2 s1
-  let s3 := stage a b.w3 s2
-  have hz : value zero = 0 := rfl
-  obtain ⟨hb0, q0, h0⟩ := stage_spec a b.w0 zero ha hap (by rw [hz]; decide)
-  obtain ⟨hb1, q1, h1⟩ := stage_spec a b.w1 s0 ha hap hb0
-  obtain ⟨hb2, q2, h2⟩ := stage_spec a b.w2 s1 ha hap hb1
-  obtain ⟨hb3, q3, h3⟩ := stage_spec a b.w3 s2 ha hap hb2
-  refine ⟨hb3, ?_⟩
-  have e0 := fold_mod (value a) (value s0) (value zero) 1 b.w0.toNat q0 0 h0 (by simp [hz])
-  simp only [Nat.mul_one, Nat.one_mul, Nat.zero_add] at e0
-  have e1 := fold_mod (value a) (value s1) (value s0) wordRadix b.w1.toNat q1 b.w0.toNat h1 e0
-  have e2 := fold_mod (value a) (value s2) (value s1) (wordRadix^2) b.w2.toNat q2
-    (b.w0.toNat + wordRadix*b.w1.toNat) h2 (by exact e1)
-  have e3 := fold_mod (value a) (value s3) (value s2) (wordRadix^3) b.w3.toNat q3
-    (b.w0.toNat + wordRadix*b.w1.toNat + wordRadix^2*b.w2.toNat) h3 (by exact e2)
-  change (wordRadix^4 * value s3) % Fp.modulus = (value a * value b) % Fp.modulus
-  simpa only [value, lowValue, hb, UInt64.toNat_zero, Nat.mul_zero, Nat.add_zero,
-    show wordRadix * wordRadix^3 = wordRadix^4 by decide] using e3
 
 private theorem Raw.words_fromWords (w : Words64) (h : w.top = 0) :
     (Raw.fromWords w).words = w := by
@@ -390,8 +321,8 @@ theorem toMont_mul (a b : Montgomery) : toMont (a*b) = toMont a * toMont b := by
   let y := toMont b
   have hspec := (Cryptography.Montgomery.mulLimbs_spec Fp.params x.limbs x.lt y.limbs).2
   have hEq : Limbs.val (n := 8) (x*y).limbs =
-      Limbs.val (n := 8) (Cryptography.Montgomery.mulWords (Limbs.get Fp.params.pLimbs) Fp.params.pinv
-        (Limbs.get x.limbs) (Limbs.get y.limbs) Limbs.pack) := by
+      Limbs.val (n := 8) (Cryptography.Montgomery.mulWords (Limbs.get Fp.params.pLimbs)
+        Fp.params.pinv (Limbs.get x.limbs) (Limbs.get y.limbs) Limbs.pack) := by
     change Limbs.val (n := 8) (Fp.params.mul x.limbs y.limbs) = _
     rw [Fp.params.mul_spec x.limbs y.limbs x.lt]
   change _ = x*y
@@ -421,8 +352,9 @@ theorem toMont_ofFin (a : Fp) : toMont (ofFin a) = Cryptography.Montgomery.ofFin
     decide
   simp only [ofFin, toMont_mul, h]
   change Cryptography.Montgomery.mulLimbs Fp.params Fp.params.r2 Fp.params.r2_lt
-    (toMont (readRaw a)).limbs = Cryptography.Montgomery.mulLimbs Fp.params Fp.params.r2 Fp.params.r2_lt
-      (Limbs.ofNat (a.val % Fp.modulus))
+    (toMont (readRaw a)).limbs =
+      Cryptography.Montgomery.mulLimbs Fp.params Fp.params.r2 Fp.params.r2_lt
+        (Limbs.ofNat (a.val % Fp.modulus))
   rw [Nat.mod_eq_of_lt a.isLt, toMont_readRaw]
 
 /-- Leaving either Montgomery representation gives the same field element. -/
@@ -432,9 +364,11 @@ theorem toFin_eq (a : Montgomery) : toFin a = Cryptography.Montgomery.toFin (toM
   rw [rawToNat_eq, ← toMont_val, toMont_mul, Cryptography.Montgomery.toNat_eq_val]
   have h : (toMont rawOne).limbs = Limbs.ofNat (n := 8) 1 := by decide
   exact congrArg (fun limbs =>
-    Limbs.val (Cryptography.Montgomery.mulLimbs Fp.params (toMont a).limbs (toMont a).lt limbs).limbs) h
+    Limbs.val
+      (Cryptography.Montgomery.mulLimbs Fp.params (toMont a).limbs (toMont a).lt limbs).limbs) h
 
-private theorem add_val (a b : Montgomery) : (a+b).raw.val = (a.raw.val + b.raw.val) % Fp.modulus := by
+private theorem add_val (a b : Montgomery) :
+    (a+b).raw.val = (a.raw.val + b.raw.val) % Fp.modulus := by
   let u := add64 reduceFast a.raw.words b.raw.words
   have hu := add64_spec reduceFast reduceFast_spec a.raw.words b.raw.words rfl rfl
     (a.raw.val_eq ▸ a.lt) (b.raw.val_eq ▸ b.lt)
@@ -621,8 +555,9 @@ theorem productSubSquare_eq (a b c : Montgomery) : productSubSquare a b c = a*b 
 
 /-! ## The field read back
 
-Reading an element back into `Fp` keeps zero, one, sums, differences and products, and
-distinct elements stay distinct.
+Reading an element back into `Fp` keeps zero, one, sums, differences and products.
+
+Distinct elements read back to distinct elements.
 -/
 
 theorem toFin_zero : toFin (0 : Montgomery) = 0 := by

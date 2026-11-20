@@ -1,6 +1,5 @@
 module
 
-public import EthLib.Cryptography.Inverse
 
 /-!
 # `Secp256k1.Field`
@@ -16,9 +15,7 @@ Each field is `Fin` of its modulus, so every element is below the modulus by con
 
 Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
-The inverse of `Fp` here comes from the extended Euclidean algorithm.
-
-The inverse of `Fn`, the Montgomery form of `Fp` and the square root of `Fp` come later.
+Other files of this module give the Montgomery form of `Fp`, the inverses and the square root.
 
 No division is defined.
 
@@ -64,11 +61,6 @@ namespace Fp
 
 /-- `a^e`, for an exponent below `2^256`. -/
 def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
-
-/-- The inverse of `a`, by the extended Euclidean algorithm.
-
-It sends `0` to `0`. -/
-def inv (a : Fp) : Fp := Fin.inverse a
 
 end Fp
 

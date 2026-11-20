@@ -104,17 +104,17 @@ def ofCoords {F : Type} [OfNat F 0] [OfNat F 1] [Add F] [Sub F] [Mul F] [Decidab
 /-- The point of a Jacobian form. -/
 def ofJacobian (p : Jacobian Fp.modulus) : Point := ofCoords Fin.inverse id p.toCoords
 
-/-- The Jacobian form of a point, on Montgomery form. -/
+/-- The Jacobian form of a point, in Montgomery form. -/
 def toMontgomeryCoords (p : Point) : Jacobian.Coords Fp.Montgomery :=
   (toJacobian p).toCoords.map Montgomery.ofFin
 
-/-- The point of a Jacobian form on Montgomery form. -/
+/-- The point of a Jacobian form in Montgomery form. -/
 def ofMontgomeryCoords (p : Jacobian.Coords Fp.Montgomery) : Point :=
   ofCoords Montgomery.inv Montgomery.toFin p
 
 /-- `k P`, for `k < 2^fuel`, by double and add on the bits of `k`, low bit first.
 
-The steps run in Jacobian coordinates on Montgomery form.
+The steps run in Jacobian coordinates in Montgomery form.
 
 Only the conversion back takes an inverse. -/
 def mulBits (fuel k : Nat) (p : Point) : Point :=

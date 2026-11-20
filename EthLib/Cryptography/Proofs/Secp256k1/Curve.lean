@@ -16,7 +16,7 @@ Mathlib defines that curve over the field `ZMod p`, and proves its points form a
 Each point of the specification maps to an element of that group.
 
 - Addition and negation are the group's.
-- Double and add computes `k P`, and one shared chain of doublings computes `k P + l Q`.
+- Double and add computes `k P`.
 - Each operation stays on the curve.
 - Points on the curve and group elements correspond one to one.
 
@@ -330,8 +330,6 @@ theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true
   | some x y h =>
     have hc : (affine x y).isOnCurve = true := (isOnCurve_affine x y).mpr ((equation_iff x y).mp h.1)
     exact ⟨affine x y, hc, toPoint_affine hc⟩
-
-/-! ## Two products with shared doublings -/
 
 end Point
 
