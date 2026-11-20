@@ -16201,13 +16201,7 @@ private theorem lowEB_slashed (h : Setting config checks g split fin pulled anc 
 
 The key has no sync debits on the run, and the test of its floor holds.
 
-The proof runs conjunct (2) of the floor pair.
-
-A downward update fires only at a step whose balance after it is at least the finalized balance.
-
-Such an update is from an effective balance above the finalized one, set at an update `w`.
-
-The potential floor of the run from `w` then keeps the balance, by `stay_arith`. -/
+A downward update fires only at a step whose balance after it is at least the finalized balance. -/
 private theorem floorC_stay (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -16798,7 +16792,7 @@ The bound reads the floor of its balance from the finalized state.
 The penalties are covered by `drop` and the partials by `partialsDue`.
 
 The hysteresis is covered by the activation balance. -/
-private theorem existing_low_or_floor (h : Setting config checks g split fin pulled anc counted V)
+private theorem existing_low_le_charge (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {events : List (BalanceEvent preset)}
@@ -16874,7 +16868,7 @@ private theorem pending_key_claim (h : Setting config checks g split fin pulled 
     (pinTerms config pulled anc fin).newKeySlack < (events.map (syncDebit v.toNat)).sum := by
   -- The charge splits C's run at the step that exits the key.
   --
-  -- The key is activated there, by (I1).
+  -- The key is activated there, by `charge_activated`.
   --
   -- The key is active at that state, so the floor of a new key reads its effective balance.
   --
@@ -16998,7 +16992,7 @@ A key that is not activated at the finalized state loses seats, by `pending_key_
 
 An activated key is active and not withdrawable at R, by `activated_key_at_pulled`.
 
-Its low bound is covered by its charge and its debits, by `existing_low_or_floor`. -/
+Its low bound is covered by its charge and its debits, by `existing_low_le_charge`. -/
 private theorem small_charge_claim (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -17025,7 +17019,7 @@ private theorem small_charge_claim (h : Setting config checks g split fin pulled
   · exact .inr rich
   refine .inl (lowB_intro config pulled anc fin
     (activated_key_at_pulled h tailC v activatedBy charged found activated) ?_)
-  have floor := existing_low_or_floor h fromFin tailC replayed v epochLe w found charged
+  have floor := existing_low_le_charge h fromFin tailC replayed v epochLe w found charged
   have order := exitFloor_add_slack h
   omega
 
