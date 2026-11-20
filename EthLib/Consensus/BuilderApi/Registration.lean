@@ -29,8 +29,8 @@ The [builder specification] gives the rules, and [`validators.yaml`] the 200 and
 
 The rules hold at any fork, and the exports take them from Bellatrix to Fulu only.
 
-[builder specification]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/specs/bellatrix/builder.md#process_registration
-[`validators.yaml`]: https://github.com/ethereum/builder-specs/blob/fce64468a81a87892d7cb9b4858272bb3d010e50/apis/builder/validators.yaml
+[builder specification]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/specs/bellatrix/builder.md#process_registration
+[`validators.yaml`]: https://github.com/ethereum/builder-specs/blob/ea92eff73ad77c33d3b59a2033ffa02dfae5ee05/apis/builder/validators.yaml
 [Relay API]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/types/responses.yaml
 -/
 

@@ -6,7 +6,7 @@ from ethlib.networking.libp2p import identity
 from raising import raises
 
 # The keys are the secp256k1 rows of "Test vectors" in peer-ids/peer-ids.md of libp2p/specs.
-# The pinned commit is c750236de43cd8b246a824b377dfdb26bae686db.
+# The pinned commit is 4facaf9876da1eb7d6e066982010c81495ebb965.
 # The private key row is the protobuf 08 02 12 20 of key type 2, then the 32-byte secret.
 SECRET = bytes.fromhex("53DADF1D5A164D6B4ACDB15E24AA4C5B1D3461BDBD42ABEDB0A4404D56CED8FB")
 PUBLIC_KEY = bytes.fromhex(

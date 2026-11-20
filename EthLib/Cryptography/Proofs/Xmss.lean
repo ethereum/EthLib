@@ -20,8 +20,10 @@ public import EthLib.Cryptography.Proofs.Xmss.Sign
 public import EthLib.Cryptography.Proofs.Xmss.Correctness
 public import EthLib.Cryptography.Proofs.Xmss.Security
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.FinderRepeat
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PairedGame
 public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.PairedHashWord
+public import EthLib.Cryptography.Proofs.Xmss.Unforgeability.VCV.SigningCache
 public import EthLib.Cryptography.Proofs.Xmss.Errors
 
 /-!

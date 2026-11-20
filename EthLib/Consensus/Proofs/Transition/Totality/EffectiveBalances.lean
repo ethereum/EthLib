@@ -180,6 +180,25 @@ theorem processEffectiveBalanceUpdates_balances
       current.balances = state.balances)
     (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl computed
 
+/-- A successful pass finds a balance at each position of the registry. -/
+theorem processEffectiveBalanceUpdates_owned
+    (computed : processEffectiveBalanceUpdates state = .ok after) {index : Nat}
+    {validator : Validator} (found : state.validators.data[index]? = some validator) :
+    ∃ balance : Gwei, state.balances.data[index]? = some balance := by
+  unfold processEffectiveBalanceUpdates at computed
+  have inside := (Array.getElem?_eq_some_iff.mp found).1
+  obtain ⟨middle, next, prefixOk, atIndex, -⟩ :=
+    (foldlM_ok_steps (fun _ _ => True) (fun _ => trivial) (fun _ _ => trivial)
+      (fun _ _ _ _ => trivial) computed).2 index (by simpa using inside)
+  simp only [List.getElem_range] at atIndex
+  have balances : middle.balances = state.balances :=
+    foldlM_ok_invariant (fun current : BeaconState preset fork =>
+      current.balances = state.balances)
+      (fun _ _ _ kept step => (updateEffectiveBalance_ok step).1.trans kept) rfl prefixOk
+  obtain ⟨-, -, amount, -, -, amountAt, -, -⟩ := updateEffectiveBalance_ok atIndex
+  rw [balances] at amountAt
+  exact ⟨amount, amountAt⟩
+
 /-- A successful pass applies the scalar effective-balance update at each validator's index.
 
 It uses the original validator and balance, and keeps every other field of that validator. -/

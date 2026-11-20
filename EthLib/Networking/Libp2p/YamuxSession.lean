@@ -21,9 +21,9 @@ Data spends the window of its direction, and a Window Update adds to the other d
 
 The cases that the source leaves open, and the choices made for them, are listed in SOUNDNESS.md.
 
-[ids]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#streamid-field
-[flow]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#message-flow
-[window]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/yamux/README.md#flow-control
+[ids]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#streamid-field
+[flow]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#message-flow
+[window]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/yamux/README.md#flow-control
 -/
 
 @[expose] public section

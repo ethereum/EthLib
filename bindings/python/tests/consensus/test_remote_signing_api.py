@@ -72,8 +72,6 @@ GLOAS_KINDS = {
 # The two examples whose fields are not spelled as the schemas spell them.
 # Their fork info writes `previousVersion` and `currentVersion`, and the block writes camel case.
 MISSPELLED = {"AGGREGATION_SLOT", "BLOCK (DEPRECATED)"}
-# The envelope example has a logs bloom of 262 bytes, where the bloom has 256.
-ENVELOPE = "EXECUTION_PAYLOAD_ENVELOPE (GLOAS)"
 
 
 def _examples() -> dict[str, Any]:
@@ -87,14 +85,14 @@ EXAMPLES = _examples()
 WELL_SPELLED = sorted(
     name
     for name, value in EXAMPLES.items()
-    if value["type"] in KINDS | GLOAS_KINDS and name not in MISSPELLED | {ENVELOPE}
+    if value["type"] in KINDS | GLOAS_KINDS and name not in MISSPELLED
 )
 
 
 def test_every_kind_has_an_example():
     assert {value["type"] for value in EXAMPLES.values()} == KINDS | GLOAS_KINDS
     assert len(EXAMPLES) == 32
-    assert len(WELL_SPELLED) == 29
+    assert len(WELL_SPELLED) == 30
 
 
 def _presets(name: str) -> set[str]:
@@ -185,18 +183,6 @@ def test_gloas_kinds_take_only_gloas(name: str, key: str):
     with raises(ERROR, f'{REJECTED}unknownVersion "{key}" "FULU"') as info:
         consensus.read_signing_request(PRESET, example)
     assert info.value.code == 5
-
-
-def test_envelope_example_has_a_long_bloom():
-    example = copy.deepcopy(EXAMPLES[ENVELOPE])
-    message = f'{_BAD} "data" (EthLib.Serialization.Ssz.Err.hexLength 256 262)'
-    for preset in ("minimal", "mainnet"):
-        with raises(ERROR, message):
-            consensus.read_signing_request(preset, example)
-    # With a bloom of 256 bytes, the example reads back under either preset.
-    example["execution_payload_envelope"]["data"]["payload"]["logs_bloom"] = "0x" + "00" * 256
-    for preset in ("minimal", "mainnet"):
-        assert consensus.read_signing_request(preset, example) == example
 
 
 def test_empty_auth_data_is_refused():
@@ -339,9 +325,6 @@ def test_aggregate_takes_the_shape_of_its_version():
         consensus.read_signing_request(PRESET, example)
 
 
-# The Electra and Fulu aggregates carry a signing root that neither preset gives.
-# Their data is the data of the Gloas aggregate, whose root the bindings match.
-WRONG_ROOT = {"AGGREGATE_AND_PROOF_V2 (ELECTRA)", "AGGREGATE_AND_PROOF_V2 (FULU)"}
 # The configuration whose genesis fork version, 0x00000001, the examples use.
 CONFIG = "minimal"
 
@@ -359,12 +342,12 @@ def _well_spelled(name: str) -> dict[str, Any]:
 ROOTED = sorted(
     name
     for name, value in EXAMPLES.items()
-    if "signingRoot" in value and name != "BLOCK (DEPRECATED)" and name not in WRONG_ROOT
+    if "signingRoot" in value and name != "BLOCK (DEPRECATED)"
 )
 
 
 def test_examples_of_kinds_before_gloas_carry_roots():
-    assert len(ROOTED) == 24
+    assert len(ROOTED) == 26
     assert all(EXAMPLES[name]["type"] in KINDS for name in ROOTED)
 
 
@@ -453,12 +436,13 @@ def _aggregate_signing_root(example: dict[str, Any]) -> bytes:
     return _merkleize([message, domain], 2)
 
 
-@pytest.mark.parametrize("name", sorted(WRONG_ROOT))
-def test_electra_aggregate_root(name: str):
+@pytest.mark.parametrize(
+    "name", ["AGGREGATE_AND_PROOF_V2 (ELECTRA)", "AGGREGATE_AND_PROOF_V2 (FULU)"]
+)
+def test_aggregate_root_computed_here(name: str):
+    """The root of the Electra and Fulu aggregates, merkleized here, is the one they carry."""
     example = EXAMPLES[name]
-    root = consensus.signing_request_root("mainnet", CONFIG, example)
-    assert root == _aggregate_signing_root(example)
-    assert "0x" + root.hex() != example["signingRoot"]
+    assert "0x" + _aggregate_signing_root(example).hex() == example["signingRoot"]
 
 
 # The examples of the kinds that Gloas adds carry no signing root.
@@ -552,8 +536,6 @@ def test_payload_attestation_root_of_the_issue():
 @pytest.mark.parametrize("name", sorted(RECORDED))
 def test_gloas_recorded_root(name: str):
     example = copy.deepcopy(EXAMPLES[name])
-    if name == ENVELOPE:
-        example["execution_payload_envelope"]["data"]["payload"]["logs_bloom"] = "0x" + "00" * 256
     for preset in ("minimal", "mainnet"):
         root = consensus.signing_request_root(preset, CONFIG, example)
         assert "0x" + root.hex() == RECORDED[name]
@@ -582,7 +564,7 @@ def test_public_keys():
     assert consensus.remote_signer_public_keys([]) == []
 
 
-SIGNED = sorted(name for name in WELL_SPELLED + ["AGGREGATION_SLOT"] if name not in WRONG_ROOT)
+SIGNED = sorted(WELL_SPELLED + ["AGGREGATION_SLOT"])
 
 
 @pytest.mark.parametrize("name", SIGNED)
@@ -598,10 +580,12 @@ def test_sign_example(name: str):
     assert G2ProofOfPossession.Verify(BLSPubkey(_hex(PUBKEY)), root, BLSSignature(signature))
 
 
-@pytest.mark.parametrize("name", sorted(WRONG_ROOT))
-def test_sign_refuses_another_root(name: str):
+def test_sign_refuses_another_root():
+    """A request whose signing root is not the one the signer computes is refused with 400."""
+    example = copy.deepcopy(EXAMPLES["RANDAO_REVEAL"])
+    example["signingRoot"] = "0x" + "00" * 32
     status, signature, record = consensus.remote_signer_sign(
-        "mainnet", CONFIG, [KEY], _record(), PUBKEY, EXAMPLES[name]
+        PRESET, CONFIG, [KEY], _record(), PUBKEY, example
     )
     assert (status, signature, json.loads(record)) == (400, None, json.loads(_record()))
 

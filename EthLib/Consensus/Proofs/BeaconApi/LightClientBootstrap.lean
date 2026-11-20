@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.LightClient.Execution
 public import EthLib.Consensus.Proofs.LightClient.FullNode
 public import EthLib.Consensus.Proofs.BeaconApi.Responses
 public import EthLib.Consensus.Proofs.LightClient.Upgrade
+import EthLib.Consensus.Proofs.BeaconApi.Encoding
 
 /-!
 # Proofs: the bootstrap answer of the Beacon API
@@ -35,6 +36,12 @@ It refuses a root whose block or post state the store lacks.
 It refuses a root whose post state is before the Altair fork epoch.
 
 Each refusal has code 404, and the JSON answer passes it on unchanged.
+
+The JSON answer refuses only when the bootstrap does.
+
+So in JSON a bootstrap that the node serves never gets code 500.
+
+That result needs a preset with a nonempty logs bloom and sync committee.
 -/
 
 @[expose] public section
@@ -411,6 +418,27 @@ theorem bootstrapResponse_of_error {config : Config} {store : Store preset fork}
     {error : ErrorMessage} (refused : bootstrapFor config store root = .error error) :
     bootstrapResponse config store root = .error error :=
   versioned_of_error refused
+
+/-- The JSON answer of the bootstrap refuses exactly when the bootstrap does, with the same error.
+
+So in JSON a bootstrap that the node serves never gets code 500.
+
+It needs a preset with a nonempty logs bloom and sync committee. -/
+theorem bootstrapResponse_eq_error_iff [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {config : Config} {store : Store preset fork}
+    {root : Root} {error : ErrorMessage} :
+    bootstrapResponse config store root = .error error ↔
+      bootstrapFor config store root = .error error :=
+  versioned_eq_error_iff fun bootstrap _ => toApiJson_total bootstrap
+
+/-- Each refusal of the JSON answer of the bootstrap is the error with code 404 that names the root.
+
+It needs a preset with a nonempty logs bloom and sync committee. -/
+theorem bootstrapResponse_error [NeZero preset.BYTES_PER_LOGS_BLOOM.toNat]
+    [NeZero preset.SYNC_COMMITTEE_SIZE.toNat] {config : Config} {store : Store preset fork}
+    {root : Root} {error : ErrorMessage}
+    (refused : bootstrapResponse config store root = .error error) : error = noBootstrap root :=
+  bootstrapFor_error (bootstrapResponse_eq_error_iff.mp refused)
 
 /-- A root whose block or post state the store lacks gets the error with code 404 that names it. -/
 theorem bootstrapFor_of_missing {config : Config} {store : Store preset fork} {root : Root}

@@ -8,7 +8,7 @@ public import EthLib.Networking.Discv5.Distance
 # `Networking.Discv5.Packet`
 
 The packets of discv5, from "Packet Encoding" of `discv5-wire.md` in `ethereum/devp2p`:
-<https://github.com/ethereum/devp2p/blob/88f1c80800d6/discv5/discv5-wire.md>
+<https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/discv5/discv5-wire.md>
 
 A packet is a masking IV of 16 bytes, the masked header, then the encrypted message.
 

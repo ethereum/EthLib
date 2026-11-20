@@ -33,9 +33,9 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- The paired cache theorem preserves full hash replies in the leanXMSS proof.
+-- VCVio supplies the warm finder law and the adaptive digest watch.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "6f8b75511932ed54e901c3d978b3022a66961f8d"
+  "e51283d38477ccb61116ab0f3465acefd6efcaf4"
 
 @[default_target]
 lean_lib «EthLib» where
@@ -144,6 +144,18 @@ No default target builds it.
 lean_exe «known-answers» where
   srcDir := "scripts"
   root := `KnownAnswers
+
+/-- A library of known answers that the kernel checks.
+
+Each file stays within the budget that `CONTRIBUTING.md` sets.
+
+No default target imports it.
+
+`lake build KernelVectors` builds it, and `scripts/check_memory.py` measures each of its files. -/
+lean_lib «KernelVectors» where
+  requiresModuleSystem := true
+  srcDir := "tests/kernel"
+  globs := #[.submodules `KernelVectors]
 
 /-- Writes the binding contract from the Lean docstrings and error codes.
 

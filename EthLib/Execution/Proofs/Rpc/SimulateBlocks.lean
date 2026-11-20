@@ -9,6 +9,7 @@ public import EthLib.Execution.Proofs.Transactions.Overrides
 public import EthLib.Execution.Proofs.Transactions.Process
 public import EthLib.Execution.Proofs.Transactions.StateGas
 public import EthLib.Execution.Proofs.Transactions.Unsigned
+import EthLib.Base.Proofs.ChainConfig
 
 /-!
 # Proofs: the blocks of `eth_simulateV1`
@@ -32,6 +33,8 @@ Each block of a simulation, gap blocks included, is a simulated block at its own
 A gap block is simulated from an empty request.
 
 A block of the plan is simulated from its request, at its fork.
+
+That fork is no earlier than the active fork of the header of the base block.
 
 A block simulated without calls has no transactions.
 
@@ -152,7 +155,9 @@ theorem simulateBlock_transactions {chain chain' : BlockChain} {base : RecentBlo
 
 /-- A plan holds the planned blocks of the request after its base block.
 
-They pass the order check. -/
+They pass the order check.
+
+Each has the fork that is active at its number and time. -/
 private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
     {choices : SimulateChoices} {plan : SimulatePlan}
     (h : v.planSimulate payload p choices = .ok plan) :
@@ -161,7 +166,8 @@ private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p
     checkOrder choices.blockTime plan.base.block.header.number
       plan.base.block.header.timestamp.toNat (planBlocks choices.blockTime
         plan.base.block.header.number plan.base.block.header.timestamp.toNat
-        payload.blockStateCalls) = .ok () := by
+        payload.blockStateCalls) = .ok () ∧
+    ∀ x ∈ plan.blocks, v.config.activeFork x.1.number x.1.time = some x.2 := by
   simp only [ChainView.planSimulate] at h
   obtain ⟨r, -, h⟩ := bind_ok_iff.mp h
   split at h
@@ -171,15 +177,47 @@ private theorem planSimulate_spec {v : ChainView} {payload : SimulatePayload} {p
     obtain ⟨blocks, hBlocks, h⟩ := bind_ok_iff.mp h
     simp only [pure, Except.pure, Except.ok.injEq] at h
     subst h
-    refine ⟨map_of_mapM_ok (fun x y hxy => ?_) hBlocks |>.trans (List.map_id' _), hOrder⟩
-    split at hxy
-    · obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
-      obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
-      simp only [pure, Except.pure, Except.ok.injEq] at hxy
-      subst hxy
-      rfl
-    · simp [throw, throwThe, MonadExceptOf.throw] at hxy
+    refine ⟨map_of_mapM_ok (fun x y hxy => ?_) hBlocks |>.trans (List.map_id' _), hOrder,
+      fun y hy => ?_⟩
+    · split at hxy
+      · obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        simp only [pure, Except.pure, Except.ok.injEq] at hxy
+        subst hxy
+        rfl
+      · simp [throw, throwThe, MonadExceptOf.throw] at hxy
+    · obtain ⟨x, -, hxy⟩ := mapM_ok_mem hBlocks y hy
+      split at hxy
+      · rename_i fork hFork
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        obtain ⟨-, hxy⟩ := bind_unit_ok_iff.mp hxy
+        simp only [pure, Except.pure, Except.ok.injEq] at hxy
+        subst hxy
+        exact hFork
+      · simp [throw, throwThe, MonadExceptOf.throw] at hxy
   · simp [throw, throwThe, MonadExceptOf.throw] at h
+
+/-- Each block of a plan has a fork no earlier than the given fork.
+
+The given fork must be the active fork of the header of the base block. -/
+theorem planSimulate_fork_le {v : ChainView} {payload : SimulatePayload} {p : BlockParam}
+    {choices : SimulateChoices} {plan : SimulatePlan} {fork : Fork}
+    (h : v.planSimulate payload p choices = .ok plan)
+    (hBase : v.config.activeFork plan.base.block.header.number
+      plan.base.block.header.timestamp.toNat = some fork) :
+    ∀ x ∈ plan.blocks, fork ≤ x.2 := by
+  intro x hx
+  obtain ⟨hMap, hOrder, hFork⟩ := planSimulate_spec h
+  have hPlanned : x.1 ∈ planBlocks choices.blockTime plan.base.block.header.number
+      plan.base.block.header.timestamp.toNat payload.blockStateCalls := by
+    rw [← hMap]
+    exact List.mem_map_of_mem hx
+  obtain ⟨hNumber, hTime⟩ := lt_of_checkOrder hOrder x.1 hPlanned
+  obtain ⟨later, hLater, hle⟩ :=
+    ChainConfig.activeFork_mono hBase (Nat.le_of_lt hNumber) (Nat.le_of_lt hTime)
+  rw [hFork x hx, Option.some.injEq] at hLater
+  subst hLater
+  exact hle
 
 /-- A property that each gap block keeps holds after the gap blocks.
 
@@ -399,7 +437,7 @@ theorem simulateBlocks_links {v : ChainView}
           rw [← hBase]
           exact hHash v.canonical[i] (List.getElem_mem _)
       obtain ⟨⟨hLen, hNums, hHead, hLinks, hHashes, -⟩, hCount⟩ := hAll plan.blocks _ _ _ _ s
-        (planSimulate_spec hPlan).1 (planSimulate_spec hPlan).2 hStart rfl hFold
+        (planSimulate_spec hPlan).1 (planSimulate_spec hPlan).2.1 hStart rfl hFold
       exact ⟨by omega, hNums, hHead, hLinks, hHashes⟩
     intro L
     induction L with
@@ -555,6 +593,78 @@ theorem simulateBlocks_glamsterdam_le_or_nil {v : ChainView} {payload : Simulate
   · obtain ⟨_, _, _, _, _, _, _, _, _, _, _, rfl, -⟩ := simulateBlock_spec hBlk
     exact .inl hFork
   · exact .inr (simulateBlock_transactions hBlk hNil)
+
+/-! ## No sender with code stops a simulated call -/
+
+/-- A call whose sender is given never fails for the code of its sender.
+
+The overrides give the sender at the index of the call, as a simulation does.
+
+The rule on the code of a sender then never runs. -/
+theorem applyTransaction_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {index : Nat} {before : BodyOutput fork} {tx : Transaction} {overrides : BodyOverrides}
+    {sender : Address} (hs : overrides.senders index = some sender) (i : Nat)
+    (address : Address) :
+    applyTransaction env index before tx overrides ≠
+      .error (.invalidTransaction i (.senderNotEoa address)) := by
+  unfold applyTransaction
+  rw [hs]
+  cases hc : checkInclusion env.chainId env before.gas (.ofBlock before.block) tx (some sender)
+      overrides.lifted with
+  | error e =>
+    -- The check fails with its own error, which is never the rule on the code of the sender.
+    simp only [Except.mapError, bind, Except.bind, ne_eq, Except.error.injEq,
+      BlockError.invalidTransaction.injEq, not_and]
+    rintro - rfl
+    exact checkInclusion_ne_senderNotEoa address hc
+  | ok included =>
+    -- Past the check, every failure is an abort, a state error or a trie error.
+    intro h
+    simp only [Except.mapError, bind, Except.bind] at h
+    cases hp : processTransaction env before.block included tx overrides.precompiles
+        overrides.lifted with
+    | error e' => simp [hp] at h
+    | ok out =>
+      simp only [hp] at h
+      cases hj : (before.body.beginIndex (index + 1)).join out.state with
+      | error e' => simp [hj] at h
+      | ok body =>
+        simp only [hj] at h
+        split at h
+        · simp [pure, Except.pure] at h
+        · cases hr : State.stateRoot Cryptography.Hash.Keccak.keccak256 body.block.applyChanges <;>
+            simp [hr, Functor.map, Except.map, pure, Except.pure] at h
+
+/-- The calls from index `n` on never fail for the code of a sender, when each has its sender. -/
+private theorem foldlM_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {overrides : BodyOverrides} (i : Nat) (address : Address) :
+    ∀ (txs : List Transaction) (n : Nat) (init : BodyOutput fork),
+    (∀ j, n ≤ j → j < n + txs.length → ∃ sender, overrides.senders j = some sender) →
+    (txs.zipIdx n).foldlM (fun before (tx, index) => applyTransaction env index before tx overrides)
+      init ≠ .error (.invalidTransaction i (.senderNotEoa address))
+  | [], _, _, _ => nofun
+  | tx :: rest, n, init, hs => by
+    obtain ⟨sender, hSender⟩ := hs n (Nat.le_refl n) (by simp)
+    simp only [List.zipIdx_cons, List.foldlM_cons, bind, Except.bind]
+    cases hStep : applyTransaction env n init tx overrides with
+    | error e =>
+      rintro ⟨⟩
+      exact applyTransaction_ne_senderNotEoa hSender i address hStep
+    | ok mid =>
+      exact foldlM_ne_senderNotEoa i address rest (n + 1) mid fun j hj hlt =>
+        hs j (by omega) (by simp at hlt ⊢; omega)
+
+/-- The calls of a body never fail for the code of a sender, when each call has its sender.
+
+A simulated block runs its body with the sender of each of its calls. -/
+theorem applyTransactions_ne_senderNotEoa {fork : Fork} {env : Evm.BlockEnvironment fork}
+    {body : BodyState} {txs : List Transaction} {overrides : BodyOverrides}
+    (hs : ∀ j < txs.length, ∃ sender, overrides.senders j = some sender) (i : Nat)
+    (address : Address) :
+    applyTransactions env body txs overrides ≠
+      .error (.invalidTransaction i (.senderNotEoa address)) := by
+  unfold applyTransactions
+  exact foldlM_ne_senderNotEoa i address txs 0 _ fun j _ hj => hs j (by simpa using hj)
 
 /-! ## Agreement with the state transition -/
 

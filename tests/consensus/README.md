@@ -226,7 +226,7 @@ Their SHA-256 digests are:
 - `mainnet.tar.gz`: `67762986572372a08d3b182535aa760433c86e174e14e0bbd756f350dd19398c`, 967,886,924 bytes.
 - `minimal.tar.gz`: `26d09aea70c62ed235a120a95082d544ab1c2e6fe36bd35ea1bd5da62f3b7b68`, 468,730,308 bytes.
 
-The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `fce64468a81a87892d7cb9b4858272bb3d010e50`.
+The directory `builder_api/` holds the examples of the Builder API, from `ethereum/builder-specs` at commit `ea92eff73ad77c33d3b59a2033ffa02dfae5ee05`.
 They are SSZ examples and their JSON forms in `examples/<fork>/`, copied byte for byte under their fork.
 From Bellatrix to Fulu, they are the files `signed_*`: every fork has a signed bid and a signed blinded block.
 Bellatrix also has a signed validator registration.
@@ -284,13 +284,14 @@ The first registers every validator and compares the list with the proposer look
 The second moves the state inside an epoch, replaces the lookahead, registers one validator, and checks that only the slots of that validator have entries.
 A last test checks that the list is refused at the forks before and after Fulu.
 
-The directory `keymanager_api/` holds files of the Keymanager API, from `ethereum/keymanager-APIs` at commit `51f2a5c90e9d301c3e9980da402ec70ae82f0991`, release v1.1.0.
+The directory `keymanager_api/` holds files of the Keymanager API, from `ethereum/keymanager-APIs` at commit `3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e`.
 The files are copied byte for byte under their paths in that repository.
 `keymanager-oapi.yaml` is the OpenAPI document, which names the schemas of the API.
 `types/` holds the files that define those schemas, with an example of most of them.
+EthLib does not yet specify the schemas `BuilderConfig` and `BuilderEntry` of the builder configuration endpoints, and the test lists them as such.
 The source has no other test vectors.
 
-`bindings/python/tests/consensus/test_keymanager_api.py` reads the example of each schema through the bindings, and checks what the writer gives back.
+`bindings/python/tests/consensus/test_keymanager_api.py` reads the example of each schema that EthLib specifies through the bindings, and checks what the writer gives back.
 A schema with no example of its own takes the examples of its fields.
 The test also checks the letter case of hex, the pattern of an integer, and the codes of the errors.
 The same file runs the call that imports keystores, on keystores that it builds with PBKDF2 and AES-128-CTR, and on the PBKDF2 keystore of ERC-2335 in `tests/cryptography/keystore/`.
@@ -301,7 +302,7 @@ It moves a key from one client to another with a delete and an import, as the us
 It runs the example of issue #2140 on the fee recipient, and sets the gas limit and the graffiti of a key, with the examples of the types as the defaults of the client.
 It signs the voluntary exit of the case `basic` of the voluntary exits of `operations/minimal/`, at Capella and at Deneb, with the key of its validator, and checks the signature of the case byte for byte.
 
-The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` release `v1.4.0`, commit `44e9e0dcc115c91f8b739684f4789a8310476bd9`.
+The directory `remote_signing_api/` holds the sign endpoint of the Remote-signing API, from `ethereum/remote-signing-api` at commit `514525ca961a9d001e96a02bf870285a8ae401a4`.
 The file `signing/paths/sign.yaml` is copied byte for byte under its path in that repository.
 It defines the endpoint, and it holds one example request for each kind of request, and for each version of a versioned body.
 `bindings/python/tests/consensus/test_remote_signing_api.py` reads each example that matches the schemas through the bindings, and checks that writing it again gives the same document.
@@ -311,8 +312,7 @@ The examples name no preset, and five of them fix the size of a bitfield.
 The Altair block and the sync committee contribution have the sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 The test reads each example under every preset whose sizes it has, and checks the refusal under the other one.
 The test also computes the root that the signer signs for each example of a kind before Gloas that carries a root and reads, and compares it with the example's `signingRoot`, under the minimal configuration, whose genesis fork version is that of the examples.
-The Electra and Fulu aggregates carry a root that neither preset gives, so the test computes their root under the mainnet preset with its own merkleization, and compares it with that of the bindings.
+For the Electra and Fulu aggregates, the test also computes that root under the mainnet preset with its own merkleization.
 The test also reads the examples of the five kinds that Gloas adds, which carry no signing root.
 It computes the roots of the payload attestation, the preferences and the authentication with its own merkleization, and records those of the bid and the envelope, which are progressive containers.
-Finally, it runs the sign endpoint on each example that reads, with a fixed secret key, and checks each signature with `py_ecc`; the Electra and Fulu aggregates are refused, since their roots differ from the signer's.
-The envelope example has a logs bloom of 262 bytes, where the bloom has 256, so the test checks that the bindings refuse it, and that it reads once the bloom has 256 bytes.
+Finally, it runs the sign endpoint on each example that reads, with a fixed secret key, and checks each signature with `py_ecc`.

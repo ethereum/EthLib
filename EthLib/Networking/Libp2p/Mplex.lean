@@ -21,7 +21,7 @@ The source marks mplex as deprecated and recommends QUIC or yamux instead.
 
 The source is [mplex, "Message format" and "Protocol"][mplex].
 
-[mplex]: https://github.com/libp2p/specs/blob/c750236de43cd8b246a824b377dfdb26bae686db/mplex/README.md#message-format
+[mplex]: https://github.com/libp2p/specs/blob/4facaf9876da1eb7d6e066982010c81495ebb965/mplex/README.md#message-format
 -/
 
 @[expose] public section

@@ -33,23 +33,6 @@ open Base
 
 variable {preset : Preset} {fork : Base.Fork} {config : Config} {checks : SignatureChecks}
 
-/-- A fold that adds a weight for each input to a bound keeps a property of the state and bound.
-
-The end then has the property with the start bound plus the sum of the weights. -/
-private theorem foldlM_ok_weighted {α β ε : Type} {g : β → α → Except ε β} (P : β → Nat → Prop)
-    (weight : α → Nat) (step : ∀ b x b' c, P b c → g b x = .ok b' → P b' (c + weight x)) :
-    ∀ {xs : List α} {b b' : β} {c : Nat}, P b c → xs.foldlM g b = .ok b' →
-      P b' (c + (xs.map weight).sum)
-  | [], _, _, _, holds, computed => by
-    simp only [List.foldlM_nil, pure, Except.pure, Except.ok.injEq] at computed
-    subst computed
-    simpa using holds
-  | x :: _, b, _, c, holds, computed => by
-    rw [List.foldlM_cons, bind_ok_iff] at computed
-    obtain ⟨middle, first, rest⟩ := computed
-    have := foldlM_ok_weighted P weight step (step b x middle c holds first) rest
-    simpa [Nat.add_assoc] using this
-
 /-- A deposit credited at once keeps the slashed balances. -/
 private theorem applyPendingDeposit_slashings {state after : BeaconState preset fork}
     {deposit : PendingDeposit}

@@ -158,7 +158,7 @@ theorem le_leakLoss_leakEpochs {floor score bias divisor amount : Nat} (floorPos
   exact Nat.le_of_lt (Nat.lt_of_mul_lt_mul_left f5)
 
 /-- A whole number of increments above another is at least one increment above it. -/
-private theorem add_le_of_lt_of_aligned {inc a b : Nat} (ha : a % inc = 0) (hb : b % inc = 0)
+theorem add_le_of_lt_of_aligned {inc a b : Nat} (ha : a % inc = 0) (hb : b % inc = 0)
     (lt : b < a) : b + inc ≤ a := by
   obtain ⟨x, rfl⟩ := Nat.dvd_of_mod_eq_zero ha
   obtain ⟨y, rfl⟩ := Nat.dvd_of_mod_eq_zero hb

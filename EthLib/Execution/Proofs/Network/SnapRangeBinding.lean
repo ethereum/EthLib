@@ -12,7 +12,7 @@ A valid StorageRanges answer does the same for each storage trie it covers.
 
 The source is [`caps/snap.md`][snap], sections "AccountRange (0x01)" and "StorageRanges (0x03)".
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 The tries are secured: each key is the hash of an address or of a slot key.
 
@@ -28,6 +28,7 @@ namespace EthLib.Execution.Network
 open EthLib.Base
 open EthLib.Execution.Trie
 open EthLib.Cryptography.Hash.Keccak
+open EthLib.Serialization.Rlp (Item)
 
 /-- Take a map of the accounts that gives each one its hash and its full form.
 
@@ -36,10 +37,11 @@ When it succeeds, it keeps the accounts with a full form, in order.
 The hashes of its outputs are those of the accounts, in order.
 
 The value of a hash among its outputs is then the full form of the account with that hash. -/
-private theorem mapM_fullAccount {ε : Type} {convert : RangeEntry → Except ε (Hash32 × ByteArray)}
+private theorem mapM_fullAccount {ε : Type}
+    {convert : RangeEntry Item → Except ε (Hash32 × ByteArray)}
     (hconvert : ∀ account entry, convert account = .ok entry →
       fullAccount account.data = some entry.2 ∧ entry.1 = account.hash) :
-    {accounts : List RangeEntry} → {entries : List (Hash32 × ByteArray)} →
+    {accounts : List (RangeEntry Item)} → {entries : List (Hash32 × ByteArray)} →
       accounts.mapM convert = .ok entries →
       entries = accounts.filterMap (fun account =>
           (fullAccount account.data).map fun value => (account.hash, value)) ∧
@@ -72,7 +74,7 @@ Otherwise the range search returns a collision in the plain trie of the hashed k
 
 Or the state trie has two keys with one hash, which the key search returns. -/
 theorem verifyAccountRange_sound {data : List (ByteArray × ByteArray)} {root' start : Hash32}
-    {accounts : List RangeEntry} {proof : List ByteArray} {answer : RangeAnswer}
+    {accounts : List (RangeEntry Item)} {proof : List ByteArray} {answer : RangeAnswer}
     (hroot : root keccak256 ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)
     (hverify : verifyAccountRange root' start accounts proof = .ok answer)
     (hstate : answer ≠ .noState) (key : Hash32)
@@ -170,10 +172,11 @@ Otherwise the range search returns a collision in the plain trie of the hashed k
 
 Or the storage trie has two keys with one hash, which the key search returns. -/
 theorem verifyStorageRanges_sound {roots : List Hash32} {start : Hash32}
-    {slots ranges : List (List RangeEntry)} {proof : List ByteArray} {answer : RangeAnswer}
+    {slots ranges : List (List (RangeEntry ByteArray))} {proof : List ByteArray}
+    {answer : RangeAnswer}
     (hverify : verifyStorageRanges roots start slots proof = .ok answer)
     (hstate : answer ≠ .noState) (hranges : ranges = if slots.isEmpty then [[]] else slots)
-    {index : Nat} {range : List RangeEntry} {root' : Hash32}
+    {index : Nat} {range : List (RangeEntry ByteArray)} {root' : Hash32}
     (hrange : ranges[index]? = some range) (hrootIndex : roots[index]? = some root')
     {data : List (ByteArray × ByteArray)}
     (hroot : root keccak256 ⟨true, data⟩ = .ok root') (hkeys : (data.map Prod.fst).Nodup)

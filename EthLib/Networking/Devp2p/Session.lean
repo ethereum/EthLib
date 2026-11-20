@@ -7,7 +7,7 @@ public import EthLib.Networking.Devp2p.P2p
 
 The life of an RLPx session after the handshake, from the "p2p" capability of [`rlpx.md`][p2p].
 
-[p2p]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#p2p-capability
+[p2p]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#p2p-capability
 
 The frame layer hands the session the data of each frame: the message ID, then the message.
 
@@ -27,7 +27,7 @@ The IDs from `0x10` on belong to the capabilities that both peers share.
 
 [Message ID-based Multiplexing][mux] gives their order.
 
-[mux]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#message-id-based-multiplexing
+[mux]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#message-id-based-multiplexing
 
 The source leaves three points open, and this module reads them as follows.
 
@@ -44,7 +44,7 @@ namespace EthLib.Networking.Devp2p
 
 /-- A reason of Disconnect, from the table of [Disconnect (0x01)][disc].
 
-[disc]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/rlpx.md#disconnect-0x01
+[disc]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/rlpx.md#disconnect-0x01
 -/
 inductive DisconnectReason where
   /-- `0x00`: the disconnection was requested. -/

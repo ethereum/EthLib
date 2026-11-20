@@ -767,6 +767,57 @@ private theorem credited_processExecutionRequests {body : BeaconBlockBody preset
       simpa using recentFlagSum_mono_below grow altair base count support,
     fun v member => absurd member (Finset.notMem_empty v)⟩, count⟩
 
+/-- Credits that join: the first part converts no validator. -/
+private theorem credited_join {x y : BeaconState preset fork}
+    {p c sl o sh p' c' sl' cv' o' sh'}
+    (one : Credited s x p c sl ∅ o sh) (two : Credited x y p' c' sl' cv' o' sh') :
+    ∃ p c sl o sh, Credited s y p c sl cv' o sh := by
+  have joined := one.trans two
+  rw [Finset.empty_union] at joined
+  exact ⟨_, _, _, _, _, joined⟩
+
+/-- From Fulu and before Gloas, the operations before the requests credit like operations.
+
+They convert no validator. -/
+private theorem credited_operationsPrefix {body : BeaconBlockBody preset fork} {parent : Slot}
+    {before : fork < .hegota}
+    {proposed attested voted deposited exited changed : BeaconState preset fork}
+    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (matched : BalancesMatch s)
+    (proposersOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) s = .ok proposed)
+    (attestersOk : body.attesterSlashings.data.toList.foldlM
+      (processAttesterSlashing config checks) proposed = .ok attested)
+    (attestationsOk : body.attestations.data.toList.foldlM
+      (processAttestation config checks · parent ·) attested = .ok voted)
+    (depositsOk : (body.deposits before).data.toList.foldlM
+      (processDeposit config checks before) voted = .ok deposited)
+    (exitsOk : body.voluntaryExits.data.toList.foldlM
+      (processVoluntaryExit config checks) deposited = .ok exited)
+    (changesOk : processBlsToExecutionChanges config checks exited body = .ok changed) :
+    ∃ p c sl o sh, Credited s changed p c sl ∅ o sh := by
+  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
+  have matchedAt {x : BeaconState preset fork} {p c sl o sh}
+      (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
+    held.kept.frame.balancesMatch matched
+  obtain ⟨_, _, _, _, _, one⟩ := Credited.foldlM
+    (fun _ _ _ _ ok => credited_processProposerSlashing early ok) matched proposersOk
+  obtain ⟨_, _, _, _, _, two⟩ := Credited.foldlM
+    (fun _ _ _ _ ok => credited_processAttesterSlashing early ok) (matchedAt one) attestersOk
+  obtain ⟨_, _, _, _, _, upTwo⟩ := credited_join one two
+  obtain ⟨_, _, _, _, _, three⟩ := Credited.foldlM
+    (fun _ _ _ _ ok => credited_processAttestation early altair ok) (matchedAt upTwo)
+    attestationsOk
+  obtain ⟨_, _, _, _, _, upThree⟩ := credited_join upTwo three
+  obtain ⟨_, _, _, _, _, four⟩ := Credited.foldlM
+    (fun _ _ _ held ok => credited_processDeposit electra held ok) (matchedAt upThree) depositsOk
+  obtain ⟨_, _, _, _, _, upFour⟩ := credited_join upThree four
+  obtain ⟨_, _, _, _, _, five⟩ := Credited.foldlM
+    (fun _ _ _ _ ok => credited_processVoluntaryExit ok) (matchedAt upFour) exitsOk
+  obtain ⟨_, _, _, _, _, upFive⟩ := credited_join upFour five
+  obtain ⟨_, _, _, _, _, six⟩ := credited_processBlsToExecutionChanges changesOk
+  exact credited_join upFive six
+
 /-- From Fulu and before Gloas, the operations of a block credit like operations.
 
 They convert at most one validator for each consolidation request. -/
@@ -775,7 +826,6 @@ private theorem credited_processOperations {body : BeaconBlockBody preset fork} 
     (computed : processOperations config checks s body parent = .ok t) :
     ∃ p c sl cv o sh, Credited s t p c sl cv o sh ∧
       cv.card ≤ preset.MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD.toNat := by
-  have altair : .altair ≤ fork := Nat.le_trans (by decide) fulu
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) fulu
   unfold processOperations at computed
   split at computed
@@ -784,35 +834,47 @@ private theorem credited_processOperations {body : BeaconBlockBody preset fork} 
   simp only [bind_ok_iff, ensure_ok_iff, ← Array.foldlM_toList] at computed
   obtain ⟨_, _, _, _, a, proposersOk, b, attestersOk, c, attestationsOk, d, depositsOk, e,
     exitsOk, f, changesOk, requestsOk⟩ := computed
-  have step {x y : BeaconState preset fork} {p c sl o sh p' c' sl' cv' o' sh'}
-      (one : Credited s x p c sl ∅ o sh) (two : Credited x y p' c' sl' cv' o' sh') :
-      ∃ p c sl o sh, Credited s y p c sl cv' o sh := by
-    have joined := one.trans two
-    rw [Finset.empty_union] at joined
-    exact ⟨_, _, _, _, _, joined⟩
-  have matchedAt {x : BeaconState preset fork} {p c sl o sh}
-      (held : Credited s x p c sl ∅ o sh) : BalancesMatch x :=
-    held.kept.frame.balancesMatch matched
-  obtain ⟨_, _, _, _, _, one⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processProposerSlashing early ok) matched proposersOk
-  obtain ⟨_, _, _, _, _, two⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processAttesterSlashing early ok) (matchedAt one) attestersOk
-  obtain ⟨_, _, _, _, _, upTwo⟩ := step one two
-  obtain ⟨_, _, _, _, _, three⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processAttestation early altair ok) (matchedAt upTwo)
-    attestationsOk
-  obtain ⟨_, _, _, _, _, upThree⟩ := step upTwo three
-  obtain ⟨_, _, _, _, _, four⟩ := Credited.foldlM
-    (fun _ _ _ held ok => credited_processDeposit electra held ok) (matchedAt upThree) depositsOk
-  obtain ⟨_, _, _, _, _, upFour⟩ := step upThree four
-  obtain ⟨_, _, _, _, _, five⟩ := Credited.foldlM
-    (fun _ _ _ _ ok => credited_processVoluntaryExit ok) (matchedAt upFour) exitsOk
-  obtain ⟨_, _, _, _, _, upFive⟩ := step upFour five
-  obtain ⟨_, _, _, _, _, six⟩ := credited_processBlsToExecutionChanges changesOk
-  obtain ⟨_, _, _, _, _, upSix⟩ := step upFive six
+  obtain ⟨_, _, _, _, _, upSix⟩ := credited_operationsPrefix early fulu matched proposersOk
+    attestersOk attestationsOk depositsOk exitsOk changesOk
   obtain ⟨conv, seven, count⟩ := credited_processExecutionRequests requestsOk
-  obtain ⟨_, _, _, _, _, upSeven⟩ := step upSix seven
+  obtain ⟨_, _, _, _, _, upSeven⟩ := credited_join upSix seven
   exact ⟨_, _, _, _, _, _, upSeven, count⟩
+
+/-- A block's operations before its consolidation requests keep whether each validator compounds.
+
+This holds from Fulu and before Gloas, from a state whose balances match its validators. -/
+theorem compoundingKept_beforeConsolidations {body : BeaconBlockBody preset fork}
+    {parent : Slot} {before : fork < .hegota}
+    {proposed attested voted deposited exited changed requested withdrawn :
+      BeaconState preset fork}
+    (early : fork < .glamsterdam) (fulu : .fusaka ≤ fork) (electra : .pectra ≤ fork)
+    (matched : BalancesMatch s)
+    (proposedOk : body.proposerSlashings.data.toList.foldlM
+      (processProposerSlashing config checks) s = .ok proposed)
+    (attestedOk : body.attesterSlashings.data.toList.foldlM
+      (processAttesterSlashing config checks) proposed = .ok attested)
+    (votedOk : body.attestations.data.toList.foldlM
+      (processAttestation config checks · parent ·) attested = .ok voted)
+    (depositedOk : (body.deposits before).data.toList.foldlM
+      (processDeposit config checks before) voted = .ok deposited)
+    (exitedOk : body.voluntaryExits.data.toList.foldlM
+      (processVoluntaryExit config checks) deposited = .ok exited)
+    (changedOk : processBlsToExecutionChanges config checks exited body = .ok changed)
+    (requestedOk : (body.executionRequests ⟨electra, early⟩).deposits.data.toList.foldlM
+      (processDepositRequest · electra ·) changed = .ok requested)
+    (withdrawnOk : (body.executionRequests ⟨electra, early⟩).withdrawals.data.toList.foldlM
+      (processWithdrawalRequest config · electra ·) requested = .ok withdrawn) :
+    ∀ (v : ValidatorIndex) (validator : Validator),
+      s.validators.data[v.toNat]? = some validator →
+      ∃ later, withdrawn.validators.data[v.toNat]? = some later ∧
+        hasCompoundingWithdrawalCredential later =
+          hasCompoundingWithdrawalCredential validator := by
+  obtain ⟨_, _, _, _, _, ops⟩ := credited_operationsPrefix early fulu matched proposedOk
+    attestedOk votedOk depositedOk exitedOk changedOk
+  have both := ops.ledger.trans
+    (ledger_depositWithdrawalRequests (electra := electra) requestedOk withdrawnOk)
+  intro v validator located
+  exact both.kept v validator (by simp) located
 
 end CreditedSteps
 

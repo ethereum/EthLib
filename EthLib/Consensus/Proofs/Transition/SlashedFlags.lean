@@ -109,6 +109,20 @@ private theorem slashFlags_processEpoch {config : Config} {checks : SignatureChe
     exact slashFlags_of_validators
       (congrArg (·.data) (edge.validators_eq ⟨nofun, nofun, nofun⟩))
 
+/-- Advancing one slot keeps the slashed flag at each registry position. -/
+theorem slashedFlagAt_advanceSlot {config : Config} {checks : SignatureChecks}
+    {s t : BeaconState preset fork} (ok : advanceSlot config checks s = .ok t) :
+    ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
+  obtain ⟨next, cached, epoched, _, cachedOk, epochOk, rfl⟩ := advanceSlot_ok ok
+  obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
+  have first := slashFlags_of_validators (state := s) (after := cached) (by rw [cachedEq])
+  have middle : ∀ i, (slashedFlagAt epoched i).getD false =
+      (slashedFlagAt cached i).getD false := by
+    obtain ⟨_, epochOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochOk
+    · exact slashFlags_processEpoch epochOk
+    · exact fun _ => rfl
+  exact fun i => (middle i).trans (first i)
+
 /-- Processing slots keeps the slashed flag at each registry position.
 
 A position past the end of the registry reads as not slashed. -/
@@ -116,18 +130,6 @@ theorem slashedFlagAt_processSlots {config : Config} {checks : SignatureChecks}
     {state after : BeaconState preset fork} {slot : Slot}
     (run : processSlots config checks state slot = .ok after) :
     ∀ i, (slashedFlagAt after i).getD false = (slashedFlagAt state i).getD false := by
-  have step {s t : BeaconState preset fork}
-      (ok : advanceSlot config checks s = .ok t) :
-      ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
-    obtain ⟨next, cached, epoched, _, cachedOk, epochOk, rfl⟩ := advanceSlot_ok ok
-    obtain ⟨_, _, _, _, cachedEq⟩ := processSlot_ok cachedOk
-    have first := slashFlags_of_validators (state := s) (after := cached) (by rw [cachedEq])
-    have middle : ∀ i, (slashedFlagAt epoched i).getD false =
-        (slashedFlagAt cached i).getD false := by
-      obtain ⟨_, epochOk⟩ | ⟨_, rfl⟩ := epochIfLast_cases epochOk
-      · exact slashFlags_processEpoch epochOk
-      · exact fun _ => rfl
-    exact fun i => (middle i).trans (first i)
   have steps {count : Nat} {s t : BeaconState preset fork}
       (ok : advanceSlots config checks count s = .ok t) :
       ∀ i, (slashedFlagAt t i).getD false = (slashedFlagAt s i).getD false := by
@@ -135,7 +137,7 @@ theorem slashedFlagAt_processSlots {config : Config} {checks : SignatureChecks}
     | zero => cases ok; exact fun _ => rfl
     | succ count ih =>
       obtain ⟨_, first, rest⟩ := bind_ok_iff.mp ok
-      exact fun i => (ih rest i).trans (step first i)
+      exact fun i => (ih rest i).trans (slashedFlagAt_advanceSlot first i)
   simp only [processSlots, bind_ok_iff, ensure_ok_iff] at run
   obtain ⟨_, _, advanced⟩ := run
   exact steps advanced

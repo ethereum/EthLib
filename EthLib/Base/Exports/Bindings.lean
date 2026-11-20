@@ -653,6 +653,13 @@ def bindings : List Binding := [
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++
       "verify: bool, root: bytes, envelope: bytes) -> bytes",
     [`EthLib.Consensus.ForkChoiceError], some "ForkChoiceError"⟩,
+  ⟨"consensus_api_cached_envelope", `EthLib.Consensus.Exports.apiCachedEnvelopeExport,
+    "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> " ++
+      "dict[str, Any]",
+    [], some "ConsensusError"⟩,
+  ⟨"consensus_api_cached_envelope_ssz", `EthLib.Consensus.Exports.apiCachedEnvelopeSszExport,
+    "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> bytes",
+    [], some "ConsensusError"⟩,
   ⟨"consensus_api_light_client_bootstrap",
     `EthLib.Consensus.Exports.apiLightClientBootstrapExport,
     "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, " ++

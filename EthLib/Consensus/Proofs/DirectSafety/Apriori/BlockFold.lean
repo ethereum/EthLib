@@ -486,7 +486,7 @@ private theorem operationReplay_sync {x : ForkedBeaconState preset} {high : Nat}
     rfl rfl rfl rfl rfl frame.balancesMatch bounded
 
 /-- One recorded operation: its limits at the input, its action, and one appended event. -/
-private theorem recordBalance_single {fork : Fork} {source : BalanceSource}
+theorem recordBalance_single {fork : Fork} {source : BalanceSource}
     {limits : BeaconState preset fork → Except TransitionError (Nat × Nat)}
     {action : BeaconState preset fork → Except TransitionError (BeaconState preset fork)}
     {s t : BeaconState preset fork} {prior events : List (BalanceEvent preset)}
@@ -500,7 +500,7 @@ private theorem recordBalance_single {fork : Fork} {source : BalanceSource}
   exact ⟨credit, debit, limitsOk, actionOk, rfl⟩
 
 /-- A recorded fold runs the plain fold of its actions. -/
-private theorem recordFold_plain {fork : Fork} {α : Type} {source : BalanceSource}
+theorem recordFold_plain {fork : Fork} {α : Type} {source : BalanceSource}
     {limits : α → BeaconState preset fork → Except TransitionError (Nat × Nat)}
     {action : α → BeaconState preset fork → Except TransitionError (BeaconState preset fork)} :
     ∀ (items : List α) (s t : BeaconState preset fork) (prior events : List (BalanceEvent preset)),
@@ -912,24 +912,20 @@ private theorem deposit_churn_le_exits {g x a : ForkedBeaconState preset}
   rw [depositChurnLimit_of_lt aEarly] at churnOk
   have exitOk : exitChurnLimit config reset = .ok churn := by
     simpa only [exitChurnLimit, notGloas, ↓reduceIte] using churnOk
-  cases read : getTotalActiveBalance reset with
-  | error e =>
-    simp [exitChurnLimit, notGloas, getActivationExitChurnLimit, getBalanceChurnLimit, read,
-      bind, Except.bind] at exitOk
-  | ok total =>
-    have rate := exit_rate_le_churn aEarly read exitOk
-    have readA : getTotalActiveBalance a.state = .ok total := by
-      rw [← cachedTotal, ← resetTotal]
-      exact read
-    have bounded := total_le_ceiling_of_read (u := a) readA
-      (unit.trans (ceilingAt_mono electra high (Nat.zero_le _))) ceiling
-    have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
-    have flow : exitFlowAt (config := config) x high
-        ((getCurrentEpoch a.state).toNat - (getCurrentEpoch x.state).toNat) =
-        activationExitChurn preset config (stakeCeilingAt config x high (ix x a)) := by
-      simp [exitFlowAt, exitFlow, preElectraEpochs, notBefore]
-    rw [flow]
-    exact rate.trans (exit_churn_mono bounded)
+  obtain ⟨total, read⟩ := DirectSafety.exitChurnLimit_total aEarly exitOk
+  have rate := exit_rate_le_churn aEarly read exitOk
+  have readA : getTotalActiveBalance a.state = .ok total := by
+    rw [← cachedTotal, ← resetTotal]
+    exact read
+  have bounded := total_le_ceiling_of_read (u := a) readA
+    (unit.trans (ceilingAt_mono electra high (Nat.zero_le _))) ceiling
+  have notBefore : ¬ x.fork < .pectra := Nat.not_lt_of_ge electra
+  have flow : exitFlowAt (config := config) x high
+      ((getCurrentEpoch a.state).toNat - (getCurrentEpoch x.state).toNat) =
+      activationExitChurn preset config (stakeCeilingAt config x high (ix x a)) := by
+    simp [exitFlowAt, exitFlow, preElectraEpochs, notBefore]
+  rw [flow]
+  exact rate.trans (exit_churn_mono bounded)
 
 /-- From Electra, take the deposit credits of a branch plus its final carry.
 

@@ -363,4 +363,50 @@ theorem blindedBlockSsz_gloas {block : SignedBeaconBlock preset fork}
     (Nat.le_trans (by decide : Fork.bellatrix.ctorIdx ≤ Fork.glamsterdam.ctorIdx) gloas)
   simp [blindedBlockSsz, none, late]
 
+/-- An answer of the proposer's envelope endpoint is the cached envelope of the request.
+
+The cache holds it for the slot of the request, and it names the block root of the request.
+
+So a client never gets an envelope of another slot, or one committed to another block. -/
+theorem cachedEnvelopeOf_ok {cache : Option (CachedEnvelope preset fork)} {slot : Slot}
+    {root : Root} {envelope : ExecutionPayloadEnvelope preset fork}
+    (answered : cachedEnvelopeOf cache slot root = .ok envelope) :
+    .glamsterdam ≤ fork ∧ cache = some ⟨slot, envelope⟩ ∧ envelope.beaconBlockRoot = root := by
+  unfold cachedEnvelopeOf at answered
+  split at answered
+  · rename_i gloas
+    split at answered
+    · rename_i cached
+      split at answered
+      · rename_i hit
+        cases answered
+        obtain ⟨sameSlot, sameRoot⟩ := hit
+        cases cached
+        simp_all
+      · cases answered
+    · cases answered
+  · cases answered
+
+/-- From Gloas, a cached envelope of the slot and the block root of the request is the answer. -/
+theorem cachedEnvelopeOf_of_cached {slot : Slot} {root : Root}
+    {envelope : ExecutionPayloadEnvelope preset fork} (gloas : .glamsterdam ≤ fork)
+    (named : envelope.beaconBlockRoot = root) :
+    cachedEnvelopeOf (some ⟨slot, envelope⟩) slot root = .ok envelope := by
+  simp [cachedEnvelopeOf, gloas, named]
+
+/-- Every other answer of the proposer's envelope endpoint is the error with code 404. -/
+theorem cachedEnvelopeOf_error {cache : Option (CachedEnvelope preset fork)} {slot : Slot}
+    {root : Root} {error : ErrorMessage}
+    (failed : cachedEnvelopeOf cache slot root = .error error) :
+    error = envelopeNotFound := by
+  unfold cachedEnvelopeOf at failed
+  split at failed
+  · split at failed
+    · split at failed <;> cases failed
+      rfl
+    · cases failed
+      rfl
+  · cases failed
+    rfl
+
 end EthLib.Consensus.BeaconApi

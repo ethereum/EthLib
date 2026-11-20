@@ -1213,10 +1213,11 @@
       {"constructor": "accountMismatch", "code": 503},
       {"constructor": "slot", "code": 504},
       {"constructor": "slotEncoding", "code": 505},
-      {"constructor": "slotMismatch", "code": 506}]}],
+      {"constructor": "slotMismatch", "code": 506},
+      {"constructor": "absentSlotProof", "code": 507}]}],
    "error_class": "TrieError",
    "docstring":
-   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
+   "Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.\n\nThe arguments are the state root and the `result` object of the response.\n\n`None` means that the proof shows no account at the address.\n\nThe answer then has nonce and balance 0, zero hashes, and each slot the word 0 with no proof node.\n\nOtherwise each slot is true when it is set and holds its value, and false when it is not set.\n\nA field that is missing or out of its pattern, or a root that is not 32 bytes, has code 0.\n\nAn answer that does not hold has the code of its fault."},
   {"summary":
    "The output of an opening at an index under a root, or no bytes when verification rejects.",
    "signature": "(root: bytes, index: int, opening: bytes) -> bytes | None",
@@ -3312,6 +3313,26 @@
    "error_class": "ForkChoiceError",
    "docstring":
    "The SSZ body of the envelope answer, as `bytes`.\n\nThe arguments are those of the JSON answer."},
+  {"summary":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> dict[str, Any]",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeExport",
+   "method": "consensus_api_cached_envelope",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The JSON response of the endpoint that gives a proposer its envelope, as a `dict`.\n\nThe first arguments are the preset and the fork.\n\nThe cache is a slot with the SSZ bytes of its envelope, or None.\n\nThen come the slot and the block root of the request."},
+  {"summary":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.",
+   "signature":
+   "(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> bytes",
+   "operation": "EthLib.Consensus.Exports.apiCachedEnvelopeSszExport",
+   "method": "consensus_api_cached_envelope_ssz",
+   "errors": [],
+   "error_class": "ConsensusError",
+   "docstring":
+   "The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`.\n\nThe arguments are those of the JSON answer."},
   {"summary": "The JSON response of the bootstrap endpoint, as a `dict`.",
    "signature":
    "(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]",
@@ -12165,7 +12186,9 @@
       {"constructor": "tooManyOmmers", "code": 607},
       {"constructor": "wrongOmmersHash", "code": 608},
       {"constructor": "ommerAfterBlock", "code": 609},
-      {"constructor": "untypedTransaction", "code": 610}]}],
+      {"constructor": "untypedTransaction", "code": 610},
+      {"constructor": "invalidTransaction", "code": 611},
+      {"constructor": "gasLimitAboveBlock", "code": 612}]}],
    "error_class": "EthWireError",
    "docstring":
    "Whether the body `body` of a BlockBodies answer belongs to the header `header` at a fork.\n\nThe header and the body are RLP.\n\nIt returns true on acceptance, and raises the code of the refusal otherwise."},
@@ -12264,13 +12287,15 @@
    "error_class": "SnapError",
    "docstring":
    "Whether the snap/1 TrieNodes data `response` answers the GetTrieNodes data `request`.\n\nIt must repeat the request ID, and hold at most one node per requested node.\n\nA path that cannot be read is an error."},
-  {"summary": "The full RLP form of an account in slim form.",
+  {"summary":
+   "The full RLP form of an account, from the RLP encoding of its slim form.",
    "signature": "(slim: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.Snap.Exports.fullAccountExport",
    "method": "snap_full_account",
    "errors": [],
    "error_class": "SnapError",
-   "docstring": "The full RLP form of an account in slim form."},
+   "docstring":
+   "The full RLP form of an account, from the RLP encoding of its slim form."},
   {"summary":
    "Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.",
    "signature":

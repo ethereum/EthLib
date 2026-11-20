@@ -512,27 +512,10 @@ theorem Run.split_next {x y : ForkedBeaconState preset} (run : Run config checks
       (_ : advanceSlotAcross config checks z = .ok z') (_ : Run config checks z' y),
       getCurrentEpoch z.state = getCurrentEpoch x.state ∧
       getCurrentEpoch z'.state = getCurrentEpoch y.state := by
-  induction run with
-  | nil => omega
-  | @snoc middle last pre step ih =>
-    have low := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps pre.chainSteps)
-    have high := UInt64.le_iff_toNat_le.mp step.chainStep.currentEpoch_le
-    by_cases crossed : (getCurrentEpoch middle.state).toNat = (getCurrentEpoch x.state).toNat + 1
-    · obtain ⟨z, z', head, edge, tail, first, second⟩ := ih crossed
-      refine ⟨z, z', head, edge, tail.snoc step, first, ?_⟩
-      exact UInt64.toNat_inj.mp (by rw [second]; omega)
-    · have same : getCurrentEpoch middle.state = getCurrentEpoch x.state :=
-        UInt64.toNat_inj.mp (by omega)
-      cases step with
-      | block engine signed due ok =>
-        have slot := processBlock_slot (applySignedBlock_ok ok).2.1
-        have epoch := congrArg (computeEpochAtSlot preset) slot
-        change getCurrentEpoch _ = getCurrentEpoch _ at epoch
-        simp only at next same
-        rw [epoch] at next
-        rw [same] at next
-        omega
-      | slot ok => exact ⟨middle, last, pre, ok, .nil, same, rfl⟩
+  obtain ⟨z, z', pre, slot, post, -, first, second⟩ :=
+    run.cross_split (getCurrentEpoch x.state).toNat (Nat.le_refl _) (by omega)
+  exact ⟨z, z', pre, slot, post, UInt64.toNat_inj.mp first,
+    UInt64.toNat_inj.mp (second.trans next.symm)⟩
 
 /-- A run inside one epoch keeps its fork.
 
@@ -563,19 +546,7 @@ theorem Run.currentSyncCommittee_eq_of_same_epoch {x y : ForkedBeaconState prese
     (altair : .altair ≤ y.fork) (altair' : .altair ≤ x.fork) :
     (y.state.currentSyncCommittee altair).value.pubkeys.toList =
       (x.state.currentSyncCommittee altair').value.pubkeys.toList :=
-  Run.induction_of_same_epoch
-    (fun w _ => ∀ (altair : .altair ≤ w.fork) (altair' : .altair ≤ x.fork),
-      (w.state.currentSyncCommittee altair).value.pubkeys.toList =
-        (x.state.currentSyncCommittee altair').value.pubkeys.toList)
-    (fun _ _ => rfl)
-    (fun _ _ _ ok _ _ prior altair altair' => by
-      rw [processBlock_currentSyncCommittee altair (applySignedBlock_ok ok).2.1]
-      exact prior altair altair')
-    (fun _ _ eq cachedOk _ prior => by
-      subst eq
-      obtain ⟨_, _, _, _, rfl⟩ := processSlot_ok cachedOk
-      exact prior)
-    tail early same altair altair'
+  tail.currentSyncCommittee_eq_of_same_period early (by rw [same]) altair altair'
 
 /-- The positions active in an epoch are the same in two registries when activity stays.
 

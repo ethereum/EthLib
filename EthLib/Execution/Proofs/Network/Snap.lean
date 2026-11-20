@@ -14,7 +14,7 @@ The count of message IDs for snap and eth is nonzero exactly on the capabilities
 
 An account reads back from its slim form.
 
-The encoded slim form of an account converts to its full encoding.
+The slim form of an account converts to its full encoding, and a byte string is never a body.
 
 Each message reads back from its ID and its RLP item on the versions that use its ID.
 
@@ -44,7 +44,8 @@ namespace EthLib.Execution.Network
 open EthLib.Base
 open EthLib.Serialization.Rlp
 
-instance : LawfulCodec RangeEntry where
+/-- An entry reads back from its item, for an account body and for slot data alike. -/
+instance {α : Type} [Codec α] [LawfulCodec α] : LawfulCodec (RangeEntry α) where
   ofItem_toItem e := by
     show RangeEntry.ofItem (RangeEntry.toItem e) = _
     simp only [RangeEntry.ofItem, RangeEntry.toItem, Item.fields, Item.toItems, List.length_cons,
@@ -74,14 +75,15 @@ theorem ofSlimAccount_slimAccount (account : State.Account) (root : Hash32) :
     simp [ofSlimAccount, slimAccount, hr, hc, toItem_hash_ne_empty, Item.fields, Item.toItems,
       Item.field_toItem, bind, Except.bind, pure, Except.pure]
 
-/-- The encoded slim form converts to the full encoding of its account. -/
-theorem fullAccount_encode_slimAccount {account : State.Account} {root : Hash32}
-    {body full : ByteArray} (hbody : encode (slimAccount account root) = .ok body)
+/-- The slim form converts to the full encoding of its account. -/
+theorem fullAccount_slimAccount {account : State.Account} {root : Hash32} {full : ByteArray}
     (hfull : State.encodeAccount account root = .ok full) :
-    fullAccount body = some full := by
-  simp [fullAccount, decode_encode _ _ hbody, ofSlimAccount_slimAccount, hbody, hfull,
-    bne, BEq.beq, ByteArray.beq, Except.toOption]
-  exact Array.isEqv_self _
+    fullAccount (slimAccount account root) = some full := by
+  simp [fullAccount, ofSlimAccount_slimAccount, hfull, Except.toOption]
+
+/-- A byte string is never the body of an account, whatever bytes it holds. -/
+theorem fullAccount_bytes (bytes : ByteArray) : fullAccount (.bytes bytes) = none := by
+  simp [fullAccount, ofSlimAccount, Item.fields, Item.toItems, bind, Except.bind]
 
 namespace SnapVersion
 

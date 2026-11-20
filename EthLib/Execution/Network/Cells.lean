@@ -10,7 +10,7 @@ The cell exchange of eth/72, from three sections of [`caps/eth.md`][eth].
 
 They are "Blob Transaction and Cell Exchange", "GetCells (0x14)" and "Cells (0x15)".
 
-[eth]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/eth.md#getcells-0x14
+[eth]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/eth.md#getcells-0x14
 
 [EIP-8070][eip-8070], status Last Call, adds them.
 

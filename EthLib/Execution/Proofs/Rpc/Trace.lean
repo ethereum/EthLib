@@ -12,6 +12,8 @@ The opcode logger changes nothing in the run of a transaction, for every configu
 The trace of a transaction of a block exists whenever the block runs it, at every fork.
 
 From Byzantium, the trace fails exactly when the receipt of the transaction says it failed.
+
+An entry holds storage only at an SLOAD or SSTORE that runs, and a failed step changes no slot.
 -/
 
 @[expose] public section
@@ -116,5 +118,78 @@ theorem traceRun_count {fork : Fork} (config : TraceConfig) (unbounded : config.
     (fun evm result => Tracer.record config evm result) (fun evm result => countSteps evm result)
     (fun evm result tracer => ?_) env block included tx precompiles lifted {}
   by_cases empty : evm.code.size = 0 <;> simp [Tracer.record, countSteps, unbounded, empty]
+
+
+/-- A step that touches a slot is an SLOAD or SSTORE that runs without an error. -/
+theorem touchedSlot_isSome {fork : Fork} {Meter : Type} [GasMeter Meter] {op : Option Op}
+    {evm : Evm fork Meter} {result : Except EvmError (StepResult fork Meter)}
+    (h : (touchedSlot op evm result).isSome) :
+    (op = some .sload ∨ op = some .sstore) ∧ stepError result = none := by
+  unfold touchedSlot at h
+  split at h
+  · rename_i after
+    split at h
+    · rename_i hrun
+      obtain ⟨hop, hnone⟩ := hrun
+      refine ⟨hop, ?_⟩
+      simp [stepError, Option.isNone_iff_eq_none.mp hnone]
+    · simp at h
+  · simp at h
+
+/-- An entry of the logger holds storage only at an SLOAD or SSTORE step that runs.
+
+A step that fails runs no opcode, so its entry has no storage. -/
+theorem record_storage {fork : Fork} {Meter : Type} [GasMeter Meter] (config : TraceConfig)
+    (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter)) (tracer : Tracer) :
+    (tracer.record config evm result).logs = tracer.logs ∨
+      ∃ entry, (tracer.record config evm result).logs = tracer.logs.push entry ∧
+        (entry.storage.isSome →
+          (stepOp evm = some .sload ∨ stepOp evm = some .sstore) ∧ stepError result = none) := by
+  unfold Tracer.record
+  split
+  · exact .inl rfl
+  · refine .inr ⟨_, rfl, fun hs => touchedSlot_isSome (evm := evm) ?_⟩
+    cases h : touchedSlot (stepOp evm) evm result <;> simp_all
+
+/-- Leaving out the entry of one account keeps the entry of every other account. -/
+private theorem lookup_filter_ne {β : Type} {a b : Address} (hab : a ≠ b) :
+    ∀ (l : List (Address × β)), (l.filter (·.1 != b)).lookup a = l.lookup a
+  | [] => rfl
+  | (k, v) :: rest => by
+    by_cases hk : k = b
+    · subst hk
+      have hka : (a == k) = false := by simpa using hab
+      simp [List.filter, List.lookup, hka, lookup_filter_ne hab rest]
+    · have hkb : (k != b) = true := by simpa using hk
+      simp only [List.filter, hkb, List.lookup]
+      split <;> simp [lookup_filter_ne hab rest]
+
+/-- A step that fails leaves the slots that the logger has seen for each account as they were.
+
+Only the order of the accounts may change. -/
+theorem record_slots_of_stepError {fork : Fork} {Meter : Type} [GasMeter Meter]
+    (config : TraceConfig) (evm : Evm fork Meter) (result : Except EvmError (StepResult fork Meter))
+    (tracer : Tracer) (h : (stepError result).isSome) (a : Address) :
+    ((tracer.record config evm result).slots.lookup a).getD [] =
+      (tracer.slots.lookup a).getD [] := by
+  -- A step that fails touches no slot.
+  have ht : touchedSlot (stepOp evm) evm result = none := by
+    cases hts : touchedSlot (stepOp evm) evm result with
+    | none => rfl
+    | some _ =>
+      have := (touchedSlot_isSome (evm := evm) (op := stepOp evm) (by rw [hts]; rfl)).2
+      rw [this] at h
+      cases h
+  unfold Tracer.record
+  split
+  · rfl
+  · simp only [ht]
+    split
+    · by_cases ha : a = evm.message.currentTarget
+      · subst ha
+        simp [List.lookup]
+      · have hne : (a == evm.message.currentTarget) = false := by simpa using ha
+        simp [List.lookup, hne, lookup_filter_ne ha]
+    · rfl
 
 end EthLib.Execution.Rpc

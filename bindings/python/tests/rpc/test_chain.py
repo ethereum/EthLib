@@ -111,6 +111,11 @@ def _check_struct_log(entry: object) -> None:
         rpc.read_param("bytes32", chunk)
     if "returnData" in entry:
         rpc.read_param("bytes", entry["returnData"])
+    # The source leaves out a refund of zero, and the storage of a step that fails.
+    if entry.get("refund") == 0:
+        raise ValueError("refund: zero, which the source leaves out")
+    if "storage" in entry and "error" in entry:
+        raise ValueError("storage: at a step that fails")
     if "storage" in entry:
         if not isinstance(entry["storage"], dict):
             raise ValueError("storage: not an object")
@@ -167,15 +172,6 @@ TRACE_METHODS: Final = frozenset(
 )
 
 
-def _without_refund(value: object) -> object:
-    """The value with every `refund` field of its objects left out."""
-    if isinstance(value, dict):
-        return {key: _without_refund(item) for key, item in value.items() if key != "refund"}
-    if isinstance(value, list):
-        return [_without_refund(item) for item in value]
-    return value
-
-
 # Every fixture of a method that the view serves.
 SERVED: Final = sorted(
     path for method in RESULT_SCHEMAS for path in (FIXTURES / method).glob("*.io")
@@ -230,9 +226,8 @@ def test_fixture(path: Path, answers: dict[str, dict[str, Any]]) -> None:
         if not fixture.speconly:
             assert got["result"] == expected["result"]
         elif fixture.method in TRACE_METHODS:
-            # The trace gives the refund counter at every step, as the source recommends.
-            # The fixtures leave it out; every other field is compared.
-            assert _without_refund(got["result"]) == expected["result"]
+            # The trace leaves out a refund counter of zero, as the source requires.
+            assert got["result"] == expected["result"]
 
 
 def test_chain_links() -> None:
@@ -282,8 +277,8 @@ def test_trace_limit_keeps_the_first_entries() -> None:
     cut = _call("debug_traceTransaction", [_TRACED, {"limit": 2}])
     assert len(full["structLogs"]) > 2
     assert cut == {**full, "structLogs": full["structLogs"][:2]}
-    # Every entry gives its refund counter, which the source recommends even when it is zero.
-    assert all("refund" in entry for entry in full["structLogs"])
+    # The refund counter of this trace stays zero, so no entry gives it, as the source requires.
+    assert not any("refund" in entry for entry in full["structLogs"])
 
 
 @pytest.mark.parametrize("config", [{"limit": 0}, {"tracer": ""}], ids=["limit-0", "tracer-empty"])
@@ -366,6 +361,15 @@ BAD_TRACE_RESULTS: Final = [
     ),
     pytest.param(
         _trace(_entry(storage=[])), ValueError, "storage: not an object", id="storage-array"
+    ),
+    pytest.param(
+        _trace(_entry(refund=0)), ValueError, "refund: zero, which the source leaves out", id="zero"
+    ),
+    pytest.param(
+        _trace(_entry(op="SSTORE", error="out of gas", storage={})),
+        ValueError,
+        "storage: at a step that fails",
+        id="storage-at-error",
     ),
     pytest.param(
         _trace(_entry(memory=["0x00"])),
@@ -752,17 +756,55 @@ def test_proof_at_each_block() -> None:
         # Slot 0 is set once it holds a word other than zero.
         assert trie.verify_account_proof(root, proof) == [int(word, 16) != 0, False]
         assert (proof["balance"], proof["nonce"]) == (balance, nonce)
-        assert [slot["key"] for slot in proof["storageProof"]] == ["0x0", "0x6"]
+        assert [slot["key"] for slot in proof["storageProof"]] == [KEY, "0x6"]
         # The storage query gives a word on 32 bytes, and the proof a quantity.
         assert [slot["value"] for slot in proof["storageProof"]] == [hex(int(word, 16)), "0x0"]
         assert trie.verify_account_proof(root, absent) is None
-        slot = absent["storageProof"][0]
-        assert (absent["balance"], absent["nonce"], slot["key"], slot["value"]) == (
+        # The text of the method gives an absent account zero hashes, and slots without nodes.
+        assert (absent["balance"], absent["nonce"], absent["codeHash"], absent["storageHash"]) == (
             "0x0",
             "0x0",
-            "0x1",
-            "0x0",
+            "0x" + "00" * 32,
+            "0x" + "00" * 32,
         )
+        assert absent["storageProof"] == [{"key": "0x1", "value": "0x0", "proof": []}]
+
+
+def test_proof_of_missing_account() -> None:
+    """The request of the fixture `get-account-proof-missing-account.io` of execution-apis."""
+    result = _call(
+        "eth_getProof", ["0x000000000000000000000000000000000000dead", ["0x0"], "latest"]
+    )
+    assert (result["codeHash"], result["storageHash"]) == ("0x" + "00" * 32, "0x" + "00" * 32)
+    assert result["storageProof"] == [{"key": "0x0", "value": "0x0", "proof": []}]
+
+
+# Each requested key of slot 1, and the key that the answer gives back for it.
+# A key of 63 or 64 hex digits comes back as 32 bytes, and any other key as a number.
+KEY_ECHOES: Final = [
+    ("0x1", "0x1"),
+    ("0x01", "0x1"),
+    ("0x" + "0" * 61 + "1", "0x1"),
+    ("0x" + "0" * 62 + "1", "0x" + "00" * 31 + "01"),
+    ("0x" + "0" * 63 + "1", "0x" + "00" * 31 + "01"),
+]
+
+
+def test_proof_key_echo() -> None:
+    """Each key comes back in its requested form, in order, with a duplicate kept."""
+    keys = [key for key, _ in KEY_ECHOES] + ["0x1"]
+    result = _call("eth_getProof", [CONTRACT, keys, "latest"])
+    echoed = [slot["key"] for slot in result["storageProof"]]
+    assert echoed == [echo for _, echo in KEY_ECHOES] + ["0x1"]
+    # Every form names slot 1, so every entry gives the same word and proof.
+    assert len({json.dumps(slot | {"key": None}) for slot in result["storageProof"]}) == 1
+
+
+def test_proof_empty_key() -> None:
+    """The empty key `0x` names slot 0, and comes back as `0x0`."""
+    empty, zero = _call("eth_getProof", [CONTRACT, ["0x", "0x0"], "latest"])["storageProof"]
+    assert empty == zero
+    assert empty["key"] == "0x0"
 
 
 def test_account_at_each_block() -> None:
@@ -1052,3 +1094,211 @@ def test_network_id() -> None:
     (response,) = chain.serve(['{"jsonrpc":"2.0","id":1,"method":"net_version"}'])
     assert response is not None
     assert json.loads(response) == {"jsonrpc": "2.0", "id": 1, "result": "1"}
+
+
+# The requests of the fixtures of execution-apis#938 and execution-apis#939, with their answers.
+# Each request runs from the funded account below, to the address 0x01 followed by zeros.
+# Block 0x17 is before Berlin, 0x1a before London, 0x29 before Cancun and 0x2c before Prague.
+_FROM: Final = "0x0c2c51a0990aee1d73c1228de158688341557508"
+_TO: Final = "0x0100000000000000000000000000000000000000"
+_AUTHORIZATION: Final = {
+    "chainId": "0x0",
+    "address": _TO,
+    "nonce": "0x0",
+    "yParity": "0x0",
+    "r": "0x0",
+    "s": "0x0",
+}
+_HASH: Final = "0x01" + "00" * 31
+_FEES: Final = {"maxFeePerGas": "0x77359400", "maxPriorityFeePerGas": "0x3b9aca00"}
+
+
+def _rule_error(reason: str) -> dict[str, object]:
+    """The error of a request that a rule of the method rejects: code -32000, invalid input."""
+    return {"code": -32000, "message": "Invalid input", "data": f"transaction: {reason}"}
+
+
+_INACTIVE: Final = _rule_error("a field is not active at the fork of the block")
+_BLOB_FEE: Final = _rule_error("maxFeePerBlobGas: no blobVersionedHashes")
+_EMPTY_HASHES: Final = _rule_error("blobVersionedHashes: empty")
+_NO_BERLIN: Final = _rule_error("no access list before Berlin")
+
+REQUEST_RULES: Final = [
+    # The type is ignored: the other fields decide the kind.
+    ("call-type-access-list-before-berlin", "eth_call", {"type": "0x1"}, "0x17", "0x"),
+    ("call-type-blob-before-cancun", "eth_call", {"type": "0x3"}, "0x29", "0x"),
+    ("call-type-set-code-before-prague", "eth_call", {"type": "0x4"}, "0x2c", "0x"),
+    ("call-type-unknown", "eth_call", {"type": "0x7f"}, "latest", "0x"),
+    ("estimate-type-blob-before-cancun", "eth_estimateGas", {"type": "0x3"}, "0x29", "0x5208"),
+    (
+        "create-al-type-set-code-before-prague",
+        "eth_createAccessList",
+        {"type": "0x4"},
+        "0x2c",
+        {"accessList": [], "gasUsed": "0x5208"},
+    ),
+    (
+        "call-gas-price-before-london",
+        "eth_call",
+        {"gas": "0x5208", "gasPrice": "0x3b9aca00"},
+        "0x1a",
+        "0x",
+    ),
+    # A field whose EIP is not active at the block is invalid, even when it is zero or empty.
+    ("call-fork-inactive-access-list", "eth_call", {"accessList": []}, "0x17", _INACTIVE),
+    (
+        "estimate-fork-inactive-access-list",
+        "eth_estimateGas",
+        {"accessList": []},
+        "0x17",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-fee-fields-zero",
+        "eth_call",
+        {"maxFeePerGas": "0x0", "maxPriorityFeePerGas": "0x0"},
+        "0x1a",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-priority-fee",
+        "eth_call",
+        {"maxPriorityFeePerGas": "0x3b9aca00"},
+        "0x1a",
+        _INACTIVE,
+    ),
+    ("estimate-fork-inactive-fee-fields", "eth_estimateGas", _FEES, "0x1a", _INACTIVE),
+    ("create-al-fork-inactive-fee-fields", "eth_createAccessList", _FEES, "0x1a", _INACTIVE),
+    (
+        "call-fork-inactive-blob-hashes",
+        "eth_call",
+        {"blobVersionedHashes": [_HASH]},
+        "0x29",
+        _INACTIVE,
+    ),
+    (
+        "call-fork-inactive-authorization-list",
+        "eth_call",
+        {"authorizationList": [_AUTHORIZATION]},
+        "0x2c",
+        _INACTIVE,
+    ),
+    # Blob fields without blob hashes are invalid at every fork.
+    ("call-empty-blob-hashes", "eth_call", {"blobVersionedHashes": []}, "latest", _EMPTY_HASHES),
+    (
+        "call-blob-fee-empty-blob-hashes",
+        "eth_call",
+        {"blobVersionedHashes": [], "maxFeePerBlobGas": "0x1"},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    ("call-blob-fee-without-hashes", "eth_call", {"maxFeePerBlobGas": "0x1"}, "latest", _BLOB_FEE),
+    (
+        "call-blob-fee-without-hashes-before-cancun",
+        "eth_call",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    (
+        "estimate-empty-blob-hashes",
+        "eth_estimateGas",
+        {"blobVersionedHashes": []},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    (
+        "estimate-blob-fee-without-hashes",
+        "eth_estimateGas",
+        {"maxFeePerBlobGas": "0x1"},
+        "latest",
+        _BLOB_FEE,
+    ),
+    (
+        "estimate-blob-fee-without-hashes-before-cancun",
+        "eth_estimateGas",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    (
+        "create-al-empty-blob-hashes",
+        "eth_createAccessList",
+        {"blobVersionedHashes": []},
+        "latest",
+        _EMPTY_HASHES,
+    ),
+    (
+        "create-al-blob-fee-without-hashes",
+        "eth_createAccessList",
+        {"maxFeePerBlobGas": "0x1"},
+        "latest",
+        _BLOB_FEE,
+    ),
+    (
+        "create-al-blob-fee-without-hashes-before-cancun",
+        "eth_createAccessList",
+        {"maxFeePerBlobGas": "0x1"},
+        "0x29",
+        _BLOB_FEE,
+    ),
+    # Before Berlin, eth_createAccessList rejects every request.
+    ("create-al-fork-inactive", "eth_createAccessList", {}, "0x17", _NO_BERLIN),
+]
+
+
+@pytest.mark.parametrize(
+    ("method", "fields", "block", "expected"),
+    [pytest.param(*case[1:], id=case[0]) for case in REQUEST_RULES],
+)
+def test_request_rule(method: str, fields: dict[str, object], block: str, expected: object) -> None:
+    """Each request of the fixture gets the answer of the fixture, or its error code."""
+    params = [{"from": _FROM, "to": _TO, **fields}, block]
+    answer = _answer(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}))
+    # A rejection is compared whole, so that it names the rule that rejects the request.
+    if isinstance(expected, dict) and "code" in expected:
+        assert answer["error"] == expected
+    else:
+        assert answer["result"] == expected
+
+
+# The code of the two requests of `call-type-legacy-with-access-list`, with and without type 0.
+# It reads the balance of 0x01 followed by zeros, then returns the gas left.
+_GAS_LEFT_CODE: Final = "0x73010000000000000000000000000000000000000031505a60005260206000f3"
+
+
+def test_type_zero_with_access_list() -> None:
+    """A type 0 with an access list runs as the same request without its type."""
+    request = {
+        "accessList": [{"address": _TO, "storageKeys": []}],
+        "from": _FROM,
+        "gas": "0x493e0",
+        "input": _GAS_LEFT_CODE,
+    }
+    expected = "0x" + "00" * 29 + "01572b"
+    assert _call("eth_call", [{**request, "type": "0x0"}, "latest"]) == expected
+    assert _call("eth_call", [request, "latest"]) == expected
+
+
+def test_type_zero_with_fee_fields() -> None:
+    """A type 0 with fee caps runs with those caps, as its fixture of execution-apis expects."""
+    request = {"from": _FROM, "gas": "0x493e0", "input": "0x3a60005260206000f3", **_FEES}
+    expected = "0x" + "00" * 28 + "3c5742d4"
+    assert _call("eth_call", [{**request, "type": "0x0"}, "latest"]) == expected
+
+
+# A transaction of block 58 whose trace has an SLOAD or SSTORE step that fails.
+_FAILED_STORAGE_STEP: Final = "0x9117624aeba24b35fec724154870d2ebf04b6a06ce0cf1f8905875039a2b69d8"
+
+
+def test_trace_failed_storage_step() -> None:
+    """A storage step that fails runs no opcode, so its entry has no storage, as the source says."""
+    logs = _call("debug_traceTransaction", [_FAILED_STORAGE_STEP])["structLogs"]
+    failed = [
+        index
+        for index, entry in enumerate(logs)
+        if entry["op"] in ("SLOAD", "SSTORE") and "error" in entry
+    ]
+    assert failed
+    for index in failed:
+        assert "storage" not in logs[index]

@@ -48,7 +48,7 @@ release = "v5.0.0-beta.0"
 directories = ["tests/consensus/beacon_api"]
 
 [repositories."ethereum/builder-specs"]
-commit = "fce64468a81a87892d7cb9b4858272bb3d010e50"
+commit = "ea92eff73ad77c33d3b59a2033ffa02dfae5ee05"
 directories = ["tests/consensus/builder_api"]
 
 [repositories."flashbots/relay-specs"]
@@ -56,13 +56,11 @@ commit = "a4e0a50d9d46bfe881fd74cc7e0db366371f4eed"
 directories = ["tests/consensus/relay_api"]
 
 [repositories."ethereum/keymanager-APIs"]
-commit = "51f2a5c90e9d301c3e9980da402ec70ae82f0991"
-release = "v1.1.0"
+commit = "3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e"
 directories = ["tests/consensus/keymanager_api"]
 
 [repositories."ethereum/remote-signing-api"]
-commit = "44e9e0dcc115c91f8b739684f4789a8310476bd9"
-release = "v1.4.0"
+commit = "514525ca961a9d001e96a02bf870285a8ae401a4"
 directories = ["tests/consensus/remote_signing_api"]
 
 [repositories."ethereum/c-kzg-4844"]
@@ -95,7 +93,7 @@ commit = "7406111ac4ae539ea0db8b7ea2dc76730cd957f4"
 commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
 
 [repositories."ethereum/devp2p"]
-commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
+commit = "277ceb399c15df86efb17d51eb58200c26879784"
 
 # A mainnet block after Shapella, which the check of a received body reads.
 [repositories."ethereum/portal-spec-tests"]
@@ -188,7 +186,7 @@ commit = "dd184f1ce89c81808503bb719b5fcb13844d08f3"
 commit = "9a1fbe8edadebea223f47102f1913b8026c23a1c"
 
 [repositories."libp2p/specs"]
-commit = "c750236de43cd8b246a824b377dfdb26bae686db"
+commit = "4facaf9876da1eb7d6e066982010c81495ebb965"
 
 # The gossip RPC tests build their frames from the protobuf encoding guide at this commit.
 [repositories."protocolbuffers/protocolbuffers.github.io"]
@@ -272,6 +270,12 @@ repository = "eth-clients/mainnet"
 url = "https://raw.githubusercontent.com/eth-clients/mainnet/8cad4805e9cb5aa5e8e74d30e3f5029a7f133372/metadata/genesis.ssz"
 size = 5404504
 sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
+
+# The assets of a pinned release that no test reads, by download URL, each with its reason.
+# The release watcher fails on an asset of a pinned release that is neither here nor an archive.
+[unread_assets]
+"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/comptests.tar.gz" = "The fork choice compliance tests, which wait for their runner (#3535)"
+"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/general.tar.gz" = "Only the Altair BLS cases; the pinned general archive of v1.7.0-alpha.12 holds them too"
 
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]

@@ -1134,6 +1134,23 @@ def api_payload_envelope_ssz(
     )
 
 
+def api_cached_envelope(
+    name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes
+) -> dict[str, Any]:
+    """The Beacon API envelope that a node built for its proposer, or ConsensusError."""
+    # The cache is the slot and the SSZ bytes of the one envelope that the node built, or None.
+    # It is answered when its slot and its block root are those of the request.
+    # Otherwise, and before Gloas, it raises ConsensusError with code 404.
+    return _native.consensus_api_cached_envelope(name, fork, cached, slot, root)
+
+
+def api_cached_envelope_ssz(
+    name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes
+) -> bytes:
+    """The Beacon API SSZ body of the envelope that a node built, or ConsensusError."""
+    return _native.consensus_api_cached_envelope_ssz(name, fork, cached, slot, root)
+
+
 # A light client update that a node knows: its period, the name of its fork and its SSZ bytes.
 KnownUpdate: TypeAlias = tuple[int, str, bytes]
 
@@ -2294,6 +2311,8 @@ __all__ = [
     "api_columns_ssz",
     "api_payload_envelope",
     "api_payload_envelope_ssz",
+    "api_cached_envelope",
+    "api_cached_envelope_ssz",
     "api_light_client_bootstrap",
     "api_light_client_bootstrap_ssz",
     "api_light_client_decode_updates",

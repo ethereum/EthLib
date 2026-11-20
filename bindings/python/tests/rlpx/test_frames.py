@@ -1,6 +1,6 @@
 """RLPx frames against a transcription of the sections "Framing" and "MAC" of rlpx.md."""
 
-# The source is rlpx.md of ethereum/devp2p at commit 88f1c80800d622cc3a542a2125bbe33cc18c9f9c.
+# The source is rlpx.md of ethereum/devp2p at commit 277ceb399c15df86efb17d51eb58200c26879784.
 #
 # rlpx.md has no framing vectors, so the model below writes the frames from its text.
 # It uses only two primitives of the bindings, each checked by its own vector suite.

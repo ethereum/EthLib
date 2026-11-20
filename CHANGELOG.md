@@ -9,6 +9,127 @@ Not yet released.
 
 ### Proof additions
 
+- `DirectSafety.exitChurnLimit_total` is public: it gives the total active balance read by a successful exit churn limit before Gloas.
+  `ExitCharges` reads it for the pin reserve, and `BlockFold` reads it for the deposit churn bound.
+
+- The proof of the pin reserve bound separates the estimates for balances, exits and rewards into modules.
+  The helpers shared by these modules are public in the `PinDrift.Internal` namespace.
+  The bound's statement and import path are unchanged.
+
+- `Run.nil_append` drops an empty prefix, and `Run.snoc_append_eq` puts the split of a run before its final prefix step instead of after it.
+  `PinDriftBound` reads both to split event replays.
+
+- `Run.split_at_flip` cuts a run at a step that gains a property, and `ChainStep.epoch_le_succ` bounds one step's epoch increase by one.
+  `PinDriftBound` reads them to locate changes along a run.
+
+- `Run.cross_split` cuts a run at the slot that leaves a given epoch, and `Run.exists_epoch_split` cuts it at a state in a given epoch.
+  `PinDriftBound` reads both, and `Run.split_next` follows from `Run.cross_split` with its statement unchanged.
+
+- `Run.blockCount_le_epochs` bounds the blocks of a run by the slots of the epochs it touches.
+  `PinDriftBound` reads it to count sync committee debits and credits.
+
+- `Run.mem_balancePath_split` locates a balance-path state at a run boundary or inside a slot step before upgrades.
+  `PinDriftBound` reads it to bound balances along the path.
+
+- `ceil_div_le` bounds a rounded-up natural-number quotient by its numerator.
+  `PinDriftBound` reads it for a rounded balance bound.
+
+- `floor_add_ceil_le`, `rounded_add_ceil_le`, `rounded_add_floor_le` and `floor_le_of_lt` bound natural-number quotients and amounts rounded to an increment.
+  `PinDriftBound` reads them to bound sums and compare balances.
+
+- `signers_elsewhere_of_unseated` says that no member of a sync committee takes the position of a validator whose key the committee lacks, regardless of the member's participation bit.
+  `processSyncAggregate_proposer` reads it, and the pin's bound on a position that a sync aggregate moves reads it in `PinDriftBound`.
+
+- `Step.eq_slot_of_crossing` says that a step of a run that crosses an epoch is a slot step, and gives the step as that slot.
+  `DirectSafety.Apriori.Internal.slot_of_crossing` now follows from it, and its statement is unchanged.
+  The pin's drift bound, the penalty segments and the active-stake ceiling read it where a step leaves its epoch.
+
+- `DirectSafety.Apriori.Internal.segment_slot_cases` splits a segment of a run that starts in an epoch: it stays in its epoch, or it ends with the slot of the epoch boundary after an inner run.
+  `segment_events_cases` builds on it, and the pin's credit scan of a segment reads it.
+
+- `DirectSafety.Apriori.Internal.segment_events_cases` splits the events of a segment of a branch that starts in an epoch.
+  The segment stays in its epoch, or it ends with the slot of the epoch boundary after an inner run, and it gives the epoch passes of that run by their source.
+  The cohort's penalties in `Penalties` and one key's pass debits in the pin's drift bound read it.
+
+- `PinTerms` names the terms of `pinReserve`, `PinTerms.total` is their weighted sum, and `pinTerms` computes them from a call's state, its ancestor and the finalized block's state.
+  `pinReserve` is `(pinTerms config state ancestor finalizedState).total`.
+  Through `pinTerms`, it reads the churn of the a priori drift bound.
+  The pin's drift bound in `PinDriftBound` reads the terms one by one.
+
+- `PinTerms.capAt`, `PinTerms.dueAmount` and `PinTerms.exitedSlashable` read a key's cap, its due partial withdrawals and its exit from a state, as `pinTerms` does.
+  `PinTerms.syncEnvelope` and `PinTerms.wide` are bounds that `pinTerms` computes from a total.
+  `joiningStake` is the stake joining the active set, which `quorumReserve` and `pinTerms` both read, with `quorumReserve`'s value and statement unchanged.
+  The pin's drift bound in `PinDriftBound` reads them at other states and totals.
+
+- `ConsolidationQueueRise.Appends` says that the queue of pending consolidations only grows at its end inside a block, and `ConsolidationQueueRise.appendStep_processBlock` proves it for a block from Altair and before Gloas, with the frame and the registry lifecycle.
+  `riseStep_processBlock` now follows from it, and its statement is unchanged.
+  The pin's `block_step` reads it.
+
+- `Execution.justifiedSigned_at` generalizes `Execution.justifiedHonestlySigned` to one receiver and any set of signers.
+  A store's justified checkpoint after an epoch has a signer in a set `p`.
+  This holds when the quorum voters outside `p` hold less than two thirds of the total in each state that the store counts in.
+  `justifiedHonestlySigned` is its instance with `p` the honest set, and its statement is unchanged.
+  The pin's reader takes `p` to be the voters of a call.
+
+- `setting_runs_of_call` is public: it gives the runs and epochs of the pin's setting, for one call and one counting state.
+  The finalized block's state is reached from genesis, and a split state from it.
+  Runs from the split state reach the pulled-up state of the call and the counting state.
+  The pin's reader reads it.
+
+- `Run.slashed_withdrawable_eq` says that a validator that is slashed, with an assigned exit, keeps its withdrawable epoch along a run.
+  The pin's floors read it for the keys that the counting branch slashes before the split.
+
+- `Run.withdrawable_eq_exit_delay` says that a validator reached from genesis, if it is not slashed, has no withdrawable epoch before its exit is assigned.
+  After the exit is assigned, its withdrawable epoch is exactly the withdrawal delay after it.
+  It extends `Run.exit_withdrawable_delay` with the upper bound, and the pin's floors read it for the keys that the counting branch exits.
+  The private invariant `ActivationExitOrder.Holds` gains the upper bound as a fifth conjunct.
+  The new `Holds` implies the old one, so each reader of the old four conjuncts is unchanged.
+
+- `hysteresis_of_run_slot` says that a slot step of a run from genesis ends within the bands of hysteresis.
+  The step must reach the first slot of an epoch.
+  It composes the epoch transition with the upgrades of the slot, which keep the bands because every effective balance is at most its cap.
+  `run_boundaryEpoch` and the pin's charge lemmas read it.
+
+- `DirectSafety.Apriori.Internal.FloorTrace.run_potential_floor_slash` is public: a key unslashed at the start of a run keeps its balance within the closed form of a slash, over one more epoch.
+  The pin's `segment_potential_slash` reads it for the floor of a key that the counting run slashes.
+
+- `Run.exit_activated` says that a validator with an assigned exit, in a run from genesis, has reached its activation epoch.
+  It lets a reader of `Step.slashed_activated` discharge its `exited` premise.
+  The private invariant `ActivationExitOrder.Holds` gains it as a sixth conjunct.
+  The new `Holds` implies the old one, so each reader of the old five conjuncts is unchanged.
+
+- `DirectSafety.Apriori.Internal.perIncrement_exists` is public: the base reward per increment exists at a positive total when the scaled factor fits.
+  The pin reads it to show that its base reward per increment is at least four.
+  The pin's preset facts include `fits`, that the scaled base reward factor fits in a `Gwei`, which both presets meet.
+  They also include `activation`, that the activation balance is at most the largest effective balance before Electra, which both presets meet.
+  The pin reads `activation` for the bands of hysteresis through a chain of upgrades.
+
+- `DirectSafety.Apriori.Internal.run_cuts_of_additive` sums a bound over the one-epoch segments of a branch, for any quantity that adds over `Run.append`.
+  `run_cuts_le` is its instance for the cost of the replayed events.
+  The pin's proposer-credit bound reads it for the credits of the block steps.
+
+- `processBlockHeader_proposer` is public.
+  It says that a block's header step reads the proposer of the block at the state before it.
+  The pin's gross-credit count reads it for the proposer of a block step.
+
+- `DirectSafety.Apriori.Internal.activeStake_eq_of_same_epoch` says that the effective balances active in an epoch sum the same at two states of one epoch of a run.
+  `activeStake_same_epoch` and the pin's proposer-credit bound read it.
+
+- `Run.pendingConsolidation_targets` says that each pending consolidation of a state of a run from genesis, before Gloas, has its target in the registry.
+  A request finds its target by pubkey in the registry, which only grows.
+  The pin reads it to exclude a created key that only a consolidation funds.
+
+- `DirectSafety.Apriori.Internal.effectiveAt_le_withdrawalMax` says that a key's effective balance at a state of a run from genesis is at most the largest one its credentials allow.
+  The pin's floors read it.
+
+- `slashedFlagAt_advanceSlot` says that advancing one slot keeps each slashed flag; `Step.slashed_activated` reads it.
+
+- `Step.slashed_activated` says that a key which a step newly slashes was activated by the epoch of the step's start, from Electra.
+  A key that has begun to exit before the step must be activated, as a hypothesis, and a block never appends a slashed key.
+  The pin's closure of the created keys reads it.
+
+- `Step.new_validators_unassigned` says that a step from Electra and before Gloas leaves every validator it appends with no activation or exit epoch; the pin's `created_first_state` reads it.
+
 - A signing root in one domain type is never one in another, unless SHA-256 collides on the signing data ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
   `computeSigningRoot_ne_or_collision_of_domain_ne` states it for two different domains, and `computeSigningRoot_ne_or_collision_of_domainType_ne` for two domain types at any fork versions and chains.
   `signingDataMessages` names the inputs of the node hash in the signing data of an object root and a domain.
@@ -133,14 +254,102 @@ Not yet released.
   `effectiveRise_le` bounds the rise of the active effective balances over an epoch end, and `effectiveFall_le` the fall of a voter's.
   `Run.balanceCorrections_of_same_epoch` bounds the balances along a branch inside one epoch.
 
+- `processProposerSlashing_balanceDown` says that a proposer slashing does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
+- `processAttesterSlashing_balanceDown` says that an attester slashing does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
+- `processAttestation_balanceDown` says that an attestation does not raise the balance of any index other than the proposer's, and keeps `getBeaconProposerIndex`.
+  It needs the mixes to span more than the seed lookahead plus two epochs.
+  The pin's gross credit count reads it for each recorded pass of a block.
+
+- `DirectSafety.selected_deposit_le` says that a balance event credits a set of keys, none of them withdrawable before it, at most the gains of the keys that are not withdrawable.
+  For a deposit event from Electra, that sum is its funding credit.
+  The pin's bound on the deposits credited to the active keys of the counting run reads it, in `deposit_each_le`.
+
+- `FloorTrace.step_general_or_fulu` and `FloorTrace.run_of_le_cap_or_fulu` extend the per-key floor trace to a key with no activation epoch, from Fulu.
+  They also accept a different guard in place of the final key's exit.
+  It is that the withdrawable epoch of the key at the start of the step is past the call's epochs.
+  The existing statements are the cases with the exit guard.
+  `FloorTrace.run_of_le_cap_general` takes the same guard and covers an activated key or a branch from Fulu.
+  `processUpgrades_eq_of_window` states that the upgrades from Fulu up to before Gloas leave the state as it is.
+  The pin's drift bound reads them for keys that are not yet active.
+
+- `FloorTrace.run_effective_origin` says where a key's effective balance after a run from Fusaka comes from.
+  It is its value at the start, or an update set it at most to the balance at the last state where it changed.
+  The run splits at that state, with the effective balance constant after it and aligned.
+  The stay step of the pin's counting-branch floor reads it.
+
+- `FloorTrace.effective_aligned` says that a key's effective balance at a state of a run from genesis is a whole number of increments.
+  The pin's drift bound reads it.
+
+- `hysteresis_of_crossing_slot` says that a slot step to a later epoch, from Fusaka before Gloas, leaves the state within the bands of hysteresis.
+  `DirectSafety.Apriori.Internal.slot_of_crossing` says that a step that ends in a later epoch is a slot step.
+  The pin's claim about the keys that are pending at the start of an epoch reads them.
+
+- `processEpochAltair_credentials` says that an epoch from Altair keeps the withdrawal credentials of each validator in the registry before it.
+  `processEffectiveBalanceUpdates_owned` says that the pass of the effective balances finds a balance at each position of its registry.
+  The pin's balance bound for a key that switches to compounding on the counting branch reads both.
+
+- `compoundingKept_beforeConsolidations` says that the operations of a block before its consolidation requests keep whether each validator compounds.
+  It covers the slashings, attestations, deposits, exits and BLS changes, and the deposit and withdrawal requests, from Fulu before Gloas.
+  `ledger_depositWithdrawalRequests` says that the deposit requests and then the withdrawal requests of a payload move no balance and keep the credentials.
+  `ledger_processConsolidationRequest` says that a consolidation request converts at most one validator and moves no other balance.
+  `recordBalance_single` says that a recorded operation that succeeds runs its action at the input state and appends one event with its source, states and limits.
+  The pin's balance bound for a key that switches to compounding reads these four lemmas.
+
+- `run_partial_queue_net` bounds the partial cost of a run plus the due entries left in its queue.
+  The pin's bound on the penalties and partials of a key on the pulled-up branch reads it.
+
+- `Run.deposit_credit_le_funding` bounds what a deposit event of a run credits the keys recent at the run's end by the event's funding credit.
+  The pin's deposit-queue bound for the keys that vote on the pulled-up branch reads it.
+
+- `processRegistryUpdates_withdrawableEpoch_of_unassigned_late` says what registry updates do to the withdrawable epoch of a key with no exit.
+  They keep it, or set it after the current epoch, the seed lookahead and the withdrawal delay.
+  The existing `processRegistryUpdates_withdrawableEpoch_of_unassigned` is its weaker case.
+  The pin's drift bound reads it for the keys that registry updates eject before the pending consolidations.
+
+- `Step.consolidation_withdrawable` says what a step does to the withdrawable epoch of a key before its pending consolidations.
+  The key keeps the withdrawable epoch it had at the start of the step, or has one set after the next epoch.
+  It takes a step with a positive withdrawal delay.
+  The pin's drift bound reads it for the source of a pending consolidation.
+
+- `Run.departure_charge_site` splits a run at the step that assigns the exit of a departure charge, with the validator before and after that step.
+  The pin's drift bound reads it for the activation of a key whose exit a counting state charges.
+
+- `Run.exit_activation_gap` shows that an assigned exit in a run from genesis comes at least the seed lookahead and one epoch after the activation.
+  The pin's drift bound reads it.
+
+- `Run.eligibility_le_finalized` shows that a validator with an assigned activation in a run from genesis was eligible by the finalized epoch.
+  The pin's drift bound reads it.
+
+- `preActivation_waiting` shows that each validator put back into the activation queue at an upgrade has no activation epoch.
+  The exit-order walk, `queues_preActivation_fold` in the churn bounds and `balanceDrift_preActivation_excludes` in the balance drift read it.
+
 - The quorum drift bound adds these facts of runs.
   `Run.blockCount` counts the blocks of a run, `Run.blockCount_append` adds them over two runs, and `Run.blocks_le_slots` bounds them by one per slot.
   `run_of_stateTransition` and `run_of_processSlots` give a run for one block or for the slots before it, when the slot is before the next fork.
   `Run.split_next` splits a run that ends one epoch after it starts at the slot where its epoch changes.
   `Run.induction_of_same_epoch` inducts over a run inside one epoch, and `advanceSlotAcross_of_same_epoch` shows such a slot only caches the slot.
   Inside one epoch, `Run.fork_eq_of_same_epoch` keeps the fork, `Run.currentSyncCommittee_eq_of_same_epoch` the keys of the sync committee, and `Run.effectiveKept_of_same_epoch` each effective balance.
+  `Run.induction_of_same_period` inducts over a run inside one period of epochs, and `Run.induction_of_same_epoch` is its instance for one epoch.
+  `Run.currentSyncCommittee_eq_of_same_period` keeps the keys of the current sync committee inside one period of the committee rotation.
+  Their readers are the count of the keys that a branch credits, and the bound on the sync-seat holders that a branch debits, in the pin reserve bound.
+  `Run.currentSyncCommittee_eq_nextSyncCommittee_of_next_period` makes the keys of the current committee, one period later, the keys of the next committee at the start.
+  The pin's seat count reads it to bound the debited sync-committee seats of the two branches.
+  `pending_deposit_rises` bounds the positions whose balance the pending-deposit pass raises by the deposits that it may read, and `pending_deposit_bound` is its projection.
+  `Step.slot_deposit_site` says that a deposit event of a slot step is the pending-deposit pass at some state with matching sizes and ordered exits.
+  The registry of that state keeps its assigned epochs to the end of the slot.
+  The slot ends an epoch, and it records at most one deposit event.
+  Their reader is the count of the keys that a branch credits, in the pin reserve bound.
   `Run.withdrawableKept_of_same_epoch` and `withdrawableKept_processRegistryUpdates` keep `WithdrawableKept` inside an epoch and through the registry updates.
   `Genesis.invariant` gives the invariant of a genesis built from deposits, and `Run.invariant` keeps it along a run.
+  `syncRewards_bounds` bounds the sync rewards at a position.
+  They do not raise it without a signer or a paid proposer there, and do not lower it without an unsigned member there.
+  The pin's drift bound reads it for the keys that hold no seat.
 
 - Its transition facts are in `Transition/BlockLedger.lean`, `Transition/BlockCredits.lean`, `Transition/BranchLedger.lean`, `Transition/EffectiveRise.lean`, `Transition/EffectiveFall.lean`, `Transition/EpochReads.lean` and their neighbours.
   The ledger of a block's balances is in `BlockLedger`, its proposer and deposit credits in `BlockCredits`, and the tally of an epoch's blocks in `BranchLedger`.
@@ -173,6 +382,8 @@ Not yet released.
   `processSlots_pendingPartialWithdrawals` keeps the queue of pending partial withdrawals across slot steps from Altair.
   `hysteresis_of_advanceSlot` and `hysteresis_of_processSlots` put a state at the first slot of an epoch within the bands of hysteresis.
   `Store.ForwardReachableWith.relation_of_checkpointPrefix_with` composes a relation that needs to hold only for transitions with the store's checks.
+  `runScore_le_start` bounds the inactivity score of a key along a run by its start score plus a bias for each epoch.
+  The pin's bound on the penalty of one rewards pass at a state reads it.
 
 - Some earlier private declarations are now public, with unchanged statements.
   They are the flag frames `flags_operationsInput`, `flags_proposerSlashing`, `flags_attesterSlashing`, `flags_increase`, `flags_decrease`, `flagsBelow_add` and `flagsBelow_deposit`.
@@ -181,6 +392,17 @@ Not yet released.
   They are also `effectiveKept_setValidator`, `effectiveKept_decrease`, `effectiveKept_exit`, `effectiveKept_requests` and `balanceDrift_upgrades_upper`.
   They are also `Unassigned`, `UnassignedFrom`, `unassignedFrom_size`, `UnassignedKept` and `UnassignedKept.processDeposit`.
   `DirectSafety.total_active_congr` moves from `DirectSafety/DepartureQueue.lean` to `Transition/BalanceDrift.lean`, with its name and statement unchanged.
+  `DirectSafety.queueCarry_le_of_run` bounds the exit and consolidation capacity that the queues carry at the end of a run from a state of a run from genesis.
+  `DirectSafety.Run.departureCharges_epoch_ge_start` bounds the exit epoch of each departure charge of a run from Electra from below.
+  The bound is the epoch of the start, plus one epoch and the seed lookahead.
+  `DirectSafety.departureCharges_run_indices` shows that the departure charges of a run name each registry index at most once.
+  The pin's drift bound reads it for its exit-queue terms.
+  `sync_bounds_combined` bounds a sync aggregate's credits plus debits by the committee size times a reward and its share.
+  PinDriftBound's sync-debit bound reads it.
+  `DirectSafety.Apriori.Internal.replayRewards_passes` gives the four passes of deltas that the rewards replay runs from Altair, after the first epoch.
+  `DirectSafety.Apriori.Internal.replayDeltas_flows` bounds what one pass of deltas debits and credits at one position.
+  `DirectSafety.Apriori.Internal.rewardCredit` is the credit of one reward event at a position, the sibling of `penaltyDebit`.
+  The pin's per-key epoch reward bound reads all three.
 
 - `queueConsolidation_steps` states the steps of queueing a consolidation once ([#2334](https://github.com/ethereum/EthLib/issues/2334)).
   The churn call writes only the churn left and the earliest consolidation epoch.
@@ -421,6 +643,23 @@ Not yet released.
   `fits_of_shuffledCommittee` states that a cut committee has the number of indices times one past its position below `2^64`.
   `ReceiverWindowExitsNear` asks the receivers' exit bound only of receivers within two epochs of the parent.
 
+- `ChainStep.exit_assigned_activated` states that, from Electra, a chain step assigns an exit only to a validator that is activated at the step's start epoch.
+  The pin's drift bound reads it to show that a key whose exit starts on a run was activated before its exit.
+
+- `upgradeNext_validators_of_electra` states that, from Electra, an upgrade keeps the validators as the same sequence.
+  The pin's drift bound reads it for the registry along a slot step, and `ChainStep.exit_assigned_activated` reads it for the upgrades of a slot.
+
+- `LookaheadActive` says that, from Fulu, each entry of the proposer lookahead of a state is active in its epoch.
+  Position `k` is `k / SLOTS_PER_EPOCH` epochs after the current epoch.
+  `Run.lookaheadActive` states it along every run from genesis that ends before Gloas, when `MAX_SEED_LOOKAHEAD` is above `MIN_SEED_LOOKAHEAD`.
+  `LookaheadActive.proposer_active` states that a proposer read from a state that holds it is active in the epoch of the state.
+  The pin's whistleblower and sync bounds read it to show that a validator that exited before the finalized epoch proposes no block.
+
+- `processBlock_proposerLookahead` states that a successful block leaves the proposer lookahead unchanged.
+  `processEpoch_lookahead_cut` states that, from Fulu, an epoch draws its new last epoch of proposers from a state just before that draw.
+  That state has the slot and the lookahead of the epoch's start, and the registry of the epoch's end.
+  `Run.lookaheadActive` reads both.
+
 - Up-to-date honest stores before Gloas have a head ([#2060](https://github.com/ethereum/EthLib/issues/2060), for pre-Gloas forks).
   `Store.getHead_exists` computes the head of a store that the handlers built from its anchor, under the anchor conditions of the handlers.
   The store holds its justified state, that state has at most `2 * 10^17` Gwei of active stake, and the proposer boost fits that cap.
@@ -432,7 +671,153 @@ Not yet released.
   `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
+- `FloorTrace.balance_floor_general` says that a trace from an account keeps the floor, less the penalty of a slash if the trace holds one.
+  The pin's epoch floor and its floor of a slashed key read it.
+
+- `FloorTrace.run_potential_floor_once` says that the potential floor of a run whose effective balance starts above its balance is charged once.
+  The pin's segment potential reads it.
+
+- `runScores_le` says that on a branch from Altair, each inactivity score of a state is at most the start score plus the bias for each epoch of the branch.
+  It holds at the positions that the branch adds as well.
+  The pin's cross-branch bound on a key's leak reads it.
+
+- `scoresKept_processBlock` says that a block keeps the inactivity score at each position of the registry before it.
+  Each score after the block, at every position, was there before it or is zero.
+  The step of the branch's score bound reads it, in `runScores_le`.
+
+- `scoresKept_processEpochAltair` says the same of the epoch pass from Altair: it keeps the score at each position of the registry before it.
+  It needs no premise on the deposits or the consolidations.
+  The step of the branch's score bound reads it too.
+
+- `addValidatorToRegistry_keeps` says that, from Altair, a new validator at the end of the registry keeps each validator, the consolidations, and the balance and score at each position that holds a validator.
+  The new validator takes the score zero.
+  The block's proof that the balance is not raised reads it.
+
+- `slot_events_no_withdrawals` says that a slot records no withdrawal event.
+  The pin's partial-debit bound of a key reads it.
+
+- `PartialCost` says that a cost function charges a withdrawals event at most the amounts of the queued partial withdrawals that a filter selects, and every other event nothing.
+  The pin reads it for the partial debits of one key and of all keys.
+
+- `departure_charges_le_window_electra_cap` says that, from Electra, the departures of a window spend only carry-in capacity and eligible epochs.
+  If the exit churn limit at each step of the run is at most `exitCap`, the exit queue adds at most `exitCap` for each epoch of the window.
+  The pin's queue-window bound reads it.
+
+- `ScheduledEligibleBalanceElectra` says that, from Electra, an eligible key that is not yet active keeps its activation reserve.
+  `run_eligible_balance` states it for the state at the end of a run.
+
+- `run_eligible_balance` says that a key without an activation epoch keeps its effective balance funded at the end of a run from genesis.
+  From Electra, the eligible keys that are not yet active also keep their activation reserve.
+  The pin's bounds on a key's funding at the start of a run and at the first state of a created key read it.
+
+- `PinPresetFacts` is public: the preset facts that the pin's drift bound needs.
+  Each field is a fact about the preset alone, and a deployed preset has it.
+  Its fields bound the increment, the largest effective balance, the bands, the slashings vector, the slashing and whistleblower quotients, the reward factor and the seed lookahead, and include `activation : ActivationWithinMaxEffective preset`.
+  The one divisor fact the pin reads is `syncPeriod : preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD ≠ 0`.
+  Facts that follow from its other fields are not fields.
+  A preset's witness proves each field, as `PinPresetFacts.mainnet` and `PinPresetFacts.minimal` do.
+
+- `PinPresetFacts.mainnet` is public: the mainnet preset has the preset facts of the pin.
+
+- `PinPresetFacts.minimal` is public: the minimal preset has the preset facts of the pin.
+
+- `PinDrift.Setting` is public: the setting of the pin's drift bound for one call.
+  It holds the runs from genesis to the finalized state, the split state, the pulled-up state and the counting state, with the fork bounds.
+
+- `PinDrift.le_pinReserve` is public: under a `PinDrift.Setting`, it bounds the drift of the quorum from the call's pulled-up state to a counting state.
+  It takes the setting and the two total active balances.
+
+- `PinGuarded` is public: the a priori guard at a call's finalized state, for the head that each honest store selects, within the withdrawal delay from that state.
+
+- `justifiedPinned_of_setting` is public: the voters of a call pin the justified checkpoints of the call's epoch.
+  It assumes no bound on finality lag: past the withdrawal delay the reserve already covers three times the voters' stake.
+
+- `justifiedPinned_of_setting.mainnet` is `justifiedPinned_of_setting` on the mainnet preset, with the preset premises proved.
+
+- `justifiedPinned_of_setting.minimal` is `justifiedPinned_of_setting` on the minimal preset, with the preset premises proved.
+
+- `DirectSafety.Apriori.Internal.applyPendingDeposit_absent_balances` says that a pending deposit to a key that no validator has raises no balance inside the registry.
+  It changes nothing, or appends one validator with its balance.
+  The pin's deposit bound reads it.
+
+- `DirectSafety.Apriori.Internal.except_dite_bind` moves a fork-conditional replay before its common continuation.
+  The pin's credit bound reads it.
+
+- `DirectSafety.Apriori.Internal.penaltyDebit_sum_zero_of_free` says that events with no penalty or inactivity source debit no key as a penalty.
+  The pin's segment penalty bounds read it.
+
+- `DirectSafety.Apriori.Internal.single_balanceEvents` reads the events of one step as the events of the one-step run.
+  The pin's step bounds read it.
+
+- `DirectSafety.Apriori.Internal.balance_le_pathCredits` says that the balance at the end of a path of states is at most the balance at its start and the increases between its states.
+  The pin's step bounds read it.
+
+- `DirectSafety.Apriori.Internal.recordFold_plain` says that a recorded fold ends at the state of the fold of its actions.
+  `PinDriftBound` reads it in `blockReplay_proposer_credits` and `block_flip_balance`.
+
+- `add_le_of_lt_of_aligned` says that a whole number of increments above another is at least one increment above it.
+  The pin's effective-balance bounds read it.
+
+- `Models.Network.voters_sum_le` says that a sum over some voters of a function of their positions is at most its sum over those positions.
+  The pin's drift bound reads it.
+
+- `activationLe_of_active` and `activationLe_of_slashable` say that an active or slashable validator was activated at or before the epoch.
+  `ActivationExitOrder` reads both for its exit, slashing and consolidation steps, and `ValidatorStep` reads the first.
+  `PinDriftBound` reads `activationLe_of_active` for active voters.
+
+- `DirectSafety.Apriori.Internal.keys_debits_le` says that the debits of one event over a set of keys are at most its debits over the registry.
+  The pin's debit bounds read it.
+
+- `DirectSafety.Apriori.Internal.slashing_credits_le` says that uniform per-index bounds over the step inputs of a run pay all its slashing credits only once.
+  The pin's whistleblower terms read it.
+
+- `Internal.minimum_cap` says that the withdrawal cap of a validator is at least the maximum effective balance before Electra.
+  It needs the activation balance and the compounding cap in order.
+  The pin's floors for keys that upgrade read it.
+
+- `balanceDrift_epoch` says that an epoch keeps every existing effective balance until its effective-balance update.
+  Registry updates and pending deposits before it keep existing effective balances, and the stages after it keep the validators and the balances.
+  The pin's floor of a key's effective balance reads it.
+
+- `rounded_mono` in `Base.Proofs.Nat` says that rounding down to a multiple of an increment preserves order.
+  `EffectiveFall` and `InactivityLeakVoterRun` use it for their rounding bounds, and the pin uses it for its effective-balance bounds.
+
+- `Internal.assigned_of_active` is moved to `Transition.ActiveKept` and says that an active validator has an assigned activation epoch.
+  `ValidatorStep`, `PinDriftBound.CreditBudgets` and `PinDriftBound.PreviousEpochRise` use it.
+
 ### Changes that break callers
+
+- In Lean, `DirectSafety.Apriori.Internal.ScoresBelow.step` no longer takes the hypothesis `inside : n ≤ m.state.validators.data.size`.
+  Its proof does not read it.
+  Migration: a caller drops that argument.
+  The new statement implies the old one, so a caller that proved the hypothesis only for this call can drop its proof.
+
+- In Lean, `pinReserve` has a new body: it bounds drifts that the reserve of #2713 missed or under-read ([#2770](https://github.com/ethereum/EthLib/pull/2770)).
+  `JustifiedPinned`, `ReservedTargetVotes`, `CallCheckpointInputs` and `CallObligations` read it in a premise.
+  Migration: a caller that proved `total + (margin + pinReserve config state anc fin) < 3 * stake` for the old reserve must prove it for the new one.
+  `quorumReserve_le_pinReserve` keeps its statement.
+
+- In Lean, the `withdrawal` field of `EthLib.Consensus.Internal.CapStep` is stronger.
+  For a slashed validator with an assigned exit, it now says that `withdrawableEpoch` is equal after the step.
+  It said that the epoch does not fall.
+  Migration: constructors of `CapStep` must now prove `withdrawableEpoch` is unchanged after slashing.
+  The new field implies the old one, so a reader of the old field reads the new one through `le_of_eq`.
+  `CapStep.refl`, `CapStep.trans` and `CapStep.data` carry the new field, and the readers in this repository keep their statements.
+
+- In Lean, the result of `Store.Reachable.finalizedState_of_blockState` is stronger.
+  After the anchor epoch, it also says that the store reads the finalized block of the state from the state's own block.
+  That read is `store.getCheckpointBlock root anc.finalizedCheckpoint.epoch = .ok anc.finalizedCheckpoint.root`.
+  Migration: a caller that destructures the result as `⟨fin, finRead, finAnchor⟩` adds a component, as `⟨fin, finRead, finAnchor, -⟩`.
+  The new statement implies the old one, so a reader of the old statement drops the last conjunct.
+  The four callers in this repository, two in `CheckpointConsistency` and two in `RootViability`, do that.
+
+- The snap AccountRange message reads and writes each account body as the slim account list nested in its entry, the encoding used on the network ([#3491](https://github.com/ethereum/EthLib/issues/3491)).
+  `caps/snap.md` types the body `B`, and a byte string that holds the list is now no account body.
+  In Lean, `RangeEntry` takes the type of its data: an account entry is `RangeEntry Item`, and a slot entry `RangeEntry ByteArray`.
+  `fullAccount` takes the item of the body, and `fullAccount_slimAccount` replaces `fullAccount_encode_slimAccount`.
+  `AccountRangeWitness` loses its `slim` and `encode_slim` fields, since the entry carries the slim form itself.
+  In Python, `decode_message` reads the nested form, and still reads a message whose body is a byte string.
+  `full_account` and `verify_account_range` still take the RLP encoding of each body, and refuse a byte string as before.
 
 - In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
   The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.

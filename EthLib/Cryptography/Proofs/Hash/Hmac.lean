@@ -30,18 +30,18 @@ namespace EthLib.Cryptography.Hash.Hmac
 /-! ## The key block -/
 
 /-- A key of at most `B` bytes is padded with zero bytes to `B` bytes. -/
-theorem blockKey_of_le {key : ByteArray} (h : key.size ≤ BLOCK_SIZE) :
-    blockKey key = key ++ ⟨Array.replicate (BLOCK_SIZE - key.size) 0⟩ := by
+theorem blockKey_of_le {key : ByteArray} (h : key.size ≤ Sha256.BLOCK_SIZE) :
+    blockKey key = key ++ ⟨Array.replicate (Sha256.BLOCK_SIZE - key.size) 0⟩ := by
   rw [blockKey, ite_eq_right (Nat.not_lt.mpr h)]
 
 /-- A key longer than `B` bytes is hashed, and its hash is padded with zero bytes to `B` bytes. -/
-theorem blockKey_of_lt {key : ByteArray} (h : BLOCK_SIZE < key.size) :
-    blockKey key = Sha256.hash key ++ ⟨Array.replicate (BLOCK_SIZE - 32) 0⟩ := by
+theorem blockKey_of_lt {key : ByteArray} (h : Sha256.BLOCK_SIZE < key.size) :
+    blockKey key = Sha256.hash key ++ ⟨Array.replicate (Sha256.BLOCK_SIZE - 32) 0⟩ := by
   rw [blockKey, ite_eq_left h, Sha256.hash_size]
 
 /-- The key block has `B = 64` bytes. -/
-theorem blockKey_size (key : ByteArray) : (blockKey key).size = BLOCK_SIZE := by
-  by_cases h : BLOCK_SIZE < key.size
+theorem blockKey_size (key : ByteArray) : (blockKey key).size = Sha256.BLOCK_SIZE := by
+  by_cases h : Sha256.BLOCK_SIZE < key.size
   · rw [blockKey_of_lt h, ByteArray.size_append, Sha256.hash_size]
     rfl
   · have h := Nat.not_lt.mp h
@@ -50,9 +50,9 @@ theorem blockKey_size (key : ByteArray) : (blockKey key).size = BLOCK_SIZE := by
     omega
 
 /-- Zero bytes appended to a key of at most `B` bytes leave the key block unchanged. -/
-theorem blockKey_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ BLOCK_SIZE) :
+theorem blockKey_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ Sha256.BLOCK_SIZE) :
     blockKey (key ++ ⟨Array.replicate n 0⟩) = blockKey key := by
-  have h' : (key ++ ⟨Array.replicate n 0⟩).size ≤ BLOCK_SIZE := by
+  have h' : (key ++ ⟨Array.replicate n 0⟩).size ≤ Sha256.BLOCK_SIZE := by
     rw [ByteArray.size_append]
     simp only [ByteArray.size, Array.size_replicate] at h ⊢
     omega
@@ -66,7 +66,7 @@ theorem blockKey_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ 
   omega
 
 /-- Zero bytes appended to a key of at most `B` bytes leave the tag unchanged. -/
-theorem hmac_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ BLOCK_SIZE)
+theorem hmac_append_zeros {key : ByteArray} {n : Nat} (h : key.size + n ≤ Sha256.BLOCK_SIZE)
     (message : ByteArray) : hmac (key ++ ⟨Array.replicate n 0⟩) message = hmac key message := by
   unfold hmac
   rw [blockKey_append_zeros h]

@@ -35,9 +35,9 @@ This module takes the reading of step 4; `SOUNDNESS.md` records the question.
 
 So the data of a keystore that is a duplicate is not loaded either.
 
-[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/apis/local_keystores.yaml
-[import flow]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/flows/README.md#import
-[use cases]: https://github.com/ethereum/keymanager-APIs/blob/51f2a5c90e9d301c3e9980da402ec70ae82f0991/use-cases/README.md#add-a-key
+[`local_keystores.yaml`]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/apis/local_keystores.yaml
+[import flow]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/flows/README.md#import
+[use cases]: https://github.com/ethereum/keymanager-APIs/blob/3e7c64e2118f819a51de7093ea2b2f03bb2f8f6e/use-cases/README.md#add-a-key
 -/
 
 @[expose] public section

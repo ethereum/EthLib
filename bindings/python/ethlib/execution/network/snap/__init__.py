@@ -49,7 +49,8 @@ def verify_account_range(
     root: bytes, start: bytes, accounts: Sequence[tuple[bytes, bytes]], proof: Sequence[bytes]
 ) -> bool | None:
     """Check an AccountRange answer from `start` in the state trie of `root`."""
-    # Each account is the hash of its address and its body in slim form.
+    # Each account is the hash of its address and the RLP encoding of its slim form.
+    # The slim form is an RLP list, so a byte string that holds it is refused.
     # None is the empty reply of a peer without the state, so test the result with `is None`.
     # Otherwise the result says whether the trie holds an account after the last one.
     # An answer that does not verify raises SnapError with the code of its fault.

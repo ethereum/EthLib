@@ -19,6 +19,8 @@ The [columns endpoint] gives the data column sidecars of a block, in any order.
 
 The [envelope endpoint] gives the signed payload envelope of a block, from Gloas.
 
+The [proposer's envelope endpoint] gives a proposer the envelope that its node built, to sign.
+
 Each answer takes the blocks, headers, blobs, sidecars or envelope that it reads as inputs.
 
 Which of them a node keeps, and how it finds them, is its own matter.
@@ -31,6 +33,7 @@ SOUNDNESS.md records the points that the source leaves open.
 [blobs endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/blobs/blobs.yaml
 [columns endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/debug/data_column_sidecars.yaml
 [envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/7911555e6a30c51f9b69bb168111a59f1ff8ee49/apis/beacon/execution_payload/envelope_get.yaml
+[proposer's envelope endpoint]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml
 -/
 
 @[expose] public section
@@ -317,5 +320,52 @@ def payloadEnvelopeResponse (store : Store preset fork) (root : Root)
 def payloadEnvelopeSsz (store : Store preset fork) (root : Root)
     (signed : SignedExecutionPayloadEnvelope preset fork) : Except ErrorMessage ByteArray :=
   payloadEnvelopeOf store root signed >>= apiSszOr500
+
+/-! ## The envelope that a node built for its proposer -/
+
+/-- From Gloas: the envelope that a node built for the payload of a slot, with that slot.
+
+The envelope names its block by root, but not its slot, so the entry keeps the slot. -/
+structure CachedEnvelope (preset : Preset) (fork : Fork) where
+  /-- The slot of the payload. -/
+  slot : Slot
+  /-- The unsigned envelope of the payload. -/
+  envelope : ExecutionPayloadEnvelope preset fork
+
+/-- From Gloas: the envelope that a proposer fetches to sign, at a slot and for a block root.
+
+The cache is an input: the caller vouches that it is the one envelope built for the current slot.
+
+The [source] says that the node keeps only that one.
+
+The answer is that envelope exactly when its slot and its block root are those of the request.
+
+Any other request gets the error with code 404.
+
+So the answer always names the requested block, and a reorg before the request gives 404.
+
+Before Gloas no envelope exists, and the answer is that error too.
+
+[source]: https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml#L1-L77
+-/
+def cachedEnvelopeOf (cache : Option (CachedEnvelope preset fork)) (slot : Slot) (root : Root) :
+    Except ErrorMessage (ExecutionPayloadEnvelope preset fork) :=
+  if .glamsterdam ≤ fork then
+    match cache with
+    | some cached =>
+      if cached.slot = slot ∧ cached.envelope.beaconBlockRoot = root then .ok cached.envelope
+      else .error envelopeNotFound
+    | none => .error envelopeNotFound
+  else .error envelopeNotFound
+
+/-- The JSON response of the endpoint that gives a proposer its envelope, with the version. -/
+def cachedEnvelopeResponse (cache : Option (CachedEnvelope preset fork)) (slot : Slot)
+    (root : Root) : Except ErrorMessage ApiEnvelope :=
+  versioned fork (cachedEnvelopeOf cache slot root)
+
+/-- The SSZ body of the endpoint that gives a proposer its envelope: the unsigned envelope. -/
+def cachedEnvelopeSsz (cache : Option (CachedEnvelope preset fork)) (slot : Slot) (root : Root) :
+    Except ErrorMessage ByteArray :=
+  cachedEnvelopeOf cache slot root >>= apiSszOr500
 
 end EthLib.Consensus.BeaconApi

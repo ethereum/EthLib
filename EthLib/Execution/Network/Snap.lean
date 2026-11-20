@@ -12,7 +12,7 @@ The snap capability, which a node uses to download the state of a recent block.
 
 The source is [`caps/snap.md`][snap] of the devp2p specifications.
 
-[snap]: https://github.com/ethereum/devp2p/blob/88f1c80800d622cc3a542a2125bbe33cc18c9f9c/caps/snap.md
+[snap]: https://github.com/ethereum/devp2p/blob/277ceb399c15df86efb17d51eb58200c26879784/caps/snap.md
 
 - snap/1 has the IDs 0x00 to 0x07, as `snap.md` gave them at [`a1d196b`][snap1].
 - snap/2, [EIP-8189][eip-8189], status Last Call, removes GetTrieNodes (0x06) and TrieNodes (0x07).
@@ -34,6 +34,18 @@ An empty code hash stands for the hash of empty code.
 "Data format" calls them an "empty list", but an empty field in RLP is the empty string `0x80`.
 
 EthLib reads them as that string.
+
+`snap.md` types the body of an account `B`, a byte string.
+
+On the network the body is the slim form itself, an RLP list nested in the entry.
+
+EthLib reads and writes that list.
+
+So an account with nonce 1, balance 2, no storage and no code is `c4 01 02 80 80` in its entry.
+
+A byte string that holds those bytes, `85 c4 01 02 80 80`, is not an account body.
+
+The data of a storage slot stays a byte string.
 
 The Merkle proofs of a range are carried as lists of trie nodes.
 
@@ -118,47 +130,52 @@ def ofSlimAccount (item : Item) : Except RlpError (State.Account × Hash32) := d
 /-- The value of an account in the state trie, from its body in slim form.
 
 There is none when the body is not the slim form itself, such as another encoding of the account.
--/
-def fullAccount (body : ByteArray) : Option ByteArray := do
-  let .ok item := decode body | none
-  let .ok (account, storageRoot) := ofSlimAccount item | none
-  let .ok slim := encode (slimAccount account storageRoot) | none
-  if slim != body then none
+
+A byte string that holds the encoding of the slim form is not the slim form either. -/
+def fullAccount (body : Item) : Option ByteArray := do
+  let .ok (account, storageRoot) := ofSlimAccount body | none
+  if slimAccount account storageRoot ≠ body then none
   (State.encodeAccount account storageRoot).toOption
 
 /-! ## Messages -/
 
-/-- An entry of a range: the hash of its key, the path in the trie, and its data. -/
-structure RangeEntry where
+/-- An entry of a range: the hash of its key, which is its path in the trie, and its data.
+
+An account carries its body in slim form as an RLP item, and a slot carries its data as bytes. -/
+structure RangeEntry (α : Type) where
   /-- The hash of the account address or of the storage slot key. -/
   hash : Hash32
   /-- The account body in slim form, or the slot data. -/
-  data : ByteArray
+  data : α
   deriving DecidableEq
 
 /-- An entry as the RLP list `[hash, data]`. -/
-def RangeEntry.toItem (e : RangeEntry) : Item := .list [Codec.toItem e.hash, Codec.toItem e.data]
+def RangeEntry.toItem {α : Type} [Codec α] (e : RangeEntry α) : Item :=
+  .list [Codec.toItem e.hash, Codec.toItem e.data]
 
 /-- The entry in the RLP list `[hash, data]`. -/
-def RangeEntry.ofItem (item : Item) : Except RlpError RangeEntry := do
+def RangeEntry.ofItem {α : Type} [Codec α] (item : Item) : Except RlpError (RangeEntry α) := do
   match ← item.fields 2 with
   | [h, d] => return ⟨← h.field 0, ← d.field 1⟩
   | items => throw (.wrongFieldCount 2 items.length)
 
-instance : Codec RangeEntry := ⟨RangeEntry.toItem, RangeEntry.ofItem⟩
+instance {α : Type} [Codec α] : Codec (RangeEntry α) := ⟨RangeEntry.toItem, RangeEntry.ofItem⟩
 
 /-- A message of the snap capability. -/
 inductive SnapMessage where
   /-- GetAccountRange (0x00): `[reqID, rootHash, startingHash, limitHash, responseBytes]`. -/
   | getAccountRange (requestId : UInt64) (root start limit : Hash32) (responseBytes : Nat)
-  /-- AccountRange (0x01): `[reqID, [[accHash, accBody], ...], [node, ...]]`. -/
-  | accountRange (requestId : UInt64) (accounts : List RangeEntry) (proof : List ByteArray)
+  /-- AccountRange (0x01): `[reqID, [[accHash, accBody], ...], [node, ...]]`.
+
+  Each body is the slim form of its account, nested as an RLP list. -/
+  | accountRange (requestId : UInt64) (accounts : List (RangeEntry Item)) (proof : List ByteArray)
   /-- GetStorageRanges (0x02):
   `[reqID, rootHash, [accountHash, ...], startingHash, limitHash, responseBytes]`. -/
   | getStorageRanges (requestId : UInt64) (root : Hash32) (accounts : List Hash32)
       (start limit : ByteArray) (responseBytes : Nat)
   /-- StorageRanges (0x03): `[reqID, [[[slotHash, slotData], ...], ...], [node, ...]]`. -/
-  | storageRanges (requestId : UInt64) (slots : List (List RangeEntry)) (proof : List ByteArray)
+  | storageRanges (requestId : UInt64) (slots : List (List (RangeEntry ByteArray)))
+      (proof : List ByteArray)
   /-- GetByteCodes (0x04): `[reqID, [hash, ...], bytes]`. -/
   | getByteCodes (requestId : UInt64) (hashes : List Hash32) (responseBytes : Nat)
   /-- ByteCodes (0x05): `[reqID, [code, ...]]`. -/

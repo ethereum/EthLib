@@ -45,5 +45,12 @@ def test_every_network_is_placed(suite) -> None:
 
 
 @pytest.mark.parametrize("suite", catalogue.DEVNETS)
+def test_every_format_is_placed(suite) -> None:
+    # A format that is neither run, planned nor left out is new upstream.
+    index = catalogue.execution_index(catalogue.DEVNETS[suite])
+    assert harness.unplaced_formats(index) == []
+
+
+@pytest.mark.parametrize("suite", catalogue.DEVNETS)
 def test_disagreements(suite) -> None:
     harness.check_disagreements(CASES[suite], DISAGREEMENTS[suite])

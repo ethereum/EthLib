@@ -4,7 +4,7 @@ import hashlib
 import json
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from ruamel.yaml import YAML
@@ -69,17 +69,23 @@ def _schemas() -> list[str]:
     return list(_load("keymanager-oapi.yaml")["components"]["schemas"])
 
 
+# The schemas of the builder configuration endpoints, which EthLib does not yet specify (#3615).
+NOT_YET_SPECIFIED: Final = ["BuilderConfig", "BuilderEntry"]
+
+
 def _expected(name: str, value: str) -> str:
     """What the writer gives for a scalar example: hex in lowercase, the rest as it is."""
     return value.lower() if name in HEX else value
 
 
 def test_schemas_named():
-    """The test covers every schema of the components of the source."""
+    """The test names every schema of the components of the source."""
     assert _schemas() == [
         "Pubkey",
         "EthAddress",
         "Keystore",
+        "BuilderConfig",
+        "BuilderEntry",
         "FeeRecipient",
         "GasLimit",
         "Graffiti",
@@ -92,7 +98,7 @@ def test_schemas_named():
     ]
 
 
-@pytest.mark.parametrize("name", _schemas())
+@pytest.mark.parametrize("name", [name for name in _schemas() if name not in NOT_YET_SPECIFIED])
 def test_example_reads_back(name: str):
     """The example of each schema reads, and the writer gives it back in canonical form."""
     example = _example(*_schema(name))

@@ -1,6 +1,8 @@
 """Tests of `check_spec_releases.py` on release lists and source files written here."""
 
+import contextlib
 import importlib.util
+import io
 import re
 import tempfile
 import unittest
@@ -101,6 +103,127 @@ repository = "ethereum/consensus-specs"
                 "ethereum/execution-specs: tests@v21.0.1 is pinned; "
                 "newer: tests@v21.0.2 (2026-10-26)",
             ],
+        )
+
+
+# The download URL of an asset of a consensus-specs release.
+DOWNLOAD = "https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/{}"
+# The end of the line that names an unplaced asset.
+UNPLACED = "which tests/sources.toml neither pins in archives nor declares in unread_assets"
+
+
+class Assets(unittest.TestCase):
+    def test_assets_are_the_download_urls_of_the_release(self):
+        asked = []
+
+        def get(path):
+            asked.append(path)
+            return {
+                "assets": [{"browser_download_url": "https://a"}, {"browser_download_url": "b"}]
+            }
+
+        with mock.patch.object(check, "_get", get):
+            self.assertEqual(
+                check.assets("ethereum/execution-specs", "tests@v21.0.2"), ["https://a", "b"]
+            )
+        # The tag is quoted, since `@` is not part of a path segment of the API.
+        self.assertEqual(asked, ["repos/ethereum/execution-specs/releases/tags/tests%40v21.0.2"])
+
+    def test_placed_assets_are_the_archives_and_the_declared_ones(self):
+        sources = f"""
+[archives."consensus-specs/v1.7.0-beta.4/mainnet"]
+repository = "ethereum/consensus-specs"
+url = "{DOWNLOAD.format("mainnet.tar.gz")}"
+
+[unread_assets]
+"{DOWNLOAD.format("comptests.tar.gz")}" = "Its runner is planned"
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tests").mkdir()
+            (root / "tests" / "sources.toml").write_text(sources)
+            self.assertEqual(
+                check.placed(root),
+                {DOWNLOAD.format("mainnet.tar.gz"), DOWNLOAD.format("comptests.tar.gz")},
+            )
+
+    def test_every_unplaced_asset_is_named_once_in_order(self):
+        names = ["mainnet.tar.gz", "minimal.tar.gz", "general.tar.gz", "comptests.tar.gz"]
+        devnet = "https://github.com/ethereum/execution-specs/releases/download/x/extra.tar.gz"
+        # The pins come in reverse order, and one unplaced asset is listed twice.
+        found = {
+            ("ethereum/execution-specs", "x"): [devnet],
+            ("ethereum/consensus-specs", "v1.7.0-beta.4"): [
+                *(DOWNLOAD.format(name) for name in names),
+                DOWNLOAD.format("general.tar.gz"),
+            ],
+        }
+        known = {DOWNLOAD.format("mainnet.tar.gz"), DOWNLOAD.format("minimal.tar.gz")}
+        lines = [
+            f"ethereum/consensus-specs: v1.7.0-beta.4 has the asset {DOWNLOAD.format(name)}, "
+            f"{UNPLACED}"
+            for name in ("comptests.tar.gz", "general.tar.gz")
+        ]
+        lines.append(f"ethereum/execution-specs: x has the asset {devnet}, {UNPLACED}")
+        self.assertEqual(check.unplaced(found, known), lines)
+
+    def test_placed_assets_give_no_line(self):
+        urls = [DOWNLOAD.format("mainnet.tar.gz")]
+        found = {("ethereum/consensus-specs", "v1.7.0-beta.4"): urls}
+        self.assertEqual(check.unplaced(found, set(urls)), [])
+
+
+class Main(unittest.TestCase):
+    def run_main(self, placed: set[str], fork: tuple[str, ...] = ()) -> tuple[int, list[str]]:
+        """The exit code and the printed lines of a run over one pin with two assets."""
+        pin = ("ethereum/consensus-specs", "v1.7.0-beta.4")
+        printed = io.StringIO()
+        with (
+            mock.patch.object(check, "pins", lambda: [pin]),
+            mock.patch.object(check, "releases", lambda repository: CONSENSUS),
+            mock.patch.object(
+                check, "assets", lambda repository, tag: [DOWNLOAD.format(n) for n in "ab"]
+            ),
+            mock.patch.object(check, "placed", lambda: placed),
+            mock.patch.object(check, "next_fork", lambda found: list(fork)),
+            contextlib.redirect_stdout(printed),
+        ):
+            code = check.main()
+        return code, printed.getvalue().splitlines()
+
+    def test_an_unplaced_asset_fails_the_run_and_is_named(self):
+        code, lines = self.run_main({DOWNLOAD.format("a")})
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            lines,
+            [
+                "ethereum/consensus-specs: v1.7.0-beta.4 is the latest release of its line",
+                f"ethereum/consensus-specs: v1.7.0-beta.4 has the asset {DOWNLOAD.format('b')}, "
+                f"{UNPLACED}",
+            ],
+        )
+
+    def test_the_next_fork_fails_the_run_after_the_assets(self):
+        fork = "ethereum/execution-specs: forks/bogota holds tests/bogota"
+        code, lines = self.run_main({DOWNLOAD.format("a")}, (fork,))
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            lines,
+            [
+                "ethereum/consensus-specs: v1.7.0-beta.4 is the latest release of its line",
+                f"ethereum/consensus-specs: v1.7.0-beta.4 has the asset {DOWNLOAD.format('b')}, "
+                f"{UNPLACED}",
+                fork,
+            ],
+        )
+        code, lines = self.run_main({DOWNLOAD.format(n) for n in "ab"}, (fork,))
+        self.assertEqual((code, lines[1:]), (1, [fork]))
+
+    def test_placed_assets_pass(self):
+        code, lines = self.run_main({DOWNLOAD.format(n) for n in "ab"})
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            lines, ["ethereum/consensus-specs: v1.7.0-beta.4 is the latest release of its line"]
         )
 
 

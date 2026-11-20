@@ -27,7 +27,9 @@ open EthLib.Execution.Rpc (accountProofOfJson)
 
 /-- Check an answer of `eth_getProof` against a 32-byte state root, with Keccak-256.
 
-`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.
+`None` means that the proof shows no account at the address.
+
+The answer then has nonce and balance 0, zero hashes, and each slot the word 0 with no proof node.
 
 Otherwise each slot is true when it is set and holds its value, and false when it is not set. -/
 def verifyAccountProofOf (args : ByteArray × PyValue) : Result (Option (List Bool)) := do
@@ -45,7 +47,9 @@ def verifyAccountProofOf (args : ByteArray × PyValue) : Result (Option (List Bo
 
 The arguments are the state root and the `result` object of the response.
 
-`None` means that the proof shows no account at the address, with the nonce, balance and slots 0.
+`None` means that the proof shows no account at the address.
+
+The answer then has nonce and balance 0, zero hashes, and each slot the word 0 with no proof node.
 
 Otherwise each slot is true when it is set and holds its value, and false when it is not set.
 

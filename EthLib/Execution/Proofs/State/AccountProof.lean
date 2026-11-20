@@ -65,7 +65,7 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
       match value with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
       | none =>
-        p.absentFields hash = true ∧ present = false := by
+        p.absentFields = true ∧ present = false := by
   unfold verifyAccount at h
   cases hv : verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof with
   | error e => simp [hv, Except.mapError, bind, Except.bind] at h
@@ -74,7 +74,7 @@ theorem verifyAccount_eq_ok {stateRoot : Hash32} {p : AccountProof} {present : B
     simp only [hv, Except.mapError, bind, Except.bind] at h
     cases value with
     | none =>
-      by_cases hm : p.absentFields hash = true
+      by_cases hm : p.absentFields = true
       · simp only [hm, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
         exact ⟨hm, h.symm⟩
       · simp [hm, throw, throwThe, MonadExceptOf.throw] at h
@@ -106,7 +106,7 @@ theorem verifyAccount_eq_ok_iff {stateRoot : Hash32} {p : AccountProof} {present
         match value with
         | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
         | none =>
-          p.absentFields hash = true ∧ present = false := by
+          p.absentFields = true ∧ present = false := by
   refine ⟨verifyAccount_eq_ok, fun ⟨value, hv, hmatch⟩ => ?_⟩
   unfold verifyAccount
   cases value with
@@ -120,12 +120,12 @@ theorem verifyAccount_eq_ok_iff {stateRoot : Hash32} {p : AccountProof} {present
 /-- The value that the slot check reads, and the outcome that it gives on that value. -/
 theorem verifySlot_eq_ok {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     {outcome : SlotOutcome} (h : verifySlot hash storageRoot index s = .ok outcome) :
-    ∃ value, verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok value ∧
+    ∃ value, verifyProof hash storageRoot true ⟨s.key.slot.toArray⟩ s.proof = .ok value ∧
       match value with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
       | none => s.value = 0 ∧ outcome = .absent := by
   unfold verifySlot at h
-  cases hv : verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof with
+  cases hv : verifyProof hash storageRoot true ⟨s.key.slot.toArray⟩ s.proof with
   | error e => simp [hv, Except.mapError, bind, Except.bind] at h
   | ok value =>
     refine ⟨value, rfl, ?_⟩
@@ -157,7 +157,7 @@ No value means the slot is absent, and the answer must give it the word `0`. -/
 theorem verifySlot_eq_ok_iff {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     {outcome : SlotOutcome} :
     verifySlot hash storageRoot index s = .ok outcome ↔
-      ∃ value, verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok value ∧
+      ∃ value, verifyProof hash storageRoot true ⟨s.key.slot.toArray⟩ s.proof = .ok value ∧
         match value with
         | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
         | none => s.value = 0 ∧ outcome = .absent := by
@@ -199,7 +199,7 @@ theorem verifyAccount_eq_accountMismatch {stateRoot : Hash32} {p : AccountProof}
 /-- An absent account whose fields do not fit an address with no account fails with a mismatch. -/
 theorem verifyAccount_eq_accountMismatch_absent {stateRoot : Hash32} {p : AccountProof}
     (hv : verifyProof hash stateRoot true ⟨p.address.toArray⟩ p.accountProof = .ok none)
-    (ha : p.absentFields hash = false) :
+    (ha : p.absentFields = false) :
     p.verifyAccount hash stateRoot = .error .accountMismatch := by
   simp [verifyAccount, hv, ha, Except.mapError, bind, Except.bind, throw, throwThe,
     MonadExceptOf.throw]
@@ -207,7 +207,7 @@ theorem verifyAccount_eq_accountMismatch_absent {stateRoot : Hash32} {p : Accoun
 /-- A slot whose proven word differs from that of the answer fails with `slotMismatch`. -/
 theorem verifySlot_eq_slotMismatch {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     {bytes : ByteArray} {word : U256}
-    (hv : verifyProof hash storageRoot true ⟨s.key.toArray⟩ s.proof = .ok (some bytes))
+    (hv : verifyProof hash storageRoot true ⟨s.key.slot.toArray⟩ s.proof = .ok (some bytes))
     (hd : (Codec.decode bytes : Except RlpError U256) = .ok word) (hne : word ≠ s.value) :
     verifySlot hash storageRoot index s = .error (.slotMismatch index word s.value) := by
   simp [verifySlot, hv, hd, hne, Except.mapError, bind, Except.bind, throw, throwThe,
@@ -271,18 +271,24 @@ theorem verifySlots_eq_ok_iff {storageRoot : Hash32} :
             cases hrest
             rw [h0]
 
-/-- The slot checks of an absent account pass exactly when each slot gives the word `0`. -/
+/-- The slot checks of an absent account pass exactly when each slot gives the word `0`.
+
+Each slot must also have no proof node. -/
 theorem verifyAbsentSlots_eq_ok_iff :
     ∀ {index : Nat} {slots : List StorageProof},
-      verifyAbsentSlots index slots = .ok () ↔ ∀ s ∈ slots, s.value = 0
+      verifyAbsentSlots index slots = .ok () ↔ ∀ s ∈ slots, s.value = 0 ∧ s.proof = []
   | _, [] => by simp [verifyAbsentSlots, pure, Except.pure]
   | index, s :: rest => by
     have ih := verifyAbsentSlots_eq_ok_iff (index := index + 1) (slots := rest)
     by_cases hs : s.value = 0
-    · simp [verifyAbsentSlots, hs, ih]
+    · by_cases hp : s.proof = []
+      · simp [verifyAbsentSlots, hs, hp, ih]
+      · have hp' : s.proof.isEmpty = false := by simpa using hp
+        simp only [verifyAbsentSlots, hs, hp']
+        simp [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, hp]
     · simp only [verifyAbsentSlots, ite_eq_right hs]
       simp only [throw, throwThe, MonadExceptOf.throw, bind, Except.bind, reduceCtorEq, false_iff]
-      exact fun h => hs (h s List.mem_cons_self)
+      exact fun h => hs (h s List.mem_cons_self).1
 
 /-- A whole answer shows the account exactly when the account check passes with it present.
 
@@ -305,10 +311,11 @@ theorem verify_eq_ok_present_iff {stateRoot : Hash32} {p : AccountProof}
 
 /-- A whole answer shows the address absent exactly when the account check passes with it absent.
 
-Each slot of the answer must then give the word `0`. -/
+Each slot of the answer must then give the word `0` and no proof node. -/
 theorem verify_eq_ok_absent_iff {stateRoot : Hash32} {p : AccountProof} :
     p.verify hash stateRoot = .ok .absent ↔
-      p.verifyAccount hash stateRoot = .ok false ∧ ∀ s ∈ p.storageProof, s.value = 0 := by
+      p.verifyAccount hash stateRoot = .ok false ∧
+        ∀ s ∈ p.storageProof, s.value = 0 ∧ s.proof = [] := by
   rw [← verifyAbsentSlots_eq_ok_iff (index := 0)]
   unfold verify
   cases ha : p.verifyAccount hash stateRoot with
@@ -342,7 +349,7 @@ theorem verifyAccount_sound {trie : Trie} {stateRoot : Hash32} {honest : List By
     (match valueAt hash trie ⟨p.address.toArray⟩ with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
       | none =>
-        p.absentFields hash = true ∧ present = false) ∨
+        p.absentFields = true ∧ present = false) ∨
       (∃ pair,
         findProofCollision hash (readNodes hash stateRoot p.accountProof) honest = some pair ∧
           IsCollision hash pair) ∨
@@ -364,10 +371,10 @@ Otherwise a search finds a collision with the trie's own proof, or two keys with
 theorem verifySlot_sound {trie : Trie} {storageRoot : Hash32} {honest : List ByteArray}
     {index : Nat} {s : StorageProof} {outcome : SlotOutcome}
     (hroot : root hash trie = .ok storageRoot) (hsecured : trie.secured = true)
-    (hhonest : getProof hash trie ⟨s.key.toArray⟩ = .ok honest)
+    (hhonest : getProof hash trie ⟨s.key.slot.toArray⟩ = .ok honest)
     (hkeys : (trie.data.map Prod.fst).Nodup)
     (h : verifySlot hash storageRoot index s = .ok outcome) :
-    (match valueAt hash trie ⟨s.key.toArray⟩ with
+    (match valueAt hash trie ⟨s.key.slot.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
       | none => s.value = 0 ∧ outcome = .absent) ∨
       (∃ pair, findProofCollision hash (readNodes hash storageRoot s.proof) honest = some pair ∧
@@ -390,7 +397,7 @@ theorem verifyAccount_sound_state {state : State} {entries : List (ByteArray × 
     (match valueAt hash ⟨true, entries⟩ ⟨p.address.toArray⟩ with
       | some bytes => decodeAccount bytes = .ok (p.account, p.storageHash) ∧ present = true
       | none =>
-        p.absentFields hash = true ∧ present = false) ∨
+        p.absentFields = true ∧ present = false) ∨
       (∃ pair,
         findProofCollision hash (readNodes hash stateRoot p.accountProof) honest = some pair ∧
           IsCollision hash pair) ∨
@@ -403,9 +410,9 @@ theorem verifySlot_sound_storage {storage : Std.ExtTreeMap Bytes32 U256}
     {index : Nat} {s : StorageProof} {outcome : SlotOutcome}
     (hentries : storageEntries storage = .ok entries)
     (hroot : root hash ⟨true, entries⟩ = .ok storageRoot)
-    (hhonest : getProof hash ⟨true, entries⟩ ⟨s.key.toArray⟩ = .ok honest)
+    (hhonest : getProof hash ⟨true, entries⟩ ⟨s.key.slot.toArray⟩ = .ok honest)
     (h : verifySlot hash storageRoot index s = .ok outcome) :
-    (match valueAt hash ⟨true, entries⟩ ⟨s.key.toArray⟩ with
+    (match valueAt hash ⟨true, entries⟩ ⟨s.key.slot.toArray⟩ with
       | some bytes => (Codec.decode bytes : Except RlpError U256) = .ok s.value ∧ outcome = .set
       | none => s.value = 0 ∧ outcome = .absent) ∨
       (∃ pair, findProofCollision hash (readNodes hash storageRoot s.proof) honest = some pair ∧
@@ -431,7 +438,7 @@ theorem verifyAccount_getProof {trie : Trie} {stateRoot : Hash32} {p : AccountPr
       decodeAccount bytes = .ok (p.account, p.storageHash) →
         p.verifyAccount hash stateRoot = .ok true
     | none =>
-      p.absentFields hash = true → p.verifyAccount hash stateRoot = .ok false := by
+      p.absentFields = true → p.verifyAccount hash stateRoot = .ok false := by
   have hverify := verifyProof_getProof hash hroot hhonest hpaths
   rw [hsecured] at hverify
   unfold verifyAccount
@@ -452,9 +459,9 @@ It reports a slot without a value as absent, when the answer gives it the word `
 The keys of the trie must have distinct paths. -/
 theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {s : StorageProof}
     (hroot : root hash trie = .ok storageRoot) (hsecured : trie.secured = true)
-    (hhonest : getProof hash trie ⟨s.key.toArray⟩ = .ok s.proof)
+    (hhonest : getProof hash trie ⟨s.key.slot.toArray⟩ = .ok s.proof)
     (hpaths : (trie.data.map fun entry => keyPath hash trie.secured entry.1).Nodup) :
-    match valueAt hash trie ⟨s.key.toArray⟩ with
+    match valueAt hash trie ⟨s.key.slot.toArray⟩ with
     | some bytes =>
       (Codec.decode bytes : Except RlpError U256) = .ok s.value →
         verifySlot hash storageRoot index s = .ok .set
@@ -462,7 +469,7 @@ theorem verifySlot_getProof {trie : Trie} {storageRoot : Hash32} {index : Nat} {
   have hverify := verifyProof_getProof hash hroot hhonest hpaths
   rw [hsecured] at hverify
   unfold verifySlot
-  cases hv : valueAt hash trie ⟨s.key.toArray⟩ with
+  cases hv : valueAt hash trie ⟨s.key.slot.toArray⟩ with
   | none =>
     intro hz
     simp [hverify, hv, hz, Except.mapError, bind, Except.bind, pure, Except.pure]
