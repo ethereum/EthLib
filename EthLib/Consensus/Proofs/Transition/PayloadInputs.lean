@@ -90,14 +90,6 @@ theorem PayloadInputs.trans {first second third : BeaconState preset fork}
     two.latestExecutionPayloadBid.trans one.latestExecutionPayloadBid,
     two.proposerLookahead.trans one.proposerLookahead⟩
 
-/-- A fold whose every step keeps the inputs of a payload keeps them. -/
-theorem PayloadInputs.foldlM {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (kept : ∀ s x s', step s x = .ok s' → PayloadInputs s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : PayloadInputs state after :=
-  foldlM_ok_invariant (PayloadInputs state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
-    (PayloadInputs.refl state) computed
-
 /-! ## Mutators -/
 
 theorem payloadInputs_setValidatorAt {position : Nat} {validator : Validator}
@@ -180,97 +172,71 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     (payloadInputs_increaseBalance lastOk).trans cancelled
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A pending deposit keeps the inputs of a payload. -/
-theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
-    (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    PayloadInputs state after := by
-  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨-, added⟩
-  · exact PayloadInputs.refl _
-  · exact payloadInputs_increaseBalance raised
-  · exact payloadInputs_addValidatorToRegistry added
-
 /-! ## Steps of an epoch -/
 
-/-- The inactivity updates keep the inputs of a payload. -/
-theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
-    (computed : processInactivityUpdates config state altair = .ok after) :
-    PayloadInputs state after := by
-  rw [processInactivityUpdates_frame computed]
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+/-- The inputs of a payload satisfy the frame base laws of the epoch steps.
 
-/-- The registry updates keep the inputs of a payload. -/
-theorem payloadInputs_processRegistryUpdates
-    (computed : processRegistryUpdates config state = .ok after) : PayloadInputs state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine PayloadInputs.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact payloadInputs_setValidatorAt set
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact payloadInputs_initiateValidatorExit exited
-    split at ok
-    · exact payloadInputs_setValidatorAt (liftAccessor_ok.mp ok)
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ PayloadInputs.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
-  refine (PayloadInputs.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
-    (PayloadInputs.foldlM (fun _ _ _ ok => ?_) activated)
-  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := payloadInputs_setValidatorAt markedOk
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact set.trans (payloadInputs_initiateValidatorExit exited)
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ set
-  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    exact payloadInputs_setValidator set
+Those laws leave out the mixes and the lookahead. -/
+theorem payloadInputsLaws : EpochFrameBaseLaws (@PayloadInputs preset fork) where
+  refl := PayloadInputs.refl
+  trans := PayloadInputs.trans
+  setValidatorAt set _ _ _ _ _ := payloadInputs_setValidatorAt set
+  increaseBalance := payloadInputs_increaseBalance
+  decreaseBalance := payloadInputs_decreaseBalance
+  initiateValidatorExit := payloadInputs_initiateValidatorExit
+  eth1DataVotes _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  inactivityScores _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  slashings _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalRoots _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalSummaries _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  participationRecords _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  pendingConsolidations _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  syncCommittees _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ptcWindow _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  addValidatorToRegistry added _ := payloadInputs_addValidatorToRegistry added
+  pendingDeposits _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A pass over the pending deposits keeps the inputs of a payload. -/
-theorem payloadInputs_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      passPendingDeposits config checks stop nextEpoch available state processed count postponed
-        deposits = .ok pass →
-      PayloadInputs state pass.1.state :=
-  fun computed => passPendingDeposits_of PayloadInputs PayloadInputs.refl
-    (fun one two => one.trans two) (fun ok => payloadInputs_applyPendingDeposit ok) computed
+/-- A fold whose every step keeps the inputs of a payload keeps them. -/
+theorem PayloadInputs.foldlM {α ε : Type}
+    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (kept : ∀ s x s', step s x = .ok s' → PayloadInputs s s') {items : List α}
+    (computed : items.foldlM step state = .ok after) : PayloadInputs state after :=
+  payloadInputsLaws.foldlM kept computed
 
-/-- A pass over the pending consolidations keeps the inputs of a payload. -/
-theorem payloadInputs_passPendingConsolidations {nextEpoch : Epoch} :
-    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      passPendingConsolidations nextEpoch state consolidations = .ok result →
-      PayloadInputs state result.1 :=
-  fun computed => (passPendingConsolidations_of PayloadInputs PayloadInputs.refl
-    (fun one two => one.trans two) (fun _ => True)
-    (fun _ _ _ lowered raised =>
-      (payloadInputs_decreaseBalance lowered).trans (payloadInputs_increaseBalance raised))
-    (fun _ _ => trivial) computed).2
-
-/-- The historical summaries update keeps the inputs of a payload. -/
-theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨-, rest⟩ := processHistoricalSummariesUpdate_eq computed
-  split at rest
-  · obtain ⟨_, _, _, _, _, same⟩ := rest
-    rw [← same]
+/-- The stages of an epoch before the RANDAO reset keep the inputs of a payload. -/
+theorem payloadInputs_epochPrefix {config : Config} {checks : SignatureChecks}
+    {state cleared : BeaconState preset fork}
+    (trace : EpochTrace (EpochStage.action config checks)
+      (EpochStage.prefixStages ++ [.payments, .effectiveBalances, .slashingsReset]) state cleared) :
+    PayloadInputs state cleared := by
+  apply trace.transport PayloadInputs PayloadInputs.refl (fun one two => one.trans two)
+  intro k member a b ok
+  have edge := EpochStage.action_cases.mp ok
+  cases k <;> simp only [EpochStage.Edge] at edge
+  · rw [processJustificationAndFinalization_eq edge]
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · subst rest
-    exact PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processInactivityUpdates edge
+    · exact edge ▸ PayloadInputs.refl _
+  · exact payloadInputsLaws.processRewardsAndPenalties edge
+  · exact payloadInputsLaws.processRegistryUpdates edge
+  · exact payloadInputsLaws.processSlashings edge
+  · split at edge
+    · exact payloadInputsLaws.processEth1DataReset edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processPendingDeposits edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processPendingConsolidations edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ PayloadInputs.refl _
+  · exact payloadInputsLaws.processEffectiveBalanceUpdates edge
+  · exact payloadInputsLaws.processSlashingsReset edge
+  all_goals simp [EpochStage.prefixStages] at member
 
 /-! ## The requests of a parent payload -/
 
@@ -970,19 +936,18 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
 
-/-- From Electra, a deposit keeps the inputs of a payload. -/
+/-- A deposit keeps the inputs of a payload. -/
 theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (electra : .pectra ≤ fork)
     (computed : processDeposit config checks before state deposit = .ok after) :
     PayloadInputs state after := by
   obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
   refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
     ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
-  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
   · exact PayloadInputs.refl _
   · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   · exact (payloadInputs_addValidatorToRegistry added).trans
       ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact absurd electra (Nat.not_le_of_lt early)
+  · exact payloadInputsLaws.applyPendingDeposit applied
 
 end EthLib.Consensus

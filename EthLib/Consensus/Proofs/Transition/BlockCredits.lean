@@ -411,7 +411,7 @@ private theorem kept_processAttestation {attestation : Attestation preset fork} 
 private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (electra : .pectra ≤ fork) (computed : processDeposit config checks before s deposit = .ok t) :
     Kept s t :=
-  ⟨(frame_processDeposit computed).toFrame, payloadInputs_processDeposit electra computed,
+  ⟨(frame_processDeposit computed).toFrame, payloadInputs_processDeposit computed,
     stepKeeps_processDeposit computed, effectiveKept_processDeposit computed,
     registryLifecycle_processDeposit computed, lives_processDeposit electra computed⟩
 
