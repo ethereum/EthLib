@@ -305,7 +305,8 @@ theorem justifiedPinned_of_setting.mainnet (mainnet : preset = Preset.mainnet) :
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_mainnet
     genesis pre roots absent bounded enough terminal unslashed finality guarded preGloas fusaka
     forkWindow Preset.incrementWithinUpwardBand_mainnet CapOrder.mainnet
-    Preset.seedLookaheadAtLeastThree_mainnet maxEffectiveBalancesAligned_mainnet (by decide) PinPresetFacts.mainnet
+    Preset.seedLookaheadAtLeastThree_mainnet maxEffectiveBalancesAligned_mainnet (by decide)
+      PinPresetFacts.mainnet
 
 /-- On the minimal preset, the voters of a call pin the justified checkpoints of its epoch. -/
 theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
@@ -315,7 +316,8 @@ theorem justifiedPinned_of_setting.minimal (minimal : preset = Preset.minimal) :
     anchorZero slots ⟨by decide, by decide, by decide⟩ Preset.inclusionDelayPositive_minimal
     genesis pre roots absent bounded enough terminal unslashed finality guarded preGloas fusaka
     forkWindow Preset.incrementWithinUpwardBand_minimal CapOrder.minimal
-    Preset.seedLookaheadAtLeastThree_minimal maxEffectiveBalancesAligned_minimal (by decide) PinPresetFacts.minimal
+    Preset.seedLookaheadAtLeastThree_minimal maxEffectiveBalancesAligned_minimal (by decide)
+      PinPresetFacts.minimal
 
 end Deployed
 
