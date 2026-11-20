@@ -220,7 +220,9 @@ def _update(period: int, fork: str = "pectra", slot: int = 0) -> ResponseLightCl
         pytest.param([], True, id="empty"),
         pytest.param([_update(1500)], True, id="first-period"),
         pytest.param([_update(p) for p in range(1500, 1504)], True, id="every-period"),
-        pytest.param([_update(1501), _update(1503)], True, id="skipped-period"),
+        pytest.param([_update(1501), _update(1502)], True, id="later-first-period"),
+        pytest.param([_update(1501), _update(1503)], False, id="skipped-period"),
+        pytest.param([_update(1500), _update(1503)], False, id="gap-after-first"),
         pytest.param([_update(1503, slot=8191)], True, id="last-slot"),
         pytest.param([_update(1500, slot=-1)], False, id="before-start"),
         pytest.param([_update(1504)], False, id="after-end"),
@@ -272,8 +274,8 @@ def test_light_client_updates_by_range_request_limit() -> None:
     assert not consensus.reqresp_is_valid_response("pectra", protocol, request, over)
 
 
-def test_light_client_updates_by_range_ascending_periods_imply_count_bound() -> None:
-    # Updates at ascending periods inside a range of count periods number at most the count.
+def test_light_client_updates_by_range_consecutive_periods_imply_count_bound() -> None:
+    # Updates at consecutive periods inside a range of count periods number at most the count.
     # So a response over the count also breaks the order, and the count has no case of its own.
     request, protocol = _u64(1500, 2), _id("light_client_updates_by_range")
     both = [_update(1500), _update(1501)]

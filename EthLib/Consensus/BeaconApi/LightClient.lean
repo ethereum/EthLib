@@ -16,7 +16,9 @@ The [updates] of a range of periods are the best updates that the node knows.
 
 The node chooses which update is the best of a period, so the caller gives them.
 
-The answer holds the known updates of the range in increasing period order.
+The source asks for results in consecutive order by period, which EthLib reads as no gap.
+
+So the answer holds the known updates of consecutive periods of the range, in increasing order.
 
 It holds at most the smaller of 128 and the count.
 
@@ -24,7 +26,11 @@ The source does not ask for every known update of the range.
 
 It asks that the answer start with the earliest one.
 
+Since the periods have no gap, a period that the node lacks ends the answer.
+
 So a predicate gives every answer that the source accepts, and one function gives the longest.
+
+The other accepted answers are the nonempty starts of the longest one.
 
 In SSZ, the updates come as chunks: a length of eight bytes, a fork digest and the update.
 
@@ -100,7 +106,9 @@ def updatesLimit (count : UInt64) : Nat :=
 
 The node knows at most one update per period, in a map from periods.
 
-Each entry is the known update of a period of the range, and the periods increase strictly.
+Each entry is the known update of a period of the range.
+
+Each period is the one after the period before it, so the periods have no gap.
 
 When the range has a known update, the answer starts with that of the earliest such period.
 
@@ -112,16 +120,32 @@ def IsUpdatesAnswer {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod cou
   ∃ periods : List UInt64,
     periods.map (known[·]?) = answer.map some ∧
       (∀ period ∈ periods, InRange startPeriod count period) ∧
-      periods.Pairwise (· < ·) ∧
+      (∀ i (h : i + 1 < periods.length), periods[i + 1].toNat = periods[i].toNat + 1) ∧
       (∀ period, InRange startPeriod count period → period ∈ known →
         ∃ first, periods.head? = some first ∧ first ≤ period) ∧
       answer.length ≤ updatesLimit count
 
-/-- The known updates of the range, in increasing period order, cut to the limit. -/
+/-- The known updates of the periods from a period on, with a bound on how many it reads.
+
+It stops at the first period that the node lacks or that lies past the range. -/
+def updatesFrom {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod count : UInt64) :
+    Nat → Nat → List α
+  | _, 0 => []
+  | period, bound + 1 =>
+    if period < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat period) then
+      match known[UInt64.ofNat period]? with
+      | some update => update :: updatesFrom known startPeriod count (period + 1) bound
+      | none => []
+    else []
+
+/-- The known updates of the range from its earliest known period, with no gap, cut to the limit.
+
+It is empty when the range has no known update. -/
 def updatesInRange {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod count : UInt64) :
     List α :=
-  ((known.toList.filter fun entry => decide (InRange startPeriod count entry.1)).take
-    (updatesLimit count)).map (·.2)
+  match known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) with
+  | some (first, _) => updatesFrom known startPeriod count first.toNat (updatesLimit count)
+  | none => []
 
 /-- An update of a light client, with its fork. -/
 abbrev AnyLightClientUpdate (preset : Preset) : Type :=
