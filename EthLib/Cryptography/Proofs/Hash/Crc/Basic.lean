@@ -1,6 +1,6 @@
 module
 
-public import EthLib.Cryptography.Hash.Crc
+public import EthLib.Cryptography.Hash.Crc.Basic
 
 /-!
 # Proofs: the residue of a 32-bit CRC
