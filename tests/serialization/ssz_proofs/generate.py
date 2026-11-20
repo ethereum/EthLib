@@ -127,8 +127,6 @@ def tagged(cls: type) -> object:
     """The type in the tagged form of the EthLib bindings."""
     if cls in UINTS:
         return {"uint": UINTS[cls]}
-    if cls is Boolean:
-        return "bool"
     if issubclass(cls, ByteVector):
         return {"byte_vector": cls.LENGTH}
     if issubclass(cls, ByteList):
@@ -189,6 +187,9 @@ PATHS: dict[str, list[list[int | str]]] = {
         [1],
         ["pair", 0],
         ["slot", 0],
+        ["slot", "x"],
+        ["pairs", "a"],
+        ["pair", "b", "a"],
         ["slot", "__len__"],
         ["pairs", "__len__", 0],
         ["__len__"],
@@ -321,7 +322,7 @@ VALUES: dict[str, tuple[str, SSZType]] = {
     ),
 }
 
-# Every index below this bound is proved in every value, besides the indices of its paths.
+# Every index below this bound is asked of every value, besides the indices of its paths.
 INDEX_BOUND = 32
 
 # An index far below the tree of every value, which a 64-bit or 128-bit integer cannot hold.

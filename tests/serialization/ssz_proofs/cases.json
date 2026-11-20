@@ -516,6 +516,36 @@
    "type": "nested",
    "path": [
     "slot",
+    "x"
+   ],
+   "gindex": null,
+   "fault": "NO_PARTS"
+  },
+  {
+   "type": "nested",
+   "path": [
+    "pairs",
+    "a"
+   ],
+   "gindex": null,
+   "fault": "NOT_A_POSITION",
+   "step": "a"
+  },
+  {
+   "type": "nested",
+   "path": [
+    "pair",
+    "b",
+    "a"
+   ],
+   "gindex": null,
+   "fault": "NOT_A_POSITION",
+   "step": "a"
+  },
+  {
+   "type": "nested",
+   "path": [
+    "slot",
     "__len__"
    ],
    "gindex": null,

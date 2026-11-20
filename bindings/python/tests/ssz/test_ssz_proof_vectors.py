@@ -1,4 +1,4 @@
-"""Generalized indices, Merkle proofs and chunk roots, against the vectors of ssz-specs v0.1.0."""
+"""Generalized indices, Merkle proofs and chunk roots, against ssz-specs v0.1.0."""
 
 import hashlib
 import json
@@ -29,7 +29,7 @@ ERR = "EthLib.Serialization.Ssz.Err."
 # The message and the code of EthLib for each fault of the package.
 # The message is filled from the fields of the case.
 # The package calls an unknown field name, or a position given for a field, a missing field.
-# It refuses a field name on a union as not a position, and EthLib as a missing field.
+# It refuses a field name on a list or a union as not a position, and EthLib as a missing field.
 # EthLib refuses these three when it reads the path, before any SSZ fault, so with code 0.
 FAULTS = {
     "NO_SUCH_POSITION": ("path rejected: " + ERR + "noSuchPosition {step}", 47),
@@ -53,14 +53,17 @@ def _bytes(text: str) -> bytes:
     return bytes.fromhex(text.removeprefix("0x"))
 
 
-def _message(case: dict) -> str:
-    """The whole message of EthLib for the fault of a case."""
-    return FAULTS[case["fault"]][0].format_map(case)
+# The package refuses a field name on a basic value as a value with no parts.
+# EthLib refuses it as a missing field, as it does every name outside a container.
+NAME_ON_A_BASIC_VALUE = {"nested/slot/x": ("path: no field x", 0)}
 
 
-def _code(case: dict) -> int:
-    """The code of EthLib for the fault of a case."""
-    return FAULTS[case["fault"]][1]
+def _expected(case: dict) -> tuple[str, int]:
+    """The whole message and the code of EthLib for the fault of a case."""
+    if "path" in case and _path_id(case) in NAME_ON_A_BASIC_VALUE:
+        return NAME_ON_A_BASIC_VALUE[_path_id(case)]
+    template, code = FAULTS[case["fault"]]
+    return template.format_map(case), code
 
 
 def _climb(node: bytes, gindex: int, branch: list[bytes]) -> bytes:
@@ -102,8 +105,8 @@ def test_digests() -> None:
 
 
 def test_counts() -> None:
-    """The file holds 118 paths, 26 values with 900 indices, and 28 chunk lists."""
-    assert (len(INDICES), len(REFUSED_PATHS)) == (77, 41)
+    """The file holds 121 paths, 26 values with 900 indices, and 28 chunk lists."""
+    assert (len(INDICES), len(REFUSED_PATHS)) == (77, 44)
     assert len(VALUES) == 26
     assert (len(PROOFS), len(REFUSED_PROOFS)) == (243, 657)
     assert (len(ROOTS), len(REFUSED_CHUNKS)) == (25, 3)
@@ -131,9 +134,10 @@ def test_generalized_index(case: dict) -> None:
 
 @pytest.mark.parametrize("case", REFUSED_PATHS, ids=map(_path_id, REFUSED_PATHS))
 def test_generalized_index_refuses(case: dict) -> None:
-    with raises(SszError, _message(case)) as caught:
+    message, code = _expected(case)
+    with raises(SszError, message) as caught:
         ssz.get_generalized_index(TYPES[case["type"]], *case["path"])
-    assert caught.value.code == _code(case)
+    assert caught.value.code == code
 
 
 @pytest.mark.parametrize(("name", "case"), PROOFS, ids=map(_proof_id, PROOFS))
@@ -146,9 +150,10 @@ def test_merkle_proof(name: str, case: dict) -> None:
 @pytest.mark.parametrize(("name", "case"), REFUSED_PROOFS, ids=map(_proof_id, REFUSED_PROOFS))
 def test_merkle_proof_refuses(name: str, case: dict) -> None:
     ssz_type, value = _value(name)
-    with raises(SszError, _message(case)) as caught:
+    message, code = _expected(case)
+    with raises(SszError, message) as caught:
         ssz.compute_merkle_proof(ssz_type, value, case["gindex"])
-    assert caught.value.code == _code(case)
+    assert caught.value.code == code
 
 
 @pytest.mark.parametrize("case", ROOTS, ids=map(_chunks_id, ROOTS))
@@ -159,6 +164,7 @@ def test_merkleize_chunks(case: dict) -> None:
 
 @pytest.mark.parametrize("case", REFUSED_CHUNKS, ids=map(_chunks_id, REFUSED_CHUNKS))
 def test_merkleize_chunks_refuses(case: dict) -> None:
-    with raises(SszError, _message(case)) as caught:
+    message, code = _expected(case)
+    with raises(SszError, message) as caught:
         ssz.merkleize_chunks([_bytes(chunk) for chunk in case["chunks"]], case["limit"])
-    assert caught.value.code == _code(case)
+    assert caught.value.code == code
