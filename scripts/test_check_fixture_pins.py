@@ -285,6 +285,72 @@ class Archives(unittest.TestCase):
             tree.tmp.cleanup()
 
 
+# A release asset that no test reads, declared with its reason.
+UNREAD = "https://github.com/org/vectors/releases/download/tests%40v1/extra.tar.gz"
+
+
+class UnreadAssets(unittest.TestCase):
+    def problems(self, url: str = UNREAD, reason: str = '"Its runner is planned"') -> list[str]:
+        """The problems of the intact tree with one archive of release tests@v1 and one asset."""
+        archive = ARCHIVE.replace(
+            'url = "https://example.org/v1/all.tar.gz"',
+            f'release = "tests@v1"\nurl = "{UNREAD.replace("extra", "all")}"',
+        )
+        tree = Tree()
+        tree.write(
+            "tests/sources.toml", f'{SOURCES}{archive}\n[unread_assets]\n"{url}" = {reason}\n'
+        )
+        tree.write("bindings/python/tests/test_b.py", 'ARCHIVE = "vectors/v1/all"\n')
+        tree.write("tests/generators.toml", GENERATORS + ARCHIVE_GROUP)
+        return tree.problems()
+
+    def test_declared_asset_passes(self):
+        self.assertEqual(self.problems(), [])
+
+    def test_asset_of_the_release_of_a_repository_passes(self):
+        # The release is pinned on the repository, and the archive names none.
+        tree = Tree()
+        sources = SOURCES.replace(f'commit = "{PIN}"', f'commit = "{PIN}"\nrelease = "tests@v1"')
+        tree.write("tests/sources.toml", f'{sources}\n[unread_assets]\n"{UNREAD}" = "Planned"\n')
+        self.assertEqual(tree.problems(), [])
+
+    def test_asset_of_a_release_that_is_not_pinned(self):
+        for old, new in (("org/vectors", "org/other"), ("tests%40v1", "tests%40v2")):
+            url = UNREAD.replace(old, new)
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self.problems(url),
+                    [f"tests/sources.toml: the unread asset {url} is no asset of a pinned release"],
+                )
+
+    def test_url_that_is_no_release_asset(self):
+        for url in (
+            "https://example.org/v1/extra.tar.gz",
+            UNREAD + "/more",
+            UNREAD.replace("https://", "http://"),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    self.problems(url),
+                    [f"tests/sources.toml: the unread asset {url} is no download URL of a release"],
+                )
+
+    def test_asset_without_a_reason(self):
+        for reason in ('""', '" "', "1"):
+            with self.subTest(reason=reason):
+                self.assertEqual(
+                    self.problems(reason=reason),
+                    [f"tests/sources.toml: the unread asset {UNREAD} needs a reason"],
+                )
+
+    def test_asset_that_is_also_an_archive(self):
+        url = UNREAD.replace("extra", "all")
+        self.assertEqual(
+            self.problems(url),
+            [f"tests/sources.toml: the unread asset {url} is also a pinned archive"],
+        )
+
+
 class Generators(unittest.TestCase):
     def problems(self, generators: str, *files: tuple[str, str]) -> list[str]:
         """The problems of the intact tree with `generators` in place, and `files` written."""

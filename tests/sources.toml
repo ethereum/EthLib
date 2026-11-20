@@ -273,6 +273,12 @@ url = "https://raw.githubusercontent.com/eth-clients/mainnet/8cad4805e9cb5aa5e8e
 size = 5404504
 sha256 = "bbdf6fa5ffd6ead8ca6714c60a17d14d48ccaabbb18622b8485f88b58633d620"
 
+# The assets of a pinned release that no test reads, by download URL, each with its reason.
+# The release watcher fails on an asset of a pinned release that is neither here nor an archive.
+[unread_assets]
+"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/comptests.tar.gz" = "The fork choice compliance tests, which wait for their runner (#3535)"
+"https://github.com/ethereum/consensus-specs/releases/download/v1.7.0-beta.4/general.tar.gz" = "Only the Altair BLS cases; the pinned general archive of v1.7.0-alpha.12 holds them too"
+
 # The pinned vector directories whose cases come from no repository, with their source.
 [other]
 "tests/cryptography/keystore" = "Unicode Character Database 16.0.0, UnicodeData.txt and NormalizationTest.txt"

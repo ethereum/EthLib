@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import tomllib
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ HEX_QUOTED = re.compile(rf"`{_HEX}`")
 HEX_AT = re.compile(rf"\bat\s+{_HEX}\b")
 FULL_COMMIT = re.compile(r"[0-9a-f]{40}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
+# The download URL of an asset of a GitHub release: its repository, its quoted tag and its name.
+RELEASE_ASSET = re.compile(r"https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)/[^/]+")
 SOURCE_LINE = "# Source: "
 
 GENERATORS = "tests/generators.toml"
@@ -370,6 +373,28 @@ def check(root: Path, members: dict[str, list[str]] | None = None) -> list[str]:
             problems.append(f"{SOURCES}: the archive {name} needs a positive size in bytes")
         if not SHA256.fullmatch(str(entry.get("sha256", ""))):
             problems.append(f"{SOURCES}: the archive {name} needs a 64-digit sha256")
+
+    # A release asset that EthLib does not read is declared by its download URL, with a reason.
+    urls = {entry.get("url") for entry in archives.values()}
+    # The pinned releases, of a repository or of an archive from another release line.
+    releases = {
+        (name, entry["release"]) for name, entry in repositories.items() if "release" in entry
+    }
+    releases |= {
+        (entry.get("repository"), entry["release"])
+        for entry in archives.values()
+        if "release" in entry
+    }
+    for url, reason in config.get("unread_assets", {}).items():
+        match = RELEASE_ASSET.fullmatch(url)
+        if match is None:
+            problems.append(f"{SOURCES}: the unread asset {url} is no download URL of a release")
+        elif (match.group(1), urllib.parse.unquote(match.group(2))) not in releases:
+            problems.append(f"{SOURCES}: the unread asset {url} is no asset of a pinned release")
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(f"{SOURCES}: the unread asset {url} needs a reason")
+        if url in urls:
+            problems.append(f"{SOURCES}: the unread asset {url} is also a pinned archive")
 
     problems += check_generators(root, set(expected), set(archives), members or {})
 
