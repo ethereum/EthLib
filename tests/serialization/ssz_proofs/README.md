@@ -33,11 +33,13 @@ uv run --no-project --python 3.12 --with eth-ssz-specs==0.1.0 \
   A path that the package refuses has a `null` index and the name of the package's fault.
   When the fault names the step that it refused, the case gives that step too.
 - `values` gives each value as its SSZ bytes, with its hash tree root.
-  For every index below 32, for every index of a path of its type, and for the index 2^200, it gives the proof, or the fault that refuses the index.
+  It gives the proof of every index below 32, of every index of a path of its type, and of the index 2^200.
+  For an index that the package refuses, it gives the fault instead.
 - `chunk_roots` gives chunks and a limit, then their root, or the fault that refuses a limit below the number of chunks.
 
 The cases cover empty lists, a list of limit 0, lists filled to a limit that is a power of two, and limits just below and above one.
-They also cover the length node of a list, the index 0, the root, and indices into packed data, a length, an empty position and past the end of a progressive list.
+They also cover the length node of a list, the index 0 and the root.
+Other indices go into packed data, into a length, into an empty position, and past the end of a progressive list.
 A list of 2^64 chunks has element indices above 2^64 and proofs of 65 siblings, which no 64-bit integer holds.
 
 No case goes past a chunk limit of 2^64, since the package roots an empty subtree of at most 2^64 leaves and refuses a larger limit.
