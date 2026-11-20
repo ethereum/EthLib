@@ -664,6 +664,14 @@ def consensus_api_payload_envelope_ssz(name: str, fork: str, anchor_state: bytes
     """The SSZ body of the envelope answer, as `bytes`."""
     ...
 
+def consensus_api_cached_envelope(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> dict[str, Any]:
+    """The JSON response of the endpoint that gives a proposer its envelope, as a `dict`."""
+    ...
+
+def consensus_api_cached_envelope_ssz(name: str, fork: str, cached: tuple[int, bytes] | None, slot: int, root: bytes) -> bytes:
+    """The SSZ body of the endpoint that gives a proposer its envelope, as `bytes`."""
+    ...
+
 def consensus_api_light_client_bootstrap(name: str, fork: str, anchor_state: bytes, anchor_block: bytes, steps: list, verify: bool, config: dict[str, Any] | None, root: bytes) -> dict[str, Any]:
     """The JSON response of the bootstrap endpoint, as a `dict`."""
     ...

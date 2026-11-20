@@ -4,7 +4,7 @@ import copy
 import hashlib
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from ruamel.yaml import YAML
@@ -333,6 +333,53 @@ def test_payload_envelope_not_held() -> None:
     for root, envelope in [(ANCHOR_ROOT, signed), (BLOCK_ROOT, other)]:
         with raises(consensus.ForkChoiceError, "Execution payload envelope not found") as error:
             consensus.api_payload_envelope(*_store_case(), _hex(root), envelope)
+        assert error.value.code == 404
+
+
+def _cached_envelope(block_root: bytes) -> tuple[bytes, dict[str, Any]]:
+    """The SSZ and JSON of the envelope of the pinned case, named for another block root."""
+    signed = _read(ENVELOPE_CASE, ENVELOPE)
+    document = consensus.api_json("minimal", GLOAS, "SignedExecutionPayloadEnvelope", signed)
+    message = dict(document["message"], beacon_block_root="0x" + block_root.hex())
+    return consensus.api_ssz("minimal", GLOAS, "ExecutionPayloadEnvelope", message), message
+
+
+# The node built the payload of slot 100 for block 0xaa..aa; a reorg then made 0xbb..bb the block.
+_BUILT_FOR: Final = b"\xaa" * 32
+_REORGED_TO: Final = b"\xbb" * 32
+
+
+def test_cached_envelope_of_the_request() -> None:
+    envelope, message = _cached_envelope(_BUILT_FOR)
+    cache = (100, envelope)
+    answer = consensus.api_cached_envelope("minimal", GLOAS, cache, 100, _BUILT_FOR)
+    assert answer == {"version": "gloas", "data": message}
+    body = consensus.api_cached_envelope_ssz("minimal", GLOAS, cache, 100, _BUILT_FOR)
+    assert body == envelope
+
+
+@pytest.mark.parametrize(
+    ("cached", "slot", "root"),
+    [
+        pytest.param(True, 100, _REORGED_TO, id="another-block"),
+        pytest.param(True, 99, _BUILT_FOR, id="another-slot"),
+        pytest.param(False, 100, _BUILT_FOR, id="nothing-cached"),
+    ],
+)
+def test_cached_envelope_not_served(cached: bool, slot: int, root: bytes) -> None:
+    """A request for another slot or block, or with nothing cached, gets code 404."""
+    cache = (100, _cached_envelope(_BUILT_FOR)[0]) if cached else None
+    for answer in (consensus.api_cached_envelope, consensus.api_cached_envelope_ssz):
+        with raises(consensus.ConsensusError, "Execution payload envelope not found") as error:
+            answer("minimal", GLOAS, cache, slot, root)
+        assert error.value.code == 404
+
+
+def test_cached_envelope_before_gloas() -> None:
+    """Before Gloas no envelope exists, so the answer is code 404."""
+    for answer in (consensus.api_cached_envelope, consensus.api_cached_envelope_ssz):
+        with raises(consensus.ConsensusError, "Execution payload envelope not found") as error:
+            answer("minimal", FORKS["fulu"], None, 100, _BUILT_FOR)
         assert error.value.code == 404
 
 

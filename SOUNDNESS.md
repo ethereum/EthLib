@@ -5509,6 +5509,13 @@ The same module gives the headers, the data column sidecars and the payload enve
 The Python suite builds the store of a Gloas fork choice case with one block and its envelope.
 It checks the header and headers answers of that block and of the anchor, with each filter, against headers that it builds from the JSON of the blocks.
 It checks the envelope answer against the pinned envelope, and code 404 for the anchor and for another message.
+The [endpoint that gives a proposer its envelope](https://github.com/ethereum/beacon-APIs/blob/0ed12552077c9927ba2599ee632e76b2caf021d7/apis/validator/execution_payload_envelope.yaml) reads the envelope that the node built for the current slot.
+That cache is an input of at most one entry, since the source says the node keeps only that one.
+`cachedEnvelopeOf_ok` shows that an answer is the cached envelope, cached for the slot of the request and naming its block root.
+So a client never gets an envelope of another slot, or one committed to a block that a reorg replaced.
+`cachedEnvelopeOf_of_cached` shows the converse from Gloas, and `cachedEnvelopeOf_error` that every other answer is code 404, before Gloas too.
+The source does not say whether the node may keep envelopes of earlier slots; EthLib reads "only caches the envelope for the current slot" as one entry.
+The Python suite checks the envelope of a request that matches the cache, and code 404 for another block root, another slot, an empty cache and a fork before Gloas.
 It checks the columns answer and its SSZ body for Fulu and Gloas, with and without indices, and code 400 before Fulu.
 It checks the SSZ bodies of the block and the blinded block against the JSON answers.
 It checks code 400 for the blinded block from Gloas, and that the attestations answer has no SSZ body.
@@ -7152,12 +7159,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 530 operations and 51 size constants.
-The Python extension calls 530 of the operations and 51 of the constants.
+Lean exports 532 operations and 51 size constants.
+The Python extension calls 532 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (344).
+12123 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2674), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1609), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (835), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
