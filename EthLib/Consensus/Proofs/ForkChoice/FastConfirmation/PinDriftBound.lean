@@ -3736,41 +3736,67 @@ private def Located {x y : ForkedBeaconState preset} (tail : Run config checks x
     tail.Contains (Step.slot ok) ∧ (Step.slot ok : Step config checks u w).balanceEvents = .ok es ∧
       e ∈ es ∧ KeepsExiting e.before.state e.after.state
 
-/-- Locate each deposit event of a run. -/
+/-- Locate each deposit event and each consolidation event of a run.
+
+A deposit event raises no balance, or it is in the events of a slot step of the run.
+
+A consolidation event is in the events of a slot step of the run, since no block records one. -/
 private theorem run_located {x y : ForkedBeaconState preset} (tail : Run config checks x y)
     (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam) (high : ℕ)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events) :
-    ∀ e ∈ events, e.source = .deposits → Located tail e := by
+    (∀ e ∈ events, e.source = .deposits → Located tail e) ∧
+      (∀ e ∈ events, e.source = .consolidations →
+        ∃ (u w : ForkedBeaconState preset) (ok : advanceSlotAcross config checks u = .ok w)
+          (es : List (BalanceEvent preset)), tail.Contains (Step.slot ok) ∧
+          (Step.slot ok : Step config checks u w).balanceEvents = .ok es ∧ e ∈ es) := by
   induction tail generalizing events with
-  | nil => cases replayed; intro e member; simp at member
+  | nil =>
+    cases replayed
+    exact ⟨fun e member => by simp at member, fun e member => by simp at member⟩
   | @snoc middle last pre step ih =>
     simp only [Run.balanceEvents, bind_ok_iff] at replayed
     obtain ⟨prior, priorOk, rest⟩ := replayed
-    have priorLocated := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) priorOk
+    obtain ⟨priorLocated, priorSlot⟩ := ih (Nat.lt_of_le_of_lt step.chainStep.fork_le early) priorOk
     have lift : ∀ e, Located pre e → Located (pre.snoc step) e := by
       rintro e (unconditional | ⟨u, w, ok, es, contains, replayedEs, member, keeps⟩)
       · exact .inl unconditional
       · exact .inr ⟨u, w, ok, es, .earlier contains step, replayedEs, member, keeps⟩
+    have liftSlot : ∀ e, (∃ (u w : ForkedBeaconState preset)
+        (ok : advanceSlotAcross config checks u = .ok w) (es : List (BalanceEvent preset)),
+        pre.Contains (Step.slot ok) ∧
+          (Step.slot ok : Step config checks u w).balanceEvents = .ok es ∧ e ∈ es) →
+        ∃ (u w : ForkedBeaconState preset) (ok : advanceSlotAcross config checks u = .ok w)
+          (es : List (BalanceEvent preset)), (pre.snoc step).Contains (Step.slot ok) ∧
+          (Step.slot ok : Step config checks u w).balanceEvents = .ok es ∧ e ∈ es := by
+      rintro e ⟨u, w, ok, es, contains, replayedEs, member⟩
+      exact ⟨u, w, ok, es, .earlier contains step, replayedEs, member⟩
     by_cases selected : (getCurrentEpoch middle.state).toNat ≤ high + 1
     · simp only [selected, ↓reduceIte, bind_ok_iff, pure, Except.pure,
         Except.ok.injEq] at rest
       obtain ⟨added, addedOk, rfl⟩ := rest
       have inFork : .pectra ≤ middle.fork :=
         Nat.le_trans electra (fork_le_of_chainSteps pre.chainSteps)
-      intro e member sourceEq
-      rcases List.mem_append.mp member with old | new
-      · exact lift e (priorLocated e old sourceEq)
-      · cases step with
-        | block engine signed due ok =>
-          exact .inl (blockReplay_unconditional inFork early engine _ _
-            (Step.balanceEvents_block early addedOk) e new sourceEq)
-        | slot ok =>
-          exact .inr ⟨_, _, ok, added, .last pre _, addedOk, new,
-            slot_quiet ok early addedOk e new sourceEq⟩
+      refine ⟨fun e member sourceEq => ?_, fun e member sourceEq => ?_⟩
+      · rcases List.mem_append.mp member with old | new
+        · exact lift e (priorLocated e old sourceEq)
+        · cases step with
+          | block engine signed due ok =>
+            exact .inl (blockReplay_unconditional inFork early engine _ _
+              (Step.balanceEvents_block early addedOk) e new sourceEq)
+          | slot ok =>
+            exact .inr ⟨_, _, ok, added, .last pre _, addedOk, new,
+              slot_quiet ok early addedOk e new sourceEq⟩
+      · rcases List.mem_append.mp member with old | new
+        · exact liftSlot e (priorSlot e old sourceEq)
+        · cases step with
+          | block engine signed due ok =>
+            exact absurd sourceEq (blockReplay_noConsolidations inFork early engine _ _
+              (Step.balanceEvents_block early addedOk) e new)
+          | slot ok => exact ⟨_, _, ok, added, .last pre _, addedOk, new⟩
     · simp only [selected, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at rest
       subst rest
-      intro e member sourceEq
-      exact lift e (priorLocated e member sourceEq)
+      exact ⟨fun e member sourceEq => lift e (priorLocated e member sourceEq),
+        fun e member sourceEq => liftSlot e (priorSlot e member sourceEq)⟩
 
 /-! ## Consolidation credits of one pass -/
 
@@ -4832,7 +4858,7 @@ private theorem Run.exiting_deposit_credit_zero_of_exited {x y : ForkedBeaconSta
           e.before.state.validators.data[i]? = some v ∧ v.exitEpoch.toNat < 2 ^ 64 - 1 ∧
           (getCurrentEpoch e.before.state).toNat < v.withdrawableEpoch.toNat) :
     ((events.filter (·.source = .deposits)).map (keyCredit i)).sum = 0 := by
-  have located := run_located tail electra early high replayed
+  have located := (run_located tail electra early high replayed).1
   apply List.sum_eq_zero
   intro n member
   obtain ⟨e, filtered, rfl⟩ := List.mem_map.mp member
