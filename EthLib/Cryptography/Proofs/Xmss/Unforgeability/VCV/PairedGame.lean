@@ -8,11 +8,15 @@ import VCVio.OracleComp.QueryTracking.RandomOracle.CachePartial.Cost
 # The security game with two cache rows per hash input
 
 The leanXMSS specification draft, section "Security", measures the game in calls to the hash oracle.
+
 The keyed signer determines the chance of a forgery.
+
 The stateless signer determines the query budget.
+
 Both games charge a repeated input again.
 
 The paired oracle stores the two halves of a hash reply in separate rows.
+
 Recording the charge before the two reads gives the caller its original cost.
 -/
 

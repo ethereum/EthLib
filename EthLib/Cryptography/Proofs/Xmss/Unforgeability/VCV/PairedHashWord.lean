@@ -7,10 +7,14 @@ public import VCVio.OracleComp.QueryTracking.RandomOracle.PairedValue
 /-!
 # Read one leanXMSS hash word through its two halves
 
-The leanXMSS draft at leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`,
-"Hashing and parameters" and "WOTS+C", uses the first and last 16 bytes as separate chain starts.
+The leanXMSS draft uses the first and last 16 bytes as separate chain starts.
+
+Source: leanXMSS draft, "Hashing and parameters" and "WOTS+C".
+
+Revision: leanVM commit `4af2cdddd7cd41b9df2cc7e123e314a91b0b4462`.
 
 The low row holds the bits for the first 16 bytes and the high row those for the last 16 bytes.
+
 Joining the rows restores the word seen by a caller of the shared hash oracle.
 -/
 
@@ -65,7 +69,7 @@ abbrev splitCache (cache : HashSpec.QueryCache) : HalfSpec.QueryCache :=
 abbrev joinCache (cache : HalfSpec.QueryCache) : HashSpec.QueryCache :=
   RandomOraclePairedValue.joinCache halves cache
 
-/-- A hash query returns the same distribution of reply and complete caches in either representation. -/
+/-- A hash query preserves the joint distribution of its reply and both final caches. -/
 theorem hash_query_joint (input : HashInput) (initial : HashSpec.QueryCache) :
     (fun z : HashOutput × HashSpec.QueryCache => (z.1, z.2, splitCache z.2)) <$>
       (HashSpec.randomOracle input).run initial =ᵈ
@@ -80,7 +84,7 @@ theorem hash_query_joint (input : HashInput) (initial : HashSpec.QueryCache) :
 abbrev readHalves : QueryImpl OracleWorld (OracleComp (unifSpec + HalfSpec)) :=
   RandomOraclePairedValue.readHalves halves
 
-/-- Every adaptive caller sees the same joint law of its result and both forms of the final cache. -/
+/-- An adaptive caller preserves the joint law of its result and both final caches. -/
 theorem run_joint {α : Type} (caller : OracleComp OracleWorld α) (initial : HashSpec.QueryCache) :
     (fun z : α × HashSpec.QueryCache => (z.1, z.2, splitCache z.2)) <$>
       (simulateQ HashSpec.romImpl caller).run initial =ᵈ
