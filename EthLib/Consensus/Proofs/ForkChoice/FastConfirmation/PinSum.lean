@@ -22488,6 +22488,15 @@ private theorem credC_prefix_le (h : Setting config checks g split fin pulled an
   unfold consAmt
   omega
 
+/-- The credits of a key over the run before a step are at most those over the whole run. -/
+private theorem creditScan_prefix_le (blockP slotP : BalanceSource → Bool) (v high : ℕ)
+    {x a b c : ForkedBeaconState preset} (pre : Run config checks x a)
+    (step : Step config checks a b) (post : Run config checks b c) :
+    (creditScan blockP slotP v high pre).1 ≤
+      (creditScan blockP slotP v high ((pre.snoc step).append post)).1 := by
+  rw [creditScan_append, creditScan_snoc_fst]
+  split <;> omega
+
 /-- The credits, whistleblower credits and credit band of a prefix are within the whole run's. -/
 private theorem prefix_credits_mono {a b : ForkedBeaconState preset}
     (pre : Run config checks ⟨fork, split⟩ a) (step : Step config checks a b)
@@ -22495,24 +22504,15 @@ private theorem prefix_credits_mono {a b : ForkedBeaconState preset}
     credC pre highC i ≤ credC ((pre.snoc step).append post) highC i ∧
       whistC pre highC i ≤ whistC ((pre.snoc step).append post) highC i ∧
       bandC pre highC i ≤ bandC ((pre.snoc step).append post) highC i := by
-  rw [snoc_append_eq pre step post]
-  have credits := creditScan_append (fun s => decide (s = .rewards ∨ s = .consolidations))
-    (fun s => decide (s = .consolidations ∨ s = .deposits)) i highC pre
-    ((Run.nil.snoc step).append post)
-  have whist := creditScan_append (fun s => decide (s = .slashings)) (fun _ => false) i highC pre
-    ((Run.nil.snoc step).append post)
-  have gross := creditScan_append
-    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i highC pre
-    ((Run.nil.snoc step).append post)
-  have deposits := creditScan_append (fun _ => false) (fun s => decide (s = .deposits)) i highC pre
-    ((Run.nil.snoc step).append post)
-  refine ⟨?_, ?_, ?_⟩
-  · unfold credC
-    omega
-  · unfold whistC
-    omega
-  · unfold bandC grossScan
-    split_ifs <;> omega
+  have gross := creditScan_prefix_le
+    (fun s => decide (s = .rewards ∨ s = .slashings ∨ s = .sync)) (fun _ => false) i highC pre step
+    post
+  have deposits := creditScan_prefix_le (fun _ => false) (fun s => decide (s = .deposits)) i highC
+    pre step post
+  refine ⟨creditScan_prefix_le _ _ i highC pre step post,
+    creditScan_prefix_le _ _ i highC pre step post, ?_⟩
+  unfold bandC grossScan
+  split_ifs <;> omega
 
 /-- The sync credits of the events of a prefix of C's run are within those of the whole run.
 
@@ -25406,6 +25406,289 @@ private theorem split_epoch_start_data (h : Setting config checks g split fin pu
     v.toNat hin unset pFulu pEarly sameT hystT pEpoch charged
   exact ⟨⟨fork, t⟩, Run.nil, pre.append cf, run_nil_append _, insideT, sameT, effEq, floor, up,
     rise⟩
+
+/-- Two splits of a run at steps that charge the same key start at the same state.
+
+One split is a prefix of the other.
+
+If the first step comes first, the exit it assigns stays assigned.
+
+So the second step cannot charge it. -/
+private theorem charge_site_start {x y p q cp cq : ForkedBeaconState preset}
+    {tail : Run config checks x y} (front : Run config checks x p) (step : Step config checks p q)
+    (post : Run config checks q y) (site : (front.snoc step).append post = tail)
+    (cfront : Run config checks x cp) (cstep : Step config checks cp cq)
+    (cpost : Run config checks cq y) (csite : (cfront.snoc cstep).append cpost = tail) {i : ℕ}
+    (charges : step.departureCharges.any (·.index == i) = true)
+    (cCharges : cstep.departureCharges.any (·.index == i) = true) : p = cp := by
+  obtain ⟨u, w, foundP, foundQ, unset, assigned⟩ := charge_exits step charges
+  obtain ⟨cu, cw, foundCp, foundCq, cUnset, cAssigned⟩ := charge_exits cstep cCharges
+  rcases Run.prefix_total (cfront.snoc cstep) cpost (front.snoc step) post csite site with
+    ⟨r, extended⟩ | ⟨r, extended⟩
+  · rcases Run.prefix_snoc (cfront.snoc cstep) r front step extended with
+      ⟨rfl, same⟩ | ⟨r', earlier⟩
+    · cases eq_of_heq same
+      rfl
+    · obtain ⟨later, foundLater, life⟩ := r'.registryLifecycle.validators i cw foundCq
+      obtain rfl : later = u := Option.some.inj (foundLater.symm.trans foundP)
+      exact absurd (by rw [← life.exitEpoch cAssigned]; exact unset) cAssigned
+  · rcases Run.prefix_snoc (front.snoc step) r cfront cstep extended with
+      ⟨rfl, same⟩ | ⟨r', earlier⟩
+    · cases eq_of_heq same
+      rfl
+    · obtain ⟨later, foundLater, life⟩ := r'.registryLifecycle.validators i w foundQ
+      obtain rfl : later = cu := Option.some.inj (foundLater.symm.trans foundCp)
+      exact absurd (by rw [← life.exitEpoch assigned]; exact cUnset) assigned
+
+/-- The effective balance at its slashing of a charged key of the split's registry.
+
+The run `pre` is the shared run from a state `t` of the split's epoch, or the empty run.
+
+The bound at the charge is given as `bound`, from the charge step and the run to it.
+
+If the slashing step assigns the exit, that step is the charge.
+
+If an earlier step assigned it, the balance before the slashing is bounded by the charge step.
+
+The key is not withdrawable at the slashing, since it is still slashable there.
+
+The credits are at most the slack's credits, at eleven tenths. -/
+private theorem registry_charge_of (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    {t : BeaconState preset fork} (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {eventsP : List (BalanceEvent preset)}
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (v : ValidatorIndex) (inside : v.toNat < split.validators.data.size)
+    (flag : (!(a.state.validators.data[v.toNat]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[v.toNat]?.map (·.slashed)).getD false) = true)
+    (charged : (tailC.departureCharges.any fun c => c.index == v.toNat) = true)
+    (bound : ∀ {front : Run config checks ⟨fork, split⟩ a}
+        {post : Run config checks b ⟨fork, counted⟩} {p q : ForkedBeaconState preset}
+        {eventsY : List (BalanceEvent preset)}
+        (cf : Run config checks ⟨fork, split⟩ p) (step' : Step config checks p q)
+        (post' : Run config checks q a),
+        (cf.snoc step').append post' = front →
+        (cf.snoc step').append ((post'.snoc step).append post) = tailC →
+        step'.departureCharges.any (·.index == v.toNat) = true →
+        a.fork = fork → (getCurrentEpoch a.state).toNat ≤ highC + 1 →
+        front.balanceEvents highC = .ok eventsY →
+        (∀ w, q.state.validators.data[v.toNat]? = some w →
+          (getCurrentEpoch a.state).toNat < w.withdrawableEpoch.toNat) →
+        effectiveAt a v.toNat ≤ effectiveAt p v.toNat + preset.upwardBand +
+          (propC (pre.append front) highC v.toNat + whistC (pre.append front) highC v.toNat +
+            syncCr (eventsP ++ eventsY) v.toNat) + (riseScan v.toNat highC (pre.append front)).2) :
+    effectiveAt a v.toNat ≤ chargeAmt tailC v.toNat + riseQ tailC highC v.toNat +
+      (propN pre highC v.toNat + whistC pre highC v.toNat + syncCr eventsP v.toNat) +
+      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+        eventsC eventsF events fin v.toNat := by
+  classical
+  obtain ⟨shared⟩ := h.toFin
+  have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
+  simp only [Bool.and_eq_true, Bool.not_eq_true'] at flag
+  obtain ⟨flagA, flagB⟩ := flag
+  obtain ⟨front, post, cut, aEarly, aEpoch⟩ := Run.contains_step_facts member h.early
+  have insideA : v.toNat < a.state.validators.data.size :=
+    Nat.lt_of_lt_of_le inside front.registryLifecycle.size_le
+  have insideB : v.toNat < b.state.validators.data.size :=
+    Nat.lt_of_lt_of_le insideA (Run.nil.snoc step : Run config checks a b).registryLifecycle.size_le
+  obtain ⟨old, foundA⟩ : ∃ w, a.state.validators.data[v.toNat]? = some w :=
+    ⟨_, Array.getElem?_eq_getElem insideA⟩
+  obtain ⟨new, foundB⟩ : ∃ w, b.state.validators.data[v.toNat]? = some w :=
+    ⟨_, Array.getElem?_eq_getElem insideB⟩
+  have cleanA : old.slashed = false := by simpa [foundA] using flagA
+  have markedB : new.slashed = true := by simpa [foundB] using flagB
+  by_cases unset : old.exitEpoch = FAR_FUTURE_EPOCH
+  · -- the slashing assigns the exit, so it is the charge
+    have := slash_exit_charge h fromFin tailC step member v.toNat old new foundA foundB unset
+      markedB
+    omega
+  -- an earlier step assigned the exit
+  subst cut
+  have bEarly : b.fork < .glamsterdam :=
+    Nat.lt_of_le_of_lt (fork_le_of_chainSteps post.chainSteps) h.early
+  have aFork : a.fork = fork :=
+    fork_eq_of_run front ((Run.nil.snoc step).append post) (Nat.le_refl _)
+  have aEpoch' : (getCurrentEpoch a.state).toNat ≤ (getCurrentEpoch counted).toNat := aEpoch
+  have unsetSplit : ∀ w, (⟨fork, split⟩ : ForkedBeaconState preset).state.validators.data[
+      v.toNat]? = some w → w.exitEpoch = FAR_FUTURE_EPOCH := by
+    intro w0 found0
+    by_contra assigned0
+    obtain ⟨c, cMember, cIndex⟩ := List.any_eq_true.mp charged
+    have cIndex' : c.index = v.toNat := by simpa using cIndex
+    obtain ⟨p', q', pre', step', post', -, vv, ww, foundP, -, unsetP, -, -, -⟩ :=
+      ((front.snoc step).append post).departure_charge_site c cMember
+    rw [cIndex'] at foundP
+    obtain ⟨x, foundX, life⟩ := pre'.registryLifecycle.validators v.toNat w0 found0
+    obtain rfl : x = vv := Option.some.inj (foundX.symm.trans foundP)
+    exact assigned0 (by rw [← life.exitEpoch assigned0]; exact unsetP)
+  obtain ⟨c0, c0Member, c0Index, -⟩ :=
+    PinSplit.Run.charge_of_exit front electra aEarly v.toNat unsetSplit old foundA unset
+  obtain ⟨p, q, cf, step', post', cut', vv, ww, foundP, foundQ, unsetP, setQ, amount, -⟩ :=
+    front.departure_charge_site c0 c0Member
+  rw [c0Index] at foundP foundQ
+  have inRun : c0 ∈ ((front.snoc step).append post).departureCharges := by
+    rw [Run.departureCharges_append]
+    simp [Run.departureCharges, c0Member]
+  have chargeEq : chargeAmt ((front.snoc step).append post) v.toNat = c0.amount := by
+    unfold chargeAmt
+    rw [find_charge inRun (by simp [c0Index])
+      (fun d inD hd =>
+        charge_unique ((front.snoc step).append post) inD inRun (by simpa [c0Index] using hd))]
+    rfl
+  have amountEq : c0.amount = effectiveAt p v.toNat := by simp [amount, effectiveAt, foundP]
+  -- the charge step
+  obtain ⟨d, dMember, dIndex, -⟩ :=
+    (Run.nil.snoc step').departure_charge_of_assigned v.toNat vv ww foundP foundQ unsetP setQ
+  have hcharge : step'.departureCharges.any (·.index == v.toNat) = true :=
+    List.any_eq_true.mpr ⟨d, by simpa [Run.departureCharges] using dMember, by simpa using dIndex⟩
+  have site : (cf.snoc step').append ((post'.snoc step).append post) =
+      (front.snoc step).append post := by
+    rw [← cut']
+    exact Run.append_assoc _ _ _
+  -- the key is not withdrawable at the slashing
+  have held : ∀ w, q.state.validators.data[v.toNat]? = some w →
+      (getCurrentEpoch a.state).toNat < w.withdrawableEpoch.toNat := by
+    intro w foundW
+    have eqW : w = ww := Option.some.inj (foundW.symm.trans foundQ)
+    have lateA : (getCurrentEpoch a.state).toNat < old.withdrawableEpoch.toNat :=
+      newly_slashed_unwithdrawable h.genesis h.caps (shared.append (fromFin.append front)) step
+        bEarly foundA foundB cleanA markedB
+    have kept := PinSplit4.kept_run (shared.append (fromFin.append (cf.snoc step'))) h.genesis
+      (Nat.le_trans h.fulu (fork_le_of_chainSteps (cf.snoc step').chainSteps)) post' aEarly
+    obtain ⟨-, wdEq⟩ := kept.withdrawable v.toNat ww old foundQ foundA setQ
+    have same : old.withdrawableEpoch = ww.withdrawableEpoch :=
+      wdEq.resolve_left (by simp [cleanA])
+    rw [eqW, ← same]
+    exact lateA
+  obtain ⟨eventsY, replayedY⟩ := front.balanceEvents_ok aEarly highC
+  have whole := bound cf step' post' cut' site hcharge aFork (by omega) replayedY held
+  -- the credits of `pre` are its proposer, whistleblower and sync credits
+  have noneBefore : ∀ c ∈ pre.departureCharges, c.index ≠ v.toNat := by
+    intro c member index
+    obtain ⟨w, foundS, assigned, -⟩ := pre.departure_charge_exit c member
+    rw [index] at foundS
+    exact assigned (unsetSplit w foundS)
+  obtain ⟨propSplit, whistSplit, riseSame⟩ := prefix_append_credits v highC pre front electra
+    h.early sameEpoch noneBefore
+  rw [riseSame] at whole
+  -- the rise of the whole run is at least the rise before the slashing
+  obtain ⟨seenC, riseMono, -⟩ := rise_fold v.toNat highC (front.snoc step)
+    ((riseScan_fst _ _ _).mpr ⟨c0, by simp [Run.departureCharges, c0Member], c0Index⟩) post
+    h.early endEpochC
+  have riseSnoc : (riseScan v.toNat highC front).2 ≤
+      (riseScan v.toNat highC (front.snoc step)).2 := by
+    simp only [riseScan]
+    split_ifs <;> omega
+  have rise : riseQ ((front.snoc step).append post) highC v.toNat =
+      preset.upwardBand + (riseScan v.toNat highC ((front.snoc step).append post)).2 := by
+    simp only [riseQ, seenC, ↓reduceIte]
+  -- the credits before the slashing are at most those of the run
+  have propLe := creditScan_prefix_le (fun s => decide (s = .rewards ∨ s = .consolidations))
+    (fun s => decide (s = .consolidations)) v.toNat highC front step post
+  have whistLe := creditScan_prefix_le (fun s => decide (s = .slashings)) (fun _ => false)
+    v.toNat highC front step post
+  have parts := (credit_parts_le ((front.snoc step).append post) highC v replayedC).2
+  have syncSplit : syncCr (eventsP ++ eventsY) v.toNat =
+      syncCr eventsP v.toNat + syncCr eventsY v.toNat := by
+    simp only [syncCr, List.map_append, List.sum_append]
+  have syncLe := syncCr_prefix_le front step post highC replayedY replayedC v.toNat
+  unfold whistleSlack whistleSlackBase
+  simp only [propC, whistC] at whole propSplit whistSplit parts ⊢
+  omega
+
+/-- The effective balance at its slashing of a charged key of the split's registry.
+
+The charge of the key is on C's run, in an epoch after the split's.
+
+The balance at the charge is read as `charge_effective_bound` reads it.
+
+Its bound is that of `registryCharge` in `whistle_core`, without the credits of `pre`. -/
+private theorem registry_charge (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (inside : i < split.validators.data.size)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
+    (charged : (tailC.departureCharges.any fun c => c.index == i) = true)
+    {cp cq : ForkedBeaconState preset} (cfront : Run config checks ⟨fork, split⟩ cp)
+    (cstep : Step config checks cp cq) (cpost : Run config checks cq ⟨fork, counted⟩)
+    (csite : (cfront.snoc cstep).append cpost = tailC)
+    (charge : cstep.departureCharges.any (·.index == i) = true)
+    (started : (getCurrentEpoch split).toNat < (getCurrentEpoch cp.state).toNat) :
+    effectiveAt a i ≤ chargeAmt tailC i + riseQ tailC highC i +
+      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+        eventsC eventsF events fin i := by
+  obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i := ⟨UInt64.ofNat i, by
+    have := BeaconState.validators_size_lt_of_lt_glamsterdam h.early split
+    exact UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+  have core := registry_charge_of h fromFin tail high (Run.nil : Run config checks ⟨fork, split⟩ _)
+    rfl tailC highC endEpochC replayedC (eventsP := []) step member v inside flag charged
+    (eventsF := eventsF) (events := events) (by
+      intro front post p q eventsY cf step' post' cut' site hcharge aFork aEpoch replayedY held
+      have sameStart := charge_site_start cf step' _ site cfront cstep cpost csite hcharge charge
+      have later : (getCurrentEpoch split).toNat < (getCurrentEpoch p.state).toNat := by
+        rw [sameStart]
+        exact started
+      have := charge_effective_bound h (y := a) aFork front highC aEpoch replayedY cf step' post'
+        cut' hcharge later held
+      simpa only [run_nil_append, List.nil_append] using this)
+  simp only [propN, whistC, creditScan_nil_fst, syncCr, List.map_nil, List.sum_nil,
+    Nat.add_zero] at core
+  exact core
+
+/-- The effective balance at its slashing of a charged key whose charge is in the split's epoch.
+
+The epoch's start `t` is on the shared run, before the split.
+
+The key's credits from `t` come through the shared suffix `pre`, and then through C's run.
+
+`pre` holds no consolidation or deposit credit, since it is inside one epoch.
+
+So its credits are the proposer, whistleblower and sync credits.
+
+The bands of hysteresis at `t` come from the slot step that crossed into its epoch.
+
+Its bound is that of `whistle_core`'s premise `registryCharge`. -/
+private theorem registry_charge_split_epoch
+    (h : Setting config checks g split fin pulled anc counted V)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
+    {eventsF events : List (BalanceEvent preset)} (high : ℕ)
+    {t : BeaconState preset fork} (toT : Run config checks g ⟨fork, t⟩)
+    (pre : Run config checks ⟨fork, t⟩ ⟨fork, split⟩)
+    (sameEpoch : getCurrentEpoch split = getCurrentEpoch t)
+    (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      toT.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch t).toNat)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
+    {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents highC = .ok eventsP)
+    {a b : ForkedBeaconState preset} (step : Step config checks a b) (member : tailC.Contains step)
+    (i : ℕ) (inside : i < split.validators.data.size)
+    (flag : (!(a.state.validators.data[i]?.map (·.slashed)).getD false &&
+      (b.state.validators.data[i]?.map (·.slashed)).getD false) = true)
+    (charged : (tailC.departureCharges.any fun c => c.index == i) = true)
+    {cp cq : ForkedBeaconState preset} (cfront : Run config checks ⟨fork, split⟩ cp)
+    (cstep : Step config checks cp cq) (cpost : Run config checks cq ⟨fork, counted⟩)
+    (csite : (cfront.snoc cstep).append cpost = tailC)
+    (charge : cstep.departureCharges.any (·.index == i) = true)
+    (inSplitEpoch : ¬ (getCurrentEpoch split).toNat < (getCurrentEpoch cp.state).toNat) :
+    effectiveAt a i ≤ chargeAmt tailC i + riseQ tailC highC i +
+      (propN pre highC i + whistC pre highC i + syncCr eventsP i) +
+      whistleSlack (pinTerms config pulled anc fin) tailC (fromFin.append tail) highC high
+        eventsC eventsF events fin i :=
+  sorry
 
 /-- A charged key of `K5` whose charge is in the split's epoch.
 
