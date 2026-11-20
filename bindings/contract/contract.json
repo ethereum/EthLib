@@ -940,7 +940,7 @@
       {"constructor": "badMessageSize", "code": 5}]}],
    "error_class": "XmssError",
    "docstring":
-   "The public key grown from a seed.\n\nIt builds the whole top tree, `2^16` one-time keys.\n\nIt returns the secret key too, which holds that tree, as an opaque object.\n\nThe C side keeps it per seed, so a first signature does not build the top tree again."},
+   "The public key grown from a seed.\n\nIt builds the whole top tree, `2^16` one-time keys."},
   {"summary":
    "`Sig(sk, idx, m)` over a hash `H`: sign a message at a leaf index.",
    "signature": "(seed: bytes, leaf_index: int, message: bytes) -> bytes",
