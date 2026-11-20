@@ -2,6 +2,7 @@ module
 
 public import EthLib.Consensus.Proofs.Containers.Misc
 public import EthLib.Consensus.Proofs.Transition.EpochRewards
+public import EthLib.Consensus.Transition.EpochParticipation
 public import EthLib.Consensus.Transition.EpochUpdates
 
 /-!
@@ -48,6 +49,8 @@ The slashings change only the balances.
 The update of the effective balances changes only the registry.
 
 Before Heze, the reset of the deposit votes changes only those votes.
+
+From Altair, the update of the inactivity scores changes only those scores.
 
 A root joins the historical roots exactly when their list has room, and it joins at the end.
 
@@ -1333,7 +1336,7 @@ theorem processParticipationRecordUpdates_eq (before : fork < .altair) :
   simp only [processParticipationRecordUpdates, notAltair, ↓reduceIte]
   try rfl
 
-/-! ## Fields kept by three steps -/
+/-! ## Fields kept by four steps -/
 
 /-- The slashing penalties change only the balances. -/
 theorem processSlashings_frame {after : BeaconState preset fork}
@@ -1428,6 +1431,20 @@ theorem processEth1DataReset_frame {hegota : fork < .hegota}
     rfl
   · simp only [pure, Except.pure, Except.ok.injEq] at computed
     subst computed
+    rfl
+
+/-- From Altair, the update of the inactivity scores changes only those scores. -/
+theorem processInactivityUpdates_frame {config : Config} {altair : .altair ≤ fork}
+    (computed : processInactivityUpdates config state altair = .ok after) :
+    after = { state with inactivityScores := after.inactivityScores } := by
+  unfold processInactivityUpdates at computed
+  split at computed
+  · simp only [pure, Except.pure, Except.ok.injEq] at computed
+    subst computed
+    rfl
+  · simp only [bind_ok_iff, pure, Except.pure, Except.ok.injEq] at computed
+    obtain ⟨_, _, scores, folded, same⟩ := computed
+    subst same
     rfl
 
 /-! ## Historical roots and summaries -/
