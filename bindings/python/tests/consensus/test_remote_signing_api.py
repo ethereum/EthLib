@@ -3,10 +3,12 @@
 import copy
 import hashlib
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
+from eth_typing import BLSPubkey, BLSSignature
 from py_ecc.bls import G2ProofOfPossession
 from ruamel.yaml import YAML
 
@@ -564,7 +566,7 @@ PUBKEY = "0x" + bytes(G2ProofOfPossession.SkToPk(SECRET)).hex()
 OTHER_PUBKEY = "0x" + bytes(G2ProofOfPossession.SkToPk(43)).hex()
 
 
-def _record(blocks: list[tuple[int, str]] = ()) -> bytes:
+def _record(blocks: Sequence[tuple[int, str]] = ()) -> bytes:
     """An EIP-3076 record that holds blocks of the test key, as (slot, signing root)."""
     entry = {
         "pubkey": PUBKEY,
@@ -592,7 +594,8 @@ def test_sign_example(name: str):
     )
     assert status == 200
     root = consensus.signing_request_root(preset, CONFIG, example)
-    assert G2ProofOfPossession.Verify(_hex(PUBKEY), root, signature)
+    assert signature is not None
+    assert G2ProofOfPossession.Verify(BLSPubkey(_hex(PUBKEY)), root, BLSSignature(signature))
 
 
 @pytest.mark.parametrize("name", sorted(WRONG_ROOT))
