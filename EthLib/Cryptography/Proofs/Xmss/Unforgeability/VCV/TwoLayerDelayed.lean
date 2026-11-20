@@ -32,7 +32,8 @@ def StableRead {α θ : Type} (pp : PublicParam) (mark : OracleComp SharedSpec �
     ∃ a, ∀ t : SharedState, z.2 ≤ t →
       (simulateQ (graph pp).eagerImpl read).run t = pure (a, t)
 
-private theorem delay {α β γ ε θ : Type} (pp : PublicParam)
+/-- Move a cached read past an adaptive decision and omit it when the decision fails. -/
+theorem delay {α β γ ε θ : Type} (pp : PublicParam)
     (mark : OracleComp SharedSpec θ) (read : OracleComp SharedSpec α)
     (next : θ → OracleComp SharedSpec (Except ε β)) (pack : α → β → γ)
     (ready : StableRead pp mark read) :
@@ -60,7 +61,8 @@ private theorem delay {α β γ ε θ : Type} (pp : PublicParam)
   | ok b => simp only [simulateQ_bind, simulateQ_pure, StateT.run_bind, StateT.run_pure,
       keep, pure_bind, Except.map]
 
-private theorem stable_values (pp : PublicParam) (l : Layer) (e : UInt32)
+/-- Each chosen chain value stays available after the touch-only signing traversal. -/
+theorem stable_values (pp : PublicParam) (l : Layer) (e : UInt32)
     (x : Vector (Fin CHAIN_LENGTH) V) : StableRead pp
       (simulateQ (selection pp l).liftQuery (beforeValues pp l e x))
       (simulateQ (selection pp l).liftQuery (revealValues e x)) := by
