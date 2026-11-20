@@ -7656,22 +7656,6 @@ private def wShare (preset : Preset) (fork : Fork) (x : ℕ) : ℕ :=
 private def bandX (X : BeaconState preset fork) (high v : ℕ) : ℕ :=
   preset.upwardBand * dueAt X high {UInt64.ofNat v}
 
-/-- The flag reward of one increment over one epoch, at the pin's rate. -/
-private def flagRate (t : PinTerms preset) : ℕ :=
-  t.perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-
-/-- The leak of one increment over the window, at the largest score of the finalized state.
-
-It is the leak part of the slash charge, read at one increment.
-
-The slash charge covers it and the flag gain of two windows. -/
-private def slashLeak (config : Config) (fork : Fork) (t : PinTerms preset) : ℕ :=
-  t.depthFin * (2 * t.perIncrement +
-    preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
-        (t.scoreMaxFin + t.depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
-      (config.INACTIVITY_SCORE_BIAS.toNat *
-        (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) + 1)
-
 /-- The initial slashing penalty of a key slashed on R's branch after the split, at the cap. -/
 private def slashW (t : PinTerms preset) (i : ℕ) : ℕ :=
   if t.slashedRB i = true then
@@ -12051,13 +12035,6 @@ private theorem K6_class {g : ForkedBeaconState preset}
             found slashed (by simp [foundU, uUnslashed])
           omega
 
-/-- The keys that join at R's next epoch are charged their stake in `joining`. -/
-private theorem joining_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
-    (pinTerms config pulled anc fin).joining =
-      ∑ i ∈ (pinTerms config pulled anc fin).positions with
-        (isActiveAt pulled (getCurrentEpoch pulled) i = false ∧
-          isActiveAt pulled (getCurrentEpoch pulled + 1) i = true), balanceAt pulled i := rfl
-
 /-- The keys that join at R's next epoch are charged their rise in `joinRise`. -/
 private theorem joinRise_eq (config : Config) (pulled anc fin : BeaconState preset fork) :
     (pinTerms config pulled anc fin).joinRise =
@@ -14016,63 +13993,55 @@ private theorem c_ceiling_abstract_flip {x m n y : ForkedBeaconState preset}
   exact fixPost
 
 open DirectSafety.Apriori.Internal in
-/-- The top of a key at R before the downward band, as `rise` reads it.
-
-It is `pinTerms`' `high` in `rise`.
-
-It adds the leak and the gain of the window, and the net partials, to the balance at R. -/
-private def riseTop (t : PinTerms preset) (pulled fin : BeaconState preset fork) (i : ℕ) : ℕ :=
-  actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) i +
-    t.depthFin * ((11 * t.gainRate i + 9) / 10 + 3 + t.leak i) +
-      ((if electra : .pectra ≤ fork then
-          PinTerms.dueAmount fin electra i ((getCurrentEpoch pulled).toNat + 1) else 0) -
-        (if electra : .pectra ≤ fork then
-          PinTerms.dueAmount pulled electra i ((getCurrentEpoch pulled).toNat + 1) else 0))
-
-/-- The cap of a key as `rise` reads it: its own cap when its gain is low, else the largest.
-
-It is `pinTerms`' `capFor`. -/
-private def capForOf (t : PinTerms preset) (state : BeaconState preset fork) (i : ℕ) : ℕ :=
-  if (decide (t.depthFin * ((11 * t.gainRate i + 9) / 10 + 3) <
-        preset.EFFECTIVE_BALANCE_INCREMENT.toNat) &&
-      decide (11 * t.depth * (t.gainRate i + 1) ≤ t.ebUp i)) = true then
-    PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i
-  else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat
+/-- The cap that `rise` reads: the key's own cap when its gain is low, else the largest. -/
+private theorem capFor_eq (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (i : ℕ) :
+    (pinTerms config state ancestor finalizedState).capFor i =
+      if (decide ((pinTerms config state ancestor finalizedState).depthFin *
+            ((11 * (pinTerms config state ancestor finalizedState).gainRate i + 9) / 10 + 3) <
+            preset.EFFECTIVE_BALANCE_INCREMENT.toNat) &&
+          decide (11 * (pinTerms config state ancestor finalizedState).depth *
+              ((pinTerms config state ancestor finalizedState).gainRate i + 1) ≤
+            (pinTerms config state ancestor finalizedState).ebUp i)) = true then
+        PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i
+      else preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := rfl
 
 /-- The cap that `rise` reads is at least the key's own cap. -/
-private theorem capAt_le_capForOf (t : PinTerms preset) (state : BeaconState preset fork) (i : ℕ)
+private theorem capAt_le_capFor (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) (i : ℕ)
     (capMax : PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i ≤
       preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat) :
-    PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i ≤ capForOf t state i := by
-  unfold capForOf
+    PinTerms.capAt (⟨fork, state⟩ : ForkedBeaconState preset) i ≤
+      (pinTerms config state ancestor finalizedState).capFor i := by
+  rw [capFor_eq]
   split
   · exact Nat.le_refl _
   · exact capMax
 
 /-- The rise of a key on its kept arm is the least of its cap, its rounded top and its headroom.
 
-The rounded top adds the downward band to `riseTop`.
+The rounded top adds the downward band to `high`.
 
 The headroom starts from the finalized balance.
 
 The rise is that less the effective balance at R. -/
 private theorem rise_kept (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ)
-    {H : ℕ} (hH : H = riseTop (pinTerms config pulled anc fin) pulled fin i)
+    {H : ℕ} (hH : H = (pinTerms config pulled anc fin).high i)
     (kept : (pinTerms config pulled anc fin).keptArm i = true) :
     (pinTerms config pulled anc fin).rise i =
-      min (capForOf (pinTerms config pulled anc fin) pulled i)
+      min ((pinTerms config pulled anc fin).capFor i)
         (min (H + preset.downwardBand - (H + preset.downwardBand) %
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
           (max (balanceAt fin i) (H - H % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) -
         balanceAt pulled i := by
   have unfold : (pinTerms config pulled anc fin).rise i =
       if (pinTerms config pulled anc fin).keptArm i = true then
-        min (capForOf (pinTerms config pulled anc fin) pulled i)
+        min ((pinTerms config pulled anc fin).capFor i)
           (min (H + preset.downwardBand - (H + preset.downwardBand) %
                 preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
             (max (balanceAt fin i) (H - H % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))) -
           balanceAt pulled i
-      else capForOf (pinTerms config pulled anc fin) pulled i - balanceAt pulled i := by
+      else (pinTerms config pulled anc fin).capFor i - balanceAt pulled i := by
     rw [hH]
     rfl
   rw [unfold]
@@ -14084,13 +14053,13 @@ private theorem rise_kept (config : Config) (pulled anc fin : BeaconState preset
 
 The key's effective balance stays at that of R, ends at its start, or is within the ceiling.
 
-The ceiling is within `riseTop` and the flows, and the slack is paid when there are flows.
+The ceiling is within `high` and the flows, and the slack is paid when there are flows.
 
 It starts from any state: `start` bounds the effective balance there.
 
 A key that ends at its start has `start` within the cap and within the rounded top of `H`. -/
 private theorem rise_close (config : Config) (pulled anc fin : BeaconState preset fork) (i : ℕ)
-    {H : ℕ} (hH : H = riseTop (pinTerms config pulled anc fin) pulled fin i)
+    {H : ℕ} (hH : H = (pinTerms config pulled anc fin).high i)
     (incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat)
     (kept : (pinTerms config pulled anc fin).keptArm i = true)
     {eC Bc S U start capHigh : ℕ}
@@ -14098,12 +14067,12 @@ private theorem rise_close (config : Config) (pulled anc fin : BeaconState prese
     (startLe : start ≤ max (balanceAt fin i)
       ((H + S) - (H + S) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (stay : eC = balanceAt pulled i ∨
-      (eC ≤ start ∧ start ≤ capForOf (pinTerms config pulled anc fin) pulled i + S + U ∧
+      (eC ≤ start ∧ start ≤ (pinTerms config pulled anc fin).capFor i + S + U ∧
         start ≤ (H + preset.downwardBand) -
           (H + preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
       (eC ≤ Bc + preset.downwardBand ∧
         eC ≤ max start (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
-    (capped : eC ≤ capForOf (pinTerms config pulled anc fin) pulled i + S + U)
+    (capped : eC ≤ (pinTerms config pulled anc fin).capFor i + S + U)
     (ceiling : Bc ≤ H + S)
     (slack : S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
       (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
@@ -14112,7 +14081,7 @@ private theorem rise_close (config : Config) (pulled anc fin : BeaconState prese
   rw [rise_kept config pulled anc fin i hH kept]
   have arith := rise_arith (finEB := max (balanceAt fin i)
       (H - H % preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
-    (capFor := capForOf (pinTerms config pulled anc fin) pulled i) incPos
+    (capFor := (pinTerms config pulled anc fin).capFor i) incPos
     stay (Nat.le_trans startLe (max_le_max (Nat.le_max_left _ _) (Nat.le_refl _))) alignedC
     capped ceiling slack
   rwa [max_assoc, max_self] at arith
@@ -14308,7 +14277,7 @@ private theorem inducedR_le (config : Config) (pulled anc fin : BeaconState pres
                 (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
               (config.INACTIVITY_SCORE_BIAS.toNat *
                 (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat)) +
-        s * slashLeak config fork (pinTerms config pulled anc fin) := by
+        s * (pinTerms config pulled anc fin).slashLeak := by
   have fold : ∀ (l : List ℕ) (b c : ℕ), b ≤ c → (∀ x ∈ l, x ≤ c) → l.foldl max b ≤ c := by
     intro l
     induction l with
@@ -14332,8 +14301,15 @@ private theorem inducedR_le (config : Config) (pulled anc fin : BeaconState pres
   · rw [inducedR_of_withdrawn _ tail i withdrawn]
     exact Nat.zero_le _
   rw [inducedR_of_not_withdrawn _ tail i (by simpa using withdrawn)]
-  unfold slashLeak
-  rw [Nat.mul_left_comm s, ← Nat.mul_add]
+  have leakEq : (pinTerms config pulled anc fin).slashLeak =
+      (pinTerms config pulled anc fin).depthFin *
+        (2 * (pinTerms config pulled anc fin).perIncrement +
+          preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
+              ((pinTerms config pulled anc fin).scoreMaxFin +
+                (pinTerms config pulled anc fin).depthFin * config.INACTIVITY_SCORE_BIAS.toNat) /
+            (config.INACTIVITY_SCORE_BIAS.toNat *
+              (parameters preset fork).INACTIVITY_PENALTY_QUOTIENT.toNat) + 1) := rfl
+  rw [leakEq, Nat.mul_left_comm s, ← Nat.mul_add]
   refine Nat.mul_le_mul_left _ ?_
   have three : 3 * (pinTerms config pulled anc fin).perIncrement * a =
       3 * ((pinTerms config pulled anc fin).perIncrement * a) := by ring
@@ -21141,7 +21117,11 @@ private theorem bands_seats (h : Setting config checks g split fin pulled anc co
   linarith
 
 /-- The flag reward of one increment is at most the reward of one increment. -/
-private theorem flagRate_le (t : PinTerms preset) : flagRate t ≤ t.perIncrement := by
+private theorem flagRate_le (config : Config)
+    (state ancestor finalizedState : BeaconState preset fork) :
+    (pinTerms config state ancestor finalizedState).flagRate ≤
+      (pinTerms config state ancestor finalizedState).perIncrement := by
+  show _ * _ / _ ≤ _
   have weights : (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum ≤ WEIGHT_DENOMINATOR.toNat := by
     decide
   exact (Nat.div_le_div_right (Nat.mul_le_mul_left _ weights)).trans
@@ -21198,9 +21178,9 @@ private theorem branchR_split (config : Config)
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
       (pinTerms config state ancestor finalizedState).slashedR *
           (2 * (pinTerms config state ancestor finalizedState).depthFin *
-            flagRate (pinTerms config state ancestor finalizedState)) +
+            (pinTerms config state ancestor finalizedState).flagRate) +
         (pinTerms config state ancestor finalizedState).slashedR *
-          slashLeak config fork (pinTerms config state ancestor finalizedState) +
+          (pinTerms config state ancestor finalizedState).slashLeak +
         (pinTerms config state ancestor finalizedState).unitGain *
           (pinTerms config state ancestor finalizedState).slashedR ≤ W ∧
       ∀ A : Finset ValidatorIndex,
@@ -21235,8 +21215,8 @@ private theorem branchR_split (config : Config)
                 (pinTerms config state ancestor finalizedState).depth /
                   max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat))) ∧
       2 * (pinTerms config state ancestor finalizedState).depthFin *
-          flagRate (pinTerms config state ancestor finalizedState) +
-        slashLeak config fork (pinTerms config state ancestor finalizedState) ≤ D ∧
+          (pinTerms config state ancestor finalizedState).flagRate +
+        (pinTerms config state ancestor finalizedState).slashLeak ≤ D ∧
       U = (pinTerms config state ancestor finalizedState).unitGain ∧
       ∀ A : Finset ValidatorIndex,
         ∑ v ∈ A.filter (fun v => (pinTerms config state ancestor finalizedState).slashedRB v.toNat
@@ -21245,7 +21225,7 @@ private theorem branchR_split (config : Config)
               (balanceAt finalizedState v.toNat) /
           (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat ≤ W := by
     refine ⟨_, _, _, rfl, ?_, rfl, fun A => ?_⟩
-    · exact charge _ _ _ _ _ _ (flagRate_le _)
+    · exact charge _ _ _ _ _ _ (flagRate_le _ _ _ _)
         (by rw [Nat.mul_assoc]; exact Nat.le_mul_of_pos_left _ (by norm_num))
     · -- The reward of a key is read at its position among the keys slashed on this branch.
       refine floor_aux (A := A) (fun i => max (balanceAt state i +
@@ -21260,8 +21240,8 @@ private theorem branchR_split (config : Config)
       (pinTerms config state ancestor finalizedState).slashedR, by rw [split]; ring, ?_, floorW⟩
   have step : (pinTerms config state ancestor finalizedState).slashedR *
       (2 * (pinTerms config state ancestor finalizedState).depthFin *
-          flagRate (pinTerms config state ancestor finalizedState) +
-        slashLeak config fork (pinTerms config state ancestor finalizedState)) ≤
+          (pinTerms config state ancestor finalizedState).flagRate +
+        (pinTerms config state ancestor finalizedState).slashLeak) ≤
       D * (pinTerms config state ancestor finalizedState).slashedR :=
     (Nat.mul_comm _ _).le.trans (Nat.mul_le_mul_right _ gain)
   rw [Nat.mul_add] at step
@@ -22122,7 +22102,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
       omega
     · exact afterC (by omega)
   have hdf : (pinTerms config pulled anc fin).depthFin = Df := by rw [hDf]; rfl
-  obtain ⟨H, hH⟩ : ∃ H, H = riseTop (pinTerms config pulled anc fin) pulled fin v.toNat :=
+  obtain ⟨H, hH⟩ : ∃ H, H = (pinTerms config pulled anc fin).high v.toNat :=
     ⟨_, rfl⟩
   obtain ⟨q, hq⟩ : ∃ q, q = (pinTerms config pulled anc fin).gainRate v.toNat := ⟨_, rfl⟩
   have hHeq : H = actualBalanceAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat +
@@ -22130,7 +22110,7 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
         (PinTerms.dueAmount fin electra v.toNat ((getCurrentEpoch pulled).toNat + 1) -
           PinTerms.dueAmount pulled electra v.toNat ((getCurrentEpoch pulled).toNat + 1)) := by
     rw [hH, hq, hDf]
-    unfold riseTop
+    dsimp only [pinTerms]
     simp only [electra, ↓reduceDIte]
     rfl
   obtain ⟨ind, hind⟩ : ∃ ind, ind =
@@ -22151,9 +22131,9 @@ private theorem cut_balance_core (h : Setting config checks g split fin pulled a
   have alignedC : balanceAt split v.toNat % preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 :=
     FloorTrace.effective_aligned (toFin.append fromFin) h.genesis h.aligned v.toNat
   have cappedC : balanceAt split v.toNat ≤
-      capForOf (pinTerms config pulled anc fin) pulled v.toNat :=
+      (pinTerms config pulled anc fin).capFor v.toNat :=
     Nat.le_trans (effective_le_cap_pulled h fromFin tail v.toNat)
-      (capAt_le_capForOf _ pulled v.toNat (capAt_le_capMax h.caps electra v.toNat))
+      (capAt_le_capFor config pulled anc fin v.toNat (capAt_le_capMax h.caps electra v.toNat))
   have incPos : 1 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     have := h.facts.incrementSize
     omega
@@ -22552,9 +22532,9 @@ private theorem bud_branchR_of (h : Setting config checks g split fin pulled anc
                 max 1 preset.EPOCHS_PER_SYNC_COMMITTEE_PERIOD.toNat)))) :
     3 * ((pinTerms config pulled anc fin).slashedR *
         (2 * (pinTerms config pulled anc fin).depthFin *
-          flagRate (pinTerms config pulled anc fin))) +
+          (pinTerms config pulled anc fin).flagRate)) +
       3 * ((pinTerms config pulled anc fin).slashedR *
-        slashLeak config fork (pinTerms config pulled anc fin)) +
+        (pinTerms config pulled anc fin).slashLeak) +
       3 * ((pinTerms config pulled anc fin).unitGain * (pinTerms config pulled anc fin).slashedR) +
       3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth *
@@ -22706,9 +22686,9 @@ private theorem bud_branchR (h : Setting config checks g split fin pulled anc co
     {eventsP : List (BalanceEvent preset)} (replayedP : pre.balanceEvents highC = .ok eventsP) :
     3 * ((pinTerms config pulled anc fin).slashedR *
         (2 * (pinTerms config pulled anc fin).depthFin *
-          flagRate (pinTerms config pulled anc fin))) +
+          (pinTerms config pulled anc fin).flagRate)) +
       3 * ((pinTerms config pulled anc fin).slashedR *
-        slashLeak config fork (pinTerms config pulled anc fin)) +
+        (pinTerms config pulled anc fin).slashLeak) +
       3 * ((pinTerms config pulled anc fin).unitGain * (pinTerms config pulled anc fin).slashedR) +
       3 * (∑ v ∈ V, bandR (eventsF ++ eventsC) v.toNat) +
         3 * ((pinTerms config pulled anc fin).depth *
@@ -26547,9 +26527,9 @@ private theorem eR_rise_aligned (h : Setting config checks g split fin pulled an
     · rw [Nat.sub_eq_zero_of_le le, Nat.add_zero]
       exact alignedR
   by_cases kept : (pinTerms config pulled anc fin).keptArm i = true
-  · have capAligned : capForOf (pinTerms config pulled anc fin) pulled i %
+  · have capAligned : (pinTerms config pulled anc fin).capFor i %
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat = 0 := by
-      unfold capForOf
+      rw [capFor_eq]
       split
       · rcases kind with e | e <;> rw [e] <;> assumption
       · exact alignedMax
@@ -28983,7 +28963,7 @@ private theorem syncLeak_of_envelope (h : Setting config checks g split fin pull
     3 * ∑ v ∈ W, inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat ≤
       (pinTerms config pulled anc fin).syncLeak +
         3 * ((pinTerms config pulled anc fin).slashedR *
-          slashLeak config fork (pinTerms config pulled anc fin)) := by
+          (pinTerms config pulled anc fin).slashLeak) := by
   classical
   have incPos : 0 < preset.EFFECTIVE_BALANCE_INCREMENT.toNat := by
     have := h.facts.incrementSize
@@ -29579,7 +29559,7 @@ The start of the effective balance's ceiling is any state's, bounded as `rise_cl
 
 A key that ends at its start has the two bounds of `start` that `rise_close` reads, for each slack.
 
-Its bound may use the ceiling `Bc ≤ riseTop + S` of the slack `S` that the closing chooses.
+Its bound may use the ceiling `Bc ≤ high + S` of the slack `S` that the closing chooses.
 
 At the finalized state it is `balanceAt fin`, and the bound is `Nat.le_max_left`.
 
@@ -29636,26 +29616,26 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
             slashW (pinTerms config pulled anc fin) v.toNat) /
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (start : ℕ)
-    (startLe : ∀ S : ℕ, Bc ≤ riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+    (startLe : ∀ S : ℕ, Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
       start ≤ max (balanceAt fin v.toNat)
-        ((riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) -
-          (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) %
+        (((pinTerms config pulled anc fin).high v.toNat + S) -
+          ((pinTerms config pulled anc fin).high v.toNat + S) %
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
       (balanceAt ending v.toNat ≤ start ∧ ∀ S U : ℕ,
-        Bc ≤ riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+        Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
         (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
           (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) →
-        start ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U ∧
-          start ≤ (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
-            preset.downwardBand) - (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
+        start ≤ (pinTerms config pulled anc fin).capFor v.toNat + S + U ∧
+          start ≤ ((pinTerms config pulled anc fin).high v.toNat +
+            preset.downwardBand) - ((pinTerms config pulled anc fin).high v.toNat +
             preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
       (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
         balanceAt ending v.toNat ≤ max start
           (min (Bc - Bc % preset.EFFECTIVE_BALANCE_INCREMENT.toNat) capHigh)))
     (cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
-      balanceAt ending v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
+      balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat +
         (Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) %
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat))
     (creditsLe : Cr ≤ credC tailC highC v.toNat + whistC tailC highC v.toNat +
@@ -29723,7 +29703,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat :=
     ⟨_, rfl⟩
   -- R's rise closes the balance ceiling of C's run, up to the flows and their slack
-  obtain ⟨H, hH⟩ : ∃ H, H = riseTop (pinTerms config pulled anc fin) pulled fin v.toNat :=
+  obtain ⟨H, hH⟩ : ∃ H, H = (pinTerms config pulled anc fin).high v.toNat :=
     ⟨_, rfl⟩
   have induced : Df * (pinTerms config pulled anc fin).leakAt M v.toNat ≤
       Df * (pinTerms config pulled anc fin).leak v.toNat +
@@ -29739,7 +29719,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         (PinTerms.dueAmount fin electra v.toNat ((getCurrentEpoch pulled).toNat + 1) -
           PinTerms.dueAmount pulled electra v.toNat ((getCurrentEpoch pulled).toNat + 1)) := by
     rw [hH, hq, hDf]
-    unfold riseTop
+    dsimp only [pinTerms]
     simp only [electra, ↓reduceDIte]
     rfl
   have gap : Bc ≤ H + (syncD eventsF v.toNat + syncD events v.toNat +
@@ -29767,7 +29747,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         (0 < slashW (pinTerms config pulled anc fin) v.toNat →
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U))) →
       balanceAt ending v.toNat ≤
-        capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U := by
+        (pinTerms config pulled anc fin).capFor v.toNat + S + U := by
     intro S U cases
     by_cases lowG : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat
     · have y := y_floor_le preset.EFFECTIVE_BALANCE_INCREMENT.toNat WEIGHT_DENOMINATOR.toNat
@@ -29776,9 +29756,9 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
         (slashW (pinTerms config pulled anc fin) v.toNat) gc S U Fl key hDF lowG hform cases
       have := cappedY lowG
       omega
-    · have notLow : capForOf (pinTerms config pulled anc fin) pulled v.toNat =
+    · have notLow : (pinTerms config pulled anc fin).capFor v.toNat =
           preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat := by
-        unfold capForOf
+        rw [capFor_eq]
         refine ite_eq_right_iff.mpr fun low => ?_
         simp only [Bool.and_eq_true, decide_eq_true_eq] at low
         have lt := low.1
@@ -29788,7 +29768,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
   have close : ∀ S U : ℕ, Bc ≤ H + S → (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
       (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
         preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) → balanceAt ending v.toNat ≤
-          capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U →
+          (pinTerms config pulled anc fin).capFor v.toNat + S + U →
       balanceAt ending v.toNat ≤
         balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat + S + U :=
     fun S U ceiling slack cap => rise_close config pulled anc fin v.toNat hH h.bands.1 kept
@@ -30002,12 +29982,12 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) →
       min (actualBalanceAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat)
           (PinTerms.capAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat) ≤
-        riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+        (pinTerms config pulled anc fin).high v.toNat + S →
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-          capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U ∧
+          (pinTerms config pulled anc fin).capFor v.toNat + S + U ∧
         effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-          (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + preset.downwardBand) -
-            (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + preset.downwardBand) %
+          ((pinTerms config pulled anc fin).high v.toNat + preset.downwardBand) -
+            ((pinTerms config pulled anc fin).high v.toNat + preset.downwardBand) %
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U)
     (kept : (pinTerms config pulled anc fin).keptArm v.toNat = true) :
     balanceAt ending v.toNat ≤ balanceAt pulled v.toNat +
@@ -30173,15 +30153,15 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     exact onC _ (by rw [head]; exact List.mem_cons_self)
   have stay : balanceAt ending v.toNat = balanceAt pulled v.toNat ∨
       (balanceAt ending v.toNat ≤ effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ∧
-        ∀ S U : ℕ, Bc ≤ riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+        ∀ S U : ℕ, Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
         (S = 0 ∨ preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ U + 1 ∨
           (S < preset.EFFECTIVE_BALANCE_INCREMENT.toNat ∧
             preset.EFFECTIVE_BALANCE_INCREMENT.toNat ≤ S + U)) →
         effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-            capForOf (pinTerms config pulled anc fin) pulled v.toNat + S + U ∧
+            (pinTerms config pulled anc fin).capFor v.toNat + S + U ∧
           effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
-            (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
-              preset.downwardBand) - (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat +
+            ((pinTerms config pulled anc fin).high v.toNat +
+              preset.downwardBand) - ((pinTerms config pulled anc fin).high v.toNat +
               preset.downwardBand) % preset.EFFECTIVE_BALANCE_INCREMENT.toNat + S + U) ∨
       (balanceAt ending v.toNat ≤ Bc + preset.downwardBand ∧
         balanceAt ending v.toNat ≤ max (effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat)
@@ -30197,11 +30177,11 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
     · exact .inr (.inr ⟨near, top⟩)
   have cappedLe : PinTerms.capAt (⟨fork, ending⟩ : ForkedBeaconState preset) v.toNat ≤
       PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat →
-      balanceAt ending v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat :=
+      balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat :=
     fun le => Nat.le_trans (effective_le_cap_at (toFin.append (toC.append (fromC.append tailC)))
       h.genesis h.caps h.early v.toNat)
       (Nat.le_trans le
-        (capAt_le_capForOf _ pulled v.toNat (capAt_le_capMax h.caps electra v.toNat)))
+        (capAt_le_capFor config pulled anc fin v.toNat (capAt_le_capMax h.caps electra v.toNat)))
   have maxLe : M ≤ (pinTerms config pulled anc fin).ebUp v.toNat +
       preset.EFFECTIVE_BALANCE_INCREMENT.toNat *
         ((syncD eventsF v.toNat + syncD events v.toNat +
@@ -30249,11 +30229,11 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       omega
     unfold syncCr at noSeat
     omega
-  have startLe : ∀ S : ℕ, Bc ≤ riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S →
+  have startLe : ∀ S : ℕ, Bc ≤ (pinTerms config pulled anc fin).high v.toNat + S →
       effectiveAt (⟨fork, c⟩ : ForkedBeaconState preset) v.toNat ≤
         max (balanceAt fin v.toNat)
-          ((riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) -
-            (riseTop (pinTerms config pulled anc fin) pulled fin v.toNat + S) %
+          (((pinTerms config pulled anc fin).high v.toNat + S) -
+            ((pinTerms config pulled anc fin).high v.toNat + S) %
               preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
     intro S ceiling
     exact start_le_round
@@ -30261,7 +30241,7 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
       (effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat) (by omega) start
   -- on the headroom of C's cap, which R's cap may not reach, the cap adds to the rounded credits
   have cappedY : Df * ((11 * q + 9) / 10 + 3) < preset.EFFECTIVE_BALANCE_INCREMENT.toNat →
-      balanceAt ending v.toNat ≤ capForOf (pinTerms config pulled anc fin) pulled v.toNat +
+      balanceAt ending v.toNat ≤ (pinTerms config pulled anc fin).capFor v.toNat +
         (Cr + (gc + (D * q + D)) - (Cr + (gc + (D * q + D))) %
           preset.EFFECTIVE_BALANCE_INCREMENT.toNat) := by
     intro lowGain
@@ -30277,9 +30257,9 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         simp only [Bool.and_eq_true, decide_eq_true_eq]
         exact ⟨by rw [show (pinTerms config pulled anc fin).depthFin = Df from hDf.symm, ← hq]
                   exact lowGain, rateLow⟩
-      have capFor : capForOf (pinTerms config pulled anc fin) pulled v.toNat =
+      have capFor : (pinTerms config pulled anc fin).capFor v.toNat =
           PinTerms.capAt (⟨fork, pulled⟩ : ForkedBeaconState preset) v.toNat := by
-        unfold capForOf
+        rw [capFor_eq]
         simp only [lowArm, ↓reduceIte]
       have pulledSize : v.toNat < pulled.validators.data.size :=
         Nat.lt_of_lt_of_le splitSize (registryGrows_of_chainSteps tail.chainSteps)
@@ -30477,7 +30457,7 @@ private theorem registry_frozen (h : Setting config checks g split fin pulled an
       · obtain ⟨toFin⟩ := h.toFin
         have capped := effective_le_cap_at (toFin.append toC) h.genesis h.caps h.early v.toNat
         have capsLater := cap_le_cap_of_run h.caps (fromC.append tail) h.early v.toNat
-        have forOf := capAt_le_capForOf (pinTerms config pulled anc fin) pulled v.toNat
+        have forOf := capAt_le_capFor config pulled anc fin v.toNat
           (capAt_le_capMax h.caps (Nat.le_trans (by decide) h.fulu) v.toNat)
         exact ⟨by omega, short_start_floor h.bands.1
           (FloorTrace.effective_aligned (toFin.append toC) h.genesis h.aligned v.toNat) capped
@@ -30846,12 +30826,12 @@ private theorem bud_syncLeak (h : Setting config checks g split fin pulled anc c
           inducedR (pinTerms config pulled anc fin) (fromFin.append tail) v.toNat) ≤
       (pinTerms config pulled anc fin).syncLeak +
         3 * ((pinTerms config pulled anc fin).slashedR *
-          slashLeak config fork (pinTerms config pulled anc fin)) ∧
+          (pinTerms config pulled anc fin).slashLeak) ∧
     (∑ v ∈ (SC pulled counted split), inducedR (pinTerms config pulled anc fin)
         (fromFin.append tail) v.toNat) ≤
       (pinTerms config pulled anc fin).syncLeak +
         (pinTerms config pulled anc fin).slashedR *
-          slashLeak config fork (pinTerms config pulled anc fin) := by
+          (pinTerms config pulled anc fin).slashLeak := by
   classical
   obtain ⟨tailC⟩ := h.toCounted
   have calledNat := UInt64.le_iff_toNat_le.mp h.called
@@ -33393,7 +33373,7 @@ private theorem whist_units (h : Setting config checks g split fin pulled anc co
           ((pinTerms config pulled anc fin).consolidationsXCount +
             2 * (pinTerms config pulled anc fin).slashedR) +
         (pinTerms config pulled anc fin).slashedR *
-          slashLeak config fork (pinTerms config pulled anc fin) := by
+          (pinTerms config pulled anc fin).slashLeak := by
   classical
   obtain ⟨toPulled⟩ := h.toPulled
   have units := (bud_units h tail high replayed fromFin replayedF tailC highC endEpochC
@@ -33547,7 +33527,7 @@ private theorem flow_whist (h : Setting config checks g split fin pulled anc cou
     with hY
   set F := (t.depthFin / P + 2) * SCS * (inc + preset.downwardBand) with hF
   set e1 := t.unitGain * (t.consolidationsXCount + 2 * t.slashedR) with he1
-  set e2 := t.slashedR * slashLeak config fork t with he2
+  set e2 := t.slashedR * t.slashLeak with he2
   set slots' := t.depth * slots + (t.depth / P + 2) * SCS + t.depth * MPD with hslots'
   obtain ⟨L, hX⟩ : ∃ L : ℕ, t.otherGain = (3 * (2 * (Sx + (11 * Y + 9) / 10 +
         (slots' + L) * inc + F + t.creditUnits + t.syncLeak + e1 + e2) / (W - 2) +
@@ -33644,7 +33624,7 @@ private theorem flow_split_of (h : Setting config checks g split fin pulled anc 
       10 * ((pinTerms config pulled anc fin).creditLow +
         3 * ((pinTerms config pulled anc fin).slashedR *
           (2 * (pinTerms config pulled anc fin).depthFin *
-            flagRate (pinTerms config pulled anc fin)))) +
+            (pinTerms config pulled anc fin).flagRate))) +
         (((∑ v ∈ (K4 pulled counted V), credN tailC highC v.toNat) +
           (∑ v ∈ (K6 pulled counted), credN tailC highC v.toNat) +
           (∑ v ∈ (K5 counted V), propN tailC highC v.toNat)) +
@@ -33779,8 +33759,9 @@ private theorem flow_split_of (h : Setting config checks g split fin pulled anc 
   rw [hOther] at creditLow
   rw [Nat.mul_assoc (t.consolidationsX / preset.EFFECTIVE_BALANCE_INCREMENT.toNat),
     Nat.mul_assoc (3 * B / preset.EFFECTIVE_BALANCE_INCREMENT.toNat)] at creditLow
-  unfold flagRate
-  rw [creditLow]
+  have rateEq : t.flagRate = t.perIncrement * (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum /
+      WEIGHT_DENOMINATOR.toNat := rfl
+  rw [rateEq, creditLow]
   linarith
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
@@ -33991,7 +33972,8 @@ private theorem stub_J (h : Setting config checks g split fin pulled anc counted
   have joinStake : ∑ v ∈ inside with (isActiveAt pulled (getCurrentEpoch pulled) v.toNat = false ∧
         isActiveAt pulled (getCurrentEpoch pulled + 1) v.toNat = true), eR pulled v ≤
       (pinTerms config pulled anc fin).joining := by
-    rw [joining_eq]
+    show _ ≤ joiningStake pulled
+    unfold joiningStake
     refine voters_sum_le (fun i => balanceAt pulled i) fun v hv => ?_
     obtain ⟨hi, hj⟩ := Finset.mem_filter.mp hv
     obtain ⟨hK, hin⟩ := Finset.mem_filter.mp hi
