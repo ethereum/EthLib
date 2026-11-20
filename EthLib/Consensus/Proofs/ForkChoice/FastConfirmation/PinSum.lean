@@ -26265,11 +26265,8 @@ R's call reads each such key as slashed, since its withdrawable epoch is a slash
 
 The sum is over keys that `SC` leaves out, because they are slashed at the split. -/
 private theorem cut_whistle (h : Setting config checks g split fin pulled anc counted V)
-    (toFin : Run config checks g ⟨fork, fin⟩)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
     (pre : Run config checks ⟨fork, b⟩ ⟨fork, split⟩)
-    (cut : toB.append pre = toFin.append fromFin)
     (sameEpoch : getCurrentEpoch split = getCurrentEpoch b) (high : ℕ) (keys : Finset ℕ) :
     ∑ i ∈ keys, whistC pre high i ≤
       ∑ v ∈ ((Finset.range pulled.validators.data.size).image UInt64.ofNat).filter
