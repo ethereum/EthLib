@@ -66,7 +66,7 @@ A counting state C of another honest store may lie on another branch since the f
 
 The two branches leave one split state, at or after the finalized checkpoint's epoch.
 
-This file bounds the drift of the quorum from R to C by `pinReserve`.
+The pin reserve bounds quorum drift from R to C for `fusaka ≤ fork < glamsterdam`.
 
 ## Keys active only in the previous epoch of the counting state
 
@@ -90,11 +90,9 @@ So a bound on that rate at each such state bounds the key's penalties over the b
 
 ## The band of totals
 
-The reserve reads its rates at the call's total, so it needs every total on both branches nearby.
+The reserve bounds the rates on both branches using the call's total active balance.
 
-`aprioriGuardAt` at the finalized state bounds each total of a branch from it.
-
-It bounds each such total by a floor and a ceiling.
+The a priori guard at the finalized state supplies a floor and a ceiling on each total.
 
 Before Gloas, twice the last ceiling of the window is at most three times its last floor.
 
@@ -448,9 +446,9 @@ The branch is from Electra.
 
 The entries counted are those due by the cutoff.
 
-The cutoff is within the withdrawal delay of the start.
+The cutoff is less than the start epoch plus the minimum withdrawability delay.
 
-An entry appended along the branch is due no earlier than the delay after the start. -/
+This leaves out the extra wait of one epoch plus the seed lookahead before exit churn can start. -/
 private theorem Run.partialDebit_net {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork) (early : y.fork < .glamsterdam)
     (high cutoff : ℕ) (endpoint : (getCurrentEpoch y.state).toNat ≤ cutoff)
@@ -11254,7 +11252,7 @@ private theorem passRate_le_leakAt (h : Setting config checks g split fin pulled
   refine Nat.le_of_eq ?_
   rw [perIncrement]
 
-/-- The pending keys of `pinTerms` are validators of R's registry.
+/-- The reserve counts only validators in R's registry as pending keys.
 
 Each is not yet eligible at R's epoch, and has no activation epoch. -/
 private theorem pendingRB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
@@ -11265,7 +11263,7 @@ private theorem pendingRB_iff (config : Config) (pulled anc fin : BeaconState pr
   simp only [pinTerms]
   cases pulled.validators.data[i]? <;> simp
 
-/-- The late keys of `pinTerms` are validators of R's registry.
+/-- The reserve counts only validators in R's registry as late keys.
 
 Each has an eligibility epoch by R's epoch.
 
@@ -11278,7 +11276,7 @@ private theorem lateB_iff (config : Config) (pulled anc fin : BeaconState preset
   simp only [pinTerms]
   cases pulled.validators.data[i]? <;> simp
 
-/-- The keys of `pinTerms` whose exit R reads are validators of R's registry.
+/-- The reserve reads scheduled exits from validators in R's registry.
 
 Each is active in R's previous epoch or its current one, and unslashed or recently slashed.
 
@@ -11296,9 +11294,11 @@ private theorem exitingB_iff (config : Config) (pulled anc fin : BeaconState pre
   · simp [none]
   · simp [some]
 
-/-- The keys of `pinTerms` whose exit R holds are validators of R's registry.
+/-- The reserve counts past exits from validators in R's registry.
 
-Each exit was set after the finalized epoch, and R's epoch is past it. -/
+The earliest exit it counts is one epoch plus the seed lookahead after the finalized epoch.
+
+Each exit epoch is strictly before R's epoch. -/
 private theorem exitedRB_iff (config : Config) (pulled anc fin : BeaconState preset fork)
     (i : ℕ) : (pinTerms config pulled anc fin).exitedRB i = true ↔
       ∃ w, pulled.validators.data[i]? = some w ∧
@@ -12836,9 +12836,9 @@ private theorem quarter_base_ok (facts : PinPresetFacts preset) {total perIncrem
 
 /-- The pin has a rate `P` that bounds the reward rate at every state of a run from `fin`.
 
-The rate is the base reward per increment that `pinTerms` reads, or zero if there is none.
+The rate is the reserve's base reward per increment, or zero if the reward read fails.
 
-The rate also bounds the largest gain rate, which `gainRateMax` is. -/
+At the maximum effective balance this rate gives the reserve's flag gain bound. -/
 private theorem pin_rate_exists (h : Setting config checks g split fin pulled anc counted V) :
     ∃ P : ℕ,
       P = ((getBaseRewardPerIncrement preset
@@ -14137,7 +14137,7 @@ private theorem key_stay_to (h : Setting config checks g split fin pulled anc co
 open DirectSafety.Apriori.Internal in
 /-- A key's balance on C's branch is at most R's balance, its debits, its credits and the gains.
 
-The key is in the low regime, so its effective balance bound `ebUp` closes the ceiling.
+The gain is small enough to use the key's effective balance envelope to bound its rewards.
 
 The credits are `Cr`, which covers C's net credits `credits`, and the sync debits of R's.
 
@@ -20631,9 +20631,7 @@ private def capUse (config : Config) (pulled anc fin counted : BeaconState prese
 
 Each one strengthens a claim on an entry of `pinReserve` that only the keys of the classes make.
 
-The keys of `SC` and `CS` join that claim, and the entry is spent once.
-
-Its base lemma keeps the proof of the claim for the classes. -/
+The keys of `SC` and `CS` join that claim, and the entry is spent once. -/
 
 /-- The rise of the current keys of K4 and of `SC` fits the rise of the current keys of R.
 
@@ -22270,7 +22268,7 @@ private theorem syncProposer_eq (config : Config) (pulled anc fin : BeaconState 
         (PinTerms.syncEnvelope preset ((getTotalActiveBalance pulled).toOption.getD 0).toNat *
           PROPOSER_WEIGHT.toNat / (WEIGHT_DENOMINATOR.toNat - PROPOSER_WEIGHT.toNat)) := rfl
 
-/-- The total that `pinTerms` reads at R is R's total active balance. -/
+/-- The reserve uses R's total active balance when the read succeeds. -/
 private theorem getD_total_eq {pulledTotal : Gwei}
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :
     ((getTotalActiveBalance pulled).toOption.getD 0).toNat = pulledTotal.toNat := by
@@ -26419,7 +26417,7 @@ private theorem bud_fall (h : Setting config checks g split fin pulled anc count
   exact mem_positions_filter config pulled anc fin found
     (isActiveAt_eq_true_iff.mpr ⟨validator, found, active⟩)
 
-/-- `quorumReserve` holds `joining` (its gain term). -/
+/-- The quorum reserve covers the stake that joins the active set. -/
 private theorem bud_joining : (pinTerms config pulled anc fin).joining ≤
     (pinTerms config pulled anc fin).quorum := by
   dsimp only [pinTerms, quorumReserve]
@@ -28494,7 +28492,7 @@ private theorem keyCeiling_of_close (anc : BeaconState preset fork)
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- The closing of the per-key core of the rise, for a key on its kept arm with any cap.
+/-- The rise of a key on the kept branch bounds its effective balance on C's branch, up to flows.
 
 Its balance on C's branch is bounded by `Bc`, and the effective balance by `stay`.
 
@@ -28502,11 +28500,11 @@ Its balance on C's branch is bounded by `Bc`, and the effective balance by `stay
 
 It adds the debits and slack on R's runs, and the credits and gains of C's run.
 
-R's rise closes it, up to the flows and the bands that pay the rounding.
+The bound also accounts for flows between states and the bands that pay for rounding.
 
 The cap enters only through `stay` and `cappedY`, which the cap arms prove.
 
-C's run may end at any state, so a prefix of it closes the same way.
+The bound applies to any prefix of C's run.
 
 The start of the effective balance's ceiling is any state's, bounded as `rise_close` reads it.
 
@@ -28632,7 +28630,7 @@ private theorem key_close (h : Setting config checks g split fin pulled anc coun
       flowGain (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat +
         unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat :=
     ⟨_, rfl⟩
-  -- R's rise closes the balance ceiling of C's run, up to the flows and their slack
+  -- R's rise covers the increase on C's branch apart from the flows and their rounding slack.
   obtain ⟨H, hH⟩ : ∃ H, H = (pinTerms config pulled anc fin).high v.toNat :=
     ⟨_, rfl⟩
   have induced : Df * (pinTerms config pulled anc fin).leakAt M v.toNat ≤
@@ -32702,11 +32700,11 @@ private theorem stake_le_total {state : BeaconState preset fork} {total : Gwei}
 
 The quorum at the counting state and `V` at the pulled-up state weigh three each.
 
-Their sum is at most twice the counting total, the pulled-up total and `pinReserve`.
+Their sum is at most twice the counting total plus the pulled-up total and the pin reserve.
 
 It also adds three times the counting stake of the quorum voters that are in `V`.
 
-The theorem takes the setting and the two total active balances. -/
+The bound holds under the drift setting, which requires `fusaka ≤ fork < glamsterdam`. -/
 theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted V)
     {total pulledTotal : Gwei} (totalOk : getTotalActiveBalance counted = .ok total)
     (pulledOk : getTotalActiveBalance pulled = .ok pulledTotal) :

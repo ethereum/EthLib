@@ -14,17 +14,11 @@ A call of the fast confirmation rule counts the stake of honest voters in its pu
 
 A later state that counts the same voters can hold a different total and different balances.
 
-The reserves are meant to bound how much that changes the quorum, from the call's states alone.
+The reserves use only the call's states to account for changes in the quorum.
 
-One covers a later state on the call's own chain, the other a counting state on another branch.
+The quorum reserve covers a later state on the call's own chain, from Fulu to before Gloas.
 
-A theorem proves the bound of the first, before Gloas from Fulu.
-
-The drift premise of the checked-call headlines follows from it.
-
-`PinDrift.le_pinReserve` proves the bound of the second.
-
-It bounds the drift from the pulled-up state to a counting state.
+The pin reserve also covers a counting state on another branch, from Fulu to before Glamsterdam.
 -/
 
 @[expose] public section
@@ -38,9 +32,7 @@ variable {preset : Preset} {fork : Fork} {config : Config} {checks : SignatureCh
   {anchorBlock : BeaconBlock preset fork} {assignment : Assignment preset}
   {genesisTimeMs : UInt64} {J : Set ValidatorIndex}
 
-/-- The effective balance of the keys inactive at a state's epoch and active at the next one.
-
-`quorumReserve` and `pinTerms` read it as the stake that joins the active set. -/
+/-- The effective balance of validators that join the active set at the next epoch. -/
 def joiningStake (state : BeaconState preset fork) : ℕ :=
   ∑ i ∈ Finset.range state.validators.data.size with
       isActiveAt state (getCurrentEpoch state) i = false ∧
@@ -202,9 +194,7 @@ def PinTerms.wide (state : BeaconState preset fork) : ℕ :=
 
 /-- Whether a key of the call's state is unslashed and exits by the next epoch.
 
-It must also not be withdrawable by the finalized epoch of the call's ancestor.
-
-`pinTerms` charges these keys in `exitedSlashable`. -/
+It must also not be withdrawable by the finalized epoch of the call's ancestor. -/
 def PinTerms.exitedSlashable (anc pulled : BeaconState preset fork) (i : ℕ) : Bool :=
   decide ((pulled.validators.data[i]?.map (·.slashed)).getD false = false ∧
     ((pulled.validators.data[i]?).map fun v =>
@@ -212,11 +202,7 @@ def PinTerms.exitedSlashable (anc pulled : BeaconState preset fork) (i : ℕ) : 
     ((pulled.validators.data[i]?).any fun v =>
       decide (anc.finalizedCheckpoint.epoch.toNat < v.withdrawableEpoch.toNat)) = true)
 
-/-- The terms of `pinReserve`, by name.
-
-Each is a read of the state, its ancestor or the finalized block's state, as `pinTerms` computes it.
-
-The pin's drift bound reads them one by one. -/
+/-- The charges in the pin reserve and the quantities used to compute them. -/
 structure PinTerms (preset : Preset) where
   quorum : ℕ
   exiting : ℕ
@@ -301,11 +287,11 @@ def PinTerms.total (t : PinTerms preset) : ℕ :=
     t.seatShortfall + (33 * t.consolidationsX + 9) / 10 + t.exitedR + t.pendingR + t.creditGain +
     t.creditUnits + t.syncLeak + 3 * t.unitGain * t.consolidationsXCount)
 
-/-- The terms of the pin reserve of a call, by name.
+/-- The charges for changes to a call's quorum on either branch.
 
-The state is the pulled-up head state of the call, and the ancestor is the state of its target root.
+The inputs include the pulled-up head state and the state of its target block.
 
-`pinReserve` is their weighted sum, `PinTerms.total`. -/
+The target block's finalized state gives both branches a common starting point. -/
 def pinTerms (config : Config) (state ancestor finalizedState : BeaconState preset fork) :
     PinTerms preset :=
   let epoch := getCurrentEpoch state
@@ -438,16 +424,18 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     WEIGHT_DENOMINATOR.toNat
   let gainRate (i : ℕ) := ebUp i / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
-  -- A partial due by the next epoch was queued at least `partialDelay` epochs before it.
+  -- Exit churn starts at the request epoch plus one plus the seed lookahead.
   --
-  -- Within that depth it predates finality and sits in the queue of the finalized block's state.
+  -- A partial becomes due no earlier than that epoch plus the minimum withdrawability delay.
+  --
+  -- Using only that delay is conservative by five epochs on mainnet.
+  --
+  -- Within this shorter window, every partial that falls due was already queued at the start.
   let partialDelay := config.MIN_VALIDATOR_WITHDRAWABILITY_DELAY.toNat
   let partialsDue (i : ℕ) := max (partialsX i) (partialsR i)
-  -- Deeper than `partialDelay` from the finalized block's state, a key can fall to nothing.
+  -- Outside that window, the queue reads alone do not cover partials requested on another branch.
   --
-  -- A partial requested after that state can then be paid on a branch and sit in no queue here.
-  --
-  -- So its whole effective balance is charged.
+  -- The reserve falls back to charging the key's full effective balance at the call.
   --
   -- The floor reads the finalized block's balance.
   --
@@ -496,7 +484,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     decide (depthFin * gainScaled i < inc) && decide (11 * depth * (gainRate i + 1) ≤ ebUp i)
   let capFor (i : ℕ) :=
     if lowRate i then cap i else capMax
-  -- A key keeps its own path when its gain stays within its bound and partials stay queued.
+  -- The kept branch includes equality at the gain bound and uses the shorter partial window.
   --
   -- Its rise is then its rounded balance; otherwise it is its whole headroom.
   let keptArm (i : ℕ) : Bool :=
@@ -507,11 +495,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let high (i : ℕ) := actual i + depthFin * (gainScaled i + leak i) + (partialsX i - partialsR i)
   -- The rise bounds the balance from the finalized block's state on, as `ebUp` does.
   let rise (i : ℕ) :=
-    -- Deeper than `partialDelay`, the call's branch can pay partials that neither queue holds.
-    --
-    -- So the rise is the key's whole headroom.
-    --
-    -- It is too once eleven times the gain plus one over the depth exceeds that bound.
+    -- Outside the shorter partial window or above the gain bound, charge the full headroom.
     if keptArm i then
       -- On another branch the key can keep an effective balance that this branch's update lowered.
       --
@@ -779,7 +763,7 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
     3 * queueKeys * (preset.upwardBand + depth * gainRateMax)
   -- A key slashed on another branch credits its whistleblower, the block's proposer.
   --
-  -- A key still active there is meant to pay three times that reward from its own balance.
+  -- A key still active there can offset three times the reward with its own counted stake.
   --
   -- A key that has exited there by then has no such balance in the count, so it is charged here.
   --
@@ -795,11 +779,9 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   let reserveW := 3 * (exitedSlashable + (if tight then 0 else
       queueWindow + queueKeys * (preset.upwardBand + depth * gainRateMax))) /
     p.WHISTLEBLOWER_REWARD_QUOTIENT.toNat
-  -- A key active there is meant to pay for its reward unless its effective balance can be low.
+  -- Test whether the balance floor after the slashing penalty can cover the reward in the count.
   --
-  -- `lowEB` bounds that balance from below, before the slashing penalty and sync-seat debits.
-  --
-  -- A key that fails the test is charged its reward three times.
+  -- Charge three times the reward if the floor is too low, and account for seat debits separately.
   let slashable (i : ℕ) := slashed i = false ∧ (validator i).any (fun v =>
     decide (v.activationEpoch.toNat ≤ epoch.toNat + 1) &&
       decide (finalized < v.withdrawableEpoch.toNat))
@@ -849,8 +831,6 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
   -- One floor of all a key's flows bounds its gains, and each split by kind costs an increment's.
   --
   -- Past that bound, each deposit the window can apply to a new key is also charged up to the cap.
-  --
-  -- This closes a proof route at degenerate totals; no reachable run is known to need it.
   let consolidationGain := consolidationsX / inc * perIncrement *
     (PARTICIPATION_FLAG_WEIGHTS.map (·.toNat)).sum / WEIGHT_DENOMINATOR.toNat
   -- A key whose only flows are seat debits pays a unit too.
@@ -935,77 +915,20 @@ def pinTerms (config : Config) (state ancestor finalizedState : BeaconState pres
 
 /-- The reserve of a call for a counting state that may be on another branch.
 
-It reads the call's pulled-up head state, the target block's state and that block's finalized state.
+It bounds drift in the quorum inequality at the target's epoch or the next.
 
-It adds to the quorum reserve what a counting state of the target's epoch or the next can change.
+The proof covers only `fusaka ≤ fork < glamsterdam` under the pin's drift assumptions.
 
-It covers exits, the queues, credits since finality, late activations, sync seats and band changes.
+The reserve's other fork branches are not proved to bound the drift.
 
-The depth is the call's epoch plus 2, minus the finalized epoch of the target block's state.
+The branches can differ in both active stake and validator balances after their last shared state.
 
-Up to the seed lookahead plus one, the exit and consolidation queues add nothing.
+The reserve accounts for these differences without reading the other branch's state.
 
-Neither do the late activations at that depth.
+Within the partial window, the rise uses the kept branch even at equality in the gain test.
 
-The reserve treats every epoch of that window as fixed before the branches split.
-
-Rates are read at a quarter of the call's total active balance, or at a fifth of an increment.
-
-A key's leak and gain are read at a computed envelope of its effective balance on any branch.
-
-The exit and consolidation churns are bounded by their values at a larger total.
-
-That total is three halves of the call's total active balance.
-
-Those bounds do not model the error branch of the checked churn reads.
-
-Another branch's consolidation carry is charged at its finalized value or one epoch's churn.
-
-A key not yet eligible here is charged once outside the tight window.
-
-Another branch can top it up and activate it.
-
-The deposits applied on a branch are charged from the finalized block's carry, over its depth.
-
-The sync seats count on both branches, each at an envelope of its reward.
-
-The envelope is read at three halves of the call's total active balance.
-
-A key's fall starts from the lesser of its balance and its cap at the finalized block's state.
-
-Another branch can keep a lower effective balance that this branch's update raised.
-
-So a key's fall reaches its effective balance at the finalized block's state.
-
-Near the downward band of that start, it also reaches its rounded balance.
-
-Past the withdrawability delay from the finalized state, a key's fall is its effective balance.
-
-A key's rise is its headroom once eleven times its gain over the depth exceeds its balance bound.
-
-Below that, its gain and the credits are scaled by eleven tenths, rounded up.
-
-Another branch can keep a higher effective balance that this branch's update lowered.
-
-So a key's rise reaches its rounded balance plus the downward band, or its finalized balance.
-
-A key active from the next epoch earns a proposer credit too.
-
-A key whose exit the call reads can be active only in the previous epoch of a counting state.
-
-There it weighs three times, so its rise and its credits are charged three times.
-
-The whistleblower reward of a key slashed on another branch is charged where that key has exited.
-
-It is also charged where that key's effective balance can fall below what pays for it in the count.
-
-A key whose exit was set by the finalized block's state can be swept here and slashed there.
-
-Those charges also read its finalized effective balance and its rounded finalized balance.
-
-A due consolidation can raise its target by one more increment, whose gains count three times.
-
-Inactivity scores and the queue of partial withdrawals are read at the finalized block's state. -/
+Past that window, measured from the finalized state, the fall charges the call's effective balance.
+-/
 def pinReserve (config : Config) (state ancestor finalizedState : BeaconState preset fork) : ℕ :=
   (pinTerms config state ancestor finalizedState).total
 

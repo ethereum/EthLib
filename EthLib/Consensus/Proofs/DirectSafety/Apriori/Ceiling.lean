@@ -2109,7 +2109,6 @@ theorem processUpgrades_eq_of_window {z z' : ForkedBeaconState preset}
             | exact absurd fulu (by decide)
             | (simp only [upgradeNext, bind_ok_iff, pure, Except.pure, Except.ok.injEq, throw,
                 throwThe, MonadExceptOf.throw, reduceCtorEq] at nextOk
-               -- The simp closes some cases itself, and then no goal is left.
                first
                  | done
                  | (obtain ⟨_, -, rfl⟩ := nextOk; exact Nat.le_refl _)
