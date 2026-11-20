@@ -564,6 +564,7 @@ So conversion proofs can enter through `meta import` without linking their objec
 The executables `check-decls`, `check-accessors` and `check-theorems` inspect the compiled declarations.
 They check which constructs the declarations use, which defaulting accessors the specification calls, and which theorems it needs.
 `gen-bindings` writes the binding contract from Lean, and `known-answers` runs pinned test vectors.
+The library `KernelVectors`, in `tests/kernel/`, proves known answers in the kernel, and no default target imports it.
 Four more libraries hold test cases in `scripts/`: `CheckDeclsTest`, `CheckAccessorsTest`, `CheckTheoremsTest` and `CheckTheoremsAttributesTest`.
 They are not default targets.
 Their test scripts, `scripts/test_check_decls.sh`, `scripts/test_check_accessors.sh` and `scripts/test_check_theorems.sh`, build them.
