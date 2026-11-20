@@ -6096,18 +6096,12 @@ private theorem run_syncDebits_le {x y : ForkedBeaconState preset} (tail : Run c
           fun debited moving apartSets apart => (priorApart' debited moving apartSets apart).trans
             (Nat.mul_le_mul_right _ (Nat.le_succ _))⟩
 
-/-- The blocks of a run fit one amount per seat for each slot of the epochs that the run touches.
-
-The run has at most one block for each slot that it covers. -/
-private theorem Run.blockCount_mul_le {x y : ForkedBeaconState preset}
-    (tail : Run config checks x y) (amount : ℕ)
-    (zero : preset.SLOTS_PER_EPOCH.toNat = 0 → amount = 0) :
-    tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * amount) ≤
+/-- A run has at most one block for each slot of the epochs that it touches. -/
+private theorem Run.blockCount_le_epochs {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (positive : 0 < preset.SLOTS_PER_EPOCH.toNat) :
+    tail.blockCount ≤
       ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
-        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * amount := by
-  by_cases empty : preset.SLOTS_PER_EPOCH.toNat = 0
-  · simp [zero empty]
-  have positive : 0 < preset.SLOTS_PER_EPOCH.toNat := Nat.pos_of_ne_zero empty
+        preset.SLOTS_PER_EPOCH.toNat := by
   have epochLe := UInt64.le_iff_toNat_le.mp (currentEpoch_le_of_chainSteps tail.chainSteps)
   rw [getCurrentEpoch_toNat, getCurrentEpoch_toNat] at epochLe ⊢
   have low : x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat * preset.SLOTS_PER_EPOCH.toNat ≤
@@ -6137,11 +6131,23 @@ private theorem Run.blockCount_mul_le {x y : ForkedBeaconState preset}
     generalize preset.SLOTS_PER_EPOCH.toNat *
       (y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1) = highest at *
     omega
+  exact counted
+
+/-- The blocks of a run fit one amount per seat for each slot of the epochs that the run touches.
+
+The run has at most one block for each slot that it covers. -/
+private theorem Run.blockCount_mul_le {x y : ForkedBeaconState preset}
+    (tail : Run config checks x y) (amount : ℕ)
+    (zero : preset.SLOTS_PER_EPOCH.toNat = 0 → amount = 0) :
+    tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * amount) ≤
+      ((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat * preset.SYNC_COMMITTEE_SIZE.toNat * amount := by
+  by_cases empty : preset.SLOTS_PER_EPOCH.toNat = 0
+  · simp [zero empty]
   calc tail.blockCount * (preset.SYNC_COMMITTEE_SIZE.toNat * amount)
-      ≤ ((y.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat + 1 -
-        x.state.slot.toNat / preset.SLOTS_PER_EPOCH.toNat) * preset.SLOTS_PER_EPOCH.toNat) *
-          (preset.SYNC_COMMITTEE_SIZE.toNat * amount) :=
-        Nat.mul_le_mul_right _ counted
+      ≤ (((getCurrentEpoch y.state).toNat + 1 - (getCurrentEpoch x.state).toNat) *
+        preset.SLOTS_PER_EPOCH.toNat) * (preset.SYNC_COMMITTEE_SIZE.toNat * amount) :=
+        Nat.mul_le_mul_right _ (Run.blockCount_le_epochs tail (Nat.pos_of_ne_zero empty))
     _ = _ := by ring
 
 /-- The sync debits of any set of keys over a run from Fulu fit one envelope per seat per slot.

@@ -3113,31 +3113,13 @@ private theorem banded_keys_le (h : Setting config checks g split fin pulled anc
   have blocks : tail.blockCount ≤
       ((getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1) *
         preset.SLOTS_PER_EPOCH.toNat := by
-    have start : (getCurrentEpoch split).toNat * preset.SLOTS_PER_EPOCH.toNat ≤
-        split.slot.toNat := by
-      rw [getCurrentEpoch_toNat]
-      exact Nat.div_mul_le_self _ _
-    have finish : x.slot.toNat <
-        ((getCurrentEpoch x).toNat + 1) * preset.SLOTS_PER_EPOCH.toNat := by
-      rw [getCurrentEpoch_toNat]
-      exact lt_of_lt_of_eq (Nat.lt_mul_div_succ _ positive) (Nat.mul_comm _ _)
-    have last : x.slot.toNat ≤
-        ((getCurrentEpoch x).toNat + 1) * preset.SLOTS_PER_EPOCH.toNat - 1 := by omega
-    have count := tail.blocks_le_slots (a := (getCurrentEpoch split).toNat *
-      preset.SLOTS_PER_EPOCH.toNat) (b := ((getCurrentEpoch x).toNat + 1) *
-        preset.SLOTS_PER_EPOCH.toNat - 1) start last
-    have gap := Nat.mul_le_mul_right preset.SLOTS_PER_EPOCH.toNat
-      (show (getCurrentEpoch split).toNat + 1 ≤ (getCurrentEpoch x).toNat + 1 by omega)
-    rw [Nat.add_mul, Nat.one_mul] at gap
-    have shape : ((getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1) *
-        preset.SLOTS_PER_EPOCH.toNat = ((getCurrentEpoch x).toNat + 1) *
-          preset.SLOTS_PER_EPOCH.toNat - (getCurrentEpoch split).toNat *
-            preset.SLOTS_PER_EPOCH.toNat := by
-      rw [← Nat.sub_mul]
-      congr 1
-      omega
-    rw [shape]
-    omega
+    have count : tail.blockCount ≤
+        ((getCurrentEpoch x).toNat + 1 - (getCurrentEpoch split).toNat) *
+          preset.SLOTS_PER_EPOCH.toNat := PinSplit5.Run.blockCount_le_epochs tail positive
+    have same : (getCurrentEpoch x).toNat + 1 - (getCurrentEpoch split).toNat =
+        (getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1 := by omega
+    rw [same] at count
+    exact count
   have total := (Finset.card_le_card subset).trans
     ((Finset.card_union_le _ _).trans (Nat.add_le_add_right (Finset.card_union_le _ _) _))
   have expand : ((getCurrentEpoch x).toNat - (getCurrentEpoch split).toNat + 1) *
