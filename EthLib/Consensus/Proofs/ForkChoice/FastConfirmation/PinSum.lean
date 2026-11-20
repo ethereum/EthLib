@@ -12038,15 +12038,16 @@ private theorem key_idle_walk (h : Setting config checks g split fin pulled anc 
       have step := slot_idle_step shared h.genesis ok lastEarly middleElectra v known idle
       exact ⟨by omega, by omega⟩
 
-/-- A validator that is active at the current epoch has its activation assigned and reached. -/
-private theorem activated_of_active {s : BeaconState preset fork} {w : Validator}
-    (active : isActiveValidator w (getCurrentEpoch s) = true) :
+/-- A validator active at an epoch up to the current one has its activation assigned and reached. -/
+private theorem activated_of_active {s : BeaconState preset fork} {w : Validator} {e : Epoch}
+    (active : isActiveValidator w e = true) (le : e ≤ getCurrentEpoch s) :
     w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧ w.activationEpoch ≤ getCurrentEpoch s := by
   simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-  refine ⟨fun far => ?_, active.1⟩
   have low := UInt64.le_iff_toNat_le.mp active.1
   have high := UInt64.lt_iff_toNat_lt.mp active.2
   have bound := w.exitEpoch.toNat_lt
+  have ahead := UInt64.le_iff_toNat_le.mp le
+  refine ⟨fun far => ?_, UInt64.le_iff_toNat_le.mpr (by omega)⟩
   rw [far] at low
   have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
   omega
@@ -12057,7 +12058,7 @@ private theorem activated_of_activeVoters (early : fork < .glamsterdam)
     ∃ w, s.validators.data[v.toNat]? = some w ∧ w.activationEpoch ≠ FAR_FUTURE_EPOCH ∧
       w.activationEpoch ≤ getCurrentEpoch s := by
   obtain ⟨w, found, active⟩ := active_of_activeVoters early member
-  exact ⟨w, found, activated_of_active active⟩
+  exact ⟨w, found, activated_of_active active (UInt64.le_refl _)⟩
 
 /-- A voter of the quorum has its activation assigned and reached.
 
@@ -12072,15 +12073,7 @@ private theorem activated_of_quorum (early : fork < .glamsterdam)
   · exact activated_of_activeVoters early (by simpa [activeVoters] using now)
   · obtain ⟨w, found, active⟩ :=
       (mem_getActiveValidatorIndices (s.validators.bound early)).mp before
-    simp only [isActiveValidator, Bool.and_eq_true, decide_eq_true_eq] at active
-    have low := UInt64.le_iff_toNat_le.mp active.1
-    have prev := UInt64.le_iff_toNat_le.mp (getPreviousEpoch_le s)
-    refine ⟨w, found, fun far => ?_, UInt64.le_iff_toNat_le.mpr (by omega)⟩
-    have high := UInt64.lt_iff_toNat_lt.mp active.2
-    have bound := w.exitEpoch.toNat_lt
-    rw [far] at low
-    have : FAR_FUTURE_EPOCH.toNat = 2 ^ 64 - 1 := rfl
-    omega
+    exact ⟨w, found, activated_of_active active (getPreviousEpoch_le s)⟩
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C activates has its activation before its exit. -/
@@ -22387,7 +22380,8 @@ private theorem created_slots_le (h : Setting config checks g split fin pulled a
         (Nat.le_trans grows beyond)
     · obtain ⟨member, active⟩ := Finset.mem_filter.mp inCS
       obtain ⟨w, found, isActive⟩ := isActiveAt_eq_true_iff.mp active
-      exact deposit v ⟨w, found, activated_of_active isActive⟩ (Finset.mem_filter.mp member).2.1
+      exact deposit v ⟨w, found, activated_of_active isActive (UInt64.le_refl _)⟩
+        (Finset.mem_filter.mp member).2.1
   have cardD' : D.card ≤ preset.MAX_PENDING_DEPOSITS_PER_EPOCH.toNat *
       ((getCurrentEpoch counted).toNat - (getCurrentEpoch split).toNat) := cardD
   refine Nat.le_trans count (Nat.le_trans cardD' ?_)
