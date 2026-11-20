@@ -7298,7 +7298,7 @@ Keystore decryption does this itself with a model of the cost, against limits th
 <!-- generated: pins -->
 The specification requires no package.
 The package requires Mathlib, at `v4.36.0`, commit `fc4f59e`.
-The package requires VCVio, at `23f4451`.
+The package requires VCVio, at `e51283d`.
 Only the proofs import them.
 The Lean toolchain is `leanprover/lean4:v4.36.0`.
 <!-- end generated -->

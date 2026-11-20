@@ -33,9 +33,9 @@ require "leanprover-community" / "mathlib" @ git "v4.36.0"
 --
 -- The library code never imports it.
 --
--- The cached scan theorem for the first valid codeword, from VCVio #1202.
+-- VCVio supplies the warm finder law and the adaptive digest watch.
 require VCVio from git "https://github.com/Verified-zkEVM/VCVio.git" @
-  "23f44515eb1e997136c796da283d89b811145164"
+  "e51283d38477ccb61116ab0f3465acefd6efcaf4"
 
 @[default_target]
 lean_lib «EthLib» where
