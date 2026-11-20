@@ -622,6 +622,45 @@ Not yet released.
   `Execution.genesisTimeMs_eq_of_honest` and `Execution.getCurrentSlot_of_slot_start` read an honest receiver's genesis time and its slot at a slot start.
   `Store.nextSlotStart_le_clock` in `ForkChoice/ForwardClock.lean` shows that the slot after one before the current slot exists and starts by the store's clock.
 
+- `FloorTrace.balance_floor_general` says that a trace from an account keeps the floor, less the penalty of a slash if the trace holds one.
+  The pin's epoch floor and its floor of a slashed key read it.
+
+- `FloorTrace.run_potential_floor_once` says that the potential floor of a run whose effective balance starts above its balance is charged once.
+  The pin's segment potential reads it.
+
+- `runScores_le` says that on a branch from Altair, each inactivity score of a state is at most the start score plus the bias for each epoch of the branch.
+  It holds at the positions that the branch adds as well.
+  The pin's cross-branch bound on a key's leak reads it.
+
+- `scoresKept_processBlock` says that a block keeps the inactivity score at each position of the registry before it.
+  Each score after the block, at every position, was there before it or is zero.
+  The step of the branch's score bound reads it, in `runScores_le`.
+
+- `scoresKept_processEpochAltair` says the same of the epoch pass from Altair: it keeps the score at each position of the registry before it.
+  It needs no premise on the deposits or the consolidations.
+  The step of the branch's score bound reads it too.
+
+- `addValidatorToRegistry_keeps` says that, from Altair, a new validator at the end of the registry keeps each validator, the consolidations, and the balance and score at each position that holds a validator.
+  The new validator takes the score zero.
+  The block's proof that the balance is not raised reads it.
+
+- `slot_events_no_withdrawals` says that a slot records no withdrawal event.
+  The pin's partial-debit bound of a key reads it.
+
+- `PartialCost` says that a cost function charges a withdrawals event at most the amounts of the queued partial withdrawals that a filter selects, and every other event nothing.
+  The pin reads it for the partial debits of one key and of all keys.
+
+- `departure_charges_le_window_electra_cap` says that, from Electra, the departures of a window spend only carry-in capacity and eligible epochs.
+  If the exit churn limit at each step of the run is at most `exitCap`, the exit queue adds at most `exitCap` for each epoch of the window.
+  The pin's queue-window bound reads it.
+
+- `ScheduledEligibleBalanceElectra` says that, from Electra, an eligible key that is not yet active keeps its activation reserve.
+  `run_eligible_balance` states it for the state at the end of a run.
+
+- `run_eligible_balance` says that a key without an activation epoch keeps its effective balance funded at the end of a run from genesis.
+  From Electra, the eligible keys that are not yet active also keep their activation reserve.
+  The pin's bounds on a key's funding at the start of a run and at the first state of a created key read it.
+
 - `PinPresetFacts` is public: the preset facts that the pin's drift bound needs.
   Each field is a fact about the preset alone, and a deployed preset has it.
 
