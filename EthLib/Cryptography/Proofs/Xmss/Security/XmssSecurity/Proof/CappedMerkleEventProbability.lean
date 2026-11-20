@@ -46,18 +46,13 @@ theorem detailed_execution_verified_merkle_query_cached_as
               encoding execution.1.forgery.signature.chainValue)) level).2) = some output := by
   have hparameter :=
     (capped_detailed_execution_key_components_consistent adversary execution hmem).1
-  unfold detailedGameWithCache detailedGameCore at hmem
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, _hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, hverify, hfinal⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure,
-    Set.mem_singleton_iff] at hfinal
-  cases hfinal
+  -- Decompose through lemmas for any scheme: the kernel would run the game to match two forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  obtain ⟨forgery, signingLog, adversaryCache, verified, -, hverify, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   simp only at hparameter hverified hdecode ⊢
   subst verified
   have hroute :
@@ -178,9 +173,9 @@ theorem merkleCollision_afterKeygen_orientation
   have hafterCacheLe := xmssRom_cache_le
     (detailedGameAfterKeygen Concrete.scheme adversary keyResult.1.1 keyResult.1.2)
     keyResult.2 execution hafter
-  have hkeygen' : keyResult ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
+  -- Rewrite key generation by its equation: the kernel would run it to match two forms.
+  have hkeygen' := hkeygen
+  rw [Concrete.scheme_keygen] at hkeygen'
   let node := Concrete.CacheReplay.pathNode leafIndex (level.val + 1)
   have hnode := pathNode_succ_lt leafIndex level
   have hforgedInitial :=

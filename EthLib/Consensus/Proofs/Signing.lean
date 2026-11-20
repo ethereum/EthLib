@@ -5,6 +5,8 @@ public import EthLib.Consensus.Signing
 public import EthLib.Serialization.Proofs.Ssz.Typed.Root
 import EthLib.Serialization.Proofs.Ssz.Codec.Summary
 import EthLib.Serialization.Proofs.Ssz.Codec.RootDomain
+public import EthLib.Serialization.Proofs.Ssz.Codec.ValueMessages
+import EthLib.Serialization.Proofs.Ssz.Type.Legality
 
 /-!
 # Proofs: domains, signing roots and fork digests
@@ -16,6 +18,10 @@ A domain starts with its domain type, so two domain types never share a domain.
 Before Fulu, a fork digest is the first four bytes of the root of the fork data.
 
 A signing root is also the root of the signing data whose first field holds the object itself.
+
+So two different objects of one type with one signing root are two values with one root.
+
+If every count of both objects fits its word, two inputs of the node hash in their trees collide.
 -/
 
 @[expose] public section
@@ -107,6 +113,209 @@ theorem computeSigningRoot_eq_hashTreeRoot {α : Type} [SszType α] [LawfulSszTy
   show SszType.hashTreeRoot (SigningData.mk ⟨root, width⟩ domain) = _
   rw [SszType.hashTreeRoot_eq]
   exact congrArg (· >>= toChunk) summary
+
+/-- The signing type is well formed exactly when the type of the object is. -/
+theorem wellFormed_signingShape_iff (shape : Desc) :
+    (signingShape shape).wellFormed = .ok () ↔ shape.wellFormed = .ok () := by
+  have distinct : firstDuplicate ["object_root", "domain"] = none := by decide
+  rw [signingShape, wellFormed_container_iff]
+  cases sound : shape.wellFormed <;>
+    simp [sound, distinct, Desc.allWellFormed, Desc.wellFormed, bind, Except.bind]
+
+/-- The signing data fits the signing type exactly when the object fits its type. -/
+theorem fits_signingValue_iff {shape : Desc} {value : Value} {domain : Domain} :
+    Fits (signingShape shape) (signingValue value domain) ↔ Fits shape value := by
+  rw [signingShape, signingValue]
+  constructor
+  · intro fitted
+    cases fitted with
+    | container paired each => exact each (shape, value) (by simp)
+  · intro fitted
+    refine .container rfl fun pair member => ?_
+    simp only [List.zip_cons_cons, List.zip_nil_left, List.mem_cons, List.not_mem_nil,
+      or_false] at member
+    rcases member with rfl | rfl
+    · exact fitted
+    · exact .byteVector (by simp [bytesPerChunk])
+
+/-- Every count of the signing data fits its word exactly when every count of the object does. -/
+theorem commitmentSized_signingValue_iff {shape : Desc} {value : Value}
+    {domain : Domain} :
+    CommitmentSized (signingShape shape) (signingValue value domain) ↔
+      CommitmentSized shape value := by
+  rw [signingShape, signingValue]
+  constructor
+  · intro sized
+    cases sized with
+    | container each => exact each (shape, value) (by simp)
+  · intro sized
+    refine .container fun pair member => ?_
+    simp only [List.zip_cons_cons, List.zip_nil_left, List.mem_cons, List.not_mem_nil,
+      or_false] at member
+    rcases member with rfl | rfl
+    · exact sized
+    · exact .byteVector _ _
+
+/-- Two signing data values are equal exactly when their objects and domains are. -/
+theorem signingValue_inj {first second : Value} {firstDomain secondDomain : Domain} :
+    signingValue first firstDomain = signingValue second secondDomain ↔
+      first = second ∧ firstDomain = secondDomain := by
+  simp [signingValue, Vector.toArray_inj]
+
+/-- Two different pairs of an object and a domain with one signing root have one root of two values.
+
+The two values are the signing data of the pairs, with each object in place of its root.
+
+They differ, and the root of each is the signing root.
+
+It needs the type of the objects to be lawful. -/
+theorem signingValues_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α]
+    {first second : α} {firstDomain secondDomain : Domain} {root : Root}
+    (differ : (first, firstDomain) ≠ (second, secondDomain))
+    (firstSigned : computeSigningRoot first firstDomain = .ok root)
+    (secondSigned : computeSigningRoot second secondDomain = .ok root) :
+    signingValue (toValue first) firstDomain ≠ signingValue (toValue second) secondDomain ∧
+      Serialization.Ssz.hashTreeRoot (signingShape (desc α))
+          (signingValue (toValue first) firstDomain) = .ok root.toArray ∧
+      Serialization.Ssz.hashTreeRoot (signingShape (desc α))
+          (signingValue (toValue second) secondDomain) = .ok root.toArray := by
+  rw [computeSigningRoot_eq_hashTreeRoot] at firstSigned secondSigned
+  -- A signing root is the root of its signing value, cut to one node.
+  have rooted : ∀ {value : Value} {domain : Domain},
+      (do toChunk (← Serialization.Ssz.hashTreeRoot (signingShape (desc α))
+        (signingValue value domain))) = Except.ok root →
+      Serialization.Ssz.hashTreeRoot (signingShape (desc α)) (signingValue value domain) =
+        .ok root.toArray := by
+    intro value domain signed
+    cases found : Serialization.Ssz.hashTreeRoot (signingShape (desc α))
+        (signingValue value domain) with
+    | error fault => simp [found, bind, Except.bind] at signed
+    | ok bytes =>
+      simp only [found, bind, Except.bind] at signed
+      rw [toChunk_ok_iff.mp signed]
+  refine ⟨fun same => differ ?_, rooted firstSigned, rooted secondSigned⟩
+  -- Equal untyped values read back as equal typed values.
+  obtain ⟨valued, domained⟩ := signingValue_inj.mp same
+  have back := congrArg (ofValue (α := α)) valued
+  rw [LawfulSszType.ofValue_toValue, LawfulSszType.ofValue_toValue] at back
+  rw [Except.ok.inj back, domained]
+
+/-- The inputs of the binary hashes that the signing root of an object computes in a domain.
+
+They are the messages of the tree of the signing data, with the object in place of its root.
+
+So they hold the messages of the tree of the object too. -/
+def signingMessages {α : Type} [SszType α] (object : α) (domain : Domain) : List Bytes :=
+  valueMessages (signingShape (desc α)) (signingValue (toValue object) domain)
+
+/-- Two different objects of one type have two different signing roots, or SHA-256 collides.
+
+The collision is between messages of their two signing roots.
+
+The domains may differ.
+
+It needs every variable-size count in both objects to fit its 256-bit word, and a lawful type. -/
+theorem computeSigningRoot_ne_or_collision {α : Type} [SszType α] [LawfulSszType α]
+    {first second : α}
+    {firstDomain secondDomain : Domain} {firstRoot secondRoot : Root}
+    (firstSized : CommitmentSized (desc α) (toValue first))
+    (secondSized : CommitmentSized (desc α) (toValue second))
+    (differ : first ≠ second)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x ∈ signingMessages first firstDomain,
+      ∃ y ∈ signingMessages second secondDomain, MessageCollision x y := by
+  by_cases same : firstRoot = secondRoot
+  · subst same
+    -- Equal roots of two different pairs are one root of two different signing values.
+    obtain ⟨valuesDiffer, firstRooted, secondRooted⟩ :=
+      signingValues_of_computeSigningRoot_eq (fun pairs => differ (Prod.mk.inj pairs).1)
+        firstSigned secondSigned
+    -- Two values of one type with one root are equal, or two messages of their trees collide.
+    rcases hashTreeRoot_binding ((wellFormed_signingShape_iff _).mpr LawfulSszType.wellFormed)
+        (fits_signingValue_iff.mpr (LawfulSszType.fits first))
+        (fits_signingValue_iff.mpr (LawfulSszType.fits second))
+        (commitmentSized_signingValue_iff.mpr firstSized)
+        (commitmentSized_signingValue_iff.mpr secondSized) firstRooted secondRooted with
+      equal | ⟨firstTree, secondTree, firstOk, secondOk, a, b, -, aMember, bMember, collision⟩
+    · exact absurd equal valuesDiffer
+    · refine .inr ⟨a, ?_, b, ?_, collision⟩
+      · rw [signingMessages, valueMessages_of_valueTree firstOk]
+        exact aMember
+      · rw [signingMessages, valueMessages_of_valueTree secondOk]
+        exact bMember
+  · exact .inl same
+
+/-- The inputs of the binary hashes in the root of the signing data of an object root and a domain.
+
+They are those of the tree of the signing data, which holds the object root and the domain. -/
+def signingDataMessages (objectRoot : Root) (domain : Domain) : List Bytes :=
+  valueMessages (desc SigningData) (toValue (SigningData.mk objectRoot domain))
+
+/-- Every variable-size count of signing data fits its 256-bit word, since it has no list. -/
+private theorem signingData_commitmentSized (data : SigningData) :
+    CommitmentSized (desc SigningData) (toValue data) := by
+  refine .container fun pair member => ?_
+  simp [desc, toValue, SszFields.descs, SszFields.toValues] at member
+  repeat' rcases member with rfl | member
+  all_goals exact .byteVector _ _
+
+/-- Two objects signed in two different domains have different signing roots, or SHA-256 collides.
+
+The objects may be of two types, and the collision is between messages of their signing data. -/
+theorem computeSigningRoot_ne_or_collision_of_domain_ne {α β : Type} [SszType α]
+    [SszType β] {first : α} {second : β} {firstDomain secondDomain : Domain}
+    {firstObjectRoot secondObjectRoot firstRoot secondRoot : Root}
+    (differ : firstDomain ≠ secondDomain)
+    (firstObject : hashTreeRoot first = .ok firstObjectRoot)
+    (secondObject : hashTreeRoot second = .ok secondObjectRoot)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x ∈ signingDataMessages firstObjectRoot firstDomain,
+      ∃ y ∈ signingDataMessages secondObjectRoot secondDomain, MessageCollision x y := by
+  by_cases same : firstRoot = secondRoot
+  · subst same
+    -- Each signing root is the root of the signing data of its object root.
+    simp only [computeSigningRoot, firstObject, secondObject, bind, Except.bind]
+      at firstSigned secondSigned
+    -- Two signing data values with one root are equal, or two messages of their trees collide.
+    rcases hashTreeRoot_binding (signingData_commitmentSized _) (signingData_commitmentSized _)
+        firstSigned secondSigned with
+      equal | ⟨firstTree, secondTree, firstOk, secondOk, a, b, -, aMember, bMember, collision⟩
+    · exact absurd (SigningData.mk.inj equal).2 differ
+    · refine .inr ⟨a, ?_, b, ?_, collision⟩
+      · rw [signingDataMessages, valueMessages_of_valueTree firstOk]
+        exact aMember
+      · rw [signingDataMessages, valueMessages_of_valueTree secondOk]
+        exact bMember
+  · exact .inl same
+
+/-- Two objects signed under two domain types have two different signing roots, or SHA-256 collides.
+
+Each domain is that of its domain type, of any fork version and of any genesis validators root.
+
+So, unless the node hash collides, no signing root in one domain type is one in another.
+
+For instance, no attestation has the signing root of a deposit. -/
+theorem computeSigningRoot_ne_or_collision_of_domainType_ne {config : Config} {α β : Type}
+    [SszType α] [SszType β] {first : α} {second : β} {firstType secondType : DomainType}
+    {firstVersion secondVersion : Version} {firstGenesis secondGenesis : Root}
+    {firstDomain secondDomain : Domain}
+    {firstObjectRoot secondObjectRoot firstRoot secondRoot : Root}
+    (differ : firstType ≠ secondType)
+    (firstDomained :
+      computeDomain config firstType firstVersion firstGenesis = .ok firstDomain)
+    (secondDomained :
+      computeDomain config secondType secondVersion secondGenesis = .ok secondDomain)
+    (firstObject : hashTreeRoot first = .ok firstObjectRoot)
+    (secondObject : hashTreeRoot second = .ok secondObjectRoot)
+    (firstSigned : computeSigningRoot first firstDomain = .ok firstRoot)
+    (secondSigned : computeSigningRoot second secondDomain = .ok secondRoot) :
+    firstRoot ≠ secondRoot ∨ ∃ x ∈ signingDataMessages firstObjectRoot firstDomain,
+      ∃ y ∈ signingDataMessages secondObjectRoot secondDomain, MessageCollision x y :=
+  computeSigningRoot_ne_or_collision_of_domain_ne
+    (computeDomain_ne differ firstDomained secondDomained) firstObject secondObject firstSigned
+    secondSigned
 
 /-- Before Fulu, the fork digest is the first four bytes of the root of the fork data. -/
 theorem computeForkDigest_of_lt_fulu {config : Config} {genesisValidatorsRoot root : Root}

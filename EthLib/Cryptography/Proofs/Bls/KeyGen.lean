@@ -2,6 +2,7 @@ module
 
 public import EthLib.Cryptography.Bls.KeyGen
 public import EthLib.Cryptography.Proofs.Hash.Hkdf
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: BLS key generation
@@ -33,13 +34,6 @@ theorem keyGen_ikmTooShort {ikm : ByteArray} (h : ikm.size < 32) (keyInfo : Byte
   unfold keyGen
   simp only [h, ↓reduceIte]
 
-/-- A success relabelled and passed on is the value passed on.
-
-It is stated on variables, so the kernel never reduces a field element to compare two forms. -/
-private theorem mapError_ok_bind {ε ε' α β : Type} (f : ε → ε') (a : α)
-    (k : α → Except ε' β) : (Except.mapError f (.ok a) >>= k) = k a :=
-  rfl
-
 /-- The expansion of an attempt succeeds: its pseudorandom key has 32 bytes, and its output 48. -/
 theorem keyGenLoop_expand_ok (ikm keyInfo salt : ByteArray) :
     ∃ okm, Hkdf.expand (Hkdf.extract (Sha256.hash salt) (ikm ++ HashToCurve.i2osp 0 1))
@@ -56,7 +50,7 @@ theorem keyGenLoop_succ_of_ne_zero {ikm keyInfo salt okm : ByteArray} (attempts 
       (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L = .ok okm)
     (h : Fr.ofNat (Base.bytesToNat okm.data.toList) ≠ 0) :
     keyGenLoop ikm keyInfo salt (attempts + 1) = .ok ⟨_, h⟩ := by
-  rw [keyGenLoop, hokm, mapError_ok_bind]
+  rw [keyGenLoop, hokm, Base.mapError_ok_bind]
   dsimp only
   split
   · exact absurd ‹_› h
@@ -73,7 +67,7 @@ theorem keyGenLoop_succ_of_eq_zero {ikm keyInfo salt okm : ByteArray} (attempts 
     (h : Fr.ofNat (Base.bytesToNat okm.data.toList) = 0) :
     keyGenLoop ikm keyInfo salt (attempts + 1) =
       keyGenLoop ikm keyInfo (Sha256.hash salt) attempts := by
-  rw [keyGenLoop, hokm, mapError_ok_bind]
+  rw [keyGenLoop, hokm, Base.mapError_ok_bind]
   dsimp only
   split
   · rfl

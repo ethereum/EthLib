@@ -19,7 +19,7 @@ Core gives `Fin` its `+`, `-`, `*` and negation, all reduced mod the modulus.
 
 An inverse comes from the extended Euclidean algorithm.
 
-Point multiplication holds the coordinates of `Fp` in Montgomery limbs.
+Point multiplication and the power of `Fp` hold their values in Montgomery limbs.
 
 A square root is a power too, because `p = 3 mod 4`.
 
@@ -86,8 +86,12 @@ Each one derives from `p` and `R`, and is checked against its defining equation.
 /-- A base-field element held in eight Montgomery limbs. -/
 abbrev Montgomery := EthLib.Cryptography.Montgomery params
 
-/-- `a^e`, for an exponent below `2^256`. -/
-def pow (a : Fp) (e : Nat) : Fp := Fin.powBits 256 a e
+/-- `a^e`, for an exponent below `2^256`.
+
+The exponent is cut into eight limbs, and the products run on Montgomery limbs. -/
+def pow (a : Fp) (e : Nat) : Fp :=
+  Montgomery.toFin
+    (Montgomery.powLimbs (Montgomery.ofFin (M := params) a) (Montgomery.Limbs.ofNat e))
 
 /-- The inverse of `a`, by the extended Euclidean algorithm.
 

@@ -431,6 +431,26 @@ theorem noRepeat_internalize_memoAdv (adversary : Adversary) :
   rw [← Memo.internalize_memoAdv]
   exact ForsPotential.noRepeat_internalize_adversary _ (Memo.memoAdv_noRepeat adversary)
 
+omit [Params] in
+/-- A run whose results all cost at most `q` keeps that bound after four draws. -/
+private theorem traceCost_le_of_run {S A T R : Type} (seeds : ProbComp S) (answersOf : ProbComp A)
+    (tables : ProbComp T) (randomizers : ProbComp R)
+    (run : A → T → R → ProbComp (Option Bool × List (Entry HashInput))) (q : Nat)
+    (bounded : ∀ answers table rnd, ∀ result ∈ support (run answers table rnd),
+      traceCost result.2 ≤ q) :
+    ∀ pair ∈ support (do
+        let seed ← seeds
+        let answers ← answersOf
+        let table ← tables
+        let rnd ← randomizers
+        (fun result => (seed, result)) <$> run answers table rnd :
+        ProbComp (S × (Option Bool × List (Entry HashInput)))),
+      traceCost pair.2.2 ≤ q := by
+  intro pair hpair
+  simp only [mem_support_bind_iff, support_map, Set.mem_image] at hpair
+  obtain ⟨_, _, _, _, _, _, _, _, result, hresult, rfl⟩ := hpair
+  exact bounded _ _ _ result hresult
+
 attribute [local irreducible] experiment sampleMasterSeed
 
 /-- Seed elimination from a uniform `SK.seed`.
@@ -617,10 +637,9 @@ theorem budgetedWinMaster_le_seedFree (adversary : Adversary) (q : Nat) (B : ℝ
                     rnd :
                 ProbComp (MasterSeed × (Option Bool × List (Entry HashInput)))),
               traceCost pair.2.2 ≤ q := by
-            intro pair hpair
-            simp only [mem_support_bind_iff, support_map, Set.mem_image] at hpair
-            obtain ⟨_, _, _, _, _, _, _, _, result, hresult, rfl⟩ := hpair
-            exact costRun_cap_cost_le _ _ _ q result hresult
+            -- The kernel would run the sampling to match it, so a lemma for any sampling decides.
+            exact traceCost_le_of_run _ _ _ _ _ q fun _ _ _ result hresult =>
+              costRun_cap_cost_le _ _ _ q result hresult
           exact le_trans (marked_hit_le (S := HashOutput)
             (Ω := MasterSeed × (Option Bool × List (Entry HashInput)))
             ($ᵗ HashOutput) (fun key input => RandHit input key)

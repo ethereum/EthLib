@@ -3,7 +3,6 @@ module
 public import EthLib.Consensus.Proofs.Transition.Invariants
 public import EthLib.Consensus.Proofs.Transition.ParentPayload
 import EthLib.Consensus.Proofs.Transition.Operations
-import EthLib.Consensus.Proofs.Transition.EpochParticipation
 
 /-!
 # Proofs: what the checks of a payload and of a bid read
@@ -20,11 +19,13 @@ From Fulu the header step also reads the proposer lookahead, so these fields inc
 
 Most steps of a block keep all of these fields, when they succeed.
 
-Several steps of an epoch keep them too, and so does a pending deposit.
+The stages of an epoch before the RANDAO reset keep them, and so does a pending deposit.
 
 The withdrawals keep them, and from Gloas so do the requests of a parent payload.
 
-The sync aggregate and the vote on the deposit contract keep them, and from Gloas the operations.
+The operations keep them at every fork.
+
+The sync aggregate from Altair and the vote on the deposit contract before Heze keep them too.
 
 A full parent changes only the latest block hash among them, and the header step only the header.
 
@@ -89,14 +90,6 @@ theorem PayloadInputs.trans {first second third : BeaconState preset fork}
     two.latestBlockHash.trans one.latestBlockHash,
     two.latestExecutionPayloadBid.trans one.latestExecutionPayloadBid,
     two.proposerLookahead.trans one.proposerLookahead⟩
-
-/-- A fold whose every step keeps the inputs of a payload keeps them. -/
-theorem PayloadInputs.foldlM {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (kept : ∀ s x s', step s x = .ok s' → PayloadInputs s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : PayloadInputs state after :=
-  foldlM_ok_invariant (PayloadInputs state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
-    (PayloadInputs.refl state) computed
 
 /-! ## Mutators -/
 
@@ -180,97 +173,71 @@ theorem payloadInputs_slashValidator {slashedIndex : ValidatorIndex}
     (payloadInputs_increaseBalance lastOk).trans cancelled
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A pending deposit keeps the inputs of a payload. -/
-theorem payloadInputs_applyPendingDeposit {deposit : PendingDeposit}
-    (computed : applyPendingDeposit config checks state deposit = .ok after) :
-    PayloadInputs state after := by
-  rcases applyPendingDeposit_cases computed with rfl | ⟨_, raised⟩ | ⟨-, added⟩
-  · exact PayloadInputs.refl _
-  · exact payloadInputs_increaseBalance raised
-  · exact payloadInputs_addValidatorToRegistry added
-
 /-! ## Steps of an epoch -/
 
-/-- The inactivity updates keep the inputs of a payload. -/
-theorem payloadInputs_processInactivityUpdates {altair : .altair ≤ fork}
-    (computed : processInactivityUpdates config state altair = .ok after) :
-    PayloadInputs state after := by
-  rw [processInactivityUpdates_frame computed]
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+/-- The inputs of a payload satisfy the frame base laws of the epoch steps.
 
-/-- The registry updates keep the inputs of a payload. -/
-theorem payloadInputs_processRegistryUpdates
-    (computed : processRegistryUpdates config state = .ok after) : PayloadInputs state after := by
-  unfold processRegistryUpdates at computed
-  split at computed
-  · simp only [bind_ok_iff, liftAccessor_ok] at computed
-    obtain ⟨_, _, computed⟩ := computed
-    refine PayloadInputs.foldlM (fun _ _ _ ok => ?_) computed
-    simp only [updateRegistryEntryElectra, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, ok⟩ := ok
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, set⟩ := ok
-      exact payloadInputs_setValidatorAt set
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact payloadInputs_initiateValidatorExit exited
-    split at ok
-    · exact payloadInputs_setValidatorAt (liftAccessor_ok.mp ok)
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ PayloadInputs.refl _
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, updatedOk, activated⟩ := computed
-  refine (PayloadInputs.foldlM (fun _ _ _ ok => ?_) updatedOk).trans
-    (PayloadInputs.foldlM (fun _ _ _ ok => ?_) activated)
-  · simp only [updateRegistryEntry, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, _, markedOk, ok⟩ := ok
-    have set := payloadInputs_setValidatorAt markedOk
-    split at ok
-    · simp only [bind_ok_iff, liftAccessor_ok] at ok
-      obtain ⟨_, _, exited⟩ := ok
-      exact set.trans (payloadInputs_initiateValidatorExit exited)
-    · simp only [pure, Except.pure, Except.ok.injEq] at ok
-      exact ok ▸ set
-  · simp only [activateValidator, bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, _, _, _, set⟩ := ok
-    exact payloadInputs_setValidator set
+Those laws leave out a write of the mixes or of the lookahead, which would change these inputs. -/
+theorem payloadInputsLaws : EpochFrameBaseLaws (@PayloadInputs preset fork) where
+  refl := PayloadInputs.refl
+  trans := PayloadInputs.trans
+  setValidatorAt set _ _ _ _ _ := payloadInputs_setValidatorAt set
+  increaseBalance := payloadInputs_increaseBalance
+  decreaseBalance := payloadInputs_decreaseBalance
+  initiateValidatorExit := payloadInputs_initiateValidatorExit
+  eth1DataVotes _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  inactivityScores _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  slashings _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalRoots _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  historicalSummaries _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  participationRecords _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  pendingConsolidations _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  syncCommittees _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ptcWindow _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  addValidatorToRegistry added _ := payloadInputs_addValidatorToRegistry added
+  pendingDeposits _ _ _ := ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- A pass over the pending deposits keeps the inputs of a payload. -/
-theorem payloadInputs_passPendingDeposits {stop : PendingDeposit → Bool} {nextEpoch : Epoch}
-    {available : Gwei} :
-    ∀ {deposits : List PendingDeposit} {state : BeaconState preset fork} {processed : Gwei}
-      {count : Nat} {postponed : Array PendingDeposit} {pass},
-      passPendingDeposits config checks stop nextEpoch available state processed count postponed
-        deposits = .ok pass →
-      PayloadInputs state pass.1.state :=
-  fun computed => passPendingDeposits_of PayloadInputs PayloadInputs.refl
-    (fun one two => one.trans two) (fun ok => payloadInputs_applyPendingDeposit ok) computed
+/-- A fold whose every step keeps the inputs of a payload keeps them. -/
+theorem PayloadInputs.foldlM {α ε : Type}
+    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
+    (kept : ∀ s x s', step s x = .ok s' → PayloadInputs s s') {items : List α}
+    (computed : items.foldlM step state = .ok after) : PayloadInputs state after :=
+  payloadInputsLaws.foldlM kept computed
 
-/-- A pass over the pending consolidations keeps the inputs of a payload. -/
-theorem payloadInputs_passPendingConsolidations {nextEpoch : Epoch} :
-    ∀ {consolidations : List PendingConsolidation} {state : BeaconState preset fork}
-      {result : BeaconState preset fork × Nat},
-      passPendingConsolidations nextEpoch state consolidations = .ok result →
-      PayloadInputs state result.1 :=
-  fun computed => (passPendingConsolidations_of PayloadInputs PayloadInputs.refl
-    (fun one two => one.trans two) (fun _ => True)
-    (fun _ _ _ lowered raised =>
-      (payloadInputs_decreaseBalance lowered).trans (payloadInputs_increaseBalance raised))
-    (fun _ _ => trivial) computed).2
-
-/-- The historical summaries update keeps the inputs of a payload. -/
-theorem payloadInputs_processHistoricalSummariesUpdate {capella : .shapella ≤ fork}
-    (computed : processHistoricalSummariesUpdate state capella = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨-, rest⟩ := processHistoricalSummariesUpdate_eq computed
-  split at rest
-  · obtain ⟨_, _, _, _, _, same⟩ := rest
-    rw [← same]
+/-- The stages of an epoch before the RANDAO reset keep the inputs of a payload. -/
+theorem payloadInputs_epochPrefix {config : Config} {checks : SignatureChecks}
+    {state cleared : BeaconState preset fork}
+    (trace : EpochTrace (EpochStage.action config checks)
+      (EpochStage.prefixStages ++ [.payments, .effectiveBalances, .slashingsReset]) state cleared) :
+    PayloadInputs state cleared := by
+  apply trace.transport PayloadInputs PayloadInputs.refl (fun one two => one.trans two)
+  intro k member a b ok
+  have edge := EpochStage.action_cases.mp ok
+  cases k <;> simp only [EpochStage.Edge] at edge
+  · rw [processJustificationAndFinalization_eq edge]
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · subst rest
-    exact PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processInactivityUpdates edge
+    · exact edge ▸ PayloadInputs.refl _
+  · exact payloadInputsLaws.processRewardsAndPenalties edge
+  · exact payloadInputsLaws.processRegistryUpdates edge
+  · exact payloadInputsLaws.processSlashings edge
+  · split at edge
+    · exact payloadInputsLaws.processEth1DataReset edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processPendingDeposits edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · exact payloadInputsLaws.processPendingConsolidations edge
+    · exact edge ▸ PayloadInputs.refl _
+  · split at edge
+    · rw [processBuilderPendingPayments_eq edge]
+      exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    · exact edge ▸ PayloadInputs.refl _
+  · exact payloadInputsLaws.processEffectiveBalanceUpdates edge
+  · exact payloadInputsLaws.processSlashingsReset edge
+  all_goals simp [EpochStage.prefixStages] at member
 
 /-! ## The requests of a parent payload -/
 
@@ -342,6 +309,20 @@ theorem payloadInputs_processConsolidationRequest {electra : .pectra ≤ fork}
   · exact PayloadInputs.refl _
   · exact payloadInputs_switchToCompoundingValidator switched
   · exact payloadInputs_queueConsolidation queued
+
+/-- From Electra to Fulu, the requests of the execution layer keep the inputs of a payload. -/
+theorem payloadInputs_processExecutionRequests {body : BeaconBlockBody preset fork}
+    {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
+    (computed : processExecutionRequests config state body electra = .ok after) :
+    PayloadInputs state after := by
+  simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at computed
+  obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := computed
+  exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processDepositRequest ok)
+      depositsOk).trans <|
+    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processWithdrawalRequest ok)
+      withdrawalsOk).trans <|
+    PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processConsolidationRequest ok)
+      consolidationsOk
 
 theorem payloadInputs_processBuilderDepositRequest {request : BuilderDepositRequest}
     (computed : processBuilderDepositRequest config checks state gloas request = .ok after) :
@@ -539,58 +520,39 @@ theorem payloadInputs_processAttestation {attestation : Attestation preset fork}
     rw [← rest]
     exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-theorem payloadInputs_processVoluntaryExit {signed : SignedVoluntaryExit}
-    (computed : processVoluntaryExit config checks state signed = .ok after) :
+/-- A deposit keeps the inputs of a payload. -/
+theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
+    (computed : processDeposit config checks before state deposit = .ok after) :
     PayloadInputs state after := by
-  unfold processVoluntaryExit at computed
-  simp only [bind_ok_iff, ensure_ok_iff, liftAccessor_ok, liftSsz_ok] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, exited⟩ := computed
-  exact payloadInputs_initiateValidatorExit exited
+  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
+  refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
+  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
+  · exact PayloadInputs.refl _
+  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact (payloadInputs_addValidatorToRegistry added).trans
+      ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  · exact payloadInputsLaws.applyPendingDeposit applied
 
-theorem payloadInputs_processBlsToExecutionChange {signed : SignedBLSToExecutionChange}
-    (computed : processBlsToExecutionChange config checks state signed = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨_, _, _, _, _, set⟩ := processBlsToExecutionChange_ok computed
-  exact payloadInputs_setValidator set
-
-/-- From Gloas the operations of a block keep the inputs of a payload. -/
-theorem payloadInputs_processOperations (gloas : .glamsterdam ≤ fork)
-    {body : BeaconBlockBody preset fork} {parentSlot : Slot}
+/-- The operations of a block keep the inputs of a payload, at every fork. -/
+theorem payloadInputs_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
     (computed : processOperations config checks state body parentSlot = .ok after) :
     PayloadInputs state after := by
-  simp only [processOperations, gloas, ↓reduceDIte, processOperationsGloas, bind_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, proposersOk, _, attestersOk, _,
-    attestedOk, _, exitsOk, _, changesOk, paid⟩ := computed
+  obtain ⟨_, _, _, proposersOk, attestersOk, attestedOk, rest⟩ :=
+    processOperations_folds_of PayloadInputs PayloadInputs.refl (fun one two => one.trans two)
+      (fun ok => payloadInputs_processDeposit ok)
+      (fun ok => payloadInputsLaws.processVoluntaryExit ok)
+      (fun ok => payloadInputsLaws.processBlsToExecutionChange ok)
+      (fun ok => payloadInputs_processExecutionRequests ok)
+      (fun ok => by
+        rw [processPayloadAttestation_eq ok]
+        exact PayloadInputs.refl _) computed
   exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processProposerSlashing ok)
       proposersOk).trans <|
     (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processAttesterSlashing ok)
       attestersOk).trans <|
     (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processAttestation ok)
-      attestedOk).trans <|
-    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processVoluntaryExit ok) exitsOk).trans <|
-    (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processBlsToExecutionChange ok)
-      changesOk).trans <|
-    PayloadInputs.foldlM (fun _ _ _ ok => by
-      rw [processPayloadAttestation_eq ok]
-      exact PayloadInputs.refl _) paid
-
-/-- The sync aggregate keeps the inputs of a payload. -/
-theorem payloadInputs_processSyncAggregate {altair : .altair ≤ fork}
-    {aggregate : SyncAggregate preset}
-    (computed : processSyncAggregate config checks state altair aggregate = .ok after) :
-    PayloadInputs state after := by
-  unfold processSyncAggregate at computed
-  simp only [bind_ok_iff] at computed
-  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, folded⟩ := computed
-  rw [← Array.foldlM_toList] at folded
-  refine PayloadInputs.foldlM (fun _ _ _ ok => ?_) folded
-  unfold applySyncReward at ok
-  split at ok
-  · simp only [bind_ok_iff, liftAccessor_ok] at ok
-    obtain ⟨_, raised, _, _, paid⟩ := ok
-    exact (payloadInputs_increaseBalance raised).trans (payloadInputs_increaseBalance paid)
-  · exact payloadInputs_decreaseBalance (liftAccessor_ok.mp ok)
+      attestedOk).trans rest
 
 /-- The vote on the deposit contract keeps the inputs of a payload. -/
 theorem payloadInputs_processEth1Data {before : fork < .hegota}
@@ -774,8 +736,8 @@ theorem processBlock_steps (gloas : .glamsterdam ≤ fork) {block : BeaconBlock 
     · exact payloadInputs_processEth1Data (votedOk before)
     · rw [kept (Nat.le_of_not_lt before)]
       exact PayloadInputs.refl _
-  have rest := voting.trans <| (payloadInputs_processOperations gloas operatedOk).trans <|
-    payloadInputs_processSyncAggregate synced
+  have rest := voting.trans <| (payloadInputs_processOperations operatedOk).trans <|
+    payloadInputsLaws.processSyncAggregate synced
   exact ⟨parented, headed, withdrawn, bidded, _, parentOk, headedOk, withdrawnOk, biddedOk,
     rest.slot.trans randao.slot, rest.latestBlockHeader.trans randao.latestBlockHeader,
     rest.latestBlockHash.trans randao.latestBlockHash,
@@ -813,56 +775,6 @@ theorem latestBlockHash_processBlock (gloas : .glamsterdam ≤ fork)
     checkExecutionPayloadBid_ok_iff.mp (processExecutionPayloadBid_ok bid).1
   rw [hash, kept, latestExecutionPayloadBid_processExecutionPayloadBid bid, parentHash]
   exact congrFun (payloadInputs_processExecutionPayloadBid bid).latestBlockHash gloas
-
-/-- The operations of a block keep the latest block header, at every fork.
-
-Before Gloas the deposits and, from Electra, the requests of the execution layer run too. -/
-private theorem latestBlockHeader_processOperations {body : BeaconBlockBody preset fork}
-    {parentSlot : Slot}
-    (computed : processOperations config checks state body parentSlot = .ok after) :
-    after.latestBlockHeader = state.latestBlockHeader := by
-  have fold {α ε : Type} {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-      (kept : ∀ s x t, step s x = .ok t → t.latestBlockHeader = s.latestBlockHeader)
-      {s t : BeaconState preset fork} {items : List α} (ok : items.foldlM step s = .ok t) :
-      t.latestBlockHeader = s.latestBlockHeader :=
-    foldlM_ok_invariant (fun t => t.latestBlockHeader = s.latestBlockHeader)
-      (fun _ _ _ before ok => (kept _ _ _ ok).trans before) rfl ok
-  by_cases gloas : .glamsterdam ≤ fork
-  · exact (payloadInputs_processOperations gloas computed).latestBlockHeader
-  simp only [processOperations, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposers, _, attesters, _, attestations, _, deposits, exited, exits,
-    changed, changes, requests⟩ := computed
-  have changesKept : changed.latestBlockHeader = exited.latestBlockHeader := by
-    unfold processBlsToExecutionChanges at changes
-    split at changes
-    · rw [← Array.foldlM_toList] at changes
-      exact fold (fun _ _ _ ok => (payloadInputs_processBlsToExecutionChange ok).latestBlockHeader)
-        changes
-    · cases changes
-      rfl
-  have requestsKept : after.latestBlockHeader = changed.latestBlockHeader := by
-    split at requests
-    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requests
-      obtain ⟨_, deposited, _, withdrawn, consolidated⟩ := requests
-      exact (fold (fun _ _ _ ok =>
-        (payloadInputs_processConsolidationRequest ok).latestBlockHeader) consolidated).trans <|
-        (fold (fun _ _ _ ok =>
-          (payloadInputs_processWithdrawalRequest ok).latestBlockHeader) withdrawn).trans <|
-        fold (fun _ _ _ ok => (payloadInputs_processDepositRequest ok).latestBlockHeader) deposited
-    · cases requests
-      rfl
-  exact requestsKept.trans <| changesKept.trans <|
-    (fold (fun _ _ _ ok => (payloadInputs_processVoluntaryExit ok).latestBlockHeader)
-      exits).trans <|
-    (fold (fun _ _ _ ok => by
-      obtain ⟨_, _, _, _, applied⟩ := processDeposit_ok ok
-      exact (frame_applyDeposit applied).latestBlockHeader) deposits).trans <|
-    (fold (fun _ _ _ ok => (payloadInputs_processAttestation ok).latestBlockHeader)
-      attestations).trans <|
-    (fold (fun _ _ _ ok => (payloadInputs_processAttesterSlashing ok).latestBlockHeader)
-      attesters).trans <|
-    fold (fun _ _ _ ok => (payloadInputs_processProposerSlashing ok).latestBlockHeader) proposers
 
 /-- The execution part of a block keeps the latest block header. -/
 private theorem latestBlockHeader_processBlockExecution {body : BeaconBlockBody preset fork}
@@ -925,8 +837,8 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
         · cases votedOk
           rfl
       exact ⟨state, headed, rfl, rfl, headedOk,
-        (payloadInputs_processSyncAggregate synced).latestBlockHeader.trans <|
-          (latestBlockHeader_processOperations operatedOk).trans <| votedKept.trans <|
+        (payloadInputsLaws.processSyncAggregate synced).latestBlockHeader.trans <|
+          (payloadInputs_processOperations operatedOk).latestBlockHeader.trans <| votedKept.trans <|
           (payloadInputs_processRandao revealedOk).latestBlockHeader.trans executedKept⟩
     · rename_i notAltair
       have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
@@ -937,7 +849,7 @@ private theorem processBlock_header_split {block : BeaconBlock preset fork}
         bind_assoc, bind_ok_iff] at computed
       obtain ⟨headed, headedOk, revealed, revealedOk, voted, votedOk, operatedOk⟩ := computed
       exact ⟨state, headed, rfl, rfl, headedOk,
-        (latestBlockHeader_processOperations operatedOk).trans <|
+        (payloadInputs_processOperations operatedOk).latestBlockHeader.trans <|
           (payloadInputs_processEth1Data votedOk).latestBlockHeader.trans
             (payloadInputs_processRandao revealedOk).latestBlockHeader⟩
 
@@ -969,20 +881,5 @@ theorem processBlock_parentRoot {block : BeaconBlock preset fork}
   obtain ⟨atSlot, newer, -, parent, -⟩ := processBlockHeader_checks headedOk
   rw [header] at newer parent
   exact ⟨atSlot.trans slot, newer, parent⟩
-
-/-- From Electra, a deposit keeps the inputs of a payload. -/
-theorem payloadInputs_processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (electra : .pectra ≤ fork)
-    (computed : processDeposit config checks before state deposit = .ok after) :
-    PayloadInputs state after := by
-  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  refine PayloadInputs.trans (second := { state with eth1DepositIndex := fun _ => next })
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ ?_
-  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨early, _⟩
-  · exact PayloadInputs.refl _
-  · exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact (payloadInputs_addValidatorToRegistry added).trans
-      ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
-  · exact absurd electra (Nat.not_le_of_lt early)
 
 end EthLib.Consensus

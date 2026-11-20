@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Base.Proofs.Bytes
 public import EthLib.Consensus.BeaconApi.Encoding
 public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.Proofs.ConsensusVersion
@@ -106,7 +107,7 @@ theorem readKey_mkObj {β : Type} {pairs : List (String × Json)}
 /-- A root reads back from its hex. -/
 theorem readRoot_toHex (r : Root) :
     ApiEnvelope.readRoot (.str (toHex r.toArray)) = some r := by
-  simp [ApiEnvelope.readRoot, Base.exactBytes?, Base.exactArray?, ofHex_toHex]
+  simp [ApiEnvelope.readRoot, Base.exactBytes?, Base.exactArray?_toArray, ofHex_toHex]
 
 /-- An envelope reads back as written. -/
 theorem ApiEnvelope.ofJson_toJson (envelope : ApiEnvelope) :

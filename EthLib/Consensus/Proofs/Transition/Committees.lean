@@ -1104,49 +1104,6 @@ private theorem keeps_processJustificationAndFinalization
     exact Keeps.of_eq (by rw [← rest]) (by rw [← rest]) (by rw [← rest]) (by rw [← rest])
       (by rw [← rest])
 
-/-! ## Steps that keep the RANDAO mixes and the slot, at every fork -/
-
-/-- Justification and finalization keep the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processJustificationAndFinalization
-    (computed : processJustificationAndFinalization state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processJustificationAndFinalization computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
-/-- The rewards and penalties of an epoch keep the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processRewardsAndPenalties
-    (computed : processRewardsAndPenalties config state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processRewardsAndPenalties computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
-/-- The slashing penalties of an epoch keep the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processSlashings (computed : processSlashings state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processSlashings computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
-/-- The reset of the deposit votes keeps the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processEth1DataReset {hegota : fork < .hegota}
-    (computed : processEth1DataReset hegota state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processEth1DataReset computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
-/-- The updates of the effective balances keep the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processEffectiveBalanceUpdates
-    (computed : processEffectiveBalanceUpdates state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processEffectiveBalanceUpdates computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
-/-- The update of the historical roots keeps the RANDAO mixes and the slot. -/
-theorem randaoMixes_slot_processHistoricalRootsUpdate
-    (computed : processHistoricalRootsUpdate state = .ok after) :
-    after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot :=
-  have keeps := keeps_processHistoricalRootsUpdate computed
-  ⟨keeps.1.1, keeps.2.2⟩
-
 /-! ## Steps that keep the slot and activity, at every fork -/
 
 /-- A balance increase keeps the slot and activity. -/

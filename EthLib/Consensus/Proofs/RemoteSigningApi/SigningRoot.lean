@@ -8,6 +8,7 @@ public import EthLib.Consensus.Proofs.Transition.Operations
 public import EthLib.Consensus.Transition.BuilderRequests
 public import EthLib.Consensus.HonestBuilder
 public import EthLib.Consensus.Proofs.Signing
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: the root of each request is the root that its duty signs
@@ -60,8 +61,12 @@ theorem signAtEpoch_eq_of_forkInfoDomain {α : Type} [SszType α] {domainType : 
       (Signatures.sign key (packBytes root)).mapError .bls := by
   subst forked
   obtain ⟨domain, domained, rooted⟩ := bind_ok_iff.mp rooted
-  simp [signAtEpoch, getDomain_eq_forkInfoDomain, domained, rooted, bind, Except.bind,
-    Except.mapError]
+  have got : getDomain config state domainType (some epoch) = .ok domain := by
+    rw [getDomain_eq_forkInfoDomain, domained]
+    rfl
+  -- Rewrite each step that succeeds, so the kernel never evaluates the signing call.
+  unfold signAtEpoch
+  rw [got, mapError_ok_bind, rooted, mapError_ok_bind]
 
 /-! ## The duties of a validator -/
 
@@ -274,8 +279,13 @@ theorem getExecutionPayloadBidSignature_eq_of_requestSigningRoot
   obtain ⟨domain, domained, rooted⟩ := bind_ok_iff.mp rooted
   simp only [requestDomain, SigningRequest.type, RequestType.domainType, forked] at domained
   simp only at rooted
-  simp [getExecutionPayloadBidSignature, builderSigningRoot, liftAccessor, liftSsz,
-    getDomain_eq_forkInfoDomain, domained, rooted, bind, Except.bind, Except.mapError]
+  have built : builderSigningRoot config state body (some (computeEpochAtSlot preset body.slot)) =
+      .ok root := by
+    simp [builderSigningRoot, liftAccessor, liftSsz, getDomain_eq_forkInfoDomain, domained,
+      rooted, bind, Except.bind, Except.mapError]
+  -- Rewrite the root before the signing call, so the kernel never evaluates the call.
+  unfold getExecutionPayloadBidSignature
+  rw [built, mapError_ok_bind]
 
 /-- The root of an envelope is the root of the builder's envelope signature.
 
@@ -303,8 +313,13 @@ theorem getExecutionPayloadEnvelopeSignature_eq_of_requestSigningRoot
       (some (computeEpochAtSlot preset state.slot)) = .ok domain := by
     rw [getDomain_eq_forkInfoDomain]
     simp [forkInfoDomain, ForkInfo.ofState, Except.mapError, domained]
-  simp [getExecutionPayloadEnvelopeSignature, builderSigningRoot, liftAccessor, liftSsz, current,
-    rooted, bind, Except.bind, Except.mapError]
+  have built : builderSigningRoot config state body (some (computeEpochAtSlot preset state.slot)) =
+      .ok root := by
+    simp [builderSigningRoot, liftAccessor, liftSsz, current, rooted, bind, Except.bind,
+      Except.mapError]
+  -- Rewrite the root before the signing call, so the kernel never evaluates the call.
+  unfold getExecutionPayloadEnvelopeSignature
+  rw [built, mapError_ok_bind]
 
 /-- The root of the data of a payload attestation is the root its member signs. -/
 theorem getPayloadAttestationMessageSignature_eq_of_requestSigningRoot

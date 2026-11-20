@@ -243,12 +243,10 @@ def decodeList (shortConnectionIdLength : Nat) : Reader Header := do
         let rest ← remainder
         require (16 < rest.length) .packetLength
         let token := rest.take (rest.length - 16)
-        let tag := rest.drop (rest.length - 16)
-        if h : tag.length = 16 then
-          return .retry destination source token.toByteArray
-            ⟨tag.toArray, by simpa using h⟩
-            ⟨first.toNat % 16, Nat.mod_lt _ (by decide)⟩
-        else throw (.truncated 16 tag.length)
+        let tag ← StateT.lift
+          (Base.exactArray 16 (rest.drop (rest.length - 16)).toArray (.truncated 16))
+        return .retry destination source token.toByteArray tag
+          ⟨first.toNat % 16, Nat.mod_lt _ (by decide)⟩
       else
         require (first.toNat / 4 % 4 = 0) (.reservedBits first)
         if first.toNat / 16 % 4 = 0 then

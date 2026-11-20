@@ -38,19 +38,6 @@ private theorem Kept.trans {first second third : BeaconState preset fork}
     (one : Kept first second) (two : Kept second third) : Kept first third :=
   ⟨two.1.trans one.1, two.2.trans one.2⟩
 
-/-- A fold whose every step keeps the mixes and the slot keeps them. -/
-private theorem Kept.foldlM {α ε : Type}
-    {step : BeaconState preset fork → α → Except ε (BeaconState preset fork)}
-    (kept : ∀ s x s', step s x = .ok s' → Kept s s') {items : List α}
-    (computed : items.foldlM step state = .ok after) : Kept state after :=
-  foldlM_ok_invariant (Kept state) (fun _ _ _ before ok => before.trans (kept _ _ _ ok))
-    (Kept.refl state) computed
-
-/-- A step that keeps the mixes and the slot, as a pair of equalities. -/
-private theorem Kept.of_eq
-    (kept : after.randaoMixes = state.randaoMixes ∧ after.slot = state.slot) : Kept state after :=
-  kept
-
 /-- A step that keeps the inputs of a payload keeps the mixes and the slot. -/
 private theorem Kept.of_payloadInputs (inputs : PayloadInputs state after) : Kept state after :=
   ⟨inputs.randaoMixes, inputs.slot⟩
@@ -67,11 +54,8 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     (windowed : if gloas : .glamsterdam ≤ fork then processPtcWindow looked gloas = .ok after
       else looked = after) : Kept rooted after := by
   have flags : Kept rooted (processParticipationFlagUpdates rooted altair) := ⟨rfl, rfl⟩
-  have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced := by
-    unfold processSyncCommitteeUpdates at syncedOk
-    simp only [bind, Except.bind, pure, Except.pure] at syncedOk
-    repeat' (split at syncedOk <;> try cases syncedOk)
-    all_goals exact ⟨rfl, rfl⟩
+  have syncedKept : Kept (processParticipationFlagUpdates rooted altair) synced :=
+    Kept.of_payloadInputs (payloadInputsLaws.processSyncCommitteeUpdates syncedOk)
   have lookedKept : Kept synced looked := by
     split at lookedOk
     · simp only [processProposerLookahead, bind_ok_iff, pure, Except.pure,
@@ -81,9 +65,7 @@ private theorem kept_epochTail {altair : .altair ≤ fork}
     · exact lookedOk ▸ Kept.refl _
   have windowedKept : Kept looked after := by
     split at windowed
-    · simp only [processPtcWindow, bind_ok_iff, pure, Except.pure, Except.ok.injEq] at windowed
-      obtain ⟨_, _, _, _, rfl⟩ := windowed
-      exact ⟨rfl, rfl⟩
+    · exact Kept.of_payloadInputs (payloadInputsLaws.processPtcWindow windowed)
     · exact windowed ▸ Kept.refl _
   exact flags.trans <| syncedKept.trans <| lookedKept.trans windowedKept
 
@@ -103,47 +85,15 @@ private theorem processEpochAltair_mixesKeptBut {altair : .altair ≤ fork}
     simpa only [processEpoch, altair, ↓reduceDIte] using computed
   obtain ⟨cleared, mixed, rooted, rotated, synced, looked, initial, mixedOk, rootedOk, rotation,
     syncedOk, lookedOk, windowed⟩ := processEpoch_randaoCut epochOk
-  have head : Kept state cleared := by
-    apply initial.transport Kept Kept.refl (fun a b => a.trans b)
-    intro k member a b ok
-    have edge := EpochStage.action_cases.mp ok
-    cases k <;> simp only [EpochStage.Edge, altair, ↓reduceDIte] at edge
-    · exact Kept.of_eq (randaoMixes_slot_processJustificationAndFinalization edge)
-    · exact Kept.of_payloadInputs (payloadInputs_processInactivityUpdates edge)
-    · exact Kept.of_eq (randaoMixes_slot_processRewardsAndPenalties edge)
-    · exact Kept.of_payloadInputs (payloadInputs_processRegistryUpdates edge)
-    · exact Kept.of_eq (randaoMixes_slot_processSlashings edge)
-    · split at edge
-      · exact Kept.of_eq (randaoMixes_slot_processEth1DataReset edge)
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingDeposits at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        all_goals
-          exact (Kept.of_payloadInputs (payloadInputs_passPendingDeposits ‹_›)).trans ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · unfold processPendingConsolidations at edge
-        simp only [bind, Except.bind, pure, Except.pure] at edge
-        repeat' (split at edge <;> try cases edge)
-        exact (Kept.of_payloadInputs (payloadInputs_passPendingConsolidations ‹_›)).trans ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · split at edge
-      · rw [processBuilderPendingPayments_eq edge]
-        exact ⟨rfl, rfl⟩
-      · exact edge ▸ Kept.refl _
-    · exact Kept.of_eq (randaoMixes_slot_processEffectiveBalanceUpdates edge)
-    · obtain ⟨_, _, _, _, rfl⟩ := processSlashingsReset_eq edge
-      exact ⟨rfl, rfl⟩
-    all_goals simp [EpochStage.prefixStages] at member
+  have head : Kept state cleared := Kept.of_payloadInputs (payloadInputs_epochPrefix initial)
   have tail : Kept mixed after := by
     simp only [EpochStage.Edge, altair, ↓reduceDIte] at rootedOk rotation syncedOk lookedOk windowed
     subst rotation
     split at rootedOk
-    · exact (Kept.of_payloadInputs (payloadInputs_processHistoricalSummariesUpdate rootedOk)).trans
+    · exact (Kept.of_payloadInputs
+        (payloadInputsLaws.processHistoricalSummariesUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
-    · exact (Kept.of_eq (randaoMixes_slot_processHistoricalRootsUpdate rootedOk)).trans
+    · exact (Kept.of_payloadInputs (payloadInputsLaws.processHistoricalRootsUpdate rootedOk)).trans
         (kept_epochTail syncedOk lookedOk windowed)
   have epoch : getCurrentEpoch cleared = getCurrentEpoch state := by
     simp only [getCurrentEpoch, head.2]
@@ -194,60 +144,6 @@ theorem mixesKeptBut_advanceSlot (computed : advanceSlot config checks state = .
     rw [cachedMixes]
 
 /-! ## The steps of a block -/
-
-/-- A deposit of a block keeps the mixes and the slot. -/
-private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit}
-    (computed : processDeposit config checks before state deposit = .ok after) :
-    Kept state after := by
-  obtain ⟨_, _, next, _, applied⟩ := processDeposit_ok computed
-  have indexed : Kept state { state with eth1DepositIndex := fun _ => next } := ⟨rfl, rfl⟩
-  refine indexed.trans ?_
-  rcases applyDeposit_cases applied with rfl | ⟨_, _, _, rfl | added, rfl⟩ | ⟨_, applied⟩
-  · exact Kept.refl _
-  · exact ⟨rfl, rfl⟩
-  · exact (Kept.of_payloadInputs (payloadInputs_addValidatorToRegistry added)).trans ⟨rfl, rfl⟩
-  · exact Kept.of_payloadInputs (payloadInputs_applyPendingDeposit applied)
-
-/-- The operations of a block keep the mixes and the slot, at every fork. -/
-private theorem kept_processOperations {body : BeaconBlockBody preset fork} {parentSlot : Slot}
-    (computed : processOperations config checks state body parentSlot = .ok after) :
-    Kept state after := by
-  by_cases gloas : Fork.glamsterdam ≤ fork
-  · exact Kept.of_payloadInputs (payloadInputs_processOperations gloas computed)
-  simp only [processOperations, gloas, ↓reduceDIte, bind_ok_iff, ensure_ok_iff,
-    ← Array.foldlM_toList] at computed
-  obtain ⟨_, _, _, _, _, proposersOk, _, attestersOk, _, attestedOk, _, depositedOk, exited,
-    exitsOk, changed, changesOk, requestsOk⟩ := computed
-  have changes : Kept exited changed := by
-    unfold processBlsToExecutionChanges at changesOk
-    split at changesOk
-    · rw [← Array.foldlM_toList] at changesOk
-      exact Kept.foldlM (fun _ _ _ ok =>
-        Kept.of_payloadInputs (payloadInputs_processBlsToExecutionChange ok)) changesOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at changesOk
-      exact changesOk ▸ Kept.refl _
-  have requests : Kept changed after := by
-    split at requestsOk
-    · simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at requestsOk
-      obtain ⟨_, depositsOk, _, withdrawalsOk, consolidationsOk⟩ := requestsOk
-      exact (Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processDepositRequest ok)) depositsOk).trans <|
-        (Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processWithdrawalRequest ok)) withdrawalsOk).trans <|
-        Kept.foldlM (fun _ _ _ ok =>
-          Kept.of_payloadInputs (payloadInputs_processConsolidationRequest ok)) consolidationsOk
-    · simp only [pure, Except.pure, Except.ok.injEq] at requestsOk
-      exact requestsOk ▸ Kept.refl _
-  exact (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processProposerSlashing ok)) proposersOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processAttesterSlashing ok)) attestersOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processAttestation ok)) attestedOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok => kept_processDeposit ok) depositedOk).trans <|
-    (Kept.foldlM (fun _ _ _ ok =>
-      Kept.of_payloadInputs (payloadInputs_processVoluntaryExit ok)) exitsOk).trans <|
-    changes.trans requests
 
 /-- Two states with the same slot, whose RANDAO mixes agree except at the current epoch. -/
 private def Writes (state after : BeaconState preset fork) : Prop :=
@@ -306,8 +202,8 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
         exact Writes.refl _
     exact paidStep.trans <| (header headedOk).trans <| executedStep.trans <|
       (randao revealedOk).trans <| votedStep.trans <|
-      (Writes.of_kept (kept_processOperations operatedOk)).trans
-      (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processSyncAggregate synced)))
+      (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processOperations operatedOk))).trans
+      (Writes.of_kept (Kept.of_payloadInputs (payloadInputsLaws.processSyncAggregate synced)))
   rename_i notAltair
   have notGloas' : ¬ Fork.glamsterdam ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
   have notBellatrix' : ¬ Fork.bellatrix ≤ fork := fun h => notAltair (Nat.le_trans (by decide) h)
@@ -317,7 +213,7 @@ theorem mixesKeptBut_processBlock {block : BeaconBlock preset fork}
   obtain ⟨_, headerOk, _, randaoOk, _, eth1Ok, operationsOk⟩ := computed
   exact (header headerOk).trans <| (randao randaoOk).trans <|
     (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processEth1Data eth1Ok))).trans
-    (Writes.of_kept (kept_processOperations operationsOk))
+    (Writes.of_kept (Kept.of_payloadInputs (payloadInputs_processOperations operationsOk)))
 
 /-! ## Committees -/
 

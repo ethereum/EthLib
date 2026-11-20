@@ -127,7 +127,7 @@ theorem decodeOpening_isSome_iff (bytes : ByteArray) :
 /-- A root that is not 32 bytes is rejected. -/
 theorem verifyBytes_badRoot {root opening : ByteArray} {index : Nat}
     (h : root.size ≠ VRF_HASH_SIZE) : verifyBytes root index opening = none := by
-  simp [verifyBytes, Base.exactBytes?, Base.exactArray?, h]
+  simp [verifyBytes, Base.exactBytes?_of_size_ne h]
 
 /-- An index outside `[0, 2^32)` is rejected. -/
 theorem verifyBytes_badIndex {root opening : ByteArray} {index : Nat}

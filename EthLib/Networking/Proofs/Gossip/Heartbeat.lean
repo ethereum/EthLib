@@ -16,6 +16,8 @@ For every lawful choice of peers, and every rank and standing that a client pass
 - A joined topic whose mesh is between the bounds, once negative peers leave, keeps those peers.
   It adds only outbound peers that it may GRAFT, until it holds the outbound count or runs out.
 - No mesh holds a peer with a negative score.
+- A heartbeat keeps the explicit peers.
+  If no explicit peer is in a mesh before the heartbeat, none is after it.
 - A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
   It has fewer only when it held fewer once its negative peers left.
 - Every peer added to a mesh gets a GRAFT.
@@ -25,6 +27,7 @@ For every lawful choice of peers, and every rank and standing that a client pass
 - No IHAVE goes to a peer below the gossip threshold.
 - The gossip of a topic whose windows hold message IDs reaches its gossip share of the candidates.
 - A fanout topic not published to for longer than its lifetime is gone.
+- If no fanout holds a peer twice before a heartbeat, none does after it.
 
 The upper bounds and the outbound result of a pruned mesh need a target at most the high bound.
 
@@ -523,6 +526,27 @@ theorem heartbeat_no_negative (hsel : sel.Lawful) {t : String} {q : PeerId}
     exact this.1.2
   · simp at hq
 
+/-- A heartbeat keeps the explicit peers. -/
+theorem heartbeat_explicit_eq : (heartbeat p c sel rank standing now s).1.explicit = s.explicit :=
+  rfl
+
+/-- If no explicit peer is in a mesh before a heartbeat, none is after it.
+
+It needs a lawful choice. -/
+theorem heartbeat_explicit (hsel : sel.Lawful) (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
+    ∀ t, ∀ q ∈ peersOf (heartbeat p c sel rank standing now s).1.mesh t,
+      q ∉ (heartbeat p c sel rank standing now s).1.explicit := by
+  intro t q hq
+  rw [heartbeat_explicit_eq]
+  rw [mesh_eq] at hq
+  split at hq
+  · refine meshAfter_mem p c sel rank standing now s hsel t (· ∉ s.explicit)
+      (fun q hq => h t q ((mem_nonNegativeMesh standing s).1 hq).1) (fun m q hq => ?_) q hq
+    have hg := ((mem_graftCandidates standing now s).1 hq).2.1
+    simp only [graftable, Bool.and_eq_true, decide_eq_true_eq] at hg
+    exact hg.1.1
+  · simp at hq
+
 /-- A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
 
 It has fewer only when it held fewer once its negative peers left.
@@ -726,5 +750,84 @@ theorem heartbeat_fanout {t : String} (ht : lastPublished s t + p.fanout_ttl * 1
     dsimp only at he ⊢
     subst he
     simp only [ht, ↓reduceIte]
+
+/-- A key found after a map step that drops each key whole comes from the first entry of that key.
+
+The step must keep the key of every entry it keeps. -/
+private theorem lookup_filterMap_exists {β : Type} (l : List (String × β))
+    (f : String × β → Option (String × β)) (t : String)
+    (hf : ∀ e, f e = none ∨ ∃ v, f e = some (e.1, v))
+    (hd : ∀ e e', e.1 = e'.1 → f e = none → f e' = none) {v : β}
+    (hv : (l.filterMap f).lookup t = some v) :
+    ∃ w, l.lookup t = some w ∧ f (t, w) = some (t, v) := by
+  induction l with
+  | nil => simp at hv
+  | cons e l ih =>
+    obtain ⟨u, w⟩ := e
+    rcases hf (u, w) with h | ⟨v', h⟩
+    · rw [List.filterMap_cons_none h] at hv
+      by_cases hu : t = u
+      · subst hu
+        rw [lookup_filterMap l f t hf (fun e he => hd (t, w) e he.symm h)] at hv
+        cases hv
+      · have hb : (t == u) = false := by simpa using hu
+        simp only [List.lookup, hb]
+        exact ih hv
+    · rw [List.filterMap_cons_some h] at hv
+      by_cases hu : t = u
+      · subst hu
+        simp only [List.lookup, beq_self_eq_true, Option.some.injEq] at hv ⊢
+        subst hv
+        exact ⟨w, rfl, h⟩
+      · have hb : (t == u) = false := by simpa using hu
+        simp only [List.lookup, hb] at hv ⊢
+        exact ih hv
+
+/-- After a heartbeat, no fanout holds a peer twice.
+
+It needs a lawful choice, and no fanout holding a peer twice before. -/
+theorem heartbeat_fanout_nodup (hsel : sel.Lawful) (h : ∀ t, (peersOf s.fanout t).Nodup)
+    (t : String) : (peersOf (heartbeat p c sel rank standing now s).1.fanout t).Nodup := by
+  show (peersOf (fanoutAfter p sel standing now s) t).Nodup
+  unfold peersOf
+  cases hl : (fanoutAfter p sel standing now s).lookup t with
+  | none => exact List.nodup_nil
+  | some v =>
+    show v.Nodup
+    unfold fanoutAfter at hl
+    refine (lookup_filterMap_exists _ _ t (fun e => ?_) (fun e e' he hn => ?_) hl).elim
+      fun w ⟨hw, hfw⟩ => ?_
+    · obtain ⟨u, peers⟩ := e
+      dsimp only
+      split
+      · exact Or.inl rfl
+      · split
+        · exact Or.inr ⟨_, rfl⟩
+        · exact Or.inr ⟨_, rfl⟩
+    · obtain ⟨u, peers⟩ := e
+      obtain ⟨u', peers'⟩ := e'
+      dsimp only at he hn ⊢
+      subst he
+      split at hn
+      · rename_i hc
+        simp only [hc, ↓reduceIte]
+      · split at hn <;> cases hn
+    · have hwn : w.Nodup := by simpa [peersOf, hw] using h t
+      dsimp only at hfw
+      split at hfw
+      · cases hfw
+      · split at hfw
+        · simp only [Option.some.injEq, Prod.mk.injEq, true_and] at hfw
+          subst hfw
+          rw [List.nodup_append]
+          refine ⟨hwn.filter _, (hsel _ _).1.nodup (EthLib.Base.nodup_eraseDups _),
+            fun a ha b hb hab => ?_⟩
+          subst hab
+          have := (List.mem_filter.1 (List.mem_eraseDups.1 ((hsel _ _).1.subset hb))).2
+          simp only [Bool.and_eq_true, decide_eq_true_eq] at this
+          exact this.2 ha
+        · simp only [Option.some.injEq, Prod.mk.injEq, true_and] at hfw
+          subst hfw
+          exact hwn.filter _
 
 end EthLib.Networking.Proofs.Gossip.Heartbeat

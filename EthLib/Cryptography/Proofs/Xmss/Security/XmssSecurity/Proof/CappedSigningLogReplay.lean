@@ -34,6 +34,55 @@ theorem cappedMappedAdversary_cache_le
   rw [QueryImpl.simulateQ_writerTMapBase_run]
   exact hmem
 
+/-- An output of the adversary with the scheme's oracles is one with the mapped oracles.
+
+It holds for any computation, so the kernel checks it without running one. -/
+private theorem mem_support_cappedMappedAdversaryImpl_run (publicKey : PublicKey)
+    (secretKey : SecretKey) (computation : OracleComp (OracleWorld + SigningSpec) α)
+    (initialCache : QueryCache HashSpec)
+    {result : (α × QueryLog SigningSpec) × QueryCache HashSpec}
+    (hmem : result ∈ support ((simulateQ romImpl
+      (simulateQ (forwardOracles + signingOracle Concrete.scheme secretKey)
+        computation).run).run initialCache)) :
+    result ∈ support
+      (((simulateQ (cappedMappedAdversaryImpl publicKey secretKey) computation).run).run
+        initialCache) := by
+  rw [cappedMappedAdversaryImpl, ← QueryImpl.simulateQ_writerTMapBase_run]
+  exact hmem
+
+/-- A signing query, answered by the mapped oracles, logs one entry and runs the signer.
+
+It holds for any scheme, any implementation equal to the mapped oracles and any query.
+
+So the kernel checks it without running the signer. -/
+private theorem mem_support_mappedImpl_signingQuery (scheme : Scheme SecretKey)
+    (secretKey : SecretKey)
+    (impl : QueryImpl (OracleWorld + SigningSpec)
+      (WriterT (QueryLog SigningSpec) (StateT (QueryCache HashSpec) ProbComp)))
+    (request : SignRequest) (initialCache : QueryCache HashSpec)
+    (query : OracleComp (OracleWorld + SigningSpec)
+      ((OracleWorld + SigningSpec).Range (.inr request)))
+    {output : (OracleWorld + SigningSpec).Range (.inr request)} {queryLog : QueryLog SigningSpec}
+    {middleCache : QueryCache HashSpec}
+    (hquery : ((output, queryLog), middleCache) ∈ support
+      (((simulateQ impl query).run).run initialCache))
+    (himpl : impl = romImpl.writerTMapBase (forwardOracles + signingOracle scheme secretKey))
+    (hq : query = liftM (OracleSpec.query (Sum.inr request))) :
+    queryLog = [⟨request, output⟩] ∧
+      @Prod.mk (Option Signature) (QueryCache HashSpec) output middleCache ∈ support
+        ((simulateQ romImpl (scheme.sign secretKey request.leafIndex request.message)).run
+          initialCache) := by
+  subst impl query
+  simp only [simulateQ_spec_query, QueryImpl.writerTMapBase, QueryImpl.add_apply_inr,
+    signingOracle] at hquery
+  rw [WriterT.run_mk] at hquery
+  erw [QueryImpl.run_withLogging_apply] at hquery
+  erw [simulateQ_bind] at hquery
+  rw [StateT.run_bind, mem_support_bind_iff] at hquery
+  obtain ⟨⟨signOutput, signCache⟩, hsign, hpure⟩ := hquery
+  cases hpure
+  exact ⟨rfl, hsign⟩
+
 theorem cappedMappedAdversary_signingLog_consistent
     (publicKey : PublicKey) (secretKey : SecretKey)
     (computation : OracleComp (OracleWorld + SigningSpec) α)
@@ -78,29 +127,20 @@ theorem cappedMappedAdversary_signingLog_consistent
             cases heq
             simp at hcurrent
         | inr signingRequest =>
-            simp only [simulateQ_spec_query, cappedMappedAdversaryImpl,
-              QueryImpl.writerTMapBase, QueryImpl.add_apply_inr,
-              signingOracle] at hquery
-            rw [WriterT.run_mk] at hquery
-            erw [QueryImpl.run_withLogging_apply] at hquery
-            erw [simulateQ_bind] at hquery
-            rw [StateT.run_bind, mem_support_bind_iff] at hquery
-            obtain ⟨⟨signOutput, signCache⟩, hsign, hpure⟩ := hquery
-            cases hpure
+            -- Step by a lemma for any scheme, or the kernel runs the signer to match forms.
+            obtain ⟨rfl, hsign⟩ := mem_support_mappedImpl_signingQuery Concrete.scheme secretKey
+              (cappedMappedAdversaryImpl publicKey secretKey) signingRequest initialCache _ hquery
+              rfl rfl
             simp only [List.mem_singleton] at hcurrent
-            cases hcurrent
+            subst hcurrent
+            have hmiddleFinal : middleCache ≤ finalCache :=
+              cappedMappedAdversary_cache_le publicKey secretKey (next output)
+                middleCache ((value, restLog), finalCache) hrest
             simp only at hrequest hsignature
-            have hmiddleFinal : signCache ≤ finalCache :=
-              cappedMappedAdversary_cache_le publicKey secretKey (next signOutput)
-                signCache ((value, restLog), finalCache) hrest
-            rw [hrequest] at hsign
-            rw [hsignature] at hsign
-            change (some signature, signCache) ∈ support
-              ((simulateQ romImpl
-                (Concrete.precomputedCappedSign secretKey request.leafIndex
-                  request.message)).run initialCache) at hsign
-            apply Concrete.precomputedCappedSign_success_replay secretKey request
-              keygenCache initialCache signCache largerCache signature hconsistent hkeygenLe
+            subst hrequest hsignature
+            rw [Concrete.scheme_sign] at hsign
+            apply Concrete.precomputedCappedSign_success_replay secretKey signingRequest
+              keygenCache initialCache middleCache largerCache signature hconsistent hkeygenLe
             · exact hsign
             · exact hmiddleFinal.trans hle
       · apply ih output middleCache ((value, restLog), finalCache) hrest hle
@@ -112,31 +152,20 @@ theorem capped_detailed_execution_signingLog_consistent
     (hmem : execution ∈ support
       (detailedGameWithCache Concrete.scheme adversary)) :
     SigningLogConsistent execution.2 execution.1.secretKey execution.1.signingLog := by
-  have hgame := hmem
-  unfold detailedGameWithCache detailedGameCore at hgame
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hgame
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, hkeygen, hrest⟩ := hgame
-  unfold detailedGameAfterKeygen at hrest
-  simp only at hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hrest
-  obtain ⟨⟨⟨forgery, signingLog⟩, adversaryCache⟩, hadversary, hverifyRest⟩ := hrest
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff] at hverifyRest
-  obtain ⟨⟨verified, finalCache⟩, hverify, hfinal⟩ := hverifyRest
-  simp only [simulateQ_pure, StateT.run_pure, support_pure,
-    Set.mem_singleton_iff] at hfinal
-  subst execution
+  -- Decompose through lemmas for any scheme: the kernel would run the game to match two forms.
+  obtain ⟨outcome, finalCache⟩ := execution
+  obtain ⟨publicKey, secretKey, keyCache, hkeygen, hrest⟩ :=
+    exists_of_mem_support_detailedGameWithCache _ _ hmem
+  obtain ⟨forgery, signingLog, adversaryCache, verified, hadversary, hverify, hout⟩ :=
+    exists_of_mem_support_detailedGameAfterKeygen _ _ _ _ _ hrest
+  subst outcome
   simp only
-  have hadversary' : ((forgery, signingLog), adversaryCache) ∈ support
-      (((simulateQ (cappedMappedAdversaryImpl publicKey secretKey)
-        (adversary.main publicKey)).run).run keyCache) := by
-    rw [cappedMappedAdversaryImpl]
-    rw [← QueryImpl.simulateQ_writerTMapBase_run]
-    exact hadversary
+  have hadversary' :=
+    mem_support_cappedMappedAdversaryImpl_run publicKey secretKey _ keyCache hadversary
   have hcacheLe : adversaryCache ≤ finalCache :=
     xmssRom_cache_le _ adversaryCache (verified, finalCache) hverify
-  have hkeygen' : ((publicKey, secretKey), keyCache) ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
+  have hkeygen' := hkeygen
+  rw [Concrete.scheme_keygen] at hkeygen'
   have hconsistent :=
     Concrete.precomputedKeygen_support_consistent
       ((publicKey, secretKey), keyCache) hkeygen'

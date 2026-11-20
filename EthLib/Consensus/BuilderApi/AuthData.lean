@@ -1,5 +1,7 @@
 module
 
+public import EthLib.Base.Bytes
+
 /-!
 # `Consensus.BuilderApi.AuthData`
 
@@ -120,7 +122,7 @@ def parseIpv6 (text : String) : Except AuthDataError (Vector UInt16 8) :=
       else none
     | none => parseGroups true text.toList
   match groups with
-  | some groups => if h : groups.length = 8 then .ok ⟨groups.toArray, h⟩ else .error .badIpv6
+  | some groups => Base.exactArray 8 groups.toArray fun _ => .badIpv6
   | none => .error .badIpv6
 
 /-- A group in lowercase hexadecimal, without leading zeros. -/

@@ -2022,8 +2022,7 @@ theorem getDomain_total (config : Config) (state : BeaconState preset fork)
     ∃ domain, getDomain config state domainType epoch = .ok domain := by
   unfold getDomain
   obtain ⟨domain, computed⟩ := computeDomain_total config domainType
-    (if epoch.getD (getCurrentEpoch state) < state.forkVersions.epoch then
-      state.forkVersions.previousVersion else state.forkVersions.currentVersion)
+    (state.forkVersions.versionAt (epoch.getD (getCurrentEpoch state)))
     state.genesisValidatorsRoot
   exact ⟨domain, by simp only [computed]; rfl⟩
 

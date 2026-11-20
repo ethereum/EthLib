@@ -86,8 +86,7 @@ private theorem keys_action (before : fork < .pectra) {stage : EpochStage}
   case participation =>
     split at edge
     · exact same (by rw [← edge]; rfl)
-    · exact ⟨(mutatorEpochFrameLaws.toEpochStepLaws.processParticipationRecordUpdates
-        edge).pubkeysPrefix,
+    · exact ⟨(mutatorEpochFrameLaws.processParticipationRecordUpdates edge).pubkeysPrefix,
         Nat.le_of_eq (loadKeptLaws.processParticipationRecordUpdates edge).1⟩
 
 /-- Before Electra, the stages before the sync committee update keep the keys of the registry. -/

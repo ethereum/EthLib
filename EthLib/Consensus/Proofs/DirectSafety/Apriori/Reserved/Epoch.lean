@@ -469,8 +469,8 @@ private theorem reserveCut_records {x : ForkedBeaconState preset} {high : Nat} {
     (balances : t.balances = s.balances)
     (reserve : ReserveCut x high ⟨fork, s⟩ epoch suffix owned) :
     ReserveCut x high ⟨fork, t⟩ epoch suffix owned := by
-  simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt, validators, balances]
-    using reserve
+  simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt, validators,
+    balances] using reserve
 
 /-- The pending consolidations leave exactly the suffix of the tagged pass as the actual queue.
 
@@ -873,10 +873,10 @@ private theorem reserveCut_effective {x : ForkedBeaconState preset} {high : Nat}
     have old := reference i ref notRetired (relevant i support)
     obtain ⟨w, found, _⟩ := support
     obtain ⟨v, e, foundS, rfl, bound⟩ := lookup i w found
-    rw [effectiveT i v e found, balance]
-    rw [effectiveS i v foundS] at old
-    have := Nat.min_le_left (actualBalanceAt (⟨fork, s⟩ : ForkedBeaconState preset) i)
-      (withdrawalMaxEffectiveBalance preset fork v).toNat
+    have cap : withdrawalMaxEffectiveBalance preset fork { v with effectiveBalance := e } =
+        withdrawalMaxEffectiveBalance preset fork v := rfl
+    simp only [potential, found, foundS, Option.map_some, Option.getD_some] at old ⊢
+    rw [cap, balance]
     omega
   · intro i initial w found active clean finite located support
     obtain ⟨v, e, foundS, rfl, bound⟩ := lookup i w located

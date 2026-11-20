@@ -1323,8 +1323,8 @@ private theorem upgrades_reserved_facts {x u v : ForkedBeaconState preset} {high
   have queueSame : pendingQueue (⟨g, t⟩ : ForkedBeaconState preset) = pendingQueue ⟨f, s⟩ := by
     simp only [pendingQueue, electra, target, ↓reduceDIte, pending]
   refine ⟨epoch, ?_, queueSame ▸ erasure, ?_, ?_, ?_⟩
-  · simpa only [ReserveCut, FundingRelevant, effectiveAt, actualBalanceAt, registry, balances,
-      cap, epoch] using reserve
+  · simpa only [ReserveCut, potential, FundingRelevant, effectiveAt, actualBalanceAt, registry,
+      balances, cap, epoch] using reserve
   · simpa only [RetiredActivated, registry] using retired
   · simpa only [EndpointCoverAll, actualBalanceAt, registry, balances, cap, epoch] using cover
   · simpa only [FutureEffectiveCover, effectiveAt, registry, epoch] using future

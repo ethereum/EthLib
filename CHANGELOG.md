@@ -9,6 +9,33 @@ Not yet released.
 
 ### Proof additions
 
+- A signing root in one domain type is never one in another, unless SHA-256 collides on the signing data ([#3433](https://github.com/ethereum/EthLib/issues/3433)).
+  `computeSigningRoot_ne_or_collision_of_domain_ne` states it for two different domains, and `computeSigningRoot_ne_or_collision_of_domainType_ne` for two domain types at any fork versions and chains.
+  `signingDataMessages` names the inputs of the node hash in the signing data of an object root and a domain.
+
+- In Lean, `payloadInputs_processExecutionRequests` (PayloadInputs.lean) shows that from Electra to Fulu the requests of the execution layer in a block keep the inputs of a payload.
+
+- A double or surround vote of signed direct safety, with a signature by the key alone on each data, gives an attester slashing that a state accepts exactly when it can slash the validator, when the state reads the fork versions of the signatures and the validator is slashable there ([#3431](https://github.com/ethereum/EthLib/issues/3431)).
+  `processAttesterSlashing_eq_slashValidator_of_single` shows that a slashing whose two attestations name one validator, with both signatures verifying in the domains the state reads and the validator slashable there, returns what slashing that validator returns.
+  `processAttesterSlashing_single_eq_slashValidator` and its run form apply it to `singleAttesterSlashing`, built from the two signed data of direct safety and two given signatures by the key alone, at a state that reads their fork versions and where the validator is slashable.
+
+- Direct accountable safety has a one-third form, for the accountable keys and for the keys that signed conflicting objects ([#3429](https://github.com/ethereum/EthLib/issues/3429)).
+  `derivedDrift_eq_zero_of_stableKeys` shows that the drift of a tail is zero when its unslashed active keys stay those of `x` not slashed since, with their effective balances, and no unslashed key leaves the active set at an epoch boundary (`StableKeys`).
+  `accountable_safety_third` and `accountable_safety_signed_third` then bound the unslashed active stake at `x` by three times the stake of those keys, or the hashes show evidence.
+  In both, the keys must stay stable up to one epoch past the later finalized epoch.
+
+- On a chain whose digests name their forks, the digest of each update or bootstrap of a valid light client response names the fork of its epoch ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `forkOfDigest_of_isValidLightClientUpdatesByRangeResponse` and `forkOfDigest_of_isValidLightClientBootstrapResponse` state it.
+  `isValidLightClientUpdatesByRangeResponse_iff_without_count` shows that the updates check needs no bound of its length by the count.
+
+- `Unforgeability.Bridge.unforgeable_capped` charges the SPHINCS signer's counter searches apart from the adversary's queries ([#3375](https://github.com/ethereum/EthLib/issues/3375)).
+  An adversary with at most `q` hash calls of its own and `r` signing requests forges with probability at most `(q + cappedCalls (2^22) r + 1) / 2^127`.
+  `cappedCalls T r` charges each request `470595 + 3 T` calls and one request `3 * 2^32` more; at `2^30` requests the floor drops from about `2^-63.4` to `2^-73.4`.
+  `forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, and `unforgeable` and `unforgeable_adversary` are unchanged.
+  `HashSig.prEvent_failedSearch_le` bounds, in the random oracle model, the chance that some search fails its first `T` trials, whoever queried them.
+  `hashCost` names the cost of a query, and `countedOracle_eq` and `experiment_eq` state the counted game as the random oracle with that cost; `countedOracle_cost` is removed, and `hashCost_eq` replaces it.
+  The bridge's budget transfers are proved once for any computation, so the kernel replay of `Count`, `AdversaryCalls` and the new modules stays within a few GB.
+
 - `VoteAt.validatePayloadVote_or_collision` shows that from Gloas a receiver passes the payload check of an honest duty vote for a block it holds ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Both stores start at the anchor store, and the receiver reads the vote at least the delay after its deadline.
   For each envelope in its view that the receiver accepts, the receiver's store must already mark the block root verified.
@@ -381,6 +408,12 @@ Not yet released.
 
 - `effectiveKept_parentPayload` states that the payload of the parent keeps the size of the registry and each effective balance in it.
 
+- `EpochBaseLaws` and `EpochFrameBaseLaws` are the laws of the epoch steps without a write of the RANDAO mixes or of the lookahead of proposers.
+  So a relation that keeps both can satisfy them.
+  `EpochStepLaws` and `EpochFrameLaws` extend them with those two laws, and have the same fields by name.
+  `payloadInputsLaws` gives the frame base laws for `PayloadInputs`.
+  `payloadInputs_epochPrefix` states that the stages of an epoch before the RANDAO reset keep the inputs of a payload.
+
 - `VotersInHeadWindow` states that, between two times, each voter below a given parent block lies in each honest head's window after that parent ([#1458](https://github.com/ethereum/EthLib/issues/1458)).
   `VoteInHeadWindow` is the vote and the window that it reads.
   `Execution.votersInHeadWindow_of_newlyActive` derives it from `NewlyActiveVotersInHeadWindow`, which asks it only of a voter activated at the target epoch of a vote two epochs after that parent.
@@ -401,6 +434,80 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `DirectSafety.Apriori.creditBudget` counts each active key's balance only up to its cap (part of [#2707](https://github.com/ethereum/EthLib/issues/2707)).
+  The new `initialCappedExcess` sums, over the keys active at the reference state, the balance capped at `withdrawalMaxEffectiveBalance` minus the effective balance.
+  `creditBudget` reads it in place of `initialExcess`.
+  `initialExcess` is unchanged.
+  `creditBudget`, `gainBudget` and `drift` are each at most their former value, so `accountable_safety_apriori` keeps its statement and implies the former one.
+  `Apriori.Internal.potential` moves from `Apriori/Ownership.lean` to `Apriori/Bound.lean`, where `initialCappedExcess` reads it; its name and value are unchanged.
+  In `Apriori.Internal`, pot 0 of `initialPot` is `potential x i - effectiveAt x i` for a key active at `x`, and `OwnedInitial` bounds its tokens with `initialCappedExcess`.
+  The `NewReference` clause of `ReserveCut` bounds `potential u i` in place of `max (effectiveAt u i) (actualBalanceAt u i)`.
+  The former clause implies the new one; a caller that read the balance from it reads `potential` instead.
+
+- In Lean, `processInactivityUpdates_frame` moves from `EthLib.Consensus.Proofs.Transition.EpochParticipation` to `EthLib.Consensus.Proofs.Transition.EpochUpdates`, next to the other frame facts of the epoch steps.
+  Its name and statement are unchanged; a caller that imports only the former adds `import EthLib.Consensus.Proofs.Transition.EpochUpdates`.
+
+- In Lean, the light client signature theorems assume soundness only on the one aggregate call of the update ([#3432](https://github.com/ethereum/EthLib/issues/3432)).
+  `validateLightClientUpdate_signed` and `validateLightClientUpdate_signed_outside` take `SignatureChecks.AggregateSoundOn` on `updateSignatureCall` in place of `SignatureChecks.AggregateSound`.
+  The new hypothesis is weaker, so the theorems are stronger; a caller with `sound : checks.AggregateSound signed` passes `sound.on _` (`SignatureChecks.AggregateSound.on`).
+
+- In Lean, `payloadInputs_processOperations` holds at every fork and no longer takes `gloas : .glamsterdam ≤ fork`.
+  Before Gloas the deposits and, from Electra, the requests of the execution layer keep the inputs of a payload too.
+  A caller drops the first explicit argument.
+
+- In Lean, signed direct safety catches collisions of signing roots ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the signed root, and `SignedConflict` asks that the two roots differ, so one signature never counts as two.
+  `signedConflict_of_accountable`, `accountableKeys_subset_signedConflictKeys`, `accountable_safety_signed` and `accountable_safety_signed_third` add the alternative `SigningEvidence`: SHA-256 collides among the messages of the signing roots that the checks of the runs compute.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` also give the domain and root of the check, and its place among the signings of the run.
+  The signing-value lemmas `wellFormed_signingShape_iff`, `fits_signingValue_iff`, `commitmentSized_signingValue_iff` and `signingValue_inj` move to `Consensus/Proofs/Signing.lean`, where they are public, with `signingValues_of_computeSigningRoot_eq`, `signingMessages` and `computeSigningRoot_ne_or_collision`.
+  `valueMessages` (`Serialization/Proofs/Ssz/Codec/ValueMessages.lean`) names the messages of the tree of a value, which the hash objects of direct safety read too.
+
+- In Lean, a signature of signed direct safety names the version of a fork of the config ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the version of its domain, and `SignedConflict` asks for the version of a fork of the config, the same for both headers.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` name the version that the state before the block reads.
+  `Run.forkVersions_ofConfig` shows that every state of a run from a genesis of deposits holds versions of forks of the config.
+  `chainStep_forkVersions` and `chainSteps_forkVersions` move from the Beacon API proofs to `Consensus/Proofs/Transition/ForkVersions.lean`, where they are public.
+  `signedConflict_of_accountable`, `accountable_safety_signed` and their corollaries keep their hypotheses and conclude this stronger form.
+
+- The light client checks of req/resp responses compare fork digests, not forks ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  From Fulu, a change of blob parameters changes the digest within one fork, and a fork no longer tells those epochs apart.
+  In Python, `reqresp_is_valid_response` takes a new argument `genesis_validators_root`, which the light client protocols need.
+  An item of `ResponseLightClientUpdate` or `ResponseLightClientBootstrap` now ends with the 4-byte digest of its chunk in place of the name of a fork.
+  In Lean, the update and bootstrap checks take the root of the genesis validators, and their items carry a digest field in place of a fork field.
+  `lightClientForkMatches` and `ResponseUpdate.forkMatches` become `lightClientDigestMatches` and `ResponseUpdate.digestMatches`.
+  `ResponseUpdate.ofUpdate` and `ResponseBootstrap.ofBootstrap` take the digest.
+
+- In Lean, requests by range share one range predicate, `InCountRange`, and the light client updates limit is `lightClientUpdatesLimit` ([#2642](https://github.com/ethereum/EthLib/issues/2642)).
+  `slotInRange`, `slotInRange_iff`, `BeaconApi.InRange` and `BeaconApi.updatesLimit` are removed; a caller writes `decide (InCountRange start count value)`, `InCountRange` or `lightClientUpdatesLimit`.
+
+- In Lean, eight more laws move from the step laws to the base laws, with the same conclusions and a weaker laws premise.
+  Each takes `EpochBaseLaws R` in place of `EpochStepLaws R`, which provides it.
+  `EpochStepLaws.processVoluntaryExit`, `EpochStepLaws.processBlsToExecutionChange`, `EpochStepLaws.applySyncReward`, `EpochStepLaws.processSyncAggregate`, `EpochStepLaws.processHistoricalRootsUpdate`, `EpochStepLaws.processParticipationRecordUpdates`, `EpochStepLaws.processSyncCommitteeUpdates` and `EpochStepLaws.processPtcWindow` are renamed `EpochBaseLaws.processVoluntaryExit`, `EpochBaseLaws.processBlsToExecutionChange`, `EpochBaseLaws.applySyncReward`, `EpochBaseLaws.processSyncAggregate`, `EpochBaseLaws.processHistoricalRootsUpdate`, `EpochBaseLaws.processParticipationRecordUpdates`, `EpochBaseLaws.processSyncCommitteeUpdates` and `EpochBaseLaws.processPtcWindow`.
+  A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws`.
+  `payloadInputs_processVoluntaryExit`, `payloadInputs_processBlsToExecutionChange` and `payloadInputs_processSyncAggregate` are removed; a caller writes `payloadInputsLaws.processVoluntaryExit`, `payloadInputsLaws.processBlsToExecutionChange` or `payloadInputsLaws.processSyncAggregate`.
+  `randaoMixes_slot_processHistoricalRootsUpdate` is removed; a caller with `h` writes `⟨(payloadInputsLaws.processHistoricalRootsUpdate h).randaoMixes, (payloadInputsLaws.processHistoricalRootsUpdate h).slot⟩`.
+  That replacement needs `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
+
+- In Lean, an XMSS secret key holds the trees it signs with, and signing returns the updated key ([#3404](https://github.com/ethereum/EthLib/pull/3404)).
+  `Xmss.SecretKey` keeps the scheme seed, the public parameter, the top tree and up to `Xmss.MAX_CACHED_BOTTOM_TREES = 8` bottom trees, each with the top signature of its root.
+  `Xmss.keyGen seed` returns the public key first, then the secret key, and the secret key keeps the top tree that key generation builds.
+  `Xmss.sign sk idx m` returns the signature with the updated key; in a kept bottom tree it makes one one-time signature and never rebuilds a tree.
+  The stateless signer of the note moves to the proofs as `Xmss.statelessSignWith`, with `signDerived`, `signLayer` and `publicKeyOf`; nothing exports it.
+  `Xmss.SecretKey.Reachable.sign_fst` proves that every key that key generation and any sequence of signatures reach signs as the stateless signer, byte for byte.
+  `Xmss.verify_keyGen_sign`, `Xmss.verifyWith_keyGenWith_signWith` and `Xmss.sign_error` take `sk.Reachable` in place of the key pair of `keyGen`; `Xmss.signatureIndex_sign` reads `(sign sk idx m).1`.
+  `Xmss.prEvent_signWith_error_le` and `..._empty` take `hkept`: a bottom tree of the index that the key keeps holds a top signature.
+  `Xmss.Cost.isQueryBoundP_signWith` and `Xmss.Cost.signCalls_eq` bound signing by `8603369879` calls; `isQueryBoundP_signWith_of_mem` and `signKeptCalls_eq` give `4294967500` in a kept tree.
+  The old statements hold for the stateless signer, under new names: `Xmss.signWith_run`, `sign_eq_ok`, `sign_error`, `prEvent_signWith_error_le` and `..._empty` become `statelessSignWith_run`, `statelessSign_eq_ok`, `statelessSign_error`, `prEvent_statelessSignWith_error_le` and `..._empty`.
+  `Xmss.Cost.isQueryBoundP_signWith` of the old signer becomes `Xmss.Cost.isQueryBoundP_statelessSignWith`, and `Unforgeability.isQueryBoundP_keyGenWith` and `isQueryBoundP_signWith` become `isQueryBoundP_statelessKeyGenWith` and `isQueryBoundP_statelessSignWith`.
+  `Xmss.Cost.isQueryBoundP_keyGenWith` keeps its name and its bound over the new key generation.
+  `Xmss.bottomTree_lt` moves from `Proofs/Xmss/Correctness.lean` to `Proofs/Xmss/Sign.lean`.
+  The unforgeability game's signer keeps its key across requests, and `Unforgeability.HasHashQueryBound` counts the calls of the same game with the stateless signer, `statelessExperiment`.
+  `Unforgeability.unforgeable`, `forgeAdvantage_le_adversaryBudget`, `forgeAdvantage_le_lifetime`, `reasonForgeAdvantage_le`, `reasonForgeAdvantage_le_add`, `signingFailure_le` and `reasonForgeAdvantage_le_bounded` keep their text over the new game.
+  Their old games are named `statelessGameCore`, `statelessExperiment`, `statelessForgeAdvantage`, `statelessReasonRun` and `statelessSigningFailure`, and `forgeAdvantage_eq_statelessForgeAdvantage` proves that both games win equally often.
+  The Python API is unchanged: `xmss.key_gen`, `xmss.sign`, `xmss.verify` and `xmss.signature_index` take and return the same values.
+  The extension keeps the secret keys of the last 2 seeds, so a signature in a kept bottom tree no longer rebuilds two trees.
+  The export `eth_xmss_key_gen` also returns the secret key, and `eth_xmss_sign` takes the secret key and returns the updated key with the result.
+
 - In Lean, `Execution.payloadVerified_of_partiallySynchronous` asks less of the receiver ([#2060](https://github.com/ethereum/EthLib/issues/2060)).
   Its premise `closed` now asks only that the receiver's store marks the block root of each envelope it accepts from its view as verified.
   It no longer asks that the envelope leaves the store unchanged.
@@ -410,6 +517,27 @@ Not yet released.
 - In Lean, `SphincsSecurity.Security.flatMap_ofFn_injective` is removed.
   `EthLib.Base.flatMap_inj_of_length` states the same fact for any list, and `List.ofFn_injective` gives it for `List.ofFn`.
   The SPHINCS+ and XMSS proofs now use it.
+
+- In Lean, 22 laws of the epoch steps move to the base laws, and three to the frame base laws.
+  `EpochStepLaws.foldlM`, `EpochStepLaws.setValidator`, `EpochStepLaws.setValidator_of_sameBalance`, `EpochStepLaws.setValidatorAt_of_sameBalance`, `EpochStepLaws.applyDeltas`, `EpochStepLaws.applyAllDeltas`, `EpochStepLaws.processRewardsAndPenalties`, `EpochStepLaws.updateRegistryEntry`, `EpochStepLaws.activateValidator`, `EpochStepLaws.updateRegistryEntryElectra`, `EpochStepLaws.processRegistryUpdates`, `EpochStepLaws.applySlashingPenalty`, `EpochStepLaws.applySlashingPenaltyElectra`, `EpochStepLaws.processSlashings`, `EpochStepLaws.processEth1DataReset`, `EpochStepLaws.updateEffectiveBalance`, `EpochStepLaws.processEffectiveBalanceUpdates`, `EpochStepLaws.processSlashingsReset`, `EpochStepLaws.processInactivityUpdates`, `EpochStepLaws.passPendingConsolidations`, `EpochStepLaws.processPendingConsolidations` and `EpochStepLaws.processHistoricalSummariesUpdate` are renamed `EpochBaseLaws.foldlM`, `EpochBaseLaws.setValidator`, `EpochBaseLaws.setValidator_of_sameBalance`, `EpochBaseLaws.setValidatorAt_of_sameBalance`, `EpochBaseLaws.applyDeltas`, `EpochBaseLaws.applyAllDeltas`, `EpochBaseLaws.processRewardsAndPenalties`, `EpochBaseLaws.updateRegistryEntry`, `EpochBaseLaws.activateValidator`, `EpochBaseLaws.updateRegistryEntryElectra`, `EpochBaseLaws.processRegistryUpdates`, `EpochBaseLaws.applySlashingPenalty`, `EpochBaseLaws.applySlashingPenaltyElectra`, `EpochBaseLaws.processSlashings`, `EpochBaseLaws.processEth1DataReset`, `EpochBaseLaws.updateEffectiveBalance`, `EpochBaseLaws.processEffectiveBalanceUpdates`, `EpochBaseLaws.processSlashingsReset`, `EpochBaseLaws.processInactivityUpdates`, `EpochBaseLaws.passPendingConsolidations`, `EpochBaseLaws.processPendingConsolidations` and `EpochBaseLaws.processHistoricalSummariesUpdate`, and each takes `EpochBaseLaws`.
+  `EpochFrameLaws.applyPendingDeposit`, `EpochFrameLaws.passPendingDeposits` and `EpochFrameLaws.processPendingDeposits` are renamed `EpochFrameBaseLaws.applyPendingDeposit`, `EpochFrameBaseLaws.passPendingDeposits` and `EpochFrameBaseLaws.processPendingDeposits`, and each takes `EpochFrameBaseLaws`.
+  A call `laws.X` through dot notation is unchanged; a call by the full name takes the new name and `laws.toEpochBaseLaws` or `laws.toEpochFrameBaseLaws`.
+  `EpochStepLaws.mk` now takes the base laws and its two own laws, not the former flat positional arguments.
+  `EpochFrameLaws.mk` takes the step laws and the two laws of the frame.
+  An instance written with named fields, as a `where` literal, is unchanged.
+  One built with `⟨…⟩` or `.mk` and positional arguments switches to a `where` literal.
+
+- In Lean, six lemmas about `PayloadInputs` are removed in favour of `payloadInputsLaws`.
+  A caller of `payloadInputs_processInactivityUpdates`, `payloadInputs_processRegistryUpdates`, `payloadInputs_passPendingDeposits`, `payloadInputs_passPendingConsolidations`, `payloadInputs_processHistoricalSummariesUpdate` or `payloadInputs_applyPendingDeposit` calls `payloadInputsLaws.X`, where `X` is the name after `payloadInputs_`.
+
+- In Lean, five lemmas in `Committees` that state that a step of an epoch keeps the RANDAO mixes and the slot are removed.
+  A caller of `randaoMixes_slot_processRewardsAndPenalties`, `randaoMixes_slot_processSlashings`, `randaoMixes_slot_processEth1DataReset` or `randaoMixes_slot_processEffectiveBalanceUpdates` reads `(payloadInputsLaws.X h).randaoMixes` and `.slot`, where `X` is the name after `randaoMixes_slot_`.
+  Those four replacements need `import EthLib.Consensus.Proofs.Transition.PayloadInputs`, which `Committees` does not import.
+  A caller passing `(hegota := …)` to the reset of the deposit votes passes `(before := …)`.
+  A caller of `randaoMixes_slot_processJustificationAndFinalization` reads `⟨by rw [processJustificationAndFinalization_eq h], processJustificationAndFinalization_slot h⟩`, whose lemmas `Committees` already imports.
+
+- In Lean, `payloadInputs_processDeposit` holds at every fork before Heze and no longer takes `electra : .pectra ≤ fork`.
+  A caller drops that argument.
 
 - In Lean, `Bls.Fr.fromBytesBE` takes its 32 bytes as a `Vector UInt8 32` (part of [#2189](https://github.com/ethereum/EthLib/issues/2189)).
   It still rejects an integer of at least `r`, with `nonCanonicalFieldElement`.

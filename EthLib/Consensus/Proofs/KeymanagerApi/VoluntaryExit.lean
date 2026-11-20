@@ -76,26 +76,22 @@ theorem verify_of_signVoluntaryExit
   split at call
   · rename_i key found
     obtain ⟨member, same⟩ := pubkey_of_localKey? found
+    -- Rewrite the signing call before the splits: the kernel replay of a split on it fills memory.
+    choose signatureOf signs verifies using
+      fun message => Signatures.verify_sign key.secretKey message
+    simp only [signs] at call
     split at call
     · rename_i index indexed
       obtain ⟨validator, validated, holds⟩ := getValidator_of_validatorIndexOfPubkey indexed
-      dsimp only at call
       split at call
       · rename_i domain domained
         split at call
         · rename_i root rooted
-          split at call
-          · rename_i signature signs
-            simp only [pure, Except.pure, Except.ok.injEq] at call
-            subst call
-            obtain ⟨signature', signs', verifies⟩ := Signatures.verify_sign key.secretKey
-              (packBytes root)
-            rw [signs', Except.ok.injEq] at signs
-            subst signs
-            refine ⟨validator, domain, root, validated, domained, rooted, ?_⟩
-            rw [holds, ← same, keyed key member]
-            exact verifies
-          · simp [throw, throwThe, MonadExceptOf.throw] at call
+          simp only [pure, Except.pure, Except.ok.injEq] at call
+          subst call
+          refine ⟨validator, domain, root, validated, domained, rooted, ?_⟩
+          rw [holds, ← same, keyed key member]
+          exact verifies _
         · simp [throw, throwThe, MonadExceptOf.throw] at call
       · simp [throw, throwThe, MonadExceptOf.throw] at call
     · simp [throw, throwThe, MonadExceptOf.throw] at call

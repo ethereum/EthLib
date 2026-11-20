@@ -1,5 +1,6 @@
 module
 
+public import EthLib.Cryptography.Proofs.SupportBind
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Seed
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Reference
 public import EthLib.Cryptography.Proofs.Xmss.Security.XmssSecurity.Proof.Bridge.Keygen
@@ -46,6 +47,24 @@ noncomputable def refGame (adversary : EthAdversary) : ProbComp Bool := do
 /-- The table with another randomizer table. -/
 def Derivations.withRnd (d : Derivations) (rnd : RandomizerOutputs) : Derivations := { d with rnd := rnd }
 
+/-- The table with another randomizer table has that randomizer table. -/
+theorem Derivations.withRnd_rnd (d : Derivations) (rnd : RandomizerOutputs) :
+    (d.withRnd rnd).rnd = rnd := rfl
+
+/-- Key generation does not read the randomizer table. -/
+theorem honestRun_withRnd (d : Derivations) (rnd : RandomizerOutputs) :
+    honestRun (d.withRnd rnd) = honestRun d := rfl
+
+/-- The model's public key does not read the randomizer table. -/
+theorem modelPublicKey_withRnd (d : Derivations) (rnd : RandomizerOutputs)
+    (result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec) :
+    modelPublicKey (d.withRnd rnd) result = modelPublicKey d result := rfl
+
+/-- The model's secret key does not read the randomizer table. -/
+theorem modelSecretKey_withRnd (d : Derivations) (rnd : RandomizerOutputs)
+    (result : (Digest × (TopIndex → Option (Randomness × Encoding))) × QueryLog HashSpec) :
+    modelSecretKey (d.withRnd rnd) result = modelSecretKey d result := rfl
+
 private theorem prob_bind_mono {α : Type} {mx : ProbComp α} {f g : α → ProbComp Bool}
     (h : ∀ a ∈ support mx, Pr{let x ← f a}[x = true] ≤ Pr{let x ← g a}[x = true]) :
     Pr{let x ← mx >>= f}[x = true] ≤ Pr{let x ← mx >>= g}[x = true] :=
@@ -87,24 +106,28 @@ theorem mem_support_keygen {key : (PublicKey × XmssSecurity.SecretKey) × Query
       key = ((modelPublicKey d p.1, modelSecretKey d p.1), p.2) := by
   have h := evalDist_keygen (fun pk sk cache => (pure ((pk, sk), cache) :
     ProbComp ((PublicKey × XmssSecurity.SecretKey) × QueryCache HashSpec)))
+  -- Step through each bind by an equation: the kernel would run key generation to match two forms.
   have hmem : key ∈ support ((simulateQ romImpl Concrete.precomputedKeygen).run ∅ >>= fun k =>
-      (pure ((k.1.1, k.1.2), k.2) : ProbComp ((PublicKey × XmssSecurity.SecretKey) × QueryCache HashSpec))) := by
-    rw [mem_support_bind_iff]
-    exact ⟨key, hkey, by simp⟩
-  rw [← OracleComp.support_eq_of_evalDistEq h, mem_support_bind_iff] at hmem
-  obtain ⟨d, _, hmem⟩ := hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨p, hp, hmem⟩ := hmem
-  exact ⟨d, p, hp, by simpa using hmem⟩
+      (pure ((k.1.1, k.1.2), k.2) :
+        ProbComp ((PublicKey × XmssSecurity.SecretKey) × QueryCache HashSpec))) :=
+    mem_support_bind_of_eq _ _ hkey fun _ same => same ▸ by rw [mem_support_pure_iff]
+  rw [← OracleComp.support_eq_of_evalDistEq h] at hmem
+  obtain ⟨d, -, hmem⟩ := exists_eq_of_mem_support_bind _ _ hmem
+  obtain ⟨p, hp, hmem⟩ := exists_eq_of_mem_support_bind _ _ (hmem _ rfl)
+  exact ⟨d, p, hp, by simpa using hmem _ rfl⟩
 
 theorem afterKeygenBudget (adversary : EthAdversary) (q : Nat) (hq : q < 2 ^ 256)
     (hbound : SeededBudget adversary q) :
     HasAfterKeygenHashQueryBound Concrete.scheme (modelAdversary adversary) (q - keygenQueries) := by
   intro key hkey result hresult
+  rw [Concrete.scheme_keygen] at hkey
   obtain ⟨d, p, hp, rfl⟩ := mem_support_keygen hkey
+  -- Rewrite the table's parts by their equations: the kernel would run the game to match them.
   have hrnd : ∀ rnd, HashQueryBound (Seeded.gameRest (tableScheme rnd) (toModelAdversary adversary)
-      (modelPublicKey d p.1) (modelSecretKey d p.1)) p.2 (q - keygenQueries) := fun rnd =>
-    (cleanBudget adversary q hq hbound (d.withRnd rnd) hp).2
+      (modelPublicKey d p.1) (modelSecretKey d p.1)) p.2 (q - keygenQueries) := fun rnd => by
+    have h := (cleanBudget adversary q hq hbound (d.withRnd rnd)
+      (by rw [honestRun_withRnd]; exact hp)).2
+    rwa [Derivations.withRnd_rnd, modelPublicKey_withRnd, modelSecretKey_withRnd] at h
   have h := hashQueryBound_reference (toModelAdversary adversary) _ _ p.2 _ fun rnd =>
     hashQueryBound_table_memo _ rnd _ _ p.2 _ (hrnd rnd)
   apply h result

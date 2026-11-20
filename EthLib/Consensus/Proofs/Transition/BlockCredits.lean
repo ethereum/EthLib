@@ -411,13 +411,13 @@ private theorem kept_processAttestation {attestation : Attestation preset fork} 
 private theorem kept_processDeposit {before : fork < .hegota} {deposit : Deposit}
     (electra : .pectra ≤ fork) (computed : processDeposit config checks before s deposit = .ok t) :
     Kept s t :=
-  ⟨(frame_processDeposit computed).toFrame, payloadInputs_processDeposit electra computed,
+  ⟨(frame_processDeposit computed).toFrame, payloadInputs_processDeposit computed,
     stepKeeps_processDeposit computed, effectiveKept_processDeposit computed,
     registryLifecycle_processDeposit computed, lives_processDeposit electra computed⟩
 
 private theorem kept_processVoluntaryExit {signed : SignedVoluntaryExit}
     (computed : processVoluntaryExit config checks s signed = .ok t) : Kept s t :=
-  ⟨(frame_processVoluntaryExit computed).toFrame, payloadInputs_processVoluntaryExit computed,
+  ⟨(frame_processVoluntaryExit computed).toFrame, payloadInputsLaws.processVoluntaryExit computed,
     stepKeeps_processVoluntaryExit computed, effectiveKept_voluntaryExit computed,
     registryLifecycle_processVoluntaryExit computed, lives_processVoluntaryExit computed⟩
 
@@ -427,7 +427,7 @@ private theorem kept_processBlsToExecutionChanges {body : BeaconBlockBody preset
   split at computed
   · rw [← Array.foldlM_toList] at computed
     exact Kept.foldlM (fun _ _ _ ok => ⟨(frame_processBlsToExecutionChange ok).toFrame,
-      payloadInputs_processBlsToExecutionChange ok, stepKeeps_processBlsToExecutionChange ok,
+      payloadInputsLaws.processBlsToExecutionChange ok, stepKeeps_processBlsToExecutionChange ok,
       effectiveKept_blsChange ok, registryLifecycle_processBlsToExecutionChange ok,
       (by obtain ⟨validator, found, _, _, _, set⟩ := processBlsToExecutionChange_ok ok
           exact Lives.setValidator found set ⟨rfl, fun _ => ⟨UInt64.le_refl _, .inr rfl⟩⟩)⟩)
@@ -436,19 +436,11 @@ private theorem kept_processBlsToExecutionChanges {body : BeaconBlockBody preset
 
 private theorem kept_processExecutionRequests {body : BeaconBlockBody preset fork}
     {electra : .pectra ≤ fork ∧ fork < .glamsterdam}
-    (computed : processExecutionRequests config s body electra = .ok t) : Kept s t := by
-  have inputs : PayloadInputs s t := by
-    have ok := computed
-    simp only [processExecutionRequests, bind_ok_iff, ← Array.foldlM_toList] at ok
-    obtain ⟨_, deposits, _, withdrawals, consolidations⟩ := ok
-    exact (PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processDepositRequest ok)
-      deposits).trans <| (PayloadInputs.foldlM
-        (fun _ _ _ ok => payloadInputs_processWithdrawalRequest ok) withdrawals).trans <|
-      PayloadInputs.foldlM (fun _ _ _ ok => payloadInputs_processConsolidationRequest ok)
-        consolidations
-  exact ⟨(frame_processExecutionRequests computed).toFrame, inputs,
-    stepKeeps_processExecutionRequests computed, effectiveKept_requests computed,
-    registryLifecycle_processExecutionRequests computed, lives_processExecutionRequests computed⟩
+    (computed : processExecutionRequests config s body electra = .ok t) : Kept s t :=
+  ⟨(frame_processExecutionRequests computed).toFrame,
+    payloadInputs_processExecutionRequests computed, stepKeeps_processExecutionRequests computed,
+    effectiveKept_requests computed, registryLifecycle_processExecutionRequests computed,
+    lives_processExecutionRequests computed⟩
 
 end KeptSteps
 
@@ -909,7 +901,7 @@ private theorem steady_processBlockExecution {engine : ExecutionEngine preset fo
 private theorem kept_processSyncAggregate {altair : .altair ≤ fork}
     {aggregate : SyncAggregate preset}
     (computed : processSyncAggregate config checks s altair aggregate = .ok t) : Kept s t :=
-  ⟨(frame_processSyncAggregate computed).toFrame, payloadInputs_processSyncAggregate computed,
+  ⟨(frame_processSyncAggregate computed).toFrame, payloadInputsLaws.processSyncAggregate computed,
     stepKeeps_processSyncAggregate computed,
     effectiveKept_data (congrArg (·.data) (processSyncAggregate_kept computed).1),
     .of_data (by rw [(processSyncAggregate_kept computed).1]),

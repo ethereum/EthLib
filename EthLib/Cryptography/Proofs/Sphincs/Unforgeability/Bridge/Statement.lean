@@ -192,6 +192,29 @@ def HasAdversarySecurityBits (bits : Nat) : Prop :=
   ∀ q r adversary, HasAdversaryQueryBound adversary q r →
     forgeAdvantage adversary ≤ ((q + schemeCalls r : Nat) : ℝ≥0∞) / ((2 ^ bits : Nat) : ℝ≥0∞)
 
+/-! ## The signer's long counter searches, charged apart -/
+
+/-- The bound on a counter search that the third budget charges to every request: `2^22`. -/
+def searchCap : Nat := 2 ^ 22
+
+/-- A bound on the scheme's calls when every request but the last searches below `T`.
+
+Key generation, `470595 + 3 T` per request, `3 * 2^32` for the last request, and verification. -/
+def cappedCalls (T r : Nat) : Nat :=
+  keyGenCalls + r * (470595 + 3 * T) + 3 * MAX_COUNTER_TRIALS + verifyCalls
+
+/-- With `q` own hash calls and `r` requests, the forging probability is `<= (q + C + 1) / 2^bits`.
+
+`C` charges each request its searches up to `2^22` counters, and one request all `2^32`.
+
+The `1` covers the chance that some search runs past `2^22` counters.
+
+At 127 bits and `2^30` requests, the bound is never below about `2^-73.4`. -/
+def HasCappedSecurityBits (bits : Nat) : Prop :=
+  ∀ q r adversary, HasAdversaryQueryBound adversary q r →
+    forgeAdvantage adversary ≤
+      ((q + cappedCalls searchCap r + 1 : Nat) : ℝ≥0∞) / ((2 ^ bits : Nat) : ℝ≥0∞)
+
 /-- The cap on signing requests is within the model's cap of 1,182,000,000. -/
 theorem signatureLimit_le : SIGNATURE_LIMIT ≤ SphincsSecurity.signatureLimit := by
   decide

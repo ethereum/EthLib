@@ -772,12 +772,13 @@ theorem actualGlobalChainKeygen_support_keyResult
     (hview : view ∈ support actualGlobalChainKeygen) :
     view.keyResult ∈ support
       ((simulateQ romImpl Concrete.keygen).run ∅) := by
-  unfold actualGlobalChainKeygen at hview
-  rw [mem_support_bind_iff] at hview
-  obtain ⟨keyResult, hkeyResult, hpure⟩ := hview
+  -- Bind on any computation and move outputs by equations, so the kernel runs no key generation.
+  rw [actualGlobalChainKeygen.eq_def] at hview
+  obtain ⟨⟨⟨publicKey, secretKey⟩, cache⟩, hkeyResult, hpure⟩ :=
+    exists_eq_of_mem_support_bind _ _ hview
+  replace hpure := hpure _ rfl
   simp only [support_pure, Set.mem_singleton_iff] at hpure
-  subst view
-  exact hkeyResult
+  exact mem_support_congr hkeyResult rfl (by rw [hpure]; rfl)
 
 theorem trajectoryProgrammedGlobalChainKeygen_support_keyResult
     (view : ProgrammedGlobalChainKeygenView)

@@ -15,6 +15,12 @@ For every choice of peers, standing and message ID that a client passes:
 - The same holds for a join with a lawful choice.
   That result also needs the fanout of the topic to list each peer once.
   It needs the same of the peers that announced the topic.
+- If no fanout holds a peer twice before a join or a publish, none does after it.
+  The publish needs a lawful choice, and the peers that announced its topic to appear once each.
+- A join, a leave and a publish keep the topics of the peers and the explicit peers.
+  A leave also keeps the fanout.
+- If no explicit peer is in a mesh before a leave, none is after it.
+  The same holds for a join with a lawful choice.
 - A published message goes only to explicit peers and to peers not below the publish threshold.
 - With flood publishing, a new message goes to every peer of the topic not below that threshold.
 - Once this node publishes a new message, no later RPC forwards or delivers its ID.
@@ -125,6 +131,50 @@ theorem join_mesh_nodup (hsel : sel.Lawful) (hf : (peersOf s.fanout topic).Nodup
       exact this.2 ha
     · exact h t
 
+/-- Joining a topic keeps each fanout free of a repeated peer.
+
+It needs no fanout holding a peer twice before. -/
+theorem join_fanout_nodup (h : ∀ t, (peersOf s.fanout t).Nodup) (t : String) :
+    (peersOf (join p sel standing now topic s).1.fanout t).Nodup := by
+  by_cases hj : topic ∈ s.topics
+  · simpa [join, hj] using h t
+  · simp only [join, hj, ↓reduceIte]
+    by_cases e : t = topic
+    · subst e
+      rw [peersOf_filter]
+      exact List.nodup_nil
+    · rw [Router.peersOf_filter_ne _ e]
+      exact h t
+
+/-- Joining a topic keeps the topics of the peers. -/
+theorem join_peerTopics : (join p sel standing now topic s).1.peerTopics = s.peerTopics := by
+  unfold join
+  split <;> rfl
+
+/-- Joining a topic keeps the explicit peers. -/
+theorem join_explicit_eq : (join p sel standing now topic s).1.explicit = s.explicit := by
+  unfold join
+  split <;> rfl
+
+/-- If no explicit peer is in a mesh before a join, none is after it.
+
+It needs a lawful choice. -/
+theorem join_explicit (hsel : sel.Lawful) (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
+    ∀ t, ∀ q ∈ peersOf (join p sel standing now topic s).1.mesh t,
+      q ∉ (join p sel standing now topic s).1.explicit := by
+  intro t q hq
+  rw [join_explicit_eq]
+  by_cases hj : topic ∈ s.topics
+  · simp only [join, hj, ↓reduceIte] at hq
+    exact h t q hq
+  · by_cases e : t = topic
+    · subst e
+      have hg := join_graftable p sel standing now t s hsel hj hq
+      simp only [graftable, Bool.and_eq_true, decide_eq_true_eq] at hg
+      exact hg.1.1
+    · simp only [join, hj, ↓reduceIte, Router.peersOf_setPeers, e] at hq
+      exact h t q hq
+
 /-- Leaving a joined topic sends a PRUNE with the unsubscribe backoff to each of its mesh peers.
 
 It sends nothing else. -/
@@ -168,9 +218,42 @@ theorem leave_mesh_nodup (h : ∀ t, (peersOf s.mesh t).Nodup) (t : String) :
       exact h t
   · simpa [leave, hj] using h t
 
-/-- A publish keeps every mesh. -/
-theorem publish_mesh {m : Message} :
-    (publish p c sel standing msgId now m s).1.mesh = s.mesh := by
+/-- Leaving a topic keeps the fanout. -/
+theorem leave_fanout : (leave c now topic s).1.fanout = s.fanout := by
+  unfold leave
+  split <;> rfl
+
+/-- Leaving a topic keeps the topics of the peers. -/
+theorem leave_peerTopics : (leave c now topic s).1.peerTopics = s.peerTopics := by
+  unfold leave
+  split <;> rfl
+
+/-- Leaving a topic keeps the explicit peers. -/
+theorem leave_explicit_eq : (leave c now topic s).1.explicit = s.explicit := by
+  unfold leave
+  split <;> rfl
+
+/-- If no explicit peer is in a mesh before a leave, none is after it. -/
+theorem leave_explicit (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
+    ∀ t, ∀ q ∈ peersOf (leave c now topic s).1.mesh t, q ∉ (leave c now topic s).1.explicit := by
+  intro t q hq
+  rw [leave_explicit_eq]
+  by_cases hj : topic ∈ s.topics
+  · by_cases e : t = topic
+    · subst e
+      rw [leave_mesh _ _ _ _ hj] at hq
+      simp at hq
+    · simp only [leave, hj, not_true_eq_false, ↓reduceIte] at hq
+      rw [Router.peersOf_filter_ne _ e] at hq
+      exact h t q hq
+  · simp only [leave, hj, not_false_eq_true, ↓reduceIte] at hq
+    exact h t q hq
+
+/-- A publish keeps every mesh, the topics of the peers and the explicit peers. -/
+private theorem publish_fields {m : Message} :
+    (publish p c sel standing msgId now m s).1.mesh = s.mesh ∧
+    (publish p c sel standing msgId now m s).1.peerTopics = s.peerTopics ∧
+    (publish p c sel standing msgId now m s).1.explicit = s.explicit := by
   unfold publish publishPeers
   by_cases hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
   · simp [hn]
@@ -179,6 +262,58 @@ theorem publish_mesh {m : Message} :
     · by_cases h2 : m.topic ∈ s.topics
       · simp [hn, h1, h2]
       · simp [hn, h1, h2]
+
+/-- A publish keeps every mesh. -/
+theorem publish_mesh {m : Message} :
+    (publish p c sel standing msgId now m s).1.mesh = s.mesh :=
+  (publish_fields p c sel standing msgId now s).1
+
+/-- A publish keeps the topics of the peers. -/
+theorem publish_peerTopics {m : Message} :
+    (publish p c sel standing msgId now m s).1.peerTopics = s.peerTopics :=
+  (publish_fields p c sel standing msgId now s).2.1
+
+/-- A publish keeps the explicit peers. -/
+theorem publish_explicit_eq {m : Message} :
+    (publish p c sel standing msgId now m s).1.explicit = s.explicit :=
+  (publish_fields p c sel standing msgId now s).2.2
+
+/-- Choosing the peers of a publish keeps each fanout free of a repeated peer.
+
+It needs a lawful choice, and no fanout holding a peer twice before.
+
+It also needs the peers that announced the topic to appear once each. -/
+private theorem publishPeers_fanout_nodup (hsel : sel.Lawful)
+    (ht : (topicPeers s topic).Nodup) (h : ∀ t, (peersOf s.fanout t).Nodup) (t : String) :
+    (peersOf (publishPeers p c sel standing now topic s).1.fanout t).Nodup := by
+  unfold publishPeers
+  by_cases h1 : c.floodPublish = true
+  · simpa [h1] using h t
+  · by_cases h2 : topic ∈ s.topics
+    · simpa [h1, h2] using h t
+    · have hq := h topic
+      generalize peersOf s.fanout topic = q at hq ⊢
+      simp only [h1, h2, Bool.false_eq_true, ↓reduceIte, Router.peersOf_setPeers]
+      split
+      · cases q with
+        | nil => exact (hsel _ _).1.nodup (ht.filter _)
+        | cons a l => exact hq
+      · exact h t
+
+/-- A publish keeps each fanout free of a repeated peer.
+
+It needs a lawful choice, and no fanout holding a peer twice before.
+
+It also needs the peers that announced the topic of the message to appear once each. -/
+theorem publish_fanout_nodup (hsel : sel.Lawful) {m : Message} (ht : (topicPeers s m.topic).Nodup)
+    (h : ∀ t, (peersOf s.fanout t).Nodup) (t : String) :
+    (peersOf (publish p c sel standing msgId now m s).1.fanout t).Nodup := by
+  by_cases hn : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = true
+  · simpa [publish, hn] using h t
+  · have hn' : s.seen.contains now (p.seen_ttl * 1000) (msgId m) = false := by simpa using hn
+    simp only [publish, hn', Bool.false_eq_true, ↓reduceIte]
+    exact publishPeers_fanout_nodup p c sel standing now m.topic
+      { s with seen := s.seen.insert now (msgId m), mcache := s.mcache.put (msgId m) m } hsel ht h t
 
 /-- A publish forwards only the message it publishes. -/
 theorem publish_forward_message {m m' : Message} {q : PeerId}

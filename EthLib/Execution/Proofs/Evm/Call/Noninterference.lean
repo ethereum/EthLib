@@ -3,6 +3,7 @@ module
 public import EthLib.Execution.Proofs.Evm.Noninterference
 public import EthLib.Execution.Proofs.Evm.Call.Reads
 public import EthLib.Execution.Proofs.Evm.Call.StaticStep
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: calls and creations keep agreeing frames
@@ -556,10 +557,6 @@ private theorem callResolve_sim {g1 g2 : Evm fork Meter}
       (by rw [accessDelegation_message hd]; exact hcurrent) kind cold memoryCost expandBy callee)
     exact (Sim.of_rel hrel2).2 r1 h reads
 
-/-- A success followed by a step gives the step on the value. -/
-private theorem exceptOk_bind {α β : Type} (x : α) (k : α → Except EvmError β) :
-    (Except.ok x >>= k) = k x := rfl
-
 omit [GasMeter Meter] in
 /-- The pops of a call move a replaced state through unchanged. -/
 private theorem popCallOperands_withState (kind : CallKind) (evm : Evm fork Meter)
@@ -568,7 +565,7 @@ private theorem popCallOperands_withState (kind : CallKind) (evm : Evm fork Mete
       (fun p => (p.1, { p.2 with state := other })) <$> popCallOperands kind evm := by
   cases kind <;>
     simp only [popCallOperands, popCallValue, CallKind.sendsValue, ↓reduceIte,
-      Bool.false_eq_true, popWord_withState, bind_map_left, map_bind, map_pure, exceptOk_bind]
+      Bool.false_eq_true, popWord_withState, bind_map_left, map_bind, map_pure, Base.ok_bind]
 
 /-- A call that succeeds has read the address that it pops. -/
 private theorem callStep_reads_address {kind : CallKind} {evm popped : Evm fork Meter}
@@ -652,8 +649,8 @@ private theorem callStep_sim {e1 e2 : Evm fork Meter}
   have hpe := popCallOperands_eq_ok hp
   have k1 := callStep_eq kind e1
   have k2 := callStep_eq kind { e1 with state := s }
-  rw [hp, exceptOk_bind] at k1
-  rw [hp2, exceptOk_bind] at k2
+  rw [hp, Base.ok_bind] at k1
+  rw [hp2, Base.ok_bind] at k2
   dsimp only at k1 k2
   rw [accessAddress_withState p1 s call.address] at k2
   dsimp only at k2
@@ -679,7 +676,7 @@ private theorem callStep_sim {e1 e2 : Evm fork Meter}
     rw [k1, k2]
     exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   | ok u =>
-    rw [hc, exceptOk_bind] at k1 k2
+    rw [hc, Base.ok_bind] at k1 k2
     have hframe : FrameAgrees account allStorage slot code
         (recordAccountRead (accessAddress p1 call.address).2 call.address)
         (recordAccountRead { (accessAddress p1 call.address).2 with state := s } call.address) :=
@@ -853,7 +850,7 @@ private theorem launchFrom_sim {g1 g2 : Evm fork Meter}
     (g1.state.getAccount g1.message.currentTarget).nonce salt initCode with
   | error e => exact ⟨fun _ h _ => h, fun _ h => by cases h⟩
   | ok address =>
-    rw [exceptOk_bind, exceptOk_bind, accessAddress_withState g1 s address]
+    rw [Base.ok_bind, Base.ok_bind, accessAddress_withState g1 s address]
     dsimp only
     have hqs : (accessAddress g1 address).2.state = g1.state := state_accessAddress _ _
     have hqm : (accessAddress g1 address).2.message = g1.message := accessAddress_message _ _

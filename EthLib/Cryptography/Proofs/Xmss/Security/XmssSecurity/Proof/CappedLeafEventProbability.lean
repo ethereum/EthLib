@@ -46,6 +46,22 @@ theorem keygenLeafTargetInput_leafInput (secretKey : SecretKey)
 
 attribute [irreducible] keygenLeafTargetInput
 
+/-- An output of key generation and an execution after it give an execution of the game.
+
+It holds for any scheme, so the kernel checks it without running one. -/
+private theorem mem_support_detailedGameWithCache_of_afterKeygen (scheme : Scheme SecretKey)
+    (adversary : Adversary) (keyResult : (PublicKey × SecretKey) × QueryCache HashSpec)
+    (hkeygen : keyResult ∈ support ((simulateQ romImpl scheme.keygen).run ∅))
+    (execution : GameOutcome × QueryCache HashSpec)
+    (hafter : execution ∈ support
+      ((simulateQ romImpl
+        (detailedGameAfterKeygen scheme adversary keyResult.1.1 keyResult.1.2)).run
+          keyResult.2)) :
+    execution ∈ support (detailedGameWithCache scheme adversary) := by
+  unfold detailedGameWithCache detailedGameCore
+  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff]
+  exact ⟨keyResult, hkeygen, hafter⟩
+
 theorem detailedGameAfterKeygen_keys_eq
     (adversary : Adversary) (publicKey : PublicKey) (secretKey : SecretKey)
     (initialCache : QueryCache HashSpec) (execution : GameOutcome × QueryCache HashSpec)
@@ -139,36 +155,37 @@ theorem leafCollision_afterKeygen_orientation
   have hafterCacheLe := xmssRom_cache_le
     (detailedGameAfterKeygen Concrete.scheme adversary keyResult.1.1 keyResult.1.2)
     keyResult.2 execution hafter
-  have hkeygen' : keyResult ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
-  let oldKeyResult : (PublicKey × SecretKey) × QueryCache HashSpec :=
-    ((keyResult.1.1, Concrete.erasePrecomputation keyResult.1.2), keyResult.2)
-  have holdKeygen : oldKeyResult ∈ support
-      ((simulateQ romImpl Concrete.keygen).run ∅) :=
-    Concrete.precomputedKeygen_support_oldKeygen keyResult hkeygen'
+  -- Rewrite key generation by its equation: the kernel would run it to match two forms.
+  have hkeygen' := hkeygen
+  rw [Concrete.scheme_keygen] at hkeygen'
+  -- Name the old key result as a variable: the kernel would unfold a local definition of it.
+  obtain ⟨oldKeyResult, holdKeygen, hold⟩ : ∃ oldKeyResult : (PublicKey × SecretKey) ×
+      QueryCache HashSpec, oldKeyResult ∈ support ((simulateQ romImpl Concrete.keygen).run ∅) ∧
+      oldKeyResult = ((keyResult.1.1, Concrete.erasePrecomputation keyResult.1.2), keyResult.2) :=
+    ⟨_, Concrete.precomputedKeygen_support_oldKeygen keyResult hkeygen', rfl⟩
+  have hold2 : oldKeyResult.2 = keyResult.2 := by rw [hold]
+  have hold12 : oldKeyResult.1.2.parameter = keyResult.1.2.parameter := by rw [hold]; rfl
+  have hold12' : oldKeyResult.1.2.chainStart = keyResult.1.2.chainStart := by rw [hold]; rfl
   have honeTimeStable := (Concrete.keygen_oneTimePublicKey_eq_of_cache_le oldKeyResult
-    holdKeygen execution.2 hafterCacheLe leafIndex).symm
-  change Concrete.CacheReplay.oneTimePublicKey execution.2 keyResult.1.2.parameter
-      keyResult.1.2.chainStart leafIndex =
-    Concrete.CacheReplay.oneTimePublicKey keyResult.2 keyResult.1.2.parameter
-      keyResult.1.2.chainStart leafIndex at honeTimeStable
+    holdKeygen execution.2 (hold2 ▸ hafterCacheLe) leafIndex).symm
+  rw [hold2, hold12, hold12'] at honeTimeStable
   obtain ⟨honestOutput, hhonestCached⟩ :=
     Concrete.keygen_cache_has_leafInput oldKeyResult holdKeygen leafIndex
-  change keyResult.2
-      (Concrete.CacheView.leafInput keyResult.1.2.parameter leafIndex
-        (Concrete.CacheReplay.oneTimePublicKey keyResult.2 keyResult.1.2.parameter
-          keyResult.1.2.chainStart leafIndex)) = some honestOutput at hhonestCached
+  rw [hold2, hold12, hold12'] at hhonestCached
   have hforgedInitial : keyResult.2
       (Concrete.CacheView.leafInput keyResult.1.2.parameter leafIndex forgedEndpoints) = none := by
-    apply Concrete.keygen_cache_leafInput_eq_none_of_ne oldKeyResult holdKeygen leafIndex
+    have h := Concrete.keygen_cache_leafInput_eq_none_of_ne oldKeyResult holdKeygen leafIndex
       forgedEndpoints
+    rw [hold2, hold12, hold12'] at h
+    apply h
     intro heq
     apply hleafCollision.1
     exact heq.trans honeTimeStable.symm
+  -- State the honest output at its plain type: the kernel would compare its input otherwise.
   exact adaptiveFreshDigestCollisionWith_of_leafCollision keyResult.1.2 keyResult.2
-    execution.2 leafIndex forgedEndpoints forgedOutput honestOutput hforgedCached hforgedInitial
-    hhonestCached (hafterCacheLe hhonestCached) honeTimeStable hleafCollision.2
+    execution.2 leafIndex forgedEndpoints forgedOutput (show HashOutput from honestOutput)
+    hforgedCached hforgedInitial hhonestCached (hafterCacheLe hhonestCached) honeTimeStable
+    hleafCollision.2
 
 /-- Take the leaf branch of a concrete fresh-leaf-index event.
 
@@ -259,11 +276,9 @@ theorem fresh_leaf_event_afterKeygen_orientation
   obtain ⟨forgedEncoding, hforgedValid, _hunsigned, hforgedDecode, hleafEvent⟩ := hfresh
   have hkeys := detailedGameAfterKeygen_keys_eq adversary keyResult.1.1
     keyResult.1.2 keyResult.2 execution hafter
-  have hgame : execution ∈ support
-      (detailedGameWithCache Concrete.scheme adversary) := by
-    unfold detailedGameWithCache detailedGameCore
-    rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff]
-    exact ⟨keyResult, hkeygen, hafter⟩
+  -- Assemble through a lemma for any scheme: the kernel would run the game to match two forms.
+  have hgame := mem_support_detailedGameWithCache_of_afterKeygen _ adversary keyResult hkeygen
+    execution hafter
   obtain ⟨forgedOutput, hforgedCached⟩ :=
     detailed_execution_verified_leaf_cached_as adversary execution hgame
       forgedEncoding hevent.1 hforgedDecode
@@ -363,10 +378,9 @@ theorem afterKeygen_execution_mem_detailedGame
       ((simulateQ romImpl
         (detailedGameAfterKeygen Concrete.scheme adversary keyResult.1.1 keyResult.1.2)).run
           keyResult.2)) :
-    execution ∈ support (detailedGameWithCache Concrete.scheme adversary) := by
-  unfold detailedGameWithCache detailedGameCore
-  rw [simulateQ_bind, StateT.run_bind, mem_support_bind_iff]
-  exact ⟨keyResult, hkeygen, hafter⟩
+    execution ∈ support (detailedGameWithCache Concrete.scheme adversary) :=
+  -- Assemble through a lemma for any scheme: the kernel would run the game to match two forms.
+  mem_support_detailedGameWithCache_of_afterKeygen _ adversary keyResult hkeygen execution hafter
 
 theorem same_leaf_witness_afterKeygen_orientation
     (adversary : Adversary)

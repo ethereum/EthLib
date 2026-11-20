@@ -41,6 +41,54 @@ noncomputable def cappedUnloggedMappedAdversaryImpl
       exact simulateQ romImpl
         (Concrete.scheme.sign secretKey request.leafIndex request.message)
 
+/-- A signing query, answered without logging, runs the scheme's signer.
+
+A proof rewrites with it, so the kernel compares the two forms as computations. -/
+theorem cappedUnloggedMappedAdversaryImpl_inr (publicKey : PublicKey) (secretKey : SecretKey)
+    (request : SignRequest) (cache : QueryCache HashSpec) :
+    (cappedUnloggedMappedAdversaryImpl publicKey secretKey (.inr request)).run cache =
+      ((simulateQ romImpl (Concrete.scheme.sign secretKey request.leafIndex request.message)).run
+        cache : ProbComp (Option Signature × QueryCache HashSpec)) :=
+  rfl
+
+/-- An output of a signing query, at the query's answer type, is one at the signer's type.
+
+It holds for any computation, so the kernel checks it without running one. -/
+theorem mem_support_range_inr {σ : Type} (request : SignRequest)
+    (c : ProbComp (Option Signature × σ))
+    (output : (OracleWorld + SigningSpec).Range (.inr request)) (state : σ)
+    (h : (output, state) ∈
+      @support ProbComp ((OracleWorld + SigningSpec).Range (.inr request) × σ) _ c) :
+    @Prod.mk (Option Signature) σ output state ∈ support c := h
+
+/-- An output of a traced signing query, read at the query's answer type, is one at the signer's.
+
+It reads the output and the support at the answer type.
+
+It holds for any computation, so the kernel checks it without running one. -/
+theorem mem_support_range_inr_traced {σ ω : Type} (request : SignRequest)
+    (c : ProbComp ((Option Signature × σ) × ω))
+    (raw : ((OracleWorld + SigningSpec).Range (.inr request) × σ) × ω)
+    (h : raw ∈ @support ProbComp (((OracleWorld + SigningSpec).Range (.inr request) × σ) × ω) _
+      c) :
+    @Membership.mem ((Option Signature × σ) × ω) _ _ (support c) raw :=
+  h
+
+/-- An output of a signing query, answered without logging, is an output of the capped signer.
+
+It holds for any query and cache, so the kernel checks it without running the signer. -/
+theorem mem_support_precomputedCappedSign_of_inr {publicKey : PublicKey}
+    {secretKey : SecretKey} {request : SignRequest} {cache : QueryCache HashSpec}
+    {output : (OracleWorld + SigningSpec).Range (.inr request)} {finalCache : QueryCache HashSpec}
+    (h : (output, finalCache) ∈ support
+      ((cappedUnloggedMappedAdversaryImpl publicKey secretKey (.inr request)).run cache)) :
+    @Prod.mk (Option Signature) (QueryCache HashSpec) output finalCache ∈ support
+      ((simulateQ romImpl
+        (Concrete.precomputedCappedSign secretKey request.leafIndex request.message)).run
+          cache) := by
+  rw [cappedUnloggedMappedAdversaryImpl_inr, Concrete.scheme_sign] at h
+  exact mem_support_range_inr request _ output finalCache h
+
 noncomputable def cappedCacheTracedMappedAdversaryImpl
     (publicKey : PublicKey) (secretKey : SecretKey) :
     QueryImpl (OracleWorld + SigningSpec)
@@ -79,9 +127,13 @@ theorem cappedUnloggedMappedAdversaryImpl_cache_le
           exact QueryImpl.withCaching_cache_le uniformSampleImpl hashInput initialCache
             result hmem
   | inr request =>
+      -- Rewrite the query to the signer: the kernel would run it to match the impl's branch.
+      obtain ⟨output, finalCache⟩ := result
+      rw [cappedUnloggedMappedAdversaryImpl_inr] at hmem
       exact xmssRom_cache_le
         (Concrete.scheme.sign secretKey request.leafIndex request.message)
-        initialCache result hmem
+        initialCache (@Prod.mk (Option Signature) _ output finalCache)
+        (mem_support_range_inr request _ output finalCache hmem)
 
 theorem cappedCacheTracedMappedAdversaryImpl_query_cachesLe
     (publicKey : PublicKey) (secretKey : SecretKey)
@@ -118,11 +170,17 @@ theorem cappedCacheTracedMappedAdversaryImpl_query_successfulEncodingsCached
   rw [cappedCacheTracedMappedAdversaryImpl, QueryImpl.extendState_apply,
     mem_support_bind_iff] at hmem
   obtain ⟨⟨output, finalCache⟩, hbase, hpure⟩ := hmem
+  -- Read the start cache while the query is open: the kernel would run the signer to match them.
+  change (output, finalCache) ∈ support
+    ((cappedUnloggedMappedAdversaryImpl publicKey secretKey input).run initialCache) at hbase
   simp only [support_pure, Set.mem_singleton_iff] at hpure
   subst result
   cases input with
   | inl worldInput => simpa [signingCacheTraceUpdate] using htrace
   | inr request =>
+      -- Rewrite the query to the signer: the kernel would run it to match the impl's branch.
+      rw [cappedUnloggedMappedAdversaryImpl_inr, Concrete.scheme_sign] at hbase
+      have hbase := mem_support_range_inr request _ _ _ hbase
       intro entry hentry
       rw [signingCacheTraceUpdate, List.mem_append] at hentry
       rcases hentry with hentry | hentry
@@ -149,12 +207,18 @@ theorem cappedCacheTracedMappedAdversaryImpl_query_preservesOtherValidEncodingIn
   rw [cappedCacheTracedMappedAdversaryImpl, QueryImpl.extendState_apply,
     mem_support_bind_iff] at hmem
   obtain ⟨⟨output, finalCache⟩, hbase, hpure⟩ := hmem
+  -- Read the start cache while the query is open: the kernel would run the signer to match them.
+  change (output, finalCache) ∈ support
+    ((cappedUnloggedMappedAdversaryImpl publicKey secretKey input).run initialCache) at hbase
   simp only [support_pure, Set.mem_singleton_iff] at hpure
   subst result
   cases input with
   | inl worldInput => simpa [SigningCacheTrace.PreservesOtherValidEncodingInputs,
       signingCacheTraceUpdate] using htrace
   | inr request =>
+      -- Rewrite the query to the signer: the kernel would run it to match the impl's branch.
+      rw [cappedUnloggedMappedAdversaryImpl_inr, Concrete.scheme_sign] at hbase
+      have hbase := mem_support_range_inr request _ _ _ hbase
       intro entry hentry
       rw [signingCacheTraceUpdate, List.mem_append] at hentry
       rcases hentry with hentry | hentry
@@ -505,9 +569,12 @@ theorem cappedDetailedGameWithSigningTrace_invariants
     result.2.2.toSigningLog = result.1.signingLog ∧
       result.2.2.CachesLe result.2.1 ∧
       result.2.2.SuccessfulEncodingsCached result.1.secretKey := by
-  unfold cappedDetailedGameWithSigningTrace at hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
+  -- Step through the bind by an equation: the kernel would run key generation to match two forms.
+  rw [cappedDetailedGameWithSigningTrace.eq_1] at hmem
+  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, -, hrest⟩ :=
+    exists_eq_of_mem_support_bind _ _ hmem
+  have hrest := hrest
+    (cappedDetailedGameAfterKeygenWithSigningTrace adversary publicKey secretKey keyCache) rfl
   obtain ⟨hsecretKey, hlog, hcaches, hcached⟩ :=
     cappedDetailedGameAfterKeygenWithSigningTrace_invariants adversary
       publicKey secretKey keyCache result hrest
@@ -518,9 +585,12 @@ theorem cappedDetailedGameWithSigningTrace_preservesOtherValidEncodingInputs
     (result : GameOutcome × (QueryCache HashSpec × SigningCacheTrace))
     (hmem : result ∈ support (cappedDetailedGameWithSigningTrace adversary)) :
     result.2.2.PreservesOtherValidEncodingInputs result.1.secretKey := by
-  unfold cappedDetailedGameWithSigningTrace at hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
+  -- Step through the bind by an equation: the kernel would run key generation to match two forms.
+  rw [cappedDetailedGameWithSigningTrace.eq_1] at hmem
+  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, -, hrest⟩ :=
+    exists_eq_of_mem_support_bind _ _ hmem
+  have hrest := hrest
+    (cappedDetailedGameAfterKeygenWithSigningTrace adversary publicKey secretKey keyCache) rfl
   have hpreserves :=
     cappedDetailedGameAfterKeygenWithSigningTrace_preservesOtherValidEncodingInputs
       adversary publicKey secretKey keyCache result hrest

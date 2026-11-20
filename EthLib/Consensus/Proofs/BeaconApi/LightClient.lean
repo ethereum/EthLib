@@ -51,12 +51,12 @@ That period is below the size of 64 bits and lies in the range. -/
 private theorem updatesFrom_getElem {α : Type} (known : Std.TreeMap UInt64 α)
     (startPeriod count : UInt64) :
     ∀ period bound j (h : j < (updatesFrom known startPeriod count period bound).length),
-      period + j < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat (period + j)) ∧
+      period + j < UInt64.size ∧ InCountRange startPeriod count (UInt64.ofNat (period + j)) ∧
         known[UInt64.ofNat (period + j)]? =
           some (updatesFrom known startPeriod count period bound)[j]
   | _, 0, j, h => by simp [updatesFrom] at h
   | period, bound + 1, j, h => by
-    by_cases hc : period < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat period)
+    by_cases hc : period < UInt64.size ∧ InCountRange startPeriod count (UInt64.ofNat period)
     · cases hk : known[UInt64.ofNat period]? with
       | none => simp [updatesFrom, hc, hk] at h
       | some update =>
@@ -76,7 +76,7 @@ private theorem prefix_updatesFrom {α : Type} (known : Std.TreeMap UInt64 α)
     (startPeriod count : UInt64) :
     ∀ period bound (values : List α), values.length ≤ bound →
       (∀ j (h : j < values.length), period + j < UInt64.size ∧
-        InRange startPeriod count (UInt64.ofNat (period + j)) ∧
+        InCountRange startPeriod count (UInt64.ofNat (period + j)) ∧
           known[UInt64.ofNat (period + j)]? = some values[j]) →
       values <+: updatesFrom known startPeriod count period bound
   | _, _, [], _, _ => List.nil_prefix
@@ -98,10 +98,10 @@ private theorem prefix_updatesFrom {α : Type} (known : Std.TreeMap UInt64 α)
 It is a known period of the range, and no known period of the range comes before it. -/
 private theorem find?_known_eq_some {α : Type} {known : Std.TreeMap UInt64 α}
     {startPeriod count first : UInt64} {value : α}
-    (found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) =
+    (found : known.toList.find? (fun entry => decide (InCountRange startPeriod count entry.1)) =
       some (first, value)) :
-    known[first]? = some value ∧ InRange startPeriod count first ∧
-      ∀ period, InRange startPeriod count period → period ∈ known → first ≤ period := by
+    known[first]? = some value ∧ InCountRange startPeriod count first ∧
+      ∀ period, InCountRange startPeriod count period → period ∈ known → first ≤ period := by
   obtain ⟨range, before, after, split, skipped⟩ := List.find?_eq_some_iff_append.mp found
   have sorted : known.toList.Pairwise (fun a b => a.1 < b.1) :=
     known.ordered_keys_toList.imp fun h => compareOfLessAndEq_eq_lt.mp h
@@ -125,8 +125,9 @@ private theorem find?_known_eq_some {α : Type} {known : Std.TreeMap UInt64 α}
 /-- When the search finds nothing, the node knows no period of the range. -/
 private theorem find?_known_eq_none {α : Type} {known : Std.TreeMap UInt64 α}
     {startPeriod count : UInt64}
-    (found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) = none)
-    (period : UInt64) (in_range : InRange startPeriod count period) : period ∉ known := by
+    (found : known.toList.find? (fun entry => decide (InCountRange startPeriod count entry.1)) =
+      none)
+    (period : UInt64) (in_range : InCountRange startPeriod count period) : period ∉ known := by
   intro known_mem
   have entry : (period, known[period]) ∈ known.toList :=
     Std.TreeMap.mem_toList_iff_getElem?_eq_some.mpr
@@ -150,7 +151,7 @@ theorem isUpdatesAnswer_iff {α : Type} (known : Std.TreeMap UInt64 α)
     IsUpdatesAnswer known startPeriod count answer ↔
       answer <+: updatesInRange known startPeriod count ∧
         (answer = [] → updatesInRange known startPeriod count = []) := by
-  rcases found : known.toList.find? (fun entry => decide (InRange startPeriod count entry.1))
+  rcases found : known.toList.find? (fun entry => decide (InCountRange startPeriod count entry.1))
     with _ | ⟨first, value⟩
   · -- The range has no known period, so only the empty answer is accepted.
     have none_known := find?_known_eq_none found
@@ -173,12 +174,14 @@ theorem isUpdatesAnswer_iff {α : Type} (known : Std.TreeMap UInt64 α)
     simp only [updatesInRange, found]
     have first_small : first.toNat < UInt64.size := first.toNat_lt
     have first_back : UInt64.ofNat first.toNat = first := UInt64.ofNat_toNat
-    have positive : 0 < updatesLimit count := by
+    have positive : 0 < lightClientUpdatesLimit count := by
       have : (128 : UInt64).toNat = 128 := rfl
-      simp only [updatesLimit, InRange, MAX_REQUEST_LIGHT_CLIENT_UPDATES] at first_range ⊢
+      simp only [lightClientUpdatesLimit, InCountRange, MAX_REQUEST_LIGHT_CLIENT_UPDATES]
+        at first_range ⊢
       omega
     -- The run starts with the update of the first period, so it is not empty.
-    have run_ne : updatesFrom known startPeriod count first.toNat (updatesLimit count) ≠ [] := by
+    have run_ne :
+        updatesFrom known startPeriod count first.toNat (lightClientUpdatesLimit count) ≠ [] := by
       obtain ⟨limit, hlimit⟩ := Nat.exists_eq_succ_of_ne_zero positive.ne'
       rw [hlimit]
       simp [updatesFrom, first_small, first_back, first_range, known_first]
@@ -224,22 +227,23 @@ theorem isUpdatesAnswer_iff {α : Type} (known : Std.TreeMap UInt64 α)
         simp at this
     · rintro ⟨pre, nonempty⟩
       have long := pre.length_le
-      have short := updatesFrom_length_le known startPeriod count first.toNat (updatesLimit count)
+      have short := updatesFrom_length_le known startPeriod count first.toNat
+        (lightClientUpdatesLimit count)
       refine ⟨(List.range answer.length).map fun j => UInt64.ofNat (first.toNat + j), ?_, ?_, ?_,
         ?_, by omega⟩
       · refine List.ext_getElem (by simp) fun j h₁ h₂ => ?_
         simp only [List.length_map, List.length_range] at h₁ h₂
-        have entry := updatesFrom_getElem known startPeriod count first.toNat (updatesLimit count)
-          j (by omega)
+        have entry := updatesFrom_getElem known startPeriod count first.toNat
+          (lightClientUpdatesLimit count) j (by omega)
         simp only [List.getElem_map, List.getElem_range, entry.2.2, pre.getElem h₂]
       · intro period mem
         obtain ⟨j, hj, rfl⟩ := List.mem_map.mp mem
-        exact (updatesFrom_getElem known startPeriod count first.toNat (updatesLimit count)
-          j (by simp at hj; omega)).2.1
+        exact (updatesFrom_getElem known startPeriod count first.toNat
+          (lightClientUpdatesLimit count) j (by simp at hj; omega)).2.1
       · intro i h
         simp only [List.length_map, List.length_range] at h
         have small := (updatesFrom_getElem known startPeriod count first.toNat
-          (updatesLimit count) (i + 1) (by omega)).1
+          (lightClientUpdatesLimit count) (i + 1) (by omega)).1
         simp only [List.getElem_map, List.getElem_range, UInt64.toNat_ofNat_of_lt' small,
           UInt64.toNat_ofNat_of_lt' (show first.toNat + i < UInt64.size by omega)]
         omega
@@ -272,7 +276,7 @@ theorem IsUpdatesAnswer.length_le {α : Type} {known : Std.TreeMap UInt64 α}
 theorem IsUpdatesAnswer.length_le_limit {α : Type} {known : Std.TreeMap UInt64 α}
     {startPeriod count : UInt64} {answer : List α}
     (accepted : IsUpdatesAnswer known startPeriod count answer) :
-    answer.length ≤ updatesLimit count := by
+    answer.length ≤ lightClientUpdatesLimit count := by
   obtain ⟨_, -, -, -, -, bounded⟩ := accepted
   exact bounded
 

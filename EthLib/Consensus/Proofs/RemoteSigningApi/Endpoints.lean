@@ -38,10 +38,11 @@ variable {preset : Preset} {config : Config} {protect : SlashingPolicy preset}
 theorem protectAndSign_status_ne_404 (protect : SlashingPolicy preset) (state : SignerState)
     (pubkey : BLSPubkey) (key : Signatures.SecretKey) (request : SigningRequest preset)
     (root : Root) : (protectAndSign protect state pubkey key request root).1.status ≠ 404 := by
+  -- Rewrite the signing call before the split: the kernel replay of a split on it fills memory.
+  obtain ⟨signature, signs, -⟩ := Signatures.verify_sign key (packBytes root)
   unfold protectAndSign
-  split
-  · simp [SignResult.status]
-  · split <;> simp [SignResult.status]
+  simp only [signs]
+  split <;> simp [SignResult.status]
 
 /-- A key is held exactly when the search over the secret keys finds one for it. -/
 theorem find?_eq_none_iff_not_mem_publicKeys (pubkey : BLSPubkey) :
@@ -85,10 +86,11 @@ theorem protectAndSign_signed {pubkey : BLSPubkey} {key : Signatures.SecretKey}
     Signatures.verify (Signatures.skToPk key) (packBytes root) signature = true := by
   obtain ⟨signature', signs, verifies⟩ := Signatures.verify_sign key (packBytes root)
   unfold protectAndSign at signed
+  -- Rewrite the signing call before the split: the kernel replay of a split on it fills memory.
+  simp only [signs] at signed
   split at signed
   · simp at signed
-  · rw [signs] at signed
-    simp only [SignResult.signed.injEq] at signed
+  · simp only [SignResult.signed.injEq] at signed
     subst signed
     exact verifies
 
@@ -127,14 +129,28 @@ theorem sign_signed {signature : BLSSignature}
             rw [← keyed]
             exact protectAndSign_signed signed
 
+/-- A last step that does not answer with a signature leaves the state as it was. -/
+theorem protectAndSign_state_of_not_signed {pubkey : BLSPubkey} {key : Signatures.SecretKey}
+    {request : SigningRequest preset} {root : Root}
+    (unsigned : ∀ signature, (protectAndSign protect state pubkey key request root).1 ≠
+      .signed signature) :
+    (protectAndSign protect state pubkey key request root).2 = state := by
+  -- Rewrite the signing call before the split: the kernel replay of a split on it fills memory.
+  obtain ⟨signature, signs, -⟩ := Signatures.verify_sign key (packBytes root)
+  unfold protectAndSign at *
+  simp only [signs] at unsigned ⊢
+  split
+  · rfl
+  · simp_all
+
 /-- A call that the sign endpoint does not answer with a signature leaves the state as it was. -/
 theorem sign_state_of_not_signed
     (unsigned : ∀ signature, (sign preset config protect state identifier document).1 ≠
       .signed signature) :
     (sign preset config protect state identifier document).2 = state := by
-  unfold sign protectAndSign at *
+  unfold sign at *
   repeat' split
-  all_goals simp_all
+  all_goals simp_all [protectAndSign_state_of_not_signed]
 
 /-! ## Slashing protection under EIP-3076 -/
 
@@ -175,6 +191,37 @@ theorem eip3076Policy_keeps {record next : Interchange} {pubkey : BLSPubkey}
        subst passed
        exact ⟨fun _ member => member, fun _ member => member⟩)
 
+/-- The last step leaves the keys, and leaves the record or stores the one the rule gave. -/
+theorem protectAndSign_protection_eq (pubkey : BLSPubkey) (key : Signatures.SecretKey)
+    (request : SigningRequest preset) (root : Root) :
+    (protectAndSign protect state pubkey key request root).2.keys = state.keys ∧
+      ((protectAndSign protect state pubkey key request root).2.protection = state.protection ∨
+        protect state.protection pubkey request root =
+          .ok (protectAndSign protect state pubkey key request root).2.protection) := by
+  -- Rewrite the signing call before the split: the kernel replay of a split on it fills memory.
+  obtain ⟨signature, signs, -⟩ := Signatures.verify_sign key (packBytes root)
+  unfold protectAndSign
+  simp only [signs]
+  split
+  · exact ⟨rfl, Or.inl rfl⟩
+  · rename_i passed
+    exact ⟨rfl, Or.inr passed⟩
+
+/-- A signature of the last step stores the record that the rule gave. -/
+theorem protectAndSign_recorded {pubkey : BLSPubkey} {key : Signatures.SecretKey}
+    {request : SigningRequest preset} {root : Root} {signature : BLSSignature}
+    (signed : (protectAndSign protect state pubkey key request root).1 = .signed signature) :
+    protect state.protection pubkey request root =
+      .ok (protectAndSign protect state pubkey key request root).2.protection := by
+  -- Rewrite the signing call before the split: the kernel replay of a split on it fills memory.
+  obtain ⟨signature', signs, -⟩ := Signatures.verify_sign key (packBytes root)
+  unfold protectAndSign at signed ⊢
+  simp only [signs] at signed ⊢
+  split at signed
+  · simp at signed
+  · rename_i passed
+    simp only [passed]
+
 /-- The record after a call, as the rule of EIP-3076 left it.
 
 The call leaves the keys as they were.
@@ -187,11 +234,12 @@ theorem sign_protection_eq (identifier : String) (document : Json) :
         ∃ (pubkey : BLSPubkey) (request : SigningRequest preset) (root : Root),
           eip3076Policy state.protection pubkey request root =
             .ok (sign preset config eip3076Policy state identifier document).2.protection) := by
-  unfold sign protectAndSign
+  unfold sign
   repeat' split
   all_goals first
     | exact ⟨rfl, Or.inl rfl⟩
-    | exact ⟨rfl, Or.inr ⟨_, _, _, by assumption⟩⟩
+    | exact (protectAndSign_protection_eq _ _ _ _).imp_right
+        (Or.imp_right fun passed => ⟨_, _, _, passed⟩)
 
 /-- A call of the sign endpoint with the rule of EIP-3076 removes no record of any key. -/
 theorem sign_keeps (identifier : String) (document : Json) (other : BLSPubkey) :
@@ -216,7 +264,7 @@ theorem sign_recorded {signature : BLSSignature}
       readIdentifier identifier = some pubkey ∧ requestSigningRoot config request = .ok root ∧
       eip3076Policy state.protection pubkey request root =
         .ok (sign preset config eip3076Policy state identifier document).2.protection := by
-  unfold sign protectAndSign at signed ⊢
+  unfold sign at signed ⊢
   split at signed
   · simp at signed
   · rename_i request hr
@@ -230,13 +278,7 @@ theorem sign_recorded {signature : BLSSignature}
         · rename_i root hroot
           split at signed
           · simp at signed
-          · split at signed
-            · simp at signed
-            · rename_i protection passed
-              split at signed
-              · simp at signed
-              · refine ⟨request, pubkey, root, hr, hi, hroot, ?_⟩
-                simp [passed]
+          · exact ⟨request, pubkey, root, hr, hi, hroot, protectAndSign_recorded signed⟩
 
 /-- A signed block passed its check against the record before the call, and enters the record. -/
 theorem sign_block {signature : BLSSignature} {pubkey : BLSPubkey} {slot : Slot} {root : Root}

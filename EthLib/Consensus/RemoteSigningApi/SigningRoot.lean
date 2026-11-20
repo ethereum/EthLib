@@ -30,11 +30,6 @@ namespace EthLib.Consensus.RemoteSigningApi
 
 open Base Serialization.Ssz
 
-/-- The fork version of an epoch: the previous version before the fork, the current one after. -/
-def _root_.EthLib.Consensus.ForkVersions.versionAt (versions : ForkVersions) (epoch : Epoch) :
-    Version :=
-  if epoch < versions.epoch then versions.previousVersion else versions.currentVersion
-
 /-- The fork info of a state: its fork versions and its root of the genesis validators. -/
 def ForkInfo.ofState {preset : Preset} {fork : Fork} (state : BeaconState preset fork) : ForkInfo :=
   ⟨state.forkVersions, state.genesisValidatorsRoot⟩

@@ -232,17 +232,8 @@ theorem cappedEncodingTracedMappedAdversaryImpl_query_freshSigningActionsReprese
             change initialState.1.1
               (Concrete.CacheView.encodingInput secretKey.parameter request.leafIndex
                 (request.message, signature.randomness)) = none at hfresh
-            have hsignSupport : (some signature, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run
-                    initialState.1.1) := by
-              change (some signature, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run
-                    initialState.1.1) at hbaseSupport
-              exact hbaseSupport
+            -- Read the query as the capped signer: the kernel would run it to match the forms.
+            have hsignSupport := mem_support_precomputedCappedSign_of_inr hbaseSupport
             obtain ⟨hashOutput, houtput⟩ :=
               Concrete.precomputedCappedSign_success_encodingInput_cached secretKey
                 request initialState.1.1 finalState.1 signature hsignSupport
@@ -330,17 +321,8 @@ theorem cappedEncodingTracedMappedAdversaryImpl_query_unsignedEncodingEntriesRep
           rw [hsuffix, hactions]
           simp [List.append_assoc]
       | none =>
-          have hsignSupport : (output, finalState.1) ∈ support
-              ((simulateQ romImpl
-                (Concrete.precomputedCappedSign secretKey request.leafIndex
-                  request.message)).run
-                  initialState.1.1) := by
-            change (output, finalState.1) ∈ support
-              ((simulateQ romImpl
-                (Concrete.precomputedCappedSign secretKey request.leafIndex
-                  request.message)).run
-                  initialState.1.1) at hbaseSupport
-            exact hbaseSupport
+          -- Read the query as the capped signer: the kernel would run it to match the forms.
+          have hsignSupport := mem_support_precomputedCappedSign_of_inr hbaseSupport
           obtain ⟨targetPair, htargetPair⟩ :=
             exists_encodingInput_of_encodingInputLeafIndex?_eq_some secretKey.parameter
               targetInput leafIndex hencoding
@@ -409,15 +391,8 @@ theorem cappedEncodingTracedMappedAdversaryImpl_query_validFreshSigningCollision
         | some returnedSignature =>
             simp only [Option.some.injEq] at hsignature
             subst returnedSignature
-            have hsignSupport : (some signature, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run initialState.1.1) := by
-              change (some signature, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run initialState.1.1) at hbaseSupport
-              exact hbaseSupport
+            -- Read the query as the capped signer: the kernel would run it to match the forms.
+            have hsignSupport := mem_support_precomputedCappedSign_of_inr hbaseSupport
             obtain ⟨encoding, hdecode⟩ :=
               Concrete.precomputedCappedSign_success_decode secretKey request
                 initialState.1.1 finalState.1 signature hsignSupport
@@ -546,17 +521,8 @@ theorem cappedEncodingTracedMappedAdversaryImpl_query_postSigningQueriesRepresen
             rw [hsuffix, hactions]
             simp [List.append_assoc]
         | none =>
-            have hsignSupport : (output, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run
-                    initialState.1.1) := by
-              change (output, finalState.1) ∈ support
-                ((simulateQ romImpl
-                  (Concrete.precomputedCappedSign secretKey request.leafIndex
-                    request.message)).run
-                    initialState.1.1) at hbaseSupport
-              exact hbaseSupport
+            -- Read the query as the capped signer: the kernel would run it to match the forms.
+            have hsignSupport := mem_support_precomputedCappedSign_of_inr hbaseSupport
             obtain ⟨targetPair, htargetPair⟩ :=
               exists_encodingInput_of_encodingInputLeafIndex?_eq_some secretKey.parameter
                 targetInput entry.request.leafIndex hencoding
@@ -746,6 +712,26 @@ theorem cappedDetailedGameAfterKeygenWithEncodingTrace_validFreshSigningCollisio
   · simpa [appendVerificationEncodingObservation, forgedInput, hfresh] using hrepresented
 
 
+/-- An execution of the traced game runs key generation, then the traced rest of the game.
+
+The key generation is the precomputed one.
+
+The bind is stepped through an equation, so the kernel never runs key generation. -/
+private theorem exists_of_mem_support_cappedDetailedGameWithEncodingTrace (adversary : Adversary)
+    {result : GameOutcome × ((QueryCache HashSpec × SigningCacheTrace) × EncodingActionTrace)}
+    (hmem : result ∈ support (cappedDetailedGameWithEncodingTrace adversary)) :
+    ∃ publicKey secretKey keyCache,
+      ((publicKey, secretKey), keyCache) ∈ support
+        ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) ∧
+      result ∈ support (cappedDetailedGameAfterKeygenWithEncodingTrace adversary publicKey
+        secretKey keyCache) := by
+  rw [cappedDetailedGameWithEncodingTrace.eq_1] at hmem
+  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, hkeygen, hrest⟩ :=
+    exists_eq_of_mem_support_bind _ _ hmem
+  rw [Concrete.scheme_keygen] at hkeygen
+  exact ⟨publicKey, secretKey, keyCache, hkeygen, hrest
+    (cappedDetailedGameAfterKeygenWithEncodingTrace adversary publicKey secretKey keyCache) rfl⟩
+
 theorem cappedDetailedGameWithEncodingTrace_signLeafIndices_sublist
     (adversary : Adversary)
     (result : GameOutcome ×
@@ -753,9 +739,9 @@ theorem cappedDetailedGameWithEncodingTrace_signLeafIndices_sublist
     (hmem : result ∈ support (cappedDetailedGameWithEncodingTrace adversary)) :
     List.Sublist (EncodingMonitor.observedSignLeafIndices result.2.2)
       result.2.1.2.leafIndices := by
-  unfold cappedDetailedGameWithEncodingTrace at hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
+  -- Step through key generation by a lemma: the kernel would run it to match two forms.
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_cappedDetailedGameWithEncodingTrace adversary hmem
   exact cappedDetailedGameAfterKeygenWithEncodingTrace_signLeafIndices_sublist adversary
     publicKey secretKey keyCache result hrest
 
@@ -765,13 +751,9 @@ theorem cappedDetailedGameWithEncodingTrace_validFreshSigningCollisionsRepresent
       ((QueryCache HashSpec × SigningCacheTrace) × EncodingActionTrace))
     (hmem : result ∈ support (cappedDetailedGameWithEncodingTrace adversary)) :
     ValidFreshSigningCollisionsRepresented result.1.secretKey result.2.1.2 result.2.2 := by
-  unfold cappedDetailedGameWithEncodingTrace at hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨keyResult, hkeygen, hrest⟩ := hmem
-  obtain ⟨⟨publicKey, secretKey⟩, keyCache⟩ := keyResult
-  have hkeygen' : ((publicKey, secretKey), keyCache) ∈ support
-      ((simulateQ romImpl Concrete.precomputedKeygen).run ∅) := by
-    simpa only [Concrete.scheme] using hkeygen
+  -- Step through key generation by a lemma: the kernel would run it to match two forms.
+  obtain ⟨publicKey, secretKey, keyCache, hkeygen', hrest⟩ :=
+    exists_of_mem_support_cappedDetailedGameWithEncodingTrace adversary hmem
   have hencodingFree : ∀ leafIndex input,
       keyCache (Concrete.CacheView.encodingInput secretKey.parameter leafIndex input) = none :=
     fun leafIndex input => Concrete.precomputedKeygen_cache_none_encodingInput
@@ -781,8 +763,8 @@ theorem cappedDetailedGameWithEncodingTrace_validFreshSigningCollisionsRepresent
       adversary publicKey secretKey keyCache hencodingFree result hrest
   have hprojection : (result.1, result.2.1) ∈ support
       (cappedDetailedGameAfterKeygenWithSigningTrace adversary publicKey secretKey keyCache) := by
-    rw [← cappedDetailedGameAfterKeygenWithEncodingTrace_projection, support_map]
-    exact ⟨result, hrest, rfl⟩
+    rw [← cappedDetailedGameAfterKeygenWithEncodingTrace_projection]
+    exact mem_support_map_of_eq _ _ hrest rfl
   have hsecretKey :=
     (cappedDetailedGameAfterKeygenWithSigningTrace_invariants adversary publicKey secretKey
       keyCache (result.1, result.2.1) hprojection).1
@@ -799,8 +781,9 @@ theorem cappedDetailedGameWithEncodingTrace_signingLeafIndices_nodup_of_winning
     result.2.1.2.leafIndices.Nodup := by
   have hprojected : (result.1, result.2.1) ∈
       support (cappedDetailedGameWithSigningTrace adversary) := by
-    rw [← cappedDetailedGameWithEncodingTrace_projection, support_map]
-    exact ⟨result, hmem, rfl⟩
+    -- Map through a lemma for any computation: the kernel would run the game to match two forms.
+    rw [← cappedDetailedGameWithEncodingTrace_projection]
+    exact mem_support_map_of_eq _ _ hmem rfl
   have hlog := (cappedDetailedGameWithSigningTrace_invariants adversary
     (result.1, result.2.1) hprojected).1
   have htraceNodup : result.2.1.2.leafIndices.Nodup := by
@@ -945,9 +928,9 @@ theorem cappedDetailedGameWithEncodingTrace_postSigningFreshForgedCollision_moni
   have hactionNodup :=
     cappedDetailedGameWithEncodingTrace_validSignLeafIndices_nodup_of_winning adversary result
       hmem hevent
-  unfold cappedDetailedGameWithEncodingTrace at hmem
-  rw [mem_support_bind_iff] at hmem
-  obtain ⟨⟨⟨publicKey, secretKey⟩, keyCache⟩, _hkeygen, hrest⟩ := hmem
+  -- Step through key generation by a lemma: the kernel would run it to match two forms.
+  obtain ⟨publicKey, secretKey, keyCache, -, hrest⟩ :=
+    exists_of_mem_support_cappedDetailedGameWithEncodingTrace adversary hmem
   unfold cappedDetailedGameAfterKeygenWithEncodingTrace at hrest
   rw [mem_support_bind_iff] at hrest
   obtain ⟨⟨forgery, adversaryState, encodingTrace⟩, hadversary, hverifyRest⟩ := hrest

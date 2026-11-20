@@ -160,16 +160,17 @@ theorem f1_step (input : (OracleWorld + SigningSpec).Domain) (s : State) :
   | inr request =>
       rw [expect_sign]
       classical
-      set e := request.leafIndex
-      set U : ℝ≥0∞ := if Unsigned trace e then Φ cache secretKey.parameter e else 0
+      -- Keep the leaf index unnamed: the kernel would run the signer to match it against its name.
+      set U : ℝ≥0∞ := if Unsigned trace request.leafIndex then
+        Φ cache secretKey.parameter request.leafIndex else 0
       have hU : U ≤ openΦ secretKey.parameter cache trace := by
         rw [openΦ]
         exact Finset.single_le_sum (f := fun e' => if Unsigned trace e' then Φ cache secretKey.parameter e' else 0)
-          (fun _ _ => zero_le) (Finset.mem_univ e)
+          (fun _ _ => zero_le) (Finset.mem_univ request.leafIndex)
       have hUtop : U ≠ ⊤ := by unfold U; split_ifs; exacts [Φ_ne_top _ _ _, ENNReal.zero_ne_top]
       refine (tsum_le_add_mul_probEvent _ _
         (N * N * (if PreBad secretKey trace then 1 else 0) + N * (openΦ secretKey.parameter cache trace - U))
-        (N * N * if Unsigned trace e then 1 else 0)
+        (N * N * if Unsigned trace request.leafIndex then 1 else 0)
         (fun r => (⟨request, r.1, cache, r.2⟩ : SigningCacheEntry).CachedSelectionCollision secretKey cache)
         fun r hr => ?_).trans ?_
       · have hΦ : openΦ secretKey.parameter r.2 (trace ++ [⟨request, r.1, cache, r.2⟩]) =
@@ -189,7 +190,7 @@ theorem f1_step (input : (OracleWorld + SigningSpec).Domain) (s : State) :
       · rw [add_assoc, f1, cost1, onHash_sign, add_zero]
         refine add_le_add le_rfl ?_
         calc N * (openΦ secretKey.parameter cache trace - U) +
-              N * N * (if Unsigned trace e then 1 else 0) *
+              N * N * (if Unsigned trace request.leafIndex then 1 else 0) *
                 Pr{let x ← (simulateQ romImpl (Concrete.scheme.sign secretKey request.leafIndex
                   request.message)).run cache}[(⟨request, x.1, cache, x.2⟩ :
                     SigningCacheEntry).CachedSelectionCollision secretKey cache] ≤
@@ -198,8 +199,8 @@ theorem f1_step (input : (OracleWorld + SigningSpec).Domain) (s : State) :
               unfold U
               split_ifs
               · rw [mul_one, mul_assoc]
-                refine mul_le_mul' le_rfl ((mul_le_mul' le_rfl (sign_collision_le secretKey e request.message
-                  cache)).trans (le_of_eq ?_))
+                refine mul_le_mul' le_rfl ((mul_le_mul' le_rfl (sign_collision_le secretKey
+                  request.leafIndex request.message cache)).trans (le_of_eq ?_))
                 rw [mul_comm, mul_assoc, mul_comm _ N, N_mul_inv, mul_one]
               · rw [mul_zero, mul_zero, zero_mul]
           _ = N * openΦ secretKey.parameter cache trace := by

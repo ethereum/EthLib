@@ -5,6 +5,7 @@ public import EthLib.Base.Proofs.BigEndian
 public import EthLib.Base.Proofs.MapM
 public import EthLib.Cryptography.Proofs.Inverse
 public import EthLib.Cryptography.Proofs.Bls.Fp2
+public import EthLib.Base.Proofs.Except
 
 /-!
 # Proofs: `Evm.Precompiles.Bls12381.Encoding`
@@ -167,10 +168,6 @@ theorem natToBytes_bytesToFq2 {raw : List UInt8} (hlength : raw.length = 96) {a 
 
 /-! ## G1 points -/
 
-/-- Binding a success passes its value to the continuation. -/
-private theorem ok_bind {α β : Type} (a : α) (f : α → Except Bls12381Error β) :
-    (Except.ok a >>= f) = f a := rfl
-
 /-- Binding an error keeps the error. -/
 private theorem error_bind {α β : Type} (e : Bls12381Error) (f : α → Except Bls12381Error β) :
     (Except.error e >>= f) = Except.error e := rfl
@@ -222,10 +219,10 @@ theorem bytesToG1_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G1} :
   | ok x =>
     cases dy with
     | error e =>
-      rw [ok_bind, error_bind]
+      rw [Base.ok_bind, error_bind]
       simp only [reduceCtorEq, false_and, and_false, exists_false]
     | ok y =>
-      rw [ok_bind, ok_bind]
+      rw [Base.ok_bind, Base.ok_bind]
       simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
       by_cases hz : x.val = 0 ∧ y.val = 0
       · rw [ite_eq_left hz]
@@ -323,10 +320,10 @@ theorem bytesToG2_eq_ok_iff {raw : List UInt8} {subgroupCheck : Bool} {p : G2} :
   | ok x =>
     cases dy with
     | error e =>
-      rw [ok_bind, error_bind]
+      rw [Base.ok_bind, error_bind]
       simp only [reduceCtorEq, false_and, and_false, exists_false]
     | ok y =>
-      rw [ok_bind, ok_bind]
+      rw [Base.ok_bind, Base.ok_bind]
       simp only [Except.ok.injEq, exists_and_left, exists_eq_left']
       by_cases hz : x.c0.val = 0 ∧ x.c1.val = 0 ∧ y.c0.val = 0 ∧ y.c1.val = 0
       · rw [ite_eq_left hz]

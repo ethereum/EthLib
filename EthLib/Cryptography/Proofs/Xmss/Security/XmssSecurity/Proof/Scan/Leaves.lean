@@ -189,11 +189,15 @@ theorem sign_other_leaf {leafIndex other : LeafIndex} {message : Message} {cache
     (hr : r ∈ support ((simulateQ romImpl (Concrete.scheme.sign secretKey leafIndex message)).run cache))
     (hne : leafIndex ≠ other) (y : Position) :
     r.2 (input secretKey.parameter other y) = cache (input secretKey.parameter other y) := by
+  -- Rewrite to the capped signer: the kernel would run it to match the scheme's signer.
+  rw [Concrete.scheme_sign] at hr
+  -- Name the pair's parts: the kernel would run the signer to match a pair against its parts.
+  obtain ⟨result, final⟩ := r
   cases hc : cache (input secretKey.parameter other y) with
   | none =>
       exact Concrete.precomputedCappedSign_preserves_other_leafIndex_encodingInput secretKey leafIndex
-        other message y cache r.2 r.1 hr hne hc
-  | some o => exact xmssRom_cache_le _ cache r hr hc
+        other message y cache final result hr hne hc
+  | some o => exact xmssRom_cache_le _ cache _ hr hc
 
 /-- A signature selects an input whose cached digest is valid. -/
 theorem sign_selected_valid {leafIndex : LeafIndex} {message : Message} {cache : QueryCache HashSpec}
@@ -202,15 +206,21 @@ theorem sign_selected_valid {leafIndex : LeafIndex} {message : Message} {cache :
     {signature : Signature} (hs : r.1 = some signature) {o : HashOutput}
     (ho : cache (input secretKey.parameter leafIndex (message, signature.randomness)) = some o) :
     TargetSum.ValidDigest (truncateHash o) := by
+  -- Rewrite to the capped signer: the kernel would run it to match the scheme's signer.
+  rw [Concrete.scheme_sign] at hr
   obtain ⟨result, final⟩ := r
   simp only at hs
   subst hs
-  obtain ⟨encoding, hdecode⟩ := Concrete.precomputedCappedSign_success_decode secretKey ⟨leafIndex, message⟩
+  -- Name the request: the kernel would run the signer to match its fields against the parts.
+  obtain ⟨request, rfl, rfl⟩ : ∃ request : SignRequest,
+      request.leafIndex = leafIndex ∧ request.message = message := ⟨⟨leafIndex, message⟩, rfl, rfl⟩
+  obtain ⟨encoding, hdecode⟩ := Concrete.precomputedCappedSign_success_decode secretKey request
     cache final signature hr
-  have hfinal : final (input secretKey.parameter leafIndex (message, signature.randomness)) = some o :=
+  have hfinal : final (input secretKey.parameter request.leafIndex
+      (request.message, signature.randomness)) = some o :=
     xmssRom_cache_le _ cache _ hr ho
-  have hfinal' : final (Concrete.CacheView.encodingInput secretKey.parameter leafIndex
-      (message, signature.randomness)) = some o := hfinal
+  have hfinal' : final (Concrete.CacheView.encodingInput secretKey.parameter request.leafIndex
+      (request.message, signature.randomness)) = some o := hfinal
   unfold Concrete.CacheView.encodingHash Concrete.CacheView.digestAt at hdecode
   rw [hfinal'] at hdecode
   exact ⟨encoding, hdecode⟩

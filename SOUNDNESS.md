@@ -78,35 +78,44 @@ No theorem covers the code that runs, the C boundary, or timing.
 
 ### XMSS
 
+The secret key keeps the top tree and the bottom trees it signed in last, and signing returns the updated key.
+`SecretKey.Reachable.sign_fst` (`Proofs/Xmss/Sign.lean`) proves that every key that `keyGen`, then any sequence of `sign` calls, gives signs as the note's stateless signer, byte for byte.
+That signer rebuilds every tree from the seed; it is written only in the proofs (`Proofs/Xmss/Reference.lean`) and is never exported.
+
 The correctness theorem is `verify_keyGen_sign` (`Proofs/Xmss/Correctness.lean`).
-If `keyGen seed` returns a key pair, and `sign` returns a signature for a message at a leaf index, then `verify` accepts that signature under that public key.
+Take a key that `keyGen seed`, then any sequence of `sign` calls, gives.
+If `sign` returns a signature with it for a message at a leaf index, then `verify` accepts that signature under the public key of `keyGen seed`.
 It says nothing about unforgeability.
 
 The hash calls of key generation and signing are bounded in `Proofs/Xmss/Cost.lean`, on every path, when each call of `H` makes at most one query.
-Key generation makes at most `13434881` calls and signing at most `8616804556`.
+Key generation makes at most `13434881` calls.
+Signing makes at most `8603369879` calls with any key, and at most `4294967500` in a bottom tree the key keeps; it never computes the top tree.
 Verification makes at most `384` calls (`isQueryBoundP_verifyWith`, `Proofs/Xmss/QueryBound.lean`).
 Under a fixed answer function, key generation makes exactly `13434881` calls, when each call of `H` makes exactly one query.
 
 In the random oracle model, signing fails with probability at most `2 exp(-4000)` (`prEvent_signWith_error_le`, `Proofs/Xmss/SignatureFailure.lean`).
 The theorem assumes that the oracle's cache holds no trial input of the two keys that sign when signing starts, as an empty cache does.
+It also assumes that a bottom tree of that index, if the key keeps one, holds a top signature, not an error.
 It proves that the signer's own calls before each search add none.
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
-So no theorem bounds the failure of a later signature, or of signing inside the game.
+So this theorem does not bound the failure of a later signature, or of signing inside the game.
 
-Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability.lean`).
-In the random oracle model, an adversary whose experiment makes at most `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
-Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle.
+Unforgeability is `Unforgeability.unforgeable` (`Proofs/Xmss/Unforgeability/KeyedSigner.lean`).
+In the random oracle model, an adversary with a budget of `q >= 1` hash calls forges a signature with probability at most `q / 2^127`.
+Its game runs EthLib's `keyGenWith`, `signWith` and `verifyWith`, with the hash `H` a query to the random oracle, and the signer keeps its key across requests.
 `keyGen`, `sign` and `verify` are the same definitions with Keccak-256 as `H`.
 
-The budget `q` counts the calls of key generation, the signer and the final verification too.
+The budget `q` bounds the calls of the same game with the stateless signer, key generation and the final verification included.
+Both games give the adversary the same answers, so it forges in each with the same probability (`forgeAdvantage_eq_statelessForgeAdvantage`).
+No theorem bounds the forgery by the calls of the game with the kept key.
 `Unforgeability.forgeAdvantage_le_adversaryBudget` (`Proofs/Xmss/Unforgeability/AdversaryBudget.lean`) counts only the adversary's own calls instead.
 Take an adversary that makes at most `qH` calls of `H` and `r` signing requests on every public key and every run.
 It forges with probability at most `Q / 2^127`, where `Q = 205 * 2^16 + 1 + qH + r (2^33 + 410 * 2^16 + 204) + 384`.
-The constants are proved upper bounds on the calls of key generation, of one signing request, and of the verification.
+The constants are proved upper bounds on the calls of key generation, of one stateless signing request, and of the verification.
 With `r <= 2^32`, `Unforgeability.forgeAdvantage_le_lifetime` gives `(qH + 2^65 + 410 * 2^48 + 204 * 2^32 + 205 * 2^16 + 385) / 2^127`.
 A request's bound includes two searches of `2^32` trials each, so this constant keeps the bound above `2^-62`.
-The library proves no smaller bound on the calls of a request.
+The library proves no smaller bound on the calls of a stateless signing request.
 
 The proof is adapted from leanerVM's, and `Proofs/Xmss/Security/README.md` lists what changed here.
 It reasons over EthLib's algorithms.
@@ -434,6 +443,11 @@ It proves that the signer's own calls before each search add none of that layer'
 The bound covers one signature from such a cache.
 An earlier signature under the same key caches the trial inputs of its keys, and in the unforgeability game the adversary's queries can too.
 So no theorem bounds the failure of a later signature, or of signing inside the game.
+`HashSig.prEvent_failedSearch_le` (`Proofs/HashSig/FailedSearch.lean`) drops the assumption on the cache.
+Take a run with at most `n` hash calls from an empty cache.
+It ends with some search whose first `T` trials all missed with probability at most `n * q^T`.
+Here `q` is the chance that one uniform answer misses, and the trial inputs may be queried by anyone, in any order.
+The unforgeability theorem with capped searches below uses it; no theorem yet states it as a failure bound for signing inside the game.
 
 Unforgeability is `Unforgeability.Bridge.unforgeable` (`Proofs/Sphincs/Unforgeability.lean`).
 Take an adversary whose experiment makes at most `q >= 1` hash calls and at most `2^30` signing requests.
@@ -458,6 +472,18 @@ At EthLib's cap of `2^30` requests, `C` is about `2^63.6`.
 Key generation makes 264193 calls, and a signing request at most `470595 + 3 * 2^32`, when every counter search tries all `2^32` counters.
 A verification makes at most 491 calls; the three counts are the theorems of `Proofs/Sphincs/Cost.lean`.
 The game with the adversary's counter is the game above with its counts forgotten (`gameCore_eq_map`, `forgeAdvantage_eq`), so both theorems bound the same forging probability.
+
+A third theorem, `Unforgeability.Bridge.unforgeable_capped`, charges each request its counter searches only up to `2^22` counters.
+Take an adversary that makes at most `q` hash calls of its own and at most `r` signing requests in every run of its game.
+It forges with probability at most `(q + C' + 1) / 2^127`, where `C' = 264193 + r * (470595 + 3 * 2^22) + 3 * 2^32 + 491`.
+At `2^30` requests, `C'` is about `2^53.6`, so the bound is never below about `2^-73.4`, against `2^-63.4` for the second theorem.
+For `r >= 2` the third bound is the lower one.
+The proof wraps the adversary: it stops forwarding queries once an answer has a counter of at least `2^22`, or is no signature (`capSearches`).
+Up to that answer the two runs agree, and all requests but the last one cost at most `470595 + 3 * 2^22` calls.
+The last one costs at most `470595 + 3 * 2^32`, which is the `3 * 2^32` in `C'`.
+An answer with a long search leaves, in the oracle's cache, a search whose first `2^22` counters all missed the code (`failedSearch_of_signerOf`).
+By `HashSig.prEvent_failedSearch_le`, that has probability at most `(q + C) * (1 - p)^(2^22)`, below `2^-127` up to `2^200` calls, and the `1` covers it; above that, the bound is at least 1.
+`forgeAdvantage_le_capped` states the bound for every cap `1 <= T <= 2^32`, with that term written out.
 
 ### VRF tree
 
@@ -622,8 +648,8 @@ One sync committee member is honest; the forger chooses the configuration, the s
 It wins if `validateLightClientUpdate` accepts the update with the honest member's bit set, with the oracle's hash of the signing root, and the honest member never signed that root.
 Its advantage is at most the byte bound above.
 `validateLightClientUpdate_oracleChecks` shows that with the real hash of the signing root, the game's check is the light client's check with the BLS checks.
-The light client theorems of `Authenticate.lean` still take `SignatureChecks.AggregateSound`, because they reason about one accepted update, not a probability.
-With the BLS checks, that assumption holds only for a trivial relation, as the light client bullet of A4 says.
+The light client theorems of `Authenticate.lean` take `SignatureChecks.AggregateSoundOn` on the one aggregate call of the update, because they reason about one accepted update, not a probability.
+For the relation of real signatures, that assumption says that this one call is not a forgery, as the light client bullet of A4 says.
 The game requires a proof of possession that passes PopVerify, §3.3.3, under the key tag.
 Ethereum registers a validator key with a deposit signature instead, a signature on a message that holds the key, under the message tag and the deposit domain.
 The bound does not cover that form of proof.
@@ -2259,9 +2285,18 @@ So it is at most the gas limit (`applyTransactions_execution_le_of_lt`), as `app
 The bound on the parent is a hypothesis.
 The rule lets each block raise the gas limit by less than a 1024th, with no cap.
 So no theorem bounds the gas limit along a chain from its genesis.
+
 From Glamsterdam a receipt counts the gas after the refund, state gas included.
-The gas limit bounds the execution gas and the state gas apart, so no theorem bounds the cumulative gas of those receipts yet.
-Both transaction theorems hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
+`processTransaction_gasUsed_le_add` (`Execution/Proofs/Transactions/Process.lean`) proves that a transaction uses at most the execution gas plus the state gas it adds to its block.
+Before Glamsterdam the block counts the gas used as execution gas, and no state gas (`processTransaction_blockGas_execution_of_lt`, `processTransaction_blockGas_state_of_lt`).
+From Glamsterdam it counts as execution gas at least the gas that the sender pays, minus the state gas (`gasUsed_sub_le_transactionBlockGas`).
+So each receipt records at most the execution gas plus the state gas of the body (`applyTransactions_cumulativeGasUsed_le_add`).
+The gas limit bounds each of the two (`applyTransactions_gas_le`), so a receipt records at most twice the gas limit.
+`stateTransition_gas_lt` derives both bounds for a block that passes its transition, at every fork that the transition runs.
+It needs the gas limit of the parent, as the gas limit rule reads it, below `2^62`.
+The rule then keeps the gas limit of the block below `2^63` (`stateTransition_gasLimit_mul_lt`), so twice that limit stays below `2^64`.
+For a parent from `2^62` up to `2^63`, no theorem keeps the receipts from Glamsterdam below `2^64`.
+`processTransaction_logsWeight` and `encode_makeReceipt_processTransaction` hold only before Hegotá: from Hegotá a transaction fails as not yet specified, so it has no receipt.
 
 ### The supply of ether
 
@@ -2465,6 +2500,7 @@ An ID from `0x10` on goes to the shared capability that holds it, and `route` gi
 `messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Message.lean`) states that the IDs an eth version holds are those below the first ID from which its decoder rejects every ID as unknown.
 `Message.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Message.lean`) states that the eth decoder reads a message exactly from its own ID and item, on a version that uses its form.
 `SnapMessage.ofItem_eq_ok_iff` (`Execution/Proofs/Network/Snap.lean`) states that the snap decoder reads a message exactly from its own ID and item, on a version that uses its ID.
+`SnapMessage.messageCount_le_iff_unknownId` (`Execution/Proofs/Network/Snap.lean`) states that the IDs a snap version holds, reserved ones included, are those below the first ID from which its decoder rejects every ID as unknown.
 No theorem says anything about a sequence of frames beyond one step, or about timeouts.
 
 The source leaves three points open, and the session reads them as follows.
@@ -2709,11 +2745,36 @@ If no mesh holds a peer twice before a leave, none does after it (`leave_mesh_no
 `join_mesh_nodup` proves the same for a join with a lawful choice.
 It also needs the fanout of the topic, and the peers that announced it, to list each peer once.
 With `receiveRpc_mesh_nodup` and `heartbeat_mesh_nodup`, every step of the router thus keeps the meshes free of a repeated peer, under the needs of each theorem.
-No theorem states that those two lists of a join repeat no peer in the states that the router reaches.
 A published message goes only to explicit peers and to peers not below the publish threshold.
 With flood publishing, a message not in the seen cache goes to every such peer of the mesh and of the topic.
 `publish_receiveRpc` proves that a message this node published is not forwarded or delivered again within the lifetime of the seen cache.
 It holds when only received RPCs come after the publish, and the last of them uses the parameters and the message ID function of the publish.
+
+Along a run of lawful router steps from an empty router, the fanout of a topic and the peers that announced it repeat no peer.
+A subscription change replaces every entry of its sender, so it keeps each peer listed at most once among the topics of the peers (`applySubscription_nodup`).
+`receiveRpc_peerTopics_nodup` carries this over an RPC, the only step that changes those topics.
+Then the peers that announced each topic appear once each (`topicPeers_nodup`).
+`join_fanout_nodup`, `publish_fanout_nodup` and `heartbeat_fanout_nodup` keep each fanout free of a repeated peer, and an RPC keeps the fanout (`receiveRpc_fanout`).
+A publish that fills an empty fanout takes peers that announced the topic.
+So it also needs a lawful choice, and those peers to appear once each.
+`steps_nodup` (`Networking/Proofs/Gossip/Steps.lean`) carries these properties along a run of RPCs, joins, leaves, publishes and heartbeats.
+Each step of the run is a `RouterStep`, so each join, publish and heartbeat uses a lawful choice.
+In each state that the run reaches, no mesh and no fanout holds a peer twice, and the peers that announced each topic appear once.
+The topics of the peers also list each peer at most once, so a second run can start from that state.
+`steps_nodup_of_empty` states this for a run from a router with no mesh, no fanout and no topics of peers.
+`steps_join_mesh_nodup` applies it to such a run followed by one join with a lawful choice.
+That join keeps every mesh free of a repeated peer, with no hypothesis on the fanout or on the peers of its topic.
+`receiveRpc_forward_nodup` in such a state also needs a positive lifetime of the seen cache, and the explicit peers listed once and outside every mesh.
+Every step keeps the explicit peers (`receiveRpc_explicit_eq`, `join_explicit_eq`, `leave_explicit_eq`, `publish_explicit_eq` and `heartbeat_explicit_eq`).
+If no explicit peer is in a mesh before a step, none is after it (`receiveRpc_explicit`, `join_explicit`, `leave_explicit` and `heartbeat_explicit`).
+An RPC adds to a mesh only a sender that is not explicit (`receiveRpc_mesh`).
+A leave removes at most the mesh of its topic, and a publish keeps every mesh (`publish_mesh`).
+A join and a heartbeat with a lawful choice add only peers that this node may GRAFT, as `join_graftable` states for a join.
+`graftable` excludes every explicit peer.
+`steps_explicit` carries both facts along a run whose start has no explicit peer in a mesh.
+`steps_receiveRpc_forward_nodup` combines it with `steps_nodup_of_empty` for a run from a router with no mesh, no fanout and no topics of peers, followed by one RPC.
+That RPC sends each message it forwards at most once to each peer, by `receiveRpc_forward_nodup`.
+The result needs a positive lifetime of the seen cache, and the explicit peers of the start listed once each.
 
 The exports `gossip_join`, `gossip_leave`, `gossip_publish` and `gossip_heartbeat` fix the choice among candidates to the first ones, in candidate order.
 `Select.first_lawful` proves that this choice is lawful.
@@ -2910,6 +2971,10 @@ It also reads the epoch of a fork left at the far future, which no message carri
 There the digest in a bootnode record of each chain reads back the fork that the record's next fork version implies.
 On mainnet the check reads the root from the pinned genesis state, so it runs only with the archives.
 `decodeResponseChunk_forkOfDigest` (`Consensus/Proofs/ReqResp/ResponseBounds.lean`) draws the consequence for req/resp: on a chain that passes the check, the receiver reads a chunk at the type of the sender's fork.
+When a gossip topic carries the same object, that type is the message type of the topic, except at version 1 of blocks by range and by root.
+`responseDesc_eq_messageDesc` states it for blocks, finality and optimistic light client updates, sidecars, payload envelopes and inclusion lists, with the size limit of the topic.
+`responseBounds_snd_eq_topicBound` draws the consequence: at a fork that lists the topic, the largest length of such a chunk is the bound of the topic.
+`responseDesc_eq_messageDesc_phase0` states that version 1 of blocks by range and by root sends a Phase 0 block at every fork, since that version has no context bytes.
 
 ### Weak subjectivity
 
@@ -4046,14 +4111,15 @@ These two are rewrite lemmas: no theorem yet binds the rebuilt root to the paylo
 The headers that the client checks are valid: `initializeLightClientStore_header_valid`, `validateLightClientUpdate_attestedHeader_valid`, and `validateLightClientUpdate_finalizedHeader_valid` after the genesis slot.
 The index theorems `executionPayloadGindex_eq`, `payloadHeaderBlockHashGindex_eq`, `executionBlockHashGindex_eq` and `executionBlockHashGindexGloas_eq` hold at every preset.
 
-The signature theorems assume `SignatureChecks.AggregateSound` (`Consensus/Proofs/SignatureChecks.lean`), listed in A4.
+The signature theorems assume `SignatureChecks.AggregateSoundOn` (`Consensus/Proofs/SignatureChecks.lean`), listed in A4.
+It covers only `updateSignatureCall`, the one aggregate call that the client checks on the update.
 Under it, `validateLightClientUpdate_signed` shows that every member whose bit is set signed the signing root.
-With the BLS checks, the assumption holds only for a trivial relation (A4), so these theorems do not yet say who signed.
+`SignatureChecks.AggregateSound.on` shows that the assumption over every input implies it.
 `validateLightClientUpdate_signed_outside` adds that a set of keys holding fewer seats of the committee than there are signers leaves a signer outside the set.
-`SignatureChecks.not_aggregateSound_acceptAll` shows that the assumption has content: the checks that accept every signature do not meet it.
+`SignatureChecks.not_aggregateSoundOn_acceptAll` shows that the assumption has content: the checks that accept every signature fail it on one call.
 `LightClientForgery.forgeAdvantage_le` bounds how often a forger makes the light client accept an aggregate with one designated honest member's bit set, on a root that member never signed.
 It assumes the random oracle model, a proof of possession for every signer, and at most `q` and `qK` hash calls; the bound is small if co-CDH is hard and the solver built from the forger is efficient, which no theorem bounds.
-It is not a proof of `AggregateSound`, and Ethereum's keys carry deposit signatures, not those proofs.
+It is not a proof of the assumption, and Ethereum's keys carry deposit signatures, not those proofs.
 The bound protects that member's bit only.
 Covering every honest member of a committee needs a guess among them, losing up to a factor of the number of honest seats; that step is not proved.
 Updates signed by corrupted members alone are still accepted, so the safety of headers also needs an honest supermajority of the committee.
@@ -4297,8 +4363,18 @@ So, unless the roots of their headers collide, the runs disagree on the checkpoi
 The conflict implies that `x` is no later than the first slot of the earlier finalized epoch (`Run.slot_le_of_checkpointPath_ne`, `DirectSafety/Hashes.lean`).
 So the theorem takes no separate premise on `x`.
 Then the unslashed active stake at `x` is at most three times the accountable stake at `x`, plus twice the larger drift of the two tails.
-The drift should be zero when the active validators and their effective balances stay the same from the epoch before `x` to one epoch past the later finalized epoch, but no theorem proves that yet.
-With zero drift, the accountable keys hold at least one third of the unslashed active stake at `x`.
+`derivedDrift_eq_zero_of_stableKeys` (`DirectSafety/Drift.lean`) shows that the drift of a tail is zero when its unslashed active keys are stable (`StableKeys`).
+That is: `x` and each state of the tail up to one epoch past the later finalized epoch have as unslashed active keys those of `x` not slashed since, no recent key outside its active keys, and the effective balances of `x` on those keys.
+A slashing keeps the keys stable, since a slashed key leaves both the support and the reference.
+An activation that takes effect after the epoch of `x`, or an exit of an unslashed key that takes effect at or after it, breaks the hypothesis; it was scheduled at least `1 + MAX_SEED_LOOKAHEAD` epochs before, exactly that many for an activation.
+A change of effective balance breaks it too, at the epoch transition that computes it.
+`stableKeys_self_of_genesisEpoch` shows that a state at the genesis epoch meets it for itself.
+`accountable_safety_third` (`DirectSafety/Safety.lean`) concludes that, with stable keys on both tails, the accountable keys hold at least one third of the unslashed active stake at `x`, or the hashes show evidence.
+This is the bound of a static validator set.
+The conflict already puts the epoch of `x` at or before the earlier finalized epoch (`epoch_le_of_conflict`), so the theorem takes no premise on `x`.
+On mainnet, activations, exits, consolidations and effective balance changes, including those after partial withdrawals of compounding validators, happen almost every epoch, so such a window is almost never stable, and the drift forms are the ones that apply there.
+No theorem shows that the hypotheses of these forms hold together for some pair of runs.
+A start from a genesis without later deposits is a candidate: no key activates, no exit by request is allowed before `SHARD_COMMITTEE_PERIOD` epochs, and balances of 32 ETH take many epochs of rewards or penalties to leave the hysteresis band.
 Otherwise the runs show evidence about the hash (`HashEvidence`), so no theorem assumes that the hash is injective.
 The evidence is what two searches find among the objects of the runs.
 `findMessageCollision` returns two different inputs of the SHA-256 node hash with one digest, read in the roots of the headers of the runs.
@@ -4326,15 +4402,37 @@ An aggregate call of that set accepts only if every key of the call signed its m
 Then each accountable key signed the signing roots of two attestation data that `isSlashableAttestationData` flags, each in an attester domain.
 Otherwise it signed the signing roots of two different headers of one slot, each in a proposer domain.
 Their proposer index holds the key in the registry at `x`, since the registry keeps its keys and its keys are distinct.
-Each domain is that of the genesis validators root of the runs and of some fork version, which need not be one of the config.
+Each domain is that of the genesis validators root of the runs and of the version of a fork of the config; the two headers take one fork.
+`Run.forkVersions_ofConfig` shows that each state of a run from a genesis of deposits holds two versions of forks of the config (`forkVersions_ofConfig_of_genesis_chainSteps`, `Consensus/Proofs/Transition/ForkVersions.lean`), so it reads only such versions.
+The version need not be that of the fork of the object's epoch.
+A state reads its previous version at any epoch before its fork epoch, and its current one at any later epoch, a header of a later fork included.
+When two forks share an epoch, the previous version is one that no epoch uses.
+The definition accepts the version of any fork of the config, including one that neither run reaches.
 `Run.genesisValidatorsRoot` shows that a run keeps that root.
-If SHA-256 collides on the two signing roots, the two signatures may be one.
+The two signed roots of a pair differ, so the two signatures are two.
+Otherwise `SigningEvidence` holds: two inputs of the SHA-256 node hash with one digest, among the messages of the signing roots that the checks of the runs compute (`signingMessages`, `attestationSignings`, `headerSignings`).
+`computeSigningRoot_ne_or_collision` (`Consensus/Proofs/Signing.lean`) shows that two different objects of one type whose counts fit their 256-bit words, as attestation data and headers do, have different signing roots, or such a collision, in any domains; `signingValues_of_computeSigningRoot_eq` (`Consensus/Proofs/Signing.lean`) reads equal signing roots as one root of two signing values.
+The theorems then conclude the bound, or `HashEvidence`, or `SigningEvidence`; neither alternative assumes that the hash is injective.
 `accountable_safety_signed` restates `accountable_safety` for the unslashed active keys at `x` that signed such a pair (`signedConflictKeys`).
 `accountableKeys_subset_signedConflictKeys` shows that they include the accountable keys.
-Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence.
+Under the same hypotheses, three times their stake plus twice the larger drift covers the unslashed active stake at `x`, or the hashes show evidence, or the signing roots of the checks collide (`SigningEvidence`).
+`accountable_safety_signed_third` adds stable unslashed active keys on both tails, and then those keys hold at least one third of that stake, or the hashes or the signing roots show evidence.
 The pairs may be headers, so the bound also counts keys whose only fault is a double proposal, which Casper FFG does not punish.
-No theorem shows that a block of either run could include a slashing built from those signatures.
+These theorems alone do not show that a block of either run could include a slashing built from those signatures.
 An aggregate checked on one run may not verify against the registry of the other, the validator may already be withdrawable, and a domain may be older than the previous fork.
+`singleAttesterSlashing` (`DirectSafety/Includable.lean`) is the attester slashing whose two attestations name one validator alone, with two given signatures.
+`processAttesterSlashing_single_eq_slashValidator` takes the two data of a double or surround vote with the domains and signing roots that their `SignedIn` holds, and two signatures by the key alone that verify on them.
+Those signatures are given, not derived: the relation of signatures does not give them, and a signature that merely exists is not one that someone holds.
+The aggregates that the runs accepted could serve instead when each of their indices names, in the slashing state, the key it named in the run; the slashing then also slashes the other slashable validators in both, and no theorem states that case yet.
+The state reads the fork version of each signature at the target epoch of its data, and has the genesis validators root of the runs.
+`processAttesterSlashing_single_eq_slashValidator_run` takes a state of a run from the genesis of the signatures, whose genesis validators root is then the right one.
+The validator is slashable at the epoch of the state, and the preset allows at least one attester; mainnet allows at least 2048.
+Then `processAttesterSlashing` returns what slashing the validator returns, so it accepts the slashing exactly when the state can slash the validator (`processAttesterSlashing_eq_slashValidator_of_single`, `Consensus/Proofs/Transition/AttesterSlashingAccepted.lean`).
+This is about the operation; it does not show that a whole block with it is valid.
+The fork windows cannot hold when a state of the chain reads neither version at that epoch, for example when the two versions are more than one fork apart; no theorem states this.
+No theorem shows that the state can slash the validator in general.
+That step can fail on checked arithmetic (exit queue, withdrawable epoch, slashings sum, balances) or on the proposer lookup.
+The pairs of headers are left out: they arise only from a proposer slashing that a tail already processed, so that run already slashed the key.
 The relation of signatures is an argument; the theorems say who signed only when it is the relation of real signatures.
 
 `source_safety` (`DirectSafety/SourceSafety.lean`) replaces the observed drift of `accountable_safety` by a source envelope for each tail (`sourceDrift`, `DirectSafety/IntervalBounds.lean`).
@@ -4414,7 +4512,7 @@ The terms doubled in the first line are stake that can leave the support of `x`.
 They are departures, partial withdrawals, scheduled exits, slack below the effective balance, penalties and rounding.
 `gainBudget` is stake that can join or grow: `activationBudget`, `creditBudget` and `pendingSourceExcess`.
 From Electra it also includes `roundingBudget` and `dueConsolidationCarry`.
-`creditBudget` is the excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
+`creditBudget` is the capped excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
 The remaining terms cover the edges of the window.
 They are two adjacent exit epochs, the stake active only at the previous epoch, and the growth room of an exit cohort.
 
@@ -5062,13 +5160,20 @@ The code of the receipts, their root and the bloom reads only the logs; no theor
 Without the flag, a call reports the log objects of its receipt, with the same `logIndex` (`callLogInfos_false`).
 From Glamsterdam, a message that starts with equal lists of logs ends with equal lists (`simulatedLogs_processMessage`, `Proofs/Evm/Call/SimulatedLogs.lean`).
 So each result reports the logs of its receipt (`runBody_simulatedLogs`, `Proofs/Blocks/SimulatedLogs.lean`).
-A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`).
+A simulated block from Glamsterdam is then the same with the flag or without (`simulateBlock_json_trace`, `Proofs/Rpc/SimulateCalls.lean`).
+A block without transactions has an empty list of call results either way (`callsJson_nil`).
+So it is the same with the flag or without (`json_trace_of_nil`).
 Each block of a simulation, gap blocks included, is a simulated block at its own fork (`simulateBlocks_mem_exists`, `Proofs/Rpc/SimulateBlocks.lean`).
-So when every block of a simulation is from Glamsterdam, the whole answer is the same with the flag or without (`simulate_traceTransfers`).
+So when each block of a simulation is from Glamsterdam or has no transactions, the answer is the same either way (`simulate_traceTransfers_of_glamsterdam_le_or_nil`, `Proofs/Rpc/SimulateCalls.lean`).
+That covers a simulation whose blocks are all from Glamsterdam (`simulate_traceTransfers`).
+A block simulated without calls has no transactions (`simulateBlock_transactions`, `Proofs/Rpc/SimulateBlocks.lean`).
+A property holds for each block of a simulation when two kinds of blocks have it (`simulateBlocks_forall`).
+They are the blocks simulated from the base block with an empty request, as gap blocks are, and the blocks of the plan.
+Suppose that each block of the plan is from Glamsterdam or has no calls.
+Then each block of the simulation, gap blocks included, is from Glamsterdam or has no transactions (`simulateBlocks_glamsterdam_le_or_nil`).
+So the answer is the same either way (`simulate_traceTransfers_of_plan`, `Proofs/Rpc/SimulateCalls.lean`).
 A failed simulation gives the same error either way, since its blocks do not read the flag (`simulateBlocks_traceTransfers`).
-Two cases have no theorem yet:
-- a block before Glamsterdam without calls, such as a gap block, is the same either way, but no theorem states this.
-- no theorem derives the hypothesis on the blocks from the configuration and the base block.
+No theorem yet derives the hypothesis on the blocks of the plan from the configuration, the base block and the request.
 
 `eth_feeHistory` and `eth_baseFee` of [`fee_market.yaml`](https://github.com/ethereum/execution-apis/blob/3284ee80c3da3e516c53782dde75157cccf1ebdc/src/eth/fee_market.yaml) report base fees, gas ratios and tips (`Execution/Rpc/Fees.lean`).
 A history is the one of the blocks of its range, when its percentiles strictly increase and the node holds its newest block (`ChainView.feeHistory_eq_ok`, `Proofs/Rpc/Fees.lean`).
@@ -5531,7 +5636,18 @@ It checks the attestation data index of Deneb, Electra and Fulu stores, and code
 It checks the aggregates and contributions against bytes it builds itself.
 It checks codes 404 and 503 for the aggregate, and codes 400, 404 and 503 for the contribution.
 It checks the codes of the aggregate before Electra only, so only the theorems speak for the single attestations.
-No theorem states when these answers refuse with code 500.
+`aggregateAttestation_internal_iff_of_lt_electra` and `aggregateAttestation_internal_iff_of_electra` state when the aggregate answer refuses with code 500.
+It refuses so exactly when the block of the first match is verified and the construction of the aggregate fails.
+From Electra that refusal also needs a committee index below `MAX_COMMITTEES_PER_SLOT`, since an index not below it gets code 400 by `aggregateAttestation_error_iff_of_electra`.
+No theorem states when the construction of an aggregate fails, so these two theorems leave its faults open.
+`produceSyncCommitteeContribution_internal_iff` states the same for the contribution answer, once the slot, the subcommittee index and the root pass their checks.
+It then refuses so exactly when the sync committee of the next slot has no value, or the construction fails on a signature.
+The sync committee of the next slot has no value only at the largest 64-bit slot, whose next slot overflows (`syncCommitteeAtNextSlot_eq`).
+The answer hands the construction only the messages of members.
+A private lemma of the same file shows that the construction then fails only for want of messages, or on a signature.
+No theorem states when the attestation data and payload attestation data answers refuse with code 500.
+No theorem states it for the aggregate and contribution responses either, which also refuse so when writing the value as JSON fails.
+`toApiJson_total` excludes that failure for a lawful type.
 The issue's single matching and validity theorems are split by fork; from Electra the union of bits is stated as the set of attesters.
 
 The light client answers are in `Consensus/BeaconApi/LightClient.lean`: the bootstrap of a block, the updates of a range of periods, and the latest finality and optimistic updates.
@@ -6821,16 +6937,17 @@ The codeword searches of each scheme share the bullet of that scheme:
   The two tags differ, as §3.3.1 of the BLS draft requires.
   [RFC 9380](https://www.rfc-editor.org/rfc/rfc9380), §3, calls its `hash_to_curve` suitable where a random oracle onto the group is needed, and §8.8.2 gives the suite that encoding.
   Nothing in EthLib proves that the hash behaves as such an oracle.
-- Light client: an aggregate signature check accepts a message only if every key in its set signed it (`SignatureChecks.AggregateSound`, `Consensus/Proofs/SignatureChecks.lean`).
+- Light client: the one aggregate check that the client makes on an update accepts only if every key of the call signed its message (`SignatureChecks.AggregateSoundOn` on `updateSignatureCall`, `Consensus/Proofs/LightClient/Authenticate.lean`).
   BLS signatures with proofs of possession are meant to make a forged aggregate unlikely, and EthLib proves only the bound below.
   `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds the forger of such aggregates on EthLib's bytes, with both hashes as random oracles.
   That is the draft's scheme, whose proofs of possession hash the key under the key tag.
   Ethereum registers keys with deposit signatures under the message tag instead, which that game does not model.
   `LightClientForgery.forgeAdvantage_le` bounds the probability that the light client accepts a forged signature of one designated honest member, when every signer carries a proof of possession that passes PopVerify, §3.3.3.
-  The theorems on one accepted update say nothing about a forged aggregate signature; the bound gives the probability of a forgery for one member.
-  Over every input, the BLS checks accept the honest signature of any valid key on any message (`verify_sign`, `fastAggregateVerify_sign`).
-  So with those checks, this assumption holds only for a relation that relates every valid key to every message, and those theorems then do not say who signed.
-  A form restricted to the calls of one update is not stated yet.
+  The relation of real signatures relates a key held by the adversary to every message, and an honest member to the roots it signed.
+  For it, the assumption says that no honest member whose bit is set was forged on the accepted call of the update.
+  Given an accepted update, this is close to the conclusion; the theorems add that the client's check is that call, and the bound on participants.
+  The bound gives the probability of a forgery for one member; reading it as the absence of forgery on one update is left informal.
+  The form over every input would hold, with the BLS checks, only for a relation that relates every valid key to every message (`verify_sign`, `fastAggregateVerify_sign`), so the theorems take the form on one call.
 - Direct accountable safety, signed form: the accepted aggregate checks that blocks of the two runs made accept only if every key of the call signed its message (`SignatureChecks.AggregateSoundOn`, `Consensus/Proofs/SignatureChecks.lean`).
   The accepted header checks of their proposer slashings accept only if the key signed the header (`SignatureChecks.VerifySoundOn`).
   For the relation of real signatures, these say that none of those calls accepted a forgery.
@@ -6842,6 +6959,25 @@ The codeword searches of each scheme share the bullet of that scheme:
   No theorem bounds the assumption on the aggregate calls for Ethereum.
   The bound with proofs of possession needs PopProve under the key tag, and Ethereum registers keys with deposit signatures under the message tag, which that game does not model.
   Without proofs of possession the aggregate assumption can fail for an honest key that never signed (`fastAggregateVerify_rogue`, `Cryptography/Proofs/Bls/SignaturesUnique.lean`).
+  The bound that the assumptions need is not proved; issue #3433 tracks it, and the reduction it needs is this.
+  For one signature, the notion is existential unforgeability under chosen messages of the scheme of [Boneh, Lynn, Shacham](https://hovav.net/ucsd/dist/sigs.pdf), §3, as the game of `Cryptography/Proofs/Bls/Security/Game.lean` states it, extended to `n` honest keys at once.
+  A reduction guesses which honest key is forged and samples the other secret keys itself, so it loses a factor `n` on top of the bound above; no theorem states the `n`-key game or that reduction.
+  The tighter reduction that spreads one challenge key over all `n` keys does not apply: honest keys sign the same attestation data, so a forgery for one key can fall on a message the challenge key already signed for another.
+  For aggregates, the notion is that of the proof-of-possession scheme of [draft-irtf-cfrg-bls-signature-04, §3.3](https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-bls-signature-04#section-3.3), whose proofs hash the key alone under a tag of their own (§3.3.1); `Pop.byteForgeAdvantage_le_coCdhAdvantage` bounds it on EthLib's bytes.
+  Ethereum's deposit signature differs from that proof in two ways, which that game does not model.
+  It signs the signing root of a deposit message, which holds the key, the withdrawal credentials and the amount, so one key can have many proofs.
+  It hashes under the message tag in the deposit domain, so it shares the oracle of the other signatures.
+  `computeSigningRoot_ne_or_collision_of_domainType_ne` (`Consensus/Proofs/Signing.lean`) shows the part that domains give: a signing root in one domain type is never one in another, unless the node hash collides on the signing data.
+  So no honest signature on an attestation, a block or a sync message signs the signing root of a deposit, unless SHA-256 collides.
+  Three steps remain.
+  First, a game with proofs over the key and extra data, any number per key, under the one message oracle.
+  Its reduction must embed the challenge in the point of every adversarial deposit and not in any point the honest key signs.
+  A signing root hides both its domain and its key, so a guess per point loses a factor exponential in the number of adversarial keys of the forgery.
+  The alternative models the hash as an oracle on the deposit message and domain, so that the reduction sees the key, a stronger idealisation.
+  Second, an invariant of the transition: every key of an accepted aggregate call entered the registry after its deposit signature was checked, which needs a genesis built from checked deposits.
+  Third, the assumption that an honest key signs a deposit message only for its own key, builder keys included, since builder deposits use the deposit domain too, and signs nothing but signing roots of Ethereum domain types.
+  Then the bound would cover the aggregate assumption, with the factor `n` of the guess; no theorem states it.
+  Reading any such probability as the absence of forgery in one pair of runs also stays informal, since the runs use the concrete hash and the bound the random oracle.
 - ECDSA: the bijection in the middle of the conversion `x_R mod n` is a uniform permutation, which the adversary evaluates in both directions.
   In ECDSA that bijection is the identity on integers below `2^256`, so the model idealises the conversion, as §4 of [Fersch, Kiltz and Poettering](https://doi.org/10.1145/2976749.2978413) does.
   The model draws the deterministic nonces of RFC 6979 as a random function of the message, so each message has one signature.
@@ -6921,7 +7057,7 @@ The Python extension calls 530 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11878 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1601), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (830), `x25519.c` (21), `xmss.c` (134).
+12095 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2652), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1605), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (833), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.
@@ -7084,6 +7220,7 @@ The files named `Proofs.lean` are roots that gather the proofs of a domain, so t
 - `EthLib/Cryptography/Proofs/RandomOracleTable.lean`
 - `EthLib/Cryptography/Proofs/Secp256k1/`
 - `EthLib/Cryptography/Proofs/Sphincs/`
+- `EthLib/Cryptography/Proofs/SupportBind.lean`
 - `EthLib/Cryptography/Proofs/TaggedLazyPermutation.lean`
 - `EthLib/Cryptography/Proofs/UniformReads.lean`
 - `EthLib/Cryptography/Proofs/Vrf/`

@@ -267,22 +267,36 @@ theorem calls_adversaryGameCore (adversary : Adversary) :
 /-! ## The budget transfers -/
 
 omit f in
-/-- The cost of the counted oracle charges each hash call 1 and each coin 0. -/
-theorem countedOracle_cost (input : OracleWorld.Domain) :
-    (fun | .inl _ => (0 : Nat) | .inr _ => 1) input = if isHashCall input then 1 else 0 := by
-  cases input <;> rfl
+/-- The oracles of the experiment with the adversary's counter are the plain random oracle. -/
+theorem adversaryOracle_eq : (unifFwdImpl HashSpec + (randomOracle : QueryImpl HashSpec
+    (StateT (QueryCache HashSpec) ProbComp))) = HashSpec.romImpl := rfl
+
+omit f in
+/-- The experiment with the adversary's counter runs its game against the plain random oracle. -/
+theorem adversaryExperiment_eq (adversary : Adversary) :
+    adversaryExperiment adversary =
+      (simulateQ HashSpec.romImpl (adversaryGameCore adversary)).run' ∅ := by
+  rw [adversaryExperiment, adversaryOracle_eq]
+
+omit f in
+/-- Forgetting the count of a counted run gives a run against the plain random oracle. -/
+theorem mem_support_run'_of_withAddCost {α : Type} (oa : OracleComp OracleWorld α)
+    (r : α × Nat)
+    (h : r ∈ support ((simulateQ (HashSpec.romImpl.withAddCost hashCost) oa).run.run' ∅)) :
+    r.1 ∈ support ((simulateQ HashSpec.romImpl oa).run' ∅) := by
+  rw [← QueryImpl.fst_map_run_simulateQ_withAddCost _ hashCost]
+  simp only [StateT.run'_eq, StateT.run_map, support_map, Set.mem_image] at h ⊢
+  obtain ⟨⟨r', cache⟩, hmem, rfl⟩ := h
+  exact ⟨(r'.1, cache), ⟨(r', cache), hmem, rfl⟩, rfl⟩
 
 /-- A run of the game with its counter under `f` gives a result of the experiment. -/
 theorem mem_support_adversaryExperiment (adversary : Adversary) (r : (Bool × Nat × Nat) × Nat)
     (hr : r ∈ support (countedRun f (adversaryGameCore adversary))) :
     r.1 ∈ support (adversaryExperiment adversary) := by
-  have h := (mem_support_counted_iff _ _ countedOracle_cost r).2 ⟨f, hr⟩
-  unfold adversaryExperiment
-  rw [← QueryImpl.fst_map_run_simulateQ_withAddCost _
-    (fun | .inl _ => (0 : Nat) | .inr _ => 1)]
-  simp only [StateT.run'_eq, StateT.run_map, support_map, Set.mem_image] at h ⊢
-  obtain ⟨⟨r', cache⟩, hmem, rfl⟩ := h
-  exact ⟨(r'.1, cache), ⟨(r', cache), hmem, rfl⟩, rfl⟩
+  rw [countedRun.eq_1] at hr
+  rw [adversaryExperiment_eq]
+  exact mem_support_run'_of_withAddCost _ r
+    ((mem_support_counted_iff (adversaryGameCore adversary) hashCost hashCost_eq r).2 ⟨f, hr⟩)
 
 omit f in
 /-- The probability of a forgery is the same in the game with the adversary's counter. -/
@@ -291,10 +305,10 @@ theorem forgeAdvantage_eq (adversary : Adversary) :
       Pr{let result ← adversaryExperiment adversary}[result.1 = true] := by
   have hE : forgeAdvantage adversary =
       Pr{let result ←
-        (simulateQ HashSpec.romImpl (gameCore adversary)).run' ∅}[result = true] :=
-    HashSig.prEvent_run_withAddCost _ _
-  rw [hE, gameCore_eq_map, simulateQ_map]
-  unfold adversaryExperiment
+        (simulateQ HashSpec.romImpl (gameCore adversary)).run' ∅}[result = true] := by
+    rw [forgeAdvantage, experiment_eq]
+    exact HashSig.prEvent_run_withAddCost (gameCore adversary) hashCost
+  rw [hE, gameCore_eq_map, simulateQ_map, adversaryExperiment_eq]
   simp only [StateT.run'_eq, StateT.run_map, Functor.map_map]
 
 omit f in
@@ -305,10 +319,9 @@ theorem hasHashQueryBound_of_adversary (adversary : Adversary) (q r : Nat)
     (hq : HasAdversaryQueryBound adversary q r) :
     HasHashQueryBound adversary (q + schemeCalls r) := by
   intro result hr
-  obtain ⟨f, hr⟩ := (mem_support_counted_iff _ _ countedOracle_cost result).1 hr
-  change result ∈ support (countedRun f (gameCore adversary)) at hr
-  rw [gameCore_eq_map, countedRun_map, support_map] at hr
-  obtain ⟨run, hrun, rfl⟩ := hr
+  obtain ⟨f, hr⟩ := exists_countedRun_of_mem_support _ _ (experiment_eq adversary) result hr
+  rw [gameCore_eq_map] at hr
+  obtain ⟨run, hrun, rfl⟩ := mem_support_countedRun_map f _ _ result hr
   have hcalls := calls_adversaryGameCore f adversary run hrun
   obtain ⟨hq₁, hq₂⟩ := hq run.1 (mem_support_adversaryExperiment f adversary run hrun)
   have hmul := Nat.mul_le_mul_right signCalls hq₂

@@ -4,6 +4,7 @@ public import EthLib.Consensus.BeaconApi.Identifiers
 public import EthLib.Consensus.BeaconApi.StateQueries
 public import EthLib.Consensus.ForkDigest
 public import EthLib.Consensus.LightClient.FullNode
+public import EthLib.Consensus.ReqResp.Messages
 
 /-!
 # `Consensus.BeaconApi.LightClient`
@@ -89,19 +90,6 @@ def bootstrapResponse (config : Config) (store : Store preset fork) (root : Root
 
 /-! ## Updates -/
 
-/-- Whether a period is in the range of a request: from the start, for the count of periods.
-
-The bound is computed without overflow. -/
-def InRange (startPeriod count period : UInt64) : Prop :=
-  startPeriod.toNat ≤ period.toNat ∧ period.toNat < startPeriod.toNat + count.toNat
-
-instance (startPeriod count period : UInt64) : Decidable (InRange startPeriod count period) :=
-  inferInstanceAs (Decidable (_ ∧ _))
-
-/-- The most updates an answer may hold: the smaller of the request limit and the count. -/
-def updatesLimit (count : UInt64) : Nat :=
-  min MAX_REQUEST_LIGHT_CLIENT_UPDATES.toNat count.toNat
-
 /-- Whether an answer to an updates request is one that the source accepts.
 
 The node knows at most one update per period, in a map from periods.
@@ -119,11 +107,11 @@ def IsUpdatesAnswer {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod cou
     (answer : List α) : Prop :=
   ∃ periods : List UInt64,
     periods.map (known[·]?) = answer.map some ∧
-      (∀ period ∈ periods, InRange startPeriod count period) ∧
+      (∀ period ∈ periods, InCountRange startPeriod count period) ∧
       (∀ i (h : i + 1 < periods.length), periods[i + 1].toNat = periods[i].toNat + 1) ∧
-      (∀ period, InRange startPeriod count period → period ∈ known →
+      (∀ period, InCountRange startPeriod count period → period ∈ known →
         ∃ first, periods.head? = some first ∧ first ≤ period) ∧
-      answer.length ≤ updatesLimit count
+      answer.length ≤ lightClientUpdatesLimit count
 
 /-- The known updates of the periods from a period on, with a bound on how many it reads.
 
@@ -132,7 +120,7 @@ def updatesFrom {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod count :
     Nat → Nat → List α
   | _, 0 => []
   | period, bound + 1 =>
-    if period < UInt64.size ∧ InRange startPeriod count (UInt64.ofNat period) then
+    if period < UInt64.size ∧ InCountRange startPeriod count (UInt64.ofNat period) then
       match known[UInt64.ofNat period]? with
       | some update => update :: updatesFrom known startPeriod count (period + 1) bound
       | none => []
@@ -143,8 +131,9 @@ def updatesFrom {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod count :
 It is empty when the range has no known update. -/
 def updatesInRange {α : Type} (known : Std.TreeMap UInt64 α) (startPeriod count : UInt64) :
     List α :=
-  match known.toList.find? (fun entry => decide (InRange startPeriod count entry.1)) with
-  | some (first, _) => updatesFrom known startPeriod count first.toNat (updatesLimit count)
+  match known.toList.find? (fun entry => decide (InCountRange startPeriod count entry.1)) with
+  | some (first, _) =>
+    updatesFrom known startPeriod count first.toNat (lightClientUpdatesLimit count)
   | none => []
 
 /-- An update of a light client, with its fork. -/

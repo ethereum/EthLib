@@ -301,20 +301,34 @@ theorem evalDist_programDerivations_draw (seed : MasterSeed) {α : Type}
   unfold drawDerivations
   simp only [bind_assoc, pure_bind]
 
+/-- Five draws, then a function of the values, reach the function on any five reachable values.
+
+It holds for any draws, so the kernel never runs a draw to check it. -/
+private theorem mem_support_draws {A B C D E : Type} (s₁ : ProbComp A) (s₂ : ProbComp B)
+    (s₃ : ProbComp C) (s₄ : ProbComp D) (s₅ : ProbComp E) {F : Type} (k : A → B → C → D → E → F)
+    {a : A} {b : B} {c : C} {d : D} {e : E} (ha : a ∈ support s₁) (hb : b ∈ support s₂)
+    (hc : c ∈ support s₃) (hd : d ∈ support s₄) (he : e ∈ support s₅) :
+    k a b c d e ∈ support (do
+      let a ← s₁
+      let b ← s₂
+      let c ← s₃
+      let d ← s₄
+      let e ← s₅
+      pure (k a b c d e)) := by
+  simp only [mem_support_bind_iff, mem_support_pure_iff]
+  exact ⟨a, ha, b, hb, c, hc, d, hd, e, he, rfl⟩
+
 theorem mem_support_drawDerivations (d : Derivations) : d ∈ support drawDerivations := by
   obtain ⟨param, bottom, top, rnd, topRnd⟩ := d
-  have hu : ∀ {α : Type} (inst : SampleableType α) [Fintype α] (x : α), x ∈ support (@uniformSample α inst) :=
+  have hu : ∀ {α : Type} (inst : SampleableType α) [Fintype α] (x : α),
+      x ∈ support (@uniformSample α inst) :=
     fun inst _ x => @mem_support_uniformSample _ inst x
+  -- Unfold each sampler by its equation: the kernel would run a sampler to match it.
   unfold drawDerivations
-  rw [mem_support_bind_iff]
-  refine ⟨param, hu _ param, ?_⟩
-  rw [mem_support_bind_iff]
-  refine ⟨bottom, hu bottomSampleable bottom, ?_⟩
-  rw [mem_support_bind_iff]
-  refine ⟨top, hu topOtsSampleable top, ?_⟩
-  rw [mem_support_bind_iff]
-  refine ⟨rnd, hu randomizerOutputsSampleableType rnd, ?_⟩
-  rw [mem_support_bind_iff]
-  exact ⟨topRnd, hu topRndSampleable topRnd, by simp⟩
+  exact mem_support_draws _ _ _ _ _ Derivations.mk (hu _ param)
+    (by rw [sampleBottom]; exact hu bottomSampleable bottom)
+    (by rw [sampleTopOts]; exact hu topOtsSampleable top)
+    (by rw [sampleRandomizerOutputs]; exact hu Seeded.instSampleableTypeRandomizerOutputs rnd)
+    (by rw [sampleTopRnd]; exact hu topRndSampleable topRnd)
 
 end XmssSecurity.Bridge
