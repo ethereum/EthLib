@@ -29,8 +29,6 @@ From Altair, the sync aggregate sets the bits that the contributions set, each i
 
 Reading the requests of the execution layer inverts the list that the execution layer receives.
 
-The signed header of a block carries the root of its body.
-
 The total effective balance of some validators is their sum, with a repeated index counted again.
 
 The custody requirement of a node is at most the number of custody groups.
@@ -340,28 +338,6 @@ theorem stateTransition_of_computeNewStateRoot {config : Config} {checks : Signa
   simp only [applySignedBlock, checkBlockSignature, checkStateRoot, signed slotted slotsOk, ensure,
     ite_true, processBlock_stateRoot, processed, bind, Except.bind, liftSsz, rooted,
     Except.mapError, pure, Except.pure]
-
-/-! ## The signed block header -/
-
-/-- The signed header of a block carries the root of its body and the signature of the block.
-
-Its other fields are those of the block. -/
-theorem signedHeader_eq_ok_iff {signed : SignedBeaconBlock preset fork}
-    {header : SignedBeaconBlockHeader} :
-    signed.signedHeader = .ok header ↔
-      SszType.hashTreeRoot signed.message.body = .ok header.message.bodyRoot ∧
-        header = ⟨⟨signed.message.slot, signed.message.proposerIndex, signed.message.parentRoot,
-          signed.message.stateRoot, header.message.bodyRoot⟩, signed.signature⟩ := by
-  unfold SignedBeaconBlock.signedHeader
-  cases rooted : SszType.hashTreeRoot signed.message.body with
-  | error e => simp [bind, Except.bind]
-  | ok bodyRoot =>
-    simp only [bind, Except.bind, pure, Except.pure, Except.ok.injEq]
-    constructor
-    · rintro rfl
-      exact ⟨rfl, rfl⟩
-    · rintro ⟨rfl, eq⟩
-      exact eq.symm
 
 /-! ## The on-chain aggregate -/
 
