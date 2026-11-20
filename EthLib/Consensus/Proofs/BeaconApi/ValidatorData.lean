@@ -21,6 +21,10 @@ It needs each signer's key in the registry, and secret keys that do not sum to z
 A bit of a contribution is set exactly when the key of that seat signed a matching message.
 
 Each refusal of an aggregate or a contribution with a code other than 500 is stated with its cause.
+
+An aggregate refuses with code 500 only when its construction fails.
+
+A contribution refuses so only without the sync committee of the next slot, or on a signature.
 -/
 
 @[expose] public section
@@ -63,6 +67,23 @@ private theorem mapError_constructionError_iff {β : Type} {built : Except Valid
     cases fault <;> simp_all [constructionError, internalError]
   · rintro ⟨rfl, index, limit, rfl⟩
     exact ⟨_, rfl, rfl⟩
+
+/-- A failed construction refuses with code 500 for every fault but an index out of range. -/
+private theorem mapError_constructionError_internal_iff {β : Type}
+    {built : Except ValidatorDutyError β} :
+    (∃ error, built.mapError constructionError = .error error ∧ error.code = 500) ↔
+      ∃ fault, built = .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit := by
+  constructor
+  · rintro ⟨error, failed, code⟩
+    obtain ⟨fault, rfl, rfl⟩ := mapError_eq_error_iff.mp failed
+    refine ⟨fault, rfl, fun index limit same => ?_⟩
+    subst same
+    simp [constructionError] at code
+  · rintro ⟨fault, rfl, inRange⟩
+    refine ⟨_, rfl, ?_⟩
+    cases fault
+    case indexOutOfRange index limit => exact absurd rfl (inRange index limit)
+    all_goals simp [constructionError, internalError]
 
 /-! ## Attestation data -/
 
@@ -492,6 +513,77 @@ theorem aggregateAttestation_error_iff_of_electra {state : BeaconState preset fo
       constructAggregateOfSingleAttestations_indexOutOfRange_iff]
     simp
 
+/-- Before Electra, the aggregate answer refuses with code 500 exactly when its construction fails.
+
+The construction joins the attestations with the data of the first match.
+
+That refusal also needs a match whose block is verified. -/
+theorem aggregateAttestation_internal_iff_of_lt_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (before : fork < .pectra) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, attestations.find? (matchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        ∃ fault, constructAggregate state before first.data attestations = .error fault := by
+  unfold aggregateAttestation
+  simp only [before, ↓reduceDIte]
+  cases attestations.find? (matchesRequest · dataRoot slot committeeIndex) with
+  | none => simp [noMatch]
+  | some first =>
+    have anyFault : (∃ fault, constructAggregate state before first.data attestations =
+        .error fault ∧ ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+        ∃ fault, constructAggregate state before first.data attestations = .error fault :=
+      ⟨fun ⟨fault, failed, _⟩ => ⟨fault, failed⟩, fun ⟨fault, failed⟩ => ⟨fault, failed,
+        fun _ _ same => constructAggregate_ne_indexOutOfRange (same ▸ failed)⟩⟩
+    simp only [checkVerified_bind_error_iff, mapError_constructionError_internal_iff, anyFault]
+    simp
+
+/-- From Electra, the aggregate answer refuses with code 500 exactly when its construction fails.
+
+The construction joins the single attestations of the committee with the data of the first match.
+
+That refusal also needs a match whose block is verified.
+
+It also needs a committee index below the most committees a slot can have. -/
+theorem aggregateAttestation_internal_iff_of_electra {state : BeaconState preset fork}
+    {optimistic : OptimisticStore preset fork} {attestations : List (Attestation preset fork)}
+    {singles : List SingleAttestation} {dataRoot : Root} {slot : Slot}
+    {committeeIndex : CommitteeIndex} (electra : .pectra ≤ fork) :
+    (∃ error, aggregateAttestation state optimistic attestations singles dataRoot slot
+      committeeIndex = .error error ∧ error.code = 500) ↔
+      ∃ first, singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) = some first ∧
+        isExecutionOptimistic optimistic first.data.beaconBlockRoot = false ∧
+        committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
+        ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex singles =
+          .error fault := by
+  unfold aggregateAttestation
+  have notBefore : ¬ fork < .pectra := fun h => Nat.not_le_of_lt h electra
+  simp only [notBefore, ↓reduceDIte]
+  cases singles.find? (singleMatchesRequest · dataRoot slot committeeIndex) with
+  | none => simp [noMatch]
+  | some first =>
+    have outside := constructAggregateOfSingleAttestations_indexOutOfRange_iff (state := state)
+      (data := first.data) (committeeIndex := committeeIndex) (singles := singles)
+    have inRangeFault : (∃ fault, constructAggregateOfSingleAttestations state first.data
+        committeeIndex singles = .error fault ∧
+          ∀ index limit, fault ≠ .indexOutOfRange index limit) ↔
+        committeeIndex < preset.MAX_COMMITTEES_PER_SLOT ∧
+          ∃ fault, constructAggregateOfSingleAttestations state first.data committeeIndex
+            singles = .error fault := by
+      constructor
+      · rintro ⟨fault, failed, inRange⟩
+        refine ⟨UInt64.not_le.mp fun above => ?_, fault, failed⟩
+        obtain ⟨index, limit, failedIndex⟩ := outside.mpr above
+        exact inRange index limit (Except.error.inj (failed.symm.trans failedIndex))
+      · rintro ⟨inside, fault, failed⟩
+        exact ⟨fault, failed, fun index limit same => UInt64.not_le.mpr inside
+          (outside.mp ⟨index, limit, same ▸ failed⟩)⟩
+    simp only [checkVerified_bind_error_iff, mapError_constructionError_internal_iff,
+      inRangeFault]
+    simp
+
 /-! ## Sync committee contributions -/
 
 /-- From Altair, a bit of a contribution is set exactly when a member of that seat sent a message.
@@ -602,6 +694,60 @@ private theorem constructSyncCommitteeContribution_noMessages_iff
     fun slot root failed => absurd rfl ((never _ failed).1 slot root),
     fun index limit failed => (never _ failed).2 index limit rfl⟩
 
+/-- A contribution of members fails only for want of messages, or on a signature.
+
+A member is a known validator with a key of the subcommittee.
+
+It needs a subcommittee index that names a subnet. -/
+private theorem constructSyncCommitteeContribution_members_error
+    {state : BeaconState preset fork} {committee : SyncCommittee preset} {blockRoot : Root}
+    {subcommitteeIndex : UInt64} {messages : List SyncCommitteeMessage}
+    {fault : ValidatorDutyError} (inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT)
+    (failed : constructSyncCommitteeContribution state committee blockRoot subcommitteeIndex
+      (messages.filter (inSubcommittee state
+        (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) = .error fault) :
+    fault = .noMessages state.slot blockRoot ∨ ∃ error, fault = .bls error := by
+  have seated : ∀ message ∈ messages.filter (inSubcommittee state
+      (syncSubcommitteePubkeys committee subcommitteeIndex.toNat)), ∃ validator,
+        getValidator state message.validatorIndex = .ok validator ∧
+          ∃ seat, syncSubcommitteeKey committee subcommitteeIndex inRange seat =
+            validator.pubkey := by
+    intro message member
+    have inside := (List.mem_filter.mp member).2
+    unfold inSubcommittee at inside
+    cases found : getValidator state message.validatorIndex with
+    | error _ => simp [found] at inside
+    | ok validator =>
+      simp only [found, List.contains_iff_mem] at inside
+      obtain ⟨position, below, keyAt⟩ := List.getElem_of_mem inside
+      exact ⟨validator, rfl, ⟨position, Nat.lt_of_lt_of_le below (List.length_take_le _ _)⟩,
+        keyAt⟩
+  unfold constructSyncCommitteeContribution at failed
+  simp only [inRange, dite_true] at failed
+  split at failed
+  · simp only [throw, throwThe, MonadExceptOf.throw, Except.error.injEq] at failed
+    exact .inl failed.symm
+  rcases bind_eq_error failed with failed | ⟨keyed, keyedOk, failed⟩
+  · obtain ⟨message, member, step⟩ := exists_mem_of_mapM_error failed
+    obtain ⟨validator, found, -⟩ := seated message (List.mem_filter.mp member).1
+    simp [found, Except.mapError, bind, Except.bind, pure, Except.pure] at step
+  split at failed
+  · rename_i key other found
+    obtain ⟨message, member, step⟩ := mapM_ok_mem keyedOk _ (List.mem_of_find?_eq_some found)
+    obtain ⟨validator, read, step⟩ := bind_ok_iff.mp step
+    simp only [pure, Except.pure, Except.ok.injEq, Prod.mk.injEq] at step
+    obtain ⟨rfl, -⟩ := step
+    obtain ⟨known, knownOk, seat, keyAt⟩ := seated message (List.mem_filter.mp member).1
+    rw [mapError_ok_iff, knownOk, Except.ok.injEq] at read
+    subst read
+    have unseated := List.find?_some found
+    simp at unseated
+    exact absurd keyAt (unseated seat)
+  rcases bind_eq_error failed with failed | ⟨_, -, failed⟩
+  · obtain ⟨error, -, rfl⟩ := mapError_eq_error_iff.mp failed
+    exact .inr ⟨error, rfl⟩
+  · simp [pure, Except.pure] at failed
+
 /-- From Altair, the contribution answer refuses with a code other than 500 in three cases only.
 
 It refuses with code 400 when the slot is not that of the state, or the index names no subnet.
@@ -690,6 +836,58 @@ theorem produceSyncCommitteeContribution_error_iff {state : BeaconState preset f
         simp [throw, throwThe, MonadExceptOf.throw, noMatch, @eq_comm _ 404 code]
       all_goals simp [throw, throwThe, MonadExceptOf.throw, constructionError,
         internalError, notInternal, @eq_comm _ 500 code]
+
+/-- From Altair, the contribution answer refuses with code 500 in two cases only.
+
+It refuses so when the sync committee of the next slot has no value.
+
+Else it refuses so when the construction of the contribution fails on a signature.
+
+Both refusals need a request at the slot of the state, and a verified root.
+
+They also need an index that names a subnet. -/
+theorem produceSyncCommitteeContribution_internal_iff {state : BeaconState preset fork}
+    {altair : .altair ≤ fork} {optimistic : OptimisticStore preset fork}
+    {messages : List SyncCommitteeMessage} {slot : Slot} {subcommitteeIndex : UInt64}
+    {root : Root} :
+    (∃ error, produceSyncCommitteeContribution state altair optimistic messages slot
+      subcommitteeIndex root = .error error ∧ error.code = 500) ↔
+      slot = state.slot ∧ subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT ∧
+        isExecutionOptimistic optimistic root = false ∧
+        ((∃ fault, syncCommitteeAtNextSlot state altair = .error fault) ∨
+          ∃ committee, syncCommitteeAtNextSlot state altair = .ok committee ∧ ∃ fault,
+            constructSyncCommitteeContribution state committee root subcommitteeIndex
+              (messages.filter (inSubcommittee state
+                (syncSubcommitteePubkeys committee subcommitteeIndex.toNat))) =
+              .error (.bls fault)) := by
+  unfold produceSyncCommitteeContribution
+  by_cases same : slot = state.slot
+  swap
+  · simp [same, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  subst same
+  by_cases inRange : subcommitteeIndex < SYNC_COMMITTEE_SUBNET_COUNT
+  swap
+  · simp [inRange, constructionError, throw, throwThe, MonadExceptOf.throw, bind, Except.bind]
+  simp only [inRange, ↓reduceIte, true_and]
+  rw [checkVerified_bind_error_iff]
+  cases isExecutionOptimistic optimistic root
+  swap
+  · simp
+  simp only [Bool.false_eq_true, false_and, false_or, true_and]
+  cases got : syncCommitteeAtNextSlot state altair with
+  | error fault => simp [Except.mapError, internalError, bind, Except.bind]
+  | ok committee =>
+    simp only [Except.mapError, bind, Except.bind, Except.ok.injEq, exists_eq_left',
+      reduceCtorEq, exists_false, false_or]
+    cases built : constructSyncCommitteeContribution state committee root subcommitteeIndex
+        (messages.filter (inSubcommittee state (syncSubcommitteePubkeys committee
+          subcommitteeIndex.toNat))) with
+    | ok contribution => simp [pure, Except.pure]
+    | error fault =>
+      rcases constructSyncCommitteeContribution_members_error inRange built with
+        rfl | ⟨error, rfl⟩
+      · simp [throw, throwThe, MonadExceptOf.throw, noMatch]
+      · simp [throw, throwThe, MonadExceptOf.throw, constructionError, internalError]
 
 /-! ## Responses -/
 
