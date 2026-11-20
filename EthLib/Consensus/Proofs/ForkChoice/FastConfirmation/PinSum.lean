@@ -14429,43 +14429,6 @@ private theorem sc_3a_split (h : Setting config checks g split fin pulled anc co
       · exact .inr (.inr (.inl ⟨t, l⟩))
       · exact .inr (.inr (.inr ⟨t, p⟩))
 
-/-- The units of the active keys of `CS` are held by the units of the keys of `CS`.
-
-Off the high gain rate each active key of `CS` charges one `unitGain` for its stake at the slashing.
-
-Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
-
-The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
-private theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
-    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
-    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
-    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
-    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
-    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
-    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
-    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
-    (if (pinTerms config pulled anc fin).gainHigh = true then 0 else
-      ((CS counted split).filter fun v =>
-        isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
-          (pinTerms config pulled anc fin).unitGain) ≤
-      ∑ v ∈ CS counted split,
-        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := sorry
-
-/-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.
-
-At a high gain rate each takes the largest cap, and `creditCap` is the cap of each deposit slot.
-
-The keys of `K6` beyond R's registry take `capUse` of it, so the slots are counted once.
-
-Each key created after R's registry came through a pending deposit of the window. -/
-private theorem bud_capSlots (h : Setting config checks g split fin pulled anc counted V) :
-    capUse config pulled anc fin counted +
-      (if (pinTerms config pulled anc fin).gainHigh = true then
-        ((CS counted split).filter fun v =>
-          isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
-            preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat else 0) ≤
-      (pinTerms config pulled anc fin).creditCap := sorry
-
 /-- The whistleblower reward of the keys of `SC` that R slashes, at R's effective balance and rise.
 
 Each key reads the quotient of its balance and rise, and the quotient of an increment rounded up.
@@ -22339,6 +22302,43 @@ private theorem created_deposit (h : Setting config checks g split fin pulled an
     replayedC v (dueAt_eq_zero_of_targets fin highC (toFin.pendingConsolidation_targets
       h.genesis h.early h.delay) (by omega))
   omega
+
+/-- The units of the active keys of `CS` are held by the units of the keys of `CS`.
+
+Off the high gain rate each active key of `CS` charges one `unitGain` for its stake at the slashing.
+
+Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
+
+The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
+private theorem bud_csUnits (h : Setting config checks g split fin pulled anc counted V)
+    (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
+    {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
+    (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
+    {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
+    (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
+    (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
+    {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC) :
+    (if (pinTerms config pulled anc fin).gainHigh = true then 0 else
+      ((CS counted split).filter fun v =>
+        isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
+          (pinTerms config pulled anc fin).unitGain) ≤
+      ∑ v ∈ CS counted split,
+        unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF v.toNat := sorry
+
+/-- The keys of `CS` that are active at C fit the deposit slots that the keys beyond R leave.
+
+At a high gain rate each takes the largest cap, and `creditCap` is the cap of each deposit slot.
+
+The keys of `K6` beyond R's registry take `capUse` of it, so the slots are counted once.
+
+Each key created after R's registry came through a pending deposit of the window. -/
+private theorem bud_capSlots (h : Setting config checks g split fin pulled anc counted V) :
+    capUse config pulled anc fin counted +
+      (if (pinTerms config pulled anc fin).gainHigh = true then
+        ((CS counted split).filter fun v =>
+          isActiveAt counted (getCurrentEpoch counted) v.toNat = true).card *
+            preset.MAX_EFFECTIVE_BALANCE_ELECTRA.toNat else 0) ≤
+      (pinTerms config pulled anc fin).creditCap := sorry
 
 /-- The keys of `K6` beyond R's registry are paid by the credits.
 
