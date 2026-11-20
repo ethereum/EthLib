@@ -2,7 +2,6 @@ module
 
 public import EthLib.Consensus.Proofs.Signing
 public import EthLib.Serialization.Proofs.Ssz.RandomOracle
-import EthLib.Serialization.Proofs.Ssz.Type.Legality
 
 /-!
 # Proofs: a collision of the signing root in the random oracle model
@@ -34,54 +33,6 @@ open OracleComp OracleSpec ENNReal
 /-- The signing data of two objects, each with its domain. -/
 def signingValues (pair : (Value × Domain) × (Value × Domain)) : Value × Value :=
   (signingValue pair.1.1 pair.1.2, signingValue pair.2.1 pair.2.2)
-
-/-- The signing type is well formed exactly when the type of the object is. -/
-private theorem wellFormed_signingShape_iff (shape : Desc) :
-    (signingShape shape).wellFormed = .ok () ↔ shape.wellFormed = .ok () := by
-  have distinct : firstDuplicate ["object_root", "domain"] = none := by decide
-  rw [signingShape, wellFormed_container_iff]
-  cases sound : shape.wellFormed <;>
-    simp [sound, distinct, Desc.allWellFormed, Desc.wellFormed, bind, Except.bind]
-
-/-- The signing data fits the signing type exactly when the object fits its type. -/
-private theorem fits_signingValue_iff {shape : Desc} {value : Value} {domain : Domain} :
-    Fits (signingShape shape) (signingValue value domain) ↔ Fits shape value := by
-  rw [signingShape, signingValue]
-  constructor
-  · intro fitted
-    cases fitted with
-    | container paired each => exact each (shape, value) (by simp)
-  · intro fitted
-    refine .container rfl fun pair member => ?_
-    simp only [List.zip_cons_cons, List.zip_nil_left, List.mem_cons, List.not_mem_nil,
-      or_false] at member
-    rcases member with rfl | rfl
-    · exact fitted
-    · exact .byteVector (by simp [bytesPerChunk])
-
-/-- Every count of the signing data fits its word exactly when every count of the object does. -/
-private theorem commitmentSized_signingValue_iff {shape : Desc} {value : Value}
-    {domain : Domain} :
-    CommitmentSized (signingShape shape) (signingValue value domain) ↔
-      CommitmentSized shape value := by
-  rw [signingShape, signingValue]
-  constructor
-  · intro sized
-    cases sized with
-    | container each => exact each (shape, value) (by simp)
-  · intro sized
-    refine .container fun pair member => ?_
-    simp only [List.zip_cons_cons, List.zip_nil_left, List.mem_cons, List.not_mem_nil,
-      or_false] at member
-    rcases member with rfl | rfl
-    · exact sized
-    · exact .byteVector _ _
-
-/-- Two signing data values are equal exactly when their objects and domains are. -/
-private theorem signingValue_inj {first second : Value} {firstDomain secondDomain : Domain} :
-    signingValue first firstDomain = signingValue second secondDomain ↔
-      first = second ∧ firstDomain = secondDomain := by
-  simp [signingValue, Vector.toArray_inj]
 
 /-- A win on the signing data of two objects is a collision of its root.
 
@@ -151,29 +102,14 @@ theorem wins_of_computeSigningRoot_eq {α : Type} [SszType α] [LawfulSszType α
         (signingValue (toValue first) firstDomain),
       Serialization.Ssz.hashTreeRoot (signingShape (desc α))
         (signingValue (toValue second) secondDomain)⟩
-  rw [computeSigningRoot_eq_hashTreeRoot] at firstSigned secondSigned
-  -- A signing root is the root of its signing value, cut to one node.
-  have rooted : ∀ {value : Value} {domain : Domain},
-      (do toChunk (← Serialization.Ssz.hashTreeRoot (signingShape (desc α))
-        (signingValue value domain))) = Except.ok root →
-      Serialization.Ssz.hashTreeRoot (signingShape (desc α)) (signingValue value domain) =
-        .ok root.toArray := by
-    intro value domain signed
-    cases found : Serialization.Ssz.hashTreeRoot (signingShape (desc α))
-        (signingValue value domain) with
-    | error fault => simp [found, bind, Except.bind] at signed
-    | ok bytes =>
-      simp only [found, bind, Except.bind] at signed
-      rw [toChunk_ok_iff.mp signed]
+  obtain ⟨valuesDiffer, firstRooted, secondRooted⟩ :=
+    signingValues_of_computeSigningRoot_eq differ firstSigned secondSigned
   refine wins_signingValue_iff.mpr ⟨LawfulSszType.wellFormed, LawfulSszType.fits first,
-    LawfulSszType.fits second, firstSized, secondSized, ?_, root.toArray,
-    rooted firstSigned, rooted secondSigned⟩
-  -- Equal untyped values read back as equal typed values.
+    LawfulSszType.fits second, firstSized, secondSized, ?_, root.toArray, firstRooted,
+    secondRooted⟩
+  -- Equal pairs of values give equal signing values.
   intro same
-  apply differ
   obtain ⟨valued, domained⟩ := Prod.mk.inj same
-  have back := congrArg (ofValue (α := α)) valued
-  rw [LawfulSszType.ofValue_toValue, LawfulSszType.ofValue_toValue] at back
-  rw [Except.ok.inj back, domained]
+  exact valuesDiffer (by rw [valued, domained])
 
 end EthLib.Consensus

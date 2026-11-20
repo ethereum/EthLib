@@ -424,6 +424,13 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, signed direct safety catches collisions of signing roots ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
+  `SignedIn` takes the signed root, and `SignedConflict` asks that the two roots differ, so one signature never counts as two.
+  `signedConflict_of_accountable`, `accountableKeys_subset_signedConflictKeys`, `accountable_safety_signed` and `accountable_safety_signed_third` add the alternative `SigningEvidence`: SHA-256 collides among the messages of the signing roots that the checks of the runs compute.
+  `AttestationCheck.signedIn` and `HeaderCheck.signedIn` also give the domain and root of the check, and its place among the signings of the run.
+  The signing-value lemmas `wellFormed_signingShape_iff`, `fits_signingValue_iff`, `commitmentSized_signingValue_iff` and `signingValue_inj` move to `Consensus/Proofs/Signing.lean`, where they are public, with `signingValues_of_computeSigningRoot_eq`, `signingMessages` and `computeSigningRoot_ne_or_collision`.
+  `valueMessages` (`Serialization/Proofs/Ssz/Codec/ValueMessages.lean`) names the messages of the tree of a value, which the hash objects of direct safety read too.
+
 - In Lean, a signature of signed direct safety names the version of a fork of the config ([#3430](https://github.com/ethereum/EthLib/issues/3430)).
   `SignedIn` takes the version of its domain, and `SignedConflict` asks for the version of a fork of the config, the same for both headers.
   `AttestationCheck.signedIn` and `HeaderCheck.signedIn` name the version that the state before the block reads.
