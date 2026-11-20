@@ -12,6 +12,7 @@ from ruamel.yaml import YAML
 from ethlib import consensus
 from ethlib.consensus import SlashingProtectionError
 from ethlib.cryptography import aes, keystore
+from ethlib.networking import snappy
 from raising import raises
 
 # The OpenAPI document and the types of the Keymanager API, pinned in tests/sources.toml.
@@ -309,7 +310,9 @@ def _run(
     calls: list[tuple[str, str, Any]], memory: int = MEMORY, work: int = WORK
 ) -> tuple[list[tuple[int, Any]], bytes, list[bytes]]:
     """The responses of calls on a client with no key, the record and the keys afterwards."""
-    responses, state = consensus.keymanager_run(memory, work, *DEFAULTS, _interchange([]), calls)
+    responses, state = consensus.keymanager_run(
+        memory, work, *DEFAULTS, _interchange([]), None, calls
+    )
     keys = [bytes.fromhex(key[2:]) for key in state["local_keys"]]
     return responses, state["slashing_protection"].encode(), keys
 
@@ -458,12 +461,12 @@ def test_unknown_call():
 def test_bad_starting_record():
     """A starting record that does not read is refused with the code of EIP-3076 data."""
     with raises(ERROR, f"keymanager value rejected with code {PROTECTION}"):
-        consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, '{"metadata": {}}', [])
+        consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, '{"metadata": {}}', None, [])
 
 
 def _calls(*calls: tuple[str, str, Any]) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """The responses of calls on a client with no key, and its state afterwards."""
-    return consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, _interchange([]), list(calls))
+    return consensus.keymanager_run(MEMORY, WORK, *DEFAULTS, _interchange([]), None, list(calls))
 
 
 def test_list_keys():
@@ -681,3 +684,72 @@ def test_setting_of_unmanaged_key():
         ("GET", path, {}), ("POST", path, {"graffiti": "x"}), ("DELETE", path, {})
     )
     assert responses == [(404, {"message": "The key was not found on the server"})] * 3
+
+
+# The minimal operations of consensus-specs, whose voluntary exit cases "basic" the tests sign.
+# They are pinned in tests/sources.toml; Capella signs with the domain of the state, Deneb not.
+EXIT_CASES = Path(__file__).resolve().parents[4] / "tests/consensus/operations/minimal"
+# The width of an integer in SSZ, and the place of the slot in the bytes of a state.
+UINT64 = 8
+SLOT = slice(40, 48)
+SLOTS_PER_EPOCH_MINIMAL = 8
+
+
+def _exit_case(name: str) -> tuple[bytes, int, int, bytes]:
+    """The state of the case at a fork, and the epoch, the index and the signature of its exit."""
+    case = EXIT_CASES / name / "operations/voluntary_exit/pyspec_tests/basic"
+    state = snappy.decompress((case / "pre.ssz_snappy").read_bytes())
+    signed = snappy.decompress((case / "voluntary_exit.ssz_snappy").read_bytes())
+    epoch = int.from_bytes(signed[:UINT64], "little")
+    index = int.from_bytes(signed[UINT64 : 2 * UINT64], "little")
+    return state, epoch, index, signed[2 * UINT64 :]
+
+
+@pytest.mark.parametrize(("fork", "name"), [("dencun", "deneb"), ("shapella", "capella")])
+def test_voluntary_exit_matches_consensus_specs(fork: str, name: str):
+    """The exit that the client signs is the signed exit of the case, byte for byte."""
+    state, epoch, index, signature = _exit_case(name)
+    # The keys of the test states of consensus-specs are the integers from 1, by validator index.
+    keystore_v = _keystore((index + 1).to_bytes(32, "big"), "pass")
+    _, held = _calls(_import([keystore_v], ["pass"]))
+    pubkey = held["local_keys"][0]
+    chain = ("minimal", "minimal", fork, state)
+    path = f"/eth/v1/validator/{pubkey}/voluntary_exit"
+    responses, _ = consensus.keymanager_run(
+        MEMORY,
+        WORK,
+        *DEFAULTS,
+        _interchange([]),
+        chain,
+        [
+            _import([keystore_v], ["pass"]),
+            ("POST", f"{path}?epoch={epoch}", {}),
+            ("POST", path, {}),
+            ("POST", f"{path}?epoch=x", {}),
+            _remote(REMOTE_C),
+            ("POST", f"/eth/v1/validator/{REMOTE_C}/voluntary_exit", {}),
+        ],
+    )
+    message = {"epoch": str(epoch), "validator_index": str(index)}
+    assert responses[1] == (
+        200,
+        {"data": {"message": message, "signature": "0x" + signature.hex()}},
+    )
+    current = int.from_bytes(state[SLOT], "little") // SLOTS_PER_EPOCH_MINIMAL
+    assert responses[2][0] == 200
+    assert responses[2][1]["data"]["message"] == {
+        "epoch": str(current),
+        "validator_index": str(index),
+    }
+    assert responses[3] == (400, {"message": "the epoch of the query does not read"})
+    assert responses[5] == (404, {"message": "The key was not found on the server"})
+
+
+def test_voluntary_exit_without_chain():
+    """A client with no view of the chain cannot sign an exit."""
+    pubkey = _pubkeys()[0]
+    responses, _ = _calls(
+        _import([_keystore(SECRETS[0], "pass")], ["pass"]),
+        ("POST", f"/eth/v1/validator/{pubkey}/voluntary_exit", {}),
+    )
+    assert responses[1] == (500, {"message": "the client has no view of the chain"})

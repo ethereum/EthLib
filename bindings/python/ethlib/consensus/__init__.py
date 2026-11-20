@@ -251,11 +251,12 @@ def keymanager_run(
     gas_limit: int,
     graffiti: str,
     protection: str,
+    chain: tuple[str, str, str, bytes] | None,
     calls: list[tuple[str, str, Any]],
 ) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
     return _native.consensus_keymanager_run(
-        memory, work, fee_recipient, gas_limit, graffiti, protection, calls
+        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls
     )
 
 
