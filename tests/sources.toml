@@ -97,6 +97,11 @@ commit = "31cf6b577123bf1703eb3713f0b242f65fea806a"
 [repositories."ethereum/devp2p"]
 commit = "88f1c80800d622cc3a542a2125bbe33cc18c9f9c"
 
+# A mainnet block after Shapella, which the check of a received body reads.
+[repositories."ethereum/portal-spec-tests"]
+commit = "938744a83d4f85dcdcf9bac12b798e15f2eac2b1"
+directories = ["bindings/python/tests/eth/portal_block_data"]
+
 [repositories."bitcoinjs/tiny-secp256k1"]
 commit = "e1fd7a77bb0ca87fb4726fb1fd4f424f30a04db9"
 directories = ["bindings/python/tests/secp256k1/tiny_secp256k1"]

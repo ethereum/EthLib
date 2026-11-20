@@ -381,7 +381,7 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have dueLt := fits.due_lt_slot nextOk slotTimeOk followingTimeOk dueOk
   have beforeBoundary := fits.before_boundary nextOk slotTimeOk followingTimeOk deadline
   -- The duty vote carries the signed data, so its target is the justified checkpoint.
-  obtain ⟨dataSlot, dataEpoch, head, headBlock, headOk, headKnown, dataRoot, notFuture⟩ :=
+  obtain ⟨dataSlot, dataEpoch, head, headBlock, -, headKnown, dataRoot, notFuture⟩ :=
     vote.data_head anchored (UInt64.le_of_eq anchorSlot) start hv deadline dueOk dueLt
   have signedEpoch : data.target.epoch = computeEpochAtSlot preset data.slot := by
     obtain ⟨_, _, _, _, _, _, _, _, made⟩ := honestData
@@ -457,32 +457,12 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   have payload : ∀ gloas : .glamsterdam ≤ fork,
       ((e.world arrival).state w).validatePayloadVote gloas attestation headBlock = .ok () := by
     intro gloas
-    obtain ⟨hd, hb, -, state, hdOk, hbKnown, -, -, made⟩ := vote.honestData
-    rw [headOk, Except.ok.injEq] at hdOk
-    subst hdOk
-    rw [headKnown, Option.some.injEq] at hbKnown
-    subst hbKnown
-    obtain ⟨indexOk, -, slotEq, rootEq, -, -⟩ := getAttestationData_eq_ok_iff.mp made
-    by_cases same : headBlock.slot = state.slot
-    · rw [attestationDataIndex_of_glamsterdam_of_eq gloas same, Except.ok.injEq] at indexOk
-      simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
-    rw [attestationDataIndex_of_glamsterdam_of_ne gloas same] at indexOk
-    cases status : head.payloadStatus <;> rw [status] at indexOk <;>
-      simp only [Except.ok.injEq, reduceCtorEq] at indexOk
-    · simp [Store.validatePayloadVote, ← indexOk, pure, Except.pure]
-    · -- A full head has its payload verified at the voter, and so at the receiver.
-      have verified := Store.isPayloadVerified_of_getHead gloas headOk status
-      rw [← rootEq] at verified
-      obtain ⟨st, stFound, -⟩ :=
-        (forward w hw arrival).reachable.blockStatesFromParents votedKnown
-      rcases e.payloadVerified_of_partiallySynchronous sync gloas (UInt64.le_of_eq anchorSlot)
-          anchored hv hw (start v hv) (start w hw) (by simpa using late) arrivalBound
-          (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted)) verified
-          ⟨st, stFound⟩ with delivered | collision
-      swap
-      · exact absurd collision noCollision
-      have slotNe : headBlock.slot ≠ attestation.data.slot := slotEq ▸ same
-      simp [Store.validatePayloadVote, ← indexOk, slotNe, delivered, pure, Except.pure]
+    rcases vote.validatePayloadVote_or_collision sync gloas (UInt64.le_of_eq anchorSlot) anchored
+        hv hw (start v hv) (start w hw) (by rw [← nTime]; exact late) arrivalBound
+        (fun _ _ mem accepted => arrivalCurrent.2 _ (.envelope mem accepted) ▸
+          Store.onExecutionPayloadEnvelope_verified accepted) votedKnown with checked | collision
+    · exact checked
+    · exact absurd collision noCollision
   rcases vote.accepted_at_next_slot_of_payloadVote anchored start hv hw committees dataSlot
       nextOk arrivalSlot arrivalBound nBound votedKnown notFuture payload
       receiverRead with
@@ -496,6 +476,35 @@ private theorem Execution.justifiedState_or_evidence {Δ : ℕ} (sync : e.Synchr
   rw [← targetEq]
   have kept := e.checkpointStates_of_le w arrivalLe (Store.checkpointState_ok_iff.mp stateOk)
   exact Store.checkpointState_ok_iff.mpr kept
+
+/-- An honest store that holds its justified state computes its viable nodes.
+
+It is forward reachable from the anchor, which the head computation reads too.
+
+The epoch of the latest 64-bit time plus the history of mixes must fit in 64 bits. -/
+private theorem Execution.filteredTree_of_justifiedState {anchor : Store preset fork}
+    (anchored : getForkchoiceStore config anchorState anchorBlock = .ok anchor)
+    (start : ∀ w ∈ J, e.start w = anchor) (sound : Invariant anchorState)
+    (slots : 0 < config.SLOT_DURATION_MS) (anchorSlot : anchorBlock.slot ≤ anchorState.slot)
+    (anchorBoundary : isStartSlotAtEpoch preset anchorBlock.slot = .ok true)
+    (seeds : (2 ^ 64 - 1) / (config.SLOT_DURATION_MS.toNat * preset.SLOTS_PER_EPOCH.toNat) +
+      preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat < 2 ^ 64)
+    (history : 2 ≤ preset.EPOCHS_PER_HISTORICAL_VECTOR.toNat)
+    {w : ValidatorIndex} (hw : w ∈ J) (k : ℕ)
+    (unknown : ((e.world k).state w).blocks[anchorBlock.parentRoot]? = none)
+    {state : BeaconState preset fork}
+    (stateOk : ((e.world k).state w).checkpointState ((e.world k).state w).justifiedCheckpoint =
+      .ok state) :
+    Store.ForwardReachable config anchorState anchorBlock ((e.world k).state w) ∧
+      ∃ nodes, ((e.world k).state w).getFilteredNodeTree config = .ok nodes := by
+  have reached := e.forwardReachableWith
+    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
+  have forward := reached.forwardReachable
+  -- The justified block is held, as the store holds the justified state.
+  obtain ⟨base, -, baseFound, -⟩ :=
+    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
+  exact ⟨forward, getFilteredNodeTree_exists forward sound slots anchorSlot anchorBoundary unknown
+    seeds history (forward.reachable.known_of_blockState baseFound)⟩
 
 /-- Every up-to-date honest store in the interval has a head. -/
 def HonestHeadsExist (first last : Nat) : Prop :=
@@ -545,16 +554,10 @@ theorem Execution.honestHeadsExist_or_evidence {Δ : ℕ} (sync : e.Synchronous 
       have := parameters.lookahead
       omega
     intro w hw k _ inTime upToDate
-    have reached := e.forwardReachableWith
-      (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
-    have forward := reached.forwardReachable
     obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
-    -- The justified block is held, as the store holds the justified state.
-    obtain ⟨base, -, baseFound, -⟩ :=
-      reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-    obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
-      (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) seeds history
-      (forward.reachable.known_of_blockState baseFound)
+    obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+      (UInt64.le_of_eq anchorSlot) anchorBoundary seeds history hw k (absent w hw k inTime)
+      stateOk
     -- The stake ceiling and the fit of the proposer boost keep every weight below `2^64`.
     exact Store.getHead_exists preGloas forward (UInt64.le_of_eq anchorSlot) (absent w hw k inTime)
       parameters.slots scoreFits tree stateOk (ceiling w hw k _ state inTime stateOk)
@@ -964,17 +967,11 @@ theorem Execution.honestHeadsExist_or_evidence_of_gloas {Δ : ℕ} (sync : e.Syn
     have := parameters.lookahead
     omega
   intro w hw k _ inTime upToDate
-  have reached := e.forwardReachableWith
-    (fun u hu => (start u hu) ▸ Store.ForwardReachableWith.anchor anchored) k w hw
-  have forward := reached.forwardReachable
   obtain ⟨state, stateOk⟩ := states w hw k inTime upToDate
   obtain ⟨held, within⟩ := registries w hw k inTime
-  -- The justified block is held, as the store holds the justified state, so the tree is computed.
-  obtain ⟨base, -, baseFound, -⟩ :=
-    reached.checkpointStatesFromBlocks (Store.checkpointState_ok_iff.mp stateOk)
-  obtain ⟨nodes, tree⟩ := getFilteredNodeTree_exists forward sound slots
-    (UInt64.le_of_eq anchorSlot) anchorBoundary (absent w hw k inTime) fit.seeds history
-    (forward.reachable.known_of_blockState baseFound)
+  obtain ⟨forward, nodes, tree⟩ := e.filteredTree_of_justifiedState anchored start sound slots
+    (UInt64.le_of_eq anchorSlot) anchorBoundary fit.seeds history hw k (absent w hw k inTime)
+    stateOk
   exact Store.getHead_exists_of_gloas gloas forward (UInt64.le_of_eq anchorSlot)
     (absent w hw k inTime) fit scoreFits weights tree stateOk (within state stateOk) held
     (supply w hw k state inTime stateOk) (registered w hw k state inTime stateOk)

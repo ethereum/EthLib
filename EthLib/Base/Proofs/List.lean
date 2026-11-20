@@ -30,6 +30,8 @@ An array holds an element that passes a test whenever a search for one finds it.
 A first match of a longer array that lies in a prefix is the first match there.
 
 The largest of a list of numbers bounds each of them.
+
+If pieces of one nonzero length determine their values, so do the joined pieces.
 -/
 
 @[expose] public section
@@ -212,5 +214,33 @@ theorem _root_.Array.findIdx?_of_prefix {α : Type} {u s : Array α} {p : α →
   refine Array.findIdx?_eq_some_iff_getElem.mpr ⟨inside, ?_, fun j lt' => ?_⟩
   · rw [← get k inside lt]; exact hit
   · rw [← get j (Nat.lt_trans lt' inside) (Nat.lt_trans lt' lt)]; exact earlier j lt'
+
+/-- If pieces of one nonzero length determine their values, so do the joined pieces. -/
+theorem flatMap_inj_of_length {α β : Type} {f : α → List β} {n : Nat} (pos : 0 < n)
+    (length : ∀ x, (f x).length = n) (inj : ∀ x y, f x = f y → x = y) :
+    ∀ {l l' : List α}, l.flatMap f = l'.flatMap f → l = l' := by
+  intro l
+  induction l with
+  | nil =>
+    intro l' h
+    cases l' with
+    | nil => rfl
+    | cons y l' =>
+      have := congrArg List.length h
+      simp only [List.flatMap_nil, List.flatMap_cons, List.length_nil, List.length_append,
+        length] at this
+      omega
+  | cons x l ih =>
+    intro l' h
+    cases l' with
+    | nil =>
+      have := congrArg List.length h
+      simp only [List.flatMap_nil, List.flatMap_cons, List.length_nil, List.length_append,
+        length] at this
+      omega
+    | cons y l' =>
+      simp only [List.flatMap_cons] at h
+      obtain ⟨hxy, hl⟩ := List.append_inj h (by rw [length, length])
+      rw [inj x y hxy, ih hl]
 
 end EthLib.Base

@@ -4,6 +4,7 @@ public import EthLib.Cryptography.Bls.Errors
 public import EthLib.Cryptography.Montgomery
 public import EthLib.Cryptography.Hash.Sha256
 public import EthLib.Base.BigEndian
+public import EthLib.Base.Bytes
 
 /-!
 # `Fr`
@@ -142,13 +143,16 @@ instance : HPow Fr Fr Fr := ⟨fun a b => powNat a b.val⟩
 
 /-- Decode a 32-byte big-endian integer as an element of `Fr`.
 
-It rejects an input of the wrong size, and an integer of at least `r`.
+It rejects an integer of at least `r`.
 
 The bytes go straight into limbs, with no integer between. -/
-def fromBytesBE (b : ByteArray) : Except BlsError Fr :=
-  if b.size ≠ 32 then .error .nonCanonicalFieldElement
+def fromBytesBE (b : Vector UInt8 32) : Except BlsError Fr :=
+  -- A vector always has 32 bytes, so this branch is never taken.
+  --
+  -- The test keeps the kernel from unfolding the limb decoder on bytes it does not know.
+  if (Base.packBytes b).size ≠ 32 then .error .nonCanonicalFieldElement
   else
-    match Montgomery.ofBytesBE b 0 with
+    match Montgomery.ofBytesBE (Base.packBytes b) 0 with
     | some a => .ok a
     | none => .error .nonCanonicalFieldElement
 

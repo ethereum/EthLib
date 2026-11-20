@@ -4,6 +4,8 @@ public import EthLib.Engine.ForkchoiceUpdated
 public import EthLib.Base.Except
 public import EthLib.Engine.Proofs.Json
 import EthLib.Base.Proofs.Toolchain.JsonBasic
+import EthLib.Base.Proofs.BigEndian
+import EthLib.Base.Proofs.List
 
 /-!
 # Proofs: the parameters, the head and the payload attributes of `engine_forkchoiceUpdated`
@@ -89,6 +91,12 @@ It holds a payload status, and its only other member that is not `null` may be a
 The status is valid, invalid or syncing, and the ID 8 bytes in lowercase hex or absent.
 
 Attributes sent with a head that the update applies come back at the fork of the next block.
+
+The bytes that the ID of a build hashes determine the head and the attributes, at one fork.
+
+Take two calls on one configuration and one tree that start builds.
+
+They hash the same bytes only for the same head and the same attributes at the same fork.
 -/
 
 public section
@@ -1566,5 +1574,116 @@ theorem forkchoiceUpdatedCall_payloadAttributesJson_of_gloas {fork : Fork}
   have hShape : attributesForkAt .glamsterdam = attributesForkAt fork := by
     cases fork <;> first | rfl | exact absurd gloas (by decide)
   exact forkchoiceUpdatedCall_payloadAttributesJson a custody hUpdate hKnown hTime hFork rfl hShape
+
+/-! ## The ID of a build -/
+
+/-- Two 64-bit numbers with the same 8 big-endian bytes are equal. -/
+private theorem natToBytes_eight_inj {a b : UInt64}
+    (h : natToBytes 8 a.toNat = natToBytes 8 b.toNat) : a = b := by
+  exact UInt64.toNat_inj.mp
+    (natToBytes_inj (by simpa using a.toNat_lt) (by simpa using b.toNat_lt) h)
+
+/-- The bytes that the ID of a build hashes for a withdrawal determine the withdrawal. -/
+private theorem withdrawalBytes_inj (w w' : Execution.Blocks.Withdrawal)
+    (h : natToBytes 8 w.index.toNat ++ (natToBytes 8 w.validatorIndex.toNat ++
+        (w.address.toList ++ natToBytes 8 w.amount.toNat)) =
+      natToBytes 8 w'.index.toNat ++ (natToBytes 8 w'.validatorIndex.toNat ++
+        (w'.address.toList ++ natToBytes 8 w'.amount.toNat))) : w = w' := by
+  obtain ⟨h1, h⟩ := List.append_inj h (by simp [natToBytes_length])
+  obtain ⟨h2, h⟩ := List.append_inj h (by simp [natToBytes_length])
+  obtain ⟨h3, h4⟩ := List.append_inj h (by simp)
+  cases w
+  cases w'
+  simp only [Execution.Blocks.Withdrawal.mk.injEq]
+  exact ⟨natToBytes_eight_inj h1, natToBytes_eight_inj h2, Vector.toList_inj.mp h3,
+    natToBytes_eight_inj h4⟩
+
+/-- The bytes that the ID of a build hashes determine the head and the attributes, at one fork. -/
+theorem payloadIdInput_inj {fork : Fork} {head head' : Hash32} {a a' : PayloadAttributes fork}
+    (h : payloadIdInput head a = payloadIdInput head' a') : head = head' ∧ a = a' := by
+  have e := congrArg (fun b : ByteArray => b.data.toList) h
+  simp only [payloadIdInput, List.append_assoc] at e
+  obtain ⟨hHead, e⟩ := List.append_inj e (by simp)
+  obtain ⟨hTime, e⟩ := List.append_inj e (by simp [natToBytes_length])
+  obtain ⟨hRandao, e⟩ := List.append_inj e (by simp)
+  obtain ⟨hFee, e⟩ := List.append_inj e (by simp)
+  -- The withdrawals vary in length, so this split counts the fixed bytes after them.
+  obtain ⟨hW, e⟩ := List.append_inj' e (by
+    by_cases hd : .dencun ≤ fork <;> by_cases hg : .glamsterdam ≤ fork <;>
+      simp [hd, hg, natToBytes_length])
+  obtain ⟨hB, hG⟩ := List.append_inj e (by by_cases hd : .dencun ≤ fork <;> simp [hd])
+  refine ⟨Vector.toList_inj.mp hHead, ?_⟩
+  obtain ⟨t, r, s, w, b, n, g⟩ := a
+  obtain ⟨t', r', s', w', b', n', g'⟩ := a'
+  simp only [PayloadAttributes.mk.injEq]
+  refine ⟨natToBytes_eight_inj hTime, Vector.toList_inj.mp hRandao, Vector.toList_inj.mp hFee,
+    ?_, ?_, ?_⟩
+  · by_cases hs : .shapella ≤ fork
+    · simp only [hs, dite_true] at hW
+      have := flatMap_inj_of_length (n := 44) (by decide) (fun x => by simp [natToBytes_length])
+        withdrawalBytes_inj hW
+      exact funext fun _ => this
+    · exact Since.eq_of_not_le hs _ _
+  · by_cases hd : .dencun ≤ fork
+    · simp only [hd, dite_true] at hB
+      exact funext fun _ => Vector.toList_inj.mp hB
+    · exact Since.eq_of_not_le hd _ _
+  · by_cases hg : .glamsterdam ≤ fork
+    · simp only [hg, dite_true] at hG
+      obtain ⟨hn, hg'⟩ := List.append_inj hG (by simp [natToBytes_length])
+      exact ⟨funext fun _ => natToBytes_eight_inj hn, funext fun _ => natToBytes_eight_inj hg'⟩
+    · exact ⟨Since.eq_of_not_le hg _ _, Since.eq_of_not_le hg _ _⟩
+
+/-- Bytes to hash that agree give the same head and the same timestamp, at any two forks. -/
+private theorem payloadIdInput_head_timestamp {fork fork' : Fork} {head head' : Hash32}
+    {a : PayloadAttributes fork} {a' : PayloadAttributes fork'}
+    (h : payloadIdInput head a = payloadIdInput head' a') :
+    head = head' ∧ a.timestamp = a'.timestamp := by
+  have e := congrArg (fun b : ByteArray => b.data.toList) h
+  simp only [payloadIdInput, List.append_assoc] at e
+  obtain ⟨hHead, e⟩ := List.append_inj e (by simp)
+  obtain ⟨hTime, -⟩ := List.append_inj e (by simp [natToBytes_length])
+  exact ⟨Vector.toList_inj.mp hHead, natToBytes_eight_inj hTime⟩
+
+/-- Two calls that start builds with the same bytes to hash start the same build.
+
+The calls must share the configuration and the tree.
+
+The builds then have the same head, and the same attributes at the same fork.
+
+The versions, the parameters, the transition and the finalized blocks of the calls may differ. -/
+theorem forkchoiceUpdatedCall_payloadIdInput_inj {version version' : Nat}
+    {params params' : Lean.Json} {transition' : TransitionConfiguration}
+    {finalized' : Option Hash32} {status status' : PayloadStatus} {head head' : Hash32}
+    {a a' : Σ fork, PayloadAttributes fork}
+    (h : forkchoiceUpdatedCall config transition version tree finalized params =
+      .ok (status, some head, some a))
+    (h' : forkchoiceUpdatedCall config transition' version' tree finalized' params' =
+      .ok (status', some head', some a'))
+    (same : payloadIdInput head a.2 = payloadIdInput head' a'.2) : head = head' ∧ a = a' := by
+  obtain ⟨_, _, _, _, _, _, _, hr | ⟨_, _, known, _, _, _, _, _, hk, hc, hr⟩⟩ :=
+    forkchoiceUpdatedCall_ok_cases h
+  · simp at hr
+  obtain ⟨_, _, _, _, _, _, _, hr' | ⟨_, _, known', _, _, _, _, _, hk', hc', hr'⟩⟩ :=
+    forkchoiceUpdatedCall_ok_cases h'
+  · simp at hr'
+  simp only [Prod.mk.injEq, Option.some.injEq] at hr hr'
+  obtain ⟨-, rfl, rfl⟩ := hr
+  obtain ⟨-, rfl, rfl⟩ := hr'
+  -- The head and the timestamp come first in the bytes.
+  --
+  -- With the configuration and the tree, they fix the fork.
+  obtain ⟨rfl, hTime⟩ := payloadIdInput_head_timestamp same
+  rw [hk, Option.some.injEq] at hk'
+  subst hk'
+  obtain ⟨f, b⟩ := a
+  obtain ⟨f', b'⟩ := a'
+  obtain ⟨hF, -, hA, -⟩ := checkAttributes_eq_ok_iff.mp hc
+  obtain ⟨hF', -, hA', -⟩ := checkAttributes_eq_ok_iff.mp hc'
+  rw [← (PayloadAttributes.atFork_fields hA).1, hTime, (PayloadAttributes.atFork_fields hA').1,
+    hF'] at hF
+  cases hF
+  obtain ⟨-, rfl⟩ := payloadIdInput_inj same
+  exact ⟨rfl, rfl⟩
 
 end EthLib.Engine

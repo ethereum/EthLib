@@ -3,6 +3,7 @@ module
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Pruning
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Landing
 public import EthLib.Cryptography.Proofs.Sphincs.Security.SphincsSecurity.Scheme.Bytes
+import EthLib.Base.Proofs.List
 
 /-!
 # Extraction from a Merkle path
@@ -71,29 +72,10 @@ theorem nodePayload_injective {left right left' right' : Digest}
   obtain ⟨hl, hr⟩ := List.append_inj h (by simp [bytesLE_length])
   exact ⟨bytesLE_injective hl, bytesLE_injective hr⟩
 
-omit [Params] in
-theorem flatMap_ofFn_injective {α β : Type} (g : α → List β) (len : Nat)
-    (hlen : ∀ a, (g a).length = len) (hinj : ∀ a b, g a = g b → a = b) :
-    ∀ {n : Nat} {f f' : Fin n → α},
-      (List.ofFn f).flatMap g = (List.ofFn f').flatMap g → f = f' := by
-  intro n
-  induction n with
-  | zero => intro f f' _; funext i; exact i.elim0
-  | succ n ih =>
-      intro f f' h
-      simp only [List.ofFn_succ, List.flatMap_cons] at h
-      obtain ⟨hhead, htail⟩ := List.append_inj h (by rw [hlen, hlen])
-      have hzero := hinj _ _ hhead
-      have hsucc := ih htail
-      funext i
-      cases i using Fin.cases with
-      | zero => exact hzero
-      | succ j => exact congrFun hsucc j
-
 theorem rootsPayload_injective {roots roots' : ForsKey}
     (h : rootsPayload roots = rootsPayload roots') : roots = roots' :=
-  flatMap_ofFn_injective (bytesLE 16) 16 (bytesLE_length 16)
-    (fun _ _ hroot => bytesLE_injective hroot) h
+  List.ofFn_injective (EthLib.Base.flatMap_inj_of_length (by decide) (bytesLE_length 16)
+    (fun _ _ hroot => bytesLE_injective hroot) h)
 
 def orderedPayload (bit : Bool) (current sibling : Digest) : HashInput :=
   if bit then nodePayload sibling current else nodePayload current sibling
