@@ -20908,6 +20908,50 @@ private theorem same_epoch_no_epoch_credits (v : ValidatorIndex) (high : ℕ)
       omega
     · simp [quiet u w ok es contained replayedEs] at inStep
 
+/-- A state that starts its epoch on a run from genesis is within the bands of hysteresis.
+
+The steps of the run before it are all in earlier epochs.
+
+So the last one is a slot step that crossed into the epoch of `b`.
+
+The epoch transition of that step sets the bands, and the upgrades of the slot keep them.
+
+A run with no step ends at genesis, which is a Phase 0 state, so it ends before Fulu. -/
+private theorem hysteresis_at_epoch_start
+    (h : Setting config checks g split fin pulled anc counted V)
+    {b : BeaconState preset fork} (toB : Run config checks g ⟨fork, b⟩)
+    (earlier : ∀ {u w : ForkedBeaconState preset} (step : Step config checks u w),
+      toB.Contains step → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) :
+    Hysteresis b := by
+  have crossed : ∀ {x : ForkedBeaconState preset} (run : Run config checks g x),
+      x = ⟨fork, b⟩ → (∀ {u w : ForkedBeaconState preset} (st : Step config checks u w),
+        run.Contains st → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) →
+      Hysteresis b := by
+    intro x run hx before
+    cases run with
+    | nil =>
+      have fulu : .fusaka ≤ g.fork := by rw [hx]; exact h.fulu
+      obtain ⟨_, _, _, initialized⟩ := h.genesis
+      obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
+      exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
+    | @snoc middle last pre' st =>
+      subst hx
+      have crossing := before st (.last pre' st)
+      have ok := DirectSafety.Apriori.Internal.slot_of_crossing st crossing
+      have first : b.slot % preset.SLOTS_PER_EPOCH = 0 := by
+        have next : b.slot.toNat = middle.state.slot.toNat + 1 :=
+          (advanceSlotAcross_cases ok).1
+        by_contra inside
+        have notDvd : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
+          rw [Nat.dvd_iff_mod_eq_zero, ← next]
+          intro zero
+          exact inside (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
+        simp only [getCurrentEpoch_toNat, next, Nat.succ_div, notDvd, ↓reduceIte,
+          Nat.add_zero, Nat.lt_irrefl] at crossing
+      exact hysteresis_of_run_slot h.genesis h.bands h.caps h.facts.activation pre' ok h.early
+        first
+  exact crossed toB rfl earlier
+
 /-- A key charged at a step is in the registry at any state of the epoch that it started.
 
 The state `n` has the bands of hysteresis.
@@ -21790,35 +21834,8 @@ private theorem K5_charged_split_epoch
   have sameNat := congrArg UInt64.toNat sameEpoch
   have sameB : getCurrentEpoch (⟨fork, b⟩ : ForkedBeaconState preset).state =
       getCurrentEpoch a.state := UInt64.toNat_inj.mp (by simp only at splitLe sameNat ⊢; omega)
-  -- the bands of hysteresis at `b`: the first state of its epoch, right after a crossing slot step
-  have hystB : Hysteresis b := by
-    have crossed : ∀ {x : ForkedBeaconState preset} (run : Run config checks g x),
-        x = ⟨fork, b⟩ → (∀ {u w : ForkedBeaconState preset} (st : Step config checks u w),
-          run.Contains st → (getCurrentEpoch u.state).toNat < (getCurrentEpoch b).toNat) →
-        Hysteresis b := by
-      intro x run hx before
-      cases run with
-      | nil =>
-        have fulu : .fusaka ≤ g.fork := by rw [hx]; exact h.fulu
-        obtain ⟨_, _, _, initialized⟩ := h.genesis
-        obtain ⟨phase0, -⟩ := initializeBeaconStateFromEth1_ok initialized
-        exact absurd (Nat.lt_of_le_of_lt fulu phase0) (by decide)
-      | @snoc middle last pre' st =>
-        subst hx
-        have crossing := before st (.last pre' st)
-        have ok := DirectSafety.Apriori.Internal.slot_of_crossing st crossing
-        have first : b.slot % preset.SLOTS_PER_EPOCH = 0 := by
-          have next : b.slot.toNat = middle.state.slot.toNat + 1 :=
-            (advanceSlotAcross_cases ok).1
-          by_contra inside
-          have notDvd : ¬ preset.SLOTS_PER_EPOCH.toNat ∣ middle.state.slot.toNat + 1 := by
-            rw [Nat.dvd_iff_mod_eq_zero, ← next]
-            intro zero
-            exact inside (UInt64.toNat_inj.mp (by rw [UInt64.toNat_mod, zero, UInt64.toNat_zero]))
-          simp only [getCurrentEpoch_toNat, next, Nat.succ_div, notDvd, ↓reduceIte,
-            Nat.add_zero, Nat.lt_irrefl] at crossing
-        exact hysteresis_of_run_slot h.genesis h.bands h.caps h.facts.activation pre' ok h.early first
-    exact crossed toB rfl earlier
+  -- the bands of hysteresis at `b`, the first state of its epoch
+  have hystB := hysteresis_at_epoch_start h toB earlier
   obtain ⟨insideB, effEq, floor, up, rise⟩ := charge_start_at h highC (pre.append front) step
     v.toNat hin unset aFulu aEarly sameB hystB aEpoch charged
   -- the whole run from `b`: the shared part `pre`, then C's run from the split
