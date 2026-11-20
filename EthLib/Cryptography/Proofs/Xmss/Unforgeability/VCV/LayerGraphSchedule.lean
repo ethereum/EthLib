@@ -225,23 +225,69 @@ noncomputable def revealValues (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V) :
     OracleComp Spec (Vector Digest V) :=
   ofFnInOrder V fun i => digestEquiv.symm <$> readCell (some (position e i (x[i]).val))
 
-theorem reveal_cached (pp : PublicParam) (l : Layer) (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V)
-    (ys : Vector Digest V) (s : State)
-    (ready : ∀ i : Fin V, s.2 (position e i (x[i]).val) = some (digestEquiv ys[i])) :
-    (simulateQ (graph pp l).eagerImpl (revealValues e x)).run s = pure (ys, s) := by
-  have law := collect_cached pp l s V
-    (fun i => digestEquiv.symm <$> readCell (some (position e i (x[i]).val)))
+/-- Reading stored digests in order returns their vector and preserves the state. -/
+theorem read_cached (pp : PublicParam) (l : Layer) {n : Nat} (cells : Fin n → Cell)
+    (ys : Vector Digest n) (s : State)
+    (ready : ∀ i : Fin n, s.2 (cells i) = some (digestEquiv ys[i])) :
+    (simulateQ (graph pp l).eagerImpl
+      (ofFnInOrder n fun i => digestEquiv.symm <$> readCell (some (cells i)))).run s =
+      pure (ys, s) := by
+  have law := collect_cached pp l s n
+    (fun i => digestEquiv.symm <$> readCell (some (cells i)))
     (fun i => (ys[i] : Id Digest)) (fun i => by
       rw [simulateQ_map, StateT.run_map, CanonicalGraph.eagerImpl_readCell_run,
         RelabelState.drawCell_run_of_cell_eq_some (ready i)]
       simp [Id.run])
-  have same : (ofFnInOrder (m := Id) V (fun i : Fin V => ys[i])).run = ys := by
+  have same : (ofFnInOrder (m := Id) n (fun i : Fin n => ys[i])).run = ys := by
     rw [HashSig.ofFnInOrder_run]
     apply Vector.ext
     intro j hj
     simp [Id.run]
   rw [same] at law
   exact law
+
+theorem reveal_cached (pp : PublicParam) (l : Layer) (e : UInt32) (x : Vector (Fin CHAIN_LENGTH) V)
+    (ys : Vector Digest V) (s : State)
+    (ready : ∀ i : Fin V, s.2 (position e i (x[i]).val) = some (digestEquiv ys[i])) :
+    (simulateQ (graph pp l).eagerImpl (revealValues e x)).run s = pure (ys, s) :=
+  read_cached pp l _ ys s ready
+
+private def walkDigits (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) (ys : Vector Digest V) :=
+  ofFnInOrder V fun i => Xmss.chain hash pp l e i 0 (x[i]).val (by simp) ys[i]
+
+private def markDigits (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) :=
+  visit V fun i => Wots.chain (GraphChain.touchStep (schedule pp l e i))
+    0 (x[i]).val (bounded_digit x[i]) ()
+
+private theorem walk_drops (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) (ys : Vector Digest V) (s : State)
+    (ready : ∀ i : Fin V, s.2 (.inl (e, i)) = some (digestEquiv ys[i])) :
+    (fun z => ((), z.2)) <$> (simulateQ (graph pp l).eagerImpl (walkDigits pp l e x ys)).run s =
+      (simulateQ (graph pp l).eagerImpl (markDigits pp l e x)).run s := by
+  apply forget_collect pp l
+  intro i t ext
+  unfold Xmss.chain
+  exact GraphChain.chain_touches_run (schedule pp l e i) digestEquiv
+    (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
+      (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) ys[i] t (ext.2 (ready i))
+
+private theorem walk_stores (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) (ys : Vector Digest V) (s : State)
+    (ready : ∀ i : Fin V, s.2 (.inl (e, i)) = some (digestEquiv ys[i])) {z}
+    (ran : z ∈ support ((simulateQ (graph pp l).eagerImpl (walkDigits pp l e x ys)).run s)) :
+    ∀ i : Fin V, z.2.2 (position e i (x[i]).val) = some (digestEquiv z.1[i]) := by
+  apply collect_recorded pp l V _ (fun i d t => t.2 (position e i (x[i]).val) =
+    some (digestEquiv d)) s (fun _ _ _ _ ext old => ext.2 old) _ ran
+  intro i t ext w hw
+  unfold Xmss.chain at hw
+  have stored := GraphChain.chain_records_result (schedule pp l e i) digestEquiv
+    (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
+      (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) ys[i] t (ext.2 (ready i)) hw
+  change w.2.2 (position e i (0 + (x[i]).val)) = some (digestEquiv w.1) at stored
+  rw [Nat.zero_add] at stored
+  exact stored
 
 /-- After a successful trial, all touches can precede every disclosed chain read.
 
@@ -252,38 +298,64 @@ theorem values (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp Spec)
       let xs ← chainStarts pp (startPrf pp l other) l e
       ofFnInOrder V fun i => Xmss.chain hash pp l e i 0 (x[i]).val (by simp) xs[i]) =
     simulateQ (graph pp l).eagerImpl (beforeValues pp l e x >>= fun _ => revealValues e x) := by
-  let steps := fun (xs : Vector Digest V) => ofFnInOrder V fun i =>
-    Xmss.chain hash pp l e i 0 (x[i]).val (by simp) xs[i]
   have eqn := fusion pp l (chainStarts pp (startPrf pp l other) l e)
-    (visit (V / 2) (startPair e)) steps
-    (visit V fun i => Wots.chain (GraphChain.touchStep (schedule pp l e i))
-      0 (x[i]).val (bounded_digit x[i]) ())
+    (visit (V / 2) (startPair e)) (walkDigits pp l e x) (markDigits pp l e x)
     (fun ys => pure ys) (revealValues e x) (starts pp l other e) ?_ ?_
-  · simpa only [steps, beforeValues, bind_pure] using eqn
-  · intro s a ha
-    have ready := starts_stored pp l other e s (z := a) ha
-    apply forget_collect pp l
-    intro i t ext
-    unfold Xmss.chain
-    exact GraphChain.chain_touches_run (schedule pp l e i) digestEquiv
-      (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
-        (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) a.1[i] t (ext.2 (ready i))
+  · simpa only [walkDigits, markDigits, beforeValues, bind_pure] using eqn
+  · exact fun s a ha => walk_drops pp l e x a.1 a.2 (starts_stored pp l other e s (z := a) ha)
   · intro s a ha b hb
-    have start := starts_stored pp l other e s (z := a) ha
     rw [simulateQ_pure, StateT.run_pure]
-    symm
-    apply reveal_cached
-    apply collect_recorded pp l V _ (fun i d t => t.2 (position e i (x[i]).val) =
-      some (digestEquiv d)) a.2 (fun _ _ _ _ ext old => ext.2 old) _ hb
-    intro i t old z run
-    unfold Xmss.chain at run
-    have stored := GraphChain.chain_records_result (schedule pp l e i) digestEquiv
-      (chainStep hash pp l e i) (fun j d => congrArg (simulateQ (graph pp l).eagerImpl)
-        (chainStep_eq pp l e i j d)) 0 (x[i]).val (bounded_digit x[i]) a.1[i] t
-      (old.2 (start i)) run
-    change z.2.2 (position e i (0 + (x[i]).val)) = some (digestEquiv z.1) at stored
-    rw [Nat.zero_add] at stored
-    exact stored
+    exact (reveal_cached pp l e x b.1 b.2
+      (walk_stores pp l e x a.1 a.2 (starts_stored pp l other e s (z := a) ha) hb)).symm
+
+private theorem hidden_pair {α β : Type} (head : ProbComp (α × State))
+    (blank : ProbComp (Unit × State))
+    (body : α → State → ProbComp (β × State)) (touch : State → ProbComp (Unit × State))
+    (post : β → State → Prop) (first : (fun z => ((), z.2)) <$> head = blank)
+    (second : ∀ a ∈ support head, (fun z => ((), z.2)) <$> body a.1 a.2 = touch a.2)
+    (record : ∀ a ∈ support head, ∀ b ∈ support (body a.1 a.2), post b.1 b.2)
+    (final : State) (ran : ((), final) ∈ support (blank >>= fun z => touch z.2)) :
+    ∃ b, post b final := by
+  rw [← first, bind_map_left, mem_support_bind_iff] at ran
+  obtain ⟨a, ha, tail⟩ := ran
+  rw [← second a ha, support_map] at tail
+  obtain ⟨⟨b, last⟩, hb, same⟩ := tail
+  have eqn : last = final := congrArg Prod.snd same
+  exact ⟨b, eqn ▸ record a ha (b, last) hb⟩
+
+private theorem marked_stores {α β : Type} (pp : PublicParam) (l : Layer)
+    (head : OracleComp Spec α) (blank : OracleComp Spec Unit) (body : α → OracleComp Spec β)
+    (touch : OracleComp Spec Unit) (post : β → State → Prop)
+    (first : ∀ s, (fun z => ((), z.2)) <$> (simulateQ (graph pp l).eagerImpl head).run s =
+      (simulateQ (graph pp l).eagerImpl blank).run s)
+    (second : ∀ s a, a ∈ support ((simulateQ (graph pp l).eagerImpl head).run s) →
+      (fun z => ((), z.2)) <$> (simulateQ (graph pp l).eagerImpl (body a.1)).run a.2 =
+        (simulateQ (graph pp l).eagerImpl touch).run a.2)
+    (store : ∀ s a, a ∈ support ((simulateQ (graph pp l).eagerImpl head).run s) →
+      ∀ b, b ∈ support ((simulateQ (graph pp l).eagerImpl (body a.1)).run a.2) → post b.1 b.2)
+    (s t : State) (ran : ((), t) ∈ support ((simulateQ (graph pp l).eagerImpl
+      (blank >>= fun _ => touch)).run s)) : ∃ b, post b t := by
+  let G := graph pp l
+  simp only [simulateQ_bind, StateT.run_bind] at ran
+  exact hidden_pair _ _ (fun a st => (simulateQ G.eagerImpl (body a)).run st)
+    (fun st => (simulateQ G.eagerImpl touch).run st) post (first s) (second s) (store s) t ran
+
+/-- After the touch-only signing prefix, every selected value is already stored. -/
+theorem beforeValues_stored (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) (initial final : State)
+    (ran : ((), final) ∈ support ((simulateQ (graph pp l).eagerImpl
+      (beforeValues pp l e x)).run initial)) :
+    ∃ ys : Vector Digest V, ∀ i : Fin V, final.2 (position e i (x[i]).val) =
+      some (digestEquiv ys[i]) := by
+  let aux : SeedPrf (OracleComp Spec) := fun _ _ _ => pure (Vector.replicate 32 0)
+  apply marked_stores pp l (chainStarts pp (startPrf pp l aux) l e) (visit (V / 2) (startPair e))
+    (walkDigits pp l e x) (markDigits pp l e x)
+    (fun (ys : Vector Digest V) (t : State) => ∀ i : Fin V,
+      t.2 (position e i (x[i]).val) = some (digestEquiv ys[i])) (starts pp l aux e) _ _
+      initial final ran
+  · exact fun s a ha => walk_drops pp l e x a.1 a.2 (starts_stored pp l aux e s (z := a) ha)
+  · exact fun s a ha b hb => walk_stores pp l e x a.1 a.2
+      (starts_stored pp l aux e s (z := a) ha) hb
 
 /-- The actual finder controls entry into the chain schedule.
 

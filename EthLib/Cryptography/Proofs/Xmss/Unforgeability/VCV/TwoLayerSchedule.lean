@@ -47,6 +47,13 @@ theorem beforeNode_pred (pp : PublicParam) (l : Layer) : ∀ h j, P (beforeNode 
   | h + 1, j => seq _ _ (beforeNode_pred pp l h (2*j)) (seq _ _ (seq _ _ (touch _) (touch _))
       (seq _ _ (beforeNode_pred pp l h (2*j+1)) (seq _ _ (touch _) (touch _))))
 
+include ret seq touch in
+/-- A successful digit vector can be processed using touches before any of its values are read. -/
+theorem beforeValues_pred (pp : PublicParam) (l : Layer) (e : UInt32)
+    (x : Vector (Fin CHAIN_LENGTH) V) : P (beforeValues pp l e x) :=
+  seq _ _ (visit_pred P ret seq _ (startPair e) fun _ => seq _ _ (touch _) (touch _))
+    (visit_pred P ret seq _ _ fun i => chain_pred P ret seq touch pp l e i (x[i]).val _)
+
 end LayerGraph.Hidden
 
 namespace TwoLayerGraph.Honest

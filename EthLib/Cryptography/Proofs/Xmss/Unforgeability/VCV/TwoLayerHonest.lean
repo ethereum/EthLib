@@ -112,7 +112,7 @@ private theorem point (pp : PublicParam) (l : Layer) (r : LayerGraph.Row) (vs : 
 
 end Selected
 
-private theorem collect (pp : PublicParam) (l : Layer) {α : Type} (n : Nat)
+theorem collect_selected (pp : PublicParam) (l : Layer) {α : Type} (n : Nat)
     (f : Fin n → OracleComp LayerGraph.Spec α) (entries : ∀ i, Selected pp l (f i)) :
     Selected pp l (ofFnInOrder n f) := by
   induction n with
@@ -122,12 +122,12 @@ private theorem collect (pp : PublicParam) (l : Layer) {α : Type} (n : Nat)
     exact Selected.bind (entries 0) fun _ => Selected.bind
       (ih (fun i => f i.succ) (fun i => entries i.succ)) fun _ => Selected.ret pp l _
 
-private theorem start_calls (pp : PublicParam) (l : Layer)
+theorem starts_selected (pp : PublicParam) (l : Layer)
     (other : SeedPrf (OracleComp LayerGraph.Spec))
     (e : UInt32) : Selected pp l
       (chainStarts pp (LayerGraph.startPrf pp l other) l e) := by
   simp only [chainStarts, LayerGraph.startPrf_pair]
-  apply Selected.bind (collect pp l _ _ ?_) (fun _ => Selected.ret pp l _)
+  apply Selected.bind (collect_selected pp l _ _ ?_) (fun _ => Selected.ret pp l _)
   intro j
   unfold LayerGraph.readPair
   exact Selected.bind (Selected.read pp l _) fun _ =>
@@ -141,7 +141,7 @@ private theorem step_calls (pp : PublicParam) (l : Layer) (e : UInt32) (i : Fin 
   exact Selected.bind (Selected.point pp l _ _ rfl) fun _ =>
     Selected.bind (Selected.point pp l _ _ rfl) fun _ => Selected.ret pp l _
 
-private theorem chain_calls (pp : PublicParam) (l : Layer) (e : UInt32) (i : Fin V)
+theorem chain_selected (pp : PublicParam) (l : Layer) (e : UInt32) (i : Fin V)
     (start steps : Nat) (h : start + steps < CHAIN_LENGTH) (d : Digest) :
     Selected pp l (Xmss.chain LayerGraph.hash pp l e i start steps h d) := by
   unfold Xmss.chain
@@ -169,9 +169,9 @@ theorem leaf_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleCom
     (e : UInt32) : Selected pp l
       (otsPublicLeaf LayerGraph.hash pp (LayerGraph.startPrf pp l other) l e) := by
   unfold otsPublicLeaf
-  apply Selected.bind (start_calls pp l other e)
+  apply Selected.bind (starts_selected pp l other e)
   intro starts
-  apply Selected.bind (collect pp l _ _ (fun i => chain_calls pp l e i _ _ _ _))
+  apply Selected.bind (collect_selected pp l _ _ (fun i => chain_selected pp l e i _ _ _ _))
   intro ends
   apply th_calls pp l (.leaf e) (LayerGraph.endWords ends)
     (by simp [LayerGraph.endWords, LayerGraph.arity])
@@ -215,7 +215,7 @@ private theorem path_selected_at (pp : PublicParam) (l : Layer)
         height e) := by
   rw [Merkle.path, LayerGraph.siblings_in_order]
   simp only [Nat.zero_add]
-  exact collect pp l height _
+  exact collect_selected pp l height _
     (fun k => node_selected pp l other k.val _ ((Nat.le_of_lt k.isLt).trans bound))
 
 theorem path_selected (pp : PublicParam) (l : Layer) (other : SeedPrf (OracleComp LayerGraph.Spec))
