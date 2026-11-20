@@ -434,6 +434,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `processInactivityUpdates_frame` moves from `EthLib.Consensus.Proofs.Transition.EpochParticipation` to `EthLib.Consensus.Proofs.Transition.EpochUpdates`, next to the other frame facts of the epoch steps.
+  Its name and statement are unchanged; a caller that imports only the former adds `import EthLib.Consensus.Proofs.Transition.EpochUpdates`.
+
 - In Lean, the light client signature theorems assume soundness only on the one aggregate call of the update ([#3432](https://github.com/ethereum/EthLib/issues/3432)).
   `validateLightClientUpdate_signed` and `validateLightClientUpdate_signed_outside` take `SignatureChecks.AggregateSoundOn` on `updateSignatureCall` in place of `SignatureChecks.AggregateSound`.
   The new hypothesis is weaker, so the theorems are stronger; a caller with `sound : checks.AggregateSound signed` passes `sound.on _` (`SignatureChecks.AggregateSound.on`).
