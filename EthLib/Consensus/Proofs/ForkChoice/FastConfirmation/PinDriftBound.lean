@@ -11289,12 +11289,10 @@ private theorem step_flip_balance {m n : ForkedBeaconState preset} (step : Step 
         simp at flat
         omega
       have replay := Step.balanceEvents_block (fork := f) early replayed
-      have limit := s.registryWithinLimit_of_lt early
-      unfold BeaconState.RegistryWithinLimit at limit
       have inside : i < s.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
-      have bound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+      have bound := inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam early s)
       obtain ⟨key, hkey⟩ : ∃ key : ValidatorIndex, key.toNat = i :=
-        ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (show i < 2 ^ 64 by omega)⟩
+        ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' bound⟩
       subst hkey
       exact block_flip_balance (fork := f) early fulu invariant.balancesMatch replay key found
         plain foundN switched
@@ -12194,7 +12192,6 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
   classical
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
   obtain ⟨_, pulledOk⟩ := h.pulledTotal
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨finalized, called, later, near, -⟩ := setting_epochs h
@@ -22057,13 +22054,11 @@ private theorem cut_whistle (h : Setting config checks g split fin pulled anc co
     have read : balanceAt split j = effectiveAt a j := kept
     simp only [p, ↓reduceIte, quotient, read, sameFork, le_refl]
   · rw [← Finset.sum_filter]
-    have limit := pulled.validators.bound h.early
-    have registry := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
     have round (z : ℕ) (hz : z ∈ (Finset.range pulled.validators.data.size).filter P) :
         (UInt64.ofNat z).toNat = z := by
-      have := Finset.mem_range.mp (Finset.mem_filter.mp hz).1
-      simp only [UInt64.toNat_ofNat']
-      omega
+      have inside := Finset.mem_range.mp (Finset.mem_filter.mp hz).1
+      exact UInt64.toNat_ofNat_of_lt'
+        (inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early pulled))
     refine Finset.sum_le_sum_of_injOn UInt64.ofNat ?_ ?_ ?_ (fun _ _ _ => Nat.zero_le _)
     · intro x hx y hy same
       rw [← round x hx, ← round y hy, same]
@@ -22517,10 +22512,7 @@ private theorem syncF_run_le (h : Setting config checks g split fin pulled anc c
               .ok (getActiveValidatorIndices fin (getCurrentEpoch fin)) := by
             rw [getActiveValidatorIndicesChecked_eq_ok_iff]
             intro position inside _
-            have within := BeaconState.registryWithinLimit_of_lt h.early fin
-            have limit := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-            unfold BeaconState.RegistryWithinLimit at within
-            omega
+            exact inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early fin)
           have okFin : getTotalActiveBalance fin = .ok T := by
             unfold getTotalActiveBalance
             rw [checked]
@@ -23855,12 +23847,9 @@ private theorem created_active (h : Setting config checks g split fin pulled anc
       aEarly i
   have lowGain : (pinTerms config pulled anc fin).gainHigh = false := by simpa using high
   -- the key as a validator index
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   obtain ⟨w, found, -⟩ := isActiveAt_eq_true_iff.mp active
   have inside := (Array.getElem?_eq_some_iff.mp found).1
-  have below : i < 2 ^ 64 := by omega
+  have below := inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
   obtain ⟨v, hvi⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
     ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' below⟩
   subst hvi
@@ -24099,9 +24088,7 @@ private theorem sum_SC_positions (h : Setting config checks g split fin pulled a
   obtain ⟨toPulled⟩ := h.toPulled
   have grows : split.validators.data.size ≤ pulled.validators.data.size :=
     registryGrows_of_chainSteps toPulled.chainSteps
-  have limit := BeaconState.registryWithinLimit_of_lt h.early pulled
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have limit := BeaconState.validators_size_lt_of_lt_glamsterdam h.early pulled
   rw [← Finset.sum_image (f := f) (g := UInt64.toNat) fun a _ b _ same => UInt64.toNat_inj.mp same]
   refine Finset.sum_congr ?_ fun _ _ => rfl
   ext i
@@ -24116,7 +24103,7 @@ private theorem sum_SC_positions (h : Setting config checks g split fin pulled a
   · intro mem
     obtain ⟨hmem, hin⟩ := Finset.mem_filter.mp mem
     obtain ⟨hrange, hsl, hcs⟩ := Finset.mem_filter.mp hmem
-    have below : i < 2 ^ 64 := by have := Finset.mem_range.mp hrange; omega
+    have below := (Nat.lt_of_lt_of_le hin grows).trans limit
     refine Finset.mem_image.mpr ⟨UInt64.ofNat i, ?_, UInt64.toNat_ofNat_of_lt' below⟩
     rw [SC, Finset.mem_filter, UInt64.toNat_ofNat_of_lt' below]
     exact ⟨Finset.mem_image.mpr ⟨i, Finset.mem_range.mpr (by omega), rfl⟩,
@@ -24129,9 +24116,6 @@ private theorem sum_CS_positions (h : Setting config checks g split fin pulled a
     ∑ v ∈ CS counted split, f v.toNat =
       ∑ i ∈ (slashedOnC split counted).filter (fun i => ¬ i < split.validators.data.size), f i := by
   classical
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   rw [← Finset.sum_image (f := f) (g := UInt64.toNat) fun a _ b _ same => UInt64.toNat_inj.mp same]
   refine Finset.sum_congr ?_ fun _ _ => rfl
   ext i
@@ -24146,7 +24130,8 @@ private theorem sum_CS_positions (h : Setting config checks g split fin pulled a
   · intro mem
     obtain ⟨hmem, hout⟩ := Finset.mem_filter.mp mem
     obtain ⟨hrange, hsl, hcs⟩ := Finset.mem_filter.mp hmem
-    have below : i < 2 ^ 64 := by have := Finset.mem_range.mp hrange; omega
+    have below := (Finset.mem_range.mp hrange).trans
+      (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
     refine Finset.mem_image.mpr ⟨UInt64.ofNat i, ?_, UInt64.toNat_ofNat_of_lt' below⟩
     rw [CS, Finset.mem_filter, UInt64.toNat_ofNat_of_lt' below]
     exact ⟨Finset.mem_image.mpr ⟨i, hrange, rfl⟩, Nat.not_lt.mp hout,
@@ -24614,11 +24599,9 @@ private theorem induced_debited (h : Setting config checks g split fin pulled an
     rw [inducedR_of_withdrawn _ _ _ (withdrawnRB_of_le config pulled anc fin found notLate)]
       at positive
     exact Nat.lt_irrefl 0 positive
-  have limit := BeaconState.registryWithinLimit_of_lt h.early split
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have below := inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early split)
   obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
-    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' below⟩
   have cleanSplit : ∀ u, split.validators.data[v.toNat]? = some u → u.slashed = false :=
     fun u foundU => by
       rw [foundU] at unslashed
@@ -24802,10 +24785,7 @@ private theorem sc_key_round (h : Setting config checks g split fin pulled anc c
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   obtain ⟨inSlashed, inside⟩ := Finset.mem_filter.mp member
   obtain ⟨-, unslashedS, -⟩ := Finset.mem_filter.mp inSlashed
-  have limit := BeaconState.registryWithinLimit_of_lt h.early split
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
-  have small : i < 2 ^ 64 := by omega
+  have small := inside.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early split)
   have replayedF' := replay_at_pulled pulled fromFin high endEpoch h.called replayedF
   -- the credits that the slack reads, and the bands that they bring
   obtain ⟨grossP, grossW, grossS, hbC, consBand⟩ :=
@@ -25371,12 +25351,10 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
     replayedS
   rw [← snoc_append_eq pre step post, replayedC] at whole
   obtain rfl := Except.ok.inj whole
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have insideC := (Array.getElem?_eq_some_iff.mp foundC).1
+  have below := insideC.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
   obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
-    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' below⟩
   have insideA := (Array.getElem?_eq_some_iff.mp foundA).1
   -- from the step on, the key is exited and not withdrawable through C
   have exited := exitEpoch_toNat_lt_of_ne_far set
@@ -25447,14 +25425,11 @@ private theorem cs_key_round (h : Setting config checks g split fin pulled anc c
   have below := h.facts.below
   obtain ⟨inSlashed, created⟩ := Finset.mem_filter.mp member
   obtain ⟨-, -, slashedC⟩ := Finset.mem_filter.mp inSlashed
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have insideC : i < counted.validators.data.size := by
     cases f : counted.validators.data[i]? with
     | none => simp [f] at slashedC
     | some w => exact (Array.getElem?_eq_some_iff.mp f).1
-  have small : i < 2 ^ 64 := by omega
+  have small := insideC.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early (getCurrentEpoch pulled).toNat
   -- the credits of the key and their bands
   have cred := created_credC_le h tailC highC endEpochC replayedC created slashedC
@@ -25463,7 +25438,7 @@ private theorem cs_key_round (h : Setting config checks g split fin pulled anc c
   have splitC := credC_split tailC highC i
   have splitN := credN_split tailC highC i
   obtain ⟨v, rfl⟩ : ∃ v : ValidatorIndex, v.toNat = i :=
-    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' (by rw [UInt64.size]; omega)⟩
+    ⟨UInt64.ofNat i, UInt64.toNat_ofNat_of_lt' small⟩
   have consScan := scan_le_events (fun s => decide (s = .consolidations))
     (fun s => decide (s = .consolidations)) (· = .consolidations) (by intro s; simp) tailC highC v
     replayedC
@@ -25743,16 +25718,13 @@ private theorem charged_window (h : Setting config checks g split fin pulled anc
     ∑ i ∈ T, chargeAmt tailC i ≤ (pinTerms config pulled anc fin).queueWindow ∧
       T.card ≤ (pinTerms config pulled anc fin).queueKeys := by
   classical
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have small : ∀ i ∈ T, i < 2 ^ 64 := by
     intro i member
     obtain ⟨-, c, inRun, index⟩ := keys i member
     obtain ⟨w, found, -⟩ := Run.departure_charge_exit tailC c inRun
     rw [index] at found
-    have : i < counted.validators.data.size := (Array.getElem?_eq_some_iff.mp found).1
-    omega
+    exact (Array.getElem?_eq_some_iff.mp found).1.trans
+      (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted)
   have injective : Set.InjOn (fun i => (UInt64.ofNat i : ValidatorIndex)) T :=
     fun a ha b hb same => by
       have := congrArg UInt64.toNat same
@@ -26276,9 +26248,6 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
     (getCurrentEpoch counted) i = true)).filter (fun i => ¬ ((pinTerms config pulled anc
     fin).tight = false ∧ ((pinTerms config pulled anc fin).lateB i = true ∨ (pinTerms config
     pulled anc fin).pendingRB i = true)))) with hFW
-  have limit := BeaconState.registryWithinLimit_of_lt h.early counted
-  unfold BeaconState.RegistryWithinLimit at limit
-  have limitBound := preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
   have facts : ∀ i ∈ FW, i < split.validators.data.size ∧ i < 2 ^ 64 ∧
       (split.validators.data[i]?.map (·.slashed)).getD false = false ∧
       (counted.validators.data[i]?.map (·.slashed)).getD false = true ∧
@@ -26292,7 +26261,8 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
     simp only [hFW, slashedOnC, Finset.mem_filter, Finset.mem_range] at hi
     obtain ⟨⟨⟨⟨⟨count, unslashed, slashedC⟩, inside⟩, notSlashed, notExited⟩, active⟩, notLate⟩ :=
       hi
-    exact ⟨inside, by omega, unslashed, slashedC, notSlashed, notExited, active, notLate⟩
+    exact ⟨inside, count.trans (BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted),
+      unslashed, slashedC, notSlashed, notExited, active, notLate⟩
   have retained : ∀ v : ValidatorIndex, v.toNat ∈ FW →
       ∀ {m n : ForkedBeaconState preset} (before : Run config checks ⟨fork, fin⟩ m)
       (step : Step config checks m n) (after : Run config checks n ⟨fork, counted⟩),
@@ -27269,9 +27239,7 @@ private theorem slack_le (h : Setting config checks g split fin pulled anc count
   have grows : split.validators.data.size ≤ counted.validators.data.size := by
     have := registryGrows_of_chainSteps tailC.chainSteps
     exact this
-  have within : counted.validators.data.size < 2 ^ 64 :=
-    Nat.lt_of_le_of_lt (BeaconState.registryWithinLimit_of_lt h.early counted)
-      preset.VALIDATOR_REGISTRY_LIMIT.toNat_lt
+  have within := BeaconState.validators_size_lt_of_lt_glamsterdam h.early counted
   have small : ∀ i ∈ T, i < 2 ^ 64 := fun i member =>
     Nat.lt_trans (Nat.lt_of_lt_of_le (inside i member) grows) within
   have conv := sum_image_ofNat T small
@@ -29229,7 +29197,6 @@ private theorem key_core_frozen_from (h : Setting config checks g split fin pull
         slashR (pinTerms config pulled anc fin) v.toNat) := by
   classical
   obtain ⟨toFin⟩ := h.toFin
-  obtain ⟨toPulled⟩ := h.toPulled
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have sizeC := registryGrows_of_chainSteps fromC.chainSteps
   -- the floor of each state of R's run, and the largest effective balance on it
@@ -31770,7 +31737,6 @@ private theorem cP_le (h : Setting config checks g split fin pulled anc counted 
         (syncF events v.toNat + syncF eventsC v.toNat) +
         slashR (pinTerms config pulled anc fin) v.toNat + bandC tailC highC v.toNat +
         bandR (eventsF ++ events) v.toNat + bandX fin highC v.toNat)) : ℕ) := by
-  obtain ⟨shared⟩ := h.toFin
   set T : ValidatorIndex → ℕ := fun v => (propN pre highC v.toNat + whistC pre highC v.toNat +
           syncCr eventsP v.toNat + propC tailC highC v.toNat +
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
