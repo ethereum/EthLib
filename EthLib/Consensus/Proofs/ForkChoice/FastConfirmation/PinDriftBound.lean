@@ -22249,35 +22249,15 @@ The surplus of the slash charge pays `flow_split_of`'s slashed term.
 
 `branchR` also holds the unit of each key slashed on R's branch.
 
-The slash charge is at least an increment and `2 * depthFin * flagRate`.
-
-The flag rate is at most the rate of an increment.
-
-The slash charge has four of the flag rate for each epoch.
-
-The `syncProposer` part of `proposerCredit` is not used by R's credits.
-
 R's credits leave out sync events, so `bud_sync` takes them.
 
 The keys of `SC` that R slashes after the split also draw on `branchR`, at weight three.
 
-The reward of such a key on C's branch is read at its balance there.
-
-That balance is at most R's balance and its rise, plus one increment for R's initial penalty.
-
-`whistleblowerR` pays the quotient of the first two.
-
-The increment is one of the slashed keys' increments, which no class spends for a key of `SC`.
+The `whistleblowerR` term of `pinReserve` pays their reward on C's branch.
 
 The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims.
 
-A key of `K5` that receives a whistleblower credit on `pre` is read at the credits of `pre`.
-
-They are at most the rewards of the keys that `pre` slashes, by `cut_whistle`.
-
-Those keys are slashed at the split, so no class of C's quorum or `SC` claims them.
-
-Each pays the quotient of its balance, and `bud_sync` pays the rounding of that quotient. -/
+A key of `K5` that receives a whistleblower credit on `pre` is read at the credits of `pre`. -/
 private theorem bud_branchR (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -22988,9 +22968,7 @@ private theorem bud_sync (h : Setting config checks g split fin pulled anc count
 
 /-- The sync credits of any keys on C's branch are at most the seats' envelope and a share.
 
-The share is the proposer's, and the bound weighs both at the depth.
-
-This is the second run of `bud_sync` for credits alone, and `syncSeats` weighs it at `depth`. -/
+The share is the proposer's, and the bound weighs both at the depth, as `syncSeats` does. -/
 private theorem syncCredits_le (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
@@ -23110,19 +23088,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The exit is charged at the step that assigns it, with the effective balance before that step.
 
-The key is active at that step, so the run crosses an epoch boundary before it.
-
-The key is in the registry at the first state after the boundary.
-
-There the balance is within the upward band of the effective balance.
-
-The effective balance stays through the epoch.
-
-From there the ceiling over the run to the key's state bounds the effective balance.
-
-A key whose cap rose after the boundary is handled by the switch step (`Run.flip_split`).
-
-In that case the effective balance is at the old cap. -/
+The band is the upward band at the epoch boundary before that step, where the key is active. -/
 private theorem earlier_charge (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -23639,17 +23605,11 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The run from the split reaches a state `z` where the key holds the activation reserve, and then C.
 
-The ceiling at the largest cap closes from `z`, at the depth of the call.
-
 The bound holds at every state of C's run after `z`, and at C.
 
 The key's base stake is credits, so one floor of the flows pays its gain.
 
-The unit pays the step of the joint floor.
-
-The rate premise is that of the low regime: `key` reads it at the depth of the call.
-
-The depth is small against an increment, from `key` and a rate of at least four. -/
+The rate premise is that of the low regime: `key` reads it at the depth of the call. -/
 private theorem created_ceiling (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -23870,13 +23830,9 @@ private theorem key_of_kept (h : Setting config checks g split fin pulled anc co
 
 Its credits since its creation are credits of C's branch, which `created_ceiling` reads.
 
-That lemma bounds its effective balance at every state after its creation.
-
 The credits of the run are at most `credC`, `whistC` and the seat credits, so the bound reads them.
 
-The key is active at C, so `start_state` finds its creation state.
-
-Off the high gain rate, `gainHigh` is false, which gives the lemma's premise on the rate. -/
+Off the high gain rate, `gainHigh` is false, which gives the rate premise of `created_ceiling`. -/
 private theorem created_active (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -23961,33 +23917,19 @@ If it is not active at C and has a charge there, it is also read at `registryCha
 
 `registry` is asked for each key that is unslashed at the split, at each step of C's branch.
 
-Its sub-cases are the arms of the key ceilings.
-
-They are: exited before the finalized state, headroom, frozen cap, rising cap, created after it.
-
-A key slashed on the shared segment from the finalized state is slashed at the split.
-
-It is not in `slashedOnC`, so the sums below have no term for it: its credit on C's branch is zero.
+A key slashed before the split has no term, since its credit on C's branch is zero.
 
 A key of R's registry that is also slashed on R's branch is a term of the first sum.
 
 A consumer that pays those terms by another budget splits that sum by the key's slashing on R.
 
-A key created after the split that is active at C is read at `createdCeil`.
+A key created after the split is read at `createdCeil` if it is active at C.
 
-A key created after the split that has exited by C is read at its charge and credits.
+If it has exited by C, it is read at its charge and credits.
 
-A charge in the split's own epoch also reads the credits of `pre`.
+A charge in the split's own epoch also reads the credits of `pre`, the run from that epoch's start.
 
-That is the run to the split from the state of that epoch's start.
-
-The facts that tie `pre` to the run are premises of the proof of `registryCharge`.
-
-They are its cut, its epoch and the earlier steps.
-
-This lemma does not use them.
-
-Each term of the sums is at most the largest cap, which a slashing reads at its balance. -/
+`registryCharge` takes the facts that tie `pre` to the run, and this lemma does not use them. -/
 private theorem whistle_core (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -24802,15 +24744,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The slack's credits pay at eleven tenths of three, the shares' rate.
 
-A nonzero slack has an unscaled band of at least four, which pays the rounding of its floor.
-
-A credit of C's run or of the shared segment has its credit, consolidation or seat band.
-
-An induced leak has a sync debit, and so its seat band.
-
-A slashing on R's branch has the key's unit.
-
-The credits of `pre` of a charged key have its upward band. -/
+Each source of the key's slack brings a band, which pays the rounding of its floor. -/
 private theorem sc_key_round (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -25481,13 +25415,7 @@ private theorem created_credC_le (h : Setting config checks g split fin pulled a
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The reward of one key of `CS` is within its charge, its shares and its bands, at ten quotients.
 
-A key active at C is read at `createdCeil`, whose gains are within a tenth of its credits.
-
-Its downward band is within the band that its creation brings, and its unit is paid for it.
-
-At a high rate it is read at the largest cap, which is paid for it.
-
-A key that has exited is read at its charge and its credits, whose rounding has a band of four.
+A key active at C is read at `createdCeil`, and one that has exited at its charge and credits.
 
 The credits of a slashed created key are its proposer credits, deposits and consolidations. -/
 private theorem cs_key_round (h : Setting config checks g split fin pulled anc counted V)
@@ -26114,13 +26042,9 @@ It is activated by R's next epoch.
 
 It is not yet withdrawable at the finalized epoch.
 
-Slashed at R, an unslashed key of the split would be a term of `slashedRB`.
+A key outside these cases is a term of `slashedRB`, `lateB` or `pendingRB`.
 
-A late activation, outside the tight window, would be a term of `lateB` or `pendingRB`.
-
-Inside the tight window, C's activation is shared with R.
-
-A withdrawable epoch by the finalized epoch is excluded by `sc3a_unwithdrawn`. -/
+`sc3a_unwithdrawn` excludes a key that is withdrawable by the finalized epoch. -/
 private theorem free_slashable (h : Setting config checks g split fin pulled anc counted V)
     {i : ℕ} (inside : i < split.validators.data.size) (below : i < 2 ^ 64)
     (unslashedS : (split.validators.data[i]?.map (·.slashed)).getD false = false)
@@ -26589,15 +26513,7 @@ The slashed keys' rewards are paid by the shares, `reserveW`, `flagged`, `cK7` a
 
 The seat debits, the keys' own `rise` and R's slashing of the key pay the rest.
 
-`registry` is the bound of the keys of the split's registry on each step of C's branch.
-
-The last terms are those that the right side gains from `branchR` and the credits.
-
-The keys slashed at C are those of `whistle_core`.
-
-`whistle_slack_sc`, `whistle_slack_cs`, `whistle_exited` and `whistle_free` pay them.
-
-The keys that R slashes are paid by `branchR`'s claim. -/
+`registry` is the bound of the keys of the split's registry on each step of C's branch. -/
 private theorem bud_whistle_of (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
