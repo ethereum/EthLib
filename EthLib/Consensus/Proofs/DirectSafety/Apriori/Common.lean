@@ -919,7 +919,13 @@ private theorem reserveCut_queueConsolidation {x : ForkedBeaconState preset} {hi
       exact ⟨unsupported, fun inQueue => absent (queued k different inQueue)⟩
     · exact absurd supported ((wasRetired _ member source found).1 _ (UInt64.le_refl _))
   · intro k ref notRetired support
-    rw [effectiveSame, balanceSame]
+    have potentialSame : potential ⟨fork, t⟩ k = potential ⟨fork, s⟩ k := by
+      by_cases same : k = sourceIndex.toNat
+      · subst same
+        simp only [potential, atSource, found, Option.map_some, Option.getD_some, capSame,
+          balanceSame]
+      · simp only [potential, others k same, balanceSame]
+    rw [potentialSame]
     exact reference k ref notRetired (relevant k support)
   -- The source had no exit at `x`, so it is not a scheduled key.
   · intro k initial w initialAt activeX cleanX assigned read support

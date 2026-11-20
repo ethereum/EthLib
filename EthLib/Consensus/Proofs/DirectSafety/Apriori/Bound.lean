@@ -604,6 +604,26 @@ def pendingSourceExcess (x : ForkedBeaconState preset) (high : Nat) : Nat :=
         else 0).sum
   else 0
 
+namespace Internal
+
+/-- A key's balance capped at its largest effective balance, or its effective balance if larger.
+
+It is zero at an index with no key. -/
+def potential (x : ForkedBeaconState preset) (i : Nat) :=
+  (x.state.validators.data[i]?.map fun v => max v.effectiveBalance.toNat
+    (min (actualBalanceAt x i) (withdrawalMaxEffectiveBalance preset x.fork v).toNat)).getD 0
+
+end Internal
+
+/-- The excess of the keys active at `x`, with each balance capped at `x`.
+
+A key counts its balance capped at its largest effective balance, minus its effective balance.
+
+The cap applies before the subtraction. -/
+def initialCappedExcess (x : ForkedBeaconState preset) : Nat :=
+  ((getActiveValidatorIndices x.state (getCurrentEpoch x.state)).map fun i =>
+    Internal.potential x i.toNat - effectiveAt x i.toNat).sum
+
 /-- The largest growth room of the unslashed keys that exit in one epoch of the window.
 
 The growth room of a key is its cap minus twice its effective balance. -/
@@ -684,9 +704,9 @@ abbrev whistleblowerAllowanceAt (x : ForkedBeaconState preset) (high : Nat) :=
 
 /-- The credits of the window.
 
-They are the excess, due credits, whistleblower allowance, issuance and transfers. -/
+They are the capped excess, due credits, whistleblower allowance, issuance and transfers. -/
 def creditBudget (x : ForkedBeaconState preset) (high : Nat) :=
-  initialExcess x + dueConsolidationCredits x (driftHorizon x high) +
+  initialCappedExcess x + dueConsolidationCredits x (driftHorizon x high) +
       whistleblowerAllowanceAt (config := config) x high +
       windowIssuance (config := config) x high +
     consolidationTransfers (config := config) x high

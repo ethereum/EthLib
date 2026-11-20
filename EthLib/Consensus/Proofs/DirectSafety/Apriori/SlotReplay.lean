@@ -817,9 +817,9 @@ private theorem reserveCut_switch {x : ForkedBeaconState preset} {high : Nat} {f
   · intro i reference notRetired relevantV
     have bound := newReference i reference notRetired (relevant i relevantV)
     obtain ⟨w, found, _⟩ := relevantV
-    obtain ⟨_, _, _, _, lower, _⟩ := lookup i w found
-    rw [effective i]
-    exact (max_le_max (Nat.le_refl _) lower).trans bound
+    obtain ⟨w₀, _, found₀, rfl, _, capped⟩ := lookup i w found
+    simp only [potential, found, found₀, Option.map_some, Option.getD_some] at bound ⊢
+    exact (max_le_max (Nat.le_refl _) capped).trans bound
   · intro i initialV w xFound active clean notFar found supportedV
     obtain ⟨w₀, _, found₀, rfl, _, capped⟩ := lookup i w found
     rw [effective i]

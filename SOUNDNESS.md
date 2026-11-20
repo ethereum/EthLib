@@ -4512,7 +4512,7 @@ The terms doubled in the first line are stake that can leave the support of `x`.
 They are departures, partial withdrawals, scheduled exits, slack below the effective balance, penalties and rounding.
 `gainBudget` is stake that can join or grow: `activationBudget`, `creditBudget` and `pendingSourceExcess`.
 From Electra it also includes `roundingBudget` and `dueConsolidationCarry`.
-`creditBudget` is the excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
+`creditBudget` is the capped excess at `x`, due consolidation credits, the whistleblower allowance, issuance and consolidation transfers.
 The remaining terms cover the edges of the window.
 They are two adjacent exit epochs, the stake active only at the previous epoch, and the growth room of an exit cohort.
 
