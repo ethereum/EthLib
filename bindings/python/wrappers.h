@@ -282,6 +282,9 @@ PyObject* py_compute_verify_cell_kzg_proof_batch_challenge(PyObject* self, PyObj
 PyObject* py_verify_cell_kzg_proof_batch                  (PyObject* self, PyObject* args);
 PyObject* py_recover_cells_and_kzg_proofs                 (PyObject* self, PyObject* args);
 
+/* Allocate the lock of the leanXMSS key cache; returns -1 with an exception set on failure. */
+int xmss_key_cache_init(void);
+
 PyObject* py_xmss_key_gen                                 (PyObject* self, PyObject* args);
 PyObject* py_xmss_sign                                    (PyObject* self, PyObject* args);
 PyObject* py_xmss_verify                                  (PyObject* self, PyObject* args);

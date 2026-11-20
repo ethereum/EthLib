@@ -16,6 +16,8 @@ For every lawful choice of peers, and every rank and standing that a client pass
 - A joined topic whose mesh is between the bounds, once negative peers leave, keeps those peers.
   It adds only outbound peers that it may GRAFT, until it holds the outbound count or runs out.
 - No mesh holds a peer with a negative score.
+- A heartbeat keeps the explicit peers.
+  If no explicit peer is in a mesh before the heartbeat, none is after it.
 - A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
   It has fewer only when it held fewer once its negative peers left.
 - Every peer added to a mesh gets a GRAFT.
@@ -522,6 +524,27 @@ theorem heartbeat_no_negative (hsel : sel.Lawful) {t : String} {q : PeerId}
     have := ((mem_graftCandidates standing now s).1 hq).2.1
     simp only [graftable, Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at this
     exact this.1.2
+  · simp at hq
+
+/-- A heartbeat keeps the explicit peers. -/
+theorem heartbeat_explicit_eq : (heartbeat p c sel rank standing now s).1.explicit = s.explicit :=
+  rfl
+
+/-- If no explicit peer is in a mesh before a heartbeat, none is after it.
+
+It needs a lawful choice. -/
+theorem heartbeat_explicit (hsel : sel.Lawful) (h : ∀ t, ∀ q ∈ peersOf s.mesh t, q ∉ s.explicit) :
+    ∀ t, ∀ q ∈ peersOf (heartbeat p c sel rank standing now s).1.mesh t,
+      q ∉ (heartbeat p c sel rank standing now s).1.explicit := by
+  intro t q hq
+  rw [heartbeat_explicit_eq]
+  rw [mesh_eq] at hq
+  split at hq
+  · refine meshAfter_mem p c sel rank standing now s hsel t (· ∉ s.explicit)
+      (fun q hq => h t q ((mem_nonNegativeMesh standing s).1 hq).1) (fun m q hq => ?_) q hq
+    have hg := ((mem_graftCandidates standing now s).1 hq).2.1
+    simp only [graftable, Bool.and_eq_true, decide_eq_true_eq] at hg
+    exact hg.1.1
   · simp at hq
 
 /-- A mesh of a joined topic pruned for oversubscription has the outbound count of outbound peers.
