@@ -408,7 +408,7 @@ The slashing penalty is then at most `top` over the slashing quotient, whenever 
 
 A key slashed at `zs` pays no slashing penalty along the run.
 
-The guards of the floor trace are `floor_guards`, from the setting's guard at the finalized block.
+The guard at the finalized block supplies the conditions for the floor along the branch.
 
 Nothing in the statement needs the key to be slashed, so it holds for a key that stays unslashed.
 
@@ -536,7 +536,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The segment runs from `wS` to `pS`, and a run to the end `e` of C's run follows it.
 
-The guards are `floor_guards`, with the exit guard `retained` of the segment.
+The floor also requires the key to stay within the segment's exit guard.
 
 The slashing quotient is the fork's, and the segment ends by the call's cutoff. -/
 private theorem segment_guards (h : Setting config checks g split fin pulled anc counted V)
@@ -642,7 +642,7 @@ The key may be slashed at the end of the segment, or at the end of C's run.
 
 The closed form is the one of a slash with the fork's quotient, over one more epoch.
 
-`segment_potential` keeps the form without the slash for a key that is unslashed at the end.
+For a key still unslashed at the end, the floor needs no slashing deduction.
 
 The slash form cannot give that one, so the lemmas stay apart. -/
 private theorem segment_potential_slash (h : Setting config checks g split fin pulled anc counted V)
@@ -710,9 +710,9 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The run is C's from the finalized block, and `floor` is below what the potential floor gives.
 
-The potential floor is `segment_potential`, read at the end of each prefix from the finalized block.
+The potential floor applies at the end of each prefix from the finalized block.
 
-The guards are `floor_guards`, with the exit guard `retained` and the pass rate `pass`.
+The floor uses the segment's exit guard and a bound on the rate of penalties per pass.
 
 The step `arith` is the arithmetic that fits the closed form of the potential floor to `floor`.
 
@@ -778,15 +778,15 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The key is unslashed at the finalized block, and it may be slashed on C's run.
 
-The potential floor is `segment_potential_slash`.
+The potential floor includes the loss from slashing.
 
 It is read at the end of each prefix, from the finalized block.
 
 The step `arithS` fits its closed form to `floor`, and `loss` is the slash's share.
 
-`cfloor_balance` has the key unslashed at the end of the run and the closed form of one epoch less.
+If the key stays unslashed, the closed form can use one fewer epoch.
 
-That form is stronger than this one, so `cfloor_balance` is not a case of it. -/
+Setting the slashing loss to zero does not recover that sharper epoch bound. -/
 private theorem cfloor_balance_slash (h : Setting config checks g split fin pulled anc counted V)
     (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
     (near : (getCurrentEpoch e).toNat ≤ (getCurrentEpoch pulled).toNat + 1)
@@ -933,7 +933,7 @@ private theorem cfloor_endpoint_of (h : Setting config checks g split fin pulled
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value.
 
-The balance of the key at every prefix end is above `floor`, by `cfloor_balance`.
+The key's actual balance stays at least `floor` at every prefix end.
 
 The effective balance of the key at the end of a prefix is then at least a least value.
 
@@ -985,9 +985,9 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cfloor_endpoint
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- The effective balance of a key at a state of C's run is above a least value, for a slashed key.
 
-The balance of the key at every prefix end is above `floor`, less `loss`, by `cfloor_balance_slash`.
+The key's actual balance stays at least `floor - loss` at every prefix end.
 
-The least value is that of `cfloor_endpoint`, with `floor - loss` for `floor`. -/
+The effective-balance floor uses that lower value before rounding to an increment. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.cfloor_endpoint_slash (h : Setting
   config checks g split fin pulled anc counted V)
     (e : BeaconState preset fork) (wholeRun : Run config checks ⟨fork, fin⟩ ⟨fork, e⟩)
@@ -1050,7 +1050,7 @@ The hypothesis `margin` fits the closed form of the potential floor to the floor
 
 The hypothesis `stay` keeps the effective balance at its finalized value if the test holds.
 
-It is `floorC_stay`, for a key with no sync debits. -/
+This test applies when the key takes no sync debits. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.floorC_at (h : Setting config
   checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -1521,7 +1521,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.rise_arith {inc
 
 The run starts at a state where the key's effective balance is within the largest one.
 
-`Run.effective_floor_pair` bounds the balance at every state by `creditBound`, given the right `E`.
+The bound `creditBound` applies at every state when the effective-balance floor `E` holds.
 
 `E` is at least the effective balances that the bound allows.
 
@@ -2358,7 +2358,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.K6_class {g : F
             found slashed (by simp [foundU, uUnslashed])
           omega
 
-/-- The keys that join at R's next epoch are charged their rise in `joinRise`. -/
+/-- The reserve charges the rise of keys that join at R's next epoch. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.joinRise_eq (config : Config)
   (pulled anc fin : BeaconState preset fork) :
     (pinTerms config pulled anc fin).joinRise =
@@ -2616,9 +2616,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.K5_charged (h :
   · exact .inr (activeAt _ (by omega) (by omega))
   · exact .inl (activeAt _ (by omega) (by omega))
 
-/-- A key of `K5` without a departure charge on C's run is one whose exit R reads.
-
-It is the contrapositive of `K5_charged`. -/
+/-- A key of `K5` without a departure charge on C's run is one whose exit R reads. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.K5_exiting_of_not_charged
     (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) {v : ValidatorIndex}
@@ -3318,9 +3316,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_deposits (h
   rw [Finset.sum_image fun _ _ _ _ same => UInt64.toNat_inj.mp same] at credited
   exact credited
 
-/-- A step with a key that has no exit at its start and one at its end charges that key.
-
-It is the converse of `charge_exits`. -/
+/-- A step with a key that has no exit at its start and one at its end charges that key. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.step_charges_of_exits {m n :
   ForkedBeaconState preset}
     (step : Step config checks m n) {i : ℕ} {u w : Validator}

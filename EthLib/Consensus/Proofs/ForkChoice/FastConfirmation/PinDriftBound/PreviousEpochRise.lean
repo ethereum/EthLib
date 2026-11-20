@@ -1349,9 +1349,9 @@ private theorem registry_charge_of (h : Setting config checks g split fin pulled
 
 The charge of the key is on C's run, in an epoch after the split's.
 
-The balance at the charge is read as `charge_effective_bound` reads it.
+The charge reads the effective balance immediately before the exit is assigned.
 
-Its bound is that of `registryCharge` in `whistle_core`, without the credits of `pre`. -/
+This bound leaves out the credits of the shared prefix. -/
 private theorem registry_charge (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -1402,7 +1402,7 @@ So its credits are the proposer, whistleblower and sync credits.
 
 The bands of hysteresis at `t` come from the slot step that crossed into its epoch.
 
-Its bound is that of `whistle_core`'s premise `registryCharge`. -/
+This bound includes the credits from the start of the split epoch. -/
 private theorem registry_charge_split_epoch
     (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
@@ -1644,9 +1644,7 @@ private theorem K5_charged_split_epoch
 
 Its exit is assigned at the split, so its deposits on C's run are postponed.
 
-So `credC` is `propC`.
-
-The rest is `key_core`. -/
+So only proposer credits count. -/
 private theorem K5_uncharged_key (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -1859,7 +1857,7 @@ The key is not in R's registry, so its flow gain is charged when the largest rat
 
 The depth of the window is below an eleventh of an increment against the rate.
 
-That gives the rate premise of `created_key_ceiling`. -/
+The low rate bounds how much the credits can compound. -/
 private theorem beyond_key (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -1908,7 +1906,7 @@ Off the high gain rate each active key of `CS` charges one `unitGain` for its st
 
 Each of them was created by a deposit of C's run, so its flows are positive and its unit is one.
 
-The slot of that unit is the slot of the deposit, which `bud_units` already gives to the key. -/
+The reserve already counts a rounding unit for the deposit that creates the key. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_csUnits (h : Setting config
   checks g split fin pulled anc counted V)
     {events eventsF : List (BalanceEvent preset)}
@@ -2040,7 +2038,7 @@ Its exit is assigned on C's run, so the run holds its departure charge.
 
 The charge's step activates the key, and the activation is at most C's epoch.
 
-`created_deposit` reads the deposit of a created key activated by C. -/
+A key created on C's branch and active at C has a deposit on that branch. -/
 private theorem whist_created (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2225,9 +2223,9 @@ private theorem whist_seat (h : Setting config checks g split fin pulled anc cou
 
 /-- The units and the induced leak of the registry keys that C slashes fit the base.
 
-The keys are in `SC`, and `bud_units` and `bud_syncLeak` bound `SC` alone at weight one.
+The reserve counts the rounding units and induced leak of `SC` at weight one.
 
-A key that R slashes holds a second unit, and `slashedRB_card_le` bounds those keys. -/
+A key that R slashes holds a second unit, counted against the number of slashings on R. -/
 private theorem whist_units (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -2338,7 +2336,7 @@ It reads each deposited or created key at the largest cap.
 
 `registry` and `registryCharge` are the bounds of the registry keys at their slashing.
 
-The proof reads the base of `otherCredits` off its definition and pays each term of the slack. -/
+The reserve includes both the balance at the slashing and the slack in that bound. -/
 private theorem flow_whist (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
@@ -2735,7 +2733,7 @@ private theorem beyond_keys (h : Setting config checks g split fin pulled anc co
 
 A key whose exit started on R's branch after the split is inactive at R and active in C.
 
-`bud_exitedR` charges it.
+The reserve charges that exit on R's branch.
 
 Its stake in C is at most its stake at R and its rise.
 

@@ -317,7 +317,7 @@ private theorem slot_slashedFlag {m n : ForkedBeaconState preset}
 
 The key is unslashed at the start, or absent from the registry there.
 
-A key that begins to exit in the step is activated by `ChainStep.exit_assigned_activated`.
+A step can assign an exit only to a key already activated by its starting epoch.
 
 A key that has begun to exit at the start is activated there, by `exited`.
 

@@ -145,7 +145,7 @@ The run from `c` to it stays in one epoch.
 
 So a key of the registry at `c` keeps its effective balance there.
 
-If that balance at `c` is within the finalized one, `short_end` reads it, plus any slack.
+If the balance at `c` is within the finalized bound, it stays within that bound plus the slack.
 
 The finalized state is the case `c = fin`. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.short_in_fin (h : Setting config
@@ -176,8 +176,6 @@ They are the key's credits at eleven tenths, rounded up, with the bands of credi
 The credits hold the key's own whistleblower credits.
 
 Its unit of gain and the leak that its sync debits induce on R's run come on top, unscaled.
-
-`bud_whistle_of` pays them with the sets that it counts.
 
 The seat debits are those of the two runs that R shares with C.
 
@@ -561,9 +559,7 @@ private theorem wide_of_lowGain (h : Setting config checks g split fin pulled an
 
 /-- Off the high gain rate, the depth of the window is small against the rate.
 
-It is below an eleventh of an increment.
-
-It is the rate premise of `created_ceiling` and `created_key_ceiling`. -/
+The product of depth and rate is below an eleventh of an increment. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_of_lowGain (h : Setting config
   checks g split fin pulled anc counted V)
     (lowGain : (pinTerms config pulled anc fin).gainHigh = false) :
@@ -599,11 +595,11 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.key_of_kept (h 
 
 /-- A key created after the split that is active at C has the bound `createdCeil` at its slashing.
 
-Its credits since its creation are credits of C's branch, which `created_ceiling` reads.
+Only C's branch supplies credits after the key's creation.
 
 The credits of the run are at most `credC`, `whistC` and the seat credits, so the bound reads them.
 
-Off the high gain rate, `gainHigh` is false, which gives the rate premise of `created_ceiling`. -/
+The low-rate case bounds how much the credits can compound. -/
 private theorem created_active (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (highC : ℕ)
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
@@ -947,7 +943,7 @@ Or it is assigned by the split, and then it is kept, and so it is R's exit.
 
 R's exit is then after the cutoff.
 
-Or R holds the key withdrawable by the finalized epoch, which `sc3a_unwithdrawn` excludes. -/
+The key cannot already be withdrawable by the finalized epoch. -/
 private theorem slashedC_retained (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩)
@@ -1175,7 +1171,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_deposit
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key that C's branch holds beyond the split pays an upward band.
 
-`created_deposit` gives it a deposit credit on C's run, so it has the credit band. -/
+The deposit that creates it on C's run supplies the credit band. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.created_band (h : Setting config
   checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩) (high : ℕ)
@@ -1814,7 +1810,7 @@ A key that exits on C's branch is read at its charge and its rise after it.
 
 The slashing credits of the slack are the keys' own.
 
-The left side of `bud_whistle_of` gives them up.
+The aggregate reward bound subtracts those credits.
 
 The unit, the induced leak and the bands of the slack are paid unscaled.
 
@@ -2613,7 +2609,7 @@ private theorem charge_due (h : Setting config checks g split fin pulled anc cou
 
 Each such position holds a validator at C, so it is a validator index.
 
-Its charge is due by C's epoch, and it is activated by R's epoch, so `charged_count_of` counts it.
+Its charge is due by C's epoch, and it is activated by R's epoch.
 -/
 private theorem charged_window (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩) (T : Finset ℕ)
@@ -2915,7 +2911,7 @@ private theorem eR_rise_aligned (h : Setting config checks g split fin pulled an
   · rw [Internal.rise_of_notKept h i kept]
     exact fill _ alignedMax
 
-/-- A key that `whistle_free` pays is slashable at R, as `flagged` reads the term.
+/-- A key charged to the flagged-key budget is slashable at R.
 
 It is in R's registry and unslashed there.
 
@@ -2923,9 +2919,7 @@ It is activated by R's next epoch.
 
 It is not yet withdrawable at the finalized epoch.
 
-A key outside these cases is a term of `slashedRB`, `lateB` or `pendingRB`.
-
-`sc3a_unwithdrawn` excludes a key that is withdrawable by the finalized epoch. -/
+A key outside those cases is charged as slashed, late or pending. -/
 private theorem free_slashable (h : Setting config checks g split fin pulled anc counted V)
     {i : ℕ} (inside : i < split.validators.data.size) (below : i < 2 ^ 64)
     (unslashedS : (split.validators.data[i]?.map (·.slashed)).getD false = false)
@@ -2974,7 +2968,7 @@ private theorem free_slashable (h : Setting config checks g split fin pulled anc
         (by omega)
   exact ⟨w, foundR, unslashedR, activated, settled⟩
 
-/-- A key that `whistle_free` pays is paid by `flagged` or by its stake at C and its seat debits.
+/-- The reward bound charges the key either as flagged or through its stake at C and seat debits.
 
 Its bound is `ebUp` or its balance and rise.
 
@@ -2982,7 +2976,7 @@ The excess over `ebUp` is at most its `rise`.
 
 If the floor test fails, `flagged` pays the reward at `ebUp`.
 
-Otherwise `lowEB_slashed` bounds the reward by the key's balance at C.
+Otherwise the key's balance at C contributes to the reward bound.
 
 It also adds the key's seat debits on both runs. -/
 private theorem free_key (h : Setting config checks g split fin pulled anc counted V)
@@ -3118,7 +3112,7 @@ The others pay from their stake at C and its seat debits, by `cK7`.
 
 The seat debits of C's branch are paid by `seatShortfall`.
 
-The seat debits of the shared segment are the last term, which `bud_sync` pays.
+The sync budget covers the seat debits of the shared segment.
 
 The excess of the bound over `ebUp` is the key's own `rise`. -/
 private theorem whistle_free (h : Setting config checks g split fin pulled anc counted V)
@@ -3322,7 +3316,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistleActiveRow (c
 
 /-- A key of the split's registry that only C activates pays from its row of R.
 
-At R it is in `late` or in `pendingR`, which only `cJ_le`'s keys of `K6` claim.
+At R the key is late or pending, and only the upcoming-only quorum class can share that charge.
 
 It needs no floor.
 
@@ -3807,9 +3801,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_lin (t : P
   have c := sum C cC
   nlinarith [a, b, c]
 
-/-- The initial slashing penalties of a key set on R's branch are at most `slashedR` increments.
-
-The penalty is at most the increment that `slashR` charges, by `slashBand`. -/
+/-- On R's branch the budget counts one balance increment per slashing for initial penalties. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_slash (h : Setting config
   checks g split fin pulled anc counted V)
     (W : Finset ValidatorIndex) :
@@ -3828,7 +3820,7 @@ The flows are C's credits and the debits of R's run and of the shared segment.
 
 The debits of the shared segment and of R's run take the epochs from the finalized block to the end.
 
-C's credits take the seats' envelope and the proposer's share, as `syncCredits_le` bounds them. -/
+C's credit bound includes the seat rewards and the proposer's share. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_sync (h : Setting config
   checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -3904,7 +3896,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_key (h : S
 
 /-- The rate of one increment, at the pin's base reward, is at least two.
 
-The base reward per increment is at least four, by `four_le_perIncrement`. -/
+The base reward per increment is at least four. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.flow_rate (h : Setting config
   checks g split fin pulled anc counted V) :
     2 ≤ (pinTerms config pulled anc fin).perIncrement *
@@ -4070,11 +4062,11 @@ private theorem sync_flows_le (h : Setting config checks g split fin pulled anc 
 
 /-- The consolidation credits and bands of any keys, on C's run and the shared segment, fit caps.
 
-Both runs charge entries of the finalized state's queue, which `cons_due_bound` bounds by caps.
+Both runs charge entries of the finalized state's queue at their balance caps.
 
 A due entry's cap is at least ten bands, so the bands of both runs are at most a fifth of the caps.
 
-The caps are at most `consolidationsX`, as `bud_consolidations_base` reads them. -/
+The consolidation reserve bounds the sum of those caps. -/
 private theorem cons_slack_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (high : ℕ) (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)

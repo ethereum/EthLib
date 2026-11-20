@@ -409,7 +409,7 @@ private theorem penalties_succ (x : ForkedBeaconState preset) (high t : Nat) :
             t := by
   simp [windowPenalties, List.range_succ, List.map_append, List.sum_append]
 
-/-- A quantity that adds over `Run.append` fits a bound summed over a branch's first `t` epochs. -/
+/-- A cost that adds across consecutive runs fits a bound summed over the first `t` epochs. -/
 theorem run_cuts_of_additive {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
     (P : ForkedBeaconState preset → Prop)
@@ -523,9 +523,7 @@ theorem run_cuts_of_additive {x y : ForkedBeaconState preset}
     rw [add cut rest early, quiet rest early empty, Nat.add_zero]
     exact bound
 
-/-- A cost of the events that a branch replays fits a bound summed over its first `t` epochs.
-
-This is `run_cuts_of_additive` for the cost of the replayed events. -/
+/-- The costs of a branch's replayed events fit a bound summed over its first `t` epochs. -/
 theorem run_cuts_le {x y : ForkedBeaconState preset}
     (high : Nat)
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)
@@ -563,7 +561,7 @@ theorem run_cuts_le {x y : ForkedBeaconState preset}
 
 /-- The penalty and sync debits of the cohort over a branch fit the penalties of `t` epochs.
 
-This is `run_cuts_le` for the cohort's debits, with the cohort's eligible stake as the property. -/
+At each epoch cut the cohort must have eligible stake. -/
 private theorem run_penalties_core {x y : ForkedBeaconState preset}
     (high : Nat)
     (tail : Run config checks x y) (early : y.fork < .glamsterdam)

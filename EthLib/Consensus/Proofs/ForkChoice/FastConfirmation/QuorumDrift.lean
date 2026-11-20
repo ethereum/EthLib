@@ -409,8 +409,6 @@ private theorem reach_of_lookahead {base middle : BeaconState preset fork} {star
 
 /-- The runs of a call's own branch, from one state at the start of its target's epoch.
 
-This is the part of `runs_of_call` that reads the call alone, with the middle state named.
-
 The middle state is the lookahead of the target block's state to the start of the epoch.
 
 The slots of epochs up to the target's are before the next fork. -/

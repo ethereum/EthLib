@@ -67,7 +67,7 @@ open DirectSafety.Apriori.Internal (recordBalance_single)
 
 section
 
-/-! ## PinSeatDebits -/
+/-! Bounds on sync committee rewards and debits over a branch. -/
 
 namespace PinSeatDebits
 
@@ -526,7 +526,7 @@ In Electra, deposits are credited in the epoch processing, so in slot steps.
 
 A block step only queues deposit requests.
 
-So the deposit events of the step raise no balance, by `blockReplay_unconditional`. -/
+So the step's deposit events raise no balance. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.block_deposit_zero {f : Fork} {u w
   : BeaconState preset f}
     {engine : ExecutionEngine preset f} {signed : SignedBeaconBlock preset f}

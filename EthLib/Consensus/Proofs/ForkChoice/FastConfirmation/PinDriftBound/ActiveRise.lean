@@ -314,7 +314,7 @@ private theorem bF_of_exit (config : Config) (pulled anc fin : BeaconState prese
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 /-- A key of the split's registry that exited before the finalized state is bounded by `whistleEnv`.
 
-The key is not one that R slashes: `registry_frozen` bounds those, from the finalized state.
+Keys slashed on R's branch instead use the bound from the finalized state.
 
 Its balance at a state of C's branch is its finalized balance and its credits since.
 
@@ -462,7 +462,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sum_unitK (t : 
   unfold Internal.unitK
   split <;> simp_all
 
-/-- The units of the counted keys, at their weights, fit the unit terms of `pinReserve`.
+/-- The reserve covers the rounding units of the counted keys at their respective weights.
 
 A credited key's unit takes a slot of `creditUnits`, and a seat-only key's takes a seat unit.
 
@@ -845,7 +845,7 @@ They are one rounding step for a sync debit on R's branch or on its shared segme
 
 The key's flows also compound, which `keyExtra` charges with its unit and its induced leak.
 
-The start's rounding is `prefix_envelope`'s floor form. -/
+The starting balance floor accounts for rounding down to an increment. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keyCeiling (anc : BeaconState preset
   fork)
     (run : Run config checks ⟨fork, fin⟩ ⟨fork, pulled⟩)
@@ -1344,15 +1344,11 @@ The cap enters only through `stay` and `cappedY`, which the cap arms prove.
 
 The bound applies to any prefix of C's run.
 
-The start of the effective balance's ceiling is any state's, bounded as `rise_close` reads it.
+The effective balance at any starting state must also satisfy the ceiling's starting bound.
 
-It concludes with the flows and bands in the form of `keyExtra`, without the credits of `credC`.
+The rise bound accounts for flows and rounding bands, apart from the credits on C's branch.
 
-`keyCeiling_of_close` gives `keyCeiling` from it, and the credits `Cr` that it holds.
-
-`cappedY` is the premise `capped` of `rise_close`, for a key on a low rate.
-
-It says the effective balance at C is at most the cap that `capFor` reads, and the rounded stake.
+The effective balance at the endpoint is at most the applicable cap and the rounded stake.
 
 A key off the low rate reads the largest cap. -/
 private theorem key_close (h : Setting config checks g split fin pulled anc counted V)
@@ -2088,7 +2084,7 @@ open DirectSafety.Apriori DirectSafety.Apriori.Internal in
 
 The key's cap may stay or move, from `c` to R and to C.
 
-It is `key_core_frozen_from` at the end of C's run.
+The bound is evaluated at the end of C's run.
 
 C's run ends at or after R's epoch, so `shortStart` holds vacuously. -/
 private theorem key_core_cap (h : Setting config checks g split fin pulled anc counted V)
@@ -2457,11 +2453,11 @@ The keys that are slashed at C and not at the split are counted too, at weight o
 
 The keys slashed at the split that R's call reads as slashed are counted at weight three.
 
-They are the keys of `Kc` in `bud_sync`.
+They are the keys whose sync flows are charged to the reserve.
 
-It fits `syncLeak`, and the leak of one increment for each key slashed on R's branch.
+The bounds include the leak induced by one increment for each key slashed on R's branch.
 
-The second bound is read by `flow_whist`, through `whist_units`. -/
+That allowance is weighted three in the combined bound and one for the keys slashed on C alone. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_syncLeak (h : Setting config
   checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)

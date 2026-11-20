@@ -337,7 +337,7 @@ The anchor's latest header must be the anchor block's, with a zero state root.
 
 The genesis state has one, since its latest header is that of the genesis block.
 
-So has the state after the anchor block, since `process_block` stores a zero state root.
+So has the state after the anchor block, since block processing stores a zero state root.
 
 The anchor store checks neither, and without them a justified root may be one no store holds. -/
 theorem Execution.justifiedHonestlySigned [DecidablePred (· ∈ J)] {anchor : Store preset fork}

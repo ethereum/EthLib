@@ -9,8 +9,8 @@ Not yet released.
 
 ### Proof additions
 
-- `PinDriftBound` is split into modules under `ForkChoice/FastConfirmation/PinDriftBound/`, whose `PinDrift.Internal` declarations hold the steps of `PinDrift.le_pinReserve`.
-  The theorem, its statement and its import path are unchanged.
+- The proof of the pin reserve bound separates the estimates for balances, exits and rewards into modules.
+  The bound's statement and import path are unchanged.
 
 - `Run.nil_append` drops an empty prefix, and `Run.snoc_append_eq` puts the split of a run before its final prefix step instead of after it.
   `PinDriftBound` reads both to split event replays.

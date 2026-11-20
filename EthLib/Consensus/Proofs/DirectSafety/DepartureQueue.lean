@@ -3213,7 +3213,7 @@ theorem Step.consolidationSites_of_request {fork : Fork} (electra : .pectra ≤ 
   rw [split] at replayed
   exact consolidationRequestsSites_mem electra replayed reached stepped grows
 
-/-- The same as `step_indexedTrace_sites`, with the exit churn limit below `exitCap`. -/
+/-- One step's indexed calls trace both departure queues with exit churn at most `exitCap`. -/
 private theorem step_indexedTrace_sites_cap {x y : ForkedBeaconState preset}
     (step : Step config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (targetElectra : .pectra ≤ y.fork) (cap exitCap : Nat)
@@ -3318,7 +3318,7 @@ private theorem step_indexedTrace_sites {x y : ForkedBeaconState preset}
   step_indexedTrace_sites_cap step electra early targetElectra cap _
     (ExitRateBelow.of_max (Nat.lt_of_le_of_lt step.chainStep.fork_le early) x.state) rates
 
-/-- The same as `run_indexedTrace_sites`, with the exit churn limit below `exitCap`. -/
+/-- A run's indexed calls trace both departure queues with exit churn at most `exitCap`. -/
 private theorem run_indexedTrace_sites_cap {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (targetElectra : .pectra ≤ y.fork) (cap exitCap : Nat)
@@ -3476,7 +3476,7 @@ private theorem partials_entries_sum (calls : List (IndexedDepartureCall preset 
       simp [entry, unindexed, ih,
         (called.pushed pending entry).1]
 
-/-- The same as `exit_calls_le_window_electra`, with the exit churn limit below `exitCap`. -/
+/-- The departure calls in the window fit the queue budget with exit churn at most `exitCap`. -/
 private theorem exit_calls_le_window_electra_cap {x y : ForkedBeaconState preset}
     (tail : Run config checks x y) (electra : .pectra ≤ x.fork)
     (early : y.fork < .glamsterdam) (high cap exitCap : Nat)

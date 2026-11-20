@@ -67,7 +67,7 @@ open DirectSafety.Apriori.Internal (recordBalance_single)
 
 section
 
-/-! ## PinSlashFloor -/
+/-! Balance floors for validators slashed before a run or during its first epoch. -/
 
 namespace PinSlashFloor
 

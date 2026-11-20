@@ -324,7 +324,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.four_le_perIncr
 
 /-- The gain on a positive number of increments is below an eleventh of them.
 
-The rate for each increment is the one that `rate_per_increment` bounds. -/
+The rate is bounded per effective-balance increment. -/
 private theorem gain_lt (I WD F P D k : ℕ) (hk : 0 < k)
     (key : 11 * D * (P * F) < WD * I) : 11 * (D * (k * P * F / WD)) < I * k := by
   have fl : WD * (k * P * F / WD) ≤ k * P * F := Nat.mul_div_le _ _
@@ -389,7 +389,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.gain_lin (I WD 
 
 /-- The gain on whole increments of a stake, at eleven tenths, is at most a tenth of the stake.
 
-The rate for each increment is the one that `rate_per_increment` bounds. -/
+The rate is bounded per effective-balance increment. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.gain_tenth (I WD F P D Zr : ℕ)
     (key : 11 * D * (P * F) < WD * I) :
     D * (11 * Zr / (10 * I) * P * F / WD) ≤ Zr / 10 := by
@@ -628,7 +628,7 @@ The run splits at the step that makes the key compound.
 
 Before the step the balance counts up to `lo`, and after it up to `hi`.
 
-The ceiling is that of `c_ceiling_abstract`, with the credits of the step added.
+The ceiling includes the credits of the step.
 
 The step leaves its balance within the smaller of its balance before it and `lo`, plus its credits.
 
@@ -1823,7 +1823,7 @@ private theorem prefix_ceiling (h : Setting config checks g split fin pulled anc
   omega
 
 open DirectSafety.Apriori DirectSafety.Apriori.Internal in
-/-- `prefix_ceiling` at each state of the balance path of the run from a state `c` to R.
+/-- The ceiling holds at every state on the balance path from `c` to R.
 
 The state `c` is on the shared segment, and the floor holds at each state after it. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.path_ceiling (h : Setting config
@@ -2278,7 +2278,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.lowB_intro (con
 
 The hypothesis `site` is the split of the run at the step that assigns the charged exit.
 
-The activation comes from `ChainStep.exit_assigned_activated` at that step. -/
+The transition can assign an exit only after activation has been assigned. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charge_activated {x y :
   ForkedBeaconState preset} (electra : .pectra ≤ x.fork)
     (tail : Run config checks x y) (charge : DepartureCharge)
@@ -2305,8 +2305,6 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.charge_activate
 Its activation at R is that of C: an assigned activation does not change.
 
 It is not withdrawable by the finalized epoch at R, since then it would be exited on both branches.
-
-This is the argument of `slashed_waits` for any key.
 
 The split fixes its exit and withdrawable epochs. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.activated_key_at_pulled (h :
@@ -2972,11 +2970,11 @@ private theorem stay_arith (ρn ρd K k depth inc band B M Bw X pd D bal L1 L2 :
 
 /-- The margin of the floor of a key on C's run, from a rate of its leak.
 
-The rate is `leak_rate`'s for the key.
+The rate bounds the key's penalties in one rewards pass.
 
 The balance of the key from the finalized block is above the closed form of the potential floor.
 
-The closed form reads the rate that `leak_rate` gives and the shortfall of the balance.
+The balance floor uses that rate and the balance shortfall.
 
 It also reads the debits of the run, which are its sync debits and its partials.
 
@@ -3052,7 +3050,7 @@ private theorem floorC_margin (h : Setting config checks g split fin pulled anc 
 
 /-- The arithmetic of the margin of the floor of a slashed key on C's run.
 
-It is `floorC_margin` for the closed form after a slash with the fork's quotient.
+The floor deducts the initial slashing penalty at the fork's quotient.
 
 The fall reads the leak at the base, and the band is a term of `X`, as `lowEB`'s drop reads them.
 
@@ -3062,7 +3060,7 @@ It is at least the finalized one and an increment.
 
 `bridge` turns the closed form into the one at the balance and the slash's share `Xs / M`.
 
-Then `margin_arith` at one more epoch gives the bound. -/
+The bound allows one more epoch of penalties. -/
 private theorem floorC_margin_slash (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
@@ -3576,7 +3574,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.V_events (h : S
       (by simp only; omega)]
     exact replayedC
 
-/-- The sync debits of a key over two runs are at most those that `cV_le` charges. -/
+/-- The voter charge covers the key's sync debits over both runs. -/
 private theorem V_sync_le (eventsF eventsC : List (BalanceEvent preset)) (v : ℕ) :
     ((eventsF ++ eventsC).map (Internal.syncDebit v)).sum ≤
       (eventsF.map (Internal.syncDebit v)).sum + Internal.syncF eventsC v := by

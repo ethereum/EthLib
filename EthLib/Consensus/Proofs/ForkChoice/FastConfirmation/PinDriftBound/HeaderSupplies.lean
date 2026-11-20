@@ -58,7 +58,7 @@ import EthLib.Consensus.Proofs.Participation
 import Mathlib.Algebra.Order.Floor.Div
 public import EthLib.Consensus.Proofs.ForkChoice.FastConfirmation.PinDriftBound.CreditBudgets
 
-/-! The pin reserve: shared supplies of the header terms for the keys of `SC` and `CS`. -/
+/-! How the pin reserve shares its charges between quorum and whistleblower accounting. -/
 
 @[expose] public section
 
@@ -76,13 +76,13 @@ variable {g : ForkedBeaconState preset} {split fin pulled anc counted : BeaconSt
 
 /-! ### The supplies of the header terms for the keys of `SC` and `CS`
 
-Each one strengthens a claim on an entry of `pinReserve` that only the keys of the classes make.
+The quorum classes and the keys slashed on C can draw on the same reserve terms.
 
 The keys of `SC` and `CS` join that claim, and the entry is spent once. -/
 
 /-- The rise of the current keys of K4 and of `SC` fits the rise of the current keys of R.
 
-The keys of `SC` that the rise term of `bud_whistle_of` charges are not in K4.
+The keys of `SC` whose rise counts toward whistleblower rewards are not in K4.
 
 Each of them is a key of R's registry. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_rise (h : Setting config checks
@@ -117,7 +117,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_rise (h : S
 
 /-- The rise of the upcoming-only keys of K6 and of `SC` fits `joinRise`.
 
-The keys of `SC` that the rise term of `bud_whistle_of` charges are not in K6.
+The keys of `SC` whose rise counts toward whistleblower rewards are not in K6.
 
 Each of them is a key of R's registry. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bud_joinRise (h : Setting config
@@ -613,7 +613,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.sc_3a_split (h 
 
 Each key reads the quotient of its balance and rise, and the quotient of an increment rounded up.
 
-`bud_branchR` pays it and `bud_whistle_of` charges it. -/
+The reserve for R's slashed keys covers this reward. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.scSlashedReward (config : Config)
     (pulled anc fin counted split : BeaconState preset fork) : ℕ :=
   ∑ v ∈ (Internal.SC pulled counted split).filter
@@ -1069,9 +1069,9 @@ A queued partial paid before the finalized state leaves the balance at the final
 
 Otherwise R's tail takes its penalties and sync debits, and the leak that `rise` reads covers them.
 
-The cut-key part of `bud_branchR`'s body reads the quotient of this bound.
+The reward for slashing a key in the shared segment divides this bound by the reward quotient.
 
-It reads it for each key of `cut_whistle`'s set, and pays the rounding with the debits. -/
+The debits cover rounding when this bound is summed over the keys slashed in that segment. -/
 private theorem cut_balance_le (h : Setting config checks g split fin pulled anc counted V)
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
@@ -1167,7 +1167,7 @@ private theorem cut_balance_le (h : Setting config checks g split fin pulled anc
 
 The run starts at `b`, so each of its steps starts at the epoch of `b` or later.
 
-No landed lemma states this, so `cut_whistle` reads it here, for a cutoff before that epoch. -/
+Thus a cutoff before the start epoch includes no epoch rewards from the run. -/
 private theorem balanceEvents_late {f : Fork} {b : BeaconState preset f}
     {y : ForkedBeaconState preset} (tail : Run config checks ⟨f, b⟩ y)
     (early : y.fork < .glamsterdam) (same : getCurrentEpoch y.state = getCurrentEpoch b)
@@ -1305,7 +1305,7 @@ The slash charges of the classes fit the slashed keys of `branchR`, with the wei
 
 The sync part of the proposer credit fits the proposer credit of each epoch.
 
-The flag gain and the unit of each slashed key fit `W`, by `branchR_split`.
+The bound `W` covers both the flag gain and the rounding unit of each slashed key.
 
 The bands of the classes fit the rounded keys of `branchR`, which is the hypothesis `bands`.
 
@@ -1462,15 +1462,15 @@ So is a sync debit of R that `rise` omits.
 
 The keys of `K4` weigh one, and those of `K5` weigh three.
 
-The surplus of the slash charge pays `flow_split_of`'s slashed term.
+The surplus of the slash charge pays for the gains induced by the slashing.
 
 `branchR` also holds the unit of each key slashed on R's branch.
 
-R's credits leave out sync events, so `bud_sync` takes them.
+The reserve accounts for sync committee events separately from R's other credits.
 
 The keys of `SC` that R slashes after the split also draw on `branchR`, at weight three.
 
-The `whistleblowerR` term of `pinReserve` pays their reward on C's branch.
+The reserve includes their whistleblower reward on C's branch.
 
 The seat holders of `SC` also weigh one, and take seat slots of `branchR` that no class claims.
 
@@ -1819,7 +1819,7 @@ The shared segment's debits are one weighted sum over the disjoint classes.
 
 `cutKeys` holds the keys slashed at the split that R's call reads as slashed, at the same weight.
 
-`bud_branchR` rounds their rewards up, and the debits pay the rounding.
+Their rewards round up, and the debits cover the rounding.
 
 The sync credits of `pre` ride with R's tail, since `pre` and the tail are one run in the epoch.
 

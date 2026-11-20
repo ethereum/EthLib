@@ -241,7 +241,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.credDepR (events : 
 
 /-- The consolidation credits to the key over the replayed events of a run.
 
-It is the quantity that `Run.consolidation_credits_le_X_targets` bounds, summed over targets. -/
+The bound sums the consolidation credits over the target keys. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.consAmt (events : List (BalanceEvent
   preset)) (v : ℕ) : ℕ :=
   ((events.filter (·.source = .consolidations)).map (Internal.keyCredit v)).sum
@@ -262,7 +262,7 @@ Sync events are in `syncF` with the seats. -/
 
 The rounding slack of a credited key is `bandC`, once for each key.
 
-The consolidation bands are not here: `bud_consolidations` charges them. -/
+The reserve counts consolidation bands separately. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.propC {x y : ForkedBeaconState preset}
   (tail : Run config checks x y)
     (high v : ℕ) : ℕ :=
@@ -335,7 +335,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.whistC {x y : Forke
 
 They are the ones that apply by `high + 1`.
 
-It is the set of `Run.consolidation_credits_le_X_targets`, counted instead of summed. -/
+This counts the entries rather than summing their amounts. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.dueAt (X : BeaconState preset fork)
   (high : ℕ) (T : Finset ValidatorIndex) : ℕ :=
   if electra : .pectra ≤ fork then
@@ -416,7 +416,7 @@ The credits are the gross credits of its block steps, and an applied deposit.
 
 A proposer reward, a whistleblower reward and a sync reward are block credits.
 
-A consolidation credit is not here: `bud_consolidations` charges its band for each entry.
+Consolidation credits count separately, with a band for each queue entry.
 
 `credits` charges `upwardBand` for each credited key. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.bandC {x y : ForkedBeaconState preset}
@@ -666,9 +666,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.unitK (t : PinTerms
 
 They are its sync debits on the shared segment, its flow gain and its unit.
 
-They also include the leak that its sync debits on R's branch induce.
-
-`bud_sync`, `flow_split_of`, `bud_units` and `bud_syncLeak` pay them, in that order. -/
+They also include the leak that its sync debits on R's branch induce. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.keyExtra (t : PinTerms preset) {x y :
   ForkedBeaconState preset}
     (tail : Run config checks x y) {x' y' : ForkedBeaconState preset}
@@ -1241,7 +1239,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.exitQ {x y : Forked
 
 The step with the charge counts too, since the key's epoch pass in it follows its exit.
 
-The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
+Only steps starting at or before epoch `high + 1` contribute rewards. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.riseScan (v high : ℕ) {x :
   ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → Bool × ℕ

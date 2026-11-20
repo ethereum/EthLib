@@ -75,7 +75,7 @@ A key that counts in C's quorum but is not active at C's epoch exits by the epoc
 
 When activity up to C's epoch is fixed at the split, R reads that exit exactly.
 
-So `pinReserve` charges such a key in its `exiting` term.
+So the pin reserve charges the stake of these scheduled exits.
 
 A slashed key there was slashed after the split, since C does not hold the slashing.
 
@@ -327,7 +327,7 @@ The rate must hold at each state of the branch before the epoch of its end.
 
 The branch ends `epoch y - epoch x` epochs, and each runs one rewards pass.
 
-The cut induction of the a priori bound, `run_cuts_le`, sums the segments. -/
+Summing the bounds for the segments covers the entire run. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.passDebit_le {x y :
   ForkedBeaconState preset} (tail : Run config checks x y)
     (early : y.fork < .glamsterdam) (altair : .altair ≤ x.fork) (high : ℕ)
@@ -797,7 +797,7 @@ private theorem applyPendingDeposit_frame {s s' : BeaconState preset fork}
 
 This holds while the key exits and is not yet withdrawable.
 
-Such a key's deposits are postponed (`processPendingDeposits_postponed_epochs`). -/
+The deposit queue postpones deposits to such a key. -/
 theorem
   _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.processPendingDeposits_exited_balance
   {state after : BeaconState preset fork}

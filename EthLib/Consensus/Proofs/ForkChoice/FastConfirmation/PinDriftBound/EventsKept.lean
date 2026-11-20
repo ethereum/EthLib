@@ -66,7 +66,7 @@ open DirectSafety.Apriori.Internal (recordBalance_single)
 
 section
 
-/-! ## PinEventsKept -/
+/-! Which validator fields persist through transitions and their recorded events. -/
 
 namespace PinEventsKept
 

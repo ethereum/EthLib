@@ -92,7 +92,7 @@ def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.stepCredit (blockP 
 
 /-- The credits to the key over a run.
 
-The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
+The scan includes only steps that start by epoch `high + 1`. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan (blockP slotP :
   BalanceSource → Bool) (v high : ℕ)
     {x : ForkedBeaconState preset} :
@@ -115,7 +115,7 @@ theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_snoc
           slotP v step
       else PinDrift.Internal.creditScan blockP slotP v high pre := rfl
 
-/-- The credits of a run to a key, read as a scan, add over `append`. -/
+/-- The credits to a key in two consecutive runs add. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.creditScan_append (blockP slotP :
   BalanceSource → Bool) (v high : ℕ)
     {x m y : ForkedBeaconState preset} (pre : Run config checks x m)
@@ -327,7 +327,7 @@ A block step counts the rise of the key's balance across the whole step.
 
 A credit that the same step takes back counts for nothing.
 
-The steps count from the one whose start epoch is at most `high + 1`, as in `Run.balanceEvents`. -/
+The scan includes only steps that start by epoch `high + 1`. -/
 def _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.netScan (v high : ℕ) {x :
   ForkedBeaconState preset} :
     {y : ForkedBeaconState preset} → Run config checks x y → ℕ
@@ -1406,8 +1406,6 @@ Suppose also that its cap stays at least `capLow`.
 Then its effective balance at the end is at least the least of three values.
 
 They are its effective balance at the start, `capLow`, and `floor` less one increment of rounding.
-
-This follows from `Run.effective_floor_rounded`.
 
 The floor rounded down to an increment is at least `floor + 1 - inc`. -/
 private theorem Run.effective_floor_of_balance_floor {x y : ForkedBeaconState preset}
@@ -2703,9 +2701,9 @@ The key stays not withdrawable through the run's end.
 
 A block deposit needs none: from Electra it raises no balance.
 
-It says that an assigned exit stays (`RegistryLifecycle`).
+An assigned exit epoch stays fixed.
 
-It says that once the exit is set, the withdrawable epoch only rises (`WithdrawableKept`).
+Once the exit is set, the withdrawable epoch can only rise.
 
 It also says that the epoch of each event's state is at most the run's last epoch. -/
 private theorem Run.exiting_deposit_credit_zero_of_kept {x y : ForkedBeaconState preset}
@@ -2739,7 +2737,7 @@ private theorem Run.exiting_deposit_credit_zero_of_kept {x y : ForkedBeaconState
 
 The key stays not withdrawable through the run's end.
 
-The withdrawable-kept fact at each deposit event of a slot step is `Run.events_kept`. -/
+The withdrawable epoch cannot drop before any deposit event of a slot step. -/
 theorem _root_.EthLib.Consensus.Models.Network.PinDrift.Internal.Run.exiting_deposit_credit_zero {g
   x y : ForkedBeaconState preset}
     (shared : Run config checks g x) (genesis : Genesis (config := config) (checks := checks) g)
