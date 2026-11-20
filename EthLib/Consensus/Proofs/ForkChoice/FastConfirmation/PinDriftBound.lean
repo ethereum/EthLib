@@ -9615,7 +9615,7 @@ The second is for a V key that is not active in C: the same, and the charges tha
 The shared run from the finalized block adds the key's sync debits to the sum.
 
 C's tail adds its sync movement. -/
-private theorem stub_V_of (h : Setting config checks g split fin pulled anc counted V)
+private theorem cV_le_of (h : Setting config checks g split fin pulled anc counted V)
     (tailC : Run config checks ⟨fork, split⟩ ⟨fork, counted⟩)
     {eventsF eventsC : List (BalanceEvent preset)}
     (active : ∀ v ∈ V, v ∈ AC counted → (eR pulled v : ℤ) - eC counted v ≤
@@ -16476,7 +16476,7 @@ private theorem V_events (h : Setting config checks g split fin pulled anc count
       (by simp only; omega)]
     exact replayedC
 
-/-- The sync debits of a key over two runs are at most those that `stub_V` charges. -/
+/-- The sync debits of a key over two runs are at most those that `cV_le` charges. -/
 private theorem V_sync_le (eventsF eventsC : List (BalanceEvent preset)) (v : ℕ) :
     ((eventsF ++ eventsC).map (syncDebit v)).sum ≤
       (eventsF.map (syncDebit v)).sum + syncF eventsC v := by
@@ -16751,7 +16751,7 @@ private theorem V_left (h : Setting config checks g split fin pulled anc counted
     omega
 
 /-- The fall of the V keys, and the stake of the V keys that left C's active set. -/
-private theorem stub_V (h : Setting config checks g split fin pulled anc counted V) (high : ℕ)
+private theorem cV_le (h : Setting config checks g split fin pulled anc counted V) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1) (events : List (BalanceEvent preset))
     (fromFin : Run config checks ⟨fork, fin⟩ ⟨fork, split⟩)
     {eventsF : List (BalanceEvent preset)} (replayedF : fromFin.balanceEvents high = .ok eventsF)
@@ -16769,7 +16769,7 @@ private theorem stub_V (h : Setting config checks g split fin pulled anc counted
           eR pulled v) +
         (∑ v ∈ (VN counted V) with (pinTerms config pulled anc fin).lateB v.toNat = true,
           eR pulled v) : ℕ) := by
-  have base := stub_V_of h tailC
+  have base := cV_le_of h tailC
     (V_active h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
     (V_left h fromFin tailC high highC endEpoch endEpochC replayedF replayedC)
   have sync : ∑ v ∈ V, ((eventsF.map (syncDebit v.toNat)).sum + syncF eventsC v.toNat) ≤
@@ -26434,7 +26434,7 @@ private def whistleActiveRow (config : Config) (pulled anc fin : BeaconState pre
 
 /-- A key of the split's registry that only C activates pays from its row of R.
 
-At R it is in `late` or in `pendingR`, which only `stub_J`'s keys of `K6` claim.
+At R it is in `late` or in `pendingR`, which only `cJ_le`'s keys of `K6` claim.
 
 It needs no floor.
 
@@ -30075,7 +30075,7 @@ private theorem key_core (h : Setting config checks g split fin pulled anc count
   · exact key_core_headroom h tail fromFin tailC highC v kept
 
 /-- The rise of the other keys, which are active in both. -/
-private theorem stub_N (h : Setting config checks g split fin pulled anc counted V)
+private theorem cN_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -31078,25 +31078,25 @@ private theorem K5_charged_held (h : Setting config checks g split fin pulled an
 
 /-- A key with no charge on a run has not started its rise on it. -/
 private theorem riseScan_of_none (v high : ℕ) {x y : ForkedBeaconState preset}
-    (run : Run config checks x y) (none : ∀ c ∈ run.departureCharges, c.index ≠ v) :
+    (run : Run config checks x y) (uncharged : ∀ c ∈ run.departureCharges, c.index ≠ v) :
     riseScan v high run = (false, 0) := by
   induction run with
   | nil => rfl
   | snoc pre step ih =>
-    have before := ih fun c member => none c (by simp [Run.departureCharges, member])
+    have before := ih fun c member => uncharged c (by simp [Run.departureCharges, member])
     have notCharged : step.departureCharges.any (·.index == v) = false := by
       refine Bool.eq_false_iff.mpr fun any => ?_
       obtain ⟨c, member, index⟩ := List.any_eq_true.mp any
-      exact none c (by simp [Run.departureCharges, member]) (beq_iff_eq.mp index)
+      exact uncharged c (by simp [Run.departureCharges, member]) (beq_iff_eq.mp index)
     simp [riseScan, before, notCharged]
 
 /-- A run after a run with no charge of the key reads the same rise as it does alone. -/
 private theorem riseScan_append_of_none (v high : ℕ) {x m y : ForkedBeaconState preset}
     (pre : Run config checks x m) (post : Run config checks m y)
-    (none : ∀ c ∈ pre.departureCharges, c.index ≠ v) :
+    (uncharged : ∀ c ∈ pre.departureCharges, c.index ≠ v) :
     riseScan v high (pre.append post) = riseScan v high post := by
   induction post with
-  | nil => exact riseScan_of_none v high pre none
+  | nil => exact riseScan_of_none v high pre uncharged
   | snoc post step ih => simp only [Run.append, riseScan, ih]
 
 /-- An assigned exit persists, so an unset key has no charge on a prefix of the run. -/
@@ -31668,7 +31668,7 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
     (endEpochC : (getCurrentEpoch counted).toNat ≤ highC + 1)
     {eventsC : List (BalanceEvent preset)} (replayedC : tailC.balanceEvents highC = .ok eventsC)
     {v : ValidatorIndex} (member : v ∈ K5 counted V)
-    (none : ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :
+    (uncharged : ¬ ∃ c ∈ tailC.departureCharges, c.index = v.toNat) :
     eC counted v ≤ eR pulled v + (pinTerms config pulled anc fin).rise v.toNat +
       ((propC tailC highC v.toNat +
           keyExtra (pinTerms config pulled anc fin) (fromFin.append tail) tailC highC
@@ -31689,7 +31689,7 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
     by_contra out
     obtain ⟨c, listed, index, -⟩ := PinKeys.Run.charge_of_exit tailC electra h.early v.toNat
       (fun w hw => absurd (Array.getElem?_eq_some_iff.mp hw).1 out) u foundU assignedU
-    exact none ⟨c, listed, index⟩
+    exact uncharged ⟨c, listed, index⟩
   obtain ⟨v0, found0⟩ : ∃ w, split.validators.data[v.toNat]? = some w :=
     ⟨_, Array.getElem?_eq_getElem insideSplit⟩
   have assigned0 : v0.exitEpoch ≠ FAR_FUTURE_EPOCH := fun far => by
@@ -31697,7 +31697,7 @@ private theorem K5_uncharged_key (h : Setting config checks g split fin pulled a
       (fun w hw => by
         obtain rfl := Option.some.inj (found0.symm.trans hw)
         exact far) u foundU assignedU
-    exact none ⟨c, listed, index⟩
+    exact uncharged ⟨c, listed, index⟩
   obtain ⟨x, foundX, life⟩ := tailC.registryLifecycle.validators v.toNat v0 found0
   obtain rfl : x = u := Option.some.inj (foundX.symm.trans foundU)
   have exit0 := congrArg UInt64.toNat (life.exitEpoch assigned0)
@@ -31742,7 +31742,7 @@ The run `pre` is the shared run from the start of the split's epoch.
 A charge in that epoch reads the balance before the credits of `pre`.
 
 So the key's proposer, whistleblower and sync credits over `pre` are read too. -/
-private theorem stub_P (h : Setting config checks g split fin pulled anc counted V)
+private theorem cP_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -32680,7 +32680,7 @@ A key whose exit started on R's branch after the split is inactive at R and acti
 Its stake in C is at most its stake at R and its rise.
 
 So is the stake of a key whose exit R reads, which `exiting` and `exitingRise` charge. -/
-private theorem stub_J (h : Setting config checks g split fin pulled anc counted V)
+private theorem cJ_le (h : Setting config checks g split fin pulled anc counted V)
     (tail : Run config checks ⟨fork, split⟩ ⟨fork, pulled⟩) (high : ℕ)
     (endEpoch : (getCurrentEpoch pulled).toNat ≤ high + 1)
     {events : List (BalanceEvent preset)} (replayed : tail.balanceEvents high = .ok events)
@@ -33005,6 +33005,7 @@ private theorem drift_le_costs (h : Setting config checks g split fin pulled anc
   · by_cases hq : v ∈ Q counted <;> by_cases ha : v ∈ AC counted <;>
       by_cases hr : v ∈ AR pulled <;> simp [hv, ha, hr, hq] <;> omega
 
+/-- A bound on `x` gives the bound at weight two against weight three. -/
 private theorem two_le_three {x : ℤ} {r : ℕ} (le : x ≤ r) : 2 * x ≤ 3 * (r : ℤ) := by omega
 
 /-- The total read is at least the active stake. -/
@@ -33053,13 +33054,13 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   obtain ⟨b, toB, pre, sameEpoch, link, earlier, shape⟩ := split_epoch_start toFin fromFin
   obtain ⟨eventsF, replayedF⟩ := fromFin.balanceEvents_ok h.early high
   obtain ⟨eventsP, replayedP⟩ := pre.balanceEvents_ok h.early highC
-  have sV := two_le_three (stub_V (config := config) h high endEpoch events fromFin replayedF
+  have sV := two_le_three (cV_le (config := config) h high endEpoch events fromFin replayedF
     tailC highC endEpochC replayedC)
-  have sN := stub_N (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
+  have sN := cN_le (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
-  have sP := stub_P (config := config) h tail high endEpoch replayed fromFin toB pre
+  have sP := cP_le (config := config) h tail high endEpoch replayed fromFin toB pre
     sameEpoch earlier replayedF tailC highC endEpochC replayedC replayedP
-  have sJ := stub_J (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
+  have sJ := cJ_le (config := config) h tail high endEpoch replayed fromFin replayedF tailC highC
     endEpochC replayedC
   -- The terms that `keyExtra` adds are paid by the flow split, the units and the induced leak.
   have reg := registry_bounds (config := config) h tail high endEpoch replayed fromFin replayedF
@@ -33137,7 +33138,7 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
     nn _ _
   have syncPosC : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncF eventsC x.toNat : ℤ) :=
     nn _ _
-  -- `bud_sync` weighs the shared segment's debits of `K4` three times, and `stub_N` once.
+  -- `bud_sync` weighs the shared segment's debits of `K4` three times, and `cN_le` once.
   have syncPosF : 0 ≤ ∑ x ∈ K4 pulled counted V, (syncD eventsF x.toNat : ℤ) :=
     nn _ _
   -- `bud_units` also weighs the units of `SC` and `CS`, which the drift does not read.
@@ -33147,7 +33148,7 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have unitPosCS : 0 ≤ ∑ x ∈ CS counted split,
       (unitK (pinTerms config pulled anc fin) tailC highC eventsC events eventsF x.toNat : ℤ) :=
     nn _ _
-  -- The compounding in `bud_credits` pays a tenth of the shared credits that `stub_P` reads.
+  -- The compounding in `bud_credits` pays a tenth of the shared credits that `cP_le` reads.
   have scChargedPre : 0 ≤
       ∑ v ∈ scCharged pulled counted split tailC, (whistC pre highC v.toNat : ℤ) :=
     nn _ _
@@ -33182,7 +33183,6 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
     linarith
 
 end Closure
-
 
 end PinDrift
 end EthLib.Consensus.Models.Network
