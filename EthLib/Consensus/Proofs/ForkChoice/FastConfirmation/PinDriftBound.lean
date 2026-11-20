@@ -12180,9 +12180,8 @@ private theorem charges_le_queueWindow (h : Setting config checks g split fin pu
   obtain ⟨shared⟩ := h.toFin
   obtain ⟨fromFin⟩ := h.fromFin
   obtain ⟨toPulled⟩ := h.toPulled
-  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
+  obtain ⟨_, pulledOk⟩ := h.pulledTotal
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  have early := h.early
   obtain ⟨finalized, called, later, near, -⟩ := setting_epochs h
   -- the exit and consolidation churn of every state on the runs from the finalized state
   have band : ∀ (u : ForkedBeaconState preset) (run : Run config checks ⟨fork, fin⟩ u),
@@ -12292,13 +12291,9 @@ private theorem bud_queues (h : Setting config checks g split fin pulled anc cou
         exitQ tailC v.toNat)) ≤
       (pinTerms config pulled anc fin).queueExit := by
   classical
-  obtain ⟨shared⟩ := h.toFin
-  obtain ⟨fromFin⟩ := h.fromFin
-  obtain ⟨toPulled⟩ := h.toPulled
-  obtain ⟨pulledTotal, pulledOk⟩ := h.pulledTotal
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
   have early := h.early
-  obtain ⟨finalized, called, later, near, -⟩ := setting_epochs h
+  obtain ⟨finalized, -, -, near, -⟩ := setting_epochs h
   -- the two sets are disjoint
   have apart : Disjoint (VN counted V)
       ((K5 counted V).filter fun v => ∃ c ∈ tailC.departureCharges, c.index = v.toNat) := by
@@ -14651,7 +14646,6 @@ private theorem debits_le_top (h : Setting config checks g split fin pulled anc 
             ((getCurrentEpoch pulled).toNat + 1)) := by
   have altair : .altair ≤ fork := Nat.le_trans (by decide) h.fulu
   have electra : .pectra ≤ fork := Nat.le_trans (by decide) h.fulu
-  obtain ⟨shared⟩ := h.toFin
   have passes : (events.map (penaltyDebit v.toNat)).sum ≤
       ((getCurrentEpoch pulled).toNat - (getCurrentEpoch s).toNat) *
         (pinTerms config pulled anc fin).leakAt M v.toNat :=
