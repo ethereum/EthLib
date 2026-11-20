@@ -288,7 +288,8 @@ The directory `keymanager_api/` holds files of the Keymanager API, from `ethereu
 The files are copied byte for byte under their paths in that repository.
 `keymanager-oapi.yaml` is the OpenAPI document, which names the schemas of the API.
 `types/` holds the files that define those schemas, with an example of most of them.
-EthLib does not yet specify the schemas `BuilderConfig` and `BuilderEntry` of the builder configuration endpoints, and the test lists them as such.
+`apis/builder_config.yaml` defines the builder configuration calls, with an example of a get and of a set.
+The test runs both examples through the calls, which read and write the schemas `BuilderConfig` and `BuilderEntry`.
 The source has no other test vectors.
 
 `bindings/python/tests/consensus/test_keymanager_api.py` reads the example of each schema that EthLib specifies through the bindings, and checks what the writer gives back.

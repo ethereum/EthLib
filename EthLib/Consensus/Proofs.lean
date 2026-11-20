@@ -53,6 +53,7 @@ public import EthLib.Consensus.Proofs.DirectSafety.IntervalFunding
 public import EthLib.Consensus.Proofs.DirectSafety.Safety
 public import EthLib.Consensus.Proofs.DirectSafety.Signatures
 public import EthLib.Consensus.Proofs.DirectSafety.SourceSafety
+public import EthLib.Consensus.Proofs.KeymanagerApi.BuilderConfig
 public import EthLib.Consensus.Proofs.KeymanagerApi.DeleteKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.LocalKeys
 public import EthLib.Consensus.Proofs.KeymanagerApi.Move

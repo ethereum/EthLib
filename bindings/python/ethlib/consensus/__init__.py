@@ -253,10 +253,19 @@ def keymanager_run(
     protection: str,
     chain: tuple[str, str, str, bytes] | None,
     calls: list[tuple[str, str, Any]],
+    builder: dict[str, Any] | None = None,
 ) -> tuple[list[tuple[int, Any]], dict[str, Any]]:
     """Responses of Keymanager API calls on a client with no key, then its record and its keys."""
+    # The builder configuration of the client; without one, no builder, no floor and a cap of 0.
+    if builder is None:
+        builder = {
+            "min_bid": "0",
+            "builder_boost_factor": "100",
+            "max_execution_payment": "0",
+            "builders": [],
+        }
     return _native.consensus_keymanager_run(
-        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls
+        memory, work, fee_recipient, gas_limit, graffiti, protection, chain, calls, builder
     )
 
 

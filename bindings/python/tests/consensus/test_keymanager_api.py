@@ -69,8 +69,8 @@ def _schemas() -> list[str]:
     return list(_load("keymanager-oapi.yaml")["components"]["schemas"])
 
 
-# The schemas of the builder configuration endpoints, which EthLib does not yet specify (#3615).
-NOT_YET_SPECIFIED: Final = ["BuilderConfig", "BuilderEntry"]
+# The schemas of the builder configuration, which the tests of its calls read and write.
+THROUGH_THE_CALLS: Final = ["BuilderConfig", "BuilderEntry"]
 
 
 def _expected(name: str, value: str) -> str:
@@ -98,7 +98,7 @@ def test_schemas_named():
     ]
 
 
-@pytest.mark.parametrize("name", [name for name in _schemas() if name not in NOT_YET_SPECIFIED])
+@pytest.mark.parametrize("name", [name for name in _schemas() if name not in THROUGH_THE_CALLS])
 def test_example_reads_back(name: str):
     """The example of each schema reads, and the writer gives it back in canonical form."""
     example = _example(*_schema(name))
@@ -759,3 +759,227 @@ def test_voluntary_exit_without_chain():
         ("POST", f"/eth/v1/validator/{pubkey}/voluntary_exit", {}),
     )
     assert responses[1] == (500, {"message": "the client has no view of the chain"})
+
+
+def _builder_calls(builder: dict[str, Any], *calls: tuple[str, str, Any]) -> list[tuple[int, Any]]:
+    """The responses of calls on a client with one key and a builder configuration of its own."""
+    responses, _ = consensus.keymanager_run(
+        MEMORY,
+        WORK,
+        *DEFAULTS,
+        _interchange([]),
+        None,
+        [_import([_keystore(SECRETS[0], "pass")], ["pass"]), *calls],
+        builder,
+    )
+    return responses[1:]
+
+
+def _ascii_hex(text: str) -> str:
+    """The default authentication data of a host, the hex of its ASCII bytes."""
+    return "0x" + text.encode().hex()
+
+
+# A client with no builder, no floor, a cap of 0 on the execution payment and a weight of 100.
+NO_BUILDER: Final = {
+    "min_bid": "0",
+    "builder_boost_factor": "100",
+    "max_execution_payment": "0",
+    "builders": [],
+}
+
+# The examples of the source's `apis/builder_config.yaml`, read from the vendored file.
+BUILDER_CONFIG_EXAMPLES: Final = YAML(typ="safe").load(
+    (SOURCE / "apis" / "builder_config.yaml").read_text()
+)
+
+
+def _builder_path() -> str:
+    return f"/eth/v1/validator/{_pubkeys()[0]}/builder_config"
+
+
+def test_builder_config_set_example():
+    """The example of a set resolves each omitted value, as the schema says."""
+    body = BUILDER_CONFIG_EXAMPLES["post"]["requestBody"]["content"]["application/json"]
+    example = body["examples"]["BuilderConfig"]["value"]
+    path = _builder_path()
+    responses = _builder_calls(NO_BUILDER, ("POST", path, example), ("GET", path, {}))
+    pubkey = example["builders"][1]["builder_pubkeys"][0]
+    assert responses == [
+        (202, None),
+        (
+            200,
+            {
+                "data": {
+                    "min_bid": "10000000",
+                    "builder_boost_factor": "100",
+                    "builders": [
+                        {
+                            "url": "https://builder-a.example.com",
+                            "auth_data": _ascii_hex("builder-a.example.com"),
+                            "builder_pubkeys": [],
+                            "max_execution_payment": "0",
+                            "min_bid": "10000000",
+                            "builder_boost_factor": "100",
+                        },
+                        {
+                            "url": "https://builder-b.example.com",
+                            "auth_data": _ascii_hex("builder-b.example.com"),
+                            "builder_pubkeys": [pubkey],
+                            "max_execution_payment": "0",
+                            "min_bid": "10000000",
+                            "builder_boost_factor": "120",
+                        },
+                    ],
+                }
+            },
+        ),
+    ]
+
+
+def test_builder_config_get_example():
+    """The example of a get, set again, is answered unchanged: it is fully resolved."""
+    content = BUILDER_CONFIG_EXAMPLES["get"]["responses"]["200"]["content"]["application/json"]
+    example = content["examples"]["BuilderConfig"]["value"]
+    path = _builder_path()
+    responses = _builder_calls(NO_BUILDER, ("POST", path, example["data"]), ("GET", path, {}))
+    assert responses == [(202, None), (200, example)]
+
+
+def test_builder_config_example_of_the_issue():
+    """A key set over the client's builders, then deleted, follows the client again."""
+    client = dict(NO_BUILDER, builders=[{"url": "https://a.example"}])
+    path = _builder_path()
+    set_body = {"builder_boost_factor": "120", "builders": [{"url": "https://b.example"}]}
+    responses = _builder_calls(
+        client,
+        ("GET", path, {}),
+        ("POST", path, set_body),
+        ("GET", path, {}),
+        ("DELETE", path, {}),
+        ("GET", path, {}),
+        ("DELETE", path, {}),
+    )
+
+    def answer(url: str, host: str, boost: str) -> tuple[int, Any]:
+        entry = {
+            "url": url,
+            "auth_data": _ascii_hex(host),
+            "builder_pubkeys": [],
+            "max_execution_payment": "0",
+            "min_bid": "0",
+            "builder_boost_factor": boost,
+        }
+        return (200, {"data": {"min_bid": "0", "builder_boost_factor": boost, "builders": [entry]}})
+
+    own = answer("https://a.example", "a.example", "100")
+    assert responses == [
+        own,
+        (202, None),
+        answer("https://b.example", "b.example", "120"),
+        (204, None),
+        own,
+        (204, None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param({"builders": [{}]}, "the request does not read", id="no-url"),
+        pytest.param(
+            {"builders": [{"url": "https://a.example"}, {"url": "https://a.example"}]},
+            "two entries share their URL and authentication data",
+            id="same-url-and-default-data",
+        ),
+        pytest.param(
+            {"builders": [{"url": "a.example"}]},
+            "an entry has no authentication data and its URL gives none",
+            id="no-default-data",
+        ),
+        pytest.param(
+            {"builders": [{"url": "https://a.example", "auth_data": "0x"}]},
+            "the request does not read",
+            id="empty-data",
+        ),
+    ],
+)
+def test_builder_config_refused(body: dict[str, Any], message: str):
+    """A set that breaks a rule of a set is refused with 400, and nothing is stored."""
+    path = _builder_path()
+    responses = _builder_calls(NO_BUILDER, ("POST", path, body), ("GET", path, {}))
+    empty = {"data": {"min_bid": "0", "builder_boost_factor": "100", "builders": []}}
+    assert responses == [(400, {"message": message}), (200, empty)]
+
+
+def test_builder_config_same_url_other_data():
+    """Two entries may share a URL when their authentication data differ."""
+    path = _builder_path()
+    body = {
+        "builders": [
+            {"url": "https://a.example", "auth_data": "0x01"},
+            {"url": "https://a.example", "auth_data": "0x02"},
+        ]
+    }
+    responses = _builder_calls(NO_BUILDER, ("POST", path, body))
+    assert responses == [(202, None)]
+
+
+def test_builder_config_unknown_key():
+    """Each call on a key that the client does not manage gets 404."""
+    path = f"/eth/v1/validator/{REMOTE_C}/builder_config"
+    responses = _builder_calls(
+        NO_BUILDER, ("GET", path, {}), ("POST", path, {}), ("DELETE", path, {})
+    )
+    assert responses == [(404, {"message": "The key was not found on the server"})] * 3
+
+
+def test_builder_config_hex_case_duplicate():
+    """Authentication data is compared as bytes, so hex case does not tell two entries apart."""
+    path = _builder_path()
+    data = _ascii_hex("a.example")
+    body = {
+        "builders": [
+            {"url": "https://a.example", "auth_data": data.upper().replace("0X", "0x")},
+            {"url": "https://a.example"},
+        ]
+    }
+    responses = _builder_calls(NO_BUILDER, ("POST", path, body))
+    assert responses == [(400, {"message": "two entries share their URL and authentication data"})]
+
+
+def test_builder_config_set_replaces():
+    """A set replaces the stored configuration in full, and an empty list names no builder."""
+    client = dict(NO_BUILDER, builders=[{"url": "https://a.example"}])
+    path = _builder_path()
+    responses = _builder_calls(
+        client,
+        ("POST", path, {"min_bid": "5", "builders": []}),
+        ("POST", path, {"builder_boost_factor": "7"}),
+        ("GET", path, {}),
+        ("POST", path, {"builders": []}),
+        ("GET", path, {}),
+    )
+    entry = {
+        "url": "https://a.example",
+        "auth_data": _ascii_hex("a.example"),
+        "builder_pubkeys": [],
+        "max_execution_payment": "0",
+        "min_bid": "0",
+        "builder_boost_factor": "7",
+    }
+    assert responses[2] == (
+        200,
+        {"data": {"min_bid": "0", "builder_boost_factor": "7", "builders": [entry]}},
+    )
+    assert responses[4] == (
+        200,
+        {"data": {"min_bid": "0", "builder_boost_factor": "100", "builders": []}},
+    )
+
+
+def test_builder_config_client_meets_the_rules():
+    """A client whose own builders break a rule of a set is refused."""
+    client = dict(NO_BUILDER, builders=[{"url": "https://a.example"}, {"url": "https://a.example"}])
+    with raises(ERROR, f"keymanager value rejected with code {FIELD}"):
+        _builder_calls(client)

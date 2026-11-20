@@ -1059,7 +1059,7 @@ def bindings : List Binding := [
   ⟨"consensus_keymanager_run", `EthLib.Consensus.Exports.keymanagerRunExport,
     "(memory: int, work: int, fee_recipient: bytes, gas_limit: int, graffiti: str, " ++
       "protection: str, chain: tuple[str, str, str, bytes] | None, " ++
-      "calls: list[tuple[str, str, Any]]) -> " ++
+      "calls: list[tuple[str, str, Any]], builder: dict[str, Any]) -> " ++
       "tuple[list[tuple[int, Any]], dict[str, Any]]",
     [`EthLib.Consensus.KeymanagerApi.KeymanagerError], some "KeymanagerError"⟩,
   ⟨"consensus_is_execution_block", `EthLib.Consensus.Exports.isExecutionBlockExport,
