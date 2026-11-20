@@ -64,6 +64,7 @@ public import EthLib.Consensus.Proofs.Proposers
 public import EthLib.Consensus.Proofs.RelayApi
 public import EthLib.Consensus.Proofs.RemoteSigningApi.Request
 public import EthLib.Consensus.Proofs.RemoteSigningApi.Response
+public import EthLib.Consensus.Proofs.RemoteSigningApi.SigningRoot
 public import EthLib.Consensus.Proofs.SyncCommittee
 public import EthLib.Consensus.Proofs.ConsensusVersion
 public import EthLib.Consensus.Proofs.Constants

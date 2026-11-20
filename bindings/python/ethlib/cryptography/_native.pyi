@@ -1040,6 +1040,10 @@ def consensus_read_signing_request(name: str, document: Any) -> Any:
     """A request of the Remote-signing API, read and written again as the signer reads it."""
     ...
 
+def consensus_signing_request_root(name: str, config: str, document: Any) -> bytes:
+    """The root that a remote signer signs for a request of the Remote-signing API."""
+    ...
+
 def consensus_check_block_signing(interchange: bytes, pubkey: bytes, slot: int, signing_root: bytes) -> bool:
     """Whether a key may sign a block of a slot with a signing root, given a record."""
     ...

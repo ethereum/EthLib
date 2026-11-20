@@ -521,6 +521,7 @@ PyObject* py_consensus_is_optimistic_restricted_domain (PyObject* self, PyObject
 PyObject* py_consensus_read_slashing_interchange (PyObject* self, PyObject* args);
 PyObject* py_consensus_import_slashing_interchange (PyObject* self, PyObject* args);
 PyObject* py_consensus_read_signing_request (PyObject* self, PyObject* args);
+PyObject* py_consensus_signing_request_root (PyObject* self, PyObject* args);
 PyObject* py_consensus_check_block_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_check_attestation_signing (PyObject* self, PyObject* args);
 PyObject* py_consensus_record_block_signing (PyObject* self, PyObject* args);

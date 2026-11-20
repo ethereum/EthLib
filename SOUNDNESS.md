@@ -6371,12 +6371,26 @@ The source names no preset, and its examples mix the two.
 The Altair block and the sync committee contribution have the bitfield sizes of the minimal preset, and the Electra, Fulu and Gloas aggregates those of the mainnet preset.
 So the suite reads each of these five examples under the preset whose sizes it has, and checks that the other preset refuses it.
 
+A signer signs a root that it computes from the request (`Consensus/RemoteSigningApi/SigningRoot.lean`).
+The source names a domain only for the kinds that Gloas adds, so the root of every other kind comes from the duty that it serves: its object, its domain type and its epoch.
+The domain comes from the fork info, by the rule of the domain of a state: the previous fork version before the fork epoch, the current one from it, with the root of the genesis validators.
+`getDomain_eq_forkInfoDomain` (`Consensus/Proofs/RemoteSigningApi/SigningRoot.lean`) shows that this is the domain of a state with that fork info.
+For each duty before Gloas, a theorem shows that under the fork info of a state the request has the root that the duty signs in that state, for the same object; for example `getAttestationSignature_eq_of_requestSigningRoot`.
+A sync committee message is signed in the current epoch of the state, so its theorem also takes the slot of the message in that epoch.
+`getBlockSignature_eq_of_requestSigningRoot_header` shows that from Bellatrix, where a request holds only the header of a block, its root is the root of the block, so the proposer's signature verifies.
+`verifyRegistrationSignature_of_requestSigningRoot` shows that a registration gets the root that the check of a registration verifies.
+`isValidDepositSignature_of_requestSigningRoot` shows the same for a deposit whose genesis fork version is that of the configuration.
+The kinds that Gloas adds sign under the domain types that the source names; whether their roots match their duties is left to the next step, since the preferences and the envelope differ from their duties in the version and the epoch they take.
+The Python suite checks the `signingRoot` of each of the 24 examples of kinds before Gloas that carry a root and read, the misspelled `AGGREGATION_SLOT` once respelled.
+The Electra and Fulu aggregates carry the root `0x2475…c9e0`, which neither preset gives; their data is that of the Gloas aggregate, whose root EthLib matches.
+The suite computes their root under the mainnet preset with its own merkleization, and checks that EthLib gives that root.
+
 The signer answers with its signature as JSON under `signature`, or as the hex alone, and lists its keys as a JSON array of hex (`Consensus/RemoteSigningApi/Response.lean`).
 The JSON signature is a lawful container (`Consensus/Proofs/RemoteSigningApi/Response.lean`), so `ofApiJson_toApiJson` reads it back as written.
 `publicKeysJson_total` shows that the writer of a list of keys never fails, and `readPublicKeys_publicKeysJson` that the list reads back as written.
 No export or Python test covers the two responses yet; the sign endpoint will use them.
 
-The source leaves eight points about the requests open, and EthLib reads each one as follows:
+The source leaves eleven points about the requests open, and EthLib reads each one as follows:
 
 - The schema `Fork` writes `previous_version` and `current_version`, but the example of `AGGREGATION_SLOT` writes `previousVersion` and `currentVersion`, and the deprecated `BLOCK` example writes the fields of its fork and of its block in camel case.
   EthLib follows the schemas, so it refuses both examples.
@@ -6389,6 +6403,13 @@ The source leaves eight points about the requests open, and EthLib reads each on
   The Beacon API gives them the version of Fulu; the source does not say which version a request at such a fork carries.
 - The source does not say whether a signer must refuse a `version` other than the fork that `fork_info` gives at the epoch of the message.
   EthLib reads the body under the version it names, whatever the fork info says.
+- The source does not say at which epoch each kind is signed; EthLib takes the epoch of the duty.
+  The epoch matters only for a message before the fork epoch of the fork info, where the previous version applies.
+- From Deneb the chain checks a voluntary exit under the fork version of Capella (EIP-7044), but the request carries only its fork info.
+  The source's example signs with the version of its fork info, so EthLib does too.
+  `voluntaryExitDomain_of_requestSigningRoot` gives the root that the check of an exit verifies, under the hypothesis that the fork info gives the version of the exit domain at the epoch of the exit.
+  Gap A lists that hypothesis.
+- The source says only that the signing root of a request is "for optional verification"; it does not say what a signer does when it differs from its own.
 - The schemas give each integer the type of a string.
   The JSON mapping of SSZ also reads a bare JSON number, and writes every integer as a string, as it does for the Beacon API.
 - The rule that the authentication data is not empty is in the description of its schema, not in a schema keyword.
@@ -6610,6 +6631,10 @@ The signers then hold at most the active balance at the end of every epoch, not 
 The theorem also assumes a positive inclusion delay, a positive withdrawal delay, and an increment at most the activation balance; mainnet meets all three.
 `processSlotsAcross_exists_ok_of_chain_altairWitnessState` instantiates the mainnet corollary at the Altair witness, so its hypotheses can hold together.
 
+The root of a voluntary exit request (`voluntaryExitDomain_of_requestSigningRoot`) holds under the hypothesis that the fork info of the request gives, at the epoch of the exit, the version of the exit domain.
+From Deneb that is the version of Capella (EIP-7044), and the Remote-signing API does not say whether the client sends it or the signer substitutes it.
+The hypothesis stays until the implementers of remote signers answer it.
+
 Whatever those hypotheses leave unproved is part of what a reader trusts.
 
 ### A3. Side channels
@@ -6782,12 +6807,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 527 operations and 51 size constants.
-The Python extension calls 527 of the operations and 51 of the constants.
+Lean exports 528 operations and 51 size constants.
+The Python extension calls 528 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-11835 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2618), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1595), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (827), `x25519.c` (21), `xmss.c` (134).
+11849 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (45), `consensus.c` (2629), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (78), `discv5.c` (303), `engine.c` (216), `enr.c` (177), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (30), `kzg.c` (511), `libp2p.c` (187), `module.c` (1597), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (181), `trie.c` (115), `vrf.c` (141), `wrappers.h` (828), `x25519.c` (21), `xmss.c` (134).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

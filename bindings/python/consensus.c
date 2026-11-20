@@ -719,6 +719,9 @@ extern lean_object*
 eth_consensus_read_signing_request(lean_object* args);
 
 extern lean_object*
+eth_consensus_signing_request_root(lean_object* args);
+
+extern lean_object*
 eth_consensus_check_block_signing(
   lean_object* text, lean_object* pubkey, uint64_t slot, lean_object* signing_root);
 
@@ -2216,6 +2219,14 @@ py_consensus_read_signing_request(
   PyObject* args
 ) {
   return call_pyvalue_export(eth_consensus_read_signing_request, args, 2, REMOTE_SIGNING_ERROR);
+}
+
+PyObject*
+py_consensus_signing_request_root(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_signing_request_root, args, 3, REMOTE_SIGNING_ERROR);
 }
 
 PyObject*
