@@ -8129,15 +8129,14 @@ private theorem sync_moved_seat {f : Fork} {c t : BeaconState preset f} (altair 
     exact seat
   obtain ⟨reward, proposerReward, members, chosen, -, -, membersOk, signed, balances⟩ :=
     processSyncAggregate_balance synced
-  have seatless : ∀ bit : Bool, ∀ member ∈ (members.zip
-      aggregate.syncCommitteeBits.bits.toArray).toList, member.2 = bit →
-      member.1.toNat ≠ i := fun _ => signers_elsewhere_of_unseated membersOk found unseated
+  have seatless : ∀ member ∈ (members.zip aggregate.syncCommitteeBits.bits.toArray).toList,
+      member.1.toNat ≠ i := signers_elsewhere_of_unseated membersOk found unseated
   obtain ⟨b, held⟩ : ∃ b, c.balances.data[i]? = some b :=
     ⟨_, Array.getElem?_eq_getElem inside⟩
   obtain ⟨final, atFinal, value⟩ := balances i b held
   have low := (syncRewards_bounds (reward := reward.toNat)
     (proposerReward := proposerReward.toNat) (index := i) (chosen := chosen) _ b.toNat).2
-    (fun member inside _ => seatless member.2 member inside rfl)
+    (fun member inside _ => seatless member inside)
   rw [← value] at low
   simp only [actualBalanceAt, held, atFinal, Option.map_some, Option.getD_some] at moved ⊢
   by_cases signer : ∃ member ∈ (members.zip aggregate.syncCommitteeBits.bits.toArray).toList,
@@ -8147,7 +8146,7 @@ private theorem sync_moved_seat {f : Fork} {c t : BeaconState preset f} (altair 
   · exfalso
     have high := (syncRewards_bounds (reward := reward.toNat)
       (proposerReward := proposerReward.toNat) (index := i) (chosen := chosen) _ b.toNat).1
-      (fun member inside bit => ⟨seatless true member inside bit,
+      (fun member inside bit => ⟨seatless member inside,
         fun same => signer ⟨member, inside, bit, same⟩⟩)
     rw [← value] at high
     omega
