@@ -26508,6 +26508,17 @@ private theorem whistle_free (h : Setting config checks g split fin pulled anc c
   push_cast at natZ
   linarith
 
+private def whistleActiveRow (config : Config) (pulled anc fin : BeaconState preset fork)
+    (i seatDebit : ℕ) : ℕ :=
+  let terms := pinTerms config pulled anc fin
+  let W := (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat
+  let excess := (balanceAt fin i - balanceAt pulled i - terms.rise i + (W - 1)) / W
+  terms.rise i + 2 * seatDebit +
+    (if terms.tight = false ∧ terms.lateB i = true then 3 * balanceAt pulled i + 3 * excess
+      else 0) +
+    (if terms.tight = false ∧ terms.pendingRB i = true then balanceAt pulled i + 3 * excess
+      else 0)
+
 /-- A key of the split's registry that only C activates pays from its row of R.
 
 At R it is in `late` or in `pendingR`, which only `stub_J`'s keys of `K6` claim.
@@ -26535,21 +26546,7 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
           pulled i = true)).filter (fun i => isActiveAt counted (getCurrentEpoch counted) i =
           true)).filter (fun i => ((pinTerms config pulled anc fin).tight = false ∧ ((pinTerms
           config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc fin).pendingRB i =
-          true)))), ((pinTerms config pulled anc fin).rise i +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).lateB i = true then
-          3 * balanceAt pulled i +
-            3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-              ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then
-          balanceAt pulled i +
-            3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-              ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0)) := by
+          true)))), whistleActiveRow config pulled anc fin i 0 := by
   rw [Finset.mul_sum]
   refine Finset.sum_le_sum fun i member => ?_
   simp only [Finset.mem_filter] at member
@@ -26587,6 +26584,7 @@ private theorem whistle_late (h : Setting config checks g split fin pulled anc c
       (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) ≤
       balanceAt pulled i + (pinTerms config pulled anc fin).rise i :=
     (Nat.mul_le_mul_right _ (by omega)).trans (Nat.mul_div_le _ _)
+  simp only [whistleActiveRow]
   split_ifs
   · omega
   · omega
@@ -26682,22 +26680,8 @@ private theorem bud_whistle_of (h : Setting config checks g split fin pulled anc
         ((∑ v ∈ SC pulled counted split with (¬ (pinTerms config pulled anc fin).slashedRB v.toNat =
             true ∧
           ¬ PinTerms.exitedSlashable anc pulled v.toNat = true) ∧
-          isActiveAt counted (getCurrentEpoch counted) v.toNat = true, ((pinTerms config pulled anc
-              fin).rise v.toNat +
-            2 * syncD eventsF v.toNat + (if (pinTerms config pulled anc fin).tight = false ∧
-                (pinTerms config pulled anc fin).lateB v.toNat = true then
-              3 * balanceAt pulled v.toNat +
-                3 * ((balanceAt fin v.toNat - balanceAt pulled v.toNat -
-                  (pinTerms config pulled anc fin).rise v.toNat +
-                  ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-                  (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-            (if (pinTerms config pulled anc fin).tight = false ∧ (pinTerms config pulled anc
-                fin).pendingRB v.toNat = true then balanceAt pulled v.toNat +
-                3 * ((balanceAt fin v.toNat - balanceAt pulled v.toNat -
-                  (pinTerms config pulled anc fin).rise v.toNat +
-                  ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-                  (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-              else 0)) : ℕ) : ℤ) +
+          isActiveAt counted (getCurrentEpoch counted) v.toNat = true,
+          whistleActiveRow config pulled anc fin v.toNat (syncD eventsF v.toNat) : ℕ) : ℤ) +
         ((3 * ∑ v ∈ SC pulled counted split with (pinTerms config pulled anc fin).slashedRB v.toNat
             = true,
           ((max (balanceAt pulled v.toNat + (pinTerms config pulled anc fin).rise v.toNat)
@@ -26766,54 +26750,18 @@ private theorem bud_whistle_of (h : Setting config checks g split fin pulled anc
   have activeKeys : ∑ v ∈ SC pulled counted split with (¬ (pinTerms config pulled anc fin).slashedRB
       v.toNat = true ∧
         ¬ PinTerms.exitedSlashable anc pulled v.toNat = true) ∧
-        isActiveAt counted (getCurrentEpoch counted) v.toNat = true, ((pinTerms config pulled anc
-            fin).rise v.toNat +
-          2 * syncD eventsF v.toNat + (if (pinTerms config pulled anc fin).tight = false ∧ (pinTerms
-              config pulled anc fin).lateB v.toNat = true then
-            3 * balanceAt pulled v.toNat +
-              3 * ((balanceAt fin v.toNat - balanceAt pulled v.toNat -
-                (pinTerms config pulled anc fin).rise v.toNat +
-                ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-          (if (pinTerms config pulled anc fin).tight = false ∧ (pinTerms config pulled anc
-              fin).pendingRB v.toNat = true then balanceAt pulled v.toNat +
-              3 * ((balanceAt fin v.toNat - balanceAt pulled v.toNat -
-                (pinTerms config pulled anc fin).rise v.toNat +
-                ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-                (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-            else 0)) =
+        isActiveAt counted (getCurrentEpoch counted) v.toNat = true,
+        whistleActiveRow config pulled anc fin v.toNat (syncD eventsF v.toNat) =
       ∑ i ∈ ((((slashedOnC split counted).filter (fun i => i < split.validators.data.size)).filter
           (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧ ¬
           PinTerms.exitedSlashable anc
           pulled i = true)).filter (fun i => isActiveAt counted (getCurrentEpoch counted) i =
-          true)), ((pinTerms config pulled anc fin).rise i + 2 * syncD eventsF i + (if (pinTerms
-          config pulled anc fin).tight = false ∧ (pinTerms config pulled anc fin).lateB i = true
-          then
-        3 * balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0)) := by
+          true)), whistleActiveRow config pulled anc fin i (syncD eventsF i) := by
     rw [sum_SC_filter_positions h (fun i => (¬ (pinTerms config pulled anc fin).slashedRB i = true ∧
       ¬ PinTerms.exitedSlashable anc pulled i = true) ∧ isActiveAt counted (getCurrentEpoch
       counted) i =
           true)
-      (fun i => (pinTerms config pulled anc fin).rise i + 2 * syncD eventsF i + (if (pinTerms config
-          pulled anc fin).tight = false ∧ (pinTerms config pulled anc fin).lateB i = true then
-        3 * balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0))]
+      (fun i => whistleActiveRow config pulled anc fin i (syncD eventsF i))]
     simp only [Finset.filter_filter, and_assoc]
   have late := whistle_late h
   have partition := Finset.sum_filter_add_sum_filter_not ((((slashedOnC split counted).filter (fun i
@@ -26823,17 +26771,7 @@ private theorem bud_whistle_of (h : Setting config checks g split fin pulled anc
       counted (getCurrentEpoch counted) i = true)) (fun i => ((pinTerms config pulled anc fin).tight
       = false ∧ ((pinTerms config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc
       fin).pendingRB i = true)))
-    (fun i => (pinTerms config pulled anc fin).rise i + 2 * syncD eventsF i + (if (pinTerms config
-        pulled anc fin).tight = false ∧ (pinTerms config pulled anc fin).lateB i = true then
-      3 * balanceAt pulled i +
-        3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-          ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-      (if (pinTerms config pulled anc fin).tight = false ∧
-          (pinTerms config pulled anc fin).pendingRB i = true then balanceAt pulled i +
-        3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-          ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-          (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0))
+    (fun i => whistleActiveRow config pulled anc fin i (syncD eventsF i))
   have freeKeys : ∑ i ∈ (((((slashedOnC split counted).filter (fun i => i <
       split.validators.data.size)).filter (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i =
       true ∧ ¬ PinTerms.exitedSlashable anc pulled i = true)).filter (fun i => isActiveAt counted
@@ -26852,61 +26790,23 @@ private theorem bud_whistle_of (h : Setting config checks g split fin pulled anc
           pulled i = true)).filter (fun i => isActiveAt counted (getCurrentEpoch counted) i =
           true)).filter (fun i => ¬ ((pinTerms config pulled anc fin).tight = false ∧ ((pinTerms
           config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc fin).pendingRB i =
-          true)))), ((pinTerms config pulled anc fin).rise i + 2 * syncD eventsF i + (if (pinTerms
-          config pulled anc fin).tight = false ∧ (pinTerms config pulled anc fin).lateB i = true
-          then
-        3 * balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0)) := by
+          true)))), whistleActiveRow config pulled anc fin i (syncD eventsF i) := by
     rw [Finset.mul_sum, ← Finset.sum_add_distrib]
-    exact Finset.sum_le_sum fun i _ => by split_ifs <;> omega
+    exact Finset.sum_le_sum fun i _ => by simp only [whistleActiveRow]; split_ifs <;> omega
   have lateKeys : ∑ i ∈ (((((slashedOnC split counted).filter (fun i => i <
       split.validators.data.size)).filter (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i =
       true ∧ ¬ PinTerms.exitedSlashable anc pulled i = true)).filter (fun i => isActiveAt counted
       (getCurrentEpoch counted) i = true)).filter (fun i => ((pinTerms config pulled anc fin).tight
       = false ∧ ((pinTerms config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc
-      fin).pendingRB i = true)))), ((pinTerms config pulled anc fin).rise i +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).lateB i = true then
-          3 * balanceAt pulled i +
-            3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-              ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then
-          balanceAt pulled i +
-            3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-              ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-              (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0)) ≤
+      fin).pendingRB i = true)))), whistleActiveRow config pulled anc fin i 0 ≤
       ∑ i ∈ (((((slashedOnC split counted).filter (fun i => i < split.validators.data.size)).filter
           (fun i => ¬ (pinTerms config pulled anc fin).slashedRB i = true ∧ ¬
           PinTerms.exitedSlashable anc
           pulled i = true)).filter (fun i => isActiveAt counted (getCurrentEpoch counted) i =
           true)).filter (fun i => ((pinTerms config pulled anc fin).tight = false ∧ ((pinTerms
           config pulled anc fin).lateB i = true ∨ (pinTerms config pulled anc fin).pendingRB i =
-          true)))), ((pinTerms config pulled anc fin).rise i + 2 * syncD eventsF i + (if (pinTerms
-          config pulled anc fin).tight = false ∧ (pinTerms config pulled anc fin).lateB i = true
-          then
-        3 * balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat) else 0) +
-        (if (pinTerms config pulled anc fin).tight = false ∧
-            (pinTerms config pulled anc fin).pendingRB i = true then balanceAt pulled i +
-          3 * ((balanceAt fin i - balanceAt pulled i - (pinTerms config pulled anc fin).rise i +
-            ((parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat - 1)) /
-            (parameters preset fork).WHISTLEBLOWER_REWARD_QUOTIENT.toNat)
-        else 0)) :=
-    Finset.sum_le_sum fun i _ => by split_ifs <;> omega
+          true)))), whistleActiveRow config pulled anc fin i (syncD eventsF i) :=
+    Finset.sum_le_sum fun i _ => by simp only [whistleActiveRow]; split_ifs <;> omega
   have wSplit := (Finset.sum_filter_add_sum_filter_not (slashedOnC split counted)
     (fun i => i < split.validators.data.size) (fun i => whistC tailC highC i)).symm
   zify at core sc cs whistSplit exited free late slashedKeys activeKeys partition
@@ -33477,6 +33377,7 @@ theorem le_pinReserve (h : Setting config checks g split fin pulled anc counted 
   have qs := queues_split config pulled anc fin
   have b14 := bud_whistle_of (config := config) h tail high endEpoch replayed fromFin replayedF
     tailC highC endEpochC replayedC pre reg.1 reg.2
+  simp only [whistleActiveRow] at b14
   have b19 := bud_joinRise (config := config) h
   have b20 := sc_3a_split (config := config) h
   have b21 := bud_capSlots (config := config) h
