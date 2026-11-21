@@ -163,6 +163,7 @@ public import EthLib.Consensus.Proofs.HonestBuilder
 public import EthLib.Consensus.Proofs.HonestAggregation
 public import EthLib.Consensus.Proofs.HonestAggregateIndex
 public import EthLib.Consensus.Proofs.HonestAggregateSignatures
+public import EthLib.Consensus.Proofs.HonestAttestationList
 public import EthLib.Consensus.Proofs.HonestAttestations
 public import EthLib.Consensus.Proofs.HonestContributionSignatures
 public import EthLib.Consensus.Proofs.HonestValidator

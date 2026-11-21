@@ -1,0 +1,381 @@
+module
+
+public import EthLib.Consensus.Proofs.HonestAttestations
+import EthLib.Consensus.Proofs.Transition.BlockRewards
+import EthLib.Consensus.Proofs.Transition.ParticipationFlagsKept
+
+/-!
+# Proofs: the attestation steps accept a list of honest attestations, and flag honest members
+
+A block runs its attestations one after the other, each on the state that the one before left.
+
+An attestation changes only the flags of its attesters and the balance of the proposer.
+
+So the committees, the checkpoints, the roots and the keys that the next one reads stay the same.
+
+Its honest attestation is the same on each of those states, since it reads only those.
+
+Each attestation pays the proposer a reward, which the budget must leave room for.
+
+Then the attestation steps of the block accept every honest attestation of the list.
+
+This holds from Altair until Gloas.
+
+A flag once set stays set, so each honest member of each committee ends with the target flag.
+-/
+
+@[expose] public section
+
+namespace EthLib.Consensus
+
+open Base Cryptography.Bls
+
+variable {preset : Preset} {fork : Base.Fork} {config : Config} {state : BeaconState preset fork}
+
+/-- Writing one entry of a list raises a sum read in step with it by at most a bound.
+
+The new term at that entry must be at most the old term plus that bound. -/
+private theorem sum_zipWith_set_le {α β : Type} (f : α → β → Nat) (value : β) (raise : Nat) :
+    ∀ (first : List α) (second : List β) (index : Nat),
+      (∀ a (inside : index < second.length), f a value ≤ f a second[index] + raise) →
+      (first.zipWith f (second.set index value)).sum ≤ (first.zipWith f second).sum + raise
+  | [], _, _, _ => by simp
+  | _ :: _, [], _, _ => by simp
+  | a :: _, _ :: _, 0, bounded => by
+    have := bounded a (by simp)
+    simp only [List.set_cons_zero, List.zipWith_cons_cons, List.sum_cons,
+      List.getElem_cons_zero] at this ⊢
+    omega
+  | _ :: first, _ :: second, index + 1, bounded => by
+    have := sum_zipWith_set_le f value raise first second index fun a inside =>
+      bounded a (by simpa using inside)
+    simp only [List.set_cons_succ, List.zipWith_cons_cons, List.sum_cons]
+    omega
+
+/-- Raising one balance raises the stake sum by at most the raise. -/
+private theorem stakeSum_increaseBalance_le {after : BeaconState preset fork}
+    {index : ValidatorIndex} {delta : Gwei}
+    (computed : increaseBalance state index delta = .ok after) :
+    stakeSum after ≤ stakeSum state + delta.toNat := by
+  obtain ⟨inside, fits, rfl⟩ := increaseBalance_eq_ok_iff.mp computed
+  unfold stakeSum
+  simp only [BeaconState.putBalance, Array.toList_set]
+  refine sum_zipWith_set_le _ _ _ _ _ _ fun validator _ => ?_
+  rw [Uint64.toNat_add_of_lt fits]
+  simp only [Array.getElem_toList]
+  omega
+
+/-- Writing flags and then raising one balance keeps the bounds, with the raise added. -/
+private theorem withinBudget_raise {budget scoreBound raised : Nat}
+    {after : BeaconState preset fork} {current : Bool} {updated : EpochParticipation preset fork}
+    {proposer : ValidatorIndex} {reward : Gwei} (holds : WithinBudget budget scoreBound state)
+    (computed : increaseBalance (setEpochParticipation state current updated) proposer reward =
+      .ok after)
+    (enough : budget + reward.toNat ≤ raised) :
+    WithinBudget raised scoreBound after := by
+  obtain ⟨inside, -, written⟩ := increaseBalance_eq_ok_iff.mp computed
+  have summed := stakeSum_increaseBalance_le computed
+  have sameStake : stakeSum (setEpochParticipation state current updated) = stakeSum state := by
+    cases current <;> rfl
+  have samePending : pendingDepositSum after = pendingDepositSum state := by
+    subst written
+    cases current <;> rfl
+  have sameSlashed : slashedBalanceSum after = slashedBalanceSum state := by
+    subst written
+    cases current <;> rfl
+  have funded := holds.funded
+  have slashed := holds.slashed
+  have matched : BalancesMatch state := holds.matched
+  subst written
+  cases current <;>
+  · refine ⟨holds.within, ?_, holds.capped, by omega, by omega, holds.scored, fun electra =>
+      ⟨Nat.le_trans (holds.carried electra).1 (by omega),
+        Nat.le_trans (holds.carried electra).2 (by omega)⟩⟩
+    simpa [BalancesMatch, BeaconState.putBalance, setEpochParticipation] using matched
+
+/-- Writing flags and then raising one balance changes only the balances and the flags. -/
+private theorem shaped_raise {other after : BeaconState preset fork} {current : Bool}
+    {updated : EpochParticipation preset fork} {proposer : ValidatorIndex} {reward : Gwei}
+    (shaped : ∃ balances previous current, other = { state with
+      balances := balances, previousEpochParticipation := previous,
+      currentEpochParticipation := current })
+    (computed : increaseBalance (setEpochParticipation other current updated) proposer reward =
+      .ok after) :
+    ∃ balances previous current, after = { state with
+      balances := balances, previousEpochParticipation := previous,
+      currentEpochParticipation := current } := by
+  obtain ⟨balances, previous, current', rfl⟩ := shaped
+  obtain ⟨inside, -, rfl⟩ := increaseBalance_eq_ok_iff.mp computed
+  cases current
+  · exact ⟨_, _, _, rfl⟩
+  · exact ⟨_, _, _, rfl⟩
+
+/-- Writing flags of the size of the registry and raising one balance keeps the sizes of flags. -/
+private theorem participationMatches_raise {after : BeaconState preset fork} {current : Bool}
+    {updated : EpochParticipation preset fork} {proposer : ValidatorIndex} {reward : Gwei}
+    (participation : ParticipationMatches state)
+    (sized : updated.data.size = state.validators.data.size)
+    (computed : increaseBalance (setEpochParticipation state current updated) proposer reward =
+      .ok after) :
+    ParticipationMatches after := by
+  obtain ⟨inside, -, rfl⟩ := increaseBalance_eq_ok_iff.mp computed
+  intro altair
+  obtain ⟨previous, current'⟩ := participation altair
+  cases current
+  · exact ⟨sized, current'⟩
+  · exact ⟨previous, sized⟩
+
+/-- From Altair, a list of attestations keeps each target flag. -/
+private theorem foldlM_processAttestation_targetFlag {checks : SignatureChecks}
+    {parentSlot : Slot} (altair : .altair ≤ fork) (current : Bool) (position : Nat)
+    {attestations : List (Attestation preset fork)} {first last : BeaconState preset fork}
+    (computed :
+      attestations.foldlM (processAttestation config checks · parentSlot ·) first = .ok last)
+    (flagged : TargetFlagAt (recentParticipation first altair current) position) :
+    TargetFlagAt (recentParticipation last altair current) position :=
+  targetFlagAt_iff.mpr (foldlM_ok_invariant
+    (fun now : BeaconState preset fork => hasFlag
+      (((recentParticipation now altair current).data[position]?).getD 0)
+      (⟨1, by decide⟩ : Fin PARTICIPATION_FLAG_WEIGHTS.length).val.toUInt64 = true)
+    (fun _ _ _ held ok => processAttestation_keepsFlag ok altair current position _ held)
+    (targetFlagAt_iff.mp flagged) computed)
+
+/-- An attestation step from Altair until Gloas writes flags, then raises one balance. -/
+private theorem processAttestation_raise {budget scoreBound : Nat} {checks : SignatureChecks}
+    {after : BeaconState preset fork} {attestation : Attestation preset fork} {parentSlot : Slot}
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (holds : WithinBudget budget scoreBound state)
+    (participation : ParticipationMatches state)
+    (fits : preset.baseRewardCeiling < 2 ^ 64)
+    (room : budget + state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    (computed : processAttestation config checks state parentSlot attestation = .ok after) :
+    ∃ current updated proposer reward,
+      increaseBalance (setEpochParticipation state current updated) proposer reward = .ok after ∧
+      updated.data.size = state.validators.data.size ∧
+      reward.toNat ≤ state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 := by
+  rw [processAttestation_of_altair altair] at computed
+  unfold processAttestationAltair at computed
+  simp only [bind_ok_iff, liftAccessor_ok] at computed
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, earned, -, indexed, indexedOk, valid, validOk, _,
+    validTrue, total, totalOk, attesters, attestersOk, ⟨updated, numerator⟩, folded, proposer, -,
+    raised, raisedOk, final⟩ := computed
+  split at final
+  · rename_i gloas
+    exact absurd beforeGloas (Nat.not_lt_of_le gloas)
+  cases final
+  obtain rfl : valid = true := ensure_ok_iff.mp validTrue
+  obtain ⟨named, namedOk, indices⟩ := getAttestingIndices_of_getIndexedAttestation indexedOk
+  rw [attestersOk, Except.ok.injEq] at namedOk
+  subst namedOk
+  -- The attesters are distinct validators of the registry, so there are at most that many.
+  have inside : ∀ attester ∈ attesters, attester.toNat < state.validators.data.size :=
+    fun attester member =>
+      isValidIndexedAttestation_lt_size validOk attester (by rw [indices]; simpa using member)
+  have counted := Nat.mul_le_mul_right (64 * preset.baseRewardCeiling)
+    (length_le_of_toNat_nodup (getAttestingIndices_nodup attestersOk) inside)
+  -- The total active balance is the one that the budget bounds, so each base reward is small.
+  obtain ⟨other, otherOk, low, -⟩ := getTotalActiveBalance_exists_ok holds.within
+    (Nat.lt_of_le_of_lt holds.effectiveBalanceSum_le (by omega))
+  rw [totalOk, Except.ok.injEq] at otherOk
+  subst otherOk
+  have baseOk := getBaseReward_exists_le altair holds increment scaled fits low
+  obtain ⟨previousSize, currentSize⟩ := participation altair
+  have sized : (if (attestation.data.target.epoch == getCurrentEpoch state) = true then
+      state.currentEpochParticipation altair
+    else state.previousEpochParticipation altair).data.size = state.validators.data.size := by
+    split <;> assumption
+  obtain ⟨updated', numerator', folded', numeratorLe⟩ :=
+    foldlM_addAttesterFlags_exists_ok (earned := earned) baseOk attesters _ 0 sized inside
+      (by simp only [UInt64.toNat_zero]; omega)
+  rw [folded, Except.ok.injEq, Prod.mk.injEq] at folded'
+  obtain ⟨rfl, rfl⟩ := folded'
+  refine ⟨_, updated, proposer, _, raisedOk, ?_, ?_⟩
+  · exact foldlM_ok_invariant
+      (fun (carried : EpochParticipation preset fork × Gwei) =>
+        carried.1.data.size = state.validators.data.size)
+      (fun ⟨_, _⟩ _ ⟨_, _⟩ holds ok => (addAttesterFlags_keeps ok).1.trans holds) sized folded
+  · -- The reward is the numerator over 448, and the numerator is at most the bound.
+    have denominator : ((WEIGHT_DENOMINATOR - PROPOSER_WEIGHT) * WEIGHT_DENOMINATOR /
+        PROPOSER_WEIGHT).toNat = 448 := by decide
+    dsimp only
+    rw [UInt64.toNat_div, denominator]
+    exact Nat.div_le_div_right (by simp only [UInt64.toNat_zero] at numeratorLe; omega)
+
+/-- The attestation steps from a state that differs from the first only in balances and flags.
+
+Each step of the list may spend one reward share of the budget. -/
+private theorem foldlM_processAttestation_honestAttestation_from {budget scoreBound : Nat}
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
+    (parentSlot : Slot) (roots : preset.RootsReachPreviousEpoch)
+    (slotRoom : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (registered : ∀ index ∈ honest, ∃ validator,
+      getValidator state index = .ok validator ∧ validator.pubkey = Signatures.skToPk (key index))
+    (proposer : ∃ index, getBeaconProposerIndex state = .ok index ∧
+      index.toNat < state.validators.data.size)
+    {votes : List (AttestationData × CommitteeIndex)}
+    {attestations : List (Attestation preset fork)}
+    (built : List.Forall₂ (fun vote attestation =>
+      honestAttestation config state honest key vote.1 vote.2 = .ok attestation)
+        votes attestations)
+    (good : ∀ vote ∈ votes, (vote.1.target.epoch = getPreviousEpoch state ∨
+        vote.1.target.epoch = getCurrentEpoch state) ∧
+      vote.1.target.epoch = computeEpochAtSlot preset vote.1.slot ∧
+      vote.1.slot.toNat < state.slot.toNat ∧
+      vote.1.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤ state.slot.toNat ∧
+      (fork < .dencun → state.slot.toNat ≤ vote.1.slot.toNat + preset.SLOTS_PER_EPOCH.toNat) ∧
+      vote.1.index = (if .pectra ≤ fork then 0 else vote.2) ∧
+      vote.2 < getCommitteeCountPerSlot state vote.1.target.epoch ∧
+      vote.1.source = (if vote.1.target.epoch = getCurrentEpoch state then
+        state.currentJustifiedCheckpoint else state.previousJustifiedCheckpoint) ∧
+      ∀ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
+        (((honestSigners honest committee).map key).map (·.val)).sum ≠ 0)
+    (first : BeaconState preset fork) (spent : Nat)
+    (shaped : ∃ balances previous current, first = { state with
+      balances := balances, previousEpochParticipation := previous,
+      currentEpochParticipation := current })
+    (holds : WithinBudget (budget + spent * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448)) scoreBound first)
+    (participation : ParticipationMatches first)
+    (room : budget + (spent + votes.length) * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64) :
+    ∃ after, attestations.foldlM (processAttestation config .bls · parentSlot ·) first = .ok after ∧
+      ∀ vote ∈ votes, getBlockRoot state vote.1.target.epoch = .ok vote.1.target.root →
+        ∀ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
+          ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation after altair
+            (vote.1.target.epoch == getCurrentEpoch state)) index.toNat := by
+  induction built generalizing first spent with
+  | nil => exact ⟨first, rfl, fun vote member => absurd member List.not_mem_nil⟩
+  | @cons vote attestation votes attestations head tail ih =>
+    obtain ⟨recent, slotEpoch, past, early, deadline, indexed, below, source, sum⟩ :=
+      good vote List.mem_cons_self
+    -- The committee of the vote has a value, since its honest attestation reads it.
+    obtain ⟨committee, committeeOk⟩ :
+        ∃ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee := by
+      have read := head
+      unfold honestAttestation at read
+      split at read
+      · obtain ⟨committee, found, -⟩ := bind_ok_iff.mp read
+        exact ⟨committee, mapError_ok_iff.mp found⟩
+      · rename_i electra
+        obtain ⟨committee, found, -⟩ := bind_ok_iff.mp read
+        rw [indexed, ite_eq_right electra] at found
+        exact ⟨committee, mapError_ok_iff.mp found⟩
+    -- The registry has a validator, so the ceiling of a base reward fits.
+    have positive : 0 < state.validators.data.size := by
+      obtain ⟨index, -, inside⟩ := proposer
+      omega
+    have ceilingLe : 64 * preset.baseRewardCeiling ≤
+        state.validators.data.size * (64 * preset.baseRewardCeiling) :=
+      Nat.le_mul_of_pos_left _ positive
+    rw [List.length_cons] at room
+    have spentLe : spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) ≤
+        (spent + (votes.length + 1)) *
+          (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) :=
+      Nat.mul_le_mul_right _ (by omega)
+    obtain ⟨balances, previous, current, rfl⟩ := shaped
+    -- The step reads only what the first state holds, so the honest attestation is accepted.
+    obtain ⟨middle, processed, flagged⟩ := processAttestation_honestAttestation
+      (state := { state with
+        balances := balances, previousEpochParticipation := previous,
+        currentEpochParticipation := current }) altair beforeGloas parentSlot roots slotRoom
+      increment scaled holds participation (by dsimp only; omega) recent slotEpoch past early
+      deadline indexed below committeeOk source
+      (fun index signer => registered index (mem_honestSigners.mp signer).2)
+      (sum committee committeeOk) proposer head
+    -- The step writes flags and pays the proposer one share at most.
+    obtain ⟨written, updated, payee, reward, raised, sized, rewardLe⟩ :=
+      processAttestation_raise altair beforeGloas increment scaled holds participation
+        (by omega) (by dsimp only; omega) processed
+    have shareStep : (spent + 1) *
+        (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) =
+        spent * (state.validators.data.size * (64 * preset.baseRewardCeiling) / 448) +
+          state.validators.data.size * (64 * preset.baseRewardCeiling) / 448 :=
+      Nat.succ_mul _ _
+    obtain ⟨after, folded, rest⟩ := ih (fun other member => good other (.tail _ member)) middle
+      (spent + 1) (shaped_raise ⟨balances, previous, current, rfl⟩ raised)
+      (withinBudget_raise holds raised (by dsimp only at rewardLe; omega))
+      (participationMatches_raise participation sized raised)
+      (by rw [show spent + 1 + votes.length = spent + (votes.length + 1) by omega]; exact room)
+    refine ⟨after, by rw [List.foldlM_cons, processed]; exact folded, ?_⟩
+    intro other member rooted otherCommittee otherOk index inside honestIndex
+    rcases List.mem_cons.mp member with rfl | member
+    · -- The first vote flags its honest members, and the later steps keep the flags.
+      rw [committeeOk, Except.ok.injEq] at otherOk
+      subst otherOk
+      exact foldlM_processAttestation_targetFlag altair _ _ folded
+        (flagged rooted index inside honestIndex)
+    · exact rest other member rooted otherCommittee otherOk index inside honestIndex
+
+/-- From Altair until Gloas, the attestation steps accept the honest attestations of committees.
+
+Each vote names its data and its committee, and its attestation is built from the state.
+
+The data and the state meet the checks of the attestation step, and the state is within a budget.
+
+The budget must leave room for the rewards of the proposer, one for each attestation of the list.
+
+Each reward is at most 64 base reward ceilings for each validator of the registry, over 448.
+
+The budget must also leave room for that bound before the division.
+
+Each honest member of each committee then holds the timely target flag of its target epoch.
+
+That needs the state to hold the target root for the first slot of that epoch. -/
+theorem foldlM_processAttestation_honestAttestation {budget scoreBound : Nat}
+    (altair : .altair ≤ fork) (beforeGloas : fork < .glamsterdam)
+    {honest : Finset ValidatorIndex} {key : ValidatorIndex → Signatures.SecretKey}
+    (parentSlot : Slot) (roots : preset.RootsReachPreviousEpoch)
+    (slotRoom : state.slot.toNat + preset.SLOTS_PER_HISTORICAL_ROOT.toNat < 2 ^ 64)
+    (increment : preset.EFFECTIVE_BALANCE_INCREMENT ≠ 0)
+    (scaled : preset.EFFECTIVE_BALANCE_INCREMENT.toNat * preset.BASE_REWARD_FACTOR.toNat < 2 ^ 64)
+    (holds : WithinBudget budget scoreBound state)
+    (participation : ParticipationMatches state)
+    {votes : List (AttestationData × CommitteeIndex)}
+    (room : budget + votes.length * (state.validators.data.size *
+      (64 * preset.baseRewardCeiling) / 448) +
+        state.validators.data.size * (64 * preset.baseRewardCeiling) < 2 ^ 64)
+    (recent : ∀ vote ∈ votes, vote.1.target.epoch = getPreviousEpoch state ∨
+      vote.1.target.epoch = getCurrentEpoch state)
+    (slotEpoch : ∀ vote ∈ votes, vote.1.target.epoch = computeEpochAtSlot preset vote.1.slot)
+    (past : ∀ vote ∈ votes, vote.1.slot.toNat < state.slot.toNat)
+    (early : ∀ vote ∈ votes,
+      vote.1.slot.toNat + preset.MIN_ATTESTATION_INCLUSION_DELAY.toNat ≤ state.slot.toNat)
+    (deadline : ∀ vote ∈ votes, fork < .dencun →
+      state.slot.toNat ≤ vote.1.slot.toNat + preset.SLOTS_PER_EPOCH.toNat)
+    (indexed : ∀ vote ∈ votes, vote.1.index = if .pectra ≤ fork then 0 else vote.2)
+    (below : ∀ vote ∈ votes, vote.2 < getCommitteeCountPerSlot state vote.1.target.epoch)
+    (source : ∀ vote ∈ votes, vote.1.source =
+      if vote.1.target.epoch = getCurrentEpoch state then state.currentJustifiedCheckpoint
+      else state.previousJustifiedCheckpoint)
+    (registered : ∀ index ∈ honest, ∃ validator,
+      getValidator state index = .ok validator ∧ validator.pubkey = Signatures.skToPk (key index))
+    (sum : ∀ vote ∈ votes, ∀ committee,
+      getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
+        (((honestSigners honest committee).map key).map (·.val)).sum ≠ 0)
+    (proposer : ∃ index, getBeaconProposerIndex state = .ok index ∧
+      index.toNat < state.validators.data.size)
+    {attestations : List (Attestation preset fork)}
+    (built : List.Forall₂ (fun vote attestation =>
+      honestAttestation config state honest key vote.1 vote.2 = .ok attestation)
+        votes attestations) :
+    ∃ after, attestations.foldlM (processAttestation config .bls · parentSlot ·) state = .ok after ∧
+      ∀ vote ∈ votes, getBlockRoot state vote.1.target.epoch = .ok vote.1.target.root →
+        ∀ committee, getBeaconCommittee state vote.1.slot vote.2 = .ok committee →
+          ∀ index ∈ committee, index ∈ honest → TargetFlagAt (recentParticipation after altair
+            (vote.1.target.epoch == getCurrentEpoch state)) index.toNat :=
+  -- The first state differs from itself in nothing, and has spent no share of the budget.
+  foldlM_processAttestation_honestAttestation_from altair beforeGloas parentSlot roots slotRoom
+    increment scaled registered proposer built
+    (fun vote member => ⟨recent vote member, slotEpoch vote member, past vote member,
+      early vote member, deadline vote member, indexed vote member, below vote member,
+      source vote member, sum vote member⟩)
+    state 0 ⟨state.balances, state.previousEpochParticipation, state.currentEpochParticipation, rfl⟩
+    (by rwa [Nat.zero_mul, Nat.add_zero]) participation (by rwa [Nat.zero_add])
+
+end EthLib.Consensus

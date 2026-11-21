@@ -101,7 +101,7 @@ private theorem getAttestationSignature_eq (config : Config) (state : BeaconStat
   rw [getAttestationSignature, signAtEpoch, domained, mapError_ok_bind, rooted, mapError_ok_bind]
 
 /-- The honest signers of a committee are its members in the honest set. -/
-private theorem mem_honestSigners {honest : Finset ValidatorIndex}
+theorem mem_honestSigners {honest : Finset ValidatorIndex}
     {committee : Array ValidatorIndex} {index : ValidatorIndex} :
     index ∈ honestSigners honest committee ↔ index ∈ committee ∧ index ∈ honest := by
   simp [honestSigners, List.mem_dedup, List.mem_filter]
