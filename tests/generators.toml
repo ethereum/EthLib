@@ -42,6 +42,11 @@ computes = "the consensus-specs Python specification, run by its reference-test 
 version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), eth-ssz-specs 0.1.0, py_arkworks_bls12381 0.5.0, ckzg 2.1.8, python-snappy 0.7.3 on cramjam 2.11.0"
 source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/pyproject.toml, and .github/workflows/release.yml:77"
 
+[generators."pyspec v1.7.0-beta.4 compliance generator"]
+computes = "the fork choice compliance generator of consensus-specs, with its small configuration: block trees from MiniZinc models, then the steps and checks from the consensus-specs Python specification"
+version = "consensus-specs v1.7.0-beta.4 (aa16bb4c); the archive also holds the generator and the specification that it ran"
+source = "https://github.com/ethereum/consensus-specs/blob/aa16bb4c156184e9548a997d53efaf2a228a6304/tests/generators/compliance_runners/fork_choice/README.md, and .github/workflows/comptests.yml"
+
 [generators."pyspec v1.7.0-beta.4, EthLib scenarios"]
 computes = "the consensus-specs Python specification, unchanged, run by its reference-test plugin on test functions that EthLib wrote"
 version = "consensus-specs v1.7.0-beta.4 (aa16bb4c), with the libraries of its uv.lock"
@@ -269,8 +274,12 @@ cases = ["**"]
 generator = "pyspec v1.7.0-beta.4"
 
 [[directories."tests/consensus/fork_choice"]]
-cases = ["**"]
+cases = ["minimal/*/fork_choice/**", "minimal/*/sync/**", "minimal/*/fast_confirmation/**"]
 generator = "pyspec v1.7.0-beta.4"
+
+[[directories."tests/consensus/fork_choice"]]
+cases = ["minimal/*/fork_choice_compliance/**"]
+generator = "pyspec v1.7.0-beta.4 compliance generator"
 
 [[directories."tests/consensus/genesis"]]
 cases = ["**"]
@@ -681,6 +690,10 @@ generator = "pyspec v1.7.0-beta.4"
 [[archives."consensus-specs/v1.7.0-beta.4/mainnet"]]
 cases = ["**"]
 generator = "pyspec v1.7.0-beta.4"
+
+[[archives."consensus-specs/v1.7.0-beta.4/comptests"]]
+cases = ["tests/minimal/*/fork_choice_compliance/**"]
+generator = "pyspec v1.7.0-beta.4 compliance generator"
 
 [[archives."bls12-381-tests/v0.1.2/bls_tests_yaml"]]
 cases = ["sign/**", "verify/**", "aggregate/**", "fast_aggregate_verify/**", "aggregate_verify/**", "batch_verify/**"]

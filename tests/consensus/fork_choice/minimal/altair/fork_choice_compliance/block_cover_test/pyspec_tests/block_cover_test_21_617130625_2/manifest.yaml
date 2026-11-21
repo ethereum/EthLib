@@ -1,0 +1,6 @@
+preset: minimal
+fork: altair
+runner: fork_choice_compliance
+handler: block_cover_test
+suite: pyspec_tests
+case: block_cover_test_21_617130625_2

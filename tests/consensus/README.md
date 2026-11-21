@@ -171,6 +171,10 @@ At Electra and Fulu it keeps the smallest case of each handler, of the optimisti
 Electra adds the handler `deposit_with_reorg`.
 At Fulu its `on_block` case is one whose block lacks the columns that the node samples.
 At Gloas and Heze it also keeps the smallest case of each fast confirmation suite.
+It also keeps two fork choice compliance cases of `block_cover_test`, from `comptests.tar.gz` of the same release, one at Altair and one at Gloas.
+A generator derives these cases from models of block trees.
+In the Altair case a block carries a vote for a block that the store does not know yet.
+In the Gloas case the members of the payload committee vote.
 `bindings/python/tests/consensus/test_fork_choice.py` runs each case on one store in Lean and compares each step with the case.
 
 The directory `gossip/` holds gossip validation cases from `minimal.tar.gz` in the same way.

@@ -19,7 +19,7 @@
 # It starts with the day it was last checked, as "As of YYYY-MM-DD, ", since its state changes.
 # The case is the identifier that the parity report uses.
 # For execution-spec-tests, it is the test identifier of a fixture.
-# For consensus-spec-tests, it is the directory of a case in the archive.
+# For consensus-spec-tests and fork-choice-compliance, it is the directory of a case in the archive.
 # For legacytests, it is the path of a file in the archive, two colons, and the name of a test.
 # An entry can name the group of runners that disagrees, and then holds for that group only.
 # A legacytests case runs once per group, so a legacytests entry names its group.

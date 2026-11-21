@@ -15,6 +15,7 @@ from consensus.containers import CONTAINERS, FORKS as CONSENSUS_FORK
 from consensus.test_epoch_processing import HANDLERS as EPOCH_STEPS, runs as runs_epoch_step
 from consensus.test_fork import runs as runs_upgrade
 from consensus.test_fork_choice import (
+    COMPLIANCE as FORK_CHOICE_COMPLIANCE,
     FAST_CONFIRMATION,
     GLOAS_HANDLERS as GLOAS_FORK_CHOICE,
     HANDLERS as FORK_CHOICE,
@@ -743,8 +744,9 @@ def _transition(root: Path, case: Case) -> None:
 def _fork_choice(root: Path, case: Case) -> None:
     from consensus.test_fork_choice import run_case
 
-    # tests/<preset>/<fork>/<fork_choice, sync or fast_confirmation>/<handler>/<suite>/<case>
-    run_case(case.preset, case.fork, root / case.path)
+    # tests/<preset>/<fork>/<runner>/<handler>/<suite>/<case>
+    compliance = case.group.startswith("fork_choice_compliance/")
+    run_case(case.preset, case.fork, root / case.path, compliance)
 
 
 def _genesis(root: Path, case: Case) -> None:
@@ -807,6 +809,8 @@ RUNNERS = {
     "sync/optimistic": _fork_choice,
     # The fast confirmation cases are fork choice cases whose checks also read the rule's store.
     **{f"fast_confirmation/{suite}": _fork_choice for suite in FAST_CONFIRMATION},
+    # The compliance cases are fork choice cases that a generator derives from block trees.
+    **{f"fork_choice_compliance/{suite}": _fork_choice for suite in FORK_CHOICE_COMPLIANCE},
     **{group: _transition for group in TRANSITION_GROUPS},
     **{f"genesis/{handler}": _genesis for handler in GENESIS},
     "legacy_ommers": legacy.run_ommers,

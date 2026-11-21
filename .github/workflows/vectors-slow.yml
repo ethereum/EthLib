@@ -96,6 +96,12 @@ jobs:
             shard: 2/2
             bindings: true
             run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_consensus.py
+          # The fork choice compliance cases of the pinned release of consensus-specs.
+          # Locally in November 2026, their 10,304 cases took about 75 minutes of one core.
+          # So one job runs them all.
+          - suite: parity-compliance
+            bindings: true
+            run: uv run --no-sync pytest -n auto -m archive bindings/python/tests/parity/test_compliance.py
           # The cases of the execution-spec-tests devnets that the pinned release lacks.
           - suite: parity-devnets
             bindings: true
@@ -232,7 +238,7 @@ jobs:
       - name: merge
         run: |
           status=0
-          for suite in parity-execution parity-consensus parity-devnets parity-legacy; do
+          for suite in parity-execution parity-consensus parity-compliance parity-devnets parity-legacy; do
             uv run --no-project --python 3.12 python scripts/merge_parity.py \
               "$RUNNER_TEMP/$suite.md" "$RUNNER_TEMP"/shards/"$suite"-*/parity.json || status=1
             if [ -f "$RUNNER_TEMP/$suite.md" ]; then

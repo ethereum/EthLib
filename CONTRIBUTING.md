@@ -598,6 +598,7 @@ The `vectors-slow` workflow runs these tests every Monday.
 
 The parity tests in `bindings/python/tests/parity` are archive tests too.
 They run every case of execution-spec-tests and consensus-spec-tests at the forks in scope.
+They also run the fork choice compliance tests of the pinned release of consensus-specs.
 A case passes, fails, waits for a runner, or disagrees for a reason listed in `tests/parity/disagreements.toml`.
 Set `ETHLIB_PARITY_REPORT` to a file name to get the report of these outcomes for each fork and runner.
 
