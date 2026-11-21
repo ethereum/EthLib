@@ -1157,6 +1157,12 @@
 #define DOC_discv4_record_signed_by \
   "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."
 
+#define DOC_discv4_receive \
+  "What a node knows of the sender of a packet after it receives it, and what it sends back."
+
+#define DOC_discv4_accept_enr_response \
+  "Whether an ENRResponse packet answers an ENRRequest packet that the node sent."
+
 #define DOC_fork_id \
   "The fork identifier of a node with a schedule at a head: its hash and its next fork."
 

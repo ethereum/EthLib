@@ -12436,6 +12436,43 @@
    "docstring":
    "Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."},
   {"summary":
+   "What a node knows of the sender of a packet after it receives it, and what it sends back.",
+   "signature":
+   "(now: int, ip: bytes, port: int, last_ping: bytes | None, last_pong: int | None, packet: bytes, expiration: int, enr_seq: int | None, record: bytes, nodes: bytes) -> tuple[tuple[bytes | None, int | None], list[bytes]]",
+   "operation": "EthLib.Networking.Discv4.Exports.receiveExport",
+   "method": "discv4_receive",
+   "errors":
+   [{"type": "EthLib.Networking.Discv4.Discv4Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "tooShort", "code": 2},
+      {"constructor": "hashMismatch", "code": 3},
+      {"constructor": "invalidSignature", "code": 4},
+      {"constructor": "secp256k1", "code": 5},
+      {"constructor": "unknownType", "code": 6},
+      {"constructor": "rlp", "code": 7}]}],
+   "error_class": "Discv4Error",
+   "docstring":
+   "What a node knows of the sender of a packet after it receives it, and what it sends back.\n\nThe arguments are the time, the sender's IP and UDP port, and what the node knows of it.\n\nThat is the hash of the node's last Ping there, and the time of the last Pong that carried it.\n\nThen come the packet and the expiration of the answers.\n\nLast come the node's record sequence number, its record and the nodes it gives for any target.\n\nThe record and the list of nodes are RLP bytes.\n\nThe result is the new hash and time, and the content of each packet that the node sends."},
+  {"summary":
+   "Whether an ENRResponse packet answers an ENRRequest packet that the node sent.",
+   "signature": "(request: bytes, response: bytes) -> bool",
+   "operation": "EthLib.Networking.Discv4.Exports.acceptEnrResponseExport",
+   "method": "discv4_accept_enr_response",
+   "errors":
+   [{"type": "EthLib.Networking.Discv4.Discv4Error",
+     "codes":
+     [{"constructor": "tooLarge", "code": 1},
+      {"constructor": "tooShort", "code": 2},
+      {"constructor": "hashMismatch", "code": 3},
+      {"constructor": "invalidSignature", "code": 4},
+      {"constructor": "secp256k1", "code": 5},
+      {"constructor": "unknownType", "code": 6},
+      {"constructor": "rlp", "code": 7}]}],
+   "error_class": "Discv4Error",
+   "docstring":
+   "Whether an ENRResponse packet answers an ENRRequest packet that the node sent.\n\nIt must hold the hash of the request packet, and a record signed by the key of the response."},
+  {"summary":
    "The fork identifier of a node with a schedule at a head: its hash and its next fork.",
    "signature":
    "(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]",

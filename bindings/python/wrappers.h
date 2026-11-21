@@ -686,6 +686,8 @@ PyObject* py_devp2p_session (PyObject* self, PyObject* args);
 PyObject* py_discv4_decode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_encode                                (PyObject* self, PyObject* args);
 PyObject* py_discv4_record_signed_by                      (PyObject* self, PyObject* args);
+PyObject* py_discv4_receive                               (PyObject* self, PyObject* args);
+PyObject* py_discv4_accept_enr_response                   (PyObject* self, PyObject* args);
 PyObject* py_fork_id                                      (PyObject* self, PyObject* args);
 PyObject* py_fork_id_schedule                             (PyObject* self, PyObject* args);
 PyObject* py_fork_id_encode                               (PyObject* self, PyObject* args);

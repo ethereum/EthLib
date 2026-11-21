@@ -1552,6 +1552,14 @@ def discv4_record_signed_by(sender: bytes, record: bytes) -> bool:
     """Whether the RLP record `record` of an ENRResponse is signed by the public key `sender`."""
     ...
 
+def discv4_receive(now: int, ip: bytes, port: int, last_ping: bytes | None, last_pong: int | None, packet: bytes, expiration: int, enr_seq: int | None, record: bytes, nodes: bytes) -> tuple[tuple[bytes | None, int | None], list[bytes]]:
+    """What a node knows of the sender of a packet after it receives it, and what it sends back."""
+    ...
+
+def discv4_accept_enr_response(request: bytes, response: bytes) -> bool:
+    """Whether an ENRResponse packet answers an ENRRequest packet that the node sent."""
+    ...
+
 def fork_id(schedule: bytes, number: int, timestamp: int) -> tuple[bytes, int]:
     """The fork identifier of a node with a schedule at a head: its hash and its next fork."""
     ...
