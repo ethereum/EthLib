@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Proofs.Fork
 public import EthLib.Execution.Evm.Instructions.EnvironmentData
 public import EthLib.Execution.Proofs.Evm.Step
+public import EthLib.Execution.Proofs.Fees.BlobBaseFee
 
 /-!
 # Proofs: `Evm.Instructions.EnvironmentData`
@@ -23,6 +24,10 @@ BLOBHASH puts the versioned hash in place of the index.
 
 CHAINID pays the base price and pushes the chain id, from Istanbul on.
 
+BLOBBASEFEE pays the base price and pushes the blob base fee, from Dencun on.
+
+Below the threshold of a mainnet blob schedule, that word is the fee itself.
+
 SLOTNUM pays the base price and pushes the slot of the block, from Glamsterdam on.
 
 Each instruction exists exactly from the fork that adds its opcode.
@@ -37,6 +42,9 @@ None of them changes memory either.
 namespace EthLib.Execution.Evm
 
 open EthLib.Base (Fork Hash32 U256)
+open EthLib.Execution.Fees.BlobBaseFee
+  (blobBaseFeeOverflowExcess blobSchedule getBaseFeePerBlobGas
+    getBaseFeePerBlobGas_blobSchedule_lt_iff)
 open GasCosts
 
 variable {fork : Fork} {Meter : Type} [GasMeter Meter]
@@ -162,6 +170,40 @@ theorem environmentStep_slotnum (h : .glamsterdam ≤ fork) {evm : Evm fork Mete
   ⟨readFrame GasCosts.OPCODE_SLOTNUM fun evm =>
       BitVec.ofNat 256 (evm.message.blockEnv.slotNumber h).toNat,
     by simp [environmentStep, h], readFrame_of_length_lt room⟩
+
+/-- BLOBBASEFEE, from Dencun, on a stack with room: pay the base price, push the blob base fee.
+
+Its price is the base price, 2 gas, as EIP-7516 gives.
+
+The fee is pushed modulo `2^256`. -/
+theorem environmentStep_blobbasefee (h : .dencun ≤ fork) {evm : Evm fork Meter}
+    (room : evm.stack.val.length < STACK_LIMIT) :
+    ∃ step, environmentStep fork .blobbasefee = some step ∧
+      step evm = (GasMeter.charge evm.gas GasCosts.BASE).map fun gas =>
+        { evm with
+          gas
+          stack := ⟨BitVec.ofNat 256 (evm.message.blockEnv.blobBaseFee h) :: evm.stack.val, room⟩
+          pc := evm.pc + 1 } :=
+  ⟨readFrame GasCosts.OPCODE_BLOBBASEFEE fun evm =>
+      BitVec.ofNat 256 (evm.message.blockEnv.blobBaseFee h),
+    by simp [environmentStep, h], readFrame_of_length_lt room⟩
+
+/-- Below the threshold of its mainnet schedule, the word that BLOBBASEFEE pushes is the fee.
+
+The block sets no blob price of its own and has the mainnet schedule of its fork.
+
+Then the word is the base fee per blob gas of EIP-4844, with no wrap. -/
+theorem toNat_blobBaseFee_of_lt (h : .dencun ≤ fork) {env : BlockEnvironment fork}
+    (hPrice : env.blobGasPrice = none) (hSchedule : env.blobSchedule h = blobSchedule fork h)
+    (hExcess : (env.excessBlobGas h).toNat < blobBaseFeeOverflowExcess fork h) :
+    (BitVec.ofNat 256 (env.blobBaseFee h)).toNat =
+      getBaseFeePerBlobGas (blobSchedule fork h) (env.excessBlobGas h).toNat := by
+  have hfee : env.blobBaseFee h =
+      getBaseFeePerBlobGas (blobSchedule fork h) (env.excessBlobGas h).toNat := by
+    simp [BlockEnvironment.blobBaseFee, hPrice, hSchedule]
+  -- Below the threshold the fee is below `2^256`, so reducing it modulo `2^256` keeps it.
+  rw [hfee, BitVec.toNat_ofNat]
+  exact Nat.mod_eq_of_lt ((getBaseFeePerBlobGas_blobSchedule_lt_iff h _).mpr hExcess)
 
 /-- Before Glamsterdam, SLOTNUM has no instruction. -/
 theorem environmentStep_slotnum_of_lt (h : fork < .glamsterdam) :

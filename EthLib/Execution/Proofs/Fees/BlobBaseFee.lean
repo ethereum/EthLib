@@ -9,6 +9,7 @@ public import EthLib.Base.Proofs.Fork
 
 - The loop of `fake_exponential` stops before its bound.
 - The base fee per blob gas is monotone in the excess, and at least 1.
+- Under each mainnet schedule, it is below `2^256` exactly below a given excess.
 - At every fork, the excess rises by at most `GAS_PER_BLOB * (max - target)` per block.
 - Under every blob schedule, the excess grows with the blob gas of the parent.
 - A chain that sets no blob schedule of its own, as mainnet and Hoodi, has the forks' schedules.
@@ -258,6 +259,61 @@ theorem le_getBaseFeePerBlobGas (schedule : BlobSchedule) (excessBlobGas : Nat) 
     MIN_BASE_FEE_PER_BLOB_GAS ≤ getBaseFeePerBlobGas schedule excessBlobGas := by
   rw [← getBaseFeePerBlobGas_zero schedule]
   exact getBaseFeePerBlobGas_mono schedule (Nat.zero_le _)
+
+/-! ## The fee within 256 bits -/
+
+/-- An excess at which the fee first reaches a bound splits every excess in two.
+
+The fee is below the bound exactly below that excess, since it is monotone. -/
+theorem getBaseFeePerBlobGas_lt_iff_of_threshold {schedule : BlobSchedule}
+    {bound threshold : Nat} (below : getBaseFeePerBlobGas schedule (threshold - 1) < bound)
+    (reach : bound ≤ getBaseFeePerBlobGas schedule threshold) (excessBlobGas : Nat) :
+    getBaseFeePerBlobGas schedule excessBlobGas < bound ↔ excessBlobGas < threshold := by
+  constructor
+  · -- From the threshold up, the fee is at least its value there.
+    intro h
+    refine Nat.lt_of_not_le fun hle => ?_
+    have := getBaseFeePerBlobGas_mono schedule hle
+    omega
+  · -- Below the threshold, the fee is at most its value one step below.
+    intro h
+    exact Nat.lt_of_le_of_lt (getBaseFeePerBlobGas_mono schedule (by omega)) below
+
+/-- The least excess blob gas at which the mainnet fee of a fork reaches `2^256`, from Dencun.
+
+Each value is about 177.4457 times the update fraction, since `ln 2^256` is about 177.4457.
+
+From that excess on, BLOBBASEFEE pushes the fee modulo `2^256`. -/
+def blobBaseFeeOverflowExcess (fork : Fork) : Since .dencun fork Nat := fun _ =>
+  if fork ≥ .bpo2 then 2073394371
+  else if fork ≥ .bpo1 then 1480995878
+  else if fork ≥ .pectra then 888597562
+  else 592398316
+
+/-- Under the mainnet schedule of a fork, the fee is below `2^256` exactly below its threshold.
+
+So the threshold is exact: the fee one excess below it fits in 256 bits, and its own does not. -/
+theorem getBaseFeePerBlobGas_blobSchedule_lt_iff {fork : Fork} (h : .dencun ≤ fork)
+    (excessBlobGas : Nat) :
+    getBaseFeePerBlobGas (blobSchedule fork h) excessBlobGas < 2 ^ 256 ↔
+      excessBlobGas < blobBaseFeeOverflowExcess fork h := by
+  -- The kernel evaluates the fee on both sides of each threshold, in about 500 steps of the loop.
+  have key (schedule : BlobSchedule) (threshold : Nat)
+      (below : getBaseFeePerBlobGas schedule (threshold - 1) < 2 ^ 256)
+      (reach : 2 ^ 256 ≤ getBaseFeePerBlobGas schedule threshold) :=
+    getBaseFeePerBlobGas_lt_iff_of_threshold below reach excessBlobGas
+  unfold blobSchedule blobBaseFeeOverflowExcess
+  by_cases h2 : fork ≥ .bpo2
+  · simp only [h2, ↓reduceIte]
+    exact key _ _ (by decide +kernel) (by decide +kernel)
+  by_cases h1 : fork ≥ .bpo1
+  · simp only [h2, h1, ↓reduceIte]
+    exact key _ _ (by decide +kernel) (by decide +kernel)
+  by_cases hp : fork ≥ .pectra
+  · simp only [h2, h1, hp, ↓reduceIte]
+    exact key _ _ (by decide +kernel) (by decide +kernel)
+  simp only [h2, h1, hp, ↓reduceIte]
+  exact key _ _ (by decide +kernel) (by decide +kernel)
 
 /-! ## The excess blob gas -/
 
