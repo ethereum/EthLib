@@ -38,7 +38,7 @@ theorem keyGen_ikmTooShort {ikm : ByteArray} (h : ikm.size < 32) (keyInfo : Byte
 theorem keyGenLoop_expand_ok (ikm keyInfo salt : ByteArray) :
     ∃ okm, Hkdf.expand (Hkdf.extract (Sha256.hash salt) (ikm ++ HashToCurve.i2osp 0 1))
       (keyInfo ++ HashToCurve.i2osp KEYGEN_L 2) KEYGEN_L = .ok okm :=
-  ⟨_, Hkdf.hkdf_eq (by simp [KEYGEN_L, Hkdf.HASH_LEN])⟩
+  ⟨_, Hkdf.hkdf_eq (by simp [KEYGEN_L, Hkdf.HASH_LEN, Sha256.DIGEST_SIZE_BYTES])⟩
 
 /-- An attempt whose expansion is not a multiple of `r` gives the key.
 

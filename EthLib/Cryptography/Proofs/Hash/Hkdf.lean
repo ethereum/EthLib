@@ -34,7 +34,7 @@ theorem hkdf_eq_error_iff {salt ikm info : ByteArray} {length : Nat} {e : HkdfEr
     hkdf salt ikm info length = .error e ↔
       e = .outputTooLong length ∧ 255 * HASH_LEN < length := by
   unfold hkdf expand extract
-  simp only [hmac_size, HASH_LEN, show ¬ 32 < 32 by decide, ite_false]
+  simp only [hmac_size, HASH_LEN, Sha256.DIGEST_SIZE_BYTES, show ¬ 32 < 32 by decide, ite_false]
   by_cases long : 255 * 32 < length
   · simp [long, eq_comm]
   · simp [long]
@@ -133,7 +133,7 @@ theorem expand_prefix {prk info okm okm' : ByteArray} {length length' : Nat}
   rw [Nat.add_sub_cancel' hn] at ht
   -- The first blocks cover the shorter output, so the tail adds none of its bytes.
   have hsize : length ≤ (blocks prk info ((length + HASH_LEN - 1) / HASH_LEN)).size := by
-    rw [blocks_size, HASH_LEN]
+    rw [blocks_size, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]
     omega
   rw [ht, ByteArray.extract_extract, ByteArray.extract_append, Nat.zero_add, Nat.zero_add,
     Nat.min_eq_left hle, Nat.sub_eq_zero_of_le hsize]
@@ -161,7 +161,7 @@ theorem hkdf_eq {salt ikm info : ByteArray} {length : Nat} (h : length ≤ 255 *
       .ok ((blocks (hmac salt ikm) info
         ((length + HASH_LEN - 1) / HASH_LEN)).extract 0 length) :=
   -- The key `HMAC-Hash(salt, IKM)` is `HashLen` bytes, so it is never too short.
-  expand_eq (by simp [extract, HASH_LEN]) h
+  expand_eq (by simp [extract, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]) h
 
 /-- A successful HKDF returns exactly the requested length. -/
 theorem hkdf_size {salt ikm info okm : ByteArray} {length : Nat}
@@ -176,9 +176,10 @@ theorem hkdf_ok {salt ikm info : ByteArray} {length : Nat} (h : length ≤ 255 *
 /-- An output of whole blocks is the first `n` blocks, with no byte cut, for `n <= 255`. -/
 theorem hkdf_hashLen_mul {salt ikm info : ByteArray} {n : Nat} (hn : n ≤ 255) :
     hkdf salt ikm info (HASH_LEN * n) = .ok (blocks (hmac salt ikm) info n) := by
-  have hcount : (HASH_LEN * n + HASH_LEN - 1) / HASH_LEN = n := by simp only [HASH_LEN]; omega
-  rw [hkdf_eq (by simp only [HASH_LEN]; omega), hcount, ← blocks_size (hmac salt ikm) info n,
-    ByteArray.extract_zero_size]
+  have hcount : (HASH_LEN * n + HASH_LEN - 1) / HASH_LEN = n := by
+    simp only [HASH_LEN, Sha256.DIGEST_SIZE_BYTES]; omega
+  rw [hkdf_eq (by simp only [HASH_LEN, Sha256.DIGEST_SIZE_BYTES]; omega), hcount,
+    ← blocks_size (hmac salt ikm) info n, ByteArray.extract_zero_size]
 
 /-! ## Error codes -/
 

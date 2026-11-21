@@ -105,7 +105,8 @@ theorem decrypt_eq {key : Fn} {p : Point} (hp : p.isOnCurve = true) (hinf : p â‰
 theorem exists_deriveKeys_eq_ok (secret : Vector UInt8 32) :
     âˆƒ keys, deriveKeys secret = .ok keys := by
   have hsize : (ByteArray.mk secret.toArray).size = 32 := by simp [ByteArray.size]
-  simp [deriveKeys, Hash.ConcatKdf.concatKdf, Hash.ConcatKdf.HASH_LEN, hsize, Except.mapError,
+  simp [deriveKeys, Hash.ConcatKdf.concatKdf, Hash.ConcatKdf.HASH_LEN,
+    Hash.Sha256.DIGEST_SIZE_BYTES, hsize, Except.mapError,
     bind, Except.bind, pure, Except.pure]
 
 /-- The derived keys are the two halves of the 32-byte KDF output.

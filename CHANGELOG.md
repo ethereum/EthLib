@@ -801,6 +801,18 @@ Not yet released.
   `ofItem_blockRangeUpdate_eth68`, `ofItem_unequalLengths` and `messageCount_le_iff_unknownId` take the bytes too, and `answers_of_requestId`, `sublist_of_checkPooled` and `numbers_of_checkHeaders` take the new types.
   New: `Rlp.listEncodings`, `Rlp.splitItems`, `Rlp.Encoded.zip`, `Message.payloadEncodings`, `Message.kept`, `Message.Kept`, and the theorems `listEncodings_of_encode`, `Encoded.zip_eq_ok_iff`, `zip_listEncodings_eq_ok_iff` and `wireHash_networkForm`.
 
+- In Lean, the SHA-256 sizes name their unit: `Sha256.BLOCK_SIZE` is now `Sha256.BLOCK_SIZE_BYTES`, and `Sha256.LENGTH_SIZE` is now `Sha256.LENGTH_SIZE_BYTES`.
+  The new `Sha256.DIGEST_SIZE_BYTES` is the 32-byte digest size of FIPS 180-4 §1.
+  `HASH_LEN` of HKDF, PBKDF2 and Concat KDF, and `OUTPUT_BYTES` of the SHA-256 precompile, are defined as that size.
+  Their values are unchanged.
+  The hash to `G2` reads that size for `b_in_bytes`.
+  A proof that unfolds one of them to the literal 32 also unfolds `Sha256.DIGEST_SIZE_BYTES`.
+  `HashToCurve.sha256BlockSize` and `HashToCurve.sha256OutputSize` are removed; a caller uses `Sha256.BLOCK_SIZE_BYTES` and `Sha256.DIGEST_SIZE_BYTES`.
+
+- In Lean, `HashToCurve.fp2` is now `Bls.Fp2.ofNats`, and its lemma `map_fp2` is now `map_ofNats`.
+  `G2.generator`, `G2.bTwist` and `HashToCurve.Bprime` are written with it, with the same values.
+  A proof that unfolds one of them to its two coordinates also unfolds `Fp2.ofNats`.
+
 - In Lean, the step of a call builds its calling frame with the new `Evm.callerFrame` and its message with the new `Evm.callMessage`.
   `genericCall` no longer empties the return data, since `callerFrame` does; the step computes what it computed before.
   `callStep_child_of_routes`, `callStep_child`, `callStep_call`, `callStep_staticcall` and `callStep_value` state one equation on these two values instead of 23 conjuncts.

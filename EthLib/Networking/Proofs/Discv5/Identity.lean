@@ -91,7 +91,8 @@ theorem deriveKeys_ok (secret challengeData : ByteArray) (nodeIdA nodeIdB : Node
   obtain ⟨okm, hk, hs⟩ := Cryptography.Hash.Hkdf.hkdf_ok
     (salt := challengeData) (ikm := secret)
     (info := asciiBytes "discovery v5 key agreement" ++ ⟨nodeIdA.toArray⟩ ++ ⟨nodeIdB.toArray⟩)
-    (length := 32) (by simp [Cryptography.Hash.Hkdf.HASH_LEN])
+    (length := 32) (by simp [Cryptography.Hash.Hkdf.HASH_LEN,
+      Cryptography.Hash.Sha256.DIGEST_SIZE_BYTES])
   refine ⟨⟨okm.extract 0 16, okm.extract 16 32⟩, by simp only [hk]; rfl, ?_, ?_⟩ <;>
     simp only [ByteArray.size_extract, hs] <;> omega
 

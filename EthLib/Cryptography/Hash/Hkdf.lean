@@ -19,7 +19,7 @@ namespace EthLib.Cryptography.Hash.Hkdf
 open EthLib.Cryptography.Hash.Hmac
 
 /-- The output length `HashLen` of HMAC-SHA-256, in bytes. -/
-def HASH_LEN : Nat := 32
+def HASH_LEN : Nat := Sha256.DIGEST_SIZE_BYTES
 
 /-- Every way HKDF-Expand can reject its input, RFC 5869 §2.3. -/
 inductive HkdfError where
@@ -83,7 +83,8 @@ theorem expandBlocks_size (prk info previous : ByteArray) (i count : Nat) :
   | succ count ih =>
     have hmac_size (key message : ByteArray) : (hmac key message).size = 32 :=
       (hmac32 key message).size_toArray
-    simp only [expandBlocks, ByteArray.size_append, hmac_size, ih, HASH_LEN]
+    simp only [expandBlocks, ByteArray.size_append, hmac_size, ih, HASH_LEN,
+      Sha256.DIGEST_SIZE_BYTES]
     omega
 
 /-- A successful expansion has exactly the requested length. -/
@@ -97,7 +98,7 @@ theorem expand_size {prk info okm : ByteArray} {length : Nat}
   simp only [short, long, ite_false] at h
   -- The blocks cover the output, so the extraction keeps the requested length.
   obtain rfl := Except.ok.inj h
-  simp only [ByteArray.size_extract, expandBlocks_size, HASH_LEN]
+  simp only [ByteArray.size_extract, expandBlocks_size, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]
   omega
 
 /--

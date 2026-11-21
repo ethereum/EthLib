@@ -381,13 +381,13 @@ theorem paddingZeros_lt (size : Nat) : paddingZeros size < 64 := Nat.mod_lt _ (b
 /-- A padded message is whole blocks. -/
 theorem pad_size_mod (message : ByteArray) : (pad message).size % 64 = 0 := by
   rw [pad_size]
-  unfold paddingZeros BLOCK_SIZE LENGTH_SIZE
+  unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES
   omega
 
 /-- No fewer zeros would fill whole blocks. -/
 theorem paddingZeros_minimal (size zeros : Nat) (complete : (size + 1 + zeros + 8) % 64 = 0) :
     paddingZeros size ≤ zeros := by
-  unfold paddingZeros BLOCK_SIZE LENGTH_SIZE
+  unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES
   omega
 
 private theorem bits_toNat (size : Nat) (admitted : size < 2 ^ 61) :
@@ -420,7 +420,7 @@ theorem lengthBytes_digit (size : Nat) (admitted : size < 2 ^ 61) (i : Fin 8) :
 theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
     pad message = Spec.padded message := by
   have zeros : paddingZeros message.size = Spec.zeroCount message.size := by
-    unfold paddingZeros BLOCK_SIZE LENGTH_SIZE Spec.zeroCount
+    unfold paddingZeros BLOCK_SIZE_BYTES LENGTH_SIZE_BYTES Spec.zeroCount
     omega
   have length : (lengthBytes message.size).data =
       Array.ofFn fun i : Fin 8 =>
@@ -447,8 +447,8 @@ theorem pad_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
 
 /-- The blocks from any block on continue the model's chain of blocks. -/
 theorem chain_toState (block : ByteArray) (initial : Spec.State) :
-    ∀ count first start s (whole : start + BLOCK_SIZE * count ≤ block.size),
-      start = BLOCK_SIZE * first →
+    ∀ count first start s (whole : start + BLOCK_SIZE_BYTES * count ≤ block.size),
+      start = BLOCK_SIZE_BYTES * first →
       interpret s = Spec.blocks block initial first →
       interpret (chain compress block count start whole s)
         = Spec.blocks block initial (first + count) := by
@@ -460,9 +460,9 @@ theorem chain_toState (block : ByteArray) (initial : Spec.State) :
     -- One block, then the rest from the next block on.
     -- A block is 64 bytes.
     have blocks : start + 64 * (count + 1) ≤ block.size := whole
-    unfold BLOCK_SIZE at hstart
+    unfold BLOCK_SIZE_BYTES at hstart
     rw [chain, show first + (count + 1) = first + 1 + count by omega]
-    apply ih (first + 1) (start + BLOCK_SIZE) _ _ (by unfold BLOCK_SIZE; omega)
+    apply ih (first + 1) (start + BLOCK_SIZE_BYTES) _ _ (by unfold BLOCK_SIZE_BYTES; omega)
     rw [compress_toState s block start (by omega), hs, hstart, Spec.blocks]
 
 /-- The digest is the model's digest. -/
@@ -487,7 +487,7 @@ theorem hash_eq_spec (message : ByteArray) (admitted : message.size < 2 ^ 61) :
   have start : interpret initial = Spec.initial := by decide
   -- The padded bytes are the model's, and the chain then runs over them.
   have padded : ∀ bytes, bytes = Spec.padded message → ∀ whole,
-      digest (chain compress bytes (bytes.size / BLOCK_SIZE) 0 whole initial)
+      digest (chain compress bytes (bytes.size / BLOCK_SIZE_BYTES) 0 whole initial)
         = Spec.hash message := by
     intro bytes same whole
     subst same

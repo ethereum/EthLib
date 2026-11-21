@@ -81,7 +81,7 @@ theorem map_Aprime (f : Hom F G) : (Aprime : Fp2 F).map f = Aprime := by
   simp only [Aprime, Fp2.map, f.map_zero, f.map_ofNat]
 
 theorem map_Bprime (f : Hom F G) : (Bprime : Fp2 F).map f = Bprime := by
-  simp only [Bprime, Fp2.map, f.map_ofNat]
+  simp only [Bprime, Fp2.ofNats, Fp2.map, f.map_ofNat]
 
 theorem map_simpleSwu (f : Hom F G) (u : Fp2 F) :
     simpleSwu (u.map f) = (simpleSwu u).map (Prod.map (Fp2.map f) (Fp2.map f)) := by
@@ -103,22 +103,23 @@ theorem map_simpleSwu (f : Hom F G) (u : Fp2 F) :
         apply_ite (Fp2.map f), Fp2.map_neg]
     | error e => rfl
 
-theorem map_fp2 (f : Hom F G) (c0 c1 : Nat) : (fp2 c0 c1 : Fp2 F).map f = fp2 c0 c1 := by
-  simp only [fp2, Fp2.map, f.map_ofNat]
+theorem map_ofNats (f : Hom F G) (c0 c1 : Nat) :
+    (Fp2.ofNats c0 c1 : Fp2 F).map f = Fp2.ofNats c0 c1 := by
+  simp only [Fp2.ofNats, Fp2.map, f.map_ofNat]
 
-theorem map_k10 (f : Hom F G) : (k10 : Fp2 F).map f = k10 := map_fp2 f _ _
-theorem map_k11 (f : Hom F G) : (k11 : Fp2 F).map f = k11 := map_fp2 f _ _
-theorem map_k12 (f : Hom F G) : (k12 : Fp2 F).map f = k12 := map_fp2 f _ _
-theorem map_k13 (f : Hom F G) : (k13 : Fp2 F).map f = k13 := map_fp2 f _ _
-theorem map_k20 (f : Hom F G) : (k20 : Fp2 F).map f = k20 := map_fp2 f _ _
-theorem map_k21 (f : Hom F G) : (k21 : Fp2 F).map f = k21 := map_fp2 f _ _
-theorem map_k30 (f : Hom F G) : (k30 : Fp2 F).map f = k30 := map_fp2 f _ _
-theorem map_k31 (f : Hom F G) : (k31 : Fp2 F).map f = k31 := map_fp2 f _ _
-theorem map_k32 (f : Hom F G) : (k32 : Fp2 F).map f = k32 := map_fp2 f _ _
-theorem map_k33 (f : Hom F G) : (k33 : Fp2 F).map f = k33 := map_fp2 f _ _
-theorem map_k40 (f : Hom F G) : (k40 : Fp2 F).map f = k40 := map_fp2 f _ _
-theorem map_k41 (f : Hom F G) : (k41 : Fp2 F).map f = k41 := map_fp2 f _ _
-theorem map_k42 (f : Hom F G) : (k42 : Fp2 F).map f = k42 := map_fp2 f _ _
+theorem map_k10 (f : Hom F G) : (k10 : Fp2 F).map f = k10 := map_ofNats f _ _
+theorem map_k11 (f : Hom F G) : (k11 : Fp2 F).map f = k11 := map_ofNats f _ _
+theorem map_k12 (f : Hom F G) : (k12 : Fp2 F).map f = k12 := map_ofNats f _ _
+theorem map_k13 (f : Hom F G) : (k13 : Fp2 F).map f = k13 := map_ofNats f _ _
+theorem map_k20 (f : Hom F G) : (k20 : Fp2 F).map f = k20 := map_ofNats f _ _
+theorem map_k21 (f : Hom F G) : (k21 : Fp2 F).map f = k21 := map_ofNats f _ _
+theorem map_k30 (f : Hom F G) : (k30 : Fp2 F).map f = k30 := map_ofNats f _ _
+theorem map_k31 (f : Hom F G) : (k31 : Fp2 F).map f = k31 := map_ofNats f _ _
+theorem map_k32 (f : Hom F G) : (k32 : Fp2 F).map f = k32 := map_ofNats f _ _
+theorem map_k33 (f : Hom F G) : (k33 : Fp2 F).map f = k33 := map_ofNats f _ _
+theorem map_k40 (f : Hom F G) : (k40 : Fp2 F).map f = k40 := map_ofNats f _ _
+theorem map_k41 (f : Hom F G) : (k41 : Fp2 F).map f = k41 := map_ofNats f _ _
+theorem map_k42 (f : Hom F G) : (k42 : Fp2 F).map f = k42 := map_ofNats f _ _
 
 theorem map_isoMapG2 (f : Hom F G) (xp yp : Fp2 F) :
     (isoMapG2 xp yp).map f = isoMapG2 (xp.map f) (yp.map f) := by

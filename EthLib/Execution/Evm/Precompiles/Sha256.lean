@@ -21,7 +21,7 @@ namespace EthLib.Execution.Evm.Precompiles.Sha256
 open EthLib.Execution.Evm (wordCount)
 
 /-- The size of the output in bytes: one SHA-256 digest. -/
-def OUTPUT_BYTES : Nat := 32
+def OUTPUT_BYTES : Nat := Cryptography.Hash.Sha256.DIGEST_SIZE_BYTES
 
 /-- The price of every call, from Appendix E of the Yellow Paper. -/
 def GAS_BASE : Nat := 60

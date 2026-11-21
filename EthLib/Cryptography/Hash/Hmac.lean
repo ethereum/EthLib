@@ -28,8 +28,8 @@ A key longer than a block is hashed first.
 Zero bytes then fill the block.
 -/
 def blockKey (key : ByteArray) : ByteArray :=
-  let short := if key.size > Sha256.BLOCK_SIZE then Sha256.hash key else key
-  short ++ ⟨Array.replicate (Sha256.BLOCK_SIZE - short.size) 0⟩
+  let short := if key.size > Sha256.BLOCK_SIZE_BYTES then Sha256.hash key else key
+  short ++ ⟨Array.replicate (Sha256.BLOCK_SIZE_BYTES - short.size) 0⟩
 
 /-- Each byte of a block XORed with one pad byte. -/
 def xorPad (block : ByteArray) (pad : UInt8) : ByteArray :=

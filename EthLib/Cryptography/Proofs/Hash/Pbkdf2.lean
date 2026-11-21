@@ -21,7 +21,7 @@ theorem blocks_size (password salt : ByteArray) (iterations count index : Nat) (
   | zero => simp [blocks]
   | succ count ih =>
     simp only [blocks, ih, ByteArray.size_append]
-    simp only [ByteArray.size, Vector.size_toArray, HASH_LEN]
+    simp only [ByteArray.size, Vector.size_toArray, HASH_LEN, Sha256.DIGEST_SIZE_BYTES]
     omega
 
 /--
@@ -66,7 +66,8 @@ theorem pbkdf2_ok_iff {password salt : ByteArray} {iterations length : Nat} :
 theorem pbkdf2_size {password salt key : ByteArray} {iterations length : Nat}
     (h : pbkdf2 password salt iterations length = .ok key) : key.size = length := by
   obtain ⟨-, rfl⟩ := pbkdf2_eq_ok_iff.mp h
-  simp only [ByteArray.size_extract, blocks_size, ByteArray.size_empty, HASH_LEN]
+  simp only [ByteArray.size_extract, blocks_size, ByteArray.size_empty, HASH_LEN,
+    Sha256.DIGEST_SIZE_BYTES]
   omega
 
 /-- Zero iterations are rejected for every password, salt and requested length. -/
