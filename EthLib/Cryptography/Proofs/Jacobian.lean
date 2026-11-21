@@ -18,6 +18,10 @@ The proofs map each coordinate to the field `ZMod m`, for a prime `m != 2`.
 A change of field representation commutes with every formula, on every form.
 
 It commutes with the conversion back too, when it keeps the inverse.
+
+A point of a short Weierstrass curve converts to a form and back.
+
+So double and add on points computes `k P`, in any representation of the field.
 -/
 
 @[expose] public section
@@ -597,3 +601,132 @@ theorem toPoint_mulAdd (fuel k l : Nat) {p q : Jacobian m} (hp : OnCurve A B p)
   toPoint_mulAddAux ha h2 hp hq (add_spec ha h2 hp hq).1 (add_spec ha h2 hp hq).2 fuel k l hk hl
 
 end EthLib.Cryptography.Jacobian
+
+namespace EthLib.Cryptography.ShortWeierstrass.Point
+
+open Jacobian (toZ)
+
+/-! ## Points of a curve as forms -/
+
+section Representation
+
+variable {m : Nat} [NeZero m] {G : Type} [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G]
+  [DecidableEq G]
+
+/-- A representation of `Fin m` for double and add, with its maps in and out, and its inverse.
+
+Reading back is a change of representation, it keeps the inverse, and it undoes the encoding. -/
+structure Representation (encode : Fin m → G) (inverse : G → G) (read : G → Fin m) : Prop where
+  /-- Reading back keeps the operations, and distinct elements stay distinct. -/
+  embedding : Jacobian.Coords.Embedding read
+  /-- The inverse reads back as the inverse of `Fin m`. -/
+  read_inverse : ∀ x, read (inverse x) = Fin.inverse (read x)
+  /-- Reading back an encoded element gives that element. -/
+  read_encode : ∀ x, read (encode x) = x
+
+omit [DecidableEq G] in
+/-- `Fin m` itself is a representation, with no conversion. -/
+theorem Representation.fin : Representation (m := m) id Fin.inverse id :=
+  ⟨⟨rfl, rfl, fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl, Function.injective_id⟩,
+    fun _ => rfl, fun _ => rfl⟩
+
+/-- The point of a Jacobian form is its affine point, or the point at infinity. -/
+theorem ofJacobian_eq (p : Jacobian m) :
+    ofJacobian p = match p.toAffine with
+      | none => infinity
+      | some (x, y) => affine x y := by
+  unfold ofJacobian ofCoords Jacobian.toAffine
+  cases Jacobian.Coords.toAffine Fin.inverse p.toCoords <;> rfl
+
+/-- Normalizing in another representation gives the point of the form read back into `Fin m`.
+
+It needs the inverse of that representation to read as the inverse of `Fin m`. -/
+theorem ofCoords_map {read : G → Fin m} (hf : Jacobian.Coords.Embedding read) {inv : G → G}
+    (hinv : ∀ x, read (inv x) = Fin.inverse (read x)) (q : Jacobian.Coords G) :
+    ofCoords inv read q = ofCoords Fin.inverse id (q.map read) := by
+  unfold ofCoords
+  rw [← Jacobian.Coords.map_toAffine hf hinv q]
+  cases q.toAffine inv <;> rfl
+
+/-- Double and add in a representation is double and add on `Fin m`, for every input. -/
+theorem mulBits_eq_jacobian {encode : Fin m → G} {inverse : G → G} {read : G → Fin m}
+    (hr : Representation encode inverse read) (a : G) (fuel k : Nat) (p : Point (Fin m)) :
+    mulBits encode inverse read a fuel k p =
+      ofJacobian (Jacobian.mulBits (read a) fuel k (toJacobian p)) := by
+  rw [mulBits, ofCoords_map hr.embedding hr.read_inverse,
+    Jacobian.Coords.map_mulBits hr.embedding]
+  -- Reading back the encoded form of the point gives the form itself.
+  have h : ((toJacobian p).toCoords.map encode).map read = (toJacobian p).toCoords := by
+    simp only [Jacobian.Coords.map, hr.read_encode]
+  rw [h]
+  rfl
+
+end Representation
+
+variable {m : Nat} [NeZero m] [Fact m.Prime] [Params (Fin m)] {A B : ZMod m}
+  [(curve A B).IsElliptic] {f : Fin m → ZMod m}
+
+/-- A point of the curve has a Jacobian form on the curve, with the same group element.
+
+The map into `ZMod m` must be the value of each element. -/
+theorem toJacobian_spec (hf : Embedding f A B) (hz : ∀ x, toZ x = f x) {p : Point (Fin m)}
+    (hp : p.isOnCurve = true) :
+    Jacobian.OnCurve A B (toJacobian p) ∧
+      Jacobian.toPoint A B (toJacobian p) = toPoint A B f p := by
+  cases p with
+  | infinity => exact ⟨Jacobian.onCurve_infinity, Jacobian.toPoint_of_z_eq_zero rfl⟩
+  | affine x y =>
+    have h := (isOnCurve_affine hf x y).mp hp
+    have hx : Jacobian.affX (Jacobian.ofAffine x y) = f x := by
+      simp [Jacobian.affX, Jacobian.ofAffine, ← hz]
+    have hy : Jacobian.affY (Jacobian.ofAffine x y) = f y := by
+      simp [Jacobian.affY, Jacobian.ofAffine, ← hz]
+    have hz' : (Jacobian.ofAffine x y).z ≠ 0 :=
+      Jacobian.toZ_eq_zero.not.mp (by simp [Jacobian.ofAffine])
+    have hs := Jacobian.spec_of_eq (nonsingular_of_eq h) hz' hx hy
+    exact ⟨hs.1, hs.2.trans (toPoint_affine hf hp).symm⟩
+
+/-- A Jacobian form on the curve gives a point of the curve, with the same group element. -/
+theorem ofJacobian_spec (hf : Embedding f A B) (hz : ∀ x, toZ x = f x) {p : Jacobian m}
+    (hp : Jacobian.OnCurve A B p) :
+    (ofJacobian p).isOnCurve = true ∧ toPoint A B f (ofJacobian p) = Jacobian.toPoint A B p := by
+  by_cases hz0 : p.z = 0
+  · simp only [ofJacobian_eq, Jacobian.toAffine_of_z_eq_zero hz0]
+    exact ⟨rfl, (Jacobian.toPoint_of_z_eq_zero hz0).symm⟩
+  · obtain ⟨x, y, h, hx, hy⟩ := Jacobian.toAffine_of_z_ne_zero hz0
+    rw [hz] at hx hy
+    have he := hp hz0
+    rw [← hx, ← hy] at he
+    have hon : (affine x y).isOnCurve = true :=
+      (isOnCurve_affine hf x y).mpr (by linear_combination he)
+    simp only [ofJacobian_eq, h]
+    refine ⟨hon, ?_⟩
+    rw [toPoint_affine hf hon, Jacobian.toPoint_of_z_ne_zero hp hz0]
+    simp only [hx, hy]
+
+variable {G : Type} [OfNat G 0] [OfNat G 1] [Add G] [Sub G] [Mul G] [DecidableEq G]
+  {encode : Fin m → G} {inverse : G → G} {read : G → Fin m} {a : G}
+
+/-- Double and add stays on the curve.
+
+The representation must hold the curve's `a`, and `2 != 0` in `ZMod m`. -/
+theorem isOnCurve_mulBits (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
+    (hr : Representation encode inverse read) (ha : toZ (read a) = A) (h2 : (2 : ZMod m) ≠ 0)
+    (fuel k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) :
+    (mulBits encode inverse read a fuel k p).isOnCurve = true := by
+  rw [mulBits_eq_jacobian hr]
+  exact (ofJacobian_spec hf hz (Jacobian.onCurve_mulBits ha h2 fuel k
+    (toJacobian_spec hf hz hp).1)).1
+
+/-- Double and add computes `k P`, when `k < 2^fuel`. -/
+theorem toPoint_mulBits (hf : Embedding f A B) (hz : ∀ x, toZ x = f x)
+    (hr : Representation encode inverse read) (ha : toZ (read a) = A) (h2 : (2 : ZMod m) ≠ 0)
+    (fuel k : Nat) {p : Point (Fin m)} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
+    toPoint A B f (mulBits encode inverse read a fuel k p) = k • toPoint A B f p := by
+  have hJ := toJacobian_spec hf hz hp
+  rw [mulBits_eq_jacobian hr,
+    (ofJacobian_spec hf hz (Jacobian.onCurve_mulBits ha h2 fuel k hJ.1)).2,
+    Jacobian.toPoint_mulBits ha h2 fuel k hJ.1 hk]
+  exact congrArg (k • ·) hJ.2
+
+end EthLib.Cryptography.ShortWeierstrass.Point

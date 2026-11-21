@@ -17,6 +17,8 @@ The addition rule of SEC 1 v2 §2.2.1 is that group law.
 Points on the curve and group elements correspond one to one.
 
 Addition, negation and double and add map to the group operations.
+
+The proofs are those of every short Weierstrass curve, for the map of `Fp` into `ZMod p`.
 -/
 
 @[expose] public section
@@ -44,121 +46,54 @@ theorem nonsingular_of {x y : ZMod Fp.modulus} (h : y * y = x * x * x + 3) : cur
 @[simp] theorem negY_eq (x y : ZMod Fp.modulus) : curve.negY x y = -y :=
   ShortWeierstrass.negY_eq x y
 
+@[simp] private theorem toZMod_two : Fp.toZMod 2 = 2 := by decide
+
+@[simp] private theorem toZMod_three : Fp.toZMod 3 = 3 := by decide
+
+private theorem toZMod_b : Fp.toZMod b = 3 := by decide
+
+/-- The map of `Fp` into `ZMod p` keeps the operations of the rule, with `a = 0` and `b = 3`. -/
+theorem embedding : ShortWeierstrass.Embedding Fp.toZMod (0 : ZMod Fp.modulus) 3 :=
+  ⟨Fp.toZMod.injective, map_add _, map_sub _, map_mul _, map_neg _, map_zero _, toZMod_two,
+    toZMod_three, Fp.toZMod_inv, map_zero _, toZMod_b⟩
+
 namespace Point
 
 /-- The group element of a point.
 
-A pair off the curve has none, and goes to `0`: every theorem assumes the point is on the curve. -/
-def toPoint : Point → curve.Point
-  | infinity => 0
-  | affine x y =>
-    if h : Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 3 then
-      .some _ _ (nonsingular_of h)
-    else 0
+A pair off the curve has none, and goes to `0`.
+
+The group-law theorems assume the point is on the curve. -/
+def toPoint : Point → curve.Point := ShortWeierstrass.Point.toPoint 0 3 Fp.toZMod
 
 /-- The curve test, as an equation in `ZMod p`. -/
 theorem isOnCurve_affine (x y : Fp) :
     (affine x y).isOnCurve = true ↔ Fp.toZMod y * Fp.toZMod y = Fp.toZMod x * Fp.toZMod x * Fp.toZMod x + 3 := by
-  simp only [isOnCurve, beq_iff_eq]
-  exact ⟨fun h => by rw [← map_mul, h]; rfl, fun h => Fp.toZMod.injective (by rw [map_mul, h]; rfl)⟩
+  rw [ShortWeierstrass.Point.isOnCurve_affine embedding, zero_mul, add_zero]
 
 theorem toPoint_affine {x y : Fp} (h : (affine x y).isOnCurve = true) :
     toPoint (affine x y) = .some _ _ (nonsingular_of ((isOnCurve_affine x y).mp h)) :=
-  dite_eq_left ((isOnCurve_affine x y).mp h)
+  ShortWeierstrass.Point.toPoint_affine embedding h
 
 @[simp] theorem toPoint_infinity : toPoint infinity = 0 := rfl
 
 /-! ## Negation -/
 
-theorem isOnCurve_neg {p : Point} (h : p.isOnCurve = true) : p.neg.isOnCurve = true := by
-  cases p with
-  | infinity => rfl
-  | affine x y =>
-    show (affine x (-y)).isOnCurve = true
-    rw [isOnCurve_affine] at h ⊢
-    simp only [Fp.toZMod_neg, neg_mul_neg]
-    exact h
+theorem isOnCurve_neg {p : Point} (h : p.isOnCurve = true) : p.neg.isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_neg embedding h
 
-theorem toPoint_neg {p : Point} (h : p.isOnCurve = true) : toPoint p.neg = -toPoint p := by
-  cases p with
-  | infinity => simp [neg]
-  | affine x y =>
-    show toPoint (affine x (-y)) = _
-    rw [toPoint_affine h, toPoint_affine (isOnCurve_neg h), Affine.Point.neg_some]
-    simp [ShortWeierstrass.curve]
+theorem toPoint_neg {p : Point} (h : p.isOnCurve = true) : toPoint p.neg = -toPoint p :=
+  ShortWeierstrass.Point.toPoint_neg embedding h
 
 /-! ## Addition -/
 
-/-- A pair whose coordinates are those of a group element is on the curve, and is that element. -/
-private theorem affine_of_eq {x3 y3 : Fp} {P : curve.Point}
-    (h : ∃ h3, P = .some (Fp.toZMod x3) (Fp.toZMod y3) h3) :
-    (affine x3 y3).isOnCurve = true ∧ toPoint (affine x3 y3) = P := by
-  obtain ⟨h3, rfl⟩ := h
-  have hc : (affine x3 y3).isOnCurve = true :=
-    (isOnCurve_affine x3 y3).mpr ((equation_iff _ _).mp h3.1)
-  exact ⟨hc, toPoint_affine hc⟩
-
-@[simp] private theorem toZMod_two : Fp.toZMod 2 = 2 := by decide
-
-@[simp] private theorem toZMod_three : Fp.toZMod 3 = 3 := by decide
-
-/-- The rule for two points of the curve, both away from infinity. -/
-private theorem add_affine {x1 y1 x2 y2 : Fp} (h1 : (affine x1 y1).isOnCurve = true)
-    (h2 : (affine x2 y2).isOnCurve = true) :
-    (affine x1 y1 + affine x2 y2).isOnCurve = true
-      ∧ toPoint (affine x1 y1 + affine x2 y2) = toPoint (affine x1 y1) + toPoint (affine x2 y2) := by
-  -- The generic rules state the equation with the term `a x`, here `0 x`.
-  have e1 := (ShortWeierstrass.equation_iff _ _).mp
-    ((equation_iff _ _).mpr ((isOnCurve_affine x1 y1).mp h1))
-  have e2 := (ShortWeierstrass.equation_iff _ _).mp
-    ((equation_iff _ _).mpr ((isOnCurve_affine x2 y2).mp h2))
-  rw [toPoint_affine h1, toPoint_affine h2]
-  show (add (affine x1 y1) (affine x2 y2)).isOnCurve = true ∧ toPoint (add (affine x1 y1) (affine x2 y2)) = _
-  simp only [add]
-  by_cases hx : x1 = x2
-  · subst hx
-    rw [ite_eq_left rfl]
-    by_cases hy : y2 = -y1
-    · -- Rule 3: opposite points sum to `O`.
-      rw [ite_eq_left hy, ShortWeierstrass.add_of_y_eq_neg _ _ (by rw [hy, Fp.toZMod_neg])]
-      exact ⟨rfl, rfl⟩
-    · -- Same `x`, not opposite: the points are equal, and rule 5 doubles.
-      rw [ite_eq_right hy]
-      have hy2 : y2 = y1 := by
-        rcases ShortWeierstrass.y_eq_or_eq_neg e1 e2 with h | h
-        · exact Fp.toZMod.injective h
-        · exact absurd (Fp.toZMod.injective (h.trans (Fp.toZMod_neg y1).symm)) hy
-      subst hy2
-      have hne : Fp.toZMod y2 ≠ -Fp.toZMod y2 := fun h =>
-        hy (Fp.toZMod.injective (by rw [Fp.toZMod_neg]; exact h))
-      -- The tangent's slope of the curve is `3 x^2 / (2 y)`, with `a = 0`.
-      refine affine_of_eq
-        (ShortWeierstrass.add_self_of_y_ne (l := Fp.toZMod (3 * x1 * x1 * (2 * y2).inv)) _ hne
-          ?_ ?_ ?_) <;>
-        simp only [map_mul, map_sub, Fp.toZMod_inv, toZMod_two, toZMod_three, add_zero]
-  · -- Rule 4: different `x`, the chord.
-    rw [ite_eq_right hx]
-    have hX : Fp.toZMod x1 ≠ Fp.toZMod x2 := fun h => hx (Fp.toZMod.injective h)
-    refine affine_of_eq (ShortWeierstrass.add_of_x_ne _ _ hX rfl ?_ ?_) <;>
-      simp only [map_mul, map_sub, Fp.toZMod_inv]
-
 theorem isOnCurve_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    (p + q).isOnCurve = true := by
-  cases p with
-  | infinity => exact hq
-  | affine x1 y1 =>
-    cases q with
-    | infinity => exact hp
-    | affine x2 y2 => exact (add_affine hp hq).1
+    (p + q).isOnCurve = true :=
+  ShortWeierstrass.Point.isOnCurve_add embedding hp hq
 
 theorem toPoint_add {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    toPoint (p + q) = toPoint p + toPoint q := by
-  cases p with
-  | infinity => exact (zero_add _).symm
-  | affine x1 y1 =>
-    cases q with
-    | infinity => exact (add_zero _).symm
-    | affine x2 y2 => exact (add_affine hp hq).2
+    toPoint (p + q) = toPoint p + toPoint q :=
+  ShortWeierstrass.Point.toPoint_add embedding hp hq
 
 /-! ## Scalar multiplication -/
 
@@ -172,79 +107,41 @@ private theorem toZ_a : Jacobian.toZ (0 : Fp) = 0 := toZ_eq _
 /-- A point of the curve has a Jacobian form on the curve, with the same group element. -/
 theorem toJacobian_spec {p : Point} (hp : p.isOnCurve = true) :
     Jacobian.OnCurve (0) (3) (toJacobian p) ∧
-      (Jacobian.toPoint (0) (3) (toJacobian p) : curve.Point) = toPoint p := by
-  cases p with
-  | infinity => exact ⟨Jacobian.onCurve_infinity, Jacobian.toPoint_of_z_eq_zero rfl⟩
-  | affine x y =>
-    have h := (isOnCurve_affine x y).mp hp
-    have hx : Jacobian.affX (Jacobian.ofAffine x y) = Fp.toZMod x := by
-      simp [Jacobian.affX, Jacobian.ofAffine, toZ_eq]
-    have hy : Jacobian.affY (Jacobian.ofAffine x y) = Fp.toZMod y := by
-      simp [Jacobian.affY, Jacobian.ofAffine, toZ_eq]
-    have hz : (Jacobian.ofAffine x y).z ≠ 0 :=
-      Jacobian.toZ_eq_zero.not.mp (by simp [Jacobian.ofAffine])
-    have hs := Jacobian.spec_of_eq (A := 0) (B := 3) (nonsingular_of h) hz hx hy
-    exact ⟨hs.1, hs.2.trans (toPoint_affine hp).symm⟩
+      (Jacobian.toPoint (0) (3) (toJacobian p) : curve.Point) = toPoint p :=
+  ShortWeierstrass.Point.toJacobian_spec embedding toZ_eq hp
 
 /-- A Jacobian form on the curve gives a point of the curve, with the same group element. -/
 theorem ofJacobian_spec {p : Jacobian Fp.modulus} (hp : Jacobian.OnCurve (0) (3) p) :
-    (ofJacobian p).isOnCurve = true ∧ toPoint (ofJacobian p) = Jacobian.toPoint (0) (3) p := by
-  by_cases hz : p.z = 0
-  · simp only [ofJacobian, Jacobian.toAffine_of_z_eq_zero hz]
-    exact ⟨rfl, (Jacobian.toPoint_of_z_eq_zero hz).symm⟩
-  · obtain ⟨x, y, h, hx, hy⟩ := Jacobian.toAffine_of_z_ne_zero hz
-    rw [toZ_eq] at hx hy
-    have he := hp hz
-    rw [← hx, ← hy] at he
-    have hon : (affine x y).isOnCurve = true :=
-      (isOnCurve_affine x y).mpr (by linear_combination he)
-    simp only [ofJacobian, h]
-    refine ⟨hon, ?_⟩
-    rw [toPoint_affine hon, Jacobian.toPoint_of_z_ne_zero hp hz]
-    simp only [hx, hy]
+    (ofJacobian p).isOnCurve = true ∧ toPoint (ofJacobian p) = Jacobian.toPoint (0) (3) p :=
+  ShortWeierstrass.Point.ofJacobian_spec embedding toZ_eq hp
 
 theorem isOnCurve_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) :
     (mulBits fuel k p).isOnCurve = true :=
-  (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k
-    (toJacobian_spec hp).1)).1
+  ShortWeierstrass.Point.isOnCurve_mulBits embedding toZ_eq
+    ShortWeierstrass.Point.Representation.fin
+    toZ_a two_ne_zero' fuel k hp
 
 /-- Double and add computes `k P`, when `k < 2^fuel`. -/
 theorem toPoint_mulBits (fuel k : Nat) {p : Point} (hp : p.isOnCurve = true) (hk : k < 2 ^ fuel) :
-    toPoint (mulBits fuel k p) = k • toPoint p := by
-  have hJ := toJacobian_spec hp
-  rw [mulBits, (ofJacobian_spec (Jacobian.onCurve_mulBits toZ_a two_ne_zero' fuel k hJ.1)).2,
-    Jacobian.toPoint_mulBits toZ_a two_ne_zero' fuel k hJ.1 hk]
-  exact congrArg (k • ·) hJ.2
+    toPoint (mulBits fuel k p) = k • toPoint p :=
+  ShortWeierstrass.Point.toPoint_mulBits embedding toZ_eq
+    ShortWeierstrass.Point.Representation.fin
+    toZ_a two_ne_zero' fuel k hp hk
 
 /-! ## Points and group elements correspond -/
 
 /-- Two points on the curve with the same group element are equal. -/
 theorem toPoint_inj {p q : Point} (hp : p.isOnCurve = true) (hq : q.isOnCurve = true) :
-    toPoint p = toPoint q ↔ p = q := by
-  refine ⟨fun h => ?_, fun h => h ▸ rfl⟩
-  cases p with
-  | infinity =>
-    cases q with
-    | infinity => rfl
-    | affine x y => rw [toPoint_affine hq] at h; cases h
-  | affine x1 y1 =>
-    cases q with
-    | infinity => rw [toPoint_affine hp] at h; cases h
-    | affine x2 y2 =>
-      rw [toPoint_affine hp, toPoint_affine hq, Affine.Point.some.injEq] at h
-      rw [Fp.toZMod.injective h.1, Fp.toZMod.injective h.2]
+    toPoint p = toPoint q ↔ p = q :=
+  ShortWeierstrass.Point.toPoint_inj embedding hp hq
 
 /-- Only the point at infinity goes to `0`. -/
 theorem toPoint_eq_zero {p : Point} (hp : p.isOnCurve = true) : toPoint p = 0 ↔ p = infinity :=
-  toPoint_inj (q := infinity) hp rfl
+  ShortWeierstrass.Point.toPoint_eq_zero embedding hp
 
 /-- Every group element is the element of a point on the curve. -/
-theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true ∧ toPoint p = P := by
-  cases P with
-  | zero => exact ⟨infinity, rfl, rfl⟩
-  | some x y h =>
-    have hc : (affine x y).isOnCurve = true := (isOnCurve_affine x y).mpr ((equation_iff x y).mp h.1)
-    exact ⟨affine x y, hc, toPoint_affine hc⟩
+theorem toPoint_surjective (P : curve.Point) : ∃ p : Point, p.isOnCurve = true ∧ toPoint p = P :=
+  ShortWeierstrass.Point.toPoint_surjective embedding Fp.toZMod.surjective P
 
 end Point
 

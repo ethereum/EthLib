@@ -127,6 +127,8 @@ theorem ecdh_eq_ok_iff {sk : Fn} {pk : Point} {z : Vector UInt8 32} :
       cases hm : mul sk pk with
       | infinity => exact absurd hm (mul_ne_infinity hk hc hinf)
       | affine x y =>
+        -- Read the case at the curve's point type, as the statement writes it.
+        change mul sk pk = affine x y at hm
         rw [hm] at h
         obtain rfl := Except.ok.inj h
         refine ⟨x, y, hm ▸ isOnCurve_mul _ hc, ?_, rfl⟩
