@@ -302,23 +302,22 @@ end Montgomery
 /-- An element of the base field in Montgomery form, with `R = 2^256`.
 
 The words hold `a R mod p`, below `p`, so each element has one encoding. -/
-structure Montgomery where
-  /-- The canonical Montgomery residue. -/
-  raw : Montgomery.Raw
-  /-- A residue below the field modulus has a unique encoding. -/
-  lt : raw.val < Fp.modulus
-deriving DecidableEq
+abbrev Montgomery := Word64.Montgomery Fp.modulus
 
 /-- An element of the base field held in Montgomery form. -/
 abbrev Fp.Montgomery := Secp256k1.Montgomery
 
 namespace Montgomery
 
-/-- Zero, whose Montgomery form is zero. -/
-instance : OfNat Montgomery 0 := ⟨⟨⟨0, 0, 0, 0⟩, by decide⟩⟩
-
-/-- One, whose Montgomery form is `R mod p = 2^32 + 977`. -/
-instance : OfNat Montgomery 1 := ⟨⟨⟨0x1000003d1, 0, 0, 0⟩, by decide⟩⟩
+/-- The Montgomery constants of `p`: `R mod p` and `R^2 mod p`. -/
+instance : Word64.Montgomery.Constants Fp.modulus where
+  -- `R mod p = 2^32 + 977`.
+  one := ⟨0x1000003d1, 0, 0, 0⟩
+  -- `R^2 mod p = (2^32 + 977)^2 = 2^64 + 0x7a2000e90a1`.
+  square := ⟨0x7a2000e90a1, 1, 0, 0⟩
+  bounds := by decide
+  one_val := by decide
+  square_val := by decide
 
 /-- Add the masked complement when the words represent an integer at least `p`. -/
 @[inline] def reduceMasked (r : Words64) : Words64 :=
@@ -1237,25 +1236,11 @@ instance : Mul Montgomery := ⟨mul⟩
   finish (reduceWideInverse w.1 w.2) h.1
 
 
-/-- Read the canonical integer before applying the Montgomery scale. -/
-@[inline] def readRaw (a : Fp) : Montgomery :=
-  ⟨rawOfNat a.val, by
-    rw [rawOfNat_val _ (Nat.lt_trans a.isLt (by decide))]
-    exact a.isLt⟩
-
-/-- The raw integer `R^2 mod p`, where `R = 2^256`. -/
-def montgomerySquare : Montgomery := ⟨⟨0x7a2000e90a1, 1, 0, 0⟩, by decide⟩
-
-/-- The raw integer one used to remove the Montgomery scale. -/
-def rawOne : Montgomery := ⟨⟨1, 0, 0, 0⟩, by decide⟩
-
 /-- Enter the Montgomery representation with a product by the square of the radix. -/
-@[inline] def ofFin (a : Fp) : Montgomery := montgomerySquare * readRaw a
+abbrev ofFin (a : Fp) : Montgomery := Word64.Montgomery.ofFin a
 
 /-- Leave the Montgomery representation with a product by the word one. -/
-@[inline] def toFin (a : Montgomery) : Fp :=
-  let x := a * rawOne
-  ⟨rawToNat x.raw, by rw [rawToNat_eq]; exact x.lt⟩
+abbrev toFin (a : Montgomery) : Fp := Word64.Montgomery.toFin a
 
 /-- The sum of two values of four words, then the given reduction of the five-word result. -/
 @[inline] def add64 (reduce : Words64 → Words64) (a b : Words64) : Words64 :=
