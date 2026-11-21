@@ -15,6 +15,8 @@ Each message reads back from its ID and its RLP item, on every version that uses
 
 The decoder reads no other ID or item, so it takes no field more or less than the writer writes.
 
+Each transaction and header that the decoder reads keeps the bytes of its own encoding.
+
 The reader of an envelope reads only that envelope, with or without its part.
 
 eth/68 rejects BlockRangeUpdate.
@@ -156,9 +158,36 @@ def FitsVersion (version : EthVersion) : Message → Prop
   | .getCells .. | .cells .. => EthVersion.eth72 ≤ version
   | _ => True
 
-/-- A message of the form of a version reads back from its ID and its item on that version. -/
-theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion version) :
-    ofItem version m.id m.toItem = .ok m := by
+/-- Each transaction or header of a message keeps the bytes of its own encoding. -/
+def Kept (m : Message) : Prop :=
+  ∀ e ∈ m.kept, Serialization.Rlp.encode e.item = .ok e.bytes
+
+/-- A message without transactions or headers keeps no encoding, so it keeps them all. -/
+private theorem kept_nil {m : Message} (h : m.kept = [] := by rfl) : m.Kept := by
+  simp [Kept, h]
+
+/-- The payload of an envelope that encodes as `data` is cut from `data` with its own encoding. -/
+private theorem payloadEncodings_envelope {i : UInt64} {items : List Item} {data : ByteArray}
+    (h : Serialization.Rlp.encode (envelope i (.list items)) = .ok data) :
+    ∃ payload, Serialization.Rlp.encode (.list items) = .ok payload ∧
+      payloadEncodings data = listEncodings payload := by
+  unfold envelope at h
+  -- The envelope has two encodings, and the second is that of the payload.
+  obtain ⟨encodings, hList, hAll⟩ := listEncodings_of_encode h
+  cases hAll with
+  | cons _ hRest =>
+    cases hRest with
+    | cons hPayload hNil =>
+      cases hNil
+      exact ⟨_, hPayload, by simp [payloadEncodings, hList, bind, Except.bind]⟩
+
+/-- A message of the form of a version reads back from its ID and its item on that version.
+
+Its transactions and headers must keep their own encodings, and `data` must encode its item. -/
+theorem ofItem_toItem {version : EthVersion} {m : Message} {data : ByteArray}
+    (hm : m.FitsVersion version) (hk : m.Kept)
+    (hd : Serialization.Rlp.encode m.toItem = .ok data) :
+    ofItem version m.id m.toItem data = .ok m := by
   cases m with
   | status s =>
     cases s with
@@ -177,14 +206,23 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
     simp [ofItem, Message.id, toItem, LawfulCodec.ofItem_toItem, Functor.map, Except.map,
       Except.mapError]
   | transactions txs =>
-    simp [ofItem, Message.id, toItem, list_eq_toItem txs, LawfulCodec.ofItem_toItem,
-      Functor.map, Except.map, Except.mapError]
+    -- The encodings cut from `data` are those that the transactions keep.
+    have hd : Serialization.Rlp.encode (.list (txs.map (·.item))) = .ok data := hd
+    obtain ⟨encodings, hl, hz⟩ :=
+      bind_ok_iff.mp ((zip_listEncodings_eq_ok_iff hd).mpr ⟨rfl, hk⟩)
+    simp [ofItem, Message.id, toItem, list_eq_toItem (txs.map (·.item)),
+      LawfulCodec.ofItem_toItem, hl, hz, bind, Except.bind, pure, Except.pure, Except.mapError]
   | getBlockHeaders i r =>
     simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
       Except.mapError]
   | blockHeaders i hs =>
-    simp [ofItem, Message.id, toItem, list_eq_toItem hs, readEnvelope_envelope, Functor.map,
-      Except.map, Except.mapError]
+    -- The encodings cut from the payload are those that the headers keep.
+    have hd : Serialization.Rlp.encode (envelope i (.list (hs.map (·.item)))) = .ok data := hd
+    obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+    obtain ⟨encodings, hl, hz⟩ :=
+      bind_ok_iff.mp ((zip_listEncodings_eq_ok_iff hp).mpr ⟨rfl, hk⟩)
+    simp [ofItem, Message.id, toItem, list_eq_toItem (hs.map (·.item)), readEnvelope_envelope,
+      hpe, hl, hz, bind, Except.bind, pure, Except.pure, Except.mapError]
   | getBlockBodies i hs =>
     simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
       Except.mapError]
@@ -208,8 +246,13 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
     simp [ofItem, Message.id, toItem, readEnvelope_envelope, Functor.map, Except.map,
       Except.mapError]
   | pooledTransactions i txs =>
-    simp [ofItem, Message.id, toItem, list_eq_toItem txs, readEnvelope_envelope, Functor.map,
-      Except.map, Except.mapError]
+    -- The encodings cut from the payload are those that the transactions keep.
+    have hd : Serialization.Rlp.encode (envelope i (.list (txs.map (·.item)))) = .ok data := hd
+    obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+    obtain ⟨encodings, hl, hz⟩ :=
+      bind_ok_iff.mp ((zip_listEncodings_eq_ok_iff hp).mpr ⟨rfl, hk⟩)
+    simp [ofItem, Message.id, toItem, list_eq_toItem (txs.map (·.item)), readEnvelope_envelope,
+      hpe, hl, hz, bind, Except.bind, pure, Except.pure, Except.mapError]
   | getReceipts i k hs =>
     simp [ofItem, Message.id, toItem, readWithPart_withPart i k hs hm, Functor.map, Except.map,
       Except.mapError]
@@ -239,9 +282,13 @@ theorem ofItem_toItem {version : EthVersion} {m : Message} (hm : m.FitsVersion v
 
 So the decoder takes no item with fields missing or added, and no message of another version.
 
-It takes no announcement whose lists differ in length. -/
-theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Message} :
-    ofItem version id item = .ok m ↔ id = m.id ∧ m.FitsVersion version ∧ item = m.toItem := by
+It takes no announcement whose lists differ in length.
+
+When `data` encodes the item, each transaction and header keeps its own encoding. -/
+theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {data : ByteArray}
+    {m : Message} (hd : Serialization.Rlp.encode item = .ok data) :
+    ofItem version id item data = .ok m ↔
+      id = m.id ∧ m.FitsVersion version ∧ item = m.toItem ∧ m.Kept := by
   constructor
   · intro h
     unfold ofItem at h
@@ -249,41 +296,56 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
     · rw [ite_eq_left hc] at h
       obtain ⟨s, hs, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
       obtain ⟨rfl, hv⟩ := Status.ofItem_eq_ok_iff.mp hs
-      refine ⟨hc, ?_, rfl⟩
+      refine ⟨hc, ?_, rfl, kept_nil⟩
       cases s <;> exact hv
     rw [ite_eq_right hc] at h
     by_cases hc : id = NEW_BLOCK_HASHES_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨bs, hb, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc, trivial, (Codec.ofItem_eq_ok_iff.mp hb).symm⟩
+      exact ⟨hc, trivial, (Codec.ofItem_eq_ok_iff.mp hb).symm, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = TRANSACTIONS_ID
     · rw [ite_eq_left hc] at h
-      obtain ⟨txs, hb, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc, trivial, ((list_eq_toItem txs).trans (Codec.ofItem_eq_ok_iff.mp hb)).symm⟩
+      obtain ⟨txs, hb, h⟩ := bind_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨encodings, hl, h⟩ := bind_ok_iff.mp h
+      obtain ⟨kept, hz, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain rfl := ((list_eq_toItem txs).trans (Codec.ofItem_eq_ok_iff.mp hb)).symm
+      -- Each transaction is paired with its own encoding, cut from `data`.
+      obtain ⟨rfl, hk⟩ :=
+        (zip_listEncodings_eq_ok_iff (kept := kept) hd).mp (by simp [hl, bind, Except.bind, hz])
+      exact ⟨hc, trivial, rfl, hk⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = GET_BLOCK_HEADERS_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, r⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = BLOCK_HEADERS_ID
     · rw [ite_eq_left hc] at h
-      obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      refine ⟨hc, trivial, ?_⟩
-      show item = envelope i (.list hs)
-      rw [list_eq_toItem hs]
-      exact readEnvelope_eq_ok_iff.mp hr
+      obtain ⟨⟨i, hs⟩, hr, h⟩ := bind_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨encodings, hl, h⟩ := bind_ok_iff.mp h
+      obtain ⟨kept, hz, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain rfl : item = envelope i (.list hs) := by
+        rw [list_eq_toItem hs]
+        exact readEnvelope_eq_ok_iff.mp hr
+      -- Each one is paired with its own encoding, cut from the payload.
+      obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+      obtain ⟨rfl, hk⟩ :=
+        (zip_listEncodings_eq_ok_iff (kept := kept) hp).mp
+          (by simp [← hpe, hl, bind, Except.bind, hz])
+      exact ⟨hc, trivial, rfl, hk⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = GET_BLOCK_BODIES_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = BLOCK_BODIES_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, bs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      refine ⟨hc, trivial, ?_⟩
+      refine ⟨hc, trivial, ?_, kept_nil⟩
       show item = envelope i (.list bs)
       rw [list_eq_toItem bs]
       exact readEnvelope_eq_ok_iff.mp hr
@@ -294,7 +356,7 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
       rcases items with _ | ⟨b, _ | ⟨td, _ | ⟨_, _⟩⟩⟩ <;> simp at hlen
       obtain ⟨n, rfl, h₁⟩ := Item.field_bind_eq_ok.mp hrest
       cases h₁
-      exact ⟨hc, trivial, rfl⟩
+      exact ⟨hc, trivial, rfl, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = NEW_POOLED_TRANSACTION_HASHES_ID
     · rw [ite_eq_left hc] at h
@@ -303,32 +365,40 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
       cases hl : a.lengthsAgree
       · cases a <;> simp [Announcement.lists, hl, throw, throwThe, MonadExceptOf.throw] at h₁
       · cases a <;> simp [hl, pure, Except.pure] at h₁ <;> subst h₁ <;>
-          exact ⟨hc, ⟨hv, hl⟩, rfl⟩
+          exact ⟨hc, ⟨hv, hl⟩, rfl, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = GET_POOLED_TRANSACTIONS_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr⟩
+      exact ⟨hc, trivial, readEnvelope_eq_ok_iff.mp hr, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = POOLED_TRANSACTIONS_ID
     · rw [ite_eq_left hc] at h
-      obtain ⟨⟨i, txs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      refine ⟨hc, trivial, ?_⟩
-      show item = envelope i (.list txs)
-      rw [list_eq_toItem txs]
-      exact readEnvelope_eq_ok_iff.mp hr
+      obtain ⟨⟨i, txs⟩, hr, h⟩ := bind_ok_iff.mp (mapError_ok_iff.mp h)
+      obtain ⟨encodings, hl, h⟩ := bind_ok_iff.mp h
+      obtain ⟨kept, hz, h⟩ := bind_ok_iff.mp h
+      cases h
+      obtain rfl : item = envelope i (.list txs) := by
+        rw [list_eq_toItem txs]
+        exact readEnvelope_eq_ok_iff.mp hr
+      -- Each one is paired with its own encoding, cut from the payload.
+      obtain ⟨payload, hp, hpe⟩ := payloadEncodings_envelope hd
+      obtain ⟨rfl, hk⟩ :=
+        (zip_listEncodings_eq_ok_iff (kept := kept) hp).mp
+          (by simp [← hpe, hl, bind, Except.bind, hz])
+      exact ⟨hc, trivial, rfl, hk⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = GET_RECEIPTS_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, k, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
       obtain ⟨hk, rfl⟩ := readWithPart_eq_ok_iff.mp hr
-      exact ⟨hc, hk, rfl⟩
+      exact ⟨hc, hk, rfl, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = RECEIPTS_ID
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, b, ls⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
       obtain ⟨hb, hi⟩ := readWithPart_eq_ok_iff.mp hr
-      refine ⟨hc, hb, ?_⟩
+      refine ⟨hc, hb, ?_, kept_nil⟩
       show item = withPart i b (.list (ls.map .list))
       rw [lists_eq_toItem ls]
       exact hi
@@ -336,12 +406,12 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
     by_cases hc : id = GET_BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, hs⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc.1, hc.2, readEnvelope_eq_ok_iff.mp hr⟩
+      exact ⟨hc.1, hc.2, readEnvelope_eq_ok_iff.mp hr, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = BLOCK_ACCESS_LISTS_ID ∧ EthVersion.eth71 ≤ version
     · rw [ite_eq_left hc] at h
       obtain ⟨⟨i, ls⟩, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      refine ⟨hc.1, hc.2, ?_⟩
+      refine ⟨hc.1, hc.2, ?_, kept_nil⟩
       show item = envelope i (.list ls)
       rw [list_eq_toItem ls]
       exact readEnvelope_eq_ok_iff.mp hr
@@ -354,7 +424,7 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
       obtain ⟨hs, rfl, h₂⟩ := Item.field_bind_eq_ok.mp h₁
       obtain ⟨mask, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
       cases h₃
-      exact ⟨hc.1, hc.2, rfl⟩
+      exact ⟨hc.1, hc.2, rfl, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = CELLS_ID ∧ EthVersion.eth72 ≤ version
     · rw [ite_eq_left hc] at h
@@ -365,16 +435,16 @@ theorem ofItem_eq_ok_iff {version : EthVersion} {id : Nat} {item : Item} {m : Me
       obtain ⟨gs, rfl, h₃⟩ := Item.field_bind_eq_ok.mp h₂
       obtain ⟨mask, rfl, h₄⟩ := Item.field_bind_eq_ok.mp h₃
       cases h₄
-      exact ⟨hc.1, hc.2, rfl⟩
+      exact ⟨hc.1, hc.2, rfl, kept_nil⟩
     rw [ite_eq_right hc] at h
     by_cases hc : id = BLOCK_RANGE_UPDATE_ID ∧ EthVersion.eth69 ≤ version
     · rw [ite_eq_left hc] at h
       obtain ⟨r, hr, rfl⟩ := map_ok_iff.mp (mapError_ok_iff.mp h)
-      exact ⟨hc.1, hc.2, (Codec.ofItem_eq_ok_iff.mp hr).symm⟩
+      exact ⟨hc.1, hc.2, (Codec.ofItem_eq_ok_iff.mp hr).symm, kept_nil⟩
     rw [ite_eq_right hc] at h
     cases h
-  · rintro ⟨rfl, hm, rfl⟩
-    exact ofItem_toItem hm
+  · rintro ⟨rfl, hm, rfl, hk⟩
+    exact ofItem_toItem hm hk hd
 
 /-- A message that the decoder reads from `data` encodes back to exactly `data`.
 
@@ -386,19 +456,32 @@ theorem encode_of_decode {version : EthVersion} {id : Nat} {data : ByteArray} {m
   | error e => simp [hd, Except.mapError, bind, Except.bind] at h
   | ok item =>
     simp only [hd, Except.mapError, bind, Except.bind] at h
-    obtain ⟨-, -, rfl⟩ := ofItem_eq_ok_iff.mp h
+    obtain ⟨-, -, rfl, -⟩ := (ofItem_eq_ok_iff (encode_decode data _ hd)).mp h
     simp [encode, encode_decode data _ hd, Except.mapError]
 
+/-- Each transaction or header that the decoder reads from `data` keeps the bytes of its encoding.
+
+So its hash reads those bytes, and no caller has to encode it again. -/
+theorem kept_of_decode {version : EthVersion} {id : Nat} {data : ByteArray} {m : Message}
+    (h : decode version id data = .ok m) : m.Kept := by
+  unfold decode at h
+  cases hd : Serialization.Rlp.decode data with
+  | error e => simp [hd, Except.mapError, bind, Except.bind] at h
+  | ok item =>
+    simp only [hd, Except.mapError, bind, Except.bind] at h
+    -- The data is the encoding of the item, so the reader pairs each one with its encoding.
+    exact ((ofItem_eq_ok_iff (encode_decode data _ hd)).mp h).2.2.2
+
 /-- eth/68 rejects BlockRangeUpdate, which eth/69 adds. -/
-theorem ofItem_blockRangeUpdate_eth68 (item : Item) :
-    ofItem .eth68 BLOCK_RANGE_UPDATE_ID item = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by
+theorem ofItem_blockRangeUpdate_eth68 (item : Item) (data : ByteArray) :
+    ofItem .eth68 BLOCK_RANGE_UPDATE_ID item data = .error (.unknownId BLOCK_RANGE_UPDATE_ID) := by
   have : ¬ EthVersion.eth69 ≤ .eth68 := by decide
   simp [ofItem, this]
 
 /-- A reader refuses an announcement whose types and sizes are not as many as its hashes. -/
-theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement}
+theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement} (data : ByteArray)
     (hv : Announcement.ofItem version a.toItem = .ok a) (hl : a.lengthsAgree = false) :
-    ofItem version NEW_POOLED_TRANSACTION_HASHES_ID a.toItem
+    ofItem version NEW_POOLED_TRANSACTION_HASHES_ID a.toItem data
       = .error (.unequalLengths a.lists.1.size a.lists.2.1.length a.lists.2.2.length) := by
   simp [ofItem, hv, hl, Except.mapError, bind, Except.bind, throw, throwThe, MonadExceptOf.throw]
 
@@ -407,24 +490,31 @@ theorem ofItem_unequalLengths {version : EthVersion} {a : Announcement}
 So the count of IDs of a version is the first ID from which every ID is unknown to it. -/
 theorem messageCount_le_iff_unknownId {version : EthVersion} {n : Nat} :
     version.messageCount ≤ n ↔
-      ∀ id, n ≤ id → ∀ item, ofItem version id item = .error (.unknownId id) := by
+      ∀ id, n ≤ id → ∀ item data, ofItem version id item data = .error (.unknownId id) := by
   constructor
-  · intro h id hid item
+  · intro h id hid item data
     obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le (Nat.le_trans h hid)
     cases version <;> simp +arith +decide [ofItem, EthVersion.messageCount]
   · intro h
     refine Nat.not_lt.mp fun hlt => ?_
-    have last (m : Message) (hm : m.FitsVersion version) (hid : m.id = version.messageCount - 1) :
-        False := by
-      have := h m.id (by omega) m.toItem
-      rw [ofItem_toItem hm] at this
+    -- A message of the last ID, with an encoding, reads back, so its ID is known.
+    have last (m : Message) (hm : m.FitsVersion version) (hid : m.id = version.messageCount - 1)
+        (hk : m.Kept) (hd : ∃ data, Serialization.Rlp.encode m.toItem = .ok data) : False := by
+      obtain ⟨data, hd⟩ := hd
+      have := h m.id (by omega) m.toItem data
+      rw [ofItem_toItem hm hk hd] at this
       cases this
     cases version
     · exact last (.receipts 0 none []) (by simp +decide [FitsVersion]) rfl
+        kept_nil ⟨_, rfl⟩
     · exact last (.blockRangeUpdate ⟨0, 0, default⟩) (by simp +decide [FitsVersion]) rfl
+        kept_nil ⟨_, rfl⟩
     · exact last (.blockRangeUpdate ⟨0, 0, default⟩) (by simp +decide [FitsVersion]) rfl
+        kept_nil ⟨_, rfl⟩
     · exact last (.blockAccessLists 0 []) (by simp +decide [FitsVersion]) rfl
+        kept_nil ⟨_, rfl⟩
     · exact last (.cells 0 [] [] default) (by simp +decide [FitsVersion]) rfl
+        kept_nil ⟨_, rfl⟩
 
 /-- A response that answers a request is a response with the request ID of the request. -/
 theorem requestId_of_answers {request response : Message} (h : answers request response) :
@@ -432,8 +522,8 @@ theorem requestId_of_answers {request response : Message} (h : answers request r
   cases request <;> cases response <;> simp_all [answers, requestId?]
 
 /-- Every response type answers its request type when it repeats the request ID. -/
-theorem answers_of_requestId (i : UInt64) (r : HeaderRequest) (hs : List Item)
-    (hashes : List Hash32) (bs txs : List Item) (k : Option Nat) (b : Option Bool)
+theorem answers_of_requestId (i : UInt64) (r : HeaderRequest) (hs : List Encoded)
+    (hashes : List Hash32) (bs : List Item) (txs : List Encoded) (k : Option Nat) (b : Option Bool)
     (ls : List (List Item)) :
     answers (getBlockHeaders i r) (blockHeaders i hs) ∧
       answers (getBlockBodies i hashes) (blockBodies i bs) ∧

@@ -65,10 +65,9 @@ private theorem receiveEth_active_response (s : Schedule) (number timestamp : Na
     (hs : session.remoteStatus = some st) (hi : m.responseId? = some i) :
     receiveEth s number timestamp session m =
       if session.pending.any (Message.answers · m) = true then
-        (m.transactionHashes.mapError .transaction).map fun hashes =>
-          ({ session with
+        .ok ({ session with
               pending := session.pending.eraseP (Message.answers · m)
-              receivedTxs := session.receivedTxs ++ hashes }, .accept)
+              receivedTxs := session.receivedTxs ++ m.transactionHashes }, .accept)
       else .error (.unsolicited i) := by
   cases m <;> simp_all [receiveEth, Message.responseId?] <;> split <;> rfl
 
@@ -94,12 +93,9 @@ theorem receiveEth_response (s : Schedule) (number timestamp : Nat) (session nex
   · rename_i hany
     obtain ⟨q, hq, hqa⟩ := List.any_eq_true.mp hany
     obtain ⟨a, l1, l2, hb, hpa, hl, he⟩ := List.exists_of_eraseP (p := (Message.answers · m)) hq hqa
-    cases hth : m.transactionHashes.mapError EthSessionError.transaction with
-    | error e => simp [hth, Except.map] at h
-    | ok hashes =>
-      simp only [hth, Except.map, Except.ok.injEq, Prod.mk.injEq] at h
-      obtain ⟨rfl, rfl⟩ := h
-      exact ⟨l1, a, l2, hl, by simp [he], hpa, fun q' hq' => by simpa using hb q' hq'⟩
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    exact ⟨l1, a, l2, hl, by simp [he], hpa, fun q' hq' => by simpa using hb q' hq'⟩
   · simp at h
 
 /-- In an active session, a response that answers no pending request is rejected. -/
@@ -119,8 +115,8 @@ theorem receiveEth_unsolicited (s : Schedule) (number timestamp : Nat) (session 
 private theorem receiveEth_txs (s : Schedule) (number timestamp : Nat) (session next : EthSession)
     (v : EthVerdict) (m : Message)
     (h : receiveEth s number timestamp session m = .ok (next, v)) :
-    next.sentTxs = session.sentTxs ∧ ∃ hashes, m.transactionHashes = .ok hashes ∧
-      next.receivedTxs = session.receivedTxs ++ hashes := by
+    next.sentTxs = session.sentTxs ∧
+      next.receivedTxs = session.receivedTxs ++ m.transactionHashes := by
   unfold receiveEth at h
   cases hs : session.remoteStatus with
   | none =>
@@ -130,7 +126,7 @@ private theorem receiveEth_txs (s : Schedule) (number timestamp : Nat) (session 
     · rename_i st
       simp only [bind_ok_iff] at h
       obtain ⟨-, -, rfl, -⟩ := h
-      simp [Message.transactionHashes, pure, Except.pure]
+      simp [Message.transactionHashes]
     · simp at h
   | some st =>
     rw [hs] at h
@@ -138,21 +134,16 @@ private theorem receiveEth_txs (s : Schedule) (number timestamp : Nat) (session 
     split at h
     · simp at h
     · obtain ⟨rfl, -⟩ := Prod.mk.inj (Except.ok.inj h)
-      simp [Message.transactionHashes, pure, Except.pure]
+      simp [Message.transactionHashes]
     · obtain ⟨rfl, -⟩ := Prod.mk.inj (Except.ok.inj h)
-      simp [Message.transactionHashes, pure, Except.pure]
+      simp [Message.transactionHashes]
     · split at h
       · obtain ⟨rfl, -⟩ := Prod.mk.inj (Except.ok.inj h)
-        simp [Message.transactionHashes, pure, Except.pure]
+        simp [Message.transactionHashes]
       · simp at h
-    · cases hth : m.transactionHashes with
-      | error e =>
-        split at h <;> (try split at h) <;>
-          simp [hth, Except.mapError, bind_ok_iff, Functor.map, Except.map] at h
-      | ok hashes =>
-        split at h <;> (try split at h) <;>
-          simp [hth, Except.mapError, bind_ok_iff, Functor.map, Except.map] at h <;>
-          (obtain ⟨rfl, -⟩ := h; simp)
+    · split at h <;> (try split at h) <;>
+        simp [bind_ok_iff, pure, Except.pure] at h <;>
+        (obtain ⟨rfl, -⟩ := h; simp)
 
 /-- A received message leaves the hashes sent alone. -/
 theorem receiveEth_sentTxs (s : Schedule) (number timestamp : Nat) (session next : EthSession)
@@ -166,8 +157,7 @@ theorem receiveEth_sentTxs (s : Schedule) (number timestamp : Nat) (session next
 theorem receiveEth_receivedTxs (s : Schedule) (number timestamp : Nat)
     (session next : EthSession) (v : EthVerdict) (m : Message)
     (h : receiveEth s number timestamp session m = .ok (next, v)) :
-    ∃ hashes, m.transactionHashes = .ok hashes ∧
-      next.receivedTxs = session.receivedTxs ++ hashes :=
+    next.receivedTxs = session.receivedTxs ++ m.transactionHashes :=
   (receiveEth_txs s number timestamp session next v m h).2
 
 /-- A sent message adds itself to the pending requests exactly when it is a request. -/
@@ -175,7 +165,7 @@ theorem sendEth_pending (session next : EthSession) (m : Message)
     (h : sendEth session m = some next) :
     next.pending = if m.isRequest then session.pending ++ [m] else session.pending := by
   cases m <;> cases hb : session.statusSent && session.remoteStatus.isSome <;>
-    simp [sendEth, hb, Message.isRequest, Message.transactionHashes, Option.bind_eq_some_iff] at h ⊢
+    simp [sendEth, hb, Message.isRequest, Message.transactionHashes] at h ⊢
   all_goals first | (obtain ⟨_, _, _, rfl⟩ := h; rfl) | (subst h; rfl)
 
 /-- One send records the hashes of its message as sent, and keeps the hashes received. -/
@@ -184,27 +174,25 @@ private theorem sendEth_step (session next : EthSession) (m : Message)
     next.sentTxs = session.sentTxs ++ (EthEvent.sent m).sentHashes ∧
       next.receivedTxs = session.receivedTxs := by
   cases m <;> cases hb : session.statusSent && session.remoteStatus.isSome <;>
-    simp [sendEth, hb, EthEvent.sentHashes, Message.transactionHashes, Message.isRequest, pure,
-      Except.pure, Except.toOption, Option.bind_eq_some_iff] at h ⊢
+    simp [sendEth, hb, EthEvent.sentHashes, Message.transactionHashes, Message.isRequest] at h ⊢
   all_goals first
+    | (obtain ⟨_, rfl⟩ := h; simp)
     | (obtain ⟨_, ha, _, rfl⟩ := h; simp [ha])
     | (obtain ⟨_, ha, rfl⟩ := h; simp [ha])
     | (subst h; simp)
 
 /-- One send of a Transactions message keeps its hashes fresh. -/
-private theorem sendEth_transactions (session next : EthSession) (txs : List Item)
+private theorem sendEth_transactions (session next : EthSession) (txs : List Encoded)
     (h : sendEth session (.transactions txs) = some next) :
-    ∃ hashes, (Message.transactions txs).transactionHashes = .ok hashes ∧
-      hashes ≠ [] ∧ hashes.Nodup ∧
-      ∀ x ∈ hashes, x ∉ session.sentTxs ∧ x ∉ session.receivedTxs := by
+    txs.map wireHash ≠ [] ∧ (txs.map wireHash).Nodup ∧
+      ∀ x ∈ txs.map wireHash, x ∉ session.sentTxs ∧ x ∉ session.receivedTxs := by
   cases hb : session.statusSent && session.remoteStatus.isSome <;>
-    simp [sendEth, hb, Option.bind_eq_some_iff] at h
-  obtain ⟨a, ha, hc, -⟩ := h
-  refine ⟨a, ?_, hc.1, hc.2.1, hc.2.2⟩
-  simp only [Message.transactionHashes] at ha ⊢
-  cases hm : List.mapM wireHash txs with
-  | error e => simp [Except.toOption, hm] at ha
-  | ok b => simp [Except.toOption, hm] at ha; rw [ha]
+    simp only [sendEth, hb] at h
+  · cases h
+  · -- The send goes through only when the hashes are fresh.
+    split at h
+    · assumption
+    · cases h
 
 /-- Before the peer's Status, this node may send nothing but Status. -/
 theorem sendEth_beforeStatus (session : EthSession) (m : Message)
@@ -273,8 +261,8 @@ private theorem step_tracks (s : Schedule) (number timestamp : Nat) (session nex
       obtain ⟨next', v⟩ := r
       simp [hr, Except.toOption] at h
       subst h
-      obtain ⟨hs, hashes, hh, hr2⟩ := receiveEth_txs s number timestamp session next' v m hr
-      simp [EthEvent.sentHashes, EthEvent.receivedHashes, hs, hr2, hh, Except.toOption]
+      obtain ⟨hs, hr2⟩ := receiveEth_txs s number timestamp session next' v m hr
+      simp [EthEvent.sentHashes, EthEvent.receivedHashes, hs, hr2]
 
 /-- A run records the hashes of its events, in order. -/
 private theorem run_tracks (s : Schedule) (number timestamp : Nat) (events : List EthEvent) :
@@ -308,12 +296,11 @@ None of its transactions went to the peer before, in the run or before the run.
 
 None came from the peer before, in the run or before the run. -/
 theorem run_no_resend (s : Schedule) (number timestamp : Nat) (session next : EthSession)
-    (events before after : List EthEvent) (txs : List Item)
+    (events before after : List EthEvent) (txs : List Encoded)
     (h : session.run s number timestamp events = some next)
     (hev : events = before ++ .sent (.transactions txs) :: after) :
-    ∃ hashes, (Message.transactions txs).transactionHashes = .ok hashes ∧
-      hashes ≠ [] ∧ hashes.Nodup ∧
-      ∀ x ∈ hashes, x ∉ session.sentTxs ∧ x ∉ before.flatMap EthEvent.sentHashes ∧
+    (txs.map wireHash) ≠ [] ∧ (txs.map wireHash).Nodup ∧
+      ∀ x ∈ txs.map wireHash, x ∉ session.sentTxs ∧ x ∉ before.flatMap EthEvent.sentHashes ∧
         x ∉ session.receivedTxs ∧ x ∉ before.flatMap EthEvent.receivedHashes := by
   subst hev
   rw [run_append] at h
@@ -322,8 +309,8 @@ theorem run_no_resend (s : Schedule) (number timestamp : Nat) (session next : Et
   rw [run_cons] at h2
   obtain ⟨s2, h3, -⟩ := Option.bind_eq_some_iff.mp h2
   have h3 : sendEth s1 (.transactions txs) = some s2 := h3
-  obtain ⟨hashes, hh, hne, hnd, hf⟩ := sendEth_transactions s1 s2 txs h3
-  refine ⟨hashes, hh, hne, hnd, fun x hx => ?_⟩
+  obtain ⟨hne, hnd, hf⟩ := sendEth_transactions s1 s2 txs h3
+  refine ⟨hne, hnd, fun x hx => ?_⟩
   obtain ⟨c1, c2⟩ := hf x hx
   rw [t1] at c1
   rw [t2] at c2

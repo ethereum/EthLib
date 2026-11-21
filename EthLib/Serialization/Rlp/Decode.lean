@@ -204,4 +204,55 @@ def decode (input : ByteArray) : Except RlpError Item := do
   else
     .error (.trailingBytes (input.size - next))
 
+/-- An item, and the bytes of its encoding that a decoder read it from.
+
+A caller that keeps these bytes can hash the item without encoding it again.
+
+The structure does not check that the bytes encode the item.
+
+The decoder of messages proves it for what it reads. -/
+structure Encoded where
+  /-- The item. -/
+  item : Item
+  /-- The bytes that the item was read from. -/
+  bytes : ByteArray
+  deriving DecidableEq
+
+/-- The encodings so far, then those of the items one after another from `pos` to `stop`.
+
+Each encoding is found from the head of its item alone, without reading inside a list.
+
+So a nested list costs one step, whatever its depth. -/
+def splitItems (input : ByteArray) (pos stop : Nat) (bounded : stop ≤ input.size)
+    (done : Array ByteArray) : Except RlpError (Array ByteArray) :=
+  if pos < stop then
+    match readHead input pos stop bounded with
+    | .error e => .error e
+    | .ok (.bytes _ next _ _) =>
+      splitItems input next stop bounded (done.push (input.extract pos next))
+    | .ok (.list _ next _ _ _) =>
+      splitItems input next stop bounded (done.push (input.extract pos next))
+  else
+    .ok done
+termination_by stop - pos
+
+/-- The encodings of the items of the list that `input` encodes, one for each item, in order.
+
+Only the head of each item is read, so the items themselves are not checked. -/
+def listEncodings (input : ByteArray) : Except RlpError (List ByteArray) :=
+  match readHead input 0 input.size with
+  | .error e => .error e
+  | .ok (.bytes ..) => .error .bytesAsList
+  | .ok (.list start next _ _ within) =>
+    if next = input.size then (splitItems input start next within #[]).map (·.toList)
+    else .error (.trailingBytes (input.size - next))
+
+/-- Each item next to its encoding, in order.
+
+It fails when there are not as many encodings as items. -/
+def Encoded.zip (items : List Item) (encodings : List ByteArray) :
+    Except RlpError (List Encoded) :=
+  if items.length = encodings.length then .ok (List.zipWith Encoded.mk items encodings)
+  else .error (.wrongFieldCount items.length encodings.length)
+
 end EthLib.Serialization.Rlp

@@ -118,46 +118,43 @@ It has the next number of the request.
 When the request skips no block, the later block names the earlier one by its hash.
 
 The later block is the second header, or the first when the request is reversed. -/
-theorem followsIn_eq_ok_iff {r : HeaderRequest} {a b : Item} :
+theorem followsIn_eq_ok_iff {r : HeaderRequest} {a b : Encoded} :
     followsIn r a b = .ok () ↔
-      (∃ na nb, headerNumber a = .ok na ∧ headerNumber b = .ok nb ∧ r.next na = some nb) ∧
-        (r.skip = 0 → ∃ p, headerParent (if r.reverse then a else b) = .ok p ∧
-          headerHash (if r.reverse then b else a) = .ok p) := by
+      (∃ na nb, headerNumber a.item = .ok na ∧ headerNumber b.item = .ok nb ∧
+        r.next na = some nb) ∧
+        (r.skip = 0 → headerParent (if r.reverse then a else b).item =
+          .ok (headerHash (if r.reverse then b else a))) := by
   unfold followsIn
-  cases ha : headerNumber a with
+  cases ha : headerNumber a.item with
   | error e => simp [Except.mapError, bind, Except.bind]
   | ok na =>
-    cases hb : headerNumber b with
+    cases hb : headerNumber b.item with
     | error e => simp [Except.mapError, bind, Except.bind]
     | ok nb =>
       by_cases hne : r.next na = some nb
       · by_cases hs : r.skip = 0
-        · cases hp : headerParent (if r.reverse then a else b) with
+        · -- The later header must name the hash of the earlier one as its parent.
+          cases hp : headerParent (if r.reverse then a else b).item with
           | error e =>
             cases hr : r.reverse <;> simp_all [Except.mapError, bind, Except.bind]
           | ok p =>
-            cases hh : headerHash (if r.reverse then b else a) with
-            | error e =>
-              cases hr : r.reverse <;> simp_all [Except.mapError, bind, Except.bind]
-            | ok q =>
-              by_cases hpq : p = q
-              · subst hpq
-                cases hr : r.reverse <;>
-                  simp_all [Except.mapError, bind, Except.bind, pure, Except.pure]
-              · cases hr : r.reverse <;>
-                  simp_all [Except.mapError, bind, Except.bind, throw, throwThe,
-                    MonadExceptOf.throw, Ne.symm hpq]
+            by_cases hpq : p = headerHash (if r.reverse then b else a)
+            · cases hr : r.reverse <;>
+                simp_all [Except.mapError, bind, Except.bind, pure, Except.pure]
+            · cases hr : r.reverse <;>
+                simp_all [Except.mapError, bind, Except.bind, throw, throwThe,
+                  MonadExceptOf.throw]
         · simp [Except.mapError, bind, Except.bind, hne, hs, pure, Except.pure]
       · simp [Except.mapError, bind, Except.bind, hne, throw, throwThe, MonadExceptOf.throw]
 
 /-- A header that follows another has the next number of the request. -/
-theorem numbers_of_followsIn {r : HeaderRequest} {a b : Item} (h : followsIn r a b = .ok ()) :
-    ∃ na nb, headerNumber a = .ok na ∧ headerNumber b = .ok nb ∧ r.next na = some nb :=
+theorem numbers_of_followsIn {r : HeaderRequest} {a b : Encoded} (h : followsIn r a b = .ok ()) :
+    ∃ na nb, headerNumber a.item = .ok na ∧ headerNumber b.item = .ok nb ∧ r.next na = some nb :=
   (followsIn_eq_ok_iff.mp h).1
 
 /-- Each header of a list that passes `followAll` follows the one before it. -/
 theorem followsIn_of_followAll {r : HeaderRequest} :
-    ∀ {l : List Item}, followAll r l = .ok () →
+    ∀ {l : List Encoded}, followAll r l = .ok () →
       ∀ (i : Nat) (hi : i + 1 < l.length), followsIn r l[i] l[i + 1] = .ok ()
   | [], _, i, hi => by simp at hi
   | [_], _, i, hi => by simp at hi
@@ -175,7 +172,7 @@ theorem followsIn_of_followAll {r : HeaderRequest} :
 
 /-- A list passes `followAll` exactly when each header follows the one before it. -/
 theorem followAll_eq_ok_iff {r : HeaderRequest} :
-    ∀ {l : List Item}, followAll r l = .ok () ↔
+    ∀ {l : List Encoded}, followAll r l = .ok () ↔
       ∀ (i : Nat) (hi : i + 1 < l.length), followsIn r l[i] l[i + 1] = .ok ()
   | [] => by simp [followAll, pure, Except.pure]
   | [_] => by simp [followAll, pure, Except.pure]
@@ -191,7 +188,7 @@ theorem followAll_eq_ok_iff {r : HeaderRequest} :
     simp [followAll, hab, hrest, bind, Except.bind]
 
 /-- An answer that passes the check holds at most as many headers as asked. -/
-theorem length_le_of_checkHeaders {r : HeaderRequest} {headers : List Item}
+theorem length_le_of_checkHeaders {r : HeaderRequest} {headers : List Encoded}
     (h : checkHeaders r headers = .ok ()) : headers.length ≤ r.limit := by
   unfold checkHeaders at h
   by_cases hlt : r.limit < headers.length
@@ -199,7 +196,7 @@ theorem length_le_of_checkHeaders {r : HeaderRequest} {headers : List Item}
   · omega
 
 /-- An answer that passes the check has each header follow the one before it. -/
-theorem followAll_of_checkHeaders {r : HeaderRequest} {headers : List Item}
+theorem followAll_of_checkHeaders {r : HeaderRequest} {headers : List Encoded}
     (h : checkHeaders r headers = .ok ()) : followAll r headers = .ok () := by
   unfold checkHeaders at h
   by_cases hlt : r.limit < headers.length
@@ -220,9 +217,9 @@ In an answer that passes the check, each header is `skip + 1` blocks after the o
 
 When the answer is reversed, it is `skip + 1` blocks before it.
 -/
-theorem numbers_of_checkHeaders {r : HeaderRequest} {headers : List Item}
+theorem numbers_of_checkHeaders {r : HeaderRequest} {headers : List Encoded}
     (h : checkHeaders r headers = .ok ()) (i : Nat) (hi : i + 1 < headers.length) :
-    ∃ na nb, headerNumber headers[i] = .ok na ∧ headerNumber headers[i + 1] = .ok nb ∧
+    ∃ na nb, headerNumber headers[i].item = .ok na ∧ headerNumber headers[i + 1].item = .ok nb ∧
       r.next na = some nb :=
   numbers_of_followsIn (followsIn_of_followAll (followAll_of_checkHeaders h) i hi)
 
@@ -235,7 +232,7 @@ Each header follows the one before it.
 The conditions do not ask for as many headers as asked, since a peer may send fewer.
 
 They read only the number, the hash and the parent hash of each header, not whether it is valid. -/
-theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Item} :
+theorem checkHeaders_eq_ok_iff {r : HeaderRequest} {headers : List Encoded} :
     checkHeaders r headers = .ok () ↔
       headers.length ≤ r.limit ∧ (∀ first ∈ headers.head?, isStart r.start first = .ok true) ∧
         followAll r headers = .ok () := by
@@ -273,11 +270,11 @@ Take two neighbouring headers.
 The parent hash of the later block is the hash of the earlier one.
 
 The later block is the second, or the first when the request is reversed. -/
-theorem headerParent_of_checkHeaders {r : HeaderRequest} {headers : List Item}
+theorem headerParent_of_checkHeaders {r : HeaderRequest} {headers : List Encoded}
     (h : checkHeaders r headers = .ok ()) (hs : r.skip = 0) (i : Nat)
     (hi : i + 1 < headers.length) :
-    ∃ p, headerParent (if r.reverse then headers[i] else headers[i + 1]) = .ok p ∧
-      headerHash (if r.reverse then headers[i + 1] else headers[i]) = .ok p :=
+    headerParent (if r.reverse then headers[i] else headers[i + 1]).item =
+      .ok (headerHash (if r.reverse then headers[i + 1] else headers[i])) :=
   (followsIn_eq_ok_iff.mp (followsIn_of_followAll (followAll_of_checkHeaders h) i hi)).2 hs
 
 /-- The empty answer passes the check of every request. -/

@@ -1227,7 +1227,7 @@
   "The outcomes of the eth messages that a session sends and receives in turn."
 
 #define DOC_eth_wire_hash \
-  "The hash of a transaction as it crosses the wire."
+  "The hash of a transaction as it crosses the wire, from its item and the bytes it was read from."
 
 #define DOC_eth_receipts_match \
   "Whether the receipts of a block, as a version sends them, match the receipts root of its header."

@@ -791,6 +791,16 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, the eth messages Transactions, BlockHeaders and PooledTransactions keep each transaction and header as `Rlp.Encoded`: its item, and the bytes it was read from ([#3766](https://github.com/ethereum/EthLib/issues/3766)).
+  The wire hash, the hash of a header, the PooledTransactions check, the BlockHeaders check and the session read those bytes, so they never run the recursive RLP encoder on what a peer sent.
+  `Message.ofItem` takes the bytes of the item as a last argument, and the new `Message.kept_of_decode` states that each kept slice is the encoding of its item.
+  `wireHash`, `headerHash` and `Message.transactionHashes` no longer fail, so `PoolError.rlp` (code 301) and `EthSessionError.transaction` (code 705) are removed; the codes stay unused.
+  Migration: build an `Rlp.Encoded` from an item and its encoding; `checkPooled_eq_ok_iff`, `receiveEth_receivedTxs` and `run_no_resend` state the hashes as `txs.map wireHash`.
+  `ofItem_toItem` takes the bytes and asks that each kept slice encode its item; `ofItem_eq_ok_iff` asks that the bytes encode the item, and concludes that each kept slice encodes its own.
+  `checkHeaders`, `followsIn`, `followAll` and `isStart` take `Rlp.Encoded` headers, and `followsIn_eq_ok_iff` and `headerParent_of_checkHeaders` state the parent hash as an equation instead of `∃ p`.
+  `ofItem_blockRangeUpdate_eth68`, `ofItem_unequalLengths` and `messageCount_le_iff_unknownId` take the bytes too, and `answers_of_requestId`, `sublist_of_checkPooled` and `numbers_of_checkHeaders` take the new types.
+  New: `Rlp.listEncodings`, `Rlp.splitItems`, `Rlp.Encoded.zip`, `Message.payloadEncodings`, `Message.kept`, `Message.Kept`, and the theorems `listEncodings_of_encode`, `Encoded.zip_eq_ok_iff`, `zip_listEncodings_eq_ok_iff` and `wireHash_networkForm`.
+
 - In Lean, the step of a call builds its calling frame with the new `Evm.callerFrame` and its message with the new `Evm.callMessage`.
   `genericCall` no longer empties the return data, since `callerFrame` does; the step computes what it computed before.
   `callStep_child_of_routes`, `callStep_child`, `callStep_call`, `callStep_staticcall` and `callStep_value` state one equation on these two values instead of 23 conjuncts.

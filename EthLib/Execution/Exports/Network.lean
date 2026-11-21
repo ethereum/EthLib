@@ -18,7 +18,7 @@ A schedule crosses it as the fork identifier exports read it.
 
 Message errors have codes from 1, and Status errors from 101.
 
-Header errors have codes from 201, and transaction errors from 301.
+Header errors have codes from 201, and transaction errors from 302.
 
 Cell errors have codes from 401, partial receipts errors from 501, and body errors from 601.
 
@@ -54,7 +54,6 @@ def headersMessage : HeadersError → String
 
 /-- A message for a refused answer of transactions, phrased for someone reading a traceback. -/
 def poolMessage : PoolError → String
-  | .rlp _ => "a transaction has no RLP encoding"
   | .notRequested => "transactions are not requested ones in the order of the request"
   | .notAnswer => "response is not PooledTransactions with the request ID of the request"
 
@@ -116,15 +115,12 @@ def checkPooledExport (version : UInt64) (request response : ByteArray) : Result
   (Message.checkPooledResponse req resp).map (fun _ => true)
     |>.mapError fun e => (e.code, poolMessage e)
 
-/-- The hash of a transaction as it crosses the wire, from its RLP item. -/
+/-- The hash of a transaction as it crosses the wire, from the bytes of its RLP item. -/
 @[export eth_wire_hash]
 def wireHashExport (tx : ByteArray) : Result ByteArray := do
   match Serialization.Rlp.decode tx with
   | .error _ => throw (0, "transaction is not one RLP item")
-  | .ok item =>
-    match wireHash item with
-    | .error _ => throw (0, "transaction has no RLP encoding")
-    | .ok h => return ⟨h.toArray⟩
+  | .ok item => return ⟨(wireHash ⟨item, tx⟩).toArray⟩
 
 /-- Whether the receipts of a block, as a version sends them, match a receipts root.
 

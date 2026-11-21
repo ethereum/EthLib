@@ -23,6 +23,10 @@ Here the ID is relative to the capability: Status is 0x00 whatever offset RLPx g
 A message whose ID the version does not use is rejected.
 
 So is a message that EthLib does not read yet.
+
+Each transaction and header of a message keeps the bytes it was read from, next to its item.
+
+So its hash reads those bytes, and never encodes an item that a peer chose.
 -/
 
 @[expose] public section
@@ -45,11 +49,11 @@ inductive Message where
   /-- NewBlockHashes (0x01): `[[blockhash, number], ...]`. -/
   | newBlockHashes (blocks : List BlockAnnouncement)
   /-- Transactions (0x02): `[tx, ...]`. -/
-  | transactions (txs : List Item)
+  | transactions (txs : List Encoded)
   /-- GetBlockHeaders (0x03): `[request-id, [startblock, limit, skip, reverse]]`. -/
   | getBlockHeaders (requestId : UInt64) (request : HeaderRequest)
   /-- BlockHeaders (0x04): `[request-id, [header, ...]]`. -/
-  | blockHeaders (requestId : UInt64) (headers : List Item)
+  | blockHeaders (requestId : UInt64) (headers : List Encoded)
   /-- GetBlockBodies (0x05): `[request-id, [blockhash, ...]]`. -/
   | getBlockBodies (requestId : UInt64) (hashes : List Hash32)
   /-- BlockBodies (0x06): `[request-id, [block-body, ...]]`. -/
@@ -61,7 +65,7 @@ inductive Message where
   /-- GetPooledTransactions (0x09): `[request-id, [txhash, ...]]`. -/
   | getPooledTransactions (requestId : UInt64) (hashes : List Hash32)
   /-- PooledTransactions (0x0a): `[request-id, [tx, ...]]`. -/
-  | pooledTransactions (requestId : UInt64) (txs : List Item)
+  | pooledTransactions (requestId : UInt64) (txs : List Encoded)
   /-- GetReceipts (0x0f): `[request-id, [blockhash, ...]]`.
 
   From eth/70 on, `firstBlockReceiptIndex` comes after the request ID. -/
@@ -143,15 +147,15 @@ def withPart {α : Type} [Codec α] (requestId : UInt64) (part : Option α) (pay
 def toItem : Message → Item
   | status s => s.toItem
   | newBlockHashes bs => Codec.toItem bs
-  | transactions txs => .list txs
+  | transactions txs => .list (txs.map (·.item))
   | getBlockHeaders i r => envelope i (Codec.toItem r)
-  | blockHeaders i hs => envelope i (.list hs)
+  | blockHeaders i hs => envelope i (.list (hs.map (·.item)))
   | getBlockBodies i hs => envelope i (Codec.toItem hs)
   | blockBodies i bs => envelope i (.list bs)
   | newBlock b td => .list [b, Codec.toItem td]
   | newPooledTransactionHashes a => a.toItem
   | getPooledTransactions i hs => envelope i (Codec.toItem hs)
-  | pooledTransactions i txs => envelope i (.list txs)
+  | pooledTransactions i txs => envelope i (.list (txs.map (·.item)))
   | getReceipts i k hs => withPart i k (Codec.toItem hs)
   | receipts i b ls => withPart i b (.list (ls.map .list))
   | blockRangeUpdate r => Codec.toItem r
@@ -180,6 +184,21 @@ def readWithPart {α β : Type} [Codec α] [Codec β] (version : EthVersion) (it
     | [i, k, p] => return (← i.field 0, some (← k.field 1), ← p.field 2)
     | items => throw (.wrongFieldCount 3 items.length)
 
+/-- The encodings of the items of the payload of the envelope that `data` encodes.
+
+The envelope is `[request-id, payload]`, and the payload is a list. -/
+def payloadEncodings (data : ByteArray) : Except RlpError (List ByteArray) := do
+  match ← listEncodings data with
+  | [_, payload] => listEncodings payload
+  | encodings => throw (.wrongFieldCount 2 encodings.length)
+
+/-- The transactions or headers of a message, each with the bytes it was read from.
+
+Every other message has none. -/
+def kept : Message → List Encoded
+  | transactions txs | blockHeaders _ txs | pooledTransactions _ txs => txs
+  | _ => []
+
 /-- The request ID of a request or a response, and none for the other messages. -/
 def requestId? : Message → Option UInt64
   | getBlockHeaders i _ | blockHeaders i _ | getBlockBodies i _ | blockBodies i _
@@ -202,15 +221,25 @@ def answers (request response : Message) : Bool :=
 
 /-- The message with the ID `id` and the data `item`, on the version `version`.
 
+The caller passes the encoding of `item` as `data`.
+
+Each transaction or header keeps its own encoding, cut from `data`.
+
+On other bytes, they would keep unrelated slices.
+
 BlockRangeUpdate exists from eth/69 on. -/
-def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Message :=
+def ofItem (version : EthVersion) (id : Nat) (item : Item) (data : ByteArray) :
+    Except EthError Message :=
   if id = STATUS_ID then (status <$> Status.ofItem version item).mapError .rlp
   else if id = NEW_BLOCK_HASHES_ID then (newBlockHashes <$> Codec.ofItem item).mapError .rlp
-  else if id = TRANSACTIONS_ID then (transactions <$> Codec.ofItem item).mapError .rlp
+  else if id = TRANSACTIONS_ID then Except.mapError .rlp do
+    let txs ← Codec.ofItem item
+    return transactions (← Encoded.zip txs (← listEncodings data))
   else if id = GET_BLOCK_HEADERS_ID then
     ((fun (i, r) => getBlockHeaders i r) <$> readEnvelope item).mapError .rlp
-  else if id = BLOCK_HEADERS_ID then
-    ((fun (i, hs) => blockHeaders i hs) <$> readEnvelope item).mapError .rlp
+  else if id = BLOCK_HEADERS_ID then Except.mapError .rlp do
+    let (i, hs) ← readEnvelope item
+    return blockHeaders i (← Encoded.zip hs (← payloadEncodings data))
   else if id = GET_BLOCK_BODIES_ID then
     ((fun (i, hs) => getBlockBodies i hs) <$> readEnvelope item).mapError .rlp
   else if id = BLOCK_BODIES_ID then
@@ -226,8 +255,9 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Mes
     else throw (.unequalLengths t.size s.length h.length)
   else if id = GET_POOLED_TRANSACTIONS_ID then
     ((fun (i, hs) => getPooledTransactions i hs) <$> readEnvelope item).mapError .rlp
-  else if id = POOLED_TRANSACTIONS_ID then
-    ((fun (i, txs) => pooledTransactions i txs) <$> readEnvelope item).mapError .rlp
+  else if id = POOLED_TRANSACTIONS_ID then Except.mapError .rlp do
+    let (i, txs) ← readEnvelope item
+    return pooledTransactions i (← Encoded.zip txs (← payloadEncodings data))
   else if id = GET_RECEIPTS_ID then
     ((fun (i, k, hs) => getReceipts i k hs) <$> readWithPart version item).mapError .rlp
   else if id = RECEIPTS_ID then
@@ -250,7 +280,7 @@ def ofItem (version : EthVersion) (id : Nat) (item : Item) : Except EthError Mes
 
 /-- The message with the ID `id` whose data is the RLP encoding `data`. -/
 def decode (version : EthVersion) (id : Nat) (data : ByteArray) : Except EthError Message := do
-  ofItem version id (← (Serialization.Rlp.decode data).mapError .rlp)
+  ofItem version id (← (Serialization.Rlp.decode data).mapError .rlp) data
 
 /-- The RLP encoding of the data of a message. -/
 def encode (m : Message) : Except EthError ByteArray :=

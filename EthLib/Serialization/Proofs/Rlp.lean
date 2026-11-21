@@ -10,6 +10,7 @@ public import EthLib.Serialization.Proofs.Rlp.RoundTrip
 public import EthLib.Serialization.Proofs.Rlp.Canonical
 public import EthLib.Serialization.Proofs.Rlp.Scalar
 public import EthLib.Serialization.Proofs.Rlp.Codec
+public import EthLib.Serialization.Proofs.Rlp.Encodings
 
 /-!
 # `EthLib.Serialization.Proofs.Rlp`
@@ -25,6 +26,7 @@ Machine-checked properties of RLP.
 - `Proofs/Rlp/RoundTrip` proves that decoding undoes encoding, so the encoding is injective and prefix-free.
 - `Proofs/Rlp/Canonical` proves that the decoder accepts only canonical input, so `encode` is a bijection onto what `decode` accepts.
 - `Proofs/Rlp/Scalar` proves that `decodeScalar` decodes exactly the encodings of scalars, and rejects a leading zero byte.
+- `Proofs/Rlp/Encodings` proves that the encoding of a list splits into the encodings of its items.
 - `Proofs/Rlp/Codec` proves that each typed codec is lawful.
 - So a typed decoder accepts exactly the encoding of a value.
 -/

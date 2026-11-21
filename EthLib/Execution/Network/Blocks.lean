@@ -3,6 +3,7 @@ module
 public import EthLib.Base.Hash32
 public import EthLib.Cryptography.Hash.Keccak
 public import EthLib.Serialization.Rlp.Codec
+public import EthLib.Serialization.Rlp.Decode
 
 /-!
 # `Execution.Network.Blocks`
@@ -27,6 +28,8 @@ A request carries a request ID, a 64-bit integer, and its response repeats it.
 A header, a body and a block cross the wire as RLP items.
 
 Their fields depend on the fork of each block, so the messages carry them as items.
+
+A header of BlockHeaders also keeps the bytes it was read from, which give its hash.
 
 [eip-2481]: https://eips.ethereum.org/EIPS/eip-2481#specification
 -/
@@ -138,9 +141,9 @@ instance : Codec BlockAnnouncement := ⟨BlockAnnouncement.toItem, BlockAnnounce
 /-- The index of the number in a header, the ninth field at every fork. -/
 def HEADER_NUMBER_INDEX : Nat := 8
 
-/-- The hash of a header: the Keccak-256 hash of its RLP encoding. -/
-def headerHash (header : Item) : Except RlpError Hash32 := do
-  return Cryptography.Hash.Keccak.keccak256 (← Serialization.Rlp.encode header)
+/-- The hash of a header: the Keccak-256 hash of the bytes of its RLP encoding. -/
+def headerHash (header : Encoded) : Hash32 :=
+  Cryptography.Hash.Keccak.keccak256 header.bytes
 
 /-- The number of a header, its ninth field. -/
 def headerNumber (header : Item) : Except RlpError Nat := do
@@ -210,25 +213,25 @@ When the headers are consecutive, they must also chain.
 The parent of the later one is then the hash of the earlier one.
 
 "Block Encoding and Validity" asks this of headers in sequence. -/
-def followsIn (r : HeaderRequest) (a b : Item) : Except HeadersError Unit := do
-  let na ← (headerNumber a).mapError .rlp
-  let nb ← (headerNumber b).mapError .rlp
+def followsIn (r : HeaderRequest) (a b : Encoded) : Except HeadersError Unit := do
+  let na ← (headerNumber a.item).mapError .rlp
+  let nb ← (headerNumber b.item).mapError .rlp
   if r.next na ≠ some nb then throw (.wrongNumber ((r.next na).getD 0) nb)
   if r.skip = 0 then
     let (child, parent) := if r.reverse then (a, b) else (b, a)
-    if (← (headerParent child).mapError .rlp) ≠ (← (headerHash parent).mapError .rlp) then
+    if (← (headerParent child.item).mapError .rlp) ≠ headerHash parent then
       throw (.notChained nb)
 
 /-- Whether consecutive headers of an answer each follow the one before. -/
-def followAll (r : HeaderRequest) : List Item → Except HeadersError Unit
+def followAll (r : HeaderRequest) : List Encoded → Except HeadersError Unit
   | a :: b :: rest => do followsIn r a b; followAll r (b :: rest)
   | _ => pure ()
 
 /-- Whether a header is the start block of a request, by its number or by its hash. -/
-def isStart (start : BlockId) (header : Item) : Except HeadersError Bool :=
+def isStart (start : BlockId) (header : Encoded) : Except HeadersError Bool :=
   match start with
-  | .number n => do pure (decide ((← (headerNumber header).mapError .rlp) = n.toNat))
-  | .hash h => do pure (decide ((← (headerHash header).mapError .rlp) = h))
+  | .number n => do pure (decide ((← (headerNumber header.item).mapError .rlp) = n.toNat))
+  | .hash h => pure (decide (headerHash header = h))
 
 /--
 Whether the headers `headers` answer the request `r`, as "GetBlockHeaders (0x03)" says.
@@ -239,7 +242,7 @@ Whether the headers `headers` answer the request `r`, as "GetBlockHeaders (0x03)
 
 The list may be empty, when the peer has none of the blocks.
 -/
-def checkHeaders (r : HeaderRequest) (headers : List Item) : Except HeadersError Unit := do
+def checkHeaders (r : HeaderRequest) (headers : List Encoded) : Except HeadersError Unit := do
   if r.limit < headers.length then throw (.tooMany headers.length r.limit)
   if let first :: _ := headers then
     if !(← isStart r.start first) then throw .wrongStart

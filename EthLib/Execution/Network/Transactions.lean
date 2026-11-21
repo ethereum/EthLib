@@ -22,7 +22,7 @@ A legacy transaction crosses the wire as an RLP list.
 
 A typed one crosses it as the byte string `tx-type || tx-data`, as [EIP-2976][eip-2976] says.
 
-The messages carry each transaction as its RLP item.
+The messages carry each transaction as its RLP item, next to the bytes it was read from.
 
 From eth/68 on, an announcement has three lists of equal length, as [EIP-5793][eip-5793] says.
 
@@ -105,7 +105,7 @@ end Announcement
 def BLOB_TX_TYPE : UInt8 := 0x03
 
 /--
-The hash of a transaction as it crosses the wire.
+The hash of a transaction as it crosses the wire, from its item and the bytes it was read from.
 
 A legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.
 
@@ -121,28 +121,29 @@ The network form starts with the body, a list.
 
 So the first item tells the two apart.
 
+Each encoding hashed is a slice of the bytes read, so nothing is encoded again.
+
 [eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking
 -/
-def wireHash (tx : Item) : Except RlpError Hash32 := do
-  match tx with
-  | .list _ => return Cryptography.Hash.Keccak.keccak256 (← Serialization.Rlp.encode tx)
+def wireHash (tx : Encoded) : Hash32 :=
+  match tx.item with
+  | .list _ => Cryptography.Hash.Keccak.keccak256 tx.bytes
   | .bytes b =>
     let canonical := Cryptography.Hash.Keccak.keccak256 b
     match b.data.toList with
     | type :: rest =>
       if type = BLOB_TX_TYPE then
-        match Serialization.Rlp.decode ⟨rest.toArray⟩ with
-        | .ok (.list (body@(.list _) :: _)) =>
-          return Cryptography.Hash.Keccak.keccak256
-            (⟨#[BLOB_TX_TYPE]⟩ ++ (← Serialization.Rlp.encode body))
-        | _ => return canonical
-      else return canonical
-    | [] => return canonical
+        let form : ByteArray := ⟨rest.toArray⟩
+        -- The body is the first item of the network form, and its bytes are the first encoding.
+        match Serialization.Rlp.decode form, listEncodings form with
+        | .ok (.list (.list _ :: _)), .ok (body :: _) =>
+          Cryptography.Hash.Keccak.keccak256 (⟨#[BLOB_TX_TYPE]⟩ ++ body)
+        | _, _ => canonical
+      else canonical
+    | [] => canonical
 
 /-- Why the transactions of a PooledTransactions do not answer a GetPooledTransactions. -/
 inductive PoolError where
-  /-- A transaction has no hash, since its item does not encode. -/
-  | rlp (error : RlpError)
   /-- The hashes of the transactions are not a sublist of the requested hashes.
 
   A sublist keeps the order of the request, and may leave some hashes out. -/
@@ -153,11 +154,12 @@ inductive PoolError where
 
 /-- The stable code of an error, one per constructor, for the C exports.
 
-The codes start at 301, above every code of the other eth errors.
+The codes start at 302, after the header errors at 201.
+
+Code 301 stays unused, so that no code takes another meaning.
 
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def PoolError.code : PoolError → UInt32
-  | .rlp _ => 301
   | .notRequested => 302
   | .notAnswer => 303
 
@@ -170,8 +172,7 @@ The peer may leave some out, as "PooledTransactions (0x0a)" says.
 
 So their hashes form a sublist of the requested hashes.
 -/
-def checkPooled (requested : List Hash32) (txs : List Item) : Except PoolError Unit := do
-  let hashes ← (txs.mapM wireHash).mapError .rlp
-  if hashes.isSublist requested then pure () else throw .notRequested
+def checkPooled (requested : List Hash32) (txs : List Encoded) : Except PoolError Unit :=
+  if (txs.map wireHash).isSublist requested then pure () else throw .notRequested
 
 end EthLib.Execution.Network
