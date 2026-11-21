@@ -7723,6 +7723,24 @@ Every Monday, the `vectors-slow` workflow regenerates all cases, these included.
 It fails when a test file then differs from the committed one, or when a pinned digest does not match.
 So between two weekly runs, a change can alter the compiled key generation or signing of those two schemes unnoticed.
 
+The compiled RLP decoder recurses once per nested list, on a native stack of fixed size.
+The definitions terminate and the proofs hold at every depth, but a deep enough input overflows that stack, and the Lean runtime then aborts the process.
+The reference decoder rejects at depth 333 only through the recursion limit of CPython ([execution-specs#3469](https://github.com/ethereum/execution-specs/issues/3469)).
+So EthLib accepts inputs that the reference rejects, and no source decides between them.
+These depths were measured at commit `0b4e5d0c0`, on CPython 3.12.16 and Linux 7.0 on x86-64, in the main thread with a stack limit of 8 MiB:
+- The generic decoder of the bindings returns the item up to 9997 nested lists.
+  From 9998, the conversion of the item to Python raises `RecursionError` at the C recursion limit of CPython, which `sys.setrecursionlimit` does not raise.
+  From about 47600 nested lists, an input of about 168 KB, the decoder aborts the process.
+  In five runs each, 47001 never aborted and 48001 always did; between them the outcome varies.
+- The typed decoder of the bindings, and the decoders of eth/68, snap and devp2p messages, also abort from about 47600 nested lists.
+  A peer sends the bytes of those messages; #3766 tracks a fix.
+- The encoder raises `RecursionError` from 9998 nested lists, in the conversion from Python, before the Lean encoder runs.
+- The transaction and block decoders raise their own errors at every depth tested, up to 4194305 nested lists, on inputs that do not have the shape of a transaction or a block.
+- The other paths that decode RLP, such as trie proofs, Era1 files, discovery packets and ENR records, were not measured.
+
+A thread with a smaller stack would abort at a smaller depth; this was not measured.
+The Python suite decodes 5000 nested lists (`bindings/python/tests/rlp/test_nesting.py`).
+
 ### B2. Lean core's own implementations
 
 Lean core implements `Array.forIn'`, `foldlM`, `foldrM`, `mapM` and `anyM` with `@[implemented_by]`, and the `Nat`, `ByteArray` and `Array` primitives with `@[extern]`.
