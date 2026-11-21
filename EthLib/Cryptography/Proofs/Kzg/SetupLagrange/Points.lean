@@ -96,10 +96,10 @@ private theorem select_eq {y₀ yPos : Fp} (hy : yPos = y₀ ∨ yPos = -y₀) (
 
 /-- Decompression returns `(x, y, 1)` from the bytes of a string that encodes `(x, y)`. -/
 theorem coords_of_encodes {s : String} {b : ByteArray} {q : G1} {x y : Nat}
-    (hd : encodes (codes s) x y = true) (hb : TrustedSetup.hexToBytes? s = some b)
+    (hd : encodes (codes s) x y = true) (hb : Base.hexBytes? s.toList = some b)
     (hq : TrustedSetup.decodeG1 b = .ok q) : coords q = (x, y, 1) := by
   unfold encodes codes at hd
-  rw [TrustedSetup.hexToBytes?, SetupTorsion.hexToBytesAux_eq] at hb
+  rw [Base.hexBytes?, SetupTorsion.hexBytesFrom?_eq] at hb
   cases hl : hexBytes (s.toList.map Char.toNat) with
   | none => rw [hl] at hd; cases hd
   | some l =>

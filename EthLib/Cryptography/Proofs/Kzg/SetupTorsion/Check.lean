@@ -68,42 +68,48 @@ def checkCodes (ns : List Nat) : Bool :=
   | some l => G1.TorsionCheck.check (xOf l)
   | none => false
 
-theorem nibble?_eq (c : Char) : TrustedSetup.nibble? c = (digit c.toNat).map UInt8.ofNat := by
-  unfold TrustedSetup.nibble? digit
-  dsimp only
-  split_ifs <;> rfl
+/-- The hex reader of Base reads a digit as the decoder of its code does. -/
+theorem hexValue?_eq (c : Char) : Base.hexValue? c = (digit c.toNat).map UInt8.ofNat := by
+  have e0 : ('0' : Char).val.toNat = 48 := rfl
+  have e9 : ('9' : Char).val.toNat = 57 := rfl
+  have ea : ('a' : Char).val.toNat = 97 := rfl
+  have ef : ('f' : Char).val.toNat = 102 := rfl
+  have eA : ('A' : Char).val.toNat = 65 := rfl
+  have eF : ('F' : Char).val.toNat = 70 := rfl
+  unfold Base.hexValue? digit
+  simp only [Char.le_def, Char.toNat, UInt32.le_iff_toNat_le, e0, e9, ea, ef, eA, eF]
+  split_ifs <;> simp only [Option.map_some, Option.map_none, Nat.toUInt8_eq]
+  all_goals (congr 2; omega)
 
 theorem digit_lt {n d : Nat} (h : digit n = some d) : d < 16 := by
   unfold digit at h
   split_ifs at h <;> cases h <;> omega
 
-private theorem byte_eq_aux :
-    ∀ a b : Fin 16,
-      (UInt8.ofNat a.val <<< 4 ||| UInt8.ofNat b.val) = UInt8.ofNat (a.val * 16 + b.val) := by
-  decide
+/-- Two digits make one byte, as the hex reader of Base combines them.
 
-/-- Two digits make one byte, as the decoder of the setup combines them. -/
-theorem byte_eq {a b : Nat} (ha : a < 16) (hb : b < 16) :
-    (UInt8.ofNat a <<< 4 ||| UInt8.ofNat b) = UInt8.ofNat (a * 16 + b) :=
-  byte_eq_aux ⟨a, ha⟩ ⟨b, hb⟩
+Byte arithmetic is modulo 256, so the equation holds for any two numbers. -/
+theorem byte_eq (a b : Nat) : 16 * UInt8.ofNat a + UInt8.ofNat b = UInt8.ofNat (a * 16 + b) := by
+  apply UInt8.toNat_inj.mp
+  simp [UInt8.toNat_add, UInt8.toNat_mul, UInt8.toNat_ofNat]
+  omega
 
-/-- The decoder of the setup reads the bytes that the digit codes give. -/
-theorem hexToBytesAux_eq : ∀ (cs : List Char) (acc : ByteArray),
-    TrustedSetup.hexToBytesAux cs acc =
+/-- The hex reader of Base reads the bytes that the digit codes give. -/
+theorem hexBytesFrom?_eq : ∀ (cs : List Char) (acc : ByteArray),
+    Base.hexBytesFrom? cs acc =
       (hexBytes (cs.map Char.toNat)).map fun l => ⟨acc.data ++ (l.map UInt8.ofNat).toArray⟩
-  | [], acc => by simp [TrustedSetup.hexToBytesAux, hexBytes]
-  | [_], acc => by simp [TrustedSetup.hexToBytesAux, hexBytes]
+  | [], acc => by simp [Base.hexBytesFrom?, hexBytes]
+  | [_], acc => by simp [Base.hexBytesFrom?, hexBytes]
   | hi :: lo :: rest, acc => by
-    rw [TrustedSetup.hexToBytesAux, List.map_cons, List.map_cons, hexBytes, nibble?_eq,
-      nibble?_eq]
+    rw [Base.hexBytesFrom?, List.map_cons, List.map_cons, hexBytes, hexValue?_eq, hexValue?_eq]
     cases hh : digit hi.toNat with
     | none => rfl
     | some h =>
       cases hl : digit lo.toNat with
       | none => rfl
       | some l =>
-        simp only [Option.map_some, Option.bind_eq_bind, Option.bind_some, hexToBytesAux_eq rest,
-          byte_eq (digit_lt hh) (digit_lt hl)]
+        simp only [Option.map_some, Option.bind_eq_bind, Option.bind_some]
+        rw [byte_eq]
+        rw [hexBytesFrom?_eq rest]
         cases hexBytes (rest.map Char.toNat) with
         | none => rfl
         | some r =>
@@ -135,10 +141,10 @@ theorem fromBytesBE_eq {l : List Nat} {x : Fp}
 
 /-- If the check of a string passes, each point that it decodes to has order dividing `r`. -/
 theorem modulus_smul_eq_zero {s : String} {b : ByteArray} {q : G1}
-    (hc : checkCodes (codes s) = true) (hb : TrustedSetup.hexToBytes? s = some b)
+    (hc : checkCodes (codes s) = true) (hb : Base.hexBytes? s.toList = some b)
     (hq : TrustedSetup.decodeG1 b = .ok q) : Fr.modulus • G1.toPoint q = 0 := by
   unfold checkCodes codes at hc
-  rw [TrustedSetup.hexToBytes?, hexToBytesAux_eq] at hb
+  rw [Base.hexBytes?, hexBytesFrom?_eq] at hb
   cases hl : hexBytes (s.toList.map Char.toNat) with
   | none => rw [hl] at hc; cases hc
   | some l =>

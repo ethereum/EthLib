@@ -167,7 +167,7 @@ theorem TrustedSetup.ofBytes_g1Monomial_mem
 theorem TrustedSetup.hexListToBytes_getElem {hex : Array String} {bytes : Array ByteArray}
     (h : TrustedSetup.hexListToBytes hex = .ok bytes) :
     bytes.size = hex.size ∧
-      ∀ (i : Nat) (hi : i < hex.size), TrustedSetup.hexToBytes? hex[i] = some bytes[i]! := by
+      ∀ (i : Nat) (hi : i < hex.size), Base.hexBytes? hex[i].toList = some bytes[i]! := by
   obtain ⟨hsize, hget⟩ := array_mapM_ok h
   refine ⟨hsize, fun i hi => ?_⟩
   have hj : i < bytes.size := hsize ▸ hi
