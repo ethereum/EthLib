@@ -193,12 +193,6 @@ theorem uniform_pair_of_bijective {Left Right Joined : Type} [SampleableType Lef
     exact ProbabilityTheory.map_uniformOn_univ_of_bijective Measurable.of_discrete hcombine
   simpa only [map_bind, map_pure, Function.uncurry_apply_pair] using h.symm
 
-/-- A uniform draw from a product is two independent uniform draws. -/
-theorem uniform_product {Left Right : Type} [SampleableType Left] [SampleableType Right] :
-    ($ᵗ (Left × Right) : ProbComp (Left × Right)) =ᵈ
-      (do let left ← $ᵗ Left; let right ← $ᵗ Right; pure (left, right) : ProbComp _) :=
-  uniform_pair_of_bijective (combine := Prod.mk) Function.bijective_id
-
 /-- A uniform table is a uniform table on the image of the injection and a table on the rest.
 
 The table on the other cells is uniform and independent. -/

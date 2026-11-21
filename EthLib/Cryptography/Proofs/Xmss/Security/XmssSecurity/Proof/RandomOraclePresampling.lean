@@ -11,21 +11,6 @@ namespace OracleComp
 
 variable {D R : Type} [DecidableEq D] [SampleableType R]
 
-omit [SampleableType R] in
-theorem QueryCache.cacheQuery_comm_of_ne
-    (cache : (D →ₒ R).QueryCache) {left right : D} (h : left ≠ right)
-    (leftValue rightValue : R) :
-    (cache.cacheQuery left leftValue).cacheQuery right rightValue =
-      (cache.cacheQuery right rightValue).cacheQuery left leftValue := by
-  ext input
-  by_cases hleft : input = left
-  · subst input
-    simp [QueryCache.cacheQuery_of_ne, h]
-  · by_cases hright : input = right
-    · subst input
-      simp [QueryCache.cacheQuery_of_ne, hleft]
-    · simp [QueryCache.cacheQuery_of_ne, hleft, hright]
-
 /-- Suppose every execution of a computation caches one absent entry.
 
 Then sampling that entry first preserves the distribution of the full result and final cache. -/
@@ -137,7 +122,7 @@ theorem evalDist_randomOracle_run_eq_presample_of_cached
                 intro sampled
                 apply EvalDistEq.bind_right
                 intro answer
-                rw [QueryCache.cacheQuery_comm_of_ne cache htarget]
+                rw [QueryCache.cacheQuery_comm cache htarget]
               _ =ᵈ (do
                     let sampled ← $ᵗ R
                     (simulateQ randomOracle

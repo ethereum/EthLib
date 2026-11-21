@@ -42,7 +42,7 @@ theorem swapKnown_involutive (parameter : PublicParameter) :
 omit [Params] in
 theorem uniform_map_fst {α β : Type} [SampleableType α] [SampleableType β] :
     Prod.fst <$> ($ᵗ (α × β) : ProbComp (α × β)) =ᵈ ($ᵗ α : ProbComp α) := by
-  refine (uniform_product.map Prod.fst).trans ?_
+  refine (EthLib.Cryptography.HashSig.evalDist_independent_uniform_pair.symm.map Prod.fst).trans ?_
   simp only [map_bind, map_pure]
   calc (($ᵗ α : ProbComp α) >>= fun a => ($ᵗ β : ProbComp β) >>= fun _ => (pure a : ProbComp α))
       =ᵈ (($ᵗ α : ProbComp α) >>= fun a => (pure a : ProbComp α)) :=
@@ -68,7 +68,7 @@ theorem uniform_mix (parameter : PublicParameter) :
       (($ᵗ HiddenGraph.Table : ProbComp HiddenGraph.Table) >>= fun fixed =>
         mix parameter fixed <$> ($ᵗ HiddenGraph.Table : ProbComp HiddenGraph.Table)) := by
     rw [Functor.map_map]
-    refine (uniform_product.map _).trans ?_
+    refine (EthLib.Cryptography.HashSig.evalDist_independent_uniform_pair.symm.map _).trans ?_
     simp only [map_eq_bind_pure_comp, bind_assoc, pure_bind, Function.comp_def, swapKnown,
       EvalDistEq.refl]
   exact hpair.symm.trans (((SampleableType.map_uniformSample_evalDistEq_of_bijective
