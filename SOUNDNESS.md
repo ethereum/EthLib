@@ -1013,6 +1013,9 @@ The reader does not check the two arcs that the first subidentifier combines, si
 `validate_oid_ok_iff`, `validate_null_ok_iff`, `validate_utf8String_ok_iff` and `validate_printableString_ok_iff` state what validation accepts for these tags.
 A NULL is empty, and a UTF8String is the UTF-8 encoding of some characters.
 A PrintableString holds the letters, digits, space and `'()+,-./:=?` of X.680 §41.4.
+`validate_integer_ok_iff`, `validate_octetString` and `validate_ia5String_ok_iff` state what validation accepts for the other primitive tags.
+An INTEGER has one content octet or more, and with two or more its first nine bits are neither all zero nor all one (X.690 §§8.3.1, 8.3.2).
+An OCTET STRING passes whatever its content, and an IA5String passes exactly when each octet is below 128.
 `validate_eq_error_tag` states that a value of every tag outside the subset fails with a tag error.
 `validate_sequence_ok_iff` and `validate_set_ok_iff` state that a SEQUENCE or a SET OF passes exactly when its content reads as values that each pass.
 A SET OF also needs the encodings of those values in ascending order, compared octet by octet (X.690 §11.6).
@@ -1020,7 +1023,6 @@ Both hold for a value whose encoding is longer than its content.
 Every value that the reader returns is one (`size_lt_of_read_ok`, `children_go_sizes`).
 The comparison puts a proper prefix first, where X.690 pads the shorter encoding with zero octets.
 No theorem states that one sibling encoding is never a proper prefix of another.
-No theorem states the validation of INTEGER, OCTET STRING or IA5String.
 Nothing in Lean shows that authentication can succeed; the Python tests check vectors 1 to 4 of libp2p TLS.
 
 ### QUIC wire encodings
