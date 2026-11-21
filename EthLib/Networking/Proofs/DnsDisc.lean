@@ -156,19 +156,22 @@ theorem encodeList_of_signatureOf {cs : List Char} {sig : Vector UInt8 65}
 
 /-- A sequence number reads back from its decimal text. -/
 theorem seqOf_repr (n : Nat) : seqOf (Nat.repr n).toList = .ok n := by
-  simp only [seqOf, String.ofList_toList, Nat.toNat?_repr]
+  -- The digits of the decimal form give back the number.
+  have digits : Nat.ofDigitChars 10 (Nat.repr n).toList 0 = n := by
+    rw [Nat.toList_repr]
+    exact Nat.ofDigitChars_toDigits (by decide) (by decide)
+  simp only [seqOf, digits, ↓reduceIte]
   rfl
 
 /-- The decimal text of a sequence number is the only text that reads as that number. -/
 theorem repr_of_seqOf {cs : List Char} {n : Nat} (h : seqOf cs = .ok n) :
     (Nat.repr n).toList = cs := by
   unfold seqOf at h
-  split at h
-  · split at h
-    · cases h
-      assumption
-    · cases h
-  · cases h
+  by_cases same : Nat.toDigits 10 (Nat.ofDigitChars 10 cs 0) = cs
+  · simp only [Nat.toList_repr, same, ↓reduceIte, pure, Except.pure, Except.ok.injEq] at h
+    rw [← h, Nat.toList_repr]
+    exact same
+  · simp [Nat.toList_repr, same, throw, throwThe, MonadExceptOf.throw] at h
 
 /-! ## Roots -/
 

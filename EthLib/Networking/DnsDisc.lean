@@ -173,11 +173,12 @@ def Root.toText (r : Root) : List Char :=
   signedText r.enrRoot r.linkRoot r.seq ++ " sig=".toList ++
     Base64.encodeList r.signature.toList
 
-/-- The sequence number of a decimal text with no leading zero and no separator. -/
+/-- The sequence number of a decimal text with no leading zero and no separator.
+
+Any other text, such as one with a sign, a space or a letter, is rejected. -/
 def seqOf (cs : List Char) : Except DnsError Nat :=
-  match (String.ofList cs).toNat? with
-  | some n => if (Nat.repr n).toList = cs then return n else throw .seq
-  | none => throw .seq
+  let n := Nat.ofDigitChars 10 cs 0
+  if (Nat.repr n).toList = cs then return n else throw .seq
 
 /-- The signature of a base64 text of 65 bytes. -/
 def signatureOf (cs : List Char) : Except DnsError (Vector UInt8 65) := do
