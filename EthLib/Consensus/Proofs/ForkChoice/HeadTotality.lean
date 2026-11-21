@@ -183,18 +183,15 @@ theorem getNodeChildren_held (lower : store.ParentsBelow) {node : ForkChoiceNode
             · rw [List.mem_singleton.mp member]
               simp [nodeRank, found, pending]
             · cases member
-    · obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
-        simp only [getNodeChildren, gloas, pending, and_false, ↓reduceDIte, true_and]
-        split
-        · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
-        · exact ⟨_, rfl⟩
+    · obtain ⟨children, childrenOk⟩ :=
+        getNodeChildren_ok_of_known (status := node.payloadStatus) found
       refine ⟨children, childrenOk, fun child member => ?_⟩
       obtain ⟨childPending, childBlock, -, childFound, parent, -⟩ :=
         (mem_getNodeChildren_of_gloas gloas pending childrenOk).mp member
       exact ⟨childBlock, childFound, climbs child childBlock childPending childFound parent⟩
   · have before : fork < .glamsterdam := Nat.lt_of_not_le gloas
-    obtain ⟨children, childrenOk⟩ : ∃ children, store.getNodeChildren node = .ok children := by
-      simp [getNodeChildren, gloas, pure, Except.pure]
+    obtain ⟨children, childrenOk⟩ :=
+      getNodeChildren_ok_of_known (status := node.payloadStatus) found
     refine ⟨children, childrenOk, fun child member => ?_⟩
     obtain ⟨childPending, childBlock, childFound, parent⟩ :=
       (mem_getNodeChildren before childrenOk).mp member

@@ -130,7 +130,7 @@ private theorem receiverFinality_of_viable {last : ℕ} {anchor : Store preset f
   have reached := e.reachable (fun a ha => (start a ha) ▸ Store.Reachable.anchor anchored) k w
     receiver
   have lower := reached.parentsBelow (UInt64.le_of_eq anchorSlot) (absent w receiver k bounded)
-  rcases rootFinal_or_justified_covers anchored start anchorSlot preGloas family receiver bounded
+  rcases rootFinal_or_justified_covers anchored start anchorSlot family receiver bounded
       lower known tree route with below | final
   swap
   · intro k' earlier _
@@ -659,7 +659,7 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
           endTimeOk, fresh, complete, majority⟩ :=
           late w receiver k receiverEpoch state lowK highK upToDate receiverEpochOk (by omega)
             stateOk
-        have step := e.isAncestor_getHead_of_duty_epoch_or_accountable sync slots preGloas
+        have step := e.isAncestor_getHead_of_duty_epoch_or_accountable sync slots
           (first := (e.world n).time) (time := T)
           (fun v hv w hw i j hj => admitted v hv w hw i j (by omega))
           fits (prompt.of_le high) anchored sound anchorSlot anchorBoundary start started
@@ -668,6 +668,7 @@ public theorem Execution.honestHeadsCover_of_viableAt [DecidablePred (· ∈ J)]
           (fun w hw j hj => enough w hw j (by omega))
           (fun w hw j hj => terminal w hw j (by omega))
           (fun w hw j ep hj => bounded w hw j ep (by omega))
+          (fun gloas => absurd gloas (Nat.not_le_of_lt preGloas))
           (fun w hw j hj => roots w hw j (by omega))
           (fun a ha i hi => absent a ha i (by omega))
           covers

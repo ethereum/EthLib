@@ -1005,7 +1005,7 @@ private theorem caller_fits_below_head {anchor : Store preset fork}
         exact Store.isAncestor_self justifiedFound
       · right
         rwa [← headRoot]
-    rcases rootFinal_or_justified_covers anchored start anchorSlot before chain caller bounded
+    rcases rootFinal_or_justified_covers anchored start anchorSlot chain caller bounded
         lower headFound tree covered with justifiedCovers | fits
     · -- The justified block descends from the head, so from the block below it.
       have belowJustified := Store.isAncestor_trans (middle := ⟨head.root, .pending⟩)

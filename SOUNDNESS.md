@@ -3574,7 +3574,9 @@ They also keep their duty, stake and ancestry hypotheses, and conclude their res
 `Execution.mem_supportersOf_of_duty_epoch` and its accountable companion hold at every fork.
 From Gloas the payload check of the delivered vote needs the anchor block at or before the slot of the anchor state.
 Their `anchorSlot` equality gives it, so they gain no hypothesis.
-`Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion still require a fork before Gloas.
+`Execution.isAncestor_getHead_of_duty_epoch` and its accountable companion hold at every fork too.
+From Gloas they assume that the anchor's registry leaves room for the pending deposits of each epoch up to their horizon.
+Before Gloas that assumption is vacuous.
 
 `Execution.finalized_prefix_or_accountable` proves the narrower historical family used by those duty proofs: one honest store's later justified checkpoint reads back its earlier finalized checkpoint, or accountable-safety evidence exists.
 `Execution.mem_supportersOf_of_duty_epoch_or_accountable` and `Execution.isAncestor_getHead_of_duty_epoch_or_accountable` compose this family with the duty proofs, leaving the original statements unchanged.

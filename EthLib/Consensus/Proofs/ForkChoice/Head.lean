@@ -277,6 +277,18 @@ theorem mem_getNodeChildren_of_gloas {node child : ForkChoiceNode}
     rw [empty] at built
     cases built
 
+/-- The children of a node can be computed when the store holds its block. -/
+theorem getNodeChildren_ok_of_known {root : Root} {status : PayloadStatus}
+    {block : BeaconBlock preset fork} (found : store.blocks[root]? = some block) :
+    ∃ children, store.getNodeChildren ⟨root, status⟩ = .ok children := by
+  unfold Store.getNodeChildren
+  split
+  · exact ⟨_, rfl⟩
+  · dsimp only
+    split
+    · simp [Store.block, found, bind, Except.bind, pure, Except.pure]
+    · exact ⟨_, rfl⟩
+
 /-- The tally of the justified state, when the store holds that state. -/
 theorem justifiedTally_of_state {state : BeaconState preset fork}
     (justifiedState : store.checkpointState store.justifiedCheckpoint = .ok state) :

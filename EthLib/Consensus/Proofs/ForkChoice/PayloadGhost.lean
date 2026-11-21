@@ -237,6 +237,20 @@ theorem isAncestor_iff_of_gloas {start node : ForkChoiceNode} {block : BeaconBlo
           omega
       rw [ForkChoiceNode.toModel_injective same]
 
+/-- Parents have lower slots, and filtering from start succeeds.
+
+Then each returned node's block root descends from the start's block root. -/
+theorem filterNodeTree_root_ancestor (lower : store.ParentsBelow) {config : Config}
+    {start : ForkChoiceNode} {nodes : List ForkChoiceNode}
+    (walk : store.filterNodeTree config start = .ok nodes) :
+    ∀ n ∈ nodes, (blockTree lower).Ancestor (some start.root) (some n.root) := by
+  intro n mem
+  by_cases gloas : .glamsterdam ≤ fork
+  · exact payloadTree_ancestor_fst ((filterNodeTree_closed (T := nodeTree lower) (·.toModel) walk
+      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) n
+      mem).1)
+  · exact (filterNodeTree_ancestor (lower := lower) (Nat.lt_of_not_le gloas) walk n mem).1
+
 /-! ## Votes and weights -/
 
 variable (store) in
@@ -1308,9 +1322,7 @@ theorem isAncestor_getHead_of_majority_withBoost_of_gloas {nodes : List ForkChoi
   obtain ⟨-, ⟨nodeBlock, nodeFound⟩, -⟩ := filterNodeTree_mem tree node viable
   have belowJustified :
       (blockTree lower).Ancestor (some store.justifiedCheckpoint.root) (some node.root) :=
-    payloadTree_ancestor_fst ((filterNodeTree_closed (T := nodeTree lower) (·.toModel) tree
-      (fun _ _ _ childrenOk _ nMem => isChild_of_mem_getNodeChildren gloas childrenOk nMem) node
-      viable).1)
+    filterNodeTree_root_ancestor lower tree node viable
   have headIn : head ∈ nodes := by
     have notEmpty : ¬ (.glamsterdam ≤ fork ∧ nodes.isEmpty = true) :=
       fun ⟨_, empty⟩ => List.ne_nil_of_mem viable (List.isEmpty_iff.mp empty)
