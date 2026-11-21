@@ -787,6 +787,9 @@ Not yet released.
 
 ### Changes that break callers
 
+- In Lean, `vectorSlices_eq` and `listSlices_eq` are removed ([#3747](https://github.com/ethereum/EthLib/pull/3747)), because they restated the whole body of the SSZ slicers.
+  A caller unfolds `vectorSlices` or `listSlices`; on the offset-table path it also rewrites with the new `zipWith_extract_eq`, which turns the final `zipWith` into a map over the zipped offsets and spans.
+
 - In Lean, `Valid.transactionReceipt_blockReceipts` takes the block that the lookup returns, and no longer asks that it be canonical.
   The lookup reads only canonical blocks, so the hypotheses `i < v.canonical.length` and the block `v.canonical[i]` are gone; a caller passes the lookup's result as is.
 
