@@ -84,11 +84,45 @@ theorem CodeOrigin.of_keepsCodeOrigin {block : BlockState} {tx tx' : Transaction
 /-! ## Writes of a state -/
 
 /-- A change of one account keeps the written codes. -/
-private theorem codeWrites_modifyState {tx tx' : TransactionState} {address : Address}
+theorem codeWrites_modifyState {tx tx' : TransactionState} {address : Address}
     {f : Account → Except StateError Account} (h : tx.modifyState fork address f = .ok tx') :
     tx'.codeWrites = tx.codeWrites := by
   obtain ⟨account, -, rfl⟩ := TransactionState.modifyState_eq_ok_iff.mp h
   split <;> rfl
+
+/-- A move of ether keeps the written codes. -/
+theorem codeWrites_moveEther {tx tx' : TransactionState} {sender recipient : Address}
+    {amount : U256} (h : tx.moveEther fork sender recipient amount = .ok tx') :
+    tx'.codeWrites = tx.codeWrites := by
+  unfold TransactionState.moveEther at h
+  obtain ⟨mid, h1, h2⟩ := Base.bind_ok_iff.mp h
+  exact (codeWrites_modifyState h2).trans (codeWrites_modifyState h1)
+
+/-- A touch of an account keeps the written codes. -/
+theorem codeWrites_touchAccount (tx : TransactionState) (address : Address) :
+    (tx.touchAccount address).codeWrites = tx.codeWrites := by
+  unfold TransactionState.touchAccount
+  split <;> rfl
+
+/-- A write of storage keeps the written codes. -/
+theorem codeWrites_setStorage {tx tx' : TransactionState} {address : Address} {key : Bytes32}
+    {value : U256} (h : tx.setStorage address key value = .ok tx') :
+    tx'.codeWrites = tx.codeWrites := by
+  unfold TransactionState.setStorage at h
+  split at h
+  · cases h
+  · cases h
+    rfl
+
+/-- A write of code keeps the written codes, or adds the code under one hash. -/
+theorem codeWrites_setCode {tx tx' : TransactionState} {address : Address} {code : ByteArray}
+    (h : tx.setCode fork address code = .ok tx') :
+    tx'.codeWrites = tx.codeWrites ∨
+      ∃ codeHash, tx'.codeWrites = tx.codeWrites.insert codeHash code := by
+  dsimp only [TransactionState.setCode] at h
+  split at h
+  · exact .inl (codeWrites_modifyState h)
+  · exact .inr ⟨_, codeWrites_modifyState h⟩
 
 /-- A change of one account keeps the origin of the code hashes when the new hash has one.
 
@@ -205,9 +239,7 @@ private theorem KeepsCodeOrigin.restoreTxState {tx snapshot : TransactionState}
 /-- A touch of an account keeps the origin of the code hashes. -/
 private theorem KeepsCodeOrigin.touchAccount (tx : TransactionState) (address : Address) :
     KeepsCodeOrigin tx (tx.touchAccount address) := by
-  have hw : (tx.touchAccount address).codeWrites = tx.codeWrites := by
-    unfold TransactionState.touchAccount
-    split <;> rfl
+  have hw := codeWrites_touchAccount tx address
   refine ⟨TransactionState.parent_touchAccount tx address, fun _ hc => hw ▸ hc,
     fun x => .inr (.inr ?_)⟩
   by_cases hne : x = address
