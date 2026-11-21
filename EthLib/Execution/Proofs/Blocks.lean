@@ -14,6 +14,7 @@ public import EthLib.Execution.Proofs.Blocks.ExcessBlobGas
 public import EthLib.Execution.Proofs.Blocks.Bloom
 public import EthLib.Execution.Proofs.Blocks.Burn
 public import EthLib.Execution.Proofs.Blocks.CallsAgree
+public import EthLib.Execution.Proofs.Blocks.CodeRules
 public import EthLib.Execution.Proofs.Blocks.Codes
 public import EthLib.Execution.Proofs.Blocks.DaoFork
 public import EthLib.Execution.Proofs.Blocks.Difficulty
