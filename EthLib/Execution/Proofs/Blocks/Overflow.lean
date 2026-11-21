@@ -112,11 +112,6 @@ private theorem join_ne_balanceOverflow (body : BodyState) (tx : TransactionStat
   · exact record _ h
   · cases h
 
-/-- The join of a call to the body has no overflow. -/
-private theorem errorsMeet_join (body : BodyState) (tx : TransactionState) :
-    ErrorsMeet (¬Overflows ·) ((body.join tx).mapError .state) :=
-  ErrorsMeet.mapError (notOverflows_state (join_ne_balanceOverflow body tx))
-
 /-- Creations of ether never overflow a balance when the supply plus their bounds fits.
 
 That sum must be below `2^256`. -/
@@ -268,24 +263,6 @@ private theorem startSystemCalls_ne_balanceOverflow {env : BlockEnvironment fork
     · cases hmid
       exact second _ room h
 
-/-- A transaction of a block never overflows a balance when the supply before it leaves room. -/
-private theorem errorsMeet_applyTransaction {env : BlockEnvironment fork} {index : Nat}
-    {before : BodyOutput fork} (tx : Transaction)
-    (room : SupplyRoom fork (TransactionState.ofBlock before.block).supply) :
-    ErrorsMeet (¬Overflows ·) (applyTransaction env index before tx) := by
-  unfold applyTransaction
-  refine ErrorsMeet.bind (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-    fun included hincluded => ?_
-  refine ErrorsMeet.bind (ErrorsMeet.aborted (notOverflows_aborted
-    (Transactions.processTransaction_ne_balanceOverflow (Base.mapError_ok_iff.mp hincluded)
-      room))) fun out _ => ?_
-  refine ErrorsMeet.bind (errorsMeet_join _ _) fun body _ => ?_
-  dsimp only
-  split
-  · exact ErrorsMeet.bind (ErrorsMeet.pure _) fun _ _ => ErrorsMeet.pure _
-  · exact ErrorsMeet.bind (ErrorsMeet.map _ (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by
-      rcases h with h | h <;> cases h)) fun _ _ => ErrorsMeet.pure _
-
 /-- A transaction of a block keeps or lowers the supply. -/
 private theorem supply_applyTransaction_le {env : BlockEnvironment fork} {index : Nat}
     {before after : BodyOutput fork} {tx : Transaction}
@@ -300,208 +277,71 @@ private theorem supply_applyTransaction_le {env : BlockEnvironment fork} {index 
   change (TransactionState.ofBlock after.block).supply = out.state.supply at joined
   omega
 
-/-- The transactions of a block never overflow a balance when their start supply leaves room. -/
-private theorem errorsMeet_applyTransactions {env : BlockEnvironment fork} {body : BodyState}
-    (transactions : List Transaction)
-    (room : SupplyRoom fork (TransactionState.ofBlock body.block).supply) :
-    ErrorsMeet (¬Overflows ·) (applyTransactions env body transactions) := fun _ h =>
-  foldlM_error_of_step
-    (fun b : BodyOutput fork => SupplyRoom fork (TransactionState.ofBlock b.block).supply)
-    (¬Overflows ·) (fun _ _ _ hb hstep => hb.mono (supply_applyTransaction_le hstep))
-    (fun _ _ e hb h => errorsMeet_applyTransaction _ hb e h)
-    (b := ⟨body, .zero, 0, [], [], []⟩) room h
+/-! ## The body of a block -/
 
-/-- The transactions of a block keep or lower the supply. -/
-private theorem supply_applyTransactions_le {env : BlockEnvironment fork} {body : BodyState}
-    {transactions : List Transaction} {output : BodyOutput fork}
-    (h : applyTransactions env body transactions = .ok output) :
-    (TransactionState.ofBlock output.block).supply ≤
-      (TransactionState.ofBlock body.block).supply :=
-  foldlM_ok_invariant
-    (fun b : BodyOutput fork => (TransactionState.ofBlock b.block).supply ≤
-      (TransactionState.ofBlock body.block).supply)
-    (fun _ _ _ hb hstep => Nat.le_trans (supply_applyTransaction_le hstep) hb)
-    (b := ⟨body, .zero, 0, [], [], []⟩) (Nat.le_refl _) h
+/-- The leaves of a block body never overflow a balance when its supply plus all it creates fits.
 
-/-- A checked system call never overflows a balance when the supply of its block leaves room. -/
-private theorem errorsMeet_checkedSystemCall {env : BlockEnvironment fork} {block : BlockState}
-    (target : Address) (data : ByteArray)
-    (room : SupplyRoom fork (TransactionState.ofBlock block).supply) :
-    ErrorsMeet (¬Overflows ·) (checkedSystemCall env block target data) := by
-  unfold checkedSystemCall
-  refine ErrorsMeet.bind (ErrorsMeet.aborted (notOverflows_aborted fun a h => ?_)) fun _ _ => ?_
-  · unfold codeAt at h
-    dsimp only at h
-    cases hc : (TransactionState.ofBlock block).getCode
-        ((TransactionState.ofBlock block).getAccount target).codeHash with
-    | error e' =>
-      rw [hc] at h
-      cases h
-      exact Transactions.getCode_ne_balanceOverflow _ _ _ hc
-    | ok _ =>
-      rw [hc] at h
-      cases h
-  have rest : ErrorsMeet (¬Overflows ·) (do
-      let out ← (systemCall env block target data).mapError BlockError.aborted
-      match out.error with
-      | some error => throw (BlockError.systemCallFailed target error)
-      | none => pure out) := by
-    refine ErrorsMeet.bind (ErrorsMeet.aborted
-      (notOverflows_aborted (systemCall_ne_balanceOverflow room)))
-      fun _ _ => ?_
-    split
-    · exact ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
-    · exact ErrorsMeet.pure _
-  dsimp only
-  split
-  · exact ErrorsMeet.bind (ErrorsMeet.throw fun ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-      fun _ _ => rest
-  · exact rest
+Before the withdrawals, each state has at most the supply of the start state.
 
-/-- A read of a request contract never overflows a balance when the supply leaves room. -/
-private theorem errorsMeet_readRequest {env : BlockEnvironment fork}
-    {state : BodyState × List ByteArray} (contract : UInt8 × Address)
-    (room : SupplyRoom fork (TransactionState.ofBlock state.1.block).supply) :
-    ErrorsMeet (¬Overflows ·) (readRequest env state contract) := by
-  unfold readRequest
-  refine ErrorsMeet.bind (errorsMeet_checkedSystemCall _ _ room) fun _ _ => ?_
-  exact ErrorsMeet.bind (errorsMeet_join _ _) fun _ _ => ErrorsMeet.pure _
+After them, each state plus the rewards still to come has at most that supply plus all it creates.
 
-/-- A read of a request contract keeps or lowers the supply. -/
-private theorem supply_readRequest_le {env : BlockEnvironment fork}
-    {state state' : BodyState × List ByteArray} {contract : UInt8 × Address}
-    (h : readRequest env state contract = .ok state') :
-    (TransactionState.ofBlock state'.1.block).supply ≤
-      (TransactionState.ofBlock state.1.block).supply := by
-  obtain ⟨out, call, join, -⟩ := readRequest_eq_ok h
-  rw [BodyState.supply_join join]
-  exact supply_systemCall_le (checkedSystemCall_ok call).2.1
-
-/-- The request reads never overflow a balance when the supply leaves room. -/
-private theorem errorsMeet_readRequests {env : BlockEnvironment fork} {body : BodyState}
-    (room : SupplyRoom fork (TransactionState.ofBlock body.block).supply) :
-    ErrorsMeet (¬Overflows ·) (readRequests env body) := by
-  unfold readRequests
-  split
-  · intro e h
-    have keep : ∀ (s : BodyState × List ByteArray) (c : UInt8 × Address) s',
-        SupplyRoom fork (TransactionState.ofBlock s.1.block).supply →
-        readRequest env s c = .ok s' →
-        SupplyRoom fork (TransactionState.ofBlock s'.1.block).supply :=
-      fun _ _ _ hb hstep => hb.mono (supply_readRequest_le hstep)
-    exact foldlM_error_of_step
-      (fun s : BodyState × List ByteArray =>
-        SupplyRoom fork (TransactionState.ofBlock s.1.block).supply) (¬Overflows ·) keep
-      (fun _ c e hb h => errorsMeet_readRequest c hb e h) (b := (body, [])) room h
-  · exact ErrorsMeet.ok _
-
-/-- The requests of a block never overflow a balance when the supply leaves room. -/
-private theorem errorsMeet_blockRequests {depositContract : Address} {env : BlockEnvironment fork}
-    {body : BodyState} (logs : List Log)
-    (room : SupplyRoom fork (TransactionState.ofBlock body.block).supply) :
-    ErrorsMeet (¬Overflows ·) (blockRequests depositContract env body logs) := by
-  unfold blockRequests
-  split
-  · refine ErrorsMeet.bind
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-      fun _ _ => ?_
-    exact ErrorsMeet.bind (errorsMeet_readRequests room) fun _ _ => ErrorsMeet.pure _
-  · exact ErrorsMeet.pure _
-
-/-- The requests of a block keep or lower the supply. -/
-private theorem supply_blockRequests_le {depositContract : Address} {env : BlockEnvironment fork}
-    {body : BodyState} {logs : List Log} {result : BodyState × List ByteArray}
-    (h : blockRequests depositContract env body logs = .ok result) :
-    (TransactionState.ofBlock result.1.block).supply ≤
-      (TransactionState.ofBlock body.block).supply := by
-  obtain ⟨log, burns⟩ := blockRequests_blockRequestsBurns h
-  have := burns.supply_eq
-  omega
-
-/-- The hash of the block access list never overflows a balance. -/
-private theorem errorsMeet_accessListHashOf (body : BodyState) (gasLimit : Nat) :
-    ErrorsMeet (¬Overflows ·) (accessListHashOf fork body gasLimit) := by
-  unfold accessListHashOf
-  split
-  · refine ErrorsMeet.bind
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-      fun _ _ => ?_
-    exact ErrorsMeet.map _
-      (ErrorsMeet.mapError fun _ _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-  · exact ErrorsMeet.pure _
-
-/-! ## The body -/
-
-/-- A body never overflows a balance when its supply plus the ether it creates leaves room. -/
-private theorem errorsMeet_applyBody {config : ChainConfig} {env : BlockEnvironment fork}
-    {block : Block fork Transaction} {start : BlockState}
+The sum must leave room for the credits of a message. -/
+private theorem leaves (config : ChainConfig) (env : BlockEnvironment fork)
+    (block : Block fork Transaction) (start : BlockState)
     (room : SupplyRoom fork ((TransactionState.ofBlock start).supply + createdWei block)) :
-    ErrorsMeet (¬Overflows ·) (applyBody config env block start) := by
-  have fits := room.lt
-  unfold applyBody
-  refine ErrorsMeet.bind ?_ fun state hstate => ?_
-  · unfold daoTransfer
-    split
-    · exact ErrorsMeet.onBlock
-        (notOverflows_state fun a => applyDaoFork_ne_balanceOverflow (by omega) a)
-    · exact ErrorsMeet.pure _
-  have hdao := supply_daoTransfer hstate
-  refine ErrorsMeet.bind (ErrorsMeet.aborted (notOverflows_aborted fun a =>
-    startSystemCalls_ne_balanceOverflow (body := .init state) (room.mono ?_) a))
-    fun body hbody => ?_
-  · change (TransactionState.ofBlock state).supply ≤ _
-    omega
-  obtain ⟨log, burns⟩ := startSystemCalls_startSystemCallsBurns (Base.mapError_ok_iff.mp hbody)
-  have hsystem := burns.supply_eq
-  change _ = (TransactionState.ofBlock state).supply at hsystem
-  refine ErrorsMeet.bind (errorsMeet_applyTransactions _ (room.mono (by omega)))
-    fun output houtput => ?_
-  have htxs := supply_applyTransactions_le houtput
-  dsimp only
-  have rest : ∀ b : BodyState, (TransactionState.ofBlock b.block).supply +
-      rewardWei fork block.header.number
+    BodyLeaves config env block (¬Overflows ·)
+      (fun s => (TransactionState.ofBlock s).supply ≤ (TransactionState.ofBlock start).supply)
+      (fun s => (TransactionState.ofBlock s).supply + rewardWei fork block.header.number
         (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)) ≤
-        (TransactionState.ofBlock start).supply + createdWei block →
-      ErrorsMeet (¬Overflows ·) (do
-      let (body, requests) ← blockRequests config.depositContractAddress env b output.logs
-      let ommers := block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)
-      let state ← onBlock body.block fun tx =>
-        payRewards fork tx block.header.coinbase block.header.number ommers
-      let accessListHash ← accessListHashOf fork body block.header.gasLimit
-      return ({ output with body := { body with block := state }, requests, accessListHash } :
-        BlockOutput fork)) := by
-    intro b hb
-    refine ErrorsMeet.bind (errorsMeet_blockRequests _ (room.mono (by omega))) fun r hr => ?_
-    have hreq := supply_blockRequests_le hr
-    obtain ⟨requested, requests⟩ := r
-    refine ErrorsMeet.bind (ErrorsMeet.onBlock
-      (notOverflows_state fun a => payRewards_ne_balanceOverflow (by dsimp only at hreq; omega) a))
-      fun _ _ => ?_
-    exact ErrorsMeet.bind (errorsMeet_accessListHashOf _ _) fun _ _ => ErrorsMeet.pure _
-  split
-  · rename_i hS
-    have hcreated : createdWei block = withdrawnWei (block.withdrawals hS) +
+          (TransactionState.ofBlock start).supply + createdWei block)
+      (fun _ => True) where
+  plain _ ha hs _ _ := notOverflows_plain ha hs
+  dao _ low := notOverflows_state fun a =>
+    applyDaoFork_ne_balanceOverflow (by have := room.lt; omega) a
+  dao_inv _ _ low h := by
+    rw [supply_daoTransfer h]
+    exact low
+  start _ low := notOverflows_aborted fun a =>
+    startSystemCalls_ne_balanceOverflow (room.mono (by omega)) a
+  start_inv _ _ low h := by
+    obtain ⟨log, burns⟩ := startSystemCalls_startSystemCallsBurns h
+    have := burns.supply_eq
+    omega
+  inclusion _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  process _ _ _ low included := notOverflows_aborted
+    (Transactions.processTransaction_ne_balanceOverflow included (room.mono (by omega)))
+  transaction_inv _ _ _ _ low h := Nat.le_trans (supply_applyTransaction_le h) low
+  join body tx _ := notOverflows_state (join_ne_balanceOverflow body tx)
+  withdraw hS _ low := notOverflows_state fun a => withdrawalState_ne_balanceOverflow (by
+    have := room.lt
+    have created : createdWei block = withdrawnWei (block.withdrawals hS) +
         rewardWei fork block.header.number
           (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)) := by
       simp only [createdWei, hS, ↓reduceDIte]
-    refine ErrorsMeet.bind (ErrorsMeet.mapError
-      (notOverflows_state fun a => withdrawalState_ne_balanceOverflow ?_ a))
-      fun tx htx => ?_
-    · change (TransactionState.ofBlock output.block).supply + _ < _
-      omega
-    have hw := supply_withdrawalState (Base.mapError_ok_iff.mp htx)
-    change tx.supply = (TransactionState.ofBlock output.block).supply + _ at hw
-    refine ErrorsMeet.bind (errorsMeet_join _ _) fun b hb => rest b ?_
-    rw [BodyState.supply_join (Base.mapError_ok_iff.mp hb)]
-    omega
-  · rename_i hS
-    have hcreated : createdWei block = rewardWei fork block.header.number
+    omega) a
+  withdraw_inv hS _ _ _ low withdrawn joined := by
+    have created : createdWei block = withdrawnWei (block.withdrawals hS) +
+        rewardWei fork block.header.number
           (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)) := by
-      simp only [createdWei, hS, ↓reduceDIte, Nat.zero_add]
-    refine ErrorsMeet.bind (ErrorsMeet.pure _) fun b hb => rest b ?_
-    cases hb
-    change (TransactionState.ofBlock output.block).supply + _ ≤ _
+      simp only [createdWei, hS, ↓reduceDIte]
+    rw [BodyState.supply_join joined, supply_withdrawalState withdrawn]
     omega
+  skip_inv hS _ low := by
+    have created : createdWei block = rewardWei fork block.header.number
+        (block.ommers.map fun ommer => (ommer.2.coinbase, ommer.2.number)) := by
+      simp only [createdWei, hS, ↓reduceDIte, Nat.zero_add]
+    omega
+  code _ _ _ := notOverflows_aborted fun a h => by
+    obtain ⟨_, h, ⟨⟩⟩ := mapError_eq_error h
+    exact Transactions.getCode_ne_balanceOverflow _ _ _ h
+  call _ _ _ high := notOverflows_aborted (systemCall_ne_balanceOverflow (room.mono (by omega)))
+  call_failed _ _ _ _ _ _ _ _ := fun ⟨_, h⟩ => by rcases h with h | h <;> cases h
+  call_inv _ _ _ _ _ high called joined := by
+    rw [BodyState.supply_join joined]
+    have := supply_systemCall_le called
+    omega
+  rewards _ high := notOverflows_state fun a =>
+    payRewards_ne_balanceOverflow (by have := room.lt; omega) a
 
 /-- The body of a block never fails with the state error for a balance that would overflow.
 
@@ -514,8 +354,10 @@ theorem applyBody_ne_balanceOverflow (config : ChainConfig) (env : BlockEnvironm
     (address : Address) :
     applyBody config env block start ≠ .error (.aborted (.state (.balanceOverflow address))) ∧
       applyBody config env block start ≠ .error (.state (.balanceOverflow address)) :=
-  ⟨fun h => errorsMeet_applyBody room _ h ⟨address, .inl rfl⟩,
-    fun h => errorsMeet_applyBody room _ h ⟨address, .inr rfl⟩⟩
+  ⟨fun h => (leaves config env block start room).errorsMeet_applyBody (Nat.le_refl _) _ h
+    ⟨address, .inl rfl⟩,
+    fun h => (leaves config env block start room).errorsMeet_applyBody (Nat.le_refl _) _ h
+      ⟨address, .inr rfl⟩⟩
 
 /-- The transition of a block never fails with the state error for a balance that would overflow.
 
@@ -534,7 +376,7 @@ theorem stateTransition_ne_balanceOverflow (chain : BlockChain) (block : Block f
   have fails : ErrorsMeet (¬Overflows ·) (stateTransition chain block checkSeal) :=
     errorsMeet_stateTransition (fun _ ha hs => notOverflows_plain ha hs)
       (fun _ ⟨_, h⟩ => by rcases h with h | h <;> cases h)
-      fun _ => errorsMeet_applyBody start
+      fun _ => (leaves _ _ _ _ start).errorsMeet_applyBody (Nat.le_refl _)
   exact ⟨fun h => fails _ h ⟨address, .inl rfl⟩, fun h => fails _ h ⟨address, .inr rfl⟩⟩
 
 end EthLib.Execution.Blocks
