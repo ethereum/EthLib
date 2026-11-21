@@ -28,6 +28,16 @@ theorem toList_hexString (bytes : List UInt8) :
       simp [byteHexDigits]
   simpa [hexString] using general bytes "0x"
 
+/-- The hex digits of a list of bytes number two per byte. -/
+theorem length_flatMap_byteHexDigits (bytes : List UInt8) :
+    (bytes.flatMap byteHexDigits).length = 2 * bytes.length := by
+  induction bytes with
+  | nil => rfl
+  | cons byte rest ih =>
+    simp only [List.flatMap_cons, List.length_append, ih, byteHexDigits, List.length_cons,
+      List.length_nil]
+    omega
+
 /-- Each lowercase digit decodes to its value. -/
 theorem hexValue?_hexDigitChar (n : Fin 16) : hexValue? (hexDigitChar n) = some n.val.toUInt8 := by
   revert n
