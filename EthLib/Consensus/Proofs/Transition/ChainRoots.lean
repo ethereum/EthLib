@@ -184,7 +184,7 @@ private theorem advanceSlot_checkpoint_cases
     · exact .inl (.inl same)
 
 /-- The upgrades due at a slot keep the finalized checkpoint. -/
-private theorem processUpgrades_finalized {forked after : ForkedBeaconState preset}
+theorem processUpgrades_finalized {forked after : ForkedBeaconState preset}
     (computed : processUpgrades config checks forked = .ok after) :
     after.state.finalizedCheckpoint = forked.state.finalizedCheckpoint :=
   processUpgrades_induction
