@@ -5740,6 +5740,9 @@ With no bound, the trace has one entry for each step of a frame with code, as a 
 That count includes the STOP past the end of the code, which the official fixtures record; a frame with no code has no step, so a plain transfer gives no entry.
 Before Glamsterdam, between two consecutive entries at one depth, where the first starts no message and did not fail, the gas falls by exactly the cost of the first (`traceRun_gas`, `Proofs/Rpc/TraceGas.lean`).
 A transaction that the body of a block runs has a trace (`traceTransaction_ok`), and from Byzantium its receipt says it succeeded exactly when the trace says it did not fail (`traceTransaction_failed`).
+The trace of a block has one entry per transaction, and each entry is the trace of that transaction alone, after those before it (`traceBlock_eq_ok`).
+A block whose transactions run after the start of its body has a trace (`traceBlock_ok`).
+So a block that passes its transition has a trace with one entry per receipt, and from Byzantium each entry failed exactly when its receipt says so (`stateTransition_traceBlock`).
 The Python suite runs the 13 vendored `tests/debug_trace*` fixtures; each success fixture is `speconly`, and EthLib matches it field for field.
 The [schema of an entry](https://github.com/ethereum/execution-apis/blob/68d76a5b1c09dff023782d97eec6ce87a6f6505e/src/schemas/opcode-tracer.yaml#L144-L199) gives `refund` only when it is not zero, and `storage` only at an SLOAD or SSTORE step that does not halt with an error.
 `record_storage` (`Proofs/Rpc/Trace.lean`) shows that an entry holds storage only at a step that read or wrote a slot, and `record_slots_of_stepError` that a step that fails changes the slots of no account.
@@ -5757,7 +5760,7 @@ The source leaves these points open, and EthLib picks:
 - `gas` of the trace is the gas used after the refund.
 - Block 0 fails with `-32000`, the code of the fixture `trace-genesis.io`; a block whose parent is not a canonical block of the view, and a number below its lowest block, fail with `4444`; an unknown block or transaction fails with `-32000`.
 - A named tracer fails as an invalid parameter, since the source puts named tracers out of its scope; `timeout`, `debug` and `tracerConfig` change no answer.
-- The traced block replays the start of the body, then each transaction twice, once traced and once plain; no theorem yet ties that replay to the body.
+- The traced block replays the start of the body, then each transaction twice, once traced and once plain.
 
 The same entries also give the lines of [EIP-3155](https://github.com/ethereum/EIPs/blob/b055feec322fbc37e9d77a393a50b3ff56b31c92/EIPS/eip-3155.md#specification) (`Execution/Rpc/Eip3155.lean`).
 The line of a step has the required fields in the order of the EIP, then the optional ones that the logger recorded (`eip3155Fields_keys`, `Proofs/Rpc/Eip3155.lean`).
