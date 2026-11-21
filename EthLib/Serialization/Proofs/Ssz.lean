@@ -39,6 +39,7 @@ public import EthLib.Serialization.Proofs.Ssz.Codec.Canonicality
 public import EthLib.Serialization.Proofs.Ssz.Codec.DecodeFits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Fits
 public import EthLib.Serialization.Proofs.Ssz.Codec.Layout
+public import EthLib.Serialization.Proofs.Ssz.Codec.HexBytes
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHex
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonLaws
 public import EthLib.Serialization.Proofs.Ssz.Codec.JsonHexCase

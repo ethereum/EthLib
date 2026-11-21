@@ -6900,6 +6900,13 @@ The source leaves three points about the data API open, and EthLib specifies non
   Their names suggest the number of the block and the count of its transactions, but the source does not say so.
   So they are fields of the entry, not values computed from the payload.
 
+The third endpoint of the data API returns the latest registration that a relay holds for a key ([`validator_registration.yaml`](https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/validator_registration.yaml)).
+`getValidatorRegistration` (`Consensus/RelayApi.lean`) answers 200 with the registration that the registry keeps for the key, and 400 for a missing key or a key that is not 48 bytes of hex.
+After the relay keeps a registration, a request for its key gets 200 with it (`getValidatorRegistration_insert`, `Consensus/Proofs/RelayApi.lean`).
+After a registration passes the rules of the builder and is kept, its timestamp is at least that of the registration held before (`getValidatorRegistration_insert_monotone`).
+The source lists no answer for a key that the relay does not hold, and no 404.
+EthLib gives that case no status (`getValidatorRegistration_notHeld`), and the message of a malformed key, "invalid pubkey argument", is its own.
+
 ### Keymanager API
 
 The Keymanager API, as `ethereum/keymanager-APIs` defines it, is the set of calls that a management tool makes to a validator client.
@@ -7607,12 +7614,12 @@ A proof is unaffected unless it uses one of the tactics of C2.
 Between the Lean exports and Python sits a layer of hand-written C.
 
 <!-- generated: exports -->
-Lean exports 558 operations and 51 size constants.
-The Python extension calls 558 of the operations and 51 of the constants.
+Lean exports 559 operations and 51 size constants.
+The Python extension calls 559 of the operations and 51 of the constants.
 <!-- end generated -->
 
 <!-- generated: c-lines -->
-12503 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2723), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1644), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (862), `x25519.c` (21), `xmss.c` (344).
+12517 lines of hand-written C sit between them and Python: `aes.c` (119), `blocks.c` (364), `bls.c` (426), `chacha20_poly1305.c` (75), `chain.c` (71), `consensus.c` (2734), `crc32.c` (34), `crc32c.c` (34), `deposit_tree.c` (84), `devp2p.c` (79), `discv4.c` (104), `discv5.c` (368), `dnsdisc.c` (86), `engine.c` (234), `enr.c` (190), `era.c` (12), `era1.c` (12), `eth.c` (263), `ethash.c` (65), `evm.c` (114), `fees.c` (56), `forkid.c` (101), `gossip.c` (158), `hmac.c` (122), `keccak.c` (85), `keystore.c` (39), `kzg.c` (511), `libp2p.c` (187), `module.c` (1646), `noise.c` (111), `password_kdf.c` (105), `pow.c` (73), `precompile.c` (85), `pyvalue.c` (421), `quic.c` (271), `reqresp.c` (130), `rlp.c` (156), `rlpx.c` (184), `rpc.c` (84), `secp256k1.c` (169), `secp256r1.c` (42), `sha256.c` (38), `snap.c` (159), `snappy.c` (146), `sphincs.c` (85), `ssz.c` (86), `state.c` (108), `transactions.c` (207), `trie.c` (115), `vrf.c` (141), `wrappers.h` (863), `x25519.c` (21), `xmss.c` (344).
 <!-- end generated -->
 
 That C converts arguments, owns and frees Lean objects, and turns errors into Python exceptions.

@@ -1318,6 +1318,17 @@ py_consensus_relay_validators(
 }
 
 extern lean_object*
+eth_consensus_relay_validator_registration(lean_object* args);
+
+PyObject*
+py_consensus_relay_validator_registration(
+  PyObject* self,
+  PyObject* args
+) {
+  return call_pyvalue_export(eth_consensus_relay_validator_registration, args, 2, SSZ_ERROR);
+}
+
+extern lean_object*
 eth_consensus_relay_delivered_payload(lean_object* args);
 
 PyObject*

@@ -18,6 +18,8 @@ The data API exports read and write the JSON of delivered payloads and received 
 
 They also say whether a filter keeps an entry, and sort delivered payloads by value.
 
+One more answers a request for the registration of a key.
+
 An unknown order has code 0.
 
 A submission, a state, a registration or a document that does not decode keeps its SSZ code.
@@ -153,5 +155,31 @@ def relaySortDeliveredOf (args : String × List PyValue) : Result PyValue := do
 The arguments are the order, `value` or `-value`, and the JSON objects of the payloads. -/
 @[export eth_consensus_relay_sort_delivered]
 def relaySortDeliveredExport (args : PyValue) : Result PyValue := pyExport relaySortDeliveredOf args
+
+/-- The answer of a relay to a request for the registration of a key, with its status and body.
+
+The relay keeps the given registrations in turn, a later one for a key replacing an earlier one.
+
+None when the relay holds no registration for the key, since the source gives no answer then. -/
+def relayValidatorRegistrationOf (args : List ByteArray × Option String) :
+    Result (Option (Nat × PyValue)) := do
+  let (kept, pubkey) := args
+  let signed ← kept.mapM fun bytes =>
+    runSsz "registration rejected" (SszType.deserialize SignedValidatorRegistrationV1 bytes)
+  let registry := signed.foldl BuilderApi.Registry.insert {}
+  match RelayApi.getValidatorRegistration registry pubkey with
+  | .found entry =>
+    return some (200, PyValue.ofJson (← runSsz "value rejected" (BeaconApi.toApiJson entry)))
+  | .badRequest error => return some (400, PyValue.ofJson error.toJson)
+  | .notHeld => return none
+
+/-- The answer of a relay to a request for the registration of a key, with its status and body.
+
+The arguments are the SSZ registrations that the relay kept, in turn, and the key as text.
+
+None when the relay holds no registration for the key. -/
+@[export eth_consensus_relay_validator_registration]
+def relayValidatorRegistrationExport (args : PyValue) : Result PyValue :=
+  pyExport relayValidatorRegistrationOf args
 
 end EthLib.Consensus.Exports

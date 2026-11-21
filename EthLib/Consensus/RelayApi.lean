@@ -3,6 +3,7 @@ module
 public import EthLib.Consensus.BeaconApi.Spelling
 public import EthLib.Consensus.BuilderApi.Bid
 public import EthLib.Consensus.Containers.RelayApi
+public import EthLib.Serialization.Ssz.Codec.HexBytes
 
 /-!
 # `Consensus.RelayApi`
@@ -352,6 +353,47 @@ def sortBy (order : OrderBy) (entries : List BidTraceV2) : List BidTraceV2 :=
   match order with
   | .ascending => entries.mergeSort fun a b => a.trace.value ≤ b.trace.value
   | .descending => entries.mergeSort fun a b => b.trace.value ≤ a.trace.value
+
+/-- The answer of a relay to a request for the registration of a key, by the data API.
+
+The [source] answers 200 with the latest registration that the relay holds for the key.
+
+It answers 400 with an error message when the key is missing or does not read.
+
+It lists no answer for a key that the relay does not hold, so that case has no status here.
+
+[source]: https://github.com/flashbots/relay-specs/blob/a4e0a50d9d46bfe881fd74cc7e0db366371f4eed/apis/relay/data/validator_registration.yaml
+-/
+inductive RegistrationAnswer where
+  /-- Status 200, with the signed registration that the relay holds for the key. -/
+  | found (signed : SignedValidatorRegistrationV1)
+  /-- Status 400, with the error message. -/
+  | badRequest (error : BeaconApi.ErrorMessage)
+  /-- The relay holds no registration for the key, which the source answers in no way. -/
+  | notHeld
+  deriving DecidableEq
+
+/-- The status of an answer, if the source gives one. -/
+def RegistrationAnswer.status : RegistrationAnswer → Option Nat
+  | .found _ => some 200
+  | .badRequest _ => some 400
+  | .notHeld => none
+
+/-- The answer of a relay to a request for the registration of a key.
+
+The key is the text of the `pubkey` query parameter: `0x` and 96 hex digits.
+
+The relay looks it up among the registrations that it kept. -/
+def getValidatorRegistration (registry : Registry) (pubkey : Option String) : RegistrationAnswer :=
+  match pubkey with
+  | none => .badRequest ⟨400, "missing pubkey argument", none⟩
+  | some text =>
+    match parseHexBytes 48 text with
+    | none => .badRequest ⟨400, "invalid pubkey argument", none⟩
+    | some key =>
+      match registry.find? key with
+      | some signed => .found signed
+      | none => .notHeld
 
 end RelayApi
 

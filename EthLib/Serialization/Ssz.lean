@@ -12,6 +12,7 @@ public import EthLib.Serialization.Ssz.Codec.Serialize
 public import EthLib.Serialization.Ssz.Codec.Deserialize
 public import EthLib.Serialization.Ssz.Codec.Layout
 public import EthLib.Serialization.Ssz.Codec.Json
+public import EthLib.Serialization.Ssz.Codec.HexBytes
 public import EthLib.Serialization.Ssz.Codec.Root
 public import EthLib.Serialization.Ssz.Codec.Proof
 public import EthLib.Serialization.Ssz.Merkle.Chunk
