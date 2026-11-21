@@ -2128,7 +2128,7 @@ No theorem relates the module to the execution-specs code it follows, which call
 
 These theorems state agreement with EIP-198 and EIP-7823.
 `compute_eq_pow_mod` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that the output is `BASE ^ EXPONENT mod MODULUS`, or 0 for a zero modulus.
-It rests on `powMod_eq` (`Execution/Proofs/Evm/PowMod.lean`), which proves that the square-and-multiply loop equals `b ^ e % m`.
+It rests on `Nat.powMod_def` of Lean core, which proves that the square-and-multiply loop `Nat.powMod` equals `b ^ e % m`.
 `modexp_outOfGas` and `modexp_ok` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) prove that, with every length within the EIP-7823 bound, a call fails exactly when the gas is below the price.
 `modexp_eq_ok_iff` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that a call succeeds exactly when, from Fusaka, every length is within the EIP-7823 bound and the gas covers the price, and that it then returns the computed output.
 `modexp_eq_error_iff` (`Execution/Proofs/Evm/Precompiles/Modexp/Core.lean`) proves that a call fails exactly on the first oversized length, from Fusaka, in the order base, exponent, modulus, or else on gas below the price.
@@ -7508,6 +7508,10 @@ So between two weekly runs, a change can alter the compiled key generation or si
 Lean core implements `Array.forIn'`, `foldlM`, `foldrM`, `mapM` and `anyM` with `@[implemented_by]`, and the `Nat`, `ByteArray` and `Array` primitives with `@[extern]`.
 The compiled code runs those implementations, not the definitions the kernel checks.
 Any loop or fold over an array reaches them, so Lean core is a declared trusted baseline, and `lake exe check-decls` does not report it.
+`Nat.powMod`, which MODEXP, EXP and X25519 call, is `@[extern "lean_nat_powmod"]`.
+So compiled code runs the native modular power of the Lean runtime, not its square-and-multiply definition.
+With a zero modulus that code computes the plain power, which panics on an exponent beyond a machine word.
+No caller passes one: EXP reduces modulo `2 ^ 256`, X25519 modulo its prime, and MODEXP returns 0 first.
 
 ### B3. Native code during elaboration
 

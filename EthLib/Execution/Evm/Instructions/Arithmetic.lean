@@ -1,7 +1,6 @@
 module
 
 public import EthLib.Base.U256
-public import EthLib.Execution.Evm.PowMod
 
 /-!
 # `Evm.Instructions.Arithmetic`
@@ -81,7 +80,7 @@ Square-and-multiply keeps every step below 2^512.
 
 The power `base^exponent` alone can have 2^264 bits. -/
 def exp (base exponent : U256) : U256 :=
-  BitVec.ofNat 256 (powMod base.toNat exponent.toNat (2 ^ 256))
+  BitVec.ofNat 256 (Nat.powMod base.toNat exponent.toNat (2 ^ 256))
 
 /-- The low `byteNum + 1` bytes of `value`, read as a signed integer, widened to 32 bytes.
 

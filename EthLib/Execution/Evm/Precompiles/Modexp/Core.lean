@@ -3,7 +3,6 @@ module
 public import EthLib.Execution.Evm.Precompiles.Modexp.Encoding
 public import EthLib.Execution.Evm.Precompiles.Modexp.Gas
 public import EthLib.Execution.Evm.Precompiles.Modexp.Errors
-public import EthLib.Execution.Evm.PowMod
 
 /-!
 # `Evm.Precompiles.Modexp.Core`
@@ -23,7 +22,7 @@ The steps run in this order:
 namespace EthLib.Execution.Evm.Precompiles.Modexp
 
 open EthLib.Base
-open EthLib.Execution.Evm (bufferRead powMod)
+open EthLib.Execution.Evm (bufferRead)
 
 /-- The three length headers of an input, in bytes. -/
 structure Lengths where
@@ -82,7 +81,7 @@ def compute (data : ByteArray) (l : Lengths) : ByteArray :=
   let exponent := readNat data l.exponentStart l.exponent
   let modulus := readNat data l.modulusStart l.modulus
   -- The result is below the modulus, so it fits in `len_mod` bytes.
-  let result := if modulus = 0 then 0 else powMod base exponent modulus
+  let result := if modulus = 0 then 0 else Nat.powMod base exponent modulus
   ByteArray.mk (natToBytes l.modulus result).toArray
 
 /-- The gas a call is charged, or the reason it fails before gas is charged. -/
