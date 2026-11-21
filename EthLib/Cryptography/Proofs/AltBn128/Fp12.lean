@@ -306,17 +306,17 @@ instance : Nontrivial Fp12 :=
 
 /-- `(9 + i)^((p^4 - 1) / 6)` is not 1, which the kernel computes. -/
 theorem xi_pow_four_ne_one : (⟨9, 1⟩ : Fp2) ^ ((Fp.modulus ^ 4 - 1) / 6) ≠ 1 := by
-  rw [← Fp2.powBits_eq_pow 1024 _ _ (by decide +kernel)]
+  rw [← Fp2.powNat_eq_pow]
   decide +kernel
 
 /-- `(9 + i)^((p^6 - 1) / 6)` is not 1, which the kernel computes. -/
 theorem xi_pow_six_ne_one : (⟨9, 1⟩ : Fp2) ^ ((Fp.modulus ^ 6 - 1) / 6) ≠ 1 := by
-  rw [← Fp2.powBits_eq_pow 1536 _ _ (by decide +kernel)]
+  rw [← Fp2.powNat_eq_pow]
   decide +kernel
 
 /-- `(9 + i)^((p^12 - 1) / 6)` is 1, which the kernel computes. -/
 theorem xi_pow_twelve_eq_one : (⟨9, 1⟩ : Fp2) ^ ((Fp.modulus ^ 12 - 1) / 6) = 1 := by
-  rw [← Fp2.powBits_eq_pow 3072 _ _ (by decide +kernel)]
+  rw [← Fp2.powNat_eq_pow]
   decide +kernel
 
 /-- The quotient by a maximal ideal has `p^12` elements, so the quotient map is injective. -/

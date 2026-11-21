@@ -19,16 +19,16 @@ A map between two base fields that respects these operations then carries one re
 
 namespace EthLib.Cryptography
 
-/-- The operations of a base field, with the notation of the sum, difference, product and negation.
+/-- The field operations, with the notation of the sum, difference, product and negation.
+
+A quadratic extension reads only these, so a base field without a square root can carry one.
 
 The class states no laws: proofs take the laws from the field structure of an instance. -/
-class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
+class FieldOps (F : Type) extends Add F, Sub F, Mul F, Neg F where
   /-- The additive identity. -/
   zero : F
   /-- The multiplicative identity. -/
   one : F
-  /-- The image of a natural number `n`, the sum of `n` ones. -/
-  ofNat : Nat → F
   /-- Equality as a boolean. -/
   beq : F → F → Bool
   /-- Whether the element is zero. -/
@@ -37,6 +37,13 @@ class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
 
   Each instance states its value at zero. -/
   inverse : F → F
+
+/-- The operations of a base field: the field operations, numerals, powers, square roots and signs.
+
+The class states no laws: proofs take the laws from the field structure of an instance. -/
+class BaseField (F : Type) extends FieldOps F where
+  /-- The image of a natural number `n`, the sum of `n` ones. -/
+  ofNat : Nat → F
   /-- The power by a natural number. -/
   powNat : F → Nat → F
   /-- A square root, or `none` when the element is not a square.
@@ -53,5 +60,12 @@ class BaseField (F : Type) extends Add F, Sub F, Mul F, Neg F where
   sqrtCandidate : F → F
   /-- The sign `sgn0` of RFC 9380, §4.1: whether the canonical integer of the element is odd. -/
   sgn0 : F → Bool
+
+namespace BaseField
+
+-- The field operations keep their names under the base field.
+export FieldOps (zero one beq isZero inverse)
+
+end BaseField
 
 end EthLib.Cryptography

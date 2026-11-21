@@ -23,6 +23,8 @@ variable {F G : Type} [BaseField F] [BaseField G]
 
 namespace Fp2
 
+open Cryptography.Fp2 (c0 c1 beq isZero conjugate inverse)
+
 /-- The map of base fields, applied to both coordinates. -/
 def map (f : Hom F G) (a : Fp2 F) : Fp2 G := ⟨f a.c0, f a.c1⟩
 
@@ -33,7 +35,7 @@ theorem map_zero (f : Hom F G) : map f zero = zero := by
   simp only [map, zero, f.map_zero]
 
 theorem map_one (f : Hom F G) : map f one = one := by
-  simp only [map, one, f.map_zero, f.map_one]
+  simp only [map, one, Cryptography.Fp2.one, f.map_zero, f.map_one]
 
 theorem map_i (f : Hom F G) : map f i = i := by
   simp only [map, i, f.map_zero, f.map_one]
@@ -81,7 +83,7 @@ theorem map_powNat (f : Hom F G) (a : Fp2 F) (e : Nat) :
     map f (powNat a e) = powNat (map f a) e := by
   induction e using Nat.strongRecOn generalizing a with
   | _ e ih =>
-    rw [powNat.eq_1 a e, powNat.eq_1 (map f a) e]
+    rw [Cryptography.Fp2.powNat.eq_1 a e, Cryptography.Fp2.powNat.eq_1 (map f a) e]
     split
     · exact map_one f
     · have h := ih (e / 2) (by omega) (a * a)

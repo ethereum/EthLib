@@ -60,7 +60,7 @@ theorem frobeniusCoefficients_getElem (k : Fin 12) :
   -- `w^p = w (w^6)^((p - 1) / 6)`, and `w^6 = 9 + i`.
   have hwp : wPow 1 * ofFp2 frobeniusGamma = wPow 1 ^ Fp.modulus := by
     have hγ : frobeniusGamma = (⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6) :=
-      Fp2.powBits_eq_pow 256 _ _ (by decide)
+      Fp2.powNat_eq_pow _ _
     have hsplit : Fp.modulus = 6 * ((Fp.modulus - 1) / 6) + 1 := by decide
     conv_rhs => rw [hsplit]
     rw [hγ, show ofFp2 ((⟨9, 1⟩ : Fp2) ^ ((Fp.modulus - 1) / 6)) =

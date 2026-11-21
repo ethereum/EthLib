@@ -1,6 +1,7 @@
 module
 
 public import EthLib.Cryptography.AltBn128.Curve
+public import EthLib.Cryptography.Fp2
 
 /-!
 # `AltBn128.Pairing`
@@ -32,50 +33,29 @@ namespace EthLib.Cryptography.AltBn128
 
 /-! ## `Fp2` -/
 
-/-- An element `c0 + c1 i` of `Fp2`. -/
-structure Fp2 where
-  /-- The coefficient of 1. -/
-  c0 : Fp
-  /-- The coefficient of `i`. -/
-  c1 : Fp
-deriving DecidableEq, Repr, Inhabited
+/-- The quadratic extension `Fp2 = Fp[i] / (i^2 + 1)`, with elements `c0 + c1 i`.
+
+[EIP-197](https://eips.ethereum.org/EIPS/eip-197), §"Definition of the groups", defines this field.
+
+It is the generic quadratic extension, at the base field `Fp`. -/
+abbrev Fp2 : Type := Cryptography.Fp2 Fp
 
 namespace Fp2
 
-/-- The sum, coefficient by coefficient. -/
-def add (a b : Fp2) : Fp2 := ⟨a.c0 + b.c0, a.c1 + b.c1⟩
-
-/-- The difference, coefficient by coefficient. -/
-def sub (a b : Fp2) : Fp2 := ⟨a.c0 - b.c0, a.c1 - b.c1⟩
-
-/-- The product, with `i^2 = -1`. -/
-def mul (a b : Fp2) : Fp2 := ⟨a.c0 * b.c0 - a.c1 * b.c1, a.c0 * b.c1 + a.c1 * b.c0⟩
-
-/-- The negative. -/
-def neg (a : Fp2) : Fp2 := ⟨-a.c0, -a.c1⟩
-
-/-- The conjugate `c0 - c1 i`, which is also `a^p`. -/
-def conj (a : Fp2) : Fp2 := ⟨a.c0, -a.c1⟩
-
-/-- The inverse: `(c0 - c1 i) / (c0^2 + c1^2)`, and 0 for 0. -/
-def inv (a : Fp2) : Fp2 :=
-  let norm := (a.c0 * a.c0 + a.c1 * a.c1).inv
-  ⟨a.c0 * norm, -(a.c1 * norm)⟩
-
-instance : Add Fp2 := ⟨add⟩
-instance : Sub Fp2 := ⟨sub⟩
-instance : Mul Fp2 := ⟨mul⟩
-instance : Neg Fp2 := ⟨neg⟩
+-- The operations of the generic extension keep their names here.
+export Cryptography.Fp2 (mk add sub mul neg)
 
 /-- The element of `Fp`. -/
-def ofFp (a : Fp) : Fp2 := ⟨a, 0⟩
+abbrev ofFp (a : Fp) : Fp2 := Cryptography.Fp2.ofFp a
 
-/-- `a^e`, for `e < 2^fuel`, by square and multiply on the bits of `e`. -/
-def powBits : Nat → Fp2 → Nat → Fp2
-  | 0, _, _ => ⟨1, 0⟩
-  | fuel + 1, a, e =>
-    let half := powBits fuel (a * a) (e / 2)
-    if e % 2 = 1 then a * half else half
+/-- The element `i`. -/
+abbrev i : Fp2 := Cryptography.Fp2.i
+
+/-- The conjugate `c0 - c1 i`, which is also `a^p`. -/
+abbrev conj (a : Fp2) : Fp2 := a.conjugate
+
+/-- The inverse: `(c0 - c1 i) / (c0^2 + c1^2)`, and 0 for 0. -/
+abbrev inv (a : Fp2) : Fp2 := a.inverse
 
 end Fp2
 
@@ -118,7 +98,7 @@ def add : Point2 → Point2 → Point2
       if y2 = -y1 then infinity
       else
         -- The point is doubled, with the tangent's slope.
-        let l := Fp2.ofFp 3 * x1 * x1 * (Fp2.ofFp 2 * y1).inv
+        let l := Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)
         let x3 := l * l - x1 - x2
         affine x3 (l * (x1 - x3) - y1)
     else
@@ -236,7 +216,7 @@ def powBits : Nat → Fp12 → Nat → Fp12
 def scale (c : Fp) (a : Fp12) : Fp12 := Vector.ofFn fun k => c * a[k]
 
 /-- `w^(p - 1)` as an element of `Fp2`: `(9 + i)^((p - 1) / 6)`, since `w^6 = 9 + i`. -/
-def frobeniusGamma : Fp2 := Fp2.powBits 256 ⟨9, 1⟩ ((Fp.modulus - 1) / 6)
+def frobeniusGamma : Fp2 := Fp2.powNat ⟨9, 1⟩ ((Fp.modulus - 1) / 6)
 
 /-- The powers `(w^p)^k` for `k < 12`, which are also `(w^k)^p`.
 
@@ -317,17 +297,17 @@ def linefunc (r q : Point2) (xt yt : Fp) : Fp12 :=
     if x1 ≠ x2 then
       slopeLine ((y2 - y1) * (x2 - x1).inv) x1 y1 xt yt
     else if y1 = y2 then
-      slopeLine (Fp2.ofFp 3 * x1 * x1 * (Fp2.ofFp 2 * y1).inv) x1 y1 xt yt
+      slopeLine (Fp2.ofFp 3 * x1 * x1 * Fp2.inv (Fp2.ofFp 2 * y1)) x1 y1 xt yt
     else
       verticalLine x1 xt
   -- The loop never meets the point at infinity on points of order `q`.
   | _, _ => Fp12.one
 
 /-- `w^(2 (p - 1))` as an element of `Fp2`: `(9 + i)^((p - 1) / 3)`, since `w^6 = 9 + i`. -/
-def frobeniusX : Fp2 := Fp2.powBits 256 ⟨9, 1⟩ ((Fp.modulus - 1) / 3)
+def frobeniusX : Fp2 := Fp2.powNat ⟨9, 1⟩ ((Fp.modulus - 1) / 3)
 
 /-- `w^(3 (p - 1))` as an element of `Fp2`: `(9 + i)^((p - 1) / 2)`. -/
-def frobeniusY : Fp2 := Fp2.powBits 256 ⟨9, 1⟩ ((Fp.modulus - 1) / 2)
+def frobeniusY : Fp2 := Fp2.powNat ⟨9, 1⟩ ((Fp.modulus - 1) / 2)
 
 /-- The `p`-th power of a twisted point, written back on the twist.
 

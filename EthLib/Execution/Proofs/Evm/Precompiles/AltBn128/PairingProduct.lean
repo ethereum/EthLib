@@ -215,8 +215,8 @@ theorem bytesToG2_g2ToBytes {q : Point2} (hq : q.isOnCurve = true) :
     simp only [bytesToFp_natToBytes, hq, bind, Except.bind, pure, Except.pure, ↓reduceIte]
     split
     · rename_i hzero
-      exact absurd ⟨congrArg Fp2.c0 hzero.1, congrArg Fp2.c1 hzero.1,
-        congrArg Fp2.c0 hzero.2, congrArg Fp2.c1 hzero.2⟩ hnz
+      exact absurd ⟨congrArg Cryptography.Fp2.c0 hzero.1, congrArg Cryptography.Fp2.c1 hzero.1,
+        congrArg Cryptography.Fp2.c0 hzero.2, congrArg Cryptography.Fp2.c1 hzero.2⟩ hnz
     · rfl
 
 /-- The 192 bytes of a pair: its point of the curve, then its point of the twist. -/
