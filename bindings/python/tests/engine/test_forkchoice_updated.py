@@ -228,6 +228,14 @@ def _payload_id(head: str, attributes: Mapping[str, object]) -> str:
 
     data = raw(head) + word(attributes["timestamp"]) + raw(attributes["prevRandao"])
     data += raw(attributes["suggestedFeeRecipient"])
+    if "inclusionListTransactions" in attributes:
+        transactions = attributes["inclusionListTransactions"]
+        assert isinstance(transactions, list)
+        for transaction in transactions:
+            # A byte 1 before each byte of a transaction, and a byte 0 after it, mark its end.
+            data += b"".join(bytes([1, byte]) for byte in raw(transaction)) + b"\x00"
+        # A byte 2 ends the list.
+        data += b"\x02"
     withdrawals = attributes.get("withdrawals") or []
     assert isinstance(withdrawals, list)
     for withdrawal in withdrawals:
@@ -707,3 +715,108 @@ def test_attributes_of_no_fork() -> None:
             terminal_total_difficulty=MAINNET_TERMINAL_TOTAL_DIFFICULTY,
         )
     assert error.value.code == 38005
+
+
+# Bogota, the execution side of Hegota, starts 100 seconds after Glamsterdam, at 800 seconds.
+CONFIG_BOGOTA = CONFIG | {"activations": [*CONFIG["activations"], ["hegota", "time", 800]]}
+# Version 5 of the attributes: version 4 and an inclusion list, here a typed transaction and `0x00`.
+# The entry `0x00` decodes as no transaction, and the Engine API still takes it.
+ATTRIBUTES_V5 = ATTRIBUTES_V4 | {
+    "timestamp": "0x320",
+    "inclusionListTransactions": ["0x02f8", "0x00"],
+}
+# The tree of five blocks, with the verdict of block 3 on its inclusion list.
+TREE_BOGOTA = [
+    block | {"inclusionListSatisfied": True} if block["blockHash"] == _hash(3) else block
+    for block in TREE
+]
+
+
+def _update_v5(params: list[object], tree: list[dict] = TREE_BOGOTA) -> dict:
+    return engine.forkchoice_updated(
+        CONFIG_BOGOTA,
+        tree,
+        "engine_forkchoiceUpdatedV5",
+        params,
+        terminal_total_difficulty=MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+    )
+
+
+@pytest.mark.parametrize("attributes", [None, ATTRIBUTES_V5], ids=["no-build", "build"])
+def test_version_5_valid_head(attributes: dict[str, object] | None) -> None:
+    """Version 5 answers a status of version 2, with the verdict of the valid head."""
+    payload_id = None if attributes is None else _payload_id(_hash(3), attributes)
+    assert _update_v5([NEW_HEAD, attributes, CUSTODY_COLUMNS]) == {
+        "payloadStatus": {
+            "status": "VALID",
+            "latestValidHash": _hash(3),
+            "validationError": None,
+            "inclusionListSatisfied": True,
+        },
+        "payloadId": payload_id,
+    }
+
+
+def test_version_5_invalid_head() -> None:
+    """The verdict of a head that is not valid is `null`."""
+    state = NEW_HEAD | {"headBlockHash": _hash(5)}
+    assert _update_v5([state, None])["payloadStatus"] == {
+        "status": "INVALID",
+        "latestValidHash": _hash(3),
+        "validationError": None,
+        "inclusionListSatisfied": None,
+    }
+
+
+def test_version_5_valid_head_without_verdict() -> None:
+    """A valid head must carry its verdict, which is an input of the export."""
+    with raises(engine.EngineError, "tree: no inclusion list verdict for the valid head") as error:
+        _update_v5([NEW_HEAD, None], TREE)
+    assert error.value.code == 0
+
+
+def test_payload_id_reads_the_inclusion_list() -> None:
+    """Two lists that differ only in where one transaction ends give different IDs."""
+    ids = {
+        _update_v5([NEW_HEAD, ATTRIBUTES_V5 | {"inclusionListTransactions": transactions}])[
+            "payloadId"
+        ]
+        for transactions in [[], ["0x0102"], ["0x01", "0x02"], ["0x", "0x0102"]]
+    }
+    assert len(ids) == 4
+
+
+@pytest.mark.parametrize(
+    ("method", "attributes", "fork"),
+    [
+        # Version 5 takes Hegota alone, and version 4 Glamsterdam alone.
+        pytest.param("engine_forkchoiceUpdatedV5", ATTRIBUTES_V4, "glamsterdam", id="v5-at-gloas"),
+        pytest.param(
+            "engine_forkchoiceUpdatedV4",
+            ATTRIBUTES_V4 | {"timestamp": "0x320"},
+            "hegota",
+            id="v4-at-bogota",
+        ),
+    ],
+)
+def test_version_5_fork(method: str, attributes: dict[str, object], fork: str) -> None:
+    """Attributes of a fork that the version does not take are an unsupported fork."""
+    structure = attributes | ({"inclusionListTransactions": []} if method.endswith("V5") else {})
+    with raises(engine.EngineError, f'{UNSUPPORTED_FORK} (some "{fork}")') as error:
+        engine.forkchoice_updated(
+            CONFIG_BOGOTA,
+            TREE_BOGOTA,
+            method,
+            [NEW_HEAD, structure],
+            terminal_total_difficulty=MAINNET_TERMINAL_TOTAL_DIFFICULTY,
+        )
+    assert error.value.code == 38005
+
+
+def test_version_5_structure() -> None:
+    """Version 5 takes attributes of version 5 only."""
+    with raises(
+        engine.EngineError, "engine error: EthLib.Engine.EngineError.invalidPayloadAttributes"
+    ) as error:
+        _update_v5([NEW_HEAD, ATTRIBUTES_V4 | {"timestamp": "0x320"}])
+    assert error.value.code == 38003

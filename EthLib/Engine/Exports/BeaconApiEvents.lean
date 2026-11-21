@@ -90,7 +90,7 @@ def payloadAttributesEventGloasOf
   let finalized ← runProposer
     ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) forks.1)).mapError
       .forkChoice)
-  let (update, attributes, _) ← runProposer (prepareExecutionPayloadGloas config checks
+  let (update, attributes) ← runProposer (prepareExecutionPayloadGloas config checks
     store head state forks.1 safe finalized feeRecipient targetGasLimit)
   let (base, _, _) ← runProposer (payloadParentGloas config checks store head state forks.1)
   let event ← runProposer (payloadAttributesEvent base

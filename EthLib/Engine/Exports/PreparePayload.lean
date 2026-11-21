@@ -147,13 +147,9 @@ def preparePayloadOnStore
     | none => pure Json.null
   let finalized ← runProposer
     ((store.getFinalizedExecutionBlockHash (Nat.le_trans (by decide) gloas)).mapError .forkChoice)
-  let (update, attributes, transactions) ← runProposer (prepareExecutionPayloadGloas config checks
+  let (update, attributes) ← runProposer (prepareExecutionPayloadGloas config checks
     store head state gloas safe finalized feeRecipient targetGasLimit)
-  let lists := match sinceValue transactions with
-    | some list =>
-      [("inclusionListTransactions", Json.arr (list.map (dataJson ·.data.toList)).toArray)]
-    | none => []
-  return .ofJson (updateJson update attributes (("custodyColumns", custody) :: lists))
+  return .ofJson (updateJson update attributes [("custodyColumns", custody)])
 
 /-- From Gloas: the forkchoice update of a proposer, as the value of its JSON.
 
