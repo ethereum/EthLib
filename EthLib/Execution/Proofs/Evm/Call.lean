@@ -4,6 +4,7 @@ public import EthLib.Execution.Proofs.Evm.Call.Burn
 public import EthLib.Execution.Proofs.Evm.Call.BurnRun
 public import EthLib.Execution.Proofs.Evm.Call.Candidate
 public import EthLib.Execution.Proofs.Evm.Call.CodeOrigin
+public import EthLib.Execution.Proofs.Evm.Call.CodeRules
 public import EthLib.Execution.Proofs.Evm.Call.Codes
 public import EthLib.Execution.Proofs.Evm.Call.ContractAddress
 public import EthLib.Execution.Proofs.Evm.Call.Create
