@@ -26,7 +26,7 @@ public section
 namespace EthLib.Execution.Fees.Exports
 
 open EthLib.Base (Fork)
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (Result PyValue UnreadArgument forkUpTo pyExport rejectArgument toResult)
 open EthLib.Execution.Fees.BaseFee (calculateBaseFeePerGas)
 open EthLib.Execution.Fees.BlobBaseFee
 
@@ -36,7 +36,7 @@ def scheduleOfName (name : String) : Result (Fork × BlobSchedule) := do
   if h : .dencun ≤ fork then
     pure (fork, blobSchedule fork h)
   else
-    throw (0, "a fork before dencun has no blob schedule")
+    rejectArgument none "a fork before dencun has no blob schedule"
 
 /-- The base fee per gas of a block, from its parent's gas limit, gas used and base fee. -/
 @[export eth_fees_base_fee_per_gas]
@@ -82,8 +82,8 @@ def excessBlobGasExport (args : PyValue) : Result PyValue :=
 def blobDataFeeOf (args : String × Nat × ByteArray) : Result Nat := do
   let (fork, excess, tx) := args
   let (fork, schedule) ← scheduleOfName fork
-  let tx ← (Transactions.decodeTransaction fork tx).mapError
-    fun e => (0, s!"transaction rejected: {reprStr e}")
+  let tx ← toResult none ((Transactions.decodeTransaction fork tx).mapError
+    fun e => UnreadArgument.mk s!"transaction rejected: {reprStr e}")
   pure (calculateDataFee schedule excess tx)
 
 /-- The fee of the blobs of a transaction, decoded at a fork, at an excess blob gas.

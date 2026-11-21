@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Exports.Trie
 import all EthLib.Execution.Exports.Trie
+import all EthLib.Base.Exports.Result
 
 /-!
 # Proofs: `Execution.Exports.Trie`
@@ -29,13 +30,20 @@ private theorem rootExport_eq {secured : UInt8} {input : ByteArray} {items : Lis
       | .ok hash => return ⟨hash.toArray⟩
       | .error e => throw (e.code, s!"trie has no root: {repr e}") := by
   simp only [rootExport, hitems, hpairs, bind, Except.bind]
+  -- The conversion of an error writes the same code and the same message.
+  split <;> simp [*, EthLib.Exports.toResult, Except.mapError, throw, throwThe,
+    MonadExceptOf.throw]
+  -- The context and the message join into the same text.
+  refine ⟨rfl, ?_⟩
+  rw [String.append_assoc]
   rfl
 
 /-- A root that the export returns has 32 bytes. -/
 theorem size_of_rootExport {secured : UInt8} {input out : ByteArray}
     (h : rootExport secured input = .ok out) : out.size = 32 := by
   unfold rootExport at h
-  simp only [bind, Except.bind] at h
+  simp only [bind, Except.bind, EthLib.Exports.rejectArgument, EthLib.Exports.toResult,
+    Except.mapError] at h
   split at h
   · cases h
   · split at h

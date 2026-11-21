@@ -17,9 +17,14 @@ public section
 
 namespace EthLib.Execution.Evm.Precompiles.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport)
+open EthLib.Exports (ExportError Result PyValue forkUpTo pyExport rejectArgument toResult)
 
 open EthLib.Execution.Evm.Precompiles
+
+/-- A precompile error reaches Python with its code, and its message prints it on one line. -/
+instance : ExportError PrecompileError where
+  code := PrecompileError.code
+  message := fun e => (repr e).pretty 1000000
 
 /-- Run the precompile at the address on the call data, with the gas given, at the fork named.
 
@@ -35,8 +40,8 @@ def runExport (fork : ByteArray) (address : UInt64) (data : ByteArray) (gas : UI
     Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
   match run fork address.toNat data gas.toNat with
-  | some result => result.mapError fun e => (e.code, (repr e).pretty 1000000)
-  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
+  | some result => toResult none result
+  | none => rejectArgument none s!"no precompile at address {address} at fork {fork.name}"
 
 /-- The price of the precompile at the address on the call data, at the fork named.
 
@@ -48,7 +53,7 @@ def priceOf (args : String × Nat × ByteArray) : Result Nat := do
   let fork ← forkUpTo .glamsterdam fork.toUTF8
   match price fork address data with
   | some cost => return cost
-  | none => throw (0, s!"no precompile at address {address} at fork {fork.name}")
+  | none => rejectArgument none s!"no precompile at address {address} at fork {fork.name}"
 
 /-- The price of the precompile at the address on the call data, at the fork named.
 

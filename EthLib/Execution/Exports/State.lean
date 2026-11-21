@@ -38,11 +38,21 @@ public section
 
 namespace EthLib.Execution.State.Exports
 
-open EthLib.Exports (Result forkUpTo)
+open EthLib.Exports (ExportError Result UnreadArgument forkUpTo rejectArgument toResult)
 
 open EthLib.Base
 open EthLib.Execution.State
 open EthLib.Serialization.Rlp
+
+/-- A state that does not read reaches Python with its code, and its message names the fault. -/
+instance : ExportError StateInputError where
+  code := StateInputError.code
+  message := StateInputError.message
+
+/-- A failed change to the state reaches Python with its code, and its message names the error. -/
+instance : ExportError StateError where
+  code := StateError.code
+  message := reprStr
 
 /-- One account of the input: its address, nonce, balance, code and storage. -/
 structure Entry where
@@ -90,15 +100,14 @@ def ofInput (input : ByteArray) : Except StateInputError State := do
   ofEntries entries
 
 /-- The 32-byte state root of a state, with Keccak-256, or the code and message of its error. -/
-def rootOf (state : State) : Result ByteArray :=
-  match stateRoot Cryptography.Hash.Keccak.keccak256 state with
-  | .ok root => return ⟨root.toArray⟩
-  | .error e => throw ((StateInputError.noRoot e).code, (StateInputError.noRoot e).message)
+def rootOf (state : State) : Result ByteArray := do
+  return ⟨(← toResult none ((stateRoot Cryptography.Hash.Keccak.keccak256 state).mapError
+    StateInputError.noRoot)).toArray⟩
 
 /-- The 32-byte state root, with Keccak-256, of the state that `input` encodes. -/
 @[export eth_state_root]
 def stateRootExport (input : ByteArray) : Result ByteArray := do
-  rootOf (← (ofInput input).mapError fun e => (e.code, e.message))
+  rootOf (← toResult none (ofInput input))
 
 /-- The state root after the withdrawals of a block, from the state that `input` encodes.
 
@@ -106,21 +115,22 @@ The block is decoded at the fork, which must be Shapella or later. -/
 @[export eth_state_withdrawals_root]
 def withdrawalsRootExport (fork input block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
-  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
-  let b : Blocks.Block fork Item ← (Blocks.Block.decode (fun _ => fork) block).mapError
-    fun e => (0, s!"block rejected: {reprStr e}")
+  let pre ← toResult none (ofInput input)
+  let b : Blocks.Block fork Item ← toResult none
+    ((Blocks.Block.decode (fun _ => fork) block).mapError
+      fun e => UnreadArgument.mk s!"block rejected: {reprStr e}")
   if h : .shapella ≤ fork then
-    let post ← (Blocks.processWithdrawals fork ⟨pre, ∅, ∅, ∅, ∅⟩ (b.withdrawals h)).mapError
-      fun e => (e.code, s!"withdrawals failed: {reprStr e}")
+    let post ← toResult "withdrawals failed"
+      (Blocks.processWithdrawals fork ⟨pre, ∅, ∅, ∅, ∅⟩ (b.withdrawals h))
     rootOf post.applyChanges
-  else throw (0, "the fork is before Shapella")
+  else rejectArgument none "the fork is before Shapella"
 
 /-- The state root after the DAO Fork moves the ether of its accounts, from the state of `input`. -/
 @[export eth_state_dao_fork_root]
 def daoForkRootExport (input : ByteArray) : Result ByteArray := do
-  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
-  let tx ← (Blocks.applyDaoFork .daoFork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩)).mapError
-    fun e => (e.code, s!"the DAO Fork failed: {reprStr e}")
+  let pre ← toResult none (ofInput input)
+  let tx ← toResult "the DAO Fork failed"
+    (Blocks.applyDaoFork .daoFork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩))
   rootOf tx.incorporateTxIntoBlock.parent.applyChanges
 
 /-- The state root after the mining rewards of a block, from the state that `input` encodes.
@@ -132,13 +142,16 @@ The block and each of its ommers decode at the fork of their own number.
 From Paris on, a block pays no reward. -/
 @[export eth_state_rewards_root]
 def rewardsRootExport (forks input block : ByteArray) : Result ByteArray := do
-  let config ← (Blocks.Exports.chainOfForks forks).mapError fun (_, m) => (0, m)
-  let pre ← (ofInput input).mapError fun e => (e.code, e.message)
-  let item ← (Serialization.Rlp.decode block).mapError fun e => (0, s!"block rejected: {reprStr e}")
-  let ⟨fork, b⟩ ← (Blocks.Exports.blockOnChain config item).mapError fun (_, m) => (0, m)
+  let config ← toResult none
+    ((Blocks.Exports.chainOfForks forks).mapError fun (_, m) => UnreadArgument.mk m)
+  let pre ← toResult none (ofInput input)
+  let item ← toResult none ((Serialization.Rlp.decode block).mapError
+    fun e => UnreadArgument.mk s!"block rejected: {reprStr e}")
+  let ⟨fork, b⟩ ← toResult none
+    ((Blocks.Exports.blockOnChain config item).mapError fun (_, m) => UnreadArgument.mk m)
   let ommers := b.ommers.map fun o => (o.2.coinbase, o.2.number)
-  let tx ← (Blocks.payRewards fork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) b.header.coinbase b.header.number
-    ommers).mapError fun e => (e.code, s!"rewards failed: {reprStr e}")
+  let tx ← toResult "rewards failed"
+    (Blocks.payRewards fork (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) b.header.coinbase b.header.number ommers)
   rootOf tx.incorporateTxIntoBlock.parent.applyChanges
 
 end EthLib.Execution.State.Exports

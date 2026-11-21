@@ -47,7 +47,8 @@ public section
 
 namespace EthLib.Execution.Blocks.Exports
 
-open EthLib.Exports (Result PyValue forkUpTo pyExport toResult)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument forkUpTo pyExport rejectArgument
+  toResult)
 
 open EthLib.Base
 open EthLib.Serialization.Rlp
@@ -84,14 +85,15 @@ def chainOfForks (forks : ByteArray) : Result ChainConfig := do
       let fork ← forkUpTo .glamsterdam name
       let first : Nat ← toResult "fork block rejected" (Codec.ofItem first)
       pure (fork, Activation.block first)
-    | _ => throw (0, "a fork is not a list of a name and a block number")
+    | _ => rejectArgument none "a fork is not a list of a name and a block number"
   -- The chain ID and the deposit contract play no part in the order of the forks.
   let config : ChainConfig :=
     { chainId := 0, depositContractAddress := Vector.replicate 20 0, activations := activations }
-  if !decide config.Ordered then throw (0, "the forks are not in the order of the timeline")
+  if !decide config.Ordered then
+    rejectArgument none "the forks are not in the order of the timeline"
   match activations with
   | (_, .block 0) :: _ => pure config
-  | _ => throw (0, "the first fork does not start at block 0")
+  | _ => rejectArgument none "the first fork does not start at block 0"
 
 /-- The fork of a block number, on a chain whose first fork starts at block 0. -/
 def forkAtBlock (config : ChainConfig) (number : Nat) : Fork :=
@@ -106,9 +108,14 @@ def blockOnChain (config : ChainConfig) (item : Item) :
   pure ⟨_, ← toResult "block rejected"
     (Block.ofItem (fork := forkAtBlock config number) (forkAtBlock config) item)⟩
 
+/-- A receipt error reaches Python with its code, and its message names the error. -/
+instance : ExportError ReceiptError where
+  code := ReceiptError.code
+  message := reprStr
+
 /-- The transaction type and the receipt that some bytes hold at the fork. -/
 def decodeReceiptAt (fork : Fork) (receipt : ByteArray) : Result (UInt8 × Receipt fork) :=
-  (decodeReceipt fork receipt).mapError fun e => (e.code, s!"receipt rejected: {reprStr e}")
+  toResult "receipt rejected" (decodeReceipt fork receipt)
 
 /-- The bytes of a receipt, decoded at the fork and encoded again with its transaction type. -/
 @[export eth_receipt_reencode]
@@ -129,6 +136,7 @@ def receiptLogsBloomExport (fork receipt : ByteArray) : Result ByteArray := do
 def validateSizeExport (fork block : ByteArray) : Result UInt8 := do
   let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
+  -- The message keeps the full name of the error, unlike the instance of block errors.
   (validateBlockSize b).map (fun () => 1) |>.mapError
     fun e => (e.code, s!"block invalid: {oneLine e}")
 
@@ -143,7 +151,7 @@ def blobSchedulesOf (entries : List (Nat × Nat × Nat × Nat)) :
     if h : target ≤ max ∧ 0 < max ∧ 0 < fraction then
       pure (none, .time time, ⟨target, max, fraction, h.1, h.2.1, h.2.2⟩)
     -- No error type covers a blob schedule of the binding, so its code is 0.
-    else throw (0, "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction")
+    else rejectArgument none "a blob schedule needs target ≤ max, 0 < max and 0 < update fraction"
 
 /-- The arguments of a header check.
 
@@ -177,9 +185,10 @@ The header's blob schedule is the last given one that it has reached, else that 
 def validateHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
+    -- The message keeps the full name of the error, unlike the instance of block errors.
     (validateHeader hFork parent header schedule).mapError
       fun e => (e.code, s!"header invalid: {oneLine e}")
-  else throw (0, "the parent's fork is after the fork")
+  else rejectArgument none "the parent's fork is after the fork"
 
 /-- Check a header at a fork against its parent at the parent's fork, at every fork.
 
@@ -198,9 +207,10 @@ The header's blob schedule is the last given one that it has reached, else that 
 def checkHeaderOf (args : HeaderCheckArgs) : Result Unit := do
   let ⟨parentFork, fork, parent, header, schedule⟩ ← headerCheckInputs args
   if hFork : parentFork ≤ fork then
+    -- The message keeps the full name of the error, unlike the instance of block errors.
     (checkHeader hFork parent header schedule).mapError
       fun e => (e.code, s!"header invalid: {oneLine e}")
-  else throw (0, "the parent's fork is after the fork")
+  else rejectArgument none "the parent's fork is after the fork"
 
 /-- Check a header against its parent at two named forks, every check but the proof of work.
 
@@ -229,15 +239,16 @@ def daoExtraDataValidExport (daoBlock : UInt64) (fork header : ByteArray) : Resu
 
 /-- The transaction that an item of a block holds at the fork. -/
 def transactionOfItem (fork : Fork) (item : Item) : Result Transactions.Transaction :=
-  (Transactions.decodeBodyTransaction fork item).mapError
-    fun e => (0, s!"transaction rejected: {reprStr e}")
+  toResult none ((Transactions.decodeBodyTransaction fork item).mapError
+    fun e => UnreadArgument.mk s!"transaction rejected: {reprStr e}")
 
 /-- A root, or the code and the message of its trie error. -/
 def runTrie (act : Except Trie.TrieError Hash32) : Result ByteArray :=
   match act with
   | .ok hash => return ⟨hash.toArray⟩
-  | .error (.rlp e) => throw (e.code, s!"no root: {reprStr e}")
-  | .error e => throw (0, s!"no root: {oneLine e}")
+  -- An RLP error keeps its own code, and any other trie error has code 0.
+  | .error (.rlp e) => toResult "no root" (.error e : Except RlpError ByteArray)
+  | .error e => rejectArgument "no root" (oneLine e)
 
 /-- The transactions root of the transactions of a block, decoded at the fork. -/
 @[export eth_block_transactions_root]
@@ -252,17 +263,22 @@ def withdrawalsRootExport (fork block : ByteArray) : Result ByteArray := do
   let fork ← forkUpTo .glamsterdam fork
   let b : Block fork Item ← toResult "block rejected" (Block.decode (fun _ => fork) block)
   if h : .shapella ≤ fork then runTrie (withdrawalsRoot (b.withdrawals h))
-  else throw (0, "the fork is before Shapella")
+  else rejectArgument none "the fork is before Shapella"
+
+/-- A deposit log error reaches Python with its code, and its message names the error. -/
+instance : ExportError DepositError where
+  code := DepositError.code
+  message := reprStr
 
 /-- The data of the deposit requests of logs, given as the RLP list of the logs, in order.
 
 The first argument is the 20-byte address of the deposit contract of the chain. -/
 @[export eth_block_deposit_requests]
 def depositRequestsExport (depositContract logs : ByteArray) : Result ByteArray := do
-  let address : Address ← Base.exactBytes 20 depositContract fun _ =>
-    (0, "the deposit contract address is not 20 bytes")
+  let address : Address ← toResult none (Base.exactBytes 20 depositContract fun _ =>
+    UnreadArgument.mk "the deposit contract address is not 20 bytes")
   let logs : List Log ← toResult "logs rejected" (Codec.decode logs)
-  (depositRequests address logs).mapError fun e => (e.code, s!"deposit log rejected: {reprStr e}")
+  toResult "deposit log rejected" (depositRequests address logs)
 
 /-- The requests hash of request lists, given as an RLP list of byte strings.
 
@@ -278,12 +294,16 @@ def blockAccessListHashExport (bal : ByteArray) : Result ByteArray := do
   let bal : BlockAccessList ← toResult "block access list rejected" (Codec.decode bal)
   return ⟨(← toResult "block access list has no encoding" (BlockAccessList.hash bal)).toArray⟩
 
+/-- A block access list error reaches Python with its code, and its message names the error. -/
+instance : ExportError BlockAccessList.Error where
+  code := BlockAccessList.Error.code
+  message := reprStr
+
 /-- Check a block access list in RLP form alone, in a block with a gas limit. -/
 @[export eth_block_access_list_check]
 def blockAccessListCheckExport (bal : ByteArray) (gasLimit : UInt64) : Result UInt8 := do
   let bal : BlockAccessList ← toResult "block access list rejected" (Codec.decode bal)
-  (BlockAccessList.check bal gasLimit.toNat).map (fun () => 1) |>.mapError
-    fun e => (e.code, s!"block access list invalid: {reprStr e}")
+  toResult "block access list invalid" ((BlockAccessList.check bal gasLimit.toNat).map fun () => 1)
 
 /-- One transaction of a block: its type, its outcome, the gas it used and its logs.
 
@@ -293,10 +313,10 @@ def resultOfItem (fork : Fork) (item : Item) : Result (UInt8 × Outcome fork × 
   | [type, outcome, gas, logs] =>
     let type : Nat ← toResult "type rejected" (Codec.ofItem type)
     -- No error type covers this bound of the binding, so its code is 0.
-    if 256 ≤ type then throw (0, "type is 256 or more")
+    if 256 ≤ type then rejectArgument none "type is 256 or more"
     return (type.toUInt8, ← toResult "outcome rejected" (Codec.ofItem outcome),
       ← toResult "gas rejected" (Codec.ofItem gas), ← toResult "logs rejected" (Codec.ofItem logs))
-  | _ => throw (0, "a result is not a list of four items")
+  | _ => rejectArgument none "a result is not a list of four items"
 
 /-- The receipts of the transactions of a block, and their receipts root.
 

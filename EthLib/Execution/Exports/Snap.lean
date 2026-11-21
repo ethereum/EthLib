@@ -20,7 +20,7 @@ public section
 
 namespace EthLib.Execution.Network.Snap.Exports
 
-open EthLib.Exports (Result PyValue pyExport)
+open EthLib.Exports (ExportError Result PyValue UnreadArgument pyExport rejectArgument toResult)
 open EthLib.Execution.Network
 
 /-- A message for a rejected message, phrased for someone reading a Python traceback. -/
@@ -31,15 +31,20 @@ def snapMessage : SnapError → String
   | .compactPath _ => "a partial trie node path is not a valid compact encoding"
   | .emptyPathGroup => "a list of trie node paths is empty"
 
+/-- A rejected message reaches Python with its code, and its message names the fault. -/
+instance : ExportError SnapError where
+  code := SnapError.code
+  message := snapMessage
+
 /-- The version with a number, or code 0 when EthLib does not specify it. -/
 def readVersion (number : UInt64) : Result SnapVersion :=
   match SnapVersion.ofNumber? number.toNat with
   | some v => pure v
-  | none => throw (0, s!"snap/{number} is not a version that EthLib specifies")
+  | none => rejectArgument none s!"snap/{number} is not a version that EthLib specifies"
 
 /-- Run a fallible computation of a message, with its error as a code and a message. -/
 def run {α : Type} (act : Except SnapError α) : Result α :=
-  act.mapError fun e => (e.code, snapMessage e)
+  toResult none act
 
 /-- The canonical data of the message with the ID `id` and the data `data`, on a version.
 
@@ -74,7 +79,8 @@ def accessListsAnswerExport (request response : ByteArray) (expected : Array Byt
   let req ← run (SnapMessage.decode .snap2 0x08 request)
   let resp ← run (SnapMessage.decode .snap2 0x09 response)
   let hashes ← expected.toList.mapM fun b =>
-    Base.exactBytes 32 b fun _ => (0, "an access list hash is not 32 bytes")
+    toResult none (Base.exactBytes 32 b fun _ =>
+      UnreadArgument.mk "an access list hash is not 32 bytes")
   match resp with
   | .blockAccessLists _ lists =>
     return SnapMessage.answers req resp && accessListsAnswer hashes lists
@@ -98,7 +104,7 @@ def trieNodesAnswerExport (request response : ByteArray) : Result Bool := do
 @[export eth_snap_full_account]
 def fullAccountExport (slim : ByteArray) : Result ByteArray := do
   let some bytes := (Serialization.Rlp.decode slim).toOption.bind fullAccount
-    | throw (0, "account is not in slim form")
+    | rejectArgument none "account is not in slim form"
   return bytes
 
 /-- An answer as a Python value: `None` for the empty reply, else whether keys remain. -/
@@ -107,10 +113,10 @@ def answerToOption : RangeAnswer → Option Bool
   | .toEnd => some false
   | .more => some true
 
-/-- Run a check of a range answer, with its error as a code and a message. -/
-def runRange (act : Except SnapRangeError RangeAnswer) : Result (Option Bool) :=
-  answerToOption <$> act.mapError fun e =>
-    (e.code, s!"range answer does not verify: {(repr e).pretty 1000000}")
+/-- A range answer that does not verify reaches Python with its code, on one line. -/
+instance : ExportError SnapRangeError where
+  code := SnapRangeError.code
+  message := fun e => (repr e).pretty 1000000
 
 /-- A slot of a range from a pair of a key hash and its data. -/
 def toRangeEntry (pair : Base.Hash32 × ByteArray) : RangeEntry ByteArray := ⟨pair.1, pair.2⟩
@@ -132,7 +138,8 @@ def verifyAccountRangeOf
     (args : Base.Hash32 × Base.Hash32 × List (Base.Hash32 × ByteArray) × List ByteArray) :
     Result (Option Bool) := do
   let (root, start, accounts, proof) := args
-  runRange (verifyAccountRange root start (accounts.map toAccountEntry) proof)
+  answerToOption <$> toResult "range answer does not verify"
+    (verifyAccountRange root start (accounts.map toAccountEntry) proof)
 
 /-- Check the accounts of an AccountRange answer, from a root and a start of 32 bytes each.
 
@@ -163,9 +170,10 @@ def verifyStorageRangesOf
       List ByteArray) : Result (Option Bool) := do
   let (roots, start, slots, proof) := args
   let start ← if start.size = 0 then pure (Vector.replicate 32 0)
-    else Base.exactBytes 32 start fun size =>
-      (0, s!"bad start size: {size}, expected 0 or 32")
-  runRange (verifyStorageRanges roots start (slots.map (·.map toRangeEntry)) proof)
+    else toResult none (Base.exactBytes 32 start fun size =>
+      UnreadArgument.mk s!"bad start size: {size}, expected 0 or 32")
+  answerToOption <$> toResult "range answer does not verify"
+    (verifyStorageRanges roots start (slots.map (·.map toRangeEntry)) proof)
 
 /-- Check the ranges of a StorageRanges answer, against the storage roots of the request.
 

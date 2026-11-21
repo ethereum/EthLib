@@ -53,7 +53,7 @@ So a code crosses as a pair: whether it is negative, then its absolute value.
 namespace EthLib.Execution.Rpc.Exports
 
 open Lean (Json)
-open EthLib.Exports (Result PyValue ToPy toPy pyExport)
+open EthLib.Exports (Result PyValue ToPy UnreadArgument rejectArgument toPy pyExport toResult)
 open EthLib.Serialization.JsonRpc (Read RpcError address bytes reject uint uint64)
 
 derive_py BlockTag
@@ -125,7 +125,7 @@ def readParamOf (args : String × PyValue) : Result PyValue :=
   | "BlockNumberOrTag" => readingOf schema value blockNumberOrTag
   | "BlockNumberOrTagForRange" => readingOf schema value blockNumberOrTagForRange
   | "BlockNumberOrTagOrHash" => readingOf schema value blockNumberOrTagOrHash
-  | _ => .error (0, s!"unknown schema: {schema}")
+  | _ => rejectArgument none s!"unknown schema: {schema}"
 
 /-- Read a parameter of the execution JSON-RPC API under the schema of the given name.
 
@@ -155,7 +155,7 @@ Each code and each bound is a pair: whether it is negative, then its absolute va
 def errorGroupsExport : PyValue → Result PyValue
   | .tuple #[] => .ok (toPy (errorGroups.map fun g =>
     (g.name, g.range, g.errors.map fun e => (e.code, e.message))))
-  | _ => .error (0, "expected no argument")
+  | _ => rejectArgument none "expected no argument"
 
 /-- The code of history that the node pruned, with its message.
 
@@ -163,13 +163,13 @@ The code is a pair: whether it is negative, then its absolute value. -/
 @[export eth_rpc_pruned_history_unavailable]
 def prunedHistoryUnavailableExport : PyValue → Result PyValue
   | .tuple #[] => .ok (toPy (prunedHistoryUnavailable.code, prunedHistoryUnavailable.message))
-  | _ => .error (0, "expected no argument")
+  | _ => rejectArgument none "expected no argument"
 
 /-! ## The chain view -/
 
 open EthLib.Base (ChainConfig Fork Hash32)
 open EthLib.Execution.Blocks (Block BlockChain BlockError Log Receipt stateTransition)
-open EthLib.Execution.Blocks.Exports (blockErrorMessage blockOf)
+open EthLib.Execution.Blocks.Exports (blockOf)
 open EthLib.Execution.State (stateRoot)
 open EthLib.Cryptography.Hash.Keccak (keccak256)
 
@@ -178,7 +178,8 @@ def recordOf {fork : Fork} (block : Block fork Execution.Transactions.Transactio
     (state : Execution.State.State) (receipts : List (UInt8 × Receipt fork))
     (logs : List Log) (accessList : Option Blocks.BlockAccessList := none) :
     Result BlockRecord := do
-  let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
+  let hash ← toResult none
+    (block.header.hash.mapError fun e => UnreadArgument.mk s!"block hash: {reprStr e}")
   return ⟨fork, block, hash, state, receipts, logs, accessList⟩
 
 /-- The record of a block after the last record of a chain, by the state transition. -/
@@ -186,11 +187,10 @@ def nextRecord (config : ChainConfig) (checkSeal : Bool) (records : List BlockRe
     (prev : BlockRecord) (block : String × ByteArray) : Result BlockRecord := do
   let ⟨_, block⟩ ← blockOf config block.1 block.2
   let chain : BlockChain := ⟨config, prev.state, records.map BlockRecord.recent⟩
-  let failed := fun (e : BlockError) =>
-    (e.code, s!"block {block.header.number}: {blockErrorMessage e}")
-  let state ← (stateTransition chain block checkSeal).mapError failed
-  let hash ← block.header.hash.mapError fun e => (0, s!"block hash: {reprStr e}")
-  (BlockRecord.ofRun chain block hash state).mapError failed
+  let state ← toResult s!"block {block.header.number}" (stateTransition chain block checkSeal)
+  let hash ← toResult none
+    (block.header.hash.mapError fun e => UnreadArgument.mk s!"block hash: {reprStr e}")
+  toResult s!"block {block.header.number}" (BlockRecord.ofRun chain block hash state)
 
 /-- The inputs of a chain view: the configuration, the state of the lowest block, and the blocks.
 
@@ -203,8 +203,8 @@ def configNat (j : Json) (name : String) : Result (Option Nat) := do
   match j.getObjVal? name with
   | .error _ => return none
   | .ok value =>
-    let some n := value.getNat?.toOption | throw (0, s!"config: {name} is not a number")
-    unless n < 2 ^ 64 do throw (0, s!"config: {name} is not below 2^64")
+    let some n := value.getNat?.toOption | rejectArgument none s!"config: {name} is not a number"
+    unless n < 2 ^ 64 do rejectArgument none s!"config: {name} is not below 2^64"
     return some n
 
 /-- Explicit genesis context for a pruned view, or none when neither field is given.
@@ -215,9 +215,9 @@ def configGenesis (j : Json) : Result (Option (Hash32 × Nat)) := do
   match j.getObjVal? "genesisHash", time with
   | .error _, none => return none
   | .ok hash, some time =>
-    let hash ← (hash32 "genesisHash" hash).mapError fun reason => (0, reason)
+    let hash ← toResult none ((hash32 "genesisHash" hash).mapError UnreadArgument.mk)
     return some (hash, time)
-  | _, _ => throw (0, "config: genesisHash and genesisTime must be given together")
+  | _, _ => rejectArgument none "config: genesisHash and genesisTime must be given together"
 
 /-- The chain view that its inputs build, or why they build none.
 
@@ -238,32 +238,35 @@ def viewOf (inputs : ViewInputs) : Result ChainView := do
   let genesis ← configGenesis configJson
   let mergeForkBlock ← configNat configJson "mergeForkBlock"
   let config ← ChainConfig.Exports.configOfJson configJson
-  let setup ← EthLib.Exports.toResult none (Cryptography.Kzg.Exports.embeddedSetup ())
-  let state ← (State.Exports.ofInput state).mapError fun e => (0, e.message)
+  let setup ← toResult none (Cryptography.Kzg.Exports.embeddedSetup ())
+  let state ← toResult none
+    ((State.Exports.ofInput state).mapError fun e => UnreadArgument.mk e.message)
   let (first, rest) ← match blocks with
-    | [] => .error (0, "no block")
+    | [] => rejectArgument none "no block"
     | first :: rest => pure (first, rest)
   let ⟨fork, lowest⟩ ← blockOf config first.1 first.2
   unless config.activeFork lowest.header.number lowest.header.timestamp.toNat = some fork do
-    .error (0, "the lowest block is not at its active fork")
-  let root ← (stateRoot keccak256 state).mapError fun e => (0, s!"state root: {reprStr e}")
+    rejectArgument none "the lowest block is not at its active fork"
+  let root ← toResult none
+    ((stateRoot keccak256 state).mapError fun e => UnreadArgument.mk s!"state root: {reprStr e}")
   unless root = lowest.header.stateRoot do
-    .error (0, "the state is not the state of the lowest block")
+    rejectArgument none "the state is not the state of the lowest block"
   unless lowest.transactions.isEmpty do
-    .error (0, "the lowest block has transactions, whose receipts are not given")
+    rejectArgument none "the lowest block has transactions, whose receipts are not given"
   let lowest ← recordOf lowest state [] []
   let genesis ← match lowest.genesis with
     | some actual => do
       if let some given := genesis then
-        unless given = actual do throw (0, "config: genesis context disagrees with block zero")
+        unless given = actual do
+          rejectArgument none "config: genesis context disagrees with block zero"
       pure (some actual)
     | none => pure genesis
   let records ← rest.foldlM (init := [lowest]) fun records block => do
     let prev := records.getLast?.getD lowest
     return records ++ [← nextRecord config checkSeal records prev block]
-  if h : records = [] then .error (0, "no block")
+  if h : records = [] then rejectArgument none "no block"
   else
-    unless (records.getLast h).hash = head do .error (0, "the head is not the last block")
+    unless (records.getLast h).hash = head do rejectArgument none "the head is not the last block"
     let view : ChainView := {
       config := config
       canonical := records
@@ -338,7 +341,7 @@ def encodeBlockAccessListExport (args : PyValue) : Result PyValue :=
 /-- The state root after the account overrides of a block, or why the inputs are rejected. -/
 def applyOverridesOf (args : ByteArray × PyValue) : Result ByteArray := do
   let (input, value) := args
-  let state ← (State.Exports.ofInput input).mapError fun e => (e.code, e.message)
+  let state ← toResult none (State.Exports.ofInput input)
   let overrides ← (if containsBytes value then reject "stateOverrides: not a JSON value"
     else stateOverrides value.toJson).mapError fun reason =>
       ((RpcError.invalidParams reason).code.natAbs.toUInt32, reason)
