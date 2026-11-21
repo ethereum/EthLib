@@ -1314,6 +1314,7 @@ static PyMethodDef methods[] = {
   {"tx_intrinsic_gas", py_tx_intrinsic_gas, METH_VARARGS, DOC_tx_intrinsic_gas},
   {"tx_check", py_tx_check, METH_VARARGS, DOC_tx_check},
   {"tx_check_in_block", py_tx_check_in_block, METH_VARARGS, DOC_tx_check_in_block},
+  {"tx_admit_to_pool", py_tx_admit_to_pool, METH_VARARGS, DOC_tx_admit_to_pool},
   {"tx_run", py_tx_run, METH_VARARGS, DOC_tx_run},
   {"tx_settle", py_tx_settle, METH_VARARGS, DOC_tx_settle},
   {"tx_network_check", py_tx_network_check, METH_VARARGS, DOC_tx_network_check},

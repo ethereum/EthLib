@@ -731,6 +731,7 @@ PyObject* py_tx_recover_sender                            (PyObject* self, PyObj
 PyObject* py_tx_intrinsic_gas                             (PyObject* self, PyObject* args);
 PyObject* py_tx_check                                     (PyObject* self, PyObject* args);
 PyObject* py_tx_check_in_block                           (PyObject* self, PyObject* args);
+PyObject* py_tx_admit_to_pool                            (PyObject* self, PyObject* args);
 PyObject* py_tx_run                                      (PyObject* self, PyObject* args);
 PyObject* py_tx_settle                                    (PyObject* self, PyObject* args);
 PyObject* py_tx_network_check                             (PyObject* self, PyObject* args);

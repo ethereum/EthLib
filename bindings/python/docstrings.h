@@ -1484,6 +1484,9 @@
 #define DOC_tx_check_in_block \
   "Check that a transaction may enter its block at `fork`, on the chain `chainId`."
 
+#define DOC_tx_admit_to_pool \
+  "Check that a node may keep a transaction from a peer, at `fork` on the chain `chainId`."
+
 #define DOC_tx_settle \
   "Settle the gas of a transaction that passes the gas, nonce and fee rules."
 

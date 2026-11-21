@@ -1988,6 +1988,10 @@ def tx_check_in_block(fork: str, chain_id: int, tx: bytes, state: bytes, gas_lim
     """Check that a transaction may enter its block at `fork`, on the chain `chainId`."""
     ...
 
+def tx_admit_to_pool(fork: str, chain_id: int, tx: bytes, state: bytes) -> tuple[bytes, bool]:
+    """Check that a node may keep a transaction from a peer, at `fork` on the chain `chainId`."""
+    ...
+
 def tx_settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> tuple[int, int, int, int]:
     """Settle the gas of a transaction that passes the gas, nonce and fee rules."""
     ...

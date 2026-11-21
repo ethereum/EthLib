@@ -14333,6 +14333,28 @@
    "docstring":
    "Check that a transaction may enter its block at `fork`, on the chain `chainId`.\n\nThe block has used the gas `used` before it, and `state` is the state.\n\nThe first check that fails gives the error, and the order depends on the fork.\n\nBefore Glamsterdam:\n\n- the rules alone, which read no sender then, so any address stands in for it;\n- the gas of the block, the chain, the signature and the base fee;\n- the blobs and the authorizations.\n\nFrom Glamsterdam:\n\n- the chain and the signature;\n- the rules alone, which check the blobs and the authorizations too;\n- the gas of the block and the base fee.\n\nAt every fork, the fee per blob gas and the sender come last.\n\nA simulation may give the sender, which skips the signature and the rule on the sender's code.\n\nA legacy transaction then names no chain, since only its signature does.\n\nA simulation may also lift some rules."},
   {"summary":
+   "Check that a node may keep a transaction from a peer, at `fork` on the chain `chainId`.",
+   "signature":
+   "(fork: str, chain_id: int, tx: bytes, state: bytes) -> tuple[bytes, bool]",
+   "operation": "EthLib.Execution.Network.admitToPool",
+   "method": "tx_admit_to_pool",
+   "errors":
+   [{"type": "EthLib.Execution.Transactions.InclusionError",
+     "codes":
+     [{"constructor": "transaction", "code": null},
+      {"constructor": "gasAllowanceExceeded", "code": 201},
+      {"constructor": "blobGasLimitExceeded", "code": 202},
+      {"constructor": "insufficientMaxFeePerGas", "code": 203},
+      {"constructor": "insufficientMaxFeePerBlobGas", "code": 204},
+      {"constructor": "nonceTooLow", "code": 205},
+      {"constructor": "nonceTooHigh", "code": 206},
+      {"constructor": "insufficientBalance", "code": 207},
+      {"constructor": "senderNotEoa", "code": 208},
+      {"constructor": "missingCode", "code": 209}]}],
+   "error_class": "TransactionError",
+   "docstring":
+   "Check that a node may keep a transaction from a peer, at `fork` on the chain `chainId`.\n\nIt returns the sender.\n\nThe rules that need no state are those of a transaction alone, which go beyond the source.\n\nThey check the chain, the signature and the type, and that the gas limit covers the intrinsic gas.\n\nThe type must be active at the fork, which is stricter than the source and which it allows.\n\nThe source allows a node to enforce more rules.\n\nA transaction that fails them never enters a block.\n\nThen the nonce must be at least the nonce of the sender.\n\nLast, the sender must hold the most the transaction can cost, with the value it sends.\n\nThe source writes that cost for a legacy transaction, as the gas limit times the gas price.\n\nFor later types, the price is the most fee per gas, and the most fee of the blobs adds to it.\n\nThe errors are those of a transaction alone, a nonce too low, and a balance below the cost."},
+  {"summary":
    "Settle the gas of a transaction that passes the gas, nonce and fee rules.",
    "signature":
    "(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: int) -> tuple[int, int, int, int]",

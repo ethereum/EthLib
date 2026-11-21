@@ -90,6 +90,18 @@ def check_in_block(
     )
 
 
+class Admitted(NamedTuple):
+    """A transaction that a node keeps in its pool: its sender, and whether it may go whole."""
+
+    sender: bytes
+    may_broadcast_whole: bool
+
+
+def admit_to_pool(fork: str, chain_id: int, tx: bytes, state: bytes) -> Admitted:
+    """Check that a node may keep a transaction from a peer, against the accounts of a state."""
+    return Admitted(*_native.tx_admit_to_pool(fork, chain_id, tx, state))
+
+
 class Run(NamedTuple):
     """What one transaction leaves, with the accounts of the state after it."""
 
@@ -112,10 +124,12 @@ def settle(fork: str, tx: bytes, base_fee: int, gas_left: int, refund_counter: i
 
 
 __all__ = [
+    "Admitted",
     "Checked",
     "Included",
     "Run",
     "Settlement",
+    "admit_to_pool",
     "check",
     "check_in_block",
     "intrinsic_gas",

@@ -4,6 +4,7 @@ public import EthLib.Base.Exports.PyValue
 public import EthLib.Execution.Exports.Blocks
 public import EthLib.Execution.Exports.State
 public import EthLib.Cryptography.Exports.Kzg
+public import EthLib.Execution.Network.Pool
 public import EthLib.Execution.Transactions.Inclusion
 public import EthLib.Execution.Transactions.Network
 public import EthLib.Execution.Transactions.Process
@@ -221,6 +222,26 @@ It returns the sender, the price per gas and the blob gas of the transaction. -/
 @[export eth_tx_check_in_block]
 def checkInBlockExport (args : PyValue) : Result PyValue :=
   pyExport checkInBlockOf args
+
+/-- Check that a node may keep a transaction from a peer in its pool, against a state.
+
+It returns the sender, and whether the node may send the transaction whole to its peers. -/
+def admitToPoolOf (args : String × UInt64 × ByteArray × ByteArray) : Result (Address × Bool) := do
+  let (fork, chainId, tx, state) := args
+  let (fork, tx) ← decodeAt .bpo5 fork.toUTF8 tx
+  let pre ← (State.Exports.ofInput state).mapError fun e => (e.code, e.message)
+  let sender ← (Network.admitToPool fork chainId (.ofBlock ⟨pre, ∅, ∅, ∅, ∅⟩) tx).mapError
+    fun e => (e.code, inclusionMessage e)
+  return (sender, Network.mayBroadcastWhole tx)
+
+/-- Check that a node may keep a transaction from a peer in its pool, against a state.
+
+The arguments are the name of the fork, the chain ID, the transaction and the state.
+
+It returns the sender, and whether the node may send the transaction whole to its peers. -/
+@[export eth_tx_admit_to_pool]
+def admitToPoolExport (args : PyValue) : Result PyValue :=
+  pyExport admitToPoolOf args
 
 /-! ## The run of a transaction -/
 
