@@ -7928,14 +7928,15 @@ The RLP encoder still recurses once per nested list.
 These depths were measured on this decoder, on top of commit `22008211b`, on CPython 3.12.16 and Linux 7.0 on x86-64, in the main thread with a stack limit of 8 MiB:
 - The generic decoder of the bindings returns the item of 4194305 nested lists, an input of 16755096 bytes.
 - The typed decoder of the bindings and the decoders of snap and devp2p messages raise their own errors at every depth tested, up to 4194305 nested lists.
-- The decoder of eth messages writes the message back with the encoder, so it aborts the process from about 104700 nested lists of a Transactions message, an input of about 400 KB.
-  Near that depth the outcome varies from run to run.
-  A peer sends the bytes of those messages; #3766 tracks a fix.
+- The eth wire hash, the checks of PooledTransactions and BlockHeaders, and the eth session read the bytes each transaction or header was decoded from.
+  On a transaction of 300000 nested lists, measured on top of commit `cf8500beb`, the wire hash returns.
+  The checks of PooledTransactions and BlockHeaders raise their own errors, and the eth session accepts it.
+- The checks of a block body, of block access lists and of partial receipts still run the encoder on items that a peer sent.
+  Their depth was not measured.
 - The encoder raises `RecursionError` from 9998 nested lists, in the conversion from Python, before the Lean encoder runs.
 - The transaction and block decoders raise their own errors at every depth tested, up to 4194305 nested lists, on inputs that do not have the shape of a transaction or a block.
 - The other paths that decode RLP, such as trie proofs, Era1 files, discovery packets and ENR records, run the same decoder, but were not measured.
 
-A thread with a smaller stack would abort the eth message decoder at a smaller depth; this was not measured.
 The Python suite decodes 200000 nested lists (`bindings/python/tests/rlp/test_nesting.py`).
 
 ### B2. Lean core's own implementations

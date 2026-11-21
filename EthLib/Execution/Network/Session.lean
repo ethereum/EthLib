@@ -96,10 +96,6 @@ inductive EthSessionError where
   | unsolicited (requestId : UInt64)
   /-- A BlockRangeUpdate announces a range that starts after it ends. -/
   | badRange (earliest latest : Nat)
-  /-- A received transaction has no hash, since its item does not encode.
-
-  An item fails to encode only when a length reaches `2^64`, so no decoded item does. -/
-  | transaction (error : RlpError)
   deriving DecidableEq, Repr
 
 /-- The stable code of an error, one per constructor, for the C exports.
@@ -108,6 +104,8 @@ A refused Status carries the code of its own error, from 101.
 
 The other codes start at 701, above every code of the other errors of the eth messages.
 
+Code 705 stays unused, so that no code takes another meaning.
+
 A new constructor takes a new code, so that each code keeps its meaning. -/
 def EthSessionError.code : EthSessionError → UInt32
   | .beforeStatus _ => 701
@@ -115,7 +113,6 @@ def EthSessionError.code : EthSessionError → UInt32
   | .secondStatus => 702
   | .unsolicited _ => 703
   | .badRange .. => 704
-  | .transaction _ => 705
 
 namespace Message
 
@@ -134,9 +131,9 @@ def isRequest : Message → Bool
 /-- The hashes of the transactions that a Transactions or PooledTransactions message holds.
 
 Every other message holds none. -/
-def transactionHashes : Message → Except RlpError (List Hash32)
-  | transactions txs | pooledTransactions _ txs => txs.mapM wireHash
-  | _ => pure []
+def transactionHashes : Message → List Hash32
+  | transactions txs | pooledTransactions _ txs => txs.map wireHash
+  | _ => []
 
 end Message
 
@@ -151,7 +148,6 @@ The node has the schedule `s`, and its head has a block number and a timestamp.
 - A BlockRangeUpdate must announce a valid range.
 - A response must answer a pending request, and the oldest one it answers leaves the list.
 - The hashes of received transactions join the received ones.
-- A received transaction whose item does not encode has no hash, and is rejected.
 -/
 def receiveEth (s : Schedule) (number timestamp : Nat) (session : EthSession) (m : Message) :
     Except EthSessionError (EthSession × EthVerdict) := do
@@ -173,8 +169,8 @@ def receiveEth (s : Schedule) (number timestamp : Nat) (session : EthSession) (m
           if session.pending.any (Message.answers · m) then
             pure (session.pending.eraseP (Message.answers · m))
           else throw (.unsolicited i)
-      let hashes ← m.transactionHashes.mapError .transaction
-      return ({ session with pending, receivedTxs := session.receivedTxs ++ hashes }, .accept)
+      return ({ session with pending, receivedTxs := session.receivedTxs ++ m.transactionHashes },
+        .accept)
 
 /--
 The session after this node sends the message `m`, or none when the node must not send it.
@@ -197,23 +193,20 @@ The session does not track the requests of the peer, so it does not check what a
 
 The transactions of both messages are recorded as sent.
 
-A message with a transaction whose item does not encode cannot go on the wire, and is refused.
-
 A request joins the pending ones.
 -/
 def sendEth (session : EthSession) (m : Message) : Option EthSession :=
   match m, session.statusSent && session.remoteStatus.isSome with
   | .status _, _ => some { session with statusSent := true }
   | _, false => none
-  | .transactions _, true => do
-    let hashes ← m.transactionHashes.toOption
+  | .transactions _, true =>
+    let hashes := m.transactionHashes
     if hashes ≠ [] ∧ hashes.Nodup ∧
         ∀ h ∈ hashes, h ∉ session.sentTxs ∧ h ∉ session.receivedTxs then
       some { session with sentTxs := session.sentTxs ++ hashes }
     else none
-  | .pooledTransactions .., true => do
-    let hashes ← m.transactionHashes.toOption
-    some { session with sentTxs := session.sentTxs ++ hashes }
+  | .pooledTransactions .., true =>
+    some { session with sentTxs := session.sentTxs ++ m.transactionHashes }
   | _, true =>
     if m.isRequest then some { session with pending := session.pending ++ [m] } else some session
 
@@ -240,13 +233,13 @@ inductive EthEvent where
 A sent Transactions or PooledTransactions message records its hashes, and every other event none.
 -/
 def EthEvent.sentHashes : EthEvent → List Hash32
-  | .sent m => m.transactionHashes.toOption.getD []
+  | .sent m => m.transactionHashes
   | .received _ => []
 
 /-- The hashes of the transactions that an event brings from the peer. -/
 def EthEvent.receivedHashes : EthEvent → List Hash32
   | .sent _ => []
-  | .received m => m.transactionHashes.toOption.getD []
+  | .received m => m.transactionHashes
 
 /-- The session after the events in turn, or none when one is refused or rejected.
 

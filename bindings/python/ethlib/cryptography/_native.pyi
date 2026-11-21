@@ -1645,7 +1645,7 @@ def eth_session(version: int, schedule: bytes, number: int, timestamp: int, even
     ...
 
 def eth_wire_hash(tx: bytes) -> bytes:
-    """The hash of a transaction as it crosses the wire."""
+    """The hash of a transaction as it crosses the wire, from its item and the bytes it was read from."""
     ...
 
 def eth_receipts_match(version: int, fork: str, receipts_root: bytes, receipts: bytes) -> bool:

@@ -2,6 +2,7 @@ module
 
 public import EthLib.Execution.Network.Transactions
 public import EthLib.Serialization.Proofs.Rlp.Codec
+public import EthLib.Serialization.Proofs.Rlp.Encodings
 
 /-!
 # Proofs: the transaction exchange
@@ -15,6 +16,8 @@ Take an answer that passes the check.
 Its transactions have hashes that are requested hashes, in the order of the request.
 
 An answer passes exactly when its transactions hash to a sublist of the requested hashes, in order.
+
+A blob transaction in its network form hashes the encoding of its body, cut from its own bytes.
 -/
 
 @[expose] public section
@@ -92,37 +95,51 @@ end Announcement
 /-- Take an answer that passes the check.
 
 The hashes of its transactions are requested hashes, in the order of the request. -/
-theorem sublist_of_checkPooled {requested : List Hash32} {txs : List Item}
-    (h : checkPooled requested txs = .ok ()) :
-    ∃ hashes, txs.mapM wireHash = .ok hashes ∧ hashes.Sublist requested := by
+theorem sublist_of_checkPooled {requested : List Hash32} {txs : List Encoded}
+    (h : checkPooled requested txs = .ok ()) : (txs.map wireHash).Sublist requested := by
   unfold checkPooled at h
-  cases hm : txs.mapM wireHash with
-  | error e => simp [hm, Except.mapError, bind, Except.bind] at h
-  | ok hashes =>
-    refine ⟨hashes, rfl, ?_⟩
-    simp only [hm, Except.mapError, bind, Except.bind] at h
-    by_cases hs : hashes.isSublist requested
-    · exact List.isSublist_iff_sublist.mp hs
-    · simp [hs, throw, throwThe, MonadExceptOf.throw] at h
+  by_cases hs : (txs.map wireHash).isSublist requested
+  · exact List.isSublist_iff_sublist.mp hs
+  · simp [hs, throw, throwThe, MonadExceptOf.throw] at h
 
 /-- An answer passes the check of a request exactly when its transactions hash to requested hashes.
 
-Every transaction must hash, and the hashes form a sublist of the requested hashes, in order.
+The hashes form a sublist of the requested hashes, in order.
 
 The conditions do not ask for every requested hash, since a peer may leave some out.
 
 They read only the hash of each transaction, not whether it is valid. -/
-theorem checkPooled_eq_ok_iff {requested : List Hash32} {txs : List Item} :
-    checkPooled requested txs = .ok () ↔
-      ∃ hashes, txs.mapM wireHash = .ok hashes ∧ hashes.Sublist requested := by
-  refine ⟨sublist_of_checkPooled, fun ⟨hashes, hm, hs⟩ => ?_⟩
-  simp [checkPooled, hm, List.isSublist_iff_sublist.mpr hs, Except.mapError, bind, Except.bind,
-    pure, Except.pure]
+theorem checkPooled_eq_ok_iff {requested : List Hash32} {txs : List Encoded} :
+    checkPooled requested txs = .ok () ↔ (txs.map wireHash).Sublist requested := by
+  refine ⟨sublist_of_checkPooled, fun hs => ?_⟩
+  simp [checkPooled, List.isSublist_iff_sublist.mpr hs, pure, Except.pure]
+
+/-- A blob transaction in its network form hashes the encoding of its body, after the type 3.
+
+The body is the first item of the list that follows the type.
+
+Its bytes are cut from the transaction, and they are the encoding of the body. -/
+theorem wireHash_networkForm {b bytes body : ByteArray} {rest : List UInt8}
+    {fields others : List Item} (hb : b.data.toList = BLOB_TX_TYPE :: rest)
+    (hd : Serialization.Rlp.decode ⟨rest.toArray⟩ = .ok (.list (.list fields :: others)))
+    (he : encode (.list fields) = .ok body) :
+    wireHash ⟨.bytes b, bytes⟩ =
+      Cryptography.Hash.Keccak.keccak256 (⟨#[BLOB_TX_TYPE]⟩ ++ body) := by
+  -- The network form is the encoding of what it decodes to.
+  have hForm := Serialization.Rlp.encode_decode _ _ hd
+  -- Its first encoding is the encoding of the body, which is one byte string.
+  obtain ⟨encodings, hList, hAll⟩ := listEncodings_of_encode hForm
+  cases hAll with
+  | cons hHead _ =>
+    rw [he, Except.ok.injEq] at hHead
+    subst hHead
+    simp only [wireHash, hb, hd, hList]
+    -- The first byte is the blob type, so the network form is hashed.
+    exact ite_eq_left trivial
 
 /-- The empty answer passes the check of every request. -/
 theorem checkPooled_nil (requested : List Hash32) : checkPooled requested [] = .ok () := by
-  simp [checkPooled, List.mapM, List.mapM.loop, Except.mapError, bind, Except.bind, pure,
-    Except.pure, List.isSublist]
+  simp [checkPooled, pure, Except.pure, List.isSublist]
 
 /-- Two errors with one code come from one constructor. -/
 theorem PoolError.code_injective (e₁ e₂ : PoolError) (h : e₁.code = e₂.code) :

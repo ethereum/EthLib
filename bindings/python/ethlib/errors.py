@@ -295,7 +295,7 @@ class EthWireError(EthLibError, ValueError):
 
     Message errors have codes from 1, and Status errors codes from 101.
 
-    Header errors have codes from 201, and transaction errors codes from 301.
+    Header errors have codes from 201, and transaction errors codes from 302.
 
     Session errors have codes from 701.
 

@@ -12966,8 +12966,7 @@
       {"constructor": "unequalLengths", "code": 3}]},
     {"type": "EthLib.Execution.Network.PoolError",
      "codes":
-     [{"constructor": "rlp", "code": 301},
-      {"constructor": "notRequested", "code": 302},
+     [{"constructor": "notRequested", "code": 302},
       {"constructor": "notAnswer", "code": 303}]}],
    "error_class": "EthWireError",
    "docstring":
@@ -12995,19 +12994,19 @@
       {"constructor": "badStatus", "code": null},
       {"constructor": "secondStatus", "code": 702},
       {"constructor": "unsolicited", "code": 703},
-      {"constructor": "badRange", "code": 704},
-      {"constructor": "transaction", "code": 705}]}],
+      {"constructor": "badRange", "code": 704}]}],
    "error_class": "EthWireError",
    "docstring":
    "The outcomes of the eth messages that a session sends and receives in turn.\n\nThe session runs on an eth version, for a node with a schedule and a head block.\n\nEach event says whether this node sends it, then gives its message ID and its RLP data.\n\nEach outcome gives the verdict and the number of requests still pending after the event.\n\nA received message is accepted or discarded, and a sent one is sent or refused.\n\nA message that does not decode, or that the session rejects, raises its error.\n\nThe error names the index of the event."},
-  {"summary": "The hash of a transaction as it crosses the wire.",
+  {"summary":
+   "The hash of a transaction as it crosses the wire, from its item and the bytes it was read from.",
    "signature": "(tx: bytes) -> bytes",
    "operation": "EthLib.Execution.Network.wireHash",
    "method": "eth_wire_hash",
    "errors": [],
    "error_class": "EthWireError",
    "docstring":
-   "The hash of a transaction as it crosses the wire.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, as [EIP-4844][eip-4844] says.\n\nThat form is the type 3 followed by `rlp([tx_payload_body, ...])`.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar.\n\nThe network form starts with the body, a list.\n\nSo the first item tells the two apart.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking"},
+   "The hash of a transaction as it crosses the wire, from its item and the bytes it was read from.\n\nA legacy transaction hashes its RLP list, and a typed one its bytes `tx-type || tx-data`.\n\nA blob transaction in PooledTransactions can come in its network form, as [EIP-4844][eip-4844] says.\n\nThat form is the type 3 followed by `rlp([tx_payload_body, ...])`.\n\nIts hash is the hash of `0x03 || rlp(tx_payload_body)`, the transaction without its blobs.\n\nThe payload of a canonical blob transaction starts with the chain ID, a scalar.\n\nThe network form starts with the body, a list.\n\nSo the first item tells the two apart.\n\nEach encoding hashed is a slice of the bytes read, so nothing is encoded again.\n\n[eip-4844]: https://eips.ethereum.org/EIPS/eip-4844#networking"},
   {"summary":
    "Whether the receipts of a block, as a version sends them, match the receipts root of its header.",
    "signature":

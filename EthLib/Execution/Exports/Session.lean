@@ -125,7 +125,6 @@ def ethSessionMessage : EthSessionError → String
   | .secondStatus => "a second Status came in an active session"
   | .unsolicited i => s!"response with request ID {i} answers no pending request"
   | .badRange e l => s!"block range starts at {e}, after its end {l}"
-  | .transaction _ => "a received transaction has no RLP encoding"
 
 /-- The outcomes of the eth messages that a session sends and receives in turn.
 
