@@ -29,7 +29,7 @@ def codeCount (s : Nat) : Nat := (Finset.univ.filter (fun x : Encoding => sum x 
 /-- `[z^106](1 + z + z^2 + z^3)^58`. -/
 theorem codeCount_target : codeCount targetSum = 323504418562481994618807509487594 := by
   -- A digit word of sum `T` is a digit string of sum `T`, which the specification counts.
-  rw [codeCount, ← Fintype.card_subtype]
-  exact EthLib.Cryptography.Xmss.card_digitStrings_code
+  exact (EthLib.Cryptography.Wots.card_filter_sum_eq _ _ _).trans
+    EthLib.Cryptography.Xmss.card_digitStrings_code
 
 end XmssSecurity.TargetSum
